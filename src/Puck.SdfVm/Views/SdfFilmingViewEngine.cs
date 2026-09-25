@@ -22,21 +22,35 @@ internal static class SdfFilmingViewEngine {
     /// kernels off the frame thread.</param>
     /// <param name="work">The view's work ledger, which the engine counts into.</param>
     /// <returns><see langword="true"/> when <paramref name="engine"/> exists; <see langword="false"/> while the
-    /// pipelines build.</returns>
+    /// pipelines build, or when the build was refused (see <see cref="SdfWorldPipelineSource.TryBuild{TState}"/>), which the
+    /// next call retries.</returns>
     public static bool EnsureEngine(IGpuDeviceContext device, SdfFrame frame, ISdfFrameSource frameSource, bool hostsOnDirectX, uint height, uint width, GpuWorkLedger work, SdfWorldPipelineSource pipelines, ref SdfWorldEngine? engine) {
         if (engine is not null) {
             return true;
         }
 
-        if (pipelines.Poll(
+        engine = pipelines.TryBuild(
+            construct: static (ready, state) => Build(
+                device: state.Device,
+                frame: state.Frame,
+                frameSource: state.FrameSource,
+                height: state.Height,
+                ready: ready,
+                width: state.Width,
+                work: state.Work
+            ),
             device: device,
             hostsOnDirectX: hostsOnDirectX,
             includeBrickPipelines: false,
-            kernels: null
-        ) is not { } ready) {
-            return false;
-        }
+            kernels: null,
+            label: "session-view",
+            state: (Device: device, Frame: frame, FrameSource: frameSource, Height: height, Width: width, Work: work)
+        );
 
+        return (engine is not null);
+    }
+
+    private static SdfWorldEngine Build(IGpuDeviceContext device, SdfFrame frame, ISdfFrameSource frameSource, uint height, uint width, GpuWorkLedger work, SdfWorldPipelines ready) {
         var wordCapacity = ((frameSource is SdfCompositionFrameSource composed)
             ? composed.WorstCaseProgramWordCapacity
             : frame.Program.Words.Length
@@ -50,7 +64,7 @@ internal static class SdfFilmingViewEngine {
             : frame.DynamicTransforms.Count
         );
 
-        engine = new SdfWorldEngine(
+        return new SdfWorldEngine(
             device: device,
             height: height,
             options: new SdfWorldEngineOptions(
@@ -68,7 +82,5 @@ internal static class SdfFilmingViewEngine {
             pipelines: ready,
             width: width
         );
-
-        return true;
     }
 }

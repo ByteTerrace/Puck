@@ -12,7 +12,8 @@ namespace Puck.SdfVm.Tests;
 /// reload that created pipelines each write the device's persistent cache once, from the thread that built them; a
 /// reload creates only the pipelines whose bytecode changed; a canceled build throws before creating anything; a build
 /// holds at most <see cref="SdfWorldPipelines.BuildConcurrency"/> creations in the driver and starts the views variants
-/// last; and a build canceled while creations are in the driver waits for those alone and creates no more.
+/// last; a build canceled while creations are in the driver waits for those alone and creates no more; and a build whose
+/// creations fail together names every failed pipeline in build order and releases everything it created.
 /// </summary>
 public sealed class SdfWorldPipelinesLawTests {
     [Fact]
@@ -169,6 +170,59 @@ public sealed class SdfWorldPipelinesLawTests {
         Assert.Equal(
             actual: (driver.Entered, Created(ledger: ledger), progress.Created),
             expected: (SdfWorldPipelines.BuildConcurrency, ((long)SdfWorldPipelines.BuildConcurrency), SdfWorldPipelines.BuildConcurrency)
+        );
+    }
+    [Fact]
+    public void TwoCreationsFailingInTheDriverAtOnceAreBothNamedAndEverythingCreatedIsReleased() {
+        Assert.SkipWhen(
+            condition: (SdfWorldPipelines.BuildConcurrency < 2),
+            reason: "Two creations are in the driver at once only when the build's concurrency is at least two."
+        );
+
+        // Each failing creation waits in the driver for the other before it throws, so both fail while the build still
+        // runs, and the later-finishing one can never be dropped.
+        using var bothInDriver = new Barrier(participantCount: 2);
+        var gpu = new FakeGpuDevice(
+            reportVersion: SdfIsa.Version,
+            trackObjects: true
+        ) {
+            BeforeComputePipeline = description => {
+                if (description.Name is not ("sdf-beam" or "sdf-world-views")) {
+                    return;
+                }
+
+                _ = bothInDriver.SignalAndWait(timeout: TimeSpan.FromSeconds(value: 30));
+
+                throw new InvalidOperationException(message: $"injected failure creating {description.Name}");
+            },
+        };
+        var ledger = new GpuWorkLedger(
+                framesInFlight: SdfWorldEngine.FrameRingSize,
+                name: "gpu.sdf-engine"
+            );
+        var failure = Assert.Throws<AggregateException>(testCode: () => SdfWorldPipelines.Build(
+            cancellationToken: CancellationToken.None,
+            device: gpu,
+            includeBrickPipelines: false,
+            kernels: SdfTestPipelines.Kernels(beam: 1),
+            ledger: ledger
+        ));
+
+        Assert.StartsWith(
+            actualString: failure.Message,
+            expectedStartString: "The SDF pipeline set's build failed creating sdf-beam, sdf-world-views."
+        );
+        Assert.Equal(
+            actual: failure.InnerExceptions.Select(selector: static inner => inner.Message),
+            expected: ["injected failure creating sdf-beam", "injected failure creating sdf-world-views"]
+        );
+        Assert.NotEmpty(collection: gpu.Created);
+        Assert.All(
+            action: static created => Assert.Equal(
+                actual: created.DisposeCount,
+                expected: 1
+            ),
+            collection: gpu.Created
         );
     }
 

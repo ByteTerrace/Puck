@@ -18,7 +18,10 @@ namespace Puck.Testing;
 /// that key exists; the dictionary is not synchronized, so a harness whose node builds on the thread pool leaves it off.
 /// With <c>holdFences</c>, a submitted fence stays unsignaled until the test sets its <see cref="Fence.Completed"/>, and
 /// a fence submitted again before its wait is refused. The submitter arms a fence by casting, as both backends do, so a
-/// fence that is not this fake's own type fails the submit.
+/// fence that is not this fake's own type fails the submit. With <c>trackObjects</c>, every object a factory, the
+/// bindings or the submitter creates is a <see cref="Creation"/> in <see cref="Created"/> that counts its releases, and
+/// every image and device-local buffer is counted in <see cref="Memory"/> as device-local memory, so a law compares what
+/// was created with what was released, and reads the bytes still held.
 /// </para>
 /// </summary>
 internal sealed class FakeGpuDevice :
@@ -37,14 +40,22 @@ internal sealed class FakeGpuDevice :
     private readonly bool m_holdFences;
     private readonly byte m_reportVersion;
 
+    private readonly Dictionary<nint, Creation> m_trackedHandles = [];
+    private readonly Lock m_trackGate = new();
+
+    private readonly bool m_trackObjects;
+
     /// <summary>Initializes a new instance of the <see cref="FakeGpuDevice"/> class.</summary>
     /// <param name="reportVersion">The ISA version a 1×1 readback reports.</param>
     /// <param name="countCalls">Whether each wrapped member counts its calls into <see cref="Calls"/>.</param>
     /// <param name="holdFences">Whether a submitted fence waits for the test to complete it.</param>
-    public FakeGpuDevice(byte reportVersion = 0, bool countCalls = false, bool holdFences = false) {
+    /// <param name="trackObjects">Whether every created object is tracked in <see cref="Created"/> and
+    /// <see cref="Memory"/>.</param>
+    public FakeGpuDevice(byte reportVersion = 0, bool countCalls = false, bool holdFences = false, bool trackObjects = false) {
         m_countCalls = countCalls;
         m_holdFences = holdFences;
         m_reportVersion = reportVersion;
+        m_trackObjects = trackObjects;
         Services = new GpuDeviceServices {
             Bindings = this,
             BufferFactory = this,
@@ -69,11 +80,24 @@ internal sealed class FakeGpuDevice :
     public Dictionary<string, int> Calls { get; } = new(comparer: StringComparer.Ordinal);
 
     public GpuDeviceCapabilities? Capabilities => null;
+
+    /// <summary>Gets every object created while the device tracks objects, in creation order; read it once no creation
+    /// is running.</summary>
+    public List<Creation> Created { get; } = [];
+
+    /// <summary>The native device handle the fake's tracked memory is counted under.</summary>
+    public const nint DeviceHandle = 1;
+
     public GpuDeviceIdentity? Identity => null;
     /// <summary>Gets the fence created last.</summary>
     public Fence? LastCreatedFence { get; private set; }
     /// <summary>Gets the fence submitted last, as it reached the device.</summary>
     public IGpuSubmissionFence? LastSubmittedFence { get; private set; }
+
+    /// <summary>Gets the device-local memory of the tracked images and device-local buffers: an image is its width times
+    /// its height times four bytes, a buffer its size.</summary>
+    public GpuDeviceMemoryWork Memory { get; } = new(backend: "fake");
+
     public GpuMemoryProfile MemoryProfile => default;
     /// <summary>Gets this device as every one of its own services.</summary>
     public GpuDeviceServices Services { get; }
@@ -90,6 +114,55 @@ internal sealed class FakeGpuDevice :
     public int Count(string key) => (Calls.TryGetValue(key: key, value: out var count) ? count : 0);
     public void WaitIdle() => Hit(key: "IGpuDeviceContext.WaitIdle");
 
+    // Records one creation when the device tracks objects: a unique handle, and the device-local bytes it holds.
+    private Creation? Track(string kind, ulong deviceLocalBytes = 0UL, bool deviceLocal = false) {
+        if (!m_trackObjects) {
+            return null;
+        }
+
+        Creation creation;
+
+        lock (m_trackGate) {
+            var number = (Created.Count + 1);
+
+            creation = new Creation(
+                deviceLocal: deviceLocal,
+                gpu: this,
+                handle: ((nint)(0x1000 + (0x10 * number))),
+                kind: kind,
+                number: number
+            );
+            Created.Add(item: creation);
+            m_trackedHandles.Add(
+                key: creation.Handle,
+                value: creation
+            );
+        }
+
+        if (deviceLocal) {
+            _ = Memory.CountAllocated(
+                allocation: creation.Handle,
+                bytes: ((long)deviceLocalBytes),
+                device: DeviceHandle,
+                role: GpuMemoryRole.DeviceLocal
+            );
+        }
+
+        return creation;
+    }
+    // Releases the tracked creation behind a pool or sampler handle.
+    private void ReleaseHandle(nint handle) {
+        Creation? creation;
+
+        lock (m_trackGate) {
+            _ = m_trackedHandles.TryGetValue(
+                key: handle,
+                value: out creation
+            );
+        }
+
+        creation?.Release();
+    }
     private void Hit(string key) {
         if (m_countCalls) {
             CollectionsMarshal.GetValueRefOrAddDefault(dictionary: Calls, key: key, exists: out _)++;
@@ -120,18 +193,27 @@ internal sealed class FakeGpuDevice :
     IGpuCommandPool IGpuCommandPoolFactory.Create() {
         Hit(key: "IGpuCommandPoolFactory.Create");
 
-        return new Resource(gpu: this);
+        return new Resource(
+            creation: Track(kind: "command pool"),
+            gpu: this
+        );
     }
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         BeforeComputePipeline?.Invoke(obj: description);
         Hit(key: "IGpuPipelineFactory.Create(compute)");
 
-        return new Resource(gpu: this);
+        return new Resource(
+            creation: Track(kind: "compute pipeline"),
+            gpu: this
+        );
     }
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
         Hit(key: "IGpuPipelineFactory.Create(graphics)");
 
-        return new Resource(gpu: this);
+        return new Resource(
+            creation: Track(kind: "graphics pipeline"),
+            gpu: this
+        );
     }
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {
         Hit(key: "IGpuBindings.AllocateSet");
@@ -142,21 +224,30 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuBindings.CreatePool");
         PoolsCreated.Add(item: sizes);
 
-        return 8;
+        return (Track(kind: "descriptor pool")?.Handle ?? 8);
     }
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) {
         Hit(key: "IGpuBindings.CreateSampler");
 
-        return 9;
+        return (Track(kind: "sampler")?.Handle ?? 9);
     }
-    void IGpuBindings.DestroyPool(nint poolHandle) => Hit(key: "IGpuBindings.DestroyPool");
-    void IGpuBindings.DestroySampler(nint samplerHandle) => Hit(key: "IGpuBindings.DestroySampler");
+    void IGpuBindings.DestroyPool(nint poolHandle) {
+        Hit(key: "IGpuBindings.DestroyPool");
+        ReleaseHandle(handle: poolHandle);
+    }
+    void IGpuBindings.DestroySampler(nint samplerHandle) {
+        Hit(key: "IGpuBindings.DestroySampler");
+        ReleaseHandle(handle: samplerHandle);
+    }
     void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => Hit(key: "IGpuBindings.WriteCombinedImageSampler");
     void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => Hit(key: "IGpuBindings.WriteBuffer");
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => Hit(key: "IGpuBindings.WriteStorageImage");
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() {
         Hit(key: "IGpuQueueSubmitter.CreateSubmissionFence");
-        LastCreatedFence = new Fence(gpu: this);
+        LastCreatedFence = new Fence(
+            creation: Track(kind: "fence"),
+            gpu: this
+        );
 
         return LastCreatedFence;
     }
@@ -178,7 +269,10 @@ internal sealed class FakeGpuDevice :
     IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description) {
         Hit(key: "IGpuRenderPassFactory.Create");
 
-        return new Resource(gpu: this);
+        return new Resource(
+            creation: Track(kind: "render pass"),
+            gpu: this
+        );
     }
     IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) {
         Hit(key: "IGpuRenderPassFactory.CreateFramebuffer");
@@ -187,6 +281,7 @@ internal sealed class FakeGpuDevice :
         var extent = ((colors.Count > 0) ? colors[0] : depth);
 
         return new Resource(
+            creation: Track(kind: "framebuffer"),
             gpu: this,
             height: (extent?.Height ?? 1U),
             width: (extent?.Width ?? 1U)
@@ -195,12 +290,16 @@ internal sealed class FakeGpuDevice :
     IGpuShaderModule IGpuShaderModuleFactory.Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
         Hit(key: "IGpuShaderModuleFactory.Create");
 
-        return new Resource(gpu: this);
+        return new Resource(
+            creation: Track(kind: "shader module"),
+            gpu: this
+        );
     }
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) {
         Hit(key: "IGpuBufferFactory.CreateHostVisible");
 
         return new Resource(
+            creation: Track(kind: "host-visible buffer"),
             gpu: this,
             sizeBytes: sizeBytes
         );
@@ -209,6 +308,7 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuBufferFactory.CreateHostVisible(data)");
 
         return new Resource(
+            creation: Track(kind: "host-visible buffer"),
             gpu: this,
             sizeBytes: ((ulong)data.Length)
         );
@@ -217,6 +317,11 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuBufferFactory.CreateDeviceLocal");
 
         return new Resource(
+            creation: Track(
+                deviceLocal: true,
+                deviceLocalBytes: sizeBytes,
+                kind: "device-local buffer"
+            ),
             gpu: this,
             sizeBytes: sizeBytes
         );
@@ -225,6 +330,11 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuImageFactory.Create");
 
         return new Resource(
+            creation: Track(
+                deviceLocal: true,
+                deviceLocalBytes: ((((ulong)width) * height) * 4UL),
+                kind: "image"
+            ),
             gpu: this,
             height: height,
             width: width
@@ -236,7 +346,7 @@ internal sealed class FakeGpuDevice :
 
     /// <summary>A submission fence. It reads signaled once submitted unless the device holds fences; a held fence reads
     /// signaled when nothing is armed or the test has completed it, as the backends' fences do.</summary>
-    public sealed class Fence(FakeGpuDevice gpu) : IGpuSubmissionFence {
+    public sealed class Fence(FakeGpuDevice gpu, Creation? creation = null) : IGpuSubmissionFence {
         /// <summary>Gets whether a submission is outstanding on the fence.</summary>
         public bool Armed { get; private set; }
         /// <summary>Gets or sets whether a held fence's outstanding submission has completed.</summary>
@@ -249,7 +359,10 @@ internal sealed class FakeGpuDevice :
             }
         }
 
-        public void Dispose() => gpu.Hit(key: "IGpuSubmissionFence.Dispose");
+        public void Dispose() {
+            gpu.Hit(key: "IGpuSubmissionFence.Dispose");
+            creation?.Release();
+        }
         public void Wait() {
             gpu.Hit(key: "IGpuSubmissionFence.Wait");
             Armed = false;
@@ -268,9 +381,37 @@ internal sealed class FakeGpuDevice :
             Completed = false;
         }
     }
+    /// <summary>One object created while the device tracks objects: its kind, its one-based creation number, its unique
+    /// handle (the one a descriptor pool or sampler creation returns), and how often it was released.</summary>
+    public sealed class Creation(FakeGpuDevice gpu, string kind, int number, nint handle, bool deviceLocal) {
+        /// <summary>Gets how often the object was released.</summary>
+        public int DisposeCount { get; private set; }
+        /// <summary>Gets the object's unique handle.</summary>
+        public nint Handle => handle;
+        /// <summary>Gets the object's kind.</summary>
+        public string Kind => kind;
+        /// <summary>Gets the object's one-based creation number.</summary>
+        public int Number => number;
 
-    // Every resource kind in one: a nonzero handle for each member, the requested extent, and nothing to release.
-    private sealed class Resource(FakeGpuDevice gpu, uint width = 1, uint height = 1, ulong sizeBytes = 0) :
+        internal void Release() {
+            lock (gpu.m_trackGate) {
+                DisposeCount++;
+            }
+
+            if (deviceLocal) {
+                _ = gpu.Memory.CountReleased(
+                    allocation: handle,
+                    device: DeviceHandle
+                );
+            }
+        }
+
+        public override string ToString() => $"#{number} {kind} (released {DisposeCount}x)";
+    }
+
+    // Every resource kind in one: a nonzero handle for each member, the requested extent, and, when the device tracks
+    // objects, the creation its disposal releases.
+    private sealed class Resource(FakeGpuDevice gpu, Creation? creation = null, uint width = 1, uint height = 1, ulong sizeBytes = 0) :
         IGpuCommandPool,
         IGpuComputePipeline,
         IGpuFramebuffer,
@@ -298,7 +439,7 @@ internal sealed class FakeGpuDevice :
         public ulong SizeBytes => sizeBytes;
         public uint Width => width;
 
-        public void Dispose() { }
+        public void Dispose() => creation?.Release();
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => gpu.Hit(key: "IGpuStorageBuffer.Write");
         public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged => gpu.Hit(key: "IGpuStorageBuffer.Write(offset)");
     }
