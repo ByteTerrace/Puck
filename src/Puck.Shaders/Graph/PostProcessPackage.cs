@@ -109,7 +109,10 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 Format: ShaderPipelineRenderNode.ParseFormat(format: context.Outputs[0].Format),
                 Load: GpuAttachmentLoad.Clear,
                 Store: GpuAttachmentStore.Store
-            )]));
+            )]), name: new GpuObjectName(
+                owner: context.Instance,
+                part: context.Pass
+            ));
 
             var description = new GpuGraphicsPipelineDescription(
                 Manifest.Name,
@@ -135,6 +138,10 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             built.Pipeline = services.PipelineFactory.Create(
                 description: description,
                 fragmentShaderModule: built.Fragment,
+                name: new GpuObjectName(
+                    owner: context.Instance,
+                    part: context.Pass
+                ),
                 renderPass: built.RenderPass,
                 vertexShaderModule: built.Vertex
             );
@@ -223,6 +230,11 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             // created storage buffer.
             m_geometry = context.Device.Services.BufferFactory.CreateHostVisible(
                 data: FullscreenTriangle.CreateVertexData(),
+                name: new GpuObjectName(
+                    detail: "geometry",
+                    owner: context.Instance,
+                    part: context.Pass
+                ),
                 usage: GpuBufferUsage.Vertex
             );
 
@@ -230,7 +242,12 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 for (var slot = 0; (slot < inFlight); slot++) {
                     m_sets[slot] = m_services.Bindings.AllocateSet(
                         descriptorPool,
-                        built.Pipeline!.DescriptorSetLayoutHandle
+                        built.Pipeline!.DescriptorSetLayoutHandle,
+                        name: new GpuObjectName(
+                            index: slot,
+                            owner: context.Instance,
+                            part: context.Pass
+                        )
                     );
                     m_samplers[slot] = m_services.Bindings.CreateSampler();
                 }

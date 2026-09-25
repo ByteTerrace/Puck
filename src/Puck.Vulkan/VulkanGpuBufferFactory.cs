@@ -10,7 +10,8 @@ namespace Puck.Vulkan;
 /// </summary>
 /// <param name="deviceContext">The device context every buffer is created on.</param>
 /// <param name="bufferApi">The native buffer API.</param>
-public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, IVulkanBufferApi bufferApi) : IGpuBufferFactory {
+/// <param name="naming">The naming every created object is handed to.</param>
+public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, IVulkanBufferApi bufferApi, GpuObjectNaming naming) : IGpuBufferFactory {
     /// <summary>Returns the <c>VkBufferUsageFlags</c> a buffer of the given neutral usages is created with. A storage
     /// buffer is also a transfer source and destination (<see cref="VulkanBufferUsageFlags.Storage"/>).</summary>
     /// <param name="usage">The neutral usages.</param>
@@ -41,23 +42,26 @@ public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, I
         return result;
     }
     /// <inheritdoc/>
-    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) =>
+    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
         Create(
             memory: VulkanBufferMemory.DeviceLocal,
+            name: in name,
             sizeBytes: sizeBytes,
             usage: usage
         );
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) =>
+    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
         Create(
             memory: VulkanBufferMemory.HostCoherent,
+            name: in name,
             sizeBytes: sizeBytes,
             usage: usage
         );
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
+    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) {
         var buffer = Create(
             memory: VulkanBufferMemory.HostCoherent,
+            name: in name,
             sizeBytes: ((ulong)data.Length),
             usage: usage
         );
@@ -73,18 +77,26 @@ public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, I
         return buffer;
     }
 
-    private VulkanBuffer Create(VulkanBufferMemory memory, ulong sizeBytes, GpuBufferUsage usage) {
+    private VulkanBuffer Create(VulkanBufferMemory memory, ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         GpuBufferUsages.Validate(
             sizeBytes: sizeBytes,
             usage: usage
         );
 
-        return VulkanBuffer.Create(
+        var buffer = VulkanBuffer.Create(
             bufferApi: bufferApi,
             device: deviceContext,
             memory: memory,
             sizeBytes: sizeBytes,
             usage: ToVkBufferUsage(usage: usage)
         );
+
+        naming.Name(
+            handle: buffer.BufferHandle,
+            kind: GpuObjectKind.Buffer,
+            name: in name
+        );
+
+        return buffer;
     }
 }

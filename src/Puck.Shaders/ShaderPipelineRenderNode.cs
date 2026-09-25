@@ -239,11 +239,21 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             if (declaration.Geometry is { } geometry) {
                 runtime.GeometryBuffer = m_device.Services.BufferFactory.CreateHostVisible(
                     data: geometry.BufferData(),
+                    name: new GpuObjectName(
+                        detail: "geometry",
+                        owner: m_descriptor.Name,
+                        part: runtime.Name
+                    ),
                     usage: GpuBufferUsage.Vertex | GpuBufferUsage.Index
                 );
             } else if (declaration.Vertex == ShaderPipelineVertexInput.Position) {
                 runtime.GeometryBuffer = m_device.Services.BufferFactory.CreateHostVisible(
                     data: FullscreenTriangle.CreateVertexData(),
+                    name: new GpuObjectName(
+                        detail: "geometry",
+                        owner: m_descriptor.Name,
+                        part: runtime.Name
+                    ),
                     usage: GpuBufferUsage.Vertex
                 );
             }
@@ -459,7 +469,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                             ParseFormat(format: declaration.Format),
                             extent.Width,
                             extent.Height,
-                            usage
+                            usage,
+                            name: new GpuObjectName(
+                                index: i,
+                                owner: m_descriptor.Name,
+                                part: declaration.Name
+                            )
                         );
                     }
                 } else if (
@@ -477,6 +492,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     resource.Buffers = new IGpuBuffer[m_inFlight];
                     for (var i = 0; (i < m_inFlight); i++) {
                         resource.Buffers[i] = m_gpu.BufferFactory.CreateDeviceLocal(
+                            name: new GpuObjectName(
+                                index: i,
+                                owner: m_descriptor.Name,
+                                part: declaration.Name
+                            ),
                             sizeBytes: sizeBytes,
                             usage: GpuBufferUsage.Storage
                         );
@@ -527,9 +547,15 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 built.Preview = null;
                 preview = CreatePreview(objects: objects);
             }
-            foreach (var slot in m_slots) {
+            for (var index = 0; (index < m_slots.Length); index++) {
+                var slot = m_slots[index];
+
                 slot.Fence ??= m_gpu.QueueSubmitter.CreateSubmissionFence();
-                slot.Final ??= m_gpu.CommandPoolFactory.Create();
+                slot.Final ??= m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
+                    index: index,
+                    owner: m_descriptor.Name,
+                    part: "final"
+                ));
             }
             m_preview = preview;
             m_initializationPending = true;

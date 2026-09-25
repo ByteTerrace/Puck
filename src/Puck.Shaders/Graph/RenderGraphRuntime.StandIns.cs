@@ -46,12 +46,18 @@ public sealed partial class RenderGraphRuntime {
     }
 
     private sealed class StandIn(IGpuImage image, IGpuCommandPool pool, IGpuSubmissionFence fence) {
+        private static readonly GpuObjectName StandInName = new(
+            owner: "render-graph",
+            part: "stand-in"
+        );
+
         public IGpuImage Image { get; } = image;
 
         public static StandIn Create(GpuDeviceServices gpu, GpuPixelFormat format) {
             var image = gpu.ImageFactory.Create(
                 format: format,
                 height: 1,
+                name: StandInName,
                 usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
                 width: 1
             );
@@ -59,7 +65,7 @@ public sealed partial class RenderGraphRuntime {
             IGpuSubmissionFence? fence = null;
 
             try {
-                pool = gpu.CommandPoolFactory.Create();
+                pool = gpu.CommandPoolFactory.Create(name: StandInName);
                 fence = gpu.QueueSubmitter.CreateSubmissionFence();
 
                 var command = pool.CommandBufferHandle;

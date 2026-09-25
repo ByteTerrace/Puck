@@ -136,14 +136,14 @@ public sealed partial class SdfWorldEngine {
         var replacements = new List<IGpuBuffer>(capacity: (FrameRingSize + 4));
         var committed = false;
 
-        IGpuStorageBuffer HostBuffer(ulong bytes) {
-            var buffer = m_gpu.BufferFactory.CreateHostVisible(sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+        IGpuStorageBuffer HostBuffer(ulong bytes, in GpuObjectName name) {
+            var buffer = m_gpu.BufferFactory.CreateHostVisible(name: name, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
 
             replacements.Add(item: buffer);
             return buffer;
         }
-        IGpuBuffer DeviceBuffer(ulong bytes) {
-            var buffer = m_gpu.BufferFactory.CreateDeviceLocal(sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+        IGpuBuffer DeviceBuffer(ulong bytes, in GpuObjectName name) {
+            var buffer = m_gpu.BufferFactory.CreateDeviceLocal(name: name, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
 
             replacements.Add(item: buffer);
             return buffer;
@@ -158,17 +158,17 @@ public sealed partial class SdfWorldEngine {
 
         try {
             // Allocate the entire replacement before changing any binding or releasing an old buffer.
-            var programBuffer = (growProgram ? HostBuffer(bytes: checked((((ulong)words) * sizeof(uint)))) : m_programBuffer);
+            var programBuffer = (growProgram ? HostBuffer(bytes: checked((((ulong)words) * sizeof(uint))), name: NameOf(part: "program")) : m_programBuffer);
             var grids = (growInstances ? new IGpuStorageBuffer[FrameRingSize] : m_instanceGridBuffers);
 
             if (growInstances) {
                 for (var slot = 0; (slot < FrameRingSize); slot++) {
-                    grids[slot] = HostBuffer(bytes: FrameUploadStagingBytes(tableBytes: checked((gridWords * sizeof(uint)))));
+                    grids[slot] = HostBuffer(bytes: FrameUploadStagingBytes(tableBytes: checked((gridWords * sizeof(uint)))), name: NameOf(detail: "host", index: slot, part: "instance-grid"));
                 }
             }
-            var gridDevice = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.InstanceGrid, capacity: grown)) : m_instanceGridDeviceBuffer);
-            var masks = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.InstanceMasks, capacity: grown)) : m_instanceMaskBuffer);
-            var tiles = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.Tiles, capacity: grown)) : m_tileBuffer);
+            var gridDevice = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.InstanceGrid, capacity: grown), name: NameOf(part: "instance-grid")) : m_instanceGridDeviceBuffer);
+            var masks = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.InstanceMasks, capacity: grown), name: NameOf(part: "instance-masks")) : m_instanceMaskBuffer);
+            var tiles = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.Tiles, capacity: grown), name: NameOf(part: "tiles")) : m_tileBuffer);
 
             var oldGrids = ((IGpuStorageBuffer[])m_instanceGridBuffers.Clone());
 

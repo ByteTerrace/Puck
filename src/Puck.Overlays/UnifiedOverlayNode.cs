@@ -111,6 +111,14 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private readonly Action<string> m_writeCapture;
 
     private static readonly byte[] FullscreenTriangleVertexData = FullscreenTriangle.CreateVertexData();
+
+    // The owner every object the node creates is named under, and the name of the objects it holds one of.
+    private const string ObjectOwner = "overlay";
+
+    private static readonly GpuObjectName ObjectName = new(
+        owner: ObjectOwner,
+        part: "pass"
+    );
     private static readonly string[] OverlayPassLabels = ["overlay"];
     // Rewritten in place each frame (the draw command holds one binding over this array for the node's lifetime).
     private readonly byte[] m_pushConstantData = new byte[OverlayPassLayout.PushConstantBytes];
@@ -316,10 +324,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         m_renderTarget = m_imageFactory.Create(
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: m_height,
+            name: ObjectName,
             usage: GpuImageUsage.ColorAttachment | GpuImageUsage.Sampled,
             width: m_width
         );
         m_renderPass = m_renderPassFactory.Create(
+            name: ObjectName,
             description: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
                 FinalLayout: GpuImageLayout.ShaderReadOnly,
                 Format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -332,7 +342,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             depth: null,
             renderPass: m_renderPass
         );
-        m_commandPool = m_commandPoolFactory.Create();
+        m_commandPool = m_commandPoolFactory.Create(name: ObjectName);
         m_frameFence = m_queueSubmitter.CreateSubmissionFence();
         m_vertexShader = m_shaderModuleFactory.Create(
             bytecode: m_vertexBytecode,
@@ -343,22 +353,29 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             stage: GpuShaderStage.Fragment
         );
         m_vertexBuffer = m_geometryBufferFactory.CreateHostVisible(
+            name: new GpuObjectName(owner: ObjectOwner, part: "geometry"),
             data: FullscreenTriangleVertexData,
             usage: GpuBufferUsage.Vertex
         );
         m_dataBuffer = m_storageBufferFactory.CreateHostVisible(
+            name: new GpuObjectName(owner: ObjectOwner, part: "data"),
             sizeBytes: (((uint)m_composer.Builder.WordCount) * sizeof(uint)),
             usage: GpuBufferUsage.Storage
         );
         m_pipeline = m_pipelineFactory.Create(
+            name: ObjectName,
             description: OverlayPassLayout.PipelineDescription(),
             fragmentShaderModule: m_fragmentShader,
             renderPass: m_renderPass,
             vertexShaderModule: m_vertexShader
         );
 
-        m_descriptorPool = m_bindings.CreatePool(sizes: DescriptorPoolSizes);
+        m_descriptorPool = m_bindings.CreatePool(
+            name: ObjectName,
+            sizes: DescriptorPoolSizes
+        );
         m_descriptorSet = m_bindings.AllocateSet(
+            name: ObjectName,
             descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle,
             poolHandle: m_descriptorPool
         );

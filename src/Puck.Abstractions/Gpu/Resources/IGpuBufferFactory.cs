@@ -15,22 +15,25 @@ public interface IGpuBufferFactory {
     /// <summary>Creates a device-local buffer.</summary>
     /// <param name="sizeBytes">The size, in bytes, of the buffer; not zero.</param>
     /// <param name="usage">The usages; <see cref="GpuBufferUsages.Validate"/> states the rules.</param>
+    /// <param name="name">The object's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
     /// <returns>A new, owning <see cref="IGpuBuffer"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="sizeBytes"/> is zero.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="usage"/> is empty or undefined.</exception>
-    IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage);
+    IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name);
     /// <summary>Creates a host-visible buffer.</summary>
     /// <param name="sizeBytes">The size, in bytes, of the buffer; not zero.</param>
     /// <param name="usage">The usages; <see cref="GpuBufferUsages.Validate"/> states the rules.</param>
+    /// <param name="name">The object's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
     /// <returns>A new, owning <see cref="IGpuStorageBuffer"/>, its contents undefined until written.</returns>
     /// <exception cref="ArgumentException"><paramref name="sizeBytes"/> is zero.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="usage"/> is empty or undefined.</exception>
-    IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage);
+    IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name);
     /// <summary>Creates a host-visible buffer holding a copy of the supplied bytes.</summary>
     /// <param name="data">The bytes to copy in; not empty.</param>
     /// <param name="usage">The usages; <see cref="GpuBufferUsages.Validate"/> states the rules.</param>
+    /// <param name="name">The object's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
     /// <returns>A new, owning <see cref="IGpuStorageBuffer"/> the size of <paramref name="data"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="data"/> is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="usage"/> is empty or undefined.</exception>
-    IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage);
+    IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name);
 }

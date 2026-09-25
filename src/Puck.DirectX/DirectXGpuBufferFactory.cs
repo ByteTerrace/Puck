@@ -26,7 +26,7 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
     public const D3D12_RESOURCE_STATES HostVisibleState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
 
     /// <inheritdoc/>
-    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) {
+    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         GpuBufferUsages.Validate(
             sizeBytes: sizeBytes,
             usage: usage
@@ -44,6 +44,12 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
             sizeBytes: sizeBytes
         );
 
+        Naming.Name(
+            handle: ((nint)buffer),
+            kind: GpuObjectKind.Buffer,
+            name: in name
+        );
+
         return new DirectXGpuDeviceBuffer(
             bufferHandle: ((nint)buffer),
             memory: deviceContext.Memory,
@@ -51,7 +57,7 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
         );
     }
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) {
+    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         GpuBufferUsages.Validate(
             sizeBytes: sizeBytes,
             usage: usage
@@ -76,6 +82,12 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
             throw;
         }
 
+        Naming.Name(
+            handle: ((nint)buffer),
+            kind: GpuObjectKind.Buffer,
+            name: in name
+        );
+
         return new DirectXGpuStorageBuffer(
             bufferHandle: ((nint)buffer),
             mapped: mapped,
@@ -83,8 +95,9 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
         );
     }
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
+    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) {
         var buffer = CreateHostVisible(
+            name: in name,
             sizeBytes: ((ulong)data.Length),
             usage: usage
         );
@@ -96,4 +109,6 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
 
     private ID3D12Device* Device =>
         ((ID3D12Device*)deviceContext.Device.Handle);
+    private GpuObjectNaming Naming =>
+        deviceContext.Services.Naming;
 }

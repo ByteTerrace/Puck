@@ -185,17 +185,19 @@ public sealed unsafe class DirectXGroupedLayoutLawTests {
             expected: [true, false, false, true]
         );
 
-        var pool = bindings.CreatePool(sizes: GpuDescriptorPoolSizes.ForGroups(groups: filmGrain.Groups));
+        var pool = bindings.CreatePool(sizes: GpuDescriptorPoolSizes.ForGroups(groups: filmGrain.Groups), name: default);
 
         try {
             var admission = ((DirectXDescriptorPool)GCHandle.FromIntPtr(value: pool).Target!).Admission!;
             var frame = Set(handle: bindings.AllocateSet(
                 descriptorSetLayoutHandle: layout.GroupHandles[0],
-                poolHandle: pool
+                poolHandle: pool,
+                name: default
             ));
             var pass = Set(handle: bindings.AllocateSet(
                 descriptorSetLayoutHandle: layout.GroupHandles[3],
-                poolHandle: pool
+                poolHandle: pool,
+                name: default
             ));
             var samplerStart = admission.SamplerRanges.Single().Start;
             var samplerCpu = (DirectXConstants.GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)heaps.SamplerHeap)).ptr + (((nuint)samplerStart) * heaps.SamplerIncrement));

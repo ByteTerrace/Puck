@@ -132,6 +132,7 @@ public sealed partial class SdfWorldEngine {
             buffers: m_gpu.BufferFactory,
             byteCount: byteCount,
             copyPipeline: m_frameUploadPipeline,
+            name: NameOf(part: "mesh-region"),
             policy: policy,
             recorder: m_gpu.Recorder,
             slotCount: FrameRingSize

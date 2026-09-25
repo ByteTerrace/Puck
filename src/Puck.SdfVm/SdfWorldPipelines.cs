@@ -52,7 +52,11 @@ public sealed class SdfWorldPipelines : IDisposable {
             return new PipelineVersion(
                 native: gpu.PipelineFactory.Create(
                     computeShaderModule: shader,
-                    description: description
+                    description: description,
+                    name: new GpuObjectName(
+                        owner: SdfWorldEngine.ObjectOwner,
+                        part: description.Name
+                    )
                 ),
                 shader: shader
             );

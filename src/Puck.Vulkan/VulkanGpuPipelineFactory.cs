@@ -23,7 +23,8 @@ namespace Puck.Vulkan;
 /// <param name="computePipelineApi">The compute pipeline API.</param>
 /// <param name="pipelineFactory">The graphics pipeline factory.</param>
 /// <param name="allocator">The unmanaged allocator that marshals a planned layout's bindings.</param>
-public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext, IVulkanComputePipelineApi computePipelineApi, IVulkanGraphicsPipelineFactory pipelineFactory, IAllocator allocator) : IGpuPipelineFactory {
+/// <param name="naming">The naming every created pipeline is handed to.</param>
+public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext, IVulkanComputePipelineApi computePipelineApi, IVulkanGraphicsPipelineFactory pipelineFactory, IAllocator allocator, GpuObjectNaming naming) : IGpuPipelineFactory {
     private VulkanGroupPipelineLayout CreateGroupLayouts(VulkanDeviceCommands device, GpuPipelineLayoutDescription description) {
         VulkanPipelineLayouts.Create(
             allocator: allocator,
@@ -52,7 +53,22 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
         ),
     };
     /// <inheritdoc/>
-    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
+    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) {
+        var pipeline = CreateCompute(
+            computeShaderModule: computeShaderModule,
+            description: description
+        );
+
+        naming.Name(
+            handle: pipeline.Handle,
+            kind: GpuObjectKind.Pipeline,
+            name: in name
+        );
+
+        return pipeline;
+    }
+
+    private VulkanGpuComputePipeline CreateCompute(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         // description.SamplerFilter is a Direct3D 12 static-sampler concern; on Vulkan the sampler is a bound
         // descriptor whose filter the caller chose at CreateSampler time, so the combined-image-sampler layout
         // binding is filter-agnostic.
@@ -148,13 +164,32 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
             pipelineHandle: pipeline
         );
     }
+
     /// <inheritdoc/>
     public IGpuPipeline Create(
         IGpuRenderPass renderPass,
         IGpuShaderModule vertexShaderModule,
         IGpuShaderModule fragmentShaderModule,
-        GpuGraphicsPipelineDescription description
+        GpuGraphicsPipelineDescription description,
+        in GpuObjectName name
     ) {
+        var pipeline = CreateGraphics(
+            description: description,
+            fragmentShaderModule: fragmentShaderModule,
+            renderPass: renderPass,
+            vertexShaderModule: vertexShaderModule
+        );
+
+        naming.Name(
+            handle: pipeline.Handle,
+            kind: GpuObjectKind.Pipeline,
+            name: in name
+        );
+
+        return pipeline;
+    }
+
+    private IGpuPipeline CreateGraphics(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
         ArgumentNullException.ThrowIfNull(description);
         description.ValidateAgainst(renderPass: renderPass);
 

@@ -216,7 +216,8 @@ public sealed class GpuResidencyLawTests {
                 copyPipeline: copy,
                 policy: policy,
                 recorder: gpu.Services.Recorder,
-                slotCount: Slots
+                slotCount: Slots,
+                name: default
             );
             var expected = new byte[ByteCount];
             var frames = new List<byte[]>();
@@ -279,7 +280,8 @@ public sealed class GpuResidencyLawTests {
             copyPipeline: copy,
             policy: GpuResidencyPolicy.Staged,
             recorder: gpu.Services.Recorder,
-            slotCount: 2
+            slotCount: 2,
+            name: default
         );
 
         region.Flush(slot: 0);
@@ -293,7 +295,8 @@ public sealed class GpuResidencyLawTests {
             copyPipeline: copy,
             policy: GpuResidencyPolicy.Ring,
             recorder: gpu.Services.Recorder,
-            slotCount: 2
+            slotCount: 2,
+            name: default
         ));
     }
     [InlineData(GpuResidencyPolicy.InPlace)]
@@ -310,7 +313,8 @@ public sealed class GpuResidencyLawTests {
             copyPipeline: copy,
             policy: policy,
             recorder: gpu.Services.Recorder,
-            slotCount: 3
+            slotCount: 3,
+            name: default
         );
 
         Assert.Equal(
@@ -329,7 +333,8 @@ public sealed class GpuResidencyLawTests {
 
         return gpu.Services.PipelineFactory.Create(
             computeShaderModule: module,
-            description: GpuRegion.CopyPipeline
+            description: GpuRegion.CopyPipeline,
+            name: default
         );
     }
     // A frame's writes: none on the first frame, one straddling words, more separate ranges than a host buffer keeps

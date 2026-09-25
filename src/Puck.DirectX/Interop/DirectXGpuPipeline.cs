@@ -32,6 +32,8 @@ public sealed class DirectXGpuPipeline : IGpuPipeline, IGpuComputePipeline {
     public nint Handle => GCHandle.ToIntPtr(value: m_token);
     /// <inheritdoc/>
     public nint LayoutHandle => GCHandle.ToIntPtr(value: m_token);
+    /// <summary>Gets the pipeline state, root signature and root parameter indices the pipeline wraps.</summary>
+    public DirectXPipelineLayout Layout => ((DirectXPipelineLayout)m_token.Target!);
 
     /// <inheritdoc/>
     public void Dispose() {

@@ -10,6 +10,25 @@ namespace Puck.DirectX;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuCommandPoolFactory(DirectXDeviceContext deviceContext) : IGpuCommandPoolFactory {
     /// <inheritdoc/>
-    public IGpuCommandPool Create() =>
-        new DirectXGpuCommandPool(deviceContext: deviceContext);
+    public IGpuCommandPool Create(in GpuObjectName name) {
+        var pool = new DirectXGpuCommandPool(deviceContext: deviceContext);
+        var naming = deviceContext.Services.Naming;
+
+        if (naming.IsEnabled) {
+            var state = DirectXCommandBufferState.Decode(commandBufferHandle: pool.CommandBufferHandle);
+
+            naming.Name(
+                handle: state.Allocator,
+                kind: GpuObjectKind.CommandPool,
+                name: in name
+            );
+            naming.Name(
+                handle: state.CommandList,
+                kind: GpuObjectKind.CommandBuffer,
+                name: in name
+            );
+        }
+
+        return pool;
+    }
 }

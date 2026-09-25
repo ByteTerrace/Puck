@@ -57,11 +57,11 @@ internal sealed class RefusingGpuDevice :
     }
     public void WaitIdle() { }
 
-    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description) => throw Reach(member: "IGpuRenderPassFactory.Create");
+    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description, in GpuObjectName name) => throw Reach(member: "IGpuRenderPassFactory.Create");
     IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => throw Reach(member: "IGpuRenderPassFactory.CreateFramebuffer");
-    IGpuCommandPool IGpuCommandPoolFactory.Create() => throw Reach(member: "IGpuCommandPoolFactory.Create");
-    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => throw Reach(member: "IGpuPipelineFactory.Create(compute)");
-    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => throw Reach(member: "IGpuPipelineFactory.Create(graphics)");
+    IGpuCommandPool IGpuCommandPoolFactory.Create(in GpuObjectName name) => throw Reach(member: "IGpuCommandPoolFactory.Create");
+    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) => throw Reach(member: "IGpuPipelineFactory.Create(compute)");
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) => throw Reach(member: "IGpuPipelineFactory.Create(graphics)");
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) => throw Reach(member: "IGpuRecorder.BeginCommandBuffer");
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) => throw Reach(member: "IGpuRecorder.EndCommandBuffer");
     void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) => throw Reach(member: "IGpuRecorder.BeginDebugGroup");
@@ -87,9 +87,9 @@ internal sealed class RefusingGpuDevice :
     // A revision read reaches no device: a holder reads it to decide whether a refused build is due again.
     long IGpuBindings.HeapReleaseRevision => 0L;
 
-    nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw Reach(member: "IGpuBindings.AllocateSet");
+    nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) => throw Reach(member: "IGpuBindings.AllocateSet");
     bool IGpuBindings.CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) => throw Reach(member: "IGpuBindings.CanAdmit");
-    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => throw Reach(member: "IGpuBindings.CreatePool");
+    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) => throw Reach(member: "IGpuBindings.CreatePool");
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => throw Reach(member: "IGpuBindings.CreateSampler");
     void IGpuBindings.DestroyPool(nint poolHandle) {
         if (poolHandle != 0) {
@@ -108,10 +108,10 @@ internal sealed class RefusingGpuDevice :
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw Reach(member: "IGpuQueueSubmitter.Submit(fence)");
     void IGpuQueueSubmitter.SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => throw Reach(member: "IGpuQueueSubmitter.SubmitAndWait");
     IGpuShaderModule IGpuShaderModuleFactory.Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => throw Reach(member: "IGpuShaderModuleFactory.Create");
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => throw Reach(member: "IGpuBufferFactory.CreateHostVisible");
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) => throw Reach(member: "IGpuBufferFactory.CreateHostVisible(data)");
-    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => throw Reach(member: "IGpuBufferFactory.CreateDeviceLocal");
-    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => throw Reach(member: "IGpuImageFactory.Create");
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => throw Reach(member: "IGpuBufferFactory.CreateHostVisible");
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw Reach(member: "IGpuBufferFactory.CreateHostVisible(data)");
+    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => throw Reach(member: "IGpuBufferFactory.CreateDeviceLocal");
+    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) => throw Reach(member: "IGpuImageFactory.Create");
     IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport() => throw Reach(member: "IGpuSurfaceTransferFactory.CreateImport");
     IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => throw Reach(member: "IGpuSurfaceTransferFactory.CreateReadback");
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => throw Reach(member: "IGpuSurfaceTransferFactory.CreateUpload");

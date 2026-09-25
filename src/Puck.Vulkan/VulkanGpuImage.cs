@@ -135,14 +135,16 @@ public sealed class VulkanGpuImage : IGpuImage {
 /// <summary>
 /// Implements <see cref="IGpuImageFactory"/> for Vulkan through <see cref="VulkanGpuImage.Create"/>.
 /// </summary>
-public sealed class VulkanGpuImageFactory(IVulkanDeviceContext deviceContext, IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuImageFactory {
+/// <param name="deviceContext">The device context every image is created on.</param>
+/// <param name="offscreenImageApi">The native image API.</param>
+/// <param name="framebufferSetApi">The native image-view API.</param>
+/// <param name="naming">The naming every created object is handed to.</param>
+public sealed class VulkanGpuImageFactory(IVulkanDeviceContext deviceContext, IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi, GpuObjectNaming naming) : IGpuImageFactory {
     /// <inheritdoc/>
-    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
-
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
         var vkContext = deviceContext;
         var logicalDevice = vkContext.LogicalDevice;
-
-        return VulkanGpuImage.Create(
+        var image = VulkanGpuImage.Create(
             device: logicalDevice.Commands,
             format: format,
             framebufferSetApi: framebufferSetApi,
@@ -153,5 +155,18 @@ public sealed class VulkanGpuImageFactory(IVulkanDeviceContext deviceContext, IV
             usage: usage,
             width: width
         );
+
+        naming.Name(
+            handle: image.ImageHandle,
+            kind: GpuObjectKind.Image,
+            name: in name
+        );
+        naming.Name(
+            handle: image.ImageViewHandle,
+            kind: GpuObjectKind.ImageView,
+            name: in name
+        );
+
+        return image;
     }
 }

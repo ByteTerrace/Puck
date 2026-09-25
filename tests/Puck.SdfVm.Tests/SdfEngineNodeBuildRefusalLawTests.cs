@@ -173,7 +173,8 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
             MaxSets: 1,
             StorageBufferCount: 1,
             StorageImageCount: 0
-        ));
+        ),
+ name: default);
 
         _ = rig.ProduceUntilRefused();
         Assert.Contains(
@@ -232,7 +233,6 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         Assert.False(condition: rig.Node.IsReady);
         rig.AssertOnlyThePipelineSetIsHeld();
     }
-
     /// <summary>The operator's GPU faults are a recorded input (<see cref="GpuCreationFaults.Revision"/>): a build a fault
     /// refused is not tried again on unchanged frames, arming another fault is a change that retries it exactly once
     /// (refused again by the fault just armed, whose firing is no further change), and disarming is a change that

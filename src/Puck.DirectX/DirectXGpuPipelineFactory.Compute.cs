@@ -24,7 +24,16 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
     /// signature is <see cref="DirectXRootSignatures.CreateLayout"/>'s, with its samplers in sampler tables rather than
     /// static samplers.</para>
     /// </remarks>
-    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
+    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) =>
+        Named(
+            name: in name,
+            pipeline: CreateCompute(
+                computeShaderModule: computeShaderModule,
+                description: description
+            )
+        );
+
+    private DirectXGpuPipeline CreateCompute(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         ArgumentNullException.ThrowIfNull(computeShaderModule);
         ArgumentNullException.ThrowIfNull(description);
 
@@ -100,7 +109,6 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
 
         return new DirectXGpuPipeline(layout: layout);
     }
-
     // Packs each binding to a base heap slot in binding-list order (an array binding consuming Count slots), returning a
     // map indexed by binding index. Two bindings never share a slot, so no kernel has to hand-pick indices around array
     // spans — picking any distinct index per binding is enough.

@@ -121,8 +121,11 @@ public sealed partial class ShaderPipelineRenderNode {
         var inFlight = m_inFlight;
 
         m_previewBuilding = request;
+        var owner = m_descriptor.Name;
+
         m_previewBuild.Start(build: _ => PreviewObjects.Create(
             device: device,
+            owner: owner,
             gpu: gpu,
             directX: directX,
             height: request.Height,
@@ -207,7 +210,8 @@ public sealed partial class ShaderPipelineRenderNode {
         // The usages of a preview image: drawn into, then published and sampled downstream, in General as a storage image.
         private const GpuImageUsage TargetUsage = GpuImageUsage.ColorAttachment | GpuImageUsage.Sampled | GpuImageUsage.Storage;
 
-        private PreviewObjects(uint width, uint height, uint inFlight) {
+        private PreviewObjects(string owner, uint width, uint height, uint inFlight) {
+            Owner = owner;
             Width = width;
             Height = height;
             Framebuffers = new IGpuFramebuffer[inFlight];
@@ -215,6 +219,8 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         public IGpuShaderModule? Fragment { get; private set; }
+        // The owning instance's name, which every preview object's debug name starts with.
+        public string Owner { get; }
         public IGpuFramebuffer[] Framebuffers { get; }
         public uint Height { get; }
         public IGpuPipeline? Pipeline { get; private set; }
@@ -223,10 +229,11 @@ public sealed partial class ShaderPipelineRenderNode {
         public IGpuShaderModule? Vertex { get; private set; }
         public uint Width { get; }
 
-        public static PreviewObjects Create(GpuDeviceServices gpu, IGpuDeviceContext device, bool directX, uint width, uint height, uint inFlight) {
+        public static PreviewObjects Create(GpuDeviceServices gpu, IGpuDeviceContext device, bool directX, uint width, uint height, uint inFlight, string owner) {
             var objects = new PreviewObjects(
                 height: height,
                 inFlight: inFlight,
+                owner: owner,
                 width: width
             );
             var extension = (directX
@@ -266,18 +273,31 @@ public sealed partial class ShaderPipelineRenderNode {
                         Format: GpuPixelFormat.R8G8B8A8Unorm,
                         Load: GpuAttachmentLoad.Clear,
                         Store: GpuAttachmentStore.Store
-                    )])
+                    )]),
+                    name: new GpuObjectName(
+                        owner: owner,
+                        part: "preview"
+                    )
                 );
                 objects.Pipeline = gpu.PipelineFactory.Create(
                     objects.RenderPass,
                     objects.Vertex,
                     objects.Fragment,
-                    description
+                    description,
+                    name: new GpuObjectName(
+                        owner: owner,
+                        part: "preview"
+                    )
                 );
 
                 for (var i = 0; (i < inFlight); i++) {
                     objects.Targets[i] = gpu.ImageFactory.Create(
                         format: GpuPixelFormat.R8G8B8A8Unorm,
+                        name: new GpuObjectName(
+                            index: ((int)i),
+                            owner: owner,
+                            part: "preview"
+                        ),
                         height: height,
                         usage: TargetUsage,
                         width: width
@@ -348,16 +368,42 @@ public sealed partial class ShaderPipelineRenderNode {
             try {
                 var bindings = gpu.Bindings;
 
-                m_descriptorPool = bindings.CreatePool(sizes: PreviewDescriptorPool(inFlight: inFlight));
+                m_descriptorPool = bindings.CreatePool(
+                    name: new GpuObjectName(
+                        owner: objects.Owner,
+                        part: "preview"
+                    ),
+                    sizes: PreviewDescriptorPool(inFlight: inFlight)
+                );
                 for (var i = 0; (i < inFlight); i++) {
                     m_descriptorSets[i] = bindings.AllocateSet(
                         m_descriptorPool,
-                        m_pipeline.DescriptorSetLayoutHandle
+                        m_pipeline.DescriptorSetLayoutHandle,
+                        name: new GpuObjectName(
+                            index: ((int)i),
+                            owner: objects.Owner,
+                            part: "preview"
+                        )
                     );
                     m_samplers[i] = bindings.CreateSampler();
-                    m_pre[i] = gpu.CommandPoolFactory.Create();
-                    m_draw[i] = gpu.CommandPoolFactory.Create();
-                    m_post[i] = gpu.CommandPoolFactory.Create();
+                    m_pre[i] = gpu.CommandPoolFactory.Create(name: new GpuObjectName(
+                        detail: "barriers",
+                        index: ((int)i),
+                        owner: objects.Owner,
+                        part: "preview"
+                    ));
+                    m_draw[i] = gpu.CommandPoolFactory.Create(name: new GpuObjectName(
+                        detail: "draw",
+                        index: ((int)i),
+                        owner: objects.Owner,
+                        part: "preview"
+                    ));
+                    m_post[i] = gpu.CommandPoolFactory.Create(name: new GpuObjectName(
+                        detail: "post",
+                        index: ((int)i),
+                        owner: objects.Owner,
+                        part: "preview"
+                    ));
                 }
             } catch { Dispose(); throw; }
         }

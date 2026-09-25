@@ -34,8 +34,8 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
         var first = context.DescriptorHeaps;
         var capabilities = context.Capabilities!;
 
-        bindings.DestroyPool(poolHandle: bindings.CreatePool(sizes: Pool(buffers: 4)));
-        bindings.DestroyPool(poolHandle: bindings.CreatePool(sizes: Pool(buffers: 4)));
+        bindings.DestroyPool(poolHandle: bindings.CreatePool(sizes: Pool(buffers: 4), name: default));
+        bindings.DestroyPool(poolHandle: bindings.CreatePool(sizes: Pool(buffers: 4), name: default));
 
         Assert.Same(
             actual: context.DescriptorHeaps,
@@ -76,8 +76,8 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
         var bindings = context.Services.Bindings;
         var budget = context.DescriptorHeaps.Budget;
         var clears = DirectXShaderVisibleHeaps.ClearDescriptors;
-        var first = bindings.CreatePool(sizes: Pool(buffers: 10));
-        var second = bindings.CreatePool(sizes: Pool(buffers: 10));
+        var first = bindings.CreatePool(sizes: Pool(buffers: 10), name: default);
+        var second = bindings.CreatePool(sizes: Pool(buffers: 10), name: default);
 
         // The device's clear range sits ahead of every pool.
         Assert.Equal(
@@ -87,7 +87,7 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
 
         bindings.DestroyPool(poolHandle: first);
 
-        var third = bindings.CreatePool(sizes: Pool(buffers: 10));
+        var third = bindings.CreatePool(sizes: Pool(buffers: 10), name: default);
 
         Assert.Equal(
             actual: (StartOf(pool: third), budget.FreeViewDescriptors),
@@ -122,7 +122,7 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
             expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'over' needs {(free + 1U)} view descriptors in 2 pool(s) and is refused: "
         );
         Assert.StartsWith(
-            actualString: Assert.Throws<GpuDescriptorHeapRefusalException>(testCode: () => bindings.CreatePool(sizes: Pool(buffers: (free + 1U)))).Message,
+            actualString: Assert.Throws<GpuDescriptorHeapRefusalException>(testCode: () => bindings.CreatePool(sizes: Pool(buffers: (free + 1U)), name: default)).Message,
             expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] "
         );
         Assert.Equal(
@@ -136,7 +136,7 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
         var context = WarpContext(memory: memory);
         var heaps = context.DescriptorHeaps;
         var bytes = checked((long)(heaps.ViewHeapBytes + heaps.SamplerHeapBytes));
-        var pool = context.Services.Bindings.CreatePool(sizes: Pool(buffers: 8));
+        var pool = context.Services.Bindings.CreatePool(sizes: Pool(buffers: 8), name: default);
 
         Assert.Equal(
             actual: (memory.Held, memory.Read(kind: GpuDeviceMemoryWork.Allocated), (heaps.ViewHeapBytes == (((ulong)heaps.Budget.ViewDescriptors) * heaps.ViewIncrement))),
@@ -156,10 +156,11 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
         using var context = WarpContext(memory: null);
         var services = context.Services;
         using var buffer = services.BufferFactory.CreateDeviceLocal(
+            name: default,
             sizeBytes: 256UL,
             usage: GpuBufferUsage.Storage
         );
-        using var pool = services.CommandPoolFactory.Create();
+        using var pool = services.CommandPoolFactory.Create(name: default);
         var command = pool.CommandBufferHandle;
 
         for (var recording = 0; (recording < 2); recording++) {

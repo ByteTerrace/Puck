@@ -520,6 +520,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         for (var index = 0; (index < ((int)m_viewportCapacity)); index++) {
             m_sourceTextures[index] = scope.Own(created: gpu.ImageFactory.Create(
+                name: NameOf(part: "sources", index: index),
                 format: Format,
                 height: height,
                 usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
@@ -532,6 +533,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // while a combined-image-sampler binding requires ShaderReadOnly, so aliasing it trips Vulkan validation the
         // moment any viewport-source dispatch runs. This image is transitioned ONCE, below, and never written again.
         m_screenSourceFiller = scope.Own(created: gpu.ImageFactory.Create(
+            name: NameOf(part: "screen-source-filler"),
             format: Format,
             height: 1,
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
@@ -543,6 +545,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // per-view sources are always internal.
         m_storageImage = scope.Own(created: ((options.CreateOutputImage is null)
             ? gpu.ImageFactory.Create(
+                name: NameOf(part: "output"),
                 format: Format,
                 height: height,
                 usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
@@ -558,6 +561,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             val2: options.ProgramWordCapacity
         );
         m_programBuffer = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+            name: NameOf(part: "program"),
             sizeBytes: (((ulong)m_programWordCapacity) * sizeof(uint)),
             usage: GpuBufferUsage.Storage
         ));
@@ -567,14 +571,17 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // lead with the run-table reserve (SdfWorldEngine.Uploads.cs).
         for (var slot = 0; (slot < FrameRingSize); slot++) {
             m_viewportBuffers[slot] = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+                name: NameOf(detail: "host", index: slot, part: "viewports"),
                 sizeBytes: FrameUploadStagingBytes(tableBytes: m_viewportScratch.Length),
                 usage: GpuBufferUsage.Storage
             ));
             m_dynamicTransformBuffers[slot] = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+                name: NameOf(detail: "host", index: slot, part: "dynamic-transforms"),
                 sizeBytes: FrameUploadStagingBytes(tableBytes: m_dynamicTransformScratch.Length),
                 usage: GpuBufferUsage.Storage
             ));
             m_instanceGridBuffers[slot] = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+                name: NameOf(detail: "host", index: slot, part: "instance-grid"),
                 sizeBytes: FrameUploadStagingBytes(tableBytes: checked((m_instanceGridWordCapacity * sizeof(uint)))),
                 usage: GpuBufferUsage.Storage
             ));
@@ -582,23 +589,27 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             // (like the always-bound dynamic-transform slot), so Stage 1's binding stays valid for a program with none —
             // an all-zero undeclared slot is never addressed (no material id in a consistent program points at it).
             m_screenSurfaceBuffers[slot] = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+                name: NameOf(part: "screen-surfaces", index: slot),
                 sizeBytes: (MaxScreenSurfaces * ((ulong)ScreenSurfaceByteLength)),
                 usage: GpuBufferUsage.Storage
             ));
             // The screen-light buffer: the screen colors + environment float4s. Bound to the views set only (Stage 1
             // shades; the beam prepass does not).
             m_screenLightBuffers[slot] = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+                name: NameOf(part: "screen-lights", index: slot),
                 sizeBytes: ((ulong)m_screenLightScratch.Length),
                 usage: GpuBufferUsage.Storage
             ));
             // The glyph-decal buffer: descriptor band + cell region.
             m_decalBuffers[slot] = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+                name: NameOf(part: "decals", index: slot),
                 sizeBytes: ((ulong)m_decals.Current.Length),
                 usage: GpuBufferUsage.Storage
             ));
             // The bounded-volume buffer: bound to the views descriptor set shared with the sky pass — the beam prepass
             // never shades.
             m_volumeBuffers[slot] = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+                name: NameOf(part: "volumes", index: slot),
                 sizeBytes: ((ulong)m_volumeScratch.Length),
                 usage: GpuBufferUsage.Storage
             ));
@@ -608,6 +619,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // those bounds from this frame's poses and camera; primary reads them after the existing compute barrier.
         // Reserve the construction envelope, but index with live viewport/instance counts, as the masks do.
         m_tileBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: NameOf(part: "tiles"),
             sizeBytes: FrameBufferBytes(
                 buffer: SdfFrameBuffer.Tiles,
                 capacity: capacity
@@ -618,6 +630,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // buffer sized for a previous layout. Shared across frame slots; Record orders primary writes before
         // shading reads and this frame's writes after the preceding frame's reads.
         m_primaryHitBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: NameOf(part: "primary-hits"),
             sizeBytes: FrameBufferBytes(
                 buffer: SdfFrameBuffer.PrimaryHits,
                 capacity: capacity
@@ -631,6 +644,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // frame (m_liveInstanceMaskWordCount). UploadProgram grows this reserve when necessary.
         m_instanceMaskWordCount = SdfProgram.InstanceMaskWordCountFor(instanceCount: m_instanceCapacity);
         m_instanceMaskBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: NameOf(part: "instance-masks"),
             sizeBytes: FrameBufferBytes(
                 buffer: SdfFrameBuffer.InstanceMasks,
                 capacity: capacity
@@ -656,6 +670,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             table: "instance-grid"
         );
         m_viewportDeviceBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: NameOf(part: "viewports"),
             sizeBytes: FrameBufferBytes(
                 buffer: SdfFrameBuffer.Viewports,
                 capacity: capacity
@@ -663,6 +678,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             usage: GpuBufferUsage.Storage
         ));
         m_dynamicTransformDeviceBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: NameOf(part: "dynamic-transforms"),
             sizeBytes: FrameBufferBytes(
                 buffer: SdfFrameBuffer.DynamicTransforms,
                 capacity: capacity
@@ -670,6 +686,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             usage: GpuBufferUsage.Storage
         ));
         m_instanceGridDeviceBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: NameOf(part: "instance-grid"),
             sizeBytes: FrameBufferBytes(
                 buffer: SdfFrameBuffer.InstanceGrid,
                 capacity: capacity
@@ -684,6 +701,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // sdfSampledRegion detects the filler by its element count and renders SampledRegion programs via the
         // conservative uncarved-hull fallback (only RequestBrickBake stays rejected on a pool-less engine).
         m_brickPoolBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: NameOf(part: "brick-pool"),
             sizeBytes: FrameBufferBytes(
                 buffer: SdfFrameBuffer.BrickPool,
                 capacity: capacity
@@ -706,6 +724,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // views dispatch reads the args (the dispatch grid) and the box (its pixel offset, and where a visibility
         // record is current). The all-empty margins are never dispatched.
         m_viewsArgsBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: NameOf(part: "views-args"),
             sizeBytes: FrameBufferBytes(
                 buffer: SdfFrameBuffer.ViewsArgs,
                 capacity: capacity
@@ -713,6 +732,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
         ));
         m_cullBoundsBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: NameOf(part: "cull-bounds"),
             sizeBytes: FrameBufferBytes(
                 buffer: SdfFrameBuffer.CullBounds,
                 capacity: capacity
@@ -726,6 +746,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // (the `world` parity gate is the guard). Host-written once + host-coherent, so the queue-submit host-write
         // visibility covers it with no indirect-read barrier.
         m_compositeArgsBuffer = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+            name: NameOf(part: "composite-args"),
             sizeBytes: (sizeof(uint) * 3),
             usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
         ));
@@ -748,6 +769,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         );
 
         m_pool = m_bindings.CreatePool(
+            name: NameOf(part: "descriptors"),
             sizes: poolSizes
         );
         // The sets allocated from the pool are released with it.
@@ -758,6 +780,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         // The cull buffer is read-only here (a stride-4 SRV on Direct3D 12); the args + bounds are written (UAVs).
         m_cullArgsSet = m_bindings.AllocateSet(
+            name: NameOf(part: "cull-args"),
             descriptorSetLayoutHandle: m_cullArgsPipeline.DescriptorSetLayoutHandle,
             poolHandle: m_pool
         );
@@ -786,6 +809,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {
             var beamSet = m_bindings.AllocateSet(
+                name: NameOf(part: "beam", index: slot),
                 descriptorSetLayoutHandle: m_beamPipeline.DescriptorSetLayoutHandle,
                 poolHandle: m_pool
             );
@@ -825,6 +849,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
             // The instance-cull set: the mask buffer written (the frame's first pass — the beam then reads it).
             var instanceCullSet = m_bindings.AllocateSet(
+                name: NameOf(part: "instance-cull", index: slot),
                 descriptorSetLayoutHandle: m_instanceCullPipeline.DescriptorSetLayoutHandle,
                 poolHandle: m_pool
             );
@@ -857,6 +882,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             );
 
             var viewsSet = m_bindings.AllocateSet(
+                name: NameOf(part: "views", index: slot),
                 descriptorSetLayoutHandle: m_viewsPipeline.DescriptorSetLayoutHandle,
                 poolHandle: m_pool
             );
@@ -939,6 +965,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             );
 
             var compositeSet = m_bindings.AllocateSet(
+                name: NameOf(part: "composite", index: slot),
                 descriptorSetLayoutHandle: m_compositePipeline.DescriptorSetLayoutHandle,
                 poolHandle: m_pool
             );
@@ -953,7 +980,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
             // The source array (binding the SDF view textures and any hosted child surfaces) is (re)bound per frame by
             // BindSources — child image-views aren't known until their nodes have produced.
-            m_commandPools[slot] = scope.Own(created: gpu.CommandPoolFactory.Create());
+            m_commandPools[slot] = scope.Own(created: gpu.CommandPoolFactory.Create(name: NameOf(
+                part: "commands",
+                index: slot
+            )));
             m_frameFences[slot] = scope.Own(created: gpu.QueueSubmitter.CreateSubmissionFence());
         }
 
@@ -964,6 +994,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         if (m_brickPoolEnabled) {
             for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {
                 var requestBuffer = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+                    name: NameOf(detail: "request", index: brick, part: "brick-bake"),
                     sizeBytes: (((ulong)m_brickRequestScratch.Length) * (sizeof(float) * 4)),
                     usage: GpuBufferUsage.Storage
                 ));
@@ -971,6 +1002,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 m_brickRequestBuffers[brick] = requestBuffer;
 
                 var bakeSet = m_bindings.AllocateSet(
+                    name: NameOf(part: "brick-bake", index: brick),
                     descriptorSetLayoutHandle: m_brickBakePipeline!.DescriptorSetLayoutHandle,
                     poolHandle: m_pool
                 );
@@ -992,6 +1024,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             if (m_brickUploadPipeline is not null) {
                 for (var slot = 0; (slot < FrameRingSize); slot++) {
                     var staging = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+                        name: NameOf(detail: "staging", index: slot, part: "brick-upload"),
                         sizeBytes: (((ulong)SdfBrickPoolLayout.VoxelsPerBrick) * sizeof(float)),
                         usage: GpuBufferUsage.Storage
                     ));
@@ -999,6 +1032,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                     m_brickUploadStaging[slot] = staging;
 
                     var uploadSet = m_bindings.AllocateSet(
+                        name: NameOf(part: "brick-upload", index: slot),
                         descriptorSetLayoutHandle: m_brickUploadPipeline.DescriptorSetLayoutHandle,
                         poolHandle: m_pool
                     );
@@ -1026,6 +1060,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
             for (var table = 0; (table < FrameUploadTableCount); table++) {
                 var uploadSet = m_bindings.AllocateSet(
+                    name: NameOf(part: FrameUploadTableNames[table], detail: "upload", index: slot),
                     descriptorSetLayoutHandle: m_frameUploadPipeline.DescriptorSetLayoutHandle,
                     poolHandle: m_pool
                 );

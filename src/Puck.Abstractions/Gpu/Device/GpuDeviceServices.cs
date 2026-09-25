@@ -2,7 +2,8 @@ namespace Puck.Abstractions.Gpu;
 
 /// <summary>
 /// The neutral GPU services of one device, every one bound to it: the recorder, the bindings, the queue submitter, and
-/// the factories for command pools, pipelines, shader modules, buffers, images, render passes and surface transfers.
+/// the factories for command pools, pipelines, shader modules, buffers, images, render passes and surface transfers,
+/// and the naming their objects are created with.
 /// A backend creates the set with its device context and hands it out as <see cref="IGpuDeviceContext.Services"/>, the
 /// one way a consumer reaches a device-bound service; no member takes a device argument. The set is bound to the
 /// context rather than to one native device, so it survives a device recreated in place after a loss.
@@ -37,6 +38,10 @@ public sealed class GpuDeviceServices {
     /// changes records <see cref="GpuCreationFaults.Revision"/> as one of them, so arming or clearing a fault retries it.
     /// Every wrap carries it over unchanged.</summary>
     public GpuCreationFaults? Faults { get; init; }
+    /// <summary>Gets the naming every creating member hands its objects to (<see cref="GpuObjectNaming"/>), or
+    /// <see cref="GpuObjectNaming.Off"/>, the default, when the device names nothing. Every wrap carries it over
+    /// unchanged.</summary>
+    public GpuObjectNaming Naming { get; init; } = GpuObjectNaming.Off;
     /// <summary>Gets the surface-transfer factory (readback, upload and import).</summary>
     public required IGpuSurfaceTransferFactory SurfaceTransferFactory { get; init; }
 }

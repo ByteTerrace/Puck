@@ -124,7 +124,11 @@ public sealed class GpuRegionCopyPipelineCache {
             var pipeline = new GpuRegionCopyPipeline(
                 native: gpu.PipelineFactory.Create(
                     computeShaderModule: shader,
-                    description: GpuRegion.CopyPipeline
+                    description: GpuRegion.CopyPipeline,
+                    name: new GpuObjectName(
+                        owner: "gpu.region-copy",
+                        part: GpuRegion.CopyPipeline.Name
+                    )
                 ),
                 shader: shader
             );

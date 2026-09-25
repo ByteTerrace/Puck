@@ -86,13 +86,15 @@ public sealed class GpuRegion : IDisposable {
     /// <param name="recorder">The recorder the staged policy's copy is recorded through.</param>
     /// <param name="copyPipeline">The copy kernel's pipeline, created from <see cref="CopyPipeline"/>; read only under the
     /// staged policy. The caller owns it and keeps it alive while the region records copies.</param>
+    /// <param name="name">The region's debug name, from its creator's identity: each slot's host-visible buffer and copy
+    /// set is named at its slot's index, and the device-local buffer and the copy pool bare.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> is not a defined policy,
     /// <paramref name="byteCount"/> is not positive or not a whole number of uints, <paramref name="slotCount"/> is not
     /// positive, or a staged region holds more than <see cref="MaxStagedWords"/> words.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) {
+    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name) {
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
@@ -176,6 +178,7 @@ public sealed class GpuRegion : IDisposable {
 
             for (var index = 0; (index < m_hostBuffers.Length); index++) {
                 m_hostBuffers[index] = buffers.CreateHostVisible(
+                    name: name.At(index: index),
                     sizeBytes: hostBytes,
                     usage: GpuBufferUsage.Storage
                 );
@@ -184,11 +187,12 @@ public sealed class GpuRegion : IDisposable {
 
             if (policy == GpuResidencyPolicy.Staged) {
                 m_deviceLocal = buffers.CreateDeviceLocal(
+                    name: name,
                     sizeBytes: ((ulong)byteCount),
                     usage: GpuBufferUsage.Storage
                 );
                 m_ownedBuffers.Add(item: m_deviceLocal);
-                CreateCopySets();
+                CreateCopySets(name: name);
             }
         } catch {
             Dispose();
@@ -444,12 +448,16 @@ public sealed class GpuRegion : IDisposable {
 
     // One copy set per slot from one pool: the slot's staging buffer as the source, the device-local buffer as the
     // destination.
-    private void CreateCopySets() {
-        m_copyPool = m_bindings.CreatePool(sizes: CopyPoolSizes(slotCount: SlotCount));
+    private void CreateCopySets(in GpuObjectName name) {
+        m_copyPool = m_bindings.CreatePool(
+            name: name,
+            sizes: CopyPoolSizes(slotCount: SlotCount)
+        );
 
         for (var slot = 0; (slot < SlotCount); slot++) {
             var set = m_bindings.AllocateSet(
                 descriptorSetLayoutHandle: m_copyPipeline.DescriptorSetLayoutHandle,
+                name: name.At(index: slot),
                 poolHandle: m_copyPool
             );
 

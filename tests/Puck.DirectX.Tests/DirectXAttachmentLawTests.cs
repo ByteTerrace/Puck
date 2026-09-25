@@ -79,6 +79,7 @@ public sealed class DirectXAttachmentLawTests {
             _ = Assert.Throws<ArgumentException>(testCode: () => factory.Create(
                 description: description,
                 fragmentShaderModule: null!,
+                name: default,
                 renderPass: pass,
                 vertexShaderModule: null!
             ));

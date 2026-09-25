@@ -519,6 +519,32 @@ These are one-line cautions; the owning pages hold the derivations.
   over `FakeGpuDevice` with `trackObjects`, whose `Created` and `Memory` show
   what was released and the device-local bytes still held, and a shader
   pipeline candidate over `FakePipelineGpu`.
+- **Every GPU object is named at creation, from its creator's identity.** Each
+  creating member of `GpuDeviceServices` (buffers, images, pipelines,
+  descriptor pools and sets, command pools, render passes) takes a
+  `GpuObjectName`: owner, part, optional detail and index, such as
+  `sdf.world/viewports/host[1]` (the SDF engine's objects by role through
+  `SdfWorldEngine.NameOf`, its pipelines by kernel pipeline name),
+  `<instance>/<pass or resource>[slot]` for a shader pipeline or graph package,
+  `overlay/pass`, `render-graph/stand-in`, `gpu.region-copy/<pipeline>`.
+  `GpuObjectName.ToString` is the one place a name becomes text; a site never
+  formats one, and a name holds no handle, counter or clock, so it is the same
+  on every run. `GpuDeviceServices.Naming` (`GpuObjectNaming`) applies it:
+  `VulkanGpuObjectNaming` through `vkSetDebugUtilsObjectNameEXT`, on only with
+  validation and `VK_EXT_debug_utils`; `DirectXGpuObjectNaming` through
+  `ID3D12Object::SetName`, on only with the debug layer, for resources, pipeline
+  states, allocators and command lists (Direct3D 12 views, pools, sets and
+  render passes are not objects there). Off, `Name` returns before formatting,
+  so a named creation allocates nothing (`GpuObjectNamingLawTests`, over
+  `FakeGpuDevice` with `RecordingGpuObjectNaming`); the counting and fault
+  decorators pass every name through and carry `Naming` over. A new creating
+  member takes a name and its backends hand the object to the naming;
+  `SdfWorldEngineObjectNameLawTests` holds the engine's names. To trace a
+  validation message, run with `--debug-layers` (`puck canary --debug-layers`,
+  or the World flag) and read the name the message prints: a Vulkan
+  `[vulkan-debug] validation` line carries `handle = 0x…, name = sdf.world/…`
+  in its `Objects:` list, and a `[d3d12-debug]` line quotes the name beside
+  the resource pointer, as does its teardown `live` report.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
   backends), created-object kinds `PerBackendDeterministic`, and anything

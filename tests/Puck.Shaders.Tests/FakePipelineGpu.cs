@@ -203,7 +203,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
 
-    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => (poolHandle + 1);
+    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) => (poolHandle + 1);
     public void BeginCommandBuffer(nint commandBufferHandle) {
         lock (m_gate) {
             if (m_byHandle.TryGetValue(
@@ -228,11 +228,11 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => RecordGraphics(buffer: bufferHandle, command: "vertices", count: strideBytes, offsetBytes: 0, sizeBytes: sizeBytes);
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => ClearedImages.Add(item: imageHandle);
-    public IGpuCommandPool Create() => new FakeCommandPool(created: Create(kind: "command pool"));
-    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => new FakePipeline(created: CreateCompiled(kind: "compute pipeline"));
+    public IGpuCommandPool Create(in GpuObjectName name) => new FakeCommandPool(created: Create(kind: "command pool"));
+    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) => new FakePipeline(created: CreateCompiled(kind: "compute pipeline"));
     public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => new FakeModule(created: CreateCompiled(kind: $"{stage} module"));
-    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => throw new NotSupportedException();
-    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => new FakeImage(
+    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) => new FakeImage(
         created: Create(
             bytes: ((((ulong)width) * height) * TexelBytes(format: format)),
             kind: $"{format} image"
@@ -242,7 +242,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         usage: usage,
         width: width
     );
-    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
+    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
         description.ValidateAgainst(renderPass: renderPass);
 
         var created = CreateCompiled(kind: "graphics pipeline");
@@ -253,7 +253,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
         return new FakePipeline(created: created);
     }
-    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
+    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) {
         GpuBufferUsages.Validate(
             sizeBytes: ((ulong)data.Length),
             usage: usage
@@ -271,7 +271,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             sizeBytes: ((ulong)data.Length)
         );
     }
-    public IGpuRenderPass Create(GpuRenderPassDescription description) => new FakeRenderPass(
+    public IGpuRenderPass Create(GpuRenderPassDescription description, in GpuObjectName name) => new FakeRenderPass(
         created: Create(kind: "render pass"),
         description: description
     );
@@ -291,7 +291,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             width: width
         );
     }
-    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => new FakeBuffer(
+    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => new FakeBuffer(
         created: Create(
             bytes: sizeBytes,
             kind: "buffer"
@@ -317,7 +317,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
     public long HeapReleaseRevision => (DescriptorHeap?.ReleaseRevision ?? 0L);
 
-    public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
+    public nint CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) {
         GpuDescriptorAdmission? admission = null;
 
         lock (m_gate) {

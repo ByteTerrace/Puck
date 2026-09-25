@@ -111,7 +111,7 @@ internal sealed class UploadModelGpu :
     }
     public void WaitIdle() { }
 
-    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
+    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) {
         var pipeline = new Handles(handle: NextHandle(), layout: NextHandle(), setLayout: NextHandle());
 
         if (m_uploadModules.ContainsKey(key: computeShaderModule.Handle)) {
@@ -138,16 +138,16 @@ internal sealed class UploadModelGpu :
 
         return module;
     }
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
-    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) => throw new NotSupportedException();
-    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => throw new NotSupportedException();
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
+    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) => throw new NotSupportedException();
 
     long IGpuBindings.HeapReleaseRevision => m_inner.Services.Bindings.HeapReleaseRevision;
 
-    nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => NextHandle();
+    nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) => NextHandle();
     bool IGpuBindings.CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) => m_inner.Services.Bindings.CanAdmit(owner: owner, pools: pools, refusal: out refusal);
-    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => m_inner.Services.Bindings.CreatePool(sizes: sizes);
+    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) => m_inner.Services.Bindings.CreatePool(name: name, sizes: sizes);
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => m_inner.Services.Bindings.CreateSampler(filter: filter);
     void IGpuBindings.DestroyPool(nint poolHandle) { }
     void IGpuBindings.DestroySampler(nint samplerHandle) { }

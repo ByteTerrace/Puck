@@ -237,14 +237,23 @@ public sealed class VulkanGpuFramebuffer : IGpuFramebuffer {
 /// Implements <see cref="IGpuRenderPassFactory"/> for Vulkan through <see cref="VulkanGpuRenderPass"/> and
 /// <see cref="VulkanGpuFramebuffer"/>.
 /// </summary>
-public sealed class VulkanGpuRenderPassFactory(IVulkanDeviceContext deviceContext, IVulkanRenderPassApi renderPassApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuRenderPassFactory {
+public sealed class VulkanGpuRenderPassFactory(IVulkanDeviceContext deviceContext, IVulkanRenderPassApi renderPassApi, IVulkanFramebufferSetApi framebufferSetApi, GpuObjectNaming naming) : IGpuRenderPassFactory {
     /// <inheritdoc/>
-    public IGpuRenderPass Create(GpuRenderPassDescription description) =>
-        VulkanGpuRenderPass.Create(
+    public IGpuRenderPass Create(GpuRenderPassDescription description, in GpuObjectName name) {
+        var renderPass = VulkanGpuRenderPass.Create(
             description: description,
             device: deviceContext.LogicalDevice.Commands,
             renderPassApi: renderPassApi
         );
+
+        naming.Name(
+            handle: renderPass.RenderPass.Handle,
+            kind: GpuObjectKind.RenderPass,
+            name: in name
+        );
+
+        return renderPass;
+    }
     /// <inheritdoc/>
     public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) =>
         VulkanGpuFramebuffer.Create(

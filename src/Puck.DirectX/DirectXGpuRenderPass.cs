@@ -158,7 +158,7 @@ public sealed unsafe class DirectXGpuFramebuffer : IGpuFramebuffer {
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuRenderPassFactory(DirectXDeviceContext deviceContext) : IGpuRenderPassFactory {
     /// <inheritdoc/>
-    public IGpuRenderPass Create(GpuRenderPassDescription description) =>
+    public IGpuRenderPass Create(GpuRenderPassDescription description, in GpuObjectName name) =>
         new DirectXGpuRenderPass(description: description);
     /// <inheritdoc/>
     public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) =>

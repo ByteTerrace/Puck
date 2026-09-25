@@ -19,7 +19,8 @@ public sealed class ConsoleErrorCollection {
 /// nor a depth stencil, created with an optimized clear value. The runtime refuses the creation, so no resource exists,
 /// and the debug layer stores a message that <see cref="DirectXDeviceContext.DrainDebugMessages"/> prints.
 /// <para>The live-object report at teardown is held the same way: an object still alive when the context releases the
-/// device is written as a <c>[d3d12-debug] live</c> line, which fails a debug-layer run like any other debug message,
+/// device is written as a <c>[d3d12-debug] live</c> line carrying the name it was created with
+/// (<see cref="GpuObjectName"/>), which fails a debug-layer run like any other debug message,
 /// and a teardown that leaks nothing writes no <c>[d3d12-debug]</c> line at all.</para>
 /// Each test skips when the host has no Direct3D 12 device or the debug layer is not installed.
 /// </summary>
@@ -34,6 +35,10 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
         var output = new StringWriter();
         var context = DebugContext(output: output);
         var leaked = new DirectXGpuBufferFactory(deviceContext: context).CreateHostVisible(
+            name: new GpuObjectName(
+                owner: "law",
+                part: "leaked"
+            ),
             sizeBytes: 256,
             usage: GpuBufferUsage.Storage
         );
@@ -54,6 +59,9 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
             ) && line.Contains(
                 comparisonType: StringComparison.Ordinal,
                 value: "ID3D12Resource"
+            ) && line.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "'law/leaked'"
             ))
         );
         Assert.DoesNotContain(
@@ -70,6 +78,7 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
         var context = DebugContext(output: output);
 
         new DirectXGpuBufferFactory(deviceContext: context).CreateHostVisible(
+            name: default,
             sizeBytes: 256,
             usage: GpuBufferUsage.Storage
         ).Dispose();

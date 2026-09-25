@@ -174,6 +174,8 @@ public sealed unsafe class VulkanDeviceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, VkResult> QueueWaitIdle;
     /// <summary>The <c>vkResetFences</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, in nint, VkResult> ResetFences;
+    /// <summary>The <c>vkSetDebugUtilsObjectNameEXT</c> entry point; <see langword="null"/> unless <c>VK_EXT_debug_utils</c> is enabled.</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsObjectNameInfoExt, VkResult> SetDebugUtilsObjectNameExt;
     /// <summary>The <c>vkUnmapMemory</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, void> UnmapMemory;
     /// <summary>The <c>vkUpdateDescriptorSets</c> entry point.</summary>
@@ -527,6 +529,10 @@ public sealed unsafe class VulkanDeviceCommands {
         ResetFences = ((delegate* unmanaged[Cdecl]<nint, uint, in nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkResetFences"u8
+        ));
+        SetDebugUtilsObjectNameExt = ((delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsObjectNameInfoExt, VkResult>)procedures.ResolveOptionalDeviceProc(
+            deviceHandle: deviceHandle,
+            functionName: "vkSetDebugUtilsObjectNameEXT"u8
         ));
         UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,

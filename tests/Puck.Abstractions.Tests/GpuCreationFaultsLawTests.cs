@@ -24,15 +24,15 @@ public sealed class GpuCreationFaultsLawTests {
     // Every creating member of the wrapped interfaces, keyed Interface.Member, with the kind it counts as and a call
     // through the wrapped services. The fake reads no description or module.
     private static Dictionary<string, (GpuCreationKind Kind, Action<GpuDeviceServices> Create)> Creations() => new(comparer: StringComparer.Ordinal) {
-        ["IGpuBindings.CreatePool"] = (GpuCreationKind.BindingsPool, static services => _ = services.Bindings.CreatePool(sizes: default)),
-        ["IGpuBufferFactory.CreateDeviceLocal"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateDeviceLocal(sizeBytes: 16, usage: GpuBufferUsage.Storage)),
-        ["IGpuBufferFactory.CreateHostVisible"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateHostVisible(sizeBytes: 16, usage: GpuBufferUsage.Storage)),
-        ["IGpuBufferFactory.CreateHostVisible(data)"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateHostVisible(data: new byte[16], usage: GpuBufferUsage.Vertex)),
-        ["IGpuCommandPoolFactory.Create"] = (GpuCreationKind.CommandPool, static services => _ = services.CommandPoolFactory.Create()),
-        ["IGpuImageFactory.Create"] = (GpuCreationKind.Image, static services => _ = services.ImageFactory.Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, usage: GpuImageUsage.Storage, width: 4)),
-        ["IGpuPipelineFactory.Create(compute)"] = (GpuCreationKind.Pipeline, static services => _ = services.PipelineFactory.Create(computeShaderModule: null!, description: null!)),
-        ["IGpuPipelineFactory.Create(graphics)"] = (GpuCreationKind.Pipeline, static services => _ = services.PipelineFactory.Create(description: null!, fragmentShaderModule: null!, renderPass: null!, vertexShaderModule: null!)),
-        ["IGpuRenderPassFactory.Create"] = (GpuCreationKind.RenderPass, static services => _ = services.RenderPassFactory.Create(description: null!)),
+        ["IGpuBindings.CreatePool"] = (GpuCreationKind.BindingsPool, static services => _ = services.Bindings.CreatePool(name: default, sizes: default)),
+        ["IGpuBufferFactory.CreateDeviceLocal"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
+        ["IGpuBufferFactory.CreateHostVisible"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateHostVisible(name: default, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
+        ["IGpuBufferFactory.CreateHostVisible(data)"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateHostVisible(data: new byte[16], name: default, usage: GpuBufferUsage.Vertex)),
+        ["IGpuCommandPoolFactory.Create"] = (GpuCreationKind.CommandPool, static services => _ = services.CommandPoolFactory.Create(name: default)),
+        ["IGpuImageFactory.Create"] = (GpuCreationKind.Image, static services => _ = services.ImageFactory.Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, name: default, usage: GpuImageUsage.Storage, width: 4)),
+        ["IGpuPipelineFactory.Create(compute)"] = (GpuCreationKind.Pipeline, static services => _ = services.PipelineFactory.Create(computeShaderModule: null!, description: null!, name: default)),
+        ["IGpuPipelineFactory.Create(graphics)"] = (GpuCreationKind.Pipeline, static services => _ = services.PipelineFactory.Create(description: null!, fragmentShaderModule: null!, name: default, renderPass: null!, vertexShaderModule: null!)),
+        ["IGpuRenderPassFactory.Create"] = (GpuCreationKind.RenderPass, static services => _ = services.RenderPassFactory.Create(description: null!, name: default)),
         ["IGpuRenderPassFactory.CreateFramebuffer"] = (GpuCreationKind.Framebuffer, static services => _ = services.RenderPassFactory.CreateFramebuffer(colors: [], depth: null, renderPass: null!)),
         ["IGpuShaderModuleFactory.Create"] = (GpuCreationKind.ShaderModule, static services => _ = services.ShaderModuleFactory.Create(bytecode: new byte[4], stage: GpuShaderStage.Compute)),
     };
@@ -311,7 +311,7 @@ public sealed class GpuCreationFaultsLawTests {
             faults.Arm(kind: kind);
         }
 
-        _ = bindings.AllocateSet(descriptorSetLayoutHandle: 1, poolHandle: 2);
+        _ = bindings.AllocateSet(descriptorSetLayoutHandle: 1, name: default, poolHandle: 2);
         _ = bindings.CanAdmit(owner: "candidate", pools: [], refusal: out _);
         _ = bindings.CreateSampler();
         bindings.DestroyPool(poolHandle: 2);
@@ -421,9 +421,9 @@ public sealed class GpuCreationFaultsLawTests {
 
         faults.Arm(kind: GpuCreationKind.CommandPool, nth: 2);
         Note(changes: true);
-        _ = services.CommandPoolFactory.Create();
+        _ = services.CommandPoolFactory.Create(name: default);
         Note(changes: false);
-        _ = Assert.Throws<GpuCreationFaultException>(testCode: () => services.CommandPoolFactory.Create());
+        _ = Assert.Throws<GpuCreationFaultException>(testCode: () => services.CommandPoolFactory.Create(name: default));
         Note(changes: true);
         faults.ArmLoss(nth: 2);
         Note(changes: true);
