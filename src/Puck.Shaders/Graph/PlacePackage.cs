@@ -117,6 +117,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                         offset: 0,
                         stageFlags: ShaderPipelineRenderNode.FrameBlockStages
                     )
+                ),
+                name: new GpuObjectName(
+                    owner: context.Instance,
+                    part: context.Pass
                 )
             );
         } catch {
@@ -211,7 +215,12 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 for (var slot = 0; (slot < inFlight); slot++) {
                     m_sets[slot] = m_services.Bindings.AllocateSet(
                         descriptorPool,
-                        built.Pipeline!.DescriptorSetLayoutHandle
+                        built.Pipeline!.DescriptorSetLayoutHandle,
+                        name: new GpuObjectName(
+                            index: slot,
+                            owner: context.Instance,
+                            part: context.Pass
+                        )
                     );
                     m_samplers[slot] = m_services.Bindings.CreateSampler();
                 }
