@@ -312,7 +312,8 @@ public sealed class GpuResidencyLawTests {
                     data: new byte[GpuRegion.CopyPushByteLength],
                     offset: 0,
                     stageFlags: GpuShaderStage.Compute
-                )
+                ),
+                Registers: GpuRegisterNumbering.PackedByClass
             )
         );
     }

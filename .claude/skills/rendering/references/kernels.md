@@ -134,13 +134,22 @@ together. `SdfViewsKernelVariantLawTests` pins the host half.
 
 ## Registers and bindings
 
-Bindings are shared across backends; the SDF engine's D3D12 registers still
-differ from their bindings and per consumer. `sdfInstanceMasks` is t37 by
-default and t3 in the beam via `SDF_INSTANCE_MASKS_REGISTER` defined before the
-include. `ShaderRegisterBindingLawTests` holds every register the build compiles
-to its binding number and set, except its named list of today's violations,
-which may only shrink: a new declaration keeps register equal to binding, and
-a change that fixes one deletes its entry. Screen-source bindings
+Bindings are shared across backends. A Direct3D 12 compute root signature
+numbers each register as `GpuComputePipelineDescription.Registers` says:
+`GpuRegisterNumbering.Binding`, the default and every pipeline pass's, puts it
+at the binding number (a sampled image's sampler at the same `s` number), and
+`PackedByClass`, which only the SDF engine's pipeline specs and the region copy
+declare, numbers each class from zero in binding-list order. So the SDF
+engine's D3D12 registers still differ from their bindings and per consumer:
+`sdfInstanceMasks` is t37 by default and t3 in the beam via
+`SDF_INSTANCE_MASKS_REGISTER` defined before the include.
+`ShaderRegisterBindingLawTests` holds every register the build compiles, and
+every pipeline source the World's package store is built from
+(`PuckWorldPipelineSource` in `build/WorldAssets.targets`, and the sources a
+shipped `*.pipeline.json` names), to its binding number and set, except its
+named list of today's violations, which may only shrink: a new declaration
+keeps register equal to binding, and a change that fixes one deletes its
+entry. Screen-source bindings
 are derived from `ScreenSourceBindingBase`, never hand-listed, so the descriptor
 pool sizes itself through `GpuDescriptorPoolSizes.ForSets`. The full binding map
 is in [sync-pairs.md](sync-pairs.md#engine-buffers-push-constants-and-bindings).

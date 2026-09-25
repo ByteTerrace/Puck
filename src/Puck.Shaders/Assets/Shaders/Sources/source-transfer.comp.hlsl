@@ -7,7 +7,7 @@
 #include "image-source.hlsli"
 
 [[vk::binding(0, 0)]] ByteAddressBuffer region : register(t0);
-[[vk::binding(1, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> image : register(u0);
+[[vk::binding(1, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> image : register(u1);
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {

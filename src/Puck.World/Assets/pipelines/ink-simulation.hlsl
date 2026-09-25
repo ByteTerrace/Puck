@@ -2,8 +2,8 @@
 // The frame block is the pass's generated interface: the frame values and the pass's config.
 #include "ink-simulation.interface.hlsli"
 
-[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D<float4> previousSimulation : register(t0);
-[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState previousSampler : register(s0);
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D<float4> previousSimulation : register(t1);
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState previousSampler : register(s1);
 [[vk::binding(0, 0)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> simulation : register(u0);
 
 [numthreads(8, 8, 1)]

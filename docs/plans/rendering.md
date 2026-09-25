@@ -1330,10 +1330,14 @@ Phase 3, the groups, follows phase 2:
 
 12. Done: `ShaderRegisterBindingLawTests` holds every shader the build compiles
     to a register number equal to its binding and a space equal to its set. It
-    names each declaration that breaks the rule: the SDF engine's, which
-    P7b-19 and P7b-20 remove, the resample kernel's, which P11b ports, and the
-    image-source conversion kernels' storage image at `u0` for binding 1. The
-    list may only shrink.
+    also holds the pipeline sources the World's package store is built from.
+    It names each declaration that breaks the rule: the SDF engine's, which
+    P7b-19 and P7b-20 remove, and the resample kernel's, which P11b ports. The
+    list may only shrink. Direct3D 12 numbers a compute pipeline's registers at
+    its binding numbers unless the description declares
+    `GpuRegisterNumbering.PackedByClass`, which only the SDF engine and the
+    region copy do; P7b-20 deletes that numbering with the engine's last
+    packed register.
 13. The GPU-free group contract: a closed `GpuBindingKind` set, group and
     pipeline layout descriptions, and the `DirectXRootLayout.Plan` and
     `VulkanGroupLayouts.Plan` planners, tested against the spike's tables.

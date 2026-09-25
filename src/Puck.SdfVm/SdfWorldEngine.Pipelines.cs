@@ -334,6 +334,7 @@ public sealed partial class SdfWorldEngine {
                     Bindings: bindings,
                     Name: name,
                     PushConstantBinding: push,
+                    Registers: GpuRegisterNumbering.PackedByClass,
                     SamplerFilter: filter
                 )
             );

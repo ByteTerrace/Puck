@@ -1,8 +1,8 @@
 // The discriminating second stage: blue reads the word at byte 0 instead of byte 4, so mixed = (3/4, 3/8, 3/8, 1).
-[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] Texture2D<float4> fieldImage : register(t0);
-[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] SamplerState fieldSampler : register(s0);
-[[vk::binding(7, 0)]] ByteAddressBuffer words : register(t1);
-[[vk::binding(5, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> mixed : register(u0);
+[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] Texture2D<float4> fieldImage : register(t2);
+[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] SamplerState fieldSampler : register(s2);
+[[vk::binding(7, 0)]] ByteAddressBuffer words : register(t7);
+[[vk::binding(5, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> mixed : register(u5);
 
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {

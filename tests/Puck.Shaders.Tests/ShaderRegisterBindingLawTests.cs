@@ -6,14 +6,18 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>A resource's Direct3D 12 register number equals its Vulkan binding number, and its register space equals
 /// its descriptor set, so no backend remaps a register. These laws read every HLSL source and include the build
-/// compiles, which are the shader items each <c>src</c> project declares for <c>build/Shaders.targets</c>, and hold every
-/// declaration that carries both a <c>[[vk::binding(N, S)]]</c> and a <c>register(xN, spaceS)</c> to that rule.</summary>
+/// compiles or packages: the shader items each <c>src</c> project declares for <c>build/Shaders.targets</c>, and the
+/// pipeline sources <c>build/WorldAssets.targets</c> hands the tree run that fills the shipped package store, with
+/// every source a shipped <c>*.pipeline.json</c> names. They hold every declaration that carries both a
+/// <c>[[vk::binding(N, S)]]</c> and a <c>register(xN, spaceS)</c> to that rule.</summary>
 public sealed partial class ShaderRegisterBindingLawTests {
-    // The item types build/Shaders.targets compiles, or hashes as includes of what it compiles.
+    // The item types build/Shaders.targets compiles, or hashes as includes of what it compiles, and the pipeline sources
+    // build/WorldAssets.targets packages into the store beside the shipped worlds.
     private static readonly string[] ShaderItemTypes = [
         "ComputeShaderSource",
         "Direct3D11KernelSource",
         "FragmentShaderSource",
+        "PuckWorldPipelineSource",
         "ShaderInclude",
         "VertexShaderSource",
     ];
@@ -118,11 +122,6 @@ public sealed partial class ShaderRegisterBindingLawTests {
         // The resample kernel: P11b ports it into the graph's package library, and P14 deletes this copy.
         "src/Puck.SdfVm/Assets/Shaders/Resample/resample.comp.hlsl Source register(t0) binding(1, 0)",
         "src/Puck.SdfVm/Assets/Shaders/Resample/resample.comp.hlsl SourceSampler register(s0) binding(1, 0)",
-        // The image-source conversion kernels, whose storage image at binding 1 takes the first UAV register.
-        "src/Puck.Shaders/Assets/Shaders/Sources/source-nv12.comp.hlsl image register(u0) binding(1, 0)",
-        "src/Puck.Shaders/Assets/Shaders/Sources/source-palette.comp.hlsl image register(u0) binding(1, 0)",
-        "src/Puck.Shaders/Assets/Shaders/Sources/source-rgba.comp.hlsl image register(u0) binding(1, 0)",
-        "src/Puck.Shaders/Assets/Shaders/Sources/source-transfer.comp.hlsl image register(u0) binding(1, 0)",
     ];
 
     [GeneratedRegex(pattern: @"vk::binding\(\s*(?<binding>\d+)\s*(?:,\s*(?<set>\d+)\s*)?\)")]
@@ -181,7 +180,74 @@ public sealed partial class ShaderRegisterBindingLawTests {
             )
             : []);
     }
-    // The build's shader sources and includes, grouped by the project that declares them, in ordinal path order.
+    // Whether one Exclude attribute, relative to its project directory, names a file: a literal path, or
+    // `<directory>/**`, every file under that directory.
+    private static bool Excludes(string projectDirectory, string exclude, string file) {
+        var pattern = exclude.Replace(
+            newChar: '/',
+            oldChar: '\\'
+        );
+
+        if (pattern.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "/**"
+        )) {
+            var directory = (Path.GetFullPath(path: Path.Combine(
+                path1: projectDirectory,
+                path2: pattern[..^3]
+            )) + Path.DirectorySeparatorChar);
+
+            return Path.GetFullPath(path: file).StartsWith(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: directory
+            );
+        }
+
+        Assert.DoesNotContain(
+            actualString: pattern,
+            expectedSubstring: "*"
+        );
+
+        return string.Equals(
+            a: Path.GetFullPath(path: file),
+            b: Path.GetFullPath(path: Path.Combine(
+                path1: projectDirectory,
+                path2: pattern
+            )),
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
+    }
+    // A project file and every file it imports by a literal path, which is where build/WorldAssets.targets declares
+    // the pipeline sources of the project that imports it.
+    private static IEnumerable<XDocument> ProjectAndImports(string project) {
+        var document = XDocument.Load(uri: project);
+
+        yield return document;
+
+        foreach (var import in document.Descendants().Where(predicate: static element => (element.Name.LocalName == "Import"))) {
+            var imported = (((string?)import.Attribute(name: "Project")) ?? string.Empty);
+
+            if (!imported.Contains(value: '$')) {
+                yield return XDocument.Load(uri: Path.GetFullPath(path: Path.Combine(
+                    path1: Path.GetDirectoryName(path: project)!,
+                    path2: imported
+                )));
+            }
+        }
+    }
+    // The shader sources a pipeline document's passes name, relative to the document.
+    private static IEnumerable<string> PipelineSources(string pipeline) {
+        using var document = System.Text.Json.JsonDocument.Parse(json: File.ReadAllText(path: pipeline));
+
+        foreach (var pass in document.RootElement.GetProperty(propertyName: "passes").EnumerateArray()) {
+            yield return Path.GetFullPath(path: Path.Combine(
+                path1: Path.GetDirectoryName(path: pipeline)!,
+                path2: pass.GetProperty(propertyName: "source").GetString()!
+            ));
+        }
+    }
+    // The build's shader sources and includes, grouped by the project that declares them, in ordinal path order. A
+    // pipeline document among them stands for the sources its passes name.
     private static IEnumerable<string[]> ShippedShaderProjects(string root) {
         foreach (var project in Directory.EnumerateFiles(
             path: Path.Combine(
@@ -192,17 +258,33 @@ public sealed partial class ShaderRegisterBindingLawTests {
             searchPattern: "*.csproj"
         ).Order(comparer: StringComparer.Ordinal)) {
             var projectDirectory = Path.GetDirectoryName(path: project)!;
-            var files = XDocument.Load(uri: project)
-                .Descendants()
+            var files = ProjectAndImports(project: project)
+                .SelectMany(selector: static document => document.Descendants())
                 .Where(predicate: static element => ShaderItemTypes.Contains(value: element.Name.LocalName))
-                .SelectMany(selector: static element => (((string?)element.Attribute(name: "Include")) ?? string.Empty).Split(
-                    options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
-                    separator: ';'
-                ))
-                .SelectMany(selector: include => Expand(
-                    include: include,
-                    projectDirectory: projectDirectory
-                ))
+                .SelectMany(selector: element => {
+                    var excludes = (((string?)element.Attribute(name: "Exclude")) ?? string.Empty).Split(
+                        options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
+                        separator: ';'
+                    );
+
+                    return (((string?)element.Attribute(name: "Include")) ?? string.Empty).Split(
+                        options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
+                        separator: ';'
+                    ).SelectMany(selector: include => Expand(
+                        include: include,
+                        projectDirectory: projectDirectory
+                    )).Where(predicate: file => !excludes.Any(predicate: exclude => Excludes(
+                        exclude: exclude,
+                        file: file,
+                        projectDirectory: projectDirectory
+                    )));
+                })
+                .SelectMany(selector: static file => (file.EndsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: ".pipeline.json"
+                )
+                    ? PipelineSources(pipeline: file)
+                    : [file]))
                 .Distinct(comparer: StringComparer.Ordinal)
                 .Order(comparer: StringComparer.Ordinal)
                 .ToArray();

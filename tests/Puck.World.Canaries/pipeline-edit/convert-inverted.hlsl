@@ -1,7 +1,7 @@
 // The corrected edit of the middle pass: opaque grayscale of one minus the history's red channel, so submission n of
 // the unchanged accumulator reads 1 - min(n/16, 1).
-[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D<float4> historyImage : register(t0);
-[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState historySampler : register(s0);
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D<float4> historyImage : register(t1);
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState historySampler : register(s1);
 [[vk::binding(0, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> gray : register(u0);
 
 [numthreads(8, 8, 1)]

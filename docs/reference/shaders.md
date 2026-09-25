@@ -631,10 +631,10 @@ Graphics input bindings must be consecutive in input order, starting at zero
 (`SHADERPIPE_GRAPHICS_BINDING`), and outputs have no descriptor binding
 (`SHADERPIPE_GRAPHICS_ATTACHMENT_BINDING`). Compute bindings may be sparse.
 The planned references carry the resolved numbers for both the
-compiler and executor. Direct3D 12 has no binding numbers: it assigns a pass's
-registers per type in the order its inputs and then its outputs are declared,
-so sampled images and read-only buffers take `t0`, `t1`, … and written images
-and buffers take `u0`, `u1`, … whatever their binding numbers are.
+compiler and executor. A pass's Direct3D 12 register numbers equal its binding
+numbers: a sampled image at binding 2 is `t2` with its sampler at `s2`, a
+read-only buffer at binding 7 is `t7`, and a written image or buffer at
+binding 5 is `u5`.
 
 A buffer resource is a raw buffer of 32-bit words. A pass reads it as a
 `ByteAddressBuffer` and writes it as an `RWByteAddressBuffer`, and both

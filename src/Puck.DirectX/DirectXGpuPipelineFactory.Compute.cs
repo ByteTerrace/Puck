@@ -10,15 +10,16 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
     /// <remarks>A compute pipeline's root signature has one descriptor table mirroring the neutral binding list.
     /// The descriptor table holds one range per binding, with each range's slot in the heap fixed at its binding
     /// index (<c>OffsetInDescriptorsFromTableStart = binding</c>, matching how <see cref="DirectXGpuBindings"/> writes a
-    /// descriptor at <c>CpuBase + binding * size</c>). Shader registers are assigned per type in binding order: each
-    /// UAV binding (a storage image or a read-write buffer) takes the next <c>u#</c>, each SRV binding (a read-only
-    /// buffer) takes the next <c>t#</c>, and an array binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes
-    /// that many consecutive registers and heap slots, so each binding list lays out exactly as its kernel declares
-    /// its registers. Every parameter is <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class); each SampledImage
-    /// binding adds its own CLAMP static sampler, at s0, s1, ... in binding-list order (all sharing the pipeline's one
-    /// requested filter — DXC's <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState pair, so a
-    /// kernel with several screen-like sources declares several distinct sampler symbols at distinct registers); the
-    /// input-layout flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
+    /// descriptor at <c>CpuBase + binding * size</c>). A UAV binding (a storage image or a read-write buffer) takes a
+    /// <c>u#</c> register and an SRV binding (a read-only buffer or a sampled image) a <c>t#</c>, numbered as
+    /// <see cref="GpuComputePipelineDescription.Registers"/> says: at the binding number, or per type in binding-list
+    /// order. An array binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes that many consecutive registers
+    /// and heap slots. Every parameter is <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class); each SampledImage
+    /// binding adds its own CLAMP static sampler, at the <c>s#</c> matching its texture's number under
+    /// <see cref="GpuRegisterNumbering.Binding"/> and at s0, s1, ... in binding-list order otherwise (all sharing the
+    /// pipeline's one requested filter — DXC's <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState
+    /// pair, so a kernel with several screen-like sources declares several distinct sampler symbols at distinct
+    /// registers); the input-layout flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
     /// </remarks>
     public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         ArgumentNullException.ThrowIfNull(computeShaderModule);
@@ -55,6 +56,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
             device: device,
             hasDescriptorTable: hasDescriptorTable,
             hasRootConstants: hasRootConstants,
+            registers: description.Registers,
             rootConstantsCount: layout.RootConstantsCount,
             samplerFilter: samplerFilter,
             serialized: out layout.RootSignatureBlob,
@@ -108,6 +110,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
         bool hasRootConstants,
         uint rootConstantsCount,
         GpuSamplerFilter samplerFilter,
+        GpuRegisterNumbering registers,
         uint[] slotByBinding,
         out byte[] serialized
     ) {
@@ -126,8 +129,9 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
         var nextUavRegister = 0u;
 
         // One range per binding. The heap slot is the packed slot from slotByBinding (DirectXGpuBindings writes each
-        // descriptor at that slot + its array element); shader registers are assigned per type in binding order
-        // (UAVs u0,u1...; SRVs t0,t1...), an array binding consuming `Count` consecutive registers and heap slots.
+        // descriptor at that slot + its array element); a shader register is the binding number, or the next of its
+        // type in binding order when packed (UAVs u0,u1...; SRVs t0,t1...), an array binding consuming `Count`
+        // consecutive registers and heap slots.
         for (var index = 0; (index < bindings.Count); index++) {
             var binding = bindings[index];
             // A read-only storage buffer and a sampled image bind as SRVs (t#); a storage image or a read-write buffer binds
@@ -138,10 +142,11 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
                 ? D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV
                 : D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV
             );
-            var baseRegister = (isSrv
-                ? nextSrvRegister
-                : nextUavRegister
-            );
+            var baseRegister = ((registers == GpuRegisterNumbering.Binding)
+                ? binding.Binding
+                : (isSrv
+                    ? nextSrvRegister
+                    : nextUavRegister));
 
             if (isSrv) {
                 nextSrvRegister += count;
@@ -203,22 +208,24 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
         var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[((sampledImageCount > 0)
             ? (int)sampledImageCount
             : 1)];
-        var samplerRegister = 0u;
+        var samplerIndex = 0u;
 
         for (var index = 0; (index < bindings.Count); index++) {
             if (bindings[index].Kind != GpuComputeBindingKind.SampledImage) {
                 continue;
             }
 
-            staticSamplers[((int)samplerRegister)] = DirectXRootSignatures.ClampStaticSampler(
+            staticSamplers[((int)samplerIndex)] = DirectXRootSignatures.ClampStaticSampler(
                 filter: ((samplerFilter == GpuSamplerFilter.Nearest)
                 ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
                 : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
-                shaderRegister: samplerRegister,
+                shaderRegister: ((registers == GpuRegisterNumbering.Binding)
+                    ? bindings[index].Binding
+                    : samplerIndex),
                 shaderVisibility: D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL
             );
 
-            samplerRegister++;
+            samplerIndex++;
         }
 
         var desc = new D3D12_ROOT_SIGNATURE_DESC {
