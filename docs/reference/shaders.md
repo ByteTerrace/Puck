@@ -979,6 +979,17 @@ the budget beside `owned` and the installed graph's `steady` and `peak`, where
 `peak` is what a reload of the installed graph would reach from what the node
 owns now.
 
+A candidate that fits can still fail while it allocates, when the device
+refuses a creation. The node disposes exactly what the candidate created,
+keeps the installed graph running, and reports the failure as `LastSwapError`
+the same way. `gpu.faults` makes that happen on a real device: `gpu.faults arm
+<kind> [<n>]` fails the nth creation of a kind counted from the arming, or the
+next one, with `GPU_CREATION_FAULT` before the call reaches the device. The
+kinds are `pipeline`, `buffer`, `image`, `render-pass`, `framebuffer`,
+`shader-module`, `command-pool` and `bindings-pool`. `gpu.faults disarm`
+clears every fault and count, and `gpu.faults list` prints them. The verb
+answers the operator alone, so no world document reaches it.
+
 ### Per-instance overrides
 
 A world's `views.pipelines` row can override its source's parameters for that
@@ -1280,7 +1291,12 @@ factory seams with a device-free fake. A failure injected at every allocation
 of a replacement is refused, with each created object disposed once and the
 installed graph still producing; the same holds for a replacement that
 publishes a float output, whose preview is part of the count, for a selection
-whose preview cannot be allocated, and for a resize. The budget laws count the
+whose preview cannot be allocated, and for a resize. The same law runs through
+`GpuCreationFaults`, the decorator `gpu.faults` arms on a real device: every
+creation of every kind a replacement makes fails in turn, the refusal names
+its kind and number, disposal is exact, and the same replacement tried again
+installs. `GpuCreationFaultsLawTests` hold the decorator itself: an armed fault
+fires once, at the nth creation of its kind, and never reaches the device. The budget laws count the
 bytes the fake creates independently of the node. For each graph shape (the
 feedback graph with and without carried history, a float output, a buffer
 handoff, a `Position` vertex input and a resize), the planned steady state is
@@ -1334,7 +1350,7 @@ match its render pass and a pipeline whose depth test disagrees with it.
 `ShaderPipelineVertexInputTests` cover the
 `vertex` member. `puck canary pipeline-feedback pipeline-ink pipeline-edit
 pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override
-pipeline-package pipeline-budget pipeline-churn pipeline-geometry pipeline-echo
+pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
 no-device-compile` runs the real World
 offscreen on Vulkan and on Direct3D 12. It checks a float
 history against an arithmetic oracle across pause, reset, step and paused
@@ -1404,9 +1420,16 @@ search path: the shipped ink pipeline, named by source, renders from the build's
 stored package, the tint source is refused by `SHADERPKG_ABSENT`, and the tint
 package renders from its binaries; its discriminating leg names the Moth shader
 under a name no shipped world gives it and alters a package binary, so both are
-refused. Neither the budget nor the churn canary injects an allocation failure on a real device: the
-device factories have no fault seam, so partial-allocation failure is covered
-only by the fake. The suite also compiles every canary
+refused. The fault canary injects an allocation failure on a real device
+through `gpu.faults`: it arms the second image created after a paused feedback
+instance loads the corrected edit, so the edit creates one image and fails at
+the next. `pipeline.wait installed` fails with `GPU_CREATION_FAULT` naming
+image creation 2, `gpu.faults list` reads nothing armed after exactly two image
+creations, `pipeline.inspect` reads the installed graph's 49152 bytes again,
+the installed graph still steps, and the same edit reloaded with nothing armed
+creates its six images and installs. Run with `puck canary --debug-layers`, any
+validation message fails it. Its discriminating leg arms the seventh image,
+which the edit never reaches. The suite also compiles every canary
 document; the broken edit fails in its middle pass. A missing GPU or compiler
 is reported as unsupported, not passed. CPU tests alone do not establish GPU
 correctness. `puck parity` checks its authored
