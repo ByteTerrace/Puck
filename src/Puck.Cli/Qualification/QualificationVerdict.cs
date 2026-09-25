@@ -89,8 +89,6 @@ internal static partial class QualificationJudge {
     private const string CandidateRefusedInfix = " GPU candidate refused: ";
     private const string CodecRefusedPrefix = "[world.codec refused: ";
     private const string CreatedKindPrefix = "gpu.created.";
-    private const string Direct3D12DebugPrefix = "[d3d12-debug] ";
-    private const string VulkanValidationPrefix = "[vulkan-debug] validation ";
     private const string WorldReloadAppliedPrefix = "[world.reload: world.reload applied";
     private const string WorldReloadPrefix = "[world.reload: ";
 
@@ -166,13 +164,7 @@ internal static partial class QualificationJudge {
                     Phase: wait.Groups["phase"].Value
                 ));
             }
-            if (line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: VulkanValidationPrefix
-            ) || line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: Direct3D12DebugPrefix
-            )) {
+            if (DebugLayerOutput.IsValidationMessage(line: line)) {
                 validation.Add(item: line);
             }
             if (line.StartsWith(

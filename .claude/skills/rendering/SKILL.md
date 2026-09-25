@@ -953,11 +953,15 @@ the shipped ink pipeline rendering from its stored package and a relocated
 package from its binaries while an unpackaged source row is refused by
 `SHADERPKG_ABSENT`.
 Each proof runs once per backend, and an absent GPU or compiler is reported as
-unsupported rather than passed, except in a leg that hides the compiler. `pipeline-churn` and `pipeline-fault` fail on any `[vulkan-debug] validation`
-or `[d3d12-debug]` line (the Vulkan loader's `general` notices about the
-machine's own layers do not count, nor does a Direct3D 12 pipeline-library miss, which the
-cache counts instead), so run them with `puck canary --debug-layers` for the
-validation proof.
+unsupported rather than passed, except in a leg that hides the compiler. Under
+`puck canary --debug-layers` the runner fails every leg on any
+`[vulkan-debug] validation` or `[d3d12-debug]` line, and on
+`[d3d12] debug layer requested but not loaded` (`DebugLayerOutput` in
+`Puck.Cli`). The Vulkan loader's `general` notices about the machine's own
+layers do not count, and the Direct3D 12 drain never prints a pipeline-library
+miss, which the cache counts instead. No manifest asserts validation lines
+itself; run `pipeline-churn` and `pipeline-fault` with `--debug-layers` for
+the validation proof.
 `ShaderPipelineRenderNodeLawTests` drive the render node through its factory
 seams without a device: refusal of a candidate, a float-output candidate, a
 selection or a resize whose allocation fails partway (exact disposal counts),

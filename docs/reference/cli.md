@@ -681,7 +681,14 @@ the projects' `bin` directories (see [where the World artifact is
 built](#where-the-world-artifact-is-built)). `--world-artifact <dll>` runs every
 leg on the named entry assembly instead, such as a published package's, and
 builds nothing. `--debug-layers` boots every offscreen leg's World with
-`--debug-layers`, its backend's validation layer. It keeps stdout and stderr
+`--debug-layers`, its backend's validation layer, and then fails any such leg
+whose stderr holds a validation message, naming the first: a
+`[vulkan-debug] validation` line or any `[d3d12-debug]` line, a teardown
+live-object report included. The Vulkan loader's `general` notices do not
+count, and the Direct3D 12 drain never prints the one message the layer raises
+by design, a pipeline-library miss. A Direct3D 12 leg that prints
+`[d3d12] debug layer requested but not loaded` fails too, since nothing
+validated it. The runner keeps stdout and stderr
 separate, pins BOM-less UTF-8 stdin, closes the pipe, drains both streams,
 checks the absolute `--world` boot-origin line, enforces per-leg and
 whole-suite budgets, and kills the process tree on timeout.
