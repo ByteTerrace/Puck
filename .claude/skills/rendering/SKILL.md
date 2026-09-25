@@ -263,10 +263,30 @@ These are one-line cautions; the owning pages hold the derivations.
   A build creates up to `SdfWorldPipelines.BuildConcurrency` pipelines at once
   on the pool, in `PipelineLayouts.BuildOrder` (the views variants last), and
   checks its token between pipelines, never inside a driver call; its counts do
-  not depend on the order. A holder (`SdfWorldPipelineSource`) takes its lease
+  not depend on the order. A failed build throws one `AggregateException` naming
+  every pipeline that failed, in build order (a device loss is thrown alone).
+  A holder (`SdfWorldPipelineSource`) takes its lease
   off the frame thread, presents nothing new until the set installs, keeps the
-  lease across engine rebuilds, and releases it on device loss and disposal;
-  the last release cancels an in-flight build inside the cache's gate
+  lease across engine rebuilds, and releases it on device loss and disposal.
+  A holder builds its engine through `SdfWorldPipelineSource.TryBuild`, only
+  when it has none: a failed build (the set's or the engine's) is refused, never
+  thrown, except a `DeviceLostException`. The refusal is printed once and named
+  by `Describe` (the node's `NotReadyReason`), and the holder keeps its lease.
+  A refused build is retried only when an input it was made from changes (the
+  device, the kernels asked for, the set or its installed kernels, and the
+  holder's inputs: its `SdfWorldEngineOptions`, and for the node a kernel
+  reload request), or after `Release` on device loss. It is never retried
+  because a frame arrived and never on a clock; a new input to a build joins
+  its `inputsOf`. The node has no previous engine then and presents nothing
+  new; a view serves the image it served before. `UnifiedOverlayNode` refuses
+  its resources the same way (`ResourceRefusal`), presents the inner frame
+  unchanged, forwards captures to it, and retries only after `OnDeviceLost`. `SdfWorldEngine`'s
+  constructor owns its creations through one `GpuCreationScope`, which
+  releases them newest first when a later step throws, so a refusal leaks
+  nothing (`SdfWorldEngineCreationFaultLawTests`,
+  `SdfEngineNodeBuildRefusalLawTests`). A new GPU-owning build joins its
+  creations to a scope, or to a null-tolerant release it calls on failure.
+  The last release of a lease cancels an in-flight build inside the cache's gate
   (`BackgroundBuild.Detach`), then waits outside it for only the pipelines
   already in the driver, and disposes the set. `SdfEngineNode.IsReady` (set
   installed and first frame produced) is the one readiness fact: the console
@@ -284,7 +304,8 @@ These are one-line cautions; the owning pages hold the derivations.
   still drains the console, and that a device loss or the last release waits
   for exactly the `BuildConcurrency` creations in the driver, counted through
   the factory; `SdfWorldPipelinesLawTests` pins the concurrency bound, the
-  build order and a cancel mid-build the same way. `ShaderPipelineRenderNode` builds each candidate's
+  build order, a cancel mid-build and two failures in the driver at once, both
+  named, the same way. `ShaderPipelineRenderNode` builds each candidate's
   modules, pipelines and the render passes they are created for through
   the same `BackgroundBuild`, started by the next produced frame (never by
   `Swap`, `Resize` or `SelectOutput`, so the presenter's swap-then-resize builds
@@ -464,7 +485,12 @@ These are one-line cautions; the owning pages hold the derivations.
   both GPU presentation shapes (`WorldBootCompositionLawTests`). A new creating
   member of a wrapped factory joins a `GpuCreationKind`, and
   `GpuCreationFaultsLawTests`' coverage table fails on a member it does not
-  name.
+  name. A fault law fails every creation of an owner in turn over a tracking
+  fake and holds it to releasing exactly what it created: the SDF engine's
+  construction and the unified overlay's resources (`UnifiedOverlayWorkLawTests`)
+  over `FakeGpuDevice` with `trackObjects`, whose `Created` and `Memory` show
+  what was released and the device-local bytes still held, and a shader
+  pipeline candidate over `FakePipelineGpu`.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
   backends), created-object kinds `PerBackendDeterministic`, and anything
