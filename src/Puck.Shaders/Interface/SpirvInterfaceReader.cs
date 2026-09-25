@@ -192,15 +192,16 @@ public static class SpirvInterfaceReader {
             case OpTypeImage:
                 // Operands: sampled type, Dim, Depth, Arrayed, MS, Sampled (1 read through a sampler, 2 read and
                 // written by coordinate), Image Format.
-                var buffer = (operands[1] == DimBuffer);
+                if (operands[1] == DimBuffer) {
+                    throw ShaderInterfaceBinding.TypedBuffer(
+                        name: name,
+                        reader: "SPIR-V"
+                    );
+                }
 
                 return ((operands[5] == 2)
-                    ? (buffer
-                        ? GpuBindingKind.ReadWriteBuffer
-                        : GpuBindingKind.StorageImage)
-                    : (buffer
-                        ? GpuBindingKind.ReadOnlyBuffer
-                        : GpuBindingKind.SampledImage));
+                    ? GpuBindingKind.StorageImage
+                    : GpuBindingKind.SampledImage);
             case OpTypeSampledImage:
                 return GpuBindingKind.SampledImage;
             case OpTypeSampler:
