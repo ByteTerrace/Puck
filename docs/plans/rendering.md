@@ -974,16 +974,14 @@ apply.
 
 Still open:
 
-- The flagship world's cells fail on both backends. Three CPU-pixel surface
-  uploads (`IGpuSurfaceUpload`) outlive the device at teardown: 24 objects
-  the Vulkan validation layer reports at `vkDestroyDevice`, and 18
-  `[d3d12-debug] live` objects. `VulkanSurfaceUpload` skips every destroy once
-  its device is disposed, so an owner released after the device leaks rather
-  than faults. Which three owners they are is not established.
-- The flagship world refuses its own `world.reload`. The wire codec refuses
-  the rebuild's embedded definition because `state.strideCadence`, a `Boot`
-  draw site, holds no value when the definition is decoded, and the refusal
-  produces no `world.reload` answer and no `wire.errors` count.
+- The flagship world's cells fail on both backends because the world refuses
+  its own `world.reload`. The wire codec refuses the rebuild's embedded
+  definition because `state.strideCadence`, a `Boot` draw site, holds no value
+  when the definition is decoded, and the refusal produces no `world.reload`
+  answer and no `wire.errors` count. The cells' teardown is clean on both
+  backends: the screen binder retires every machine output it published before
+  the device goes, and a surface upload released after its device throws, with
+  its owner's release on the stack, rather than leaking.
 - The runs on the RTX 4070 and the AMD devices. Direct3D 12 cells are blocked
   on a machine whose debug layer stops device creation.
 

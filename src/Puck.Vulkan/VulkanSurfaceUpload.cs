@@ -74,46 +74,37 @@ public sealed class VulkanSurfaceUpload : IDisposable {
     }
 
     private void DisposeResources() {
-        var device = m_device;
-        // A dead device (destroyed at host teardown before a late owner released through it) freed every child
-        // object with itself — destroying a pool/buffer/view against its stale handle is a native fault, so each
-        // destroy below gates on liveness and only the managed references are dropped.
-        var deviceAlive = ((device is not null) && !device.IsDisposed);
+        if (m_device is not { } device) {
+            return;
+        }
+
+        // Destroying a device does not free its children: every object below must be destroyed while the device lives
+        // (VUID-vkDestroyDevice-device-05137). An owner that releases this upload after its device is gone has its
+        // teardown in the wrong order, and the caller disposing this upload is that owner.
+        if (device.IsDisposed) {
+            throw new InvalidOperationException(message: $"A {nameof(VulkanSurfaceUpload)} was released after its device was destroyed; the owner disposing it must release it before the device goes.");
+        }
 
         // The staging/command resources may still feed an outstanding pipelined copy — drain it first.
         WaitForPendingUpload();
-
-        if (deviceAlive) {
-            m_frameSynchronizationApi?.DestroyFence(
-                device: device!.Commands,
-                fenceHandle: m_fence
-            );
-        }
-
+        m_frameSynchronizationApi?.DestroyFence(
+            device: device.Commands,
+            fenceHandle: m_fence
+        );
         m_fence = 0;
-
-        m_uploadPending = false;
-
-        if (deviceAlive) {
-            m_commandResources?.Dispose();
-            m_stagingBuffer?.Dispose();
-        }
-
+        m_commandResources?.Dispose();
         m_commandResources = null;
+        m_stagingBuffer?.Dispose();
         m_stagingBuffer = null;
-
-        if (deviceAlive) {
-            m_framebufferSetApi.DestroyImageView(
-                device: device!.Commands,
-                imageViewHandle: m_imageViewHandle
-            );
-            m_offscreenImageApi.DestroyColorImage(
-                device: device!.Commands,
-                imageHandle: m_imageHandle,
-                memoryHandle: m_memoryHandle
-            );
-        }
-
+        m_framebufferSetApi.DestroyImageView(
+            device: device.Commands,
+            imageViewHandle: m_imageViewHandle
+        );
+        m_offscreenImageApi.DestroyColorImage(
+            device: device.Commands,
+            imageHandle: m_imageHandle,
+            memoryHandle: m_memoryHandle
+        );
         m_imageViewHandle = 0;
         m_imageHandle = 0;
         m_memoryHandle = 0;
@@ -201,7 +192,6 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         if (
             !m_uploadPending ||
             (m_device is null) ||
-            m_device.IsDisposed ||
             (0 == m_fence)
         ) {
             m_uploadPending = false;
@@ -229,6 +219,8 @@ public sealed class VulkanSurfaceUpload : IDisposable {
     }
 
     /// <summary>Waits for device idle, then frees the staging buffer, image, view, and command resources. Safe to call more than once.</summary>
+    /// <exception cref="InvalidOperationException">The device was destroyed first, so these resources can no longer be
+    /// destroyed and the owner's teardown order is wrong.</exception>
     public void Dispose() {
         if (m_disposed) {
             return;

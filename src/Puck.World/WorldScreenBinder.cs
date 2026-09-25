@@ -160,6 +160,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly Dictionary<int, Func<Vector3>> m_lights = new();
     // One publication per named producer output, even when several screens fan out from it.
     private readonly HashSet<(string Instance, string Output)> m_publishedMachineOutputs = new();
+    // Every producer output this binder has published on the current device. Each holds an upload on that device until
+    // RetireMachineOutputs releases it, and the machines themselves outlive the device, so the binder that put the
+    // uploads there is the one that takes them off.
+    private readonly HashSet<(string Instance, string Output)> m_presentedMachineOutputs = new();
     // SdfEngineNode copies m_sources/m_lights into its own dictionary once, at construction, and never re-reads
     // these dictionaries again — writing a new delegate into m_sources[index] after boot is invisible to the
     // renderer. Each boot index's cell is instead a stable, never-replaced delegate target; only the cell's own
@@ -456,6 +460,18 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         return false;
     }
+    // Releases the upload every producer output this binder published holds on the current device. An instance removed
+    // since it was published resolves to nothing, because its host released the upload when the instance went.
+    private void RetireMachineOutputs() {
+        foreach (var (instance, output) in m_presentedMachineOutputs) {
+            m_machines.VideoOutput(
+                instance: instance,
+                output: output
+            )?.NotifyDeviceLost();
+        }
+
+        m_presentedMachineOutputs.Clear();
+    }
 
     /// <summary>Applies a non-machine magazine entry (a producer, a view, a probe, a session, text, or none) as a screen's live
     /// source, through the same dispatch <see cref="ReconcileScreens"/>'s declared-source-change path uses.
@@ -494,8 +510,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         m_disposed = true;
 
-        // No machine/link disposal here — Server.WorldMachineHost (a peer DI singleton, container-disposed
-        // separately) owns that lifetime now.
+        // The machines and links belong to Server.WorldMachineHost, which outlives the render device; only the
+        // uploads this binder published on that device are released here.
+        RetireMachineOutputs();
+
         foreach (var slot in m_slots.Values) {
             slot.DeclaredFeed?.Dispose();
             slot.LiveFeed?.Dispose();
@@ -538,18 +556,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             return;
         }
 
-        m_publishedMachineOutputs.Clear();
+        RetireMachineOutputs();
+
         foreach (var slot in m_slots.Values) {
-            if (
-                (slot.MachineSource is { } machine) &&
-                (m_machines.VideoOutput(
-                instance: machine.Instance,
-                output: machine.Output
-            ) is { } output) &&
-                m_publishedMachineOutputs.Add(item: (machine.Instance, machine.Output))
-            ) {
-                output.NotifyDeviceLost();
-            }
             slot.DeclaredFeed?.NotifyDeviceLost();
         }
 
