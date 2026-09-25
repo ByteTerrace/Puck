@@ -14,7 +14,8 @@ namespace Puck.World.Tests;
 /// <summary>
 /// Laws for the GPU work <see cref="UnifiedOverlayNode"/> counts, driven over <see cref="FakeGpuDevice"/>: the exact
 /// counts of a drawn overlay frame, submission identity across a device loss, that the descriptor pool it states is the
-/// one it creates, and that a steady-state drawn frame allocates nothing.
+/// one it creates, that a steady-state drawn frame allocates nothing, and that every creation of its resources failed in
+/// turn through <see cref="GpuCreationFaults"/> releases exactly what was created before it.
 /// </summary>
 public sealed class UnifiedOverlayWorkLawTests {
     // The second drawn cursor frame, published when the third frame polls its fence. The overlay pass is the render
@@ -87,6 +88,60 @@ public sealed class UnifiedOverlayWorkLawTests {
         Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: Frame));
         Assert.True(condition: (sample.Submission > 0L));
     }
+    [Fact]
+    public void EveryCreationOfTheOverlaysResourcesFaultedInTurnReleasesExactlyWhatWasCreated() {
+        var expected = new Dictionary<GpuCreationKind, long>();
+
+        using (var measured = new Rig(trackObjects: true)) {
+            measured.Produce();
+
+            foreach (var kind in GpuCreationFaults.Kinds) {
+                expected[kind] = measured.Faults.SeenOf(kind: kind);
+            }
+        }
+
+        var faulted = 0;
+
+        foreach (var kind in GpuCreationFaults.Kinds) {
+            for (var nth = 1; (nth <= expected[kind]); nth++) {
+                using var rig = new Rig(trackObjects: true);
+
+                rig.Faults.Arm(
+                    kind: kind,
+                    nth: nth
+                );
+
+                var fault = Assert.Throws<GpuCreationFaultException>(testCode: rig.Produce);
+
+                Assert.Equal(
+                    actual: (fault.Kind, fault.Creation),
+                    expected: (kind, nth)
+                );
+                Assert.All(
+                    action: static created => Assert.Equal(
+                        actual: created.DisposeCount,
+                        expected: 1
+                    ),
+                    collection: rig.Gpu.Created
+                );
+                Assert.Equal(
+                    actual: rig.Gpu.Memory.Held,
+                    expected: 0L
+                );
+
+                // The fault fired once: the next frame creates the resources and draws.
+                rig.Produce();
+                Assert.True(condition: (rig.Gpu.Memory.Held > 0L));
+                faulted++;
+            }
+        }
+
+        Assert.Equal(
+            actual: faulted,
+            expected: expected.Values.Sum()
+        );
+        Assert.True(condition: (faulted > 0));
+    }
 
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
     private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
@@ -94,8 +149,11 @@ public sealed class UnifiedOverlayWorkLawTests {
     private sealed class Rig : IDisposable {
         private readonly CursorStore m_cursor = new();
 
-        public Rig() {
-            var gpu = new FakeGpuDevice(reportVersion: 0);
+        public Rig(bool trackObjects = false) {
+            var gpu = new FakeGpuDevice(
+                reportVersion: 0,
+                trackObjects: trackObjects
+            );
 
             Gpu = gpu;
             m_cursor.Publish(frame: new OverlayCursorFrame(Seats: new[] {
@@ -144,7 +202,10 @@ public sealed class UnifiedOverlayWorkLawTests {
                     imageViewHandle: 2,
                     width: 64
                 )),
-                deviceContext: gpu,
+                deviceContext: new FaultingDevice(
+                    faults: Faults,
+                    gpu: gpu
+                ),
                 frameSources: new NoFrameSources(),
                 sources: new UnifiedOverlaySources(
                     BindingBar: null,
@@ -165,6 +226,8 @@ public sealed class UnifiedOverlayWorkLawTests {
             );
         }
 
+        public GpuCreationFaults Faults { get; } = new();
+
         public FakeGpuDevice Gpu { get; }
         public UnifiedOverlayNode Node { get; }
 
@@ -181,6 +244,19 @@ public sealed class UnifiedOverlayWorkLawTests {
 
             return text.ToString();
         }
+    }
+    // The fake as a device context whose services pass through creation faults, as a backend's do.
+    private sealed class FaultingDevice(FakeGpuDevice gpu, GpuCreationFaults faults) : IGpuDeviceContext {
+        public long AdapterLuid => gpu.AdapterLuid;
+        public GpuDeviceCapabilities? Capabilities => gpu.Capabilities;
+        public GpuDeviceIdentity? Identity => gpu.Identity;
+        public GpuMemoryProfile MemoryProfile => gpu.MemoryProfile;
+        public GpuDeviceServices Services { get; } = GpuCreationFaults.Wrap(
+            faults: faults,
+            services: gpu.Services
+        );
+
+        public void WaitIdle() => gpu.WaitIdle();
     }
     private sealed class FixedRenderNode(Surface surface) : IRenderNode {
         public NodeDescriptor Descriptor { get; } = new(

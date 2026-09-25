@@ -407,11 +407,22 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             values: parts
         );
     }
+    // Creates the node's resources once. A creation that throws partway releases what was created before it (the one
+    // release, ReleaseGpuResources, clears each field it frees), so the next attempt starts from nothing.
     private void EnsureResources() {
         if (m_resourcesReady) {
             return;
         }
 
+        try {
+            CreateResources();
+        } catch {
+            ReleaseGpuResources();
+
+            throw;
+        }
+    }
+    private void CreateResources() {
         // The overlay clears its image each frame and leaves it shader-readable for the presenter and any capture.
         m_renderTarget = m_imageFactory.Create(
             format: GpuPixelFormat.R8G8B8A8Unorm,
