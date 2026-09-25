@@ -277,7 +277,8 @@ interface hash, and the package carries its precompiled binaries.
 P7's gate spike has run its build-time half; P10 has not
 started. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
 lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
-`sdf-film-grain.frag.hlsl` and `pixelate.comp.hlsl`, each with a frame group
+`sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
+the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
 at set and space 0 and a pass group at set and space 3, because a group's
 ordinal is its set. On the build-time criteria the spike passes for HLSL
 through DXC:
@@ -633,8 +634,7 @@ P17 still owes:
 The two largest kernel includes are `sdf-vm.hlsli` (4,584 lines) and
 `sdf-world.hlsli` (2,814 lines). The frame data is written by hand in three
 places: an `SdfFrame` field, a numbered row in the packed buffer, and an HLSL
-accessor. `viewport-composite.comp.hlsl`, `pixelate.comp.hlsl`,
-`resample.comp.hlsl`, and `sdf-child.comp.hlsl` compile but have no consumer.
+accessor. `resample.comp.hlsl` compiles but has no consumer.
 
 ## The forcing artifact
 
@@ -1228,10 +1228,9 @@ bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuGraphicsPipelineDescription`, and every binding index set by hand, such as
 `OverlayServices.StorageBufferBinding` and the SDF engine's binding constants.
 
-**Gate before P8 starts:** a one-day spike builds one package over two passes
-that already exist, `sdf-film-grain.frag.hlsl` and `pixelate.comp.hlsl`
-(which compiles but has no live consumer, so the spike drives it from a test
-pipeline), with
+**Gate before P8 starts:** a one-day spike builds one package over two passes,
+`sdf-film-grain.frag.hlsl` and a pixelate compute pass (which has no live
+consumer, so the spike drives its fixture copy from a test pipeline), with
 two frequency groups rather than today's single flat set: the interface as data,
 declarations generated from it as paired Vulkan binding and Direct3D register
 annotations, a C# reader for SPIR-V decorations and one for the DXIL container
@@ -1828,15 +1827,14 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 13. The final sweep deletes the matrix law, `SdfWorldEngine` and the types
     listed above, `SdfViewGpuServices`, `SdfShaderSetVerification`,
     `SdfWorldKernels`, the SDF pipeline set and its cache,
-    `sdf-frame-upload.comp` and `sdf-child.comp`, and corrects the comments and
+    `sdf-frame-upload.comp`, and corrects the comments and
     guides.
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups.
 P11b keeps one resample pass, a port of `resample.comp.hlsl`, in the graph's
-package library and deletes `pixelate.comp.hlsl` and
-`viewport-composite.comp.hlsl`; P14 deletes any SDF-side copy, and the pixelate
-interface fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
+package library; P14 deletes any SDF-side copy, and the pixelate interface
+fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
 P11b's `sdf.world` adapter submits through `SdfWorldEngine`'s ring as an
 external producer whose output image the graph imports. Before P12, a screen's
 matrix row is green when host leases and instance reads serve it. Without the

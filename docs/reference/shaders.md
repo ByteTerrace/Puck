@@ -353,7 +353,8 @@ reflects in DXIL as the constant buffer at `b0`, space 0, which
   non-Windows `IUnknown` carries a virtual destructor that moves every vtable
   slot.
 
-The spike interfaces two existing passes, film grain and pixelate. Each one
+The spike interfaces two passes: film grain, and a pixelate compute pass that
+exists only as the spike's fixture. Each one
 uses the frame group (set 0) and the pass group (set 3). Each variant compiles
 with the shared recipe's DXC flags. Both readers find every binding and block
 member where the layout put it. DXC writes identical SPIR-V and DXIL on a
