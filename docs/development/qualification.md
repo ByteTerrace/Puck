@@ -119,7 +119,11 @@ A cell reads its evidence from the World's own console:
 - **The memory threshold.** The largest `owned=` or `peak=` any inspection
   reads must not exceed the cell's `peakOwnedPipelineBytes`. `peak=` is the
   bytes a replacement of the installed graph would reach, so it bounds the
-  moment a reload or resize holds two graphs at once.
+  moment a reload or resize holds two graphs at once. When the cell sets
+  `peakDeviceLocalBytes`, the largest `gpu.memory.device-local.peak` any
+  `world.counters --json` reading reports (the `memory.vulkan` or
+  `memory.directx` source) must not exceed it, and a cell with the threshold
+  but no such reading fails.
 - **Every world reload applies.** Each `world.reload` the script sends must
   answer that it applied. A reload refused by the World, or a submission the
   wire codec refuses before the verb can answer, fails the cell and is quoted
@@ -157,11 +161,12 @@ carry no threshold.
 
 The profile defers three checks, and a run prints each with its reason:
 
-- **Peak device-local bytes.** No reading of the device-local bytes a World
-  process has allocated exists. The memory profile reports what the device
-  has, not what the World uses, and only a pipeline instance counts its own
-  bytes. A process-wide reading needs a byte count on the neutral GPU
-  services.
+- **Peak device-local bytes.** `memory.vulkan` and `memory.directx` count the
+  device-local bytes a World process allocates and releases at their actual
+  allocation sizes, and the peak held at once; swapchain images are never
+  counted. Every cell's `peakDeviceLocalBytes` is null, because each is set
+  from a qualification reading of the published package on the reference
+  devices and none has been taken.
 - **Frame-time median and tail**, and **reload stalls**. Both need wall-clock
   and GPU timing, which are deferred with no date. Qualification sets no
   frame-time threshold and counts that every reload installs, never how long it

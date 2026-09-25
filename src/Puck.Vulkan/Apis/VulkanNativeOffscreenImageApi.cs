@@ -106,6 +106,11 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 0,
                 out memoryHandle
             ).ThrowIfFailed(operation: "vkAllocateMemory");
+            request.Device.CountAllocated(
+                allocateInfo: in allocateInfo,
+                memoryHandle: memoryHandle,
+                memoryProperties: in memoryProperties
+            );
             request.Device.BindImageMemory(
                 request.Device.Handle,
                 imageHandle,

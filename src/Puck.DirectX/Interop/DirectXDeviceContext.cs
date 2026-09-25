@@ -151,6 +151,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// the device.</remarks>
     public GpuDeviceCapabilities? Capabilities => m_capabilities;
     /// <inheritdoc />
+    /// <remarks>Set by the host's composition; it survives device recreation, so a replaced device counts into the same
+    /// instance.</remarks>
+    public GpuDeviceMemoryWork? Memory { get; init; }
+    /// <inheritdoc />
     /// <remarks>Read from the device and its adapter when the device is created; the default profile before, and
     /// reading it never creates the device.</remarks>
     public GpuMemoryProfile MemoryProfile => m_memoryProfile;

@@ -272,6 +272,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             format: format,
             height: height,
             initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            memory: m_deviceContext.Memory,
             width: width
         ));
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
@@ -366,6 +367,10 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     }
     private void DisposeImageResources() {
         Release(pointer: ref m_uploadBuffer);
+        DirectXDeviceMemory.CountReleased(
+            memory: m_deviceContext.Memory,
+            resource: m_texture
+        );
         Release(pointer: ref m_texture);
     }
 

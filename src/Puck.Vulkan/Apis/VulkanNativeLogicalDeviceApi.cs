@@ -26,18 +26,22 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
     private const uint VkStructureTypePhysicalDeviceFeatures2 = 1000059000;
 
     private readonly IAllocator m_allocator;
+    private readonly GpuDeviceMemoryWork? m_memory;
     private readonly VulkanProcResolver m_procedures;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeLogicalDeviceApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
     /// <param name="procedures">The resolver the device's command table is resolved and counted through.</param>
+    /// <param name="memory">The device-local memory counts each device's allocations join (<c>memory.vulkan</c>), or
+    /// <see langword="null"/> to count none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="allocator"/> or <paramref name="procedures"/> is
     /// <see langword="null"/>.</exception>
-    public VulkanNativeLogicalDeviceApi(IAllocator allocator, VulkanProcResolver procedures) {
+    public VulkanNativeLogicalDeviceApi(IAllocator allocator, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null) {
         ArgumentNullException.ThrowIfNull(argument: allocator);
         ArgumentNullException.ThrowIfNull(argument: procedures);
 
         m_allocator = allocator;
+        m_memory = memory;
         m_procedures = procedures;
     }
 
@@ -190,6 +194,7 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
                 try {
                     device = new VulkanDeviceCommands(
                         deviceHandle: deviceHandle,
+                        memory: m_memory,
                         procedures: m_procedures
                     );
                 } catch {

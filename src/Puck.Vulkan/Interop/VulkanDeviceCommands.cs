@@ -195,10 +195,13 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
     /// standing in for the driver.</param>
     /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="procedures"/> is <see langword="null"/>.</exception>
+    /// <param name="memory">The device-local memory counts every allocation made through this table joins, or
+    /// <see langword="null"/> to count none.</param>
     /// <exception cref="InvalidOperationException">The device does not expose a required core entry point.</exception>
-    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures) {
+    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null) {
         ArgumentNullException.ThrowIfNull(argument: procedures);
-        VulkanArgument.RequireHandle(
+
+        Memory = memory;        VulkanArgument.RequireHandle(
             handle: deviceHandle,
             handleDescription: "logical-device",
             paramName: nameof(deviceHandle)
@@ -552,6 +555,9 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
 
     /// <summary>Gets the native <c>VkDevice</c> handle whose entry points the table holds.</summary>
     public nint Handle { get; }
+    /// <summary>Gets the device-local memory counts this table's allocations and frees join, or <see langword="null"/>
+    /// when it counts none.</summary>
+    public GpuDeviceMemoryWork? Memory { get; }
     /// <summary>Gets the opaque value the backend-neutral <c>IGpu*</c> interfaces carry as their device handle; valid until
     /// the table is disposed.</summary>
     public nint Token { get; }
@@ -579,10 +585,36 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
     /// <param name="handle">The native handle to release, or zero.</param>
     public void Destroy(delegate* unmanaged[Cdecl]<nint, nint, nint, void> destroy, nint handle) {
         if (0 != handle) {
+            // The same field value this table resolved, so an address comparison identifies vkFreeMemory.
+            if (((nint)destroy) == ((nint)FreeMemory)) {
+                _ = Memory?.CountReleased(allocation: handle);
+            }
+
             destroy(
                 Handle,
                 handle,
                 0
+            );
+        }
+    }
+    /// <summary>Counts one successful <c>vkAllocateMemory</c> into <see cref="Memory"/> at its allocation size when the
+    /// memory type it chose is device-local; memory of any other type counts nothing. Swapchain images are never
+    /// allocated through this table, so they are never counted.</summary>
+    /// <param name="memoryHandle">The <c>VkDeviceMemory</c> the allocation returned; freeing it through
+    /// <see cref="FreeMemory"/> through <c>Destroy</c> counts its release.</param>
+    /// <param name="allocateInfo">The allocation's <c>VkMemoryAllocateInfo</c>: its size and memory type.</param>
+    /// <param name="memoryProperties">The physical device's memory types, which say whether the type is device-local.</param>
+    public void CountAllocated(nint memoryHandle, in VkMemoryAllocateInfo allocateInfo, in VkPhysicalDeviceMemoryProperties memoryProperties) {
+        if (
+            (Memory is { } memory) &&
+            VulkanMemoryTypes.IsDeviceLocal(
+                memoryProperties: in memoryProperties,
+                memoryTypeIndex: allocateInfo.MemoryTypeIndex
+            )
+        ) {
+            memory.CountAllocated(
+                allocation: memoryHandle,
+                bytes: checked((long)allocateInfo.AllocationSize)
             );
         }
     }

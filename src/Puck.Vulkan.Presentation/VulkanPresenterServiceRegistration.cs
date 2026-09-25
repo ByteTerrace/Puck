@@ -22,7 +22,7 @@ namespace Puck.Vulkan.Presentation;
 /// <see cref="IHostContext"/> from the contributions and drives the run loop.
 /// </summary>
 public static class VulkanPresenterServiceRegistration {
-    // The key the backend's GpuPipelineCacheWork is registered under, and the name its counts report.
+    // The key the backend's GpuPipelineCacheWork and GpuDeviceMemoryWork are registered under, and the name their counts report.
     private const string PipelineCacheBackend = "vulkan";
 
     // The host's one procedure resolver over the loader, and its resolutions as a counter source, registered once
@@ -40,10 +40,11 @@ public static class VulkanPresenterServiceRegistration {
 
     /// <summary>Registers the factories, command-buffer recorder, asset source, and shader loader the
     /// renderer and compositor compose over the native APIs, and the backend's <c>pipeline-cache.vulkan</c> and
-    /// <c>procedures.vulkan</c> <see cref="IWorkCounterSource"/>s.</summary>
+    /// <c>procedures.vulkan</c> and <c>memory.vulkan</c> <see cref="IWorkCounterSource"/>s.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanFactories(this IServiceCollection services) {
         services.AddGpuPipelineCacheWork(backend: PipelineCacheBackend);
+        services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);
         AddProcedures(services: services);
         services.TryAddSingleton<IVulkanInstanceFactory>(implementationFactory: static sp => new VulkanInstanceFactory(instanceApi: sp.GetRequiredService<IVulkanInstanceApi>()));
         services.TryAddSingleton<IVulkanSurfaceFactory>(implementationFactory: static sp => new VulkanSurfaceFactory(surfaceApi: sp.GetRequiredService<IVulkanSurfaceApi>()));
@@ -103,6 +104,7 @@ public static class VulkanPresenterServiceRegistration {
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanNativeApis(this IServiceCollection services) {
         AddProcedures(services: services);
+        services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);
         services.TryAddSingleton<IVulkanBufferApi>(implementationFactory: static _ => new VulkanNativeBufferApi());
         services.TryAddSingleton<IVulkanCommandBufferRecordingApi>(implementationFactory: static sp => new VulkanNativeCommandBufferRecordingApi(allocator: sp.GetRequiredService<IAllocator>()));
         services.TryAddSingleton<IVulkanCommandResourcesApi>(implementationFactory: static _ => new VulkanNativeCommandResourcesApi());
@@ -119,6 +121,7 @@ public static class VulkanPresenterServiceRegistration {
         ));
         services.TryAddSingleton<IVulkanLogicalDeviceApi>(implementationFactory: static sp => new VulkanNativeLogicalDeviceApi(
             allocator: sp.GetRequiredService<IAllocator>(),
+            memory: sp.GetRequiredKeyedService<GpuDeviceMemoryWork>(serviceKey: PipelineCacheBackend),
             procedures: sp.GetRequiredService<VulkanProcResolver>()
         ));
         services.TryAddSingleton<IVulkanOffscreenImageApi>(implementationFactory: static _ => new VulkanNativeOffscreenImageApi());

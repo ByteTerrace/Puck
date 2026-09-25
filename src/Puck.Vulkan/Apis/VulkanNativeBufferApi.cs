@@ -92,6 +92,11 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
                 0,
                 out memoryHandle
             ).ThrowIfFailed(operation: "vkAllocateMemory");
+            commands.CountAllocated(
+                allocateInfo: in allocateInfo,
+                memoryHandle: memoryHandle,
+                memoryProperties: in memoryProperties
+            );
             commands.BindBufferMemory(
                 commands.Handle,
                 bufferHandle,

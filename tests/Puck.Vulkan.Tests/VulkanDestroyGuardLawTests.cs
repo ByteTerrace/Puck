@@ -2,7 +2,9 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
+using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interop;
 using Puck.Vulkan.Messages;
 using Xunit;
@@ -264,6 +266,42 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
         Assert.Empty(collection: calls.Stray);
     }
     [Fact]
+    public void DeviceLocalMemoryIsCountedAtAllocationAndReleasedThroughTheFreeGuard() {
+        const nint DeviceLocalMemory = 0x3000;
+        const nint HostMemory = 0x4000;
+
+        var memory = new GpuDeviceMemoryWork(backend: "vulkan");
+        var device = RecordingDevice(
+            memory: memory,
+            wired: [nameof(VulkanDeviceCommands.FreeMemory)]
+        );
+        var properties = new VkPhysicalDeviceMemoryProperties { MemoryTypeCount = 2U };
+
+        properties.MemoryTypePairs[0] = 0x1U;
+        properties.MemoryTypePairs[2] = 0x6U;
+        device.CountAllocated(
+            allocateInfo: new VkMemoryAllocateInfo { AllocationSize = 65536UL, MemoryTypeIndex = 0U },
+            memoryHandle: DeviceLocalMemory,
+            memoryProperties: in properties
+        );
+        device.CountAllocated(
+            allocateInfo: new VkMemoryAllocateInfo { AllocationSize = 4096UL, MemoryTypeIndex = 1U },
+            memoryHandle: HostMemory,
+            memoryProperties: in properties
+        );
+
+        var calls = Record(release: () => {
+            device.Destroy(destroy: device.FreeMemory, handle: HostMemory);
+            device.Destroy(destroy: device.FreeMemory, handle: DeviceLocalMemory);
+        });
+
+        Assert.Equal(
+            actual: calls.Calls,
+            expected: [(device.Handle, HostMemory, ((nint)0)), (device.Handle, DeviceLocalMemory, ((nint)0))]
+        );
+        Assert.Equal(expected: (65536L, 65536L, 65536L), actual: (memory.Read(kind: GpuDeviceMemoryWork.Allocated), memory.Read(kind: GpuDeviceMemoryWork.Released), memory.Read(kind: GpuDeviceMemoryWork.Peak)));
+    }
+    [Fact]
     public void EveryDestroyEntryPointOfBothTablesIsCoveredByAKind() {
         var deviceCovered = DeviceKinds.Values.SelectMany(selector: kind => kind.EntryPoints).ToHashSet();
         var instanceCovered = InstanceKinds.Values.Select(selector: kind => kind.EntryPoint).ToHashSet();
@@ -332,10 +370,11 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void RecordStrayCall(nint parent, nint handle, nint allocator) =>
         RecordedStrayCalls!.Add(item: (parent, handle, allocator));
-    private static VulkanDeviceCommands RecordingDevice(IReadOnlyCollection<string> wired) =>
+    private static VulkanDeviceCommands RecordingDevice(IReadOnlyCollection<string> wired, GpuDeviceMemoryWork? memory = null) =>
         RecordingTable(
-            build: static () => new VulkanDeviceCommands(
+            build: () => new VulkanDeviceCommands(
                 deviceHandle: DeviceHandle,
+                memory: memory,
                 procedures: RecordingProcedures()
             ),
             destroyEntryPoints: DeviceDestroyEntryPoints,

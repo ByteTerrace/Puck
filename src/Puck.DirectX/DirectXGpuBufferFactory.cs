@@ -39,11 +39,13 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
             ),
             heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
             initialState: DeviceLocalState,
+            memory: deviceContext.Memory,
             sizeBytes: sizeBytes
         );
 
         return new DirectXGpuDeviceBuffer(
             bufferHandle: ((nint)buffer),
+            memory: deviceContext.Memory,
             sizeBytes: sizeBytes
         );
     }

@@ -31,6 +31,7 @@ public static class DirectXPresenterServiceRegistration {
         services.AddDirectXComputeApis();
 
         services.AddGpuPipelineCacheWork(backend: PipelineCacheBackend);
+        services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);
         // The device is created lazily on the default adapter; its pipeline library lives under the host's
         // GpuPipelineCacheStore when one is registered, and in memory otherwise. The debug layer follows the host's
         // GpuDeviceOptions, and is off when none is registered.
@@ -42,6 +43,7 @@ public static class DirectXPresenterServiceRegistration {
             pipelineCacheWork: sp.GetRequiredKeyedService<GpuPipelineCacheWork>(serviceKey: PipelineCacheBackend)
         ) {
             EnableDebugLayer = (sp.GetService<GpuDeviceOptions>()?.DebugLayers ?? false),
+            Memory = sp.GetRequiredKeyedService<GpuDeviceMemoryWork>(serviceKey: PipelineCacheBackend),
         });
         services.TryAddSingleton<IDirectXDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<DirectXDeviceContext>());
         services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<DirectXDeviceContext>());

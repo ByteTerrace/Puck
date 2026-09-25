@@ -947,9 +947,10 @@ shipped ink pipeline. Warm-up, soak and churn are counted in ticks and frames.
 from a clean install and a cold pipeline cache, reads its evidence from
 `world.counters` and `pipeline.inspect`, and judges each cell pass, fail or
 blocked. The debug-layer run answers the buffer-transition question above.
-The peak owned pipeline bytes threshold is set for every pipeline cell. Peak
-device-local bytes is deferred, because no reading of what a World process
-allocates exists. Zero live Direct3D 12 objects after teardown is deferred,
+The peak owned pipeline bytes threshold is set for every pipeline cell. The
+peak device-local bytes threshold is judged from `memory.<backend>`, but every
+cell leaves it null until a reading of the published package on the reference
+devices sets it. Zero live Direct3D 12 objects after teardown is deferred,
 because the backend never asks its debug layer for them.
 
 The pipeline threshold is the `ink` graph's exact planned peak, 96 bytes a
@@ -1285,15 +1286,19 @@ Phase 0 needs nothing else, and all of it has landed:
    `DirectXDebugLayerLivenessTests`, and qualification no longer defers
    `Direct3D12LiveObjects`.
 
-Phase 1 follows P3, which has landed:
+Phase 1 follows P3, which has landed, and all of it has landed:
 
 5. Done: destroying descriptor pool zero does nothing and reaches no device on
    either backend, so `GpuRegion.Dispose`, `UnifiedOverlayNode` and
    `ShaderPipelineRenderNode` and its float preview destroy their pools
    unguarded.
-6. `memory.vulkan` and `memory.directx` count device-local bytes allocated and
-   released (per-backend-deterministic) at their actual size, and the peak
-   (pacing); `QualificationJudge` gains the peak device-local threshold.
+6. Done: `memory.vulkan` and `memory.directx` (`GpuDeviceMemoryWork`) count
+   device-local bytes allocated and released (per-backend-deterministic) at
+   their actual allocation size, and the peak held (pacing), where each backend
+   allocates buffers, images and exported or imported memory; swapchain images
+   are never counted. `QualificationJudge` judges a cell's
+   `peakDeviceLocalBytes`, which every cell leaves null until a
+   reference-device reading sets it.
 
 Phase 2, the services, follows the generated frame block, which has landed:
 

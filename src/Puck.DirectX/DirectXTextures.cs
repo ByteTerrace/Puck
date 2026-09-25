@@ -71,8 +71,10 @@ public static unsafe class DirectXTextures {
     /// <param name="heapFlags">Its heap flags; <c>SHARED</c> for a texture another device opens.</param>
     /// <param name="clearValue">The optimized clear value of a render target or depth stencil, or
     /// <see langword="null"/>.</param>
+    /// <param name="memory">The device-local counts the texture joins, or <see langword="null"/>; the owner counts its
+    /// release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
     /// <returns>The texture, owned by the caller.</returns>
-    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null) {
+    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null, GpuDeviceMemoryWork? memory = null) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
@@ -98,6 +100,12 @@ public static unsafe class DirectXTextures {
             pOptimizedClearValue: clearValue,
             ppvResource: &texture,
             riidResource: in resourceIid
+        );
+
+        DirectXDeviceMemory.CountAllocated(
+            device: device,
+            memory: memory,
+            resource: ((ID3D12Resource*)texture)
         );
 
         return ((ID3D12Resource*)texture);

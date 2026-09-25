@@ -34,10 +34,10 @@ public sealed class ReleaseProfileLawTests {
               "pipeline": { "instance": "ink", "layout": "pipeline", "settleFrames": 4, "reloads": 2, "resizes": 1, "loads": 3 }, "timeoutSeconds": 120 }
           ],
           "thresholds": [
-            { "workload": "world", "backend": "vulkan", "width": 1280, "height": 800, "peakOwnedPipelineBytes": null },
-            { "workload": "world", "backend": "directx", "width": 1280, "height": 800, "peakOwnedPipelineBytes": null },
-            { "workload": "ink", "backend": "vulkan", "width": 1280, "height": 800, "peakOwnedPipelineBytes": 155648000 },
-            { "workload": "ink", "backend": "directx", "width": 1280, "height": 800, "peakOwnedPipelineBytes": 155648000 }
+            { "workload": "world", "backend": "vulkan", "width": 1280, "height": 800, "peakOwnedPipelineBytes": null, "peakDeviceLocalBytes": null },
+            { "workload": "world", "backend": "directx", "width": 1280, "height": 800, "peakOwnedPipelineBytes": null, "peakDeviceLocalBytes": null },
+            { "workload": "ink", "backend": "vulkan", "width": 1280, "height": 800, "peakOwnedPipelineBytes": 155648000, "peakDeviceLocalBytes": null },
+            { "workload": "ink", "backend": "directx", "width": 1280, "height": 800, "peakOwnedPipelineBytes": 155648000, "peakDeviceLocalBytes": null }
           ],
           "deferred": [{ "check": "FrameTime", "reason": "Timing is deferred." }]
         }
@@ -165,6 +165,7 @@ public sealed class ReleaseProfileLawTests {
         Assert.Contains(expectedSubstring: "two threshold rows", actualString: Refusal(edit: static document => document["thresholds"]!.AsArray().Add(value: document["thresholds"]![0]!.DeepClone())));
         Assert.Contains(expectedSubstring: "must be null", actualString: Refusal(edit: static document => document["thresholds"]![0]!["peakOwnedPipelineBytes"] = 1));
         Assert.Contains(expectedSubstring: "positive byte count", actualString: Refusal(edit: static document => document["thresholds"]![2]!["peakOwnedPipelineBytes"] = null));
+        Assert.Contains(expectedSubstring: "peakDeviceLocalBytes must be a positive byte count or null", actualString: Refusal(edit: static document => document["thresholds"]![0]!["peakDeviceLocalBytes"] = 0));
         Assert.Contains(expectedSubstring: "not one of the profile's resolutions", actualString: Refusal(edit: static document => document["thresholds"]![3]!["width"] = 1920));
         Assert.Contains(expectedSubstring: "no workload", actualString: Refusal(edit: static document => document["thresholds"]![3]!["workload"] = "other"));
     }

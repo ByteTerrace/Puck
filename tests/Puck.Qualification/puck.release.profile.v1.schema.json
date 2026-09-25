@@ -229,6 +229,13 @@
               "integer",
               "null"
             ]
+          },
+          "peakDeviceLocalBytes": {
+            "description": "The most device-local bytes the World process may hold at once, read from every world.counters --json reading\u0027s gpu.memory.device-local.peak; null until the cell has a reading on the reference device to set it from.",
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "required": [
@@ -236,7 +243,8 @@
           "backend",
           "width",
           "height",
-          "peakOwnedPipelineBytes"
+          "peakOwnedPipelineBytes",
+          "peakDeviceLocalBytes"
         ],
         "additionalProperties": false,
         "title": "QualificationThreshold"

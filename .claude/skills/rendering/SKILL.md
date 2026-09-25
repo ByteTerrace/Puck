@@ -483,8 +483,11 @@ the largest `owned=`/`peak=` within the cell's `peakOwnedPipelineBytes`), the
 refused inspection after an unload, and, for the backends listed under
 `debugLayers`, no `[vulkan-debug] validation` or `[d3d12-debug]` line.
 Compiler discovery `None` strips every `dxc` directory from a matrix leg's
-`PATH`. Lengths are ticks and frames; the profile sets no time threshold, and
-peak device-local bytes are deferred because nothing reads them. With the
+`PATH`. Lengths are ticks and frames; the profile sets no time threshold. A
+cell's `peakDeviceLocalBytes` judges the largest `gpu.memory.device-local.peak`
+of `memory.<backend>` (`GpuDeviceMemoryWork`, counted where each backend
+allocates buffers, images and exported or imported memory, never swapchain
+images); every cell leaves it null until a reference-device reading sets it. With the
 Direct3D 12 debug layer on, `DirectXDeviceContext.Dispose` releases its own
 objects, then asks `ID3D12DebugDevice::ReportLiveDeviceObjects` for the rest and
 prints each (the device's own entry left out) as a `[d3d12-debug] live` line, so

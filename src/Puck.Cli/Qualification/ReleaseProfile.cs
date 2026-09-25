@@ -116,12 +116,16 @@ internal sealed record QualificationPipeline(
 /// <param name="PeakOwnedPipelineBytes">The most bytes the workload's pipeline instance may own or plan to own at
 /// once, read from every <c>pipeline.inspect</c>'s <c>owned=</c> and <c>peak=</c>; required for a workload with a
 /// pipeline, and <see langword="null"/> for one without.</param>
+/// <param name="PeakDeviceLocalBytes">The most device-local bytes the World process may hold at once, read from every
+/// <c>world.counters --json</c> reading's <c>gpu.memory.device-local.peak</c>; <see langword="null"/> until the cell
+/// has a reading on the reference device to set it from.</param>
 internal sealed record QualificationThreshold(
     string Workload,
     string Backend,
     int Width,
     int Height,
-    long? PeakOwnedPipelineBytes
+    long? PeakOwnedPipelineBytes,
+    long? PeakDeviceLocalBytes
 );
 /// <summary>A check qualification does not make yet.</summary>
 /// <param name="Check">The check.</param>
@@ -130,7 +134,7 @@ internal sealed record QualificationDeferral(QualificationDeferredCheck Check, s
 /// <summary>The checks a release profile can defer.</summary>
 [JsonConverter(typeof(StrictEnumConverter<QualificationDeferredCheck>))]
 internal enum QualificationDeferredCheck {
-    /// <summary>A peak of device-local bytes in use across the whole World process.</summary>
+    /// <summary>A threshold on the peak of device-local bytes the whole World process holds.</summary>
     DeviceLocalPeak,
     /// <summary>Frame-time median and tail.</summary>
     FrameTime,

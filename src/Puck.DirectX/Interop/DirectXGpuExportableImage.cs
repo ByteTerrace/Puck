@@ -110,6 +110,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
             heapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,
             height: height,
             initialState: initialState,
+            memory: deviceContext.Memory,
             width: width
         );
 
@@ -224,6 +225,10 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
         }
 
         Release(pointer: ref m_fence);
+        DirectXDeviceMemory.CountReleased(
+            memory: m_deviceContext.Memory,
+            resource: m_resource
+        );
         Release(pointer: ref m_resource);
 
         if (!m_sharedHandle.IsNull) {

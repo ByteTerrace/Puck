@@ -14,6 +14,7 @@ namespace Puck.DirectX.Interop;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuImage : IGpuImage {
     private readonly GCHandle m_imageViewToken;
+    private readonly GpuDeviceMemoryWork? m_memory;
 
     private bool m_disposed;
     private nint m_resource;
@@ -52,8 +53,10 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
             format: dxgiFormat,
             height: height,
             initialState: initialState,
+            memory: deviceContext.Memory,
             width: width
         ));
+        m_memory = deviceContext.Memory;
         DirectXResourceStates.Register(
             resource: m_resource,
             state: initialState
@@ -91,6 +94,10 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
         }
 
         if (0 != m_resource) {
+            DirectXDeviceMemory.CountReleased(
+                memory: m_memory,
+                resource: m_resource
+            );
             _ = ((IUnknown*)m_resource)->Release();
             m_resource = 0;
         }

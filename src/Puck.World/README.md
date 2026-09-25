@@ -1496,7 +1496,9 @@ rendering shape adds the shader compiler's `shaders.compiler` (requests, cache
 hits and each native tool's runs) and the process's shader loads,
 `shaders.sdf-kernels`, `shaders.fullscreen-pass` and `shaders.set-manifest`
 (loads and the bytecode bytes they read); each backend adds its
-`pipeline-cache.<backend>`, and Vulkan adds `procedures.vulkan`. A rendering
+`pipeline-cache.<backend>` and `memory.<backend>` (device-local bytes
+allocated and released at their allocation sizes, and the peak held; swapchain
+images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
 shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
 baked and refused, and the field evaluations the bakes spent. The
 client registers `presentation.mirror`, the cells its state mirror read. A
