@@ -445,9 +445,12 @@ groups. The frame graph is a document, `puck.render.graph.v1`
 pipeline document's, plus `packages`: engine work named by package id from
 `RenderGraphPackageCatalog`, which offers `sdf.world`, `overlay` and one
 `post.<id>` package per shipped post-process set. `RenderGraphCompiler` plans a
-graph with P3's planner through its public API: a package pass enters the plan
-as a compute pass whose source is `package:<id>`, so one planner orders,
-versions and barriers every pass. `RenderGraphDocumentLawTests` holds every
+graph with P3's planner: a package pass enters the plan as its own pass kind,
+`ShaderPipelinePassKind.Package`, whose source is its package id and whose
+references keep no descriptor binding, so one planner orders, versions and
+barriers every pass. A document's `passes` never declare that kind, and the
+planner refuses one there with `SHADERPIPE_PACKAGE_PASS`.
+`RenderGraphDocumentLawTests` holds every
 checked-in pipeline document to planning identically as a graph, and
 `puck schema` generates the document's schema. A world names instances in
 `views.graphs`: a graph source, a camera, a refresh divisor or rate, and
@@ -476,9 +479,8 @@ runs the parity and counted-GPU checks, makes a steady-state schedule
 allocate nothing (today each `Schedule` call allocates its result and the
 next history), and makes the deletions P11 lists,
 including the `puck.shader.pipeline.v1` schema, whose documents then need only
-their tag changed. It also needs one planner change: a first-class package
-pass kind in `ShaderPipelineCompiler`, so a package pass stops travelling as a
-compute pass with a `package:` source.
+their tag changed. The first-class package pass kind in
+`ShaderPipelineCompiler` has landed.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface

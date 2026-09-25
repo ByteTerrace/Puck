@@ -222,10 +222,11 @@ public sealed record ShaderPipelineGeometry(
 }
 /// <summary>One executable pass in a shader pipeline.</summary>
 /// <param name="Name">The unique pass name.</param>
-/// <param name="Source">The HLSL source's path, relative to the pipeline document.</param>
+/// <param name="Source">The HLSL source's path, relative to the pipeline document; a package pass's package id.</param>
 /// <param name="EntryPoint">The entry point compiled by the shader compiler: a compute pass's kernel, or a graphics
-/// pass's fragment stage.</param>
-/// <param name="Kind">Compute, fullscreen graphics, or indexed geometry.</param>
+/// pass's fragment stage. A package pass compiles nothing and leaves it empty.</param>
+/// <param name="Kind">Compute, fullscreen graphics, or indexed geometry; a frame graph's package passes are
+/// <see cref="ShaderPipelinePassKind.Package"/>.</param>
 /// <param name="Inputs">Named resource bindings. Set <see cref="ResourceReference.PreviousFrame"/> explicitly for feedback.</param>
 /// <param name="Outputs">The versions the pass writes. A graphics pass writes one color image and, for a geometry pass,
 /// at most one depth version.</param>
