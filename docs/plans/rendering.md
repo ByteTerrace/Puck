@@ -1844,10 +1844,23 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 
 **Build sequence.**
 
-1. The capability matrix as a law, with the members nothing calls deleted:
-   `SubmitFramePipelined`, `AcquireFramePixels`, `IsFramePixelsReady`,
-   `TryReadCadenceDiagnostics`, `SdfFrame.WarpAmount`, and the export-mode
-   output image branch.
+1. Landed, the capability matrix as a law: `SdfCapabilityMatrixLawTests`
+   (`tests/Puck.SdfVm.Tests`) assigns every public member of `SdfWorldEngine`,
+   `SdfEngineNode`, `SdfFrame`, `SdfViewSnapshot`, `SdfWorldEngineOptions` and
+   `SdfWorldRenderSpec` to exactly one capability row, names each row's graph
+   equivalent and check, maps every pass label to the graph pass that replaces
+   it, and holds the rows without a check to a named list of gaps: the live
+   program report, render scale, screen slots, decals, the glyph atlas,
+   volumes, the shading levers, debug views, the grid overlay, brick baking,
+   the output image and export, mesh draws, and assembly and lifetime. No row
+   is green, because no graph equivalent runs yet. A console verb is covered
+   through the member it drives rather than enumerated, because the verbs live
+   in `Puck.World`, which the SDF tests do not reach. The members nothing
+   called are gone: the pipelined preview path, the node's cadence diagnostics
+   and the engine's diagnostics hashing behind them, `SdfFrame.WarpAmount`, and
+   the world node's output-image factory with its shared-handle branch. An
+   offscreen camera view still selects export mode through
+   `SdfCameraView.ExportFactory`, so the engine's export path stays.
 2. The HLSL module split and the upward-include refusal, with every compiled
    kernel's hash unchanged.
 3. Landed, the generated instruction-set declarations: `puck shaders generate`
@@ -2067,8 +2080,9 @@ that allocates nothing. The rest of P11b waits on P7b's binding groups. P12's
 source contract, producers and conversion passes have landed; P12b, the graph
 wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
 P11b and P12b, because the engine's composition and screens need somewhere to
-go before it moves; its generated instruction-set declarations (P14-3) and the
-planner's vocabulary (P14-4) needed none of them and have landed. P4-2's mesh
+go before it moves; its capability matrix (P14-1), generated instruction-set
+declarations (P14-3) and the planner's vocabulary with multi-basis counts
+(P14-4) needed none of them and have landed. P4-2's mesh
 work follows P4-1 and P7b's services. P15 and P16 both follow P14: P15 also needs P4, and P16, the smallest package
 in this group, needs P14's float working targets. P17's CPU half, the bakes and
 their texture codecs, has landed; drawing a bake follows P4 and choosing

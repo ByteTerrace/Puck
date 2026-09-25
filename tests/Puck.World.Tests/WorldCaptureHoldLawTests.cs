@@ -285,8 +285,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                     X: 0f,
                     Y: 0f
                 )
-            )],
-            WarpAmount: 0f
+            )]
         );
     }
 

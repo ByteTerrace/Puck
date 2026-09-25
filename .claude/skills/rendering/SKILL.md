@@ -531,7 +531,15 @@ planner refuses them on a shader pass, because the node records extent
 dispatches over raw fixed buffers. `SdfPassPlanLawTests` plans the SDF engine's
 passes from `SdfFrameBufferPlan`'s uses and holds the order to `PassLabels` and
 the between-pass buffer barriers to its edges, so a change to either side moves
-the law.
+the law. It also counts each SDF buffer over the bases it grows with (a sum of
+terms, each a product of bases) and holds the planner's size to
+`SdfWorldEngine.FrameBufferBytes`, the one statement of every device-local
+frame buffer's size that construction and program growth allocate by; a new
+buffer or a resized one changes that function and the law's counts together.
+`SdfCapabilityMatrixLawTests` assigns every public member of the engine's
+surface to one capability row with its graph equivalent and check, so a new
+public member needs a row, and nothing a row claims is deleted before the row
+is green.
 The grouped binding contract is the pass interface in `src/Puck.Shaders/Interface`
 ([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)); every
 pipeline pass and shader set reads its frame block through one, and no shipped

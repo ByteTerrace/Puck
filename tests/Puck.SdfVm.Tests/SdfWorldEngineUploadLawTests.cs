@@ -273,8 +273,7 @@ public sealed class SdfWorldEngineUploadLawTests {
                 X: 0f,
                 Y: 0f
             )
-        )],
-        WarpAmount: 0f
+        )]
     ) {
         DynamicTransforms = transforms,
     };

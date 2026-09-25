@@ -59,7 +59,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     // answer ProduceChildren/StepChildren/the SetChildSource loop all share for "is this slot a child this frame".
     private uint m_childSlotMask;
 
-    private readonly Func<IGpuDeviceContext, IGpuImage>? m_createStorageImage;
     private readonly string? m_debugLabel;
     private readonly int m_dynamicTransformCapacity;
     private readonly ISdfFrameSource m_frameSource;
@@ -252,7 +251,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             height: m_height,
             options: new SdfWorldEngineOptions(
                 BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
-                CreateOutputImage: m_createStorageImage,
                 DynamicTransformCapacity: Math.Max(
                     val1: Math.Max(
                         val1: 1,
@@ -713,22 +711,12 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             writer: m_writeDebugCapture
         );
 
-        // Export mode hands the host a shared NT handle (zero-copy cross-backend present); same-device mode hands it
-        // an image view to sample directly.
-        return (m_engine.ExportMode
-            ? Surface.SharedTexture(
-                sharedHandle: m_engine.ExportSharedHandle,
-                width: m_width,
-                height: m_height,
-                format: SurfaceFormat.R8G8B8A8Unorm
-            )
-            : Surface.SameDeviceImage(
-                imageHandle: m_engine.OutputImageHandle,
-                imageViewHandle: m_engine.OutputImageViewHandle,
-                width: m_width,
-                height: m_height,
-                format: SurfaceFormat.R8G8B8A8Unorm
-            )
+        return Surface.SameDeviceImage(
+            imageHandle: m_engine.OutputImageHandle,
+            imageViewHandle: m_engine.OutputImageViewHandle,
+            width: m_width,
+            height: m_height,
+            format: SurfaceFormat.R8G8B8A8Unorm
         );
     }
     /// <inheritdoc/>
@@ -742,22 +730,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             request: request
         );
     }
-    /// <summary>Reads the cadence gate's per-span diagnostics through the live engine (a passthrough of
-    /// <see cref="SdfWorldEngine.CadenceDiagnostics"/>) — the seam the <c>sdf.info</c> verb's cadence section reads
-    /// without depending on the engine.</summary>
-    /// <param name="diagnostics">Receives the latest diagnostics.</param>
-    /// <returns>Whether the engine is built (false leaves <paramref name="diagnostics"/> at its default).</returns>
-    public bool TryReadCadenceDiagnostics(out SdfCadenceDiagnostics diagnostics) {
-        diagnostics = default;
-
-        if (m_engine is null) {
-            return false;
-        }
-
-        diagnostics = m_engine.CadenceDiagnostics;
-
-        return true;
-    }
 
     /// <summary>Initializes a new instance of the <see cref="SdfEngineNode"/> class.</summary>
     /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) this node forwards
@@ -767,7 +739,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// <param name="kernels">The compiled world kernel set (SPIR-V for Vulkan, DXIL for Direct3D 12).</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
-    /// <param name="createStorageImage">An optional factory for the output image. When it returns an <see cref="IGpuExportableImage"/>, the node runs in <em>export</em> mode: it ends each frame in the cross-backend handoff layout, drains the producer queue, and emits a shared-handle <see cref="Surface"/> (for zero-copy cross-backend present) instead of a same-device image-view one. When <see langword="null"/>, a plain same-device storage image is created from the resolved <see cref="IGpuImageFactory"/>.</param>
     /// <param name="children">An optional map from a stable name to a child <see cref="IRenderNode"/> that supplies a
     /// viewport slot's surface instead of an SDF camera whenever the frame's own <see cref="SdfFrame.Views"/> binds that
     /// slot's <see cref="SdfViewSnapshot.Child"/> to the same name (see this class's remarks for the per-frame
@@ -815,7 +786,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// carves (no pool is allocated).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfEngineNode(SdfViewGpuServices services, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, Func<IGpuDeviceContext, IGpuImage>? createStorageImage = null, IReadOnlyDictionary<string, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
+    public SdfEngineNode(SdfViewGpuServices services, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, IReadOnlyDictionary<string, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -838,7 +809,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
                 comparer: StringComparer.Ordinal
             )
         );
-        m_createStorageImage = createStorageImage;
         m_dynamicTransformCapacity = dynamicTransformCapacity;
         m_instanceCapacity = instanceCapacity;
         m_viewportCapacity = viewportCapacity;

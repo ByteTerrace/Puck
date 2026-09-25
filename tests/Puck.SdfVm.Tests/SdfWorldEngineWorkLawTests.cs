@@ -198,8 +198,7 @@ public sealed class SdfWorldEngineWorkLawTests {
                         X: 0f,
                         Y: 0f
                     )
-                )],
-                WarpAmount: 0f
+                )]
             ) {
                 EnableCadenceGate = cadence,
             };

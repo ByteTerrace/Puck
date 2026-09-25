@@ -18,19 +18,12 @@ namespace Puck.SdfVm;
 /// <c>sdf-world-composite.comp</c> (source-agnostic region composite, also dispatched indirectly). Fully
 /// backend-neutral through the <see cref="IGpuComputeServices"/> seam.
 /// <para>
-/// Three submission models, and they must never blur — nor run against one engine instance at overlapping times, since
-/// all three re-record the shared per-slot command buffers: <see cref="RenderFrame"/> is the deterministic harness path —
-/// one submit-and-wait plus a readback (validation, headless render). <see cref="SubmitFrame"/> is the live node path —
+/// Two submission models, and they must never blur: <see cref="RenderFrame"/> is the deterministic harness path — one
+/// submit-and-wait plus a readback (validation, headless render). <see cref="SubmitFrame"/> is the live node path —
 /// fire-and-forget behind the engine's own <see cref="FrameRingSize"/>-deep frame ring (each slot's fence orders that
 /// slot's rewrites against its previous submission, so a pipelining host needs no per-frame device drain), plus the
-/// export-mode queue drain when the output crosses a backend seam.
-/// <see cref="SubmitFramePipelined"/> is the demo-preview path — a non-blocking fenced readback (submit fire-and-forget,
-/// poll <see cref="IsFramePixelsReady"/> on a later produced frame, then <see cref="AcquireFramePixels"/> maps it), so
-/// the live in-editor bake preview never idles the shared present queue mid-sculpt. It stays frame-count driven
-/// (determinism is a feature even here), and a single-in-flight guard forbids interleaving it with the other two on one
-/// engine — <see cref="RenderFrame"/>, <see cref="SubmitFrame"/>, and <see cref="SubmitFramePipelined"/> each throw while
-/// a pipelined frame is outstanding. Adding a wait to <see cref="SubmitFrame"/> is a frame-rate regression; removing the
-/// wait from <see cref="RenderFrame"/> is a nondeterminism bug.
+/// export-mode queue drain when the output crosses a backend seam. Adding a wait to <see cref="SubmitFrame"/> is a
+/// frame-rate regression; removing the wait from <see cref="RenderFrame"/> is a nondeterminism bug.
 /// </para>
 /// </summary>
 public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
@@ -262,9 +255,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuBuffer m_primaryHitBuffer;
     private readonly uint m_width;
 
-    private SdfCadenceDiagnostics m_cadenceDiagnostics;
-    private ulong m_cadenceRenderedFrameCount;
-    private ulong m_cadenceSkippedFrameCount;
     private int m_currentSlot;
     private ulong m_decalRevision;
     private bool m_disposed;
@@ -276,16 +266,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // saturated band, so a glyph-free program with no atlas is safe.
     private IGpuSurfaceUpload? m_glyphAtlasUpload;
     private nint m_glyphAtlasView;
-    private bool m_hasPreviousCadenceSpanHashes;
     private bool m_hasPreviousFrameSignature;
     private bool m_imageInitialized;
     private int m_liveInstanceMaskWordCount;
-    private bool m_pipelinedFrameInFlight;
-    // Diagnostics only: the previous decided frame's independent per-span hashes (each starting fresh from the FNV
-    // basis — unlike m_previousFrameSignature's chained fold, so one span's hash never smears into another's), the
-    // cumulative skip/render counts since the gate last armed, and the latest published SdfCadenceDiagnostics. None
-    // of this feeds DecideCadenceSkip's skip decision.
-    private CadenceSpanHashes m_previousCadenceSpanHashes;
     // The previous RENDERED frame's change signature (a 64-bit hash of every packed span + revision the skipped passes
     // consume — see ComputeFrameSignature) and whether one exists yet. Reset whenever the gate is off, so re-enabling it
     // always renders the first frame before it can skip.

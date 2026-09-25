@@ -35,8 +35,8 @@ public sealed partial class SdfWorldEngine {
     /// This does not reload child engines or postprocessing decorators owned by other nodes.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="reload"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The engine has been disposed.</exception>
-    /// <exception cref="InvalidOperationException">A preview readback is outstanding, the reload was prepared for a
-    /// different pipeline set or kernel set, or the ISA handshake fails.</exception>
+    /// <exception cref="InvalidOperationException">The reload was prepared for a different pipeline set or kernel set,
+    /// or the ISA handshake fails.</exception>
     public int InstallReload(SdfWorldPipelineReload reload) {
         ArgumentNullException.ThrowIfNull(reload);
         ObjectDisposedException.ThrowIf(
@@ -44,7 +44,6 @@ public sealed partial class SdfWorldEngine {
             instance: this
         );
 
-        ThrowIfPipelinedFrameInFlight();
         m_pipelines.ThrowIfNotCurrent(reload: reload);
 
         if (reload.ChangedPipelines == 0) {
