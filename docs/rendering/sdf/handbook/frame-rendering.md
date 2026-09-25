@@ -138,8 +138,9 @@ sets the reconstruction blend.
 
 The engine overlaps CPU frame production with GPU execution using a **two-deep
 frame ring** (`FrameRingSize = 2`). Each ring slot owns its own command pool,
-per-frame host-visible buffers (viewports, transforms, screen surfaces and
-lights), descriptor sets, and a submission fence. The host builds and submits
+its host-visible buffer of every host-written table (a staging buffer or the
+table itself, as the next section describes), descriptor sets, and a submission
+fence. The host builds and submits
 frame *N* into slot *N mod 2* without waiting for frame *N−1* to finish on the
 GPU; it only waits on slot *k*'s fence—which proves frame *k−2* has retired —
 before it rewrites that slot's buffers. This is what lets a moving screen or a
@@ -150,44 +151,52 @@ reading last frame's copy.
 
 Writing host-visible memory costs CPU copies and memory bandwidth, which
 matters most on unified-memory devices such as the Steam Deck. So a frame
-writes only what changed since the frame before it:
+writes only what changed since the frame before it.
 
-- **Viewport rows, dynamic transforms and the frame instance grid** live in
-  persistent device-local tables that every march kernel reads. The engine
-  keeps a host copy of each. It compares every frame's viewport rows and
-  instance grid against that copy; dynamic transforms it never compares, and
-  instead stages the rows the frame's moved set (`SdfFrame.MovedTransforms`)
-  owes since the frame this engine last consumed. Only the changed or owed
-  ranges are written into the ring slot's host-visible buffer. When
-  a table has more than one run of adjacent changes, a small run table (8 bytes
-  per run) goes with them. The `upload` pass then copies every changed range of a
-  table with one dispatch, however scattered the changes are. Ranges nobody
-  changed stay as earlier frames left them. So a transform changed on frame *N* is still correct on frame *N+1*,
-  even though that frame stages its changes in the other slot's buffer.
-- **Screen surfaces, screen lights, bounded volumes and glyph decals** are read
-  straight from the ring slot's buffer. A change is recorded against both slots,
-  and each slot's buffer receives only the ranges it is behind by when its turn
-  comes.
-- **The program** is rewritten only by a program upload, and then only from the
-  first word that differs to the last.
-- **Mesh draws** (`SdfFrame.MeshDraws`) are packed into the mesh region
-  (`SdfMeshRegion`: one 80-byte record a draw, then each distinct mesh's
-  positions and indices once) only when the frame hands a different draw list,
-  and the region owes only the words that changed. It is a `GpuRegion` under the
-  residency policy the device selects for its size, a per-slot ring where that
-  policy is in place, since the frame ring keeps a reader in flight. It is created by the first frame
-  that draws a mesh and grown by half again when a list outgrows it. No pass
-  reads it yet.
+Every table the kernels read from the host is a `GpuRegion`: the program
+words, viewport rows, dynamic transforms, the frame instance grid, screen
+surfaces, screen lights, bounded volumes, glyph decals and mesh draws. The
+region keeps a host copy of its table, and a write owes only the words that
+differ from that copy, one run for each stretch of changed words. Where each
+region lives is the device's choice, made by `GpuResidency.Select` from its
+memory profile and the table's size, with the frame ring's reader always in
+flight:
 
-The table upload and a staged region both copy with `region-copy.comp`, the
-one region-copy pipeline each device has, which `Puck.Shaders` ships and every
-owner leases (`GpuRegionCopyPipelineCache`).
+- **Staged**, on a device the host cannot write in its own memory (a discrete
+  adapter without an aperture): each ring slot has a staging buffer, and the
+  `upload` pass copies the owed words into one device-local buffer the kernels
+  read, one dispatch per region however scattered the changes are. The staging
+  buffer states the copy: a 16-byte header, 8 bytes for each run, then the
+  words. A word nobody changed stays as an earlier frame left it, so a
+  transform changed on frame *N* is still correct on frame *N+1*, even though
+  that frame stages in the other slot's buffer.
+- **Ring**, on a device with a host-visible aperture or unified memory: each
+  ring slot has its own buffer the kernels read directly, and each receives
+  the words it is behind by when its turn comes. Nothing is copied. The buffers
+  are host memory, not the aperture.
 
-A still frame therefore writes only its viewport rows (96 bytes per view),
-because each row carries the frame's presentation time. When a sky's clouds
-drift, a few bytes of its environment rows are written too. A frame whose time
-did not move writes nothing. The frame instance grid is rebuilt only on a
-frame whose transforms moved. `world.counters gpu` reports the written bytes as
+Dynamic transforms are never compared as a table: the engine packs only the
+rows the frame's moved set (`SdfFrame.MovedTransforms`) owes since the frame it
+last consumed, and the region owes the words of those rows that changed. The
+program is written only by a program upload. Mesh draws (`SdfFrame.MeshDraws`)
+are packed into the mesh region (`SdfMeshRegion`: one 80-byte record a draw,
+then each distinct mesh's positions and indices once) only when the frame hands
+a different draw list; the region is created by the first frame that draws a
+mesh and grown by half again when a list outgrows it. No pass reads it yet.
+
+A host-baked brick reaches the brick pool through a staged region whose
+destination is the pool itself. Since the carve bake also writes the pool, each
+brick is copied whole.
+
+Every staged copy records `region-copy.comp`, the one region-copy pipeline each
+device has, which `Puck.Shaders` ships and every owner leases
+(`GpuRegionCopyPipelineCache`).
+
+A still frame therefore writes only the time word of each viewport row, because
+each row carries the frame's presentation time. When a sky's clouds drift, a
+few words of its environment rows are written too. A frame whose time did not
+move writes nothing. The frame instance grid is rebuilt only on a frame whose
+transforms moved. `world.counters gpu` reports the written bytes as
 `uploads.host-visible` on its `outside` line.
 
 There are two distinct submission entry points, and they must never be blurred:
@@ -213,7 +222,7 @@ ten labeled passes (`upload`, `sky`, `mask`, `beam`, `cull-args`, `primary`,
 effect on the image: dispatches, indirect dispatches, barriers, pipeline and
 descriptor-set binds, push-constant bytes, descriptor writes and host-visible
 upload bytes. Work before the first pass (brick uploads and bakes, the
-begin-of-frame transitions) or between frames (table uploads, descriptor
+begin-of-frame transitions) or between frames (region writes, descriptor
 rebinds) is counted outside every pass. A frame the cadence gate skips reports
 `sky` through `views` as skipped rather than as zero. Counts are published only
 once the GPU has finished the submission, so `world.counters gpu` shows the newest

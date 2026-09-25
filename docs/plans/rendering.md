@@ -449,19 +449,21 @@ reports a `GpuMemoryProfile` beside its identity, filled at device creation
 from `D3D12_FEATURE_DATA_ARCHITECTURE`, `DXGI_ADAPTER_DESC1` and options 16's
 GPU upload heap support on Direct3D 12, and from the device type and
 `vkGetPhysicalDeviceMemoryProperties` on Vulkan. `GpuResidency.Select` maps a
-profile and a region's size onto writing in place, a per-frame ring, or a
-staged copy, and `GpuRegion` writes a region under any of the three through
-the neutral buffer, descriptor and compute-recorder interfaces. Its staged
-copy is `Puck.Shaders`' `region-copy.comp`, one pipeline a device that every
-owner leases (P7b-17). `pipeline.inspect` ends with the profile
-and the policy chosen for the instance's parameter bytes. The SDF engine's mesh
-region is the one consumer that writes through a region: the engine's
-host-table ring, whose copy records the same kernel by hand, its brick staging,
-and the overlay's host-written buffer still upload by hand. The neutral buffer factory places a
-ring's buffers in host-visible memory, not in the device-local aperture the
-profile reports, and an in-place region serves a caller that retires every
-frame reading it before it writes, as the overlay does and the SDF engine's
-frame ring does not. The one state-shaped path that reaches the GPU is the
+profile, a region's size and whether a reader is in flight while the host
+writes onto writing in place, a per-frame ring, or a staged copy, and
+`GpuRegion` writes a region under any of the three through the neutral buffer,
+descriptor and compute-recorder interfaces. Its staged copy is `Puck.Shaders`'
+`region-copy.comp`, one pipeline a device that every owner leases (P7b-17),
+and the staging buffer states the copy: a header, a run table, then the owed
+words. `pipeline.inspect` ends with the profile and the policy chosen for the
+instance's parameter bytes. Every host upload of the SDF engine is a region
+(P7b-19): its program words, per-frame tables and mesh draws each under the
+policy the selector chooses with the frame ring's reader in flight, and its
+brick staging a staged region whose destination is the brick pool. The
+overlay's host-written buffer still uploads by hand. The neutral buffer factory
+places a ring's buffers in host-visible memory, not in the device-local
+aperture the profile reports, so on a device with an aperture the SDF engine's
+tables are read from host memory. The one state-shaped path that reaches the GPU is the
 physics field lattice, mirrored on the client by `WorldClientFieldLattice` and
 uploaded by `WorldFieldEmitter` one field per produced frame.
 
@@ -1991,11 +1993,9 @@ Phase 3, the groups, follows phase 2:
 16. The gate spike's GPU half, a binding station in `tests/Puck.Parity`.
 17. Done: the region-copy kernel leaves the SDF engine for `Puck.Shaders`
     (`Assets/Shaders/Residency/region-copy.comp.hlsl`), each register at its
-    binding number, so `ShaderRegisterBindingLawTests` no longer names it. It
-    stays off the grouped path: its four-word push (count, run count, offset,
-    table base) does not fit the grouped layout's one pushed index, and moving
-    those words into the staging buffer would change the SDF engine's upload
-    bytes. `GpuRegion.CopyPipeline` is its one description.
+    binding number, so `ShaderRegisterBindingLawTests` no longer names it.
+    `GpuRegion.CopyPipeline` is its one description; step 19 moves its push
+    words into the staging buffer.
     `GpuRegionCopyPipelineCache` creates one pipeline a device on the thread
     pool (`BackgroundBuild`), counted under `gpu.region-copy`, and owners lease
     it: `SdfWorldPipelineSource` takes a lease beside its set's, and an SDF
@@ -2018,9 +2018,34 @@ Phase 3, the groups, follows phase 2:
     region's words for a known draw set, and a moved draw owing one word), with
     the upload laws and `GpuResidencyLawTests` unchanged.
 18. The overlay and fullscreen passes move onto groups.
-19. The SDF engine uploads through `GpuRegion`, deleting its hand-recorded
-    table copy (`RecordFrameUpload` and its sets), `sdf-brick-upload.comp` and
-    `SdfRingTable`.
+19. Done: the SDF engine uploads through `GpuRegion`
+    (`SdfWorldEngine.Regions.cs`). Its program words, viewport rows, dynamic
+    transforms, frame instance grid, screen surfaces, screen lights, volumes,
+    glyph decals and mesh draws are each a region under the policy
+    `GpuResidency.Select` chooses for its size with the frame ring's reader in
+    flight; a write owes each run of words that differs, `PrepareFrame` flushes
+    the slot's share, and the upload pass records every staged region's copy and
+    then one buffer transition per copied buffer, so the frame buffer plan no
+    longer lists the tables. Brick staging is a staged region whose destination
+    is the brick pool: `GpuRegion.Target` names the brick's slot, and since the
+    bake also writes the pool, a retarget owes every word written after it. The
+    copy kernel takes no push constants: a staging buffer leads with a
+    four-word header (count, run count, block base, destination word) and a run
+    entry for every run, so a copy stages 16 bytes of header and 8 bytes a run
+    that the push and the single-run case used to carry. The program upload no
+    longer drains the frame ring unless a capacity grows, and a table past one
+    staged copy is refused by name on every device. `GpuResidency.Select` takes
+    whether readers are in flight, which replaces the mesh region's own ring
+    override. `RecordFrameUpload`, its sets and the engine's device-local table
+    buffers, `sdf-brick-upload.comp` and its pipeline, and `SdfRingTable` are
+    deleted. Laws: `GpuResidencyLawTests` (the policy table over four synthetic
+    profiles with and without readers in flight, a copy stating itself in its
+    staging buffer, an external destination and its retarget),
+    `SdfWorldEngineUploadLawTests` (restated in words owed, headers and run
+    entries), `SdfWorldEngineWorkLawTests` (eight copies and eight transitions
+    in a first frame's upload, and nothing written on the second),
+    `SdfFrameBufferPlanLawTests` and `SdfPassPlanLawTests` (the plan without the
+    tables).
 20. The SDF engine moves onto groups, its push blocks and hand-set binding
     constants included. It follows P4-1, which rewrites the same kernels.
 21. The owning guides and the `rendering` skill describe the result.
@@ -2033,7 +2058,8 @@ which on the first frame and after a resize is a cleared attachment with the
 block's `historyValid` at 0; a name colliding with `ShaderInterfaceHlsl`'s
 takes the nearest free spelling. `GpuResidency.Select` also takes whether
 readers are in flight, and brick staging is a region with an external
-destination. The SDF engine's groups are P14's; its 32 screens bind as 32
+destination. A region's staging buffer states its copy (header, run table,
+words), so the region-copy kernel pushes nothing. The SDF engine's groups are P14's; its 32 screens bind as 32
 bindings and one sampler until P14 makes them an array. The test fakes
 consolidate as the surface shrinks. Open: the gate's Linux build and its two-group
 parity station.

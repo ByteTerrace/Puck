@@ -40,7 +40,7 @@ public sealed class DirectXMemoryProfileLawTests {
         );
         Assert.Equal(
             expected: GpuResidencyPolicy.InPlace,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: profile)
+            actual: GpuResidency.Select(byteCount: TableBytes, profile: profile, readersInFlight: false)
         );
     }
     [Fact]
@@ -56,7 +56,7 @@ public sealed class DirectXMemoryProfileLawTests {
         Assert.False(condition: profile.CoherentUnifiedMemory);
         Assert.Equal(
             expected: GpuResidencyPolicy.Ring,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: profile)
+            actual: GpuResidency.Select(byteCount: TableBytes, profile: profile, readersInFlight: false)
         );
     }
     [Fact]
@@ -91,11 +91,11 @@ public sealed class DirectXMemoryProfileLawTests {
         );
         Assert.Equal(
             expected: GpuResidencyPolicy.Ring,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: withUploadHeaps)
+            actual: GpuResidency.Select(byteCount: TableBytes, profile: withUploadHeaps, readersInFlight: false)
         );
         Assert.Equal(
             expected: GpuResidencyPolicy.Staged,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: without)
+            actual: GpuResidency.Select(byteCount: TableBytes, profile: without, readersInFlight: false)
         );
     }
 

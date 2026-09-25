@@ -6,9 +6,11 @@ namespace Puck.Abstractions.Tests;
 /// <summary>
 /// Laws for residency. The memory profile's Vulkan and Direct3D 12 fills are pure functions of the native values they
 /// read. The selector pins one policy for each of four synthetic devices — coherent unified memory, a discrete adapter
-/// with a small host-visible aperture, one with none, and a profile reporting nothing — and stages a region past its
-/// share of the aperture. One region's bytes are identical under all three policies, frame by frame, read back through
-/// the device-free memory model that runs the copy kernel.
+/// with a small host-visible aperture, one with none, and a profile reporting nothing — with and without a reader in
+/// flight, and stages a region past its share of the aperture. One region's bytes are identical under all three
+/// policies, frame by frame, read back through the device-free memory model that runs the copy kernel. A staged copy
+/// states its header and runs in the staging buffer and owes only differing words; an external destination takes the
+/// region at its target, and a retarget owes every word written after it.
 /// </summary>
 public sealed class GpuResidencyLawTests {
     private const uint DeviceLocal = 0x1U;
@@ -163,38 +165,54 @@ public sealed class GpuResidencyLawTests {
             )
         );
     }
-    [Fact]
-    public void TheSelectorPinsOnePolicyPerDevice() {
+    // The policy table: each synthetic device, with and without a reader in flight while the host writes. Only coherent
+    // unified memory with no reader in flight writes in place; a reader in flight turns it into a ring, as every
+    // per-frame owner's frame ring does.
+    [InlineData("coherent-unified", false, GpuResidencyPolicy.InPlace)]
+    [InlineData("coherent-unified", true, GpuResidencyPolicy.Ring)]
+    [InlineData("discrete-small-aperture", false, GpuResidencyPolicy.Ring)]
+    [InlineData("discrete-small-aperture", true, GpuResidencyPolicy.Ring)]
+    [InlineData("discrete-no-aperture", false, GpuResidencyPolicy.Staged)]
+    [InlineData("discrete-no-aperture", true, GpuResidencyPolicy.Staged)]
+    [InlineData("default", false, GpuResidencyPolicy.Staged)]
+    [InlineData("default", true, GpuResidencyPolicy.Staged)]
+    [Theory]
+    public void TheSelectorPinsOnePolicyPerDeviceAndReaders(string device, bool readersInFlight, GpuResidencyPolicy policy) {
+        var profile = device switch {
+            "coherent-unified" => CoherentUnified,
+            "discrete-small-aperture" => DiscreteSmallAperture,
+            "discrete-no-aperture" => DiscreteNoAperture,
+            _ => default,
+        };
+
         Assert.Equal(
-            expected: GpuResidencyPolicy.InPlace,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: CoherentUnified)
-        );
-        Assert.Equal(
-            expected: GpuResidencyPolicy.Ring,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: DiscreteSmallAperture)
-        );
-        Assert.Equal(
-            expected: GpuResidencyPolicy.Staged,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: DiscreteNoAperture)
-        );
-        Assert.Equal(
-            expected: GpuResidencyPolicy.Staged,
-            actual: GpuResidency.Select(byteCount: TableBytes, profile: default)
+            expected: policy,
+            actual: GpuResidency.Select(
+                byteCount: TableBytes,
+                profile: profile,
+                readersInFlight: readersInFlight
+            )
         );
     }
-    [Fact]
-    public void ARegionPastItsShareOfTheApertureIsStaged() {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ARegionPastItsShareOfTheApertureIsStaged(bool readersInFlight) {
         var share = ((256UL * MiB) / GpuResidency.HostVisibleShare);
 
         Assert.Equal(
             expected: GpuResidencyPolicy.Ring,
-            actual: GpuResidency.Select(byteCount: share, profile: DiscreteSmallAperture)
+            actual: GpuResidency.Select(byteCount: share, profile: DiscreteSmallAperture, readersInFlight: readersInFlight)
         );
         Assert.Equal(
             expected: GpuResidencyPolicy.Staged,
-            actual: GpuResidency.Select(byteCount: (share + 1UL), profile: DiscreteSmallAperture)
+            actual: GpuResidency.Select(byteCount: (share + 1UL), profile: DiscreteSmallAperture, readersInFlight: readersInFlight)
         );
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuResidency.Select(byteCount: 0UL, profile: CoherentUnified));
+        Assert.Equal(
+            expected: GpuResidencyPolicy.Staged,
+            actual: GpuResidency.Select(byteCount: (((4UL * GiB) / GpuResidency.HostVisibleShare) + 1UL), profile: CoherentUnified, readersInFlight: readersInFlight)
+        );
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuResidency.Select(byteCount: 0UL, profile: CoherentUnified, readersInFlight: readersInFlight));
         Assert.Equal(
             expected: new[] { "staged", "ring", "in-place" },
             actual: Enum.GetValues<GpuResidencyPolicy>().Select(selector: static policy => GpuResidency.Name(policy: policy))
@@ -319,6 +337,116 @@ public sealed class GpuResidencyLawTests {
                 ? [GpuRegion.CopyPoolSizes(slotCount: 3)]
                 : [])
         );
+    }
+    [Fact]
+    public void AStagedCopyStatesItselfInTheStagingBufferAndOwesOnlyTheWordsThatDiffer() {
+        const int RunEntryBytes = 8;
+        const int HeaderBytes = (GpuRegion.CopyHeaderWords * sizeof(uint));
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 256,
+            copyPipeline: copy,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        region.Flush(slot: 0);
+        region.RecordCopy(commandBuffer: 2, slot: 0);
+        gpu.ResetTallies();
+
+        // Two words far apart are two runs: the header, a run-table entry per run and each word. The same bytes again
+        // owe nothing, and a slot owing nothing writes and dispatches nothing.
+        _ = region.Write(bytes: [1, 0, 0, 0], offset: 8);
+        _ = region.Write(bytes: [2], offset: 200);
+        Assert.False(condition: region.Write(bytes: [1, 0, 0, 0], offset: 8));
+        region.Flush(slot: 1);
+        Assert.True(condition: region.OwesCopy);
+        region.RecordCopy(commandBuffer: 2, slot: 1);
+        Assert.Equal(expected: ((long)((HeaderBytes + (2 * RunEntryBytes)) + (2 * sizeof(uint)))), actual: gpu.HostBytes());
+        Assert.Equal(expected: 1, actual: gpu.UploadCopies);
+        Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
+        Assert.False(condition: region.OwesCopy);
+
+        gpu.ResetTallies();
+        region.Flush(slot: 0);
+        region.RecordCopy(commandBuffer: 2, slot: 0);
+        Assert.Equal(expected: (0L, 0), actual: (gpu.HostBytes(), gpu.UploadCopies));
+        Assert.Null(@object: GpuRegion.CopyPipeline.PushConstantBinding);
+    }
+    [Fact]
+    public void AnExternalDestinationTakesTheRegionAtItsTargetAndARetargetOwesEveryWordWrittenAfterIt() {
+        const int DestinationWords = 64;
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        using var copy = CopyPipeline(gpu: gpu);
+        using var destination = gpu.Services.BufferFactory.CreateDeviceLocal(
+            sizeBytes: (DestinationWords * sizeof(uint)),
+            usage: GpuBufferUsage.Storage
+        );
+        var memory = gpu.Memory(bufferHandle: destination.BufferHandle);
+
+        memory.AsSpan().Fill(value: 0xEE);
+
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 32,
+            copyPipeline: copy,
+            destination: destination,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        byte[] block = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+        // A new external region owes nothing: what the destination holds is its owner's.
+        Assert.Equal(expected: GpuResidencyPolicy.Staged, actual: region.Policy);
+        Assert.Same(expected: destination, actual: region.Buffer(slot: 1));
+        Assert.False(condition: region.OwesCopy);
+
+        region.Target(destinationWord: 40);
+        Assert.True(condition: region.Write(bytes: block, offset: 0));
+        region.Flush(slot: 0);
+        region.RecordCopy(commandBuffer: 2, slot: 0);
+        Assert.Equal(expected: block, actual: memory[160..172]);
+        Assert.All(collection: memory[..160].Concat(second: memory[172..]), action: static value => Assert.Equal(actual: value, expected: 0xEE));
+
+        // Other work writes the destination; the same bytes retargeted there are owed whole, and without a retarget
+        // they would be owed nothing.
+        memory.AsSpan(length: 12, start: 160).Clear();
+        Assert.False(condition: region.Write(bytes: block, offset: 0));
+        region.Target(destinationWord: 40);
+        Assert.True(condition: region.Write(bytes: block, offset: 0));
+        region.Flush(slot: 1);
+        region.RecordCopy(commandBuffer: 2, slot: 1);
+        Assert.Equal(expected: block, actual: memory[160..172]);
+
+        // A retarget waits for the copy of what the region owes, and a write stays inside the destination.
+        _ = region.Write(bytes: [9], offset: 0);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => region.Target(destinationWord: 0));
+        region.Flush(slot: 0);
+        region.RecordCopy(commandBuffer: 2, slot: 0);
+        region.Target(destinationWord: (DestinationWords - 4));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => region.Write(bytes: new byte[20], offset: 0));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => region.Target(destinationWord: DestinationWords));
+    }
+    [Fact]
+    public void OnlyARegionWithAnExternalDestinationRetargets() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => region.Target(destinationWord: 0));
     }
 
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {

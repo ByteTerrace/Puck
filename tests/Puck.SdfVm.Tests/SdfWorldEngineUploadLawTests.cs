@@ -13,27 +13,28 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for the host-visible bytes <see cref="SdfWorldEngine"/> writes per frame, driven over
-/// <see cref="UploadModelGpu"/>, which backs every buffer with bytes and runs the table uploader's copies: a still frame
-/// writes only the viewport rows its presentation time moved; k dynamic transforms the producer's moved set owes write
-/// k strides plus one run-table entry per run of adjacent slots beyond the first, in one copy dispatch however
-/// scattered they are; a
-/// change reaches the device-local table once and stays there through every frame in flight after it, whichever ring
-/// slot those frames stage in; changes past the run bound still leave the table exact; a program edit writes only the
-/// program words that changed; and an engine rebuilt after a device loss owes every table again and reads back exact.
+/// <see cref="UploadModelGpu"/>, which backs every buffer with bytes and runs the region copies. Its default memory
+/// profile stages every region, so each copy writes a four-word header, one run-table entry per run and the owed words:
+/// a still frame writes only the viewport word its presentation time moved; k dynamic transforms the producer's moved
+/// set owes write the words of each that changed, in one copy dispatch however scattered they are; a change reaches the
+/// device-local buffer once and stays there through every frame in flight after it, whichever ring slot those frames
+/// stage in; changes past the run bound still leave the table exact; a program edit writes only the program words that
+/// changed; and an engine rebuilt after a device loss owes every table again and reads back exact.
 /// </summary>
 public sealed class SdfWorldEngineUploadLawTests {
-    // The packed widths: a ViewportData row (sdf-world.hlsli) and a dynamic transform (sdf-vm.hlsli sdfDynamicTransforms).
+    // The packed width of a dynamic transform (sdf-vm.hlsli sdfDynamicTransforms).
     private const int DynamicTransformBytes = 48;
     private const uint Extent = 64;
-    // A run-table entry, (table offset, prefix) in uints, staged only when a table owes two or more runs.
+    // A staged copy's header: count, run count, block base and destination word.
+    private const int HeaderBytes = (GpuRegion.CopyHeaderWords * sizeof(uint));
+    // A run-table entry, (block offset, first thread) in uints, staged for every run a copy carries.
     private const int RunEntryBytes = 8;
-    // SdfWorldEngine's run-table reserve at the front of each staging buffer: 256 runs × 2 uints.
-    private const int RunTableReserveBytes = 2048;
-    private const int ViewportBytes = 96;
+    // The header and run-table reserve at the front of each staging buffer: 256 runs × 2 uints.
+    private const int StagingReserveBytes = (HeaderBytes + (GpuRegion.MaxCopyRuns * RunEntryBytes));
 
     [Fact]
     public void ATablePastOneCopyDispatchIsRefusedByNameWhereItIsSized() {
-        var fitting = checked((int)(SdfWorldEngine.MaxFrameUploadTableWords / (DynamicTransformBytes / sizeof(uint))));
+        var fitting = checked((int)(GpuRegion.MaxStagedWords / (DynamicTransformBytes / sizeof(uint))));
 
         using (var rig = new Rig(slots: fitting)) {
             rig.Render(time: 0f);
@@ -47,12 +48,12 @@ public sealed class SdfWorldEngineUploadLawTests {
         );
     }
     [Fact]
-    public void AStillFrameWritesOnlyTheViewportRowsItsTimeMoved() {
+    public void AStillFrameWritesOnlyTheViewportWordItsTimeMoved() {
         using var rig = new Rig(slots: 40);
 
         rig.Warm();
         rig.Render(time: 1f);
-        Assert.Equal(expected: ((long)ViewportBytes), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: ((long)((HeaderBytes + RunEntryBytes) + sizeof(float))), actual: rig.Gpu.HostBytes());
         Assert.Equal(expected: 1, actual: rig.Gpu.UploadCopies);
 
         rig.Render(time: 1f);
@@ -60,7 +61,7 @@ public sealed class SdfWorldEngineUploadLawTests {
         Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
     }
     [Fact]
-    public void ChangingKTransformsWritesKStridesAndOneRunEntryPerRunInOneCopy() {
+    public void ChangingKTransformsWritesTheWordsThatMovedAndOneRunEntryPerRunInOneCopy() {
         using var rig = new Rig(slots: 40);
         ReadOnlySpan<int> changed = [3, 4, 5, 10, 20, 21];
 
@@ -71,7 +72,8 @@ public sealed class SdfWorldEngineUploadLawTests {
         }
 
         rig.Render(time: 0f);
-        Assert.Equal(expected: ((long)((changed.Length * DynamicTransformBytes) + (3 * RunEntryBytes))), actual: rig.Gpu.HostBytes());
+        // Each move changes one word, a slot's position.y; slots a stride apart are separate runs.
+        Assert.Equal(expected: ((long)(HeaderBytes + (changed.Length * (RunEntryBytes + sizeof(float))))), actual: rig.Gpu.HostBytes());
         Assert.Equal(expected: 1, actual: rig.Gpu.UploadCopies);
         rig.AssertDeviceTransforms();
     }
@@ -89,7 +91,7 @@ public sealed class SdfWorldEngineUploadLawTests {
 
         rig.Render(time: 1f);
         Assert.Equal(expected: 2, actual: rig.Gpu.UploadCopies);
-        Assert.Equal(expected: ((long)(ViewportBytes + (Changed * (DynamicTransformBytes + RunEntryBytes)))), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: ((long)((2 * HeaderBytes) + ((Changed + 1) * (RunEntryBytes + sizeof(float))))), actual: rig.Gpu.HostBytes());
         rig.AssertDeviceTransforms();
     }
     [Fact]
@@ -111,11 +113,11 @@ public sealed class SdfWorldEngineUploadLawTests {
         // A change on the next frame lands beside the earlier one rather than over it.
         rig.Move(slot: 9);
         rig.Render(time: 0f);
-        Assert.Equal(expected: ((long)DynamicTransformBytes), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: ((long)((HeaderBytes + RunEntryBytes) + sizeof(float))), actual: rig.Gpu.HostBytes());
         rig.AssertDeviceTransforms();
         rig.Move(slot: 7);
         rig.Render(time: 0f);
-        Assert.Equal(expected: ((long)DynamicTransformBytes), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: ((long)((HeaderBytes + RunEntryBytes) + sizeof(float))), actual: rig.Gpu.HostBytes());
         rig.AssertDeviceTransforms();
     }
     [Fact]
@@ -133,7 +135,7 @@ public sealed class SdfWorldEngineUploadLawTests {
 
         rig.Render(time: 0f);
         Assert.Equal(expected: 1, actual: rig.Gpu.UploadCopies);
-        Assert.InRange(actual: rig.Gpu.HostBytes(), high: ((600L * DynamicTransformBytes) + RunTableReserveBytes), low: (300L * DynamicTransformBytes));
+        Assert.InRange(actual: rig.Gpu.HostBytes(), high: ((600L * DynamicTransformBytes) + StagingReserveBytes), low: (300L * sizeof(float)));
         rig.AssertDeviceTransforms();
     }
     [Fact]
@@ -145,11 +147,11 @@ public sealed class SdfWorldEngineUploadLawTests {
         rig.Rebuild();
         rig.Render(time: 0f);
 
-        // The rebuilt engine's first frame stages the whole dynamic table, into one ring slot's buffer.
+        // The rebuilt engine's first frame stages the whole dynamic table as one run, into one ring slot's buffer.
         Assert.Equal(
-            expected: (40L * DynamicTransformBytes),
+            expected: (((40L * DynamicTransformBytes) + HeaderBytes) + RunEntryBytes),
             actual: rig.Gpu.HostWrites()
-                .Where(predicate: write => (write.SizeBytes == ((ulong)(RunTableReserveBytes + (40 * DynamicTransformBytes)))))
+                .Where(predicate: write => (write.SizeBytes == ((ulong)(StagingReserveBytes + (40 * DynamicTransformBytes)))))
                 .Sum(selector: write => write.Written)
         );
         rig.AssertDeviceTransforms();
@@ -210,9 +212,9 @@ public sealed class SdfWorldEngineUploadLawTests {
         gpu.ResetTallies();
         _ = node.ProduceFirstFrame(context: in context);
         Assert.Equal(
-            expected: (((long)Slots) * DynamicTransformBytes),
+            expected: (((((long)Slots) * DynamicTransformBytes) + HeaderBytes) + RunEntryBytes),
             actual: gpu.HostWrites()
-                .Where(predicate: write => (write.SizeBytes == ((ulong)(RunTableReserveBytes + (Slots * DynamicTransformBytes)))))
+                .Where(predicate: write => (write.SizeBytes == ((ulong)(StagingReserveBytes + (Slots * DynamicTransformBytes)))))
                 .Sum(selector: write => write.Written)
         );
         Assert.Equal(
@@ -238,11 +240,13 @@ public sealed class SdfWorldEngineUploadLawTests {
         var programBytes = (((ulong)rig.Engine.ProgramWordCapacity) * sizeof(uint));
         var writes = rig.Gpu.HostWrites();
 
-        Assert.Equal(expected: programBytes, actual: Assert.Single(collection: writes).SizeBytes);
-        Assert.InRange(actual: writes[0].Written, high: (edited.Words.Length * sizeof(uint)), low: 1L);
+        // One ring slot's program staging buffer takes the changed words, their runs and the header, and the copy
+        // leaves the device-local program exactly the edited words.
+        Assert.Equal(expected: (programBytes + StagingReserveBytes), actual: Assert.Single(collection: writes).SizeBytes);
+        Assert.InRange(actual: writes[0].Written, high: (StagingReserveBytes + (edited.Words.Length * sizeof(uint))), low: ((HeaderBytes + RunEntryBytes) + sizeof(uint)));
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: edited.Words).ToArray(),
-            actual: rig.Gpu.HostVisible(sizeBytes: programBytes).AsSpan(
+            actual: rig.Gpu.DeviceLocal(sizeBytes: programBytes).AsSpan(
                 length: (edited.Words.Length * sizeof(uint)),
                 start: 0
             ).ToArray()
@@ -330,7 +334,7 @@ public sealed class SdfWorldEngineUploadLawTests {
             meshDraws: shifted,
             time: 0f
         );
-        Assert.Equal(expected: (stillBytes + sizeof(uint)), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: (((stillBytes + HeaderBytes) + RunEntryBytes) + sizeof(uint)), actual: rig.Gpu.HostBytes());
 
         var shiftedWords = rig.Gpu.DeviceLocal(sizeBytes: layout.Bytes);
 

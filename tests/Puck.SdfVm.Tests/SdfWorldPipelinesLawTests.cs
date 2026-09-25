@@ -53,7 +53,7 @@ public sealed class SdfWorldPipelinesLawTests {
         Assert.Equal(expected: 3, actual: device.Persisted);
     }
     [Fact]
-    public void ABuildWithABrickPoolAddsTheBrickPipelinesItsKernelsCarry() {
+    public void ABuildWithABrickPoolAddsTheBrickBakePipelineItsKernelCarries() {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
         var ledger = new GpuWorkLedger(
                 framesInFlight: SdfWorldEngine.FrameRingSize,
@@ -64,12 +64,12 @@ public sealed class SdfWorldPipelinesLawTests {
             cancellationToken: CancellationToken.None,
             device: gpu,
             includeBrickPipelines: true,
-            kernels: SdfTestPipelines.Kernels(beam: 1) with { BrickBake = new byte[] { 1 }, BrickUpload = new byte[] { 1 } },
+            kernels: SdfTestPipelines.Kernels(beam: 1) with { BrickBake = new byte[] { 1 } },
             ledger: ledger
         );
 
         Assert.True(condition: pipelines.IncludesBrickPipelines);
-        Assert.Equal(expected: 13L, actual: Created(ledger: ledger));
+        Assert.Equal(expected: 12L, actual: Created(ledger: ledger));
     }
     [Fact]
     public void ACanceledBuildThrowsBeforeCreatingAnything() {

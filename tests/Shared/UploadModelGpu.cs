@@ -6,15 +6,16 @@ namespace Puck.Testing;
 
 /// <summary>
 /// A device-free GPU that models memory for the one kernel whose effect a host law can predict: the region copy,
-/// <c>region-copy.comp</c>, which <see cref="GpuRegion"/>'s staged copy and the SDF engine's table upload record. Every buffer is backed by bytes
-/// and carries its own handle; host writes land in those bytes and are tallied per buffer; descriptor sets remember
-/// which buffer each binding names; and a dispatch recorded while the pipeline built from
-/// <see cref="RegionCopyBytecode"/> is bound runs that kernel's copy at record time, from the set's binding 0 into its
-/// binding 1: the push carries <c>(count, runCount, offset, tableBase)</c> in uints, and thread <c>i</c> below the
-/// count copies <c>destination[word] = source[tableBase + word]</c>, where <c>word</c> is <c>offset + i</c> for one run
-/// or, for two or more, found in the source's leading <c>(table offset, prefix)</c> run table (a linear search here; the
-/// kernel's binary search finds the same run). Recording order is execution order here, as it is on one queue behind
-/// the barriers the caller records. A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
+/// <c>region-copy.comp</c>, which every staged <see cref="GpuRegion"/> records. Every buffer is backed by bytes and
+/// carries its own handle; host writes land in those bytes and are tallied per buffer; descriptor sets remember which
+/// buffer each binding names; and a dispatch recorded while the pipeline built from <see cref="RegionCopyBytecode"/> is
+/// bound runs that kernel's copy at record time, from the set's binding 0 into its binding 1: the source leads with
+/// <c>(count, runCount, blockBase, destinationBase)</c> and <c>(block offset, first thread)</c> per run, and thread
+/// <c>i</c> below the count copies <c>destination[destinationBase + word] = source[blockBase + word]</c>, where
+/// <c>word</c> is found in that run table (a linear search here; the kernel's binary search finds the same run). The
+/// dispatch must carry exactly the groups the count needs, and nothing pushes constants to the copy. Recording order is
+/// execution order here, as it is on one queue behind the barriers the caller records. A disposed buffer is forgotten.
+/// Everything else is <see cref="FakeGpuDevice"/>.
 /// <para>Shader modules and pipelines are created on the thread pool, several at once
 /// (<c>SdfWorldPipelines.BuildConcurrency</c>), so handles come from an interlocked counter and the copy kernel is
 /// identified by the handles of the modules built from its bytecode and the pipelines built from those modules, each a
@@ -35,7 +36,6 @@ internal sealed class UploadModelGpu :
 
     private readonly FakeGpuDevice m_inner;
 
-    private readonly byte[] m_push = new byte[16];
     private readonly ConcurrentDictionary<nint, byte> m_uploadModules = new();
     private readonly ConcurrentDictionary<nint, byte> m_uploadPipelines = new();
 
@@ -181,33 +181,33 @@ internal sealed class UploadModelGpu :
             return;
         }
 
-        var push = MemoryMarshal.Cast<byte, uint>(span: m_push.AsSpan());
         var source = MemoryMarshal.Cast<byte, uint>(span: m_buffers[m_bindings[(m_boundSet, 0u)]].Memory.AsSpan());
         var destination = MemoryMarshal.Cast<byte, uint>(span: m_buffers[m_bindings[(m_boundSet, 1u)]].Memory.AsSpan());
 
-        var (count, runCount, offset, tableBase) = (push[0], push[1], push[2], push[3]);
+        var (count, runCount, blockBase, destinationBase) = (source[0], source[1], source[2], source[3]);
+        const uint Header = GpuRegion.CopyHeaderWords;
+
+        if (groupCountX != ((count + (GpuRegion.CopyWorkgroupSize - 1U)) / GpuRegion.CopyWorkgroupSize)) {
+            throw new InvalidOperationException(message: $"A copy of {count} words dispatched {groupCountX} groups.");
+        }
 
         for (var thread = 0u; (thread < count); thread++) {
-            var word = (offset + thread);
+            var run = (runCount - 1u);
 
-            if (runCount > 1u) {
-                var run = (runCount - 1u);
-
-                while (source[((int)((run * 2u) + 1u))] > thread) {
-                    run--;
-                }
-
-                word = (source[((int)(run * 2u))] + (thread - source[((int)((run * 2u) + 1u))]));
+            while (source[((int)((Header + (run * 2u)) + 1u))] > thread) {
+                run--;
             }
 
-            destination[((int)word)] = source[((int)(tableBase + word))];
+            var word = (source[((int)(Header + (run * 2u)))] + (thread - source[((int)((Header + (run * 2u)) + 1u))]));
+
+            destination[((int)(destinationBase + word))] = source[((int)(blockBase + word))];
         }
 
         UploadCopies++;
     }
     void IGpuRecorder.PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
         if (m_uploadPipelines.ContainsKey(key: m_boundPipeline)) {
-            data.CopyTo(destination: m_push.AsSpan(start: ((int)offset)));
+            throw new InvalidOperationException(message: "The region copy takes no push constants.");
         }
     }
 

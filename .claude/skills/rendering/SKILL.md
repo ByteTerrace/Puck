@@ -429,15 +429,19 @@ These are one-line cautions; the owning pages hold the derivations.
   [Vulkan](../../../docs/rendering/vulkan.md#pipeline-cache).
 - **`RenderFrame` submits and waits; `SubmitFrame` does not.** Harnesses use
   the first, the live node the second.
-- **Host uploads go through the mirrors.** The viewport, dynamic-transform and
-  instance-grid device-local tables persist across frames and receive only
-  changed ranges; the ring tables (screen surfaces, screen lights, volumes,
-  decals) owe each slot only the ranges it is behind by. Change those tables only
-  through `StageTableEntry`, `StageTableRow`, `StageInstanceGrid`, or
-  `SdfRingTable.Write` / `MarkChanged` (`SdfWorldEngine.Uploads.cs`); a direct
-  buffer write is lost or overwritten. A still frame writes only its viewport
-  rows. The byte counts are pinned by `SdfWorldEngineUploadLawTests` over
-  `UploadModelGpu`, which runs the upload kernel's copies.
+- **Host uploads go through regions.** Every table the engine's kernels read
+  from the host (program words, viewport rows, dynamic transforms, the frame
+  instance grid, screen surfaces, screen lights, volumes, glyph decals, mesh
+  draws) is a `GpuRegion` (`SdfWorldEngine.Regions.cs`, created by
+  `CreateRegion` under `GpuResidency.Select` with the frame ring's reader in
+  flight), and brick staging is a staged region whose destination is the brick
+  pool (`Target` names the brick's slot). Change a table only through its
+  region's `Write`, which owes each run of words that differs; a direct buffer
+  write is lost or overwritten. `PrepareFrame` flushes the slot's share, and the
+  upload pass records each staged copy, then one buffer transition per copied
+  buffer; the region tables are not in `SdfFrameBufferPlan`. A still frame writes
+  only the viewport word its time moved. The byte counts are pinned by
+  `SdfWorldEngineUploadLawTests` over `UploadModelGpu`, which runs the copies.
 - **Dynamic transforms move by the moved set, never by a diff.**
   `SdfCompositionFrameSource` keeps the table across frames; an emitter repacks
   only owners whose inputs moved or that are still settling
@@ -470,21 +474,25 @@ These are one-line cautions; the owning pages hold the derivations.
   Vulkan through `GpuMemoryProfile.FromVulkan` over the device type and
   `vkGetPhysicalDeviceMemoryProperties`, Direct3D 12 through
   `DirectXNativeDeviceApi.MemoryProfile` over the architecture, adapter and
-  options 16 structures. `GpuResidency.Select(profile, bytes)` is the one choice
-  of `InPlace`, `Ring` or `Staged`, and the default profile selects `Staged`.
-  `GpuRegion` (`src/Puck.Abstractions/Gpu/Residency`) writes a region under any
-  policy; its staged copy is `Puck.Shaders`' `region-copy.comp`, created from
-  `GpuRegion.CopyPipeline` once per device by `GpuRegionCopyPipelineCache`
-  (built on the pool, leased by every owner, counted under `gpu.region-copy`)
-  and never by an owner, and its ranges are `GpuUploadRuns`, the same run list
-  the SDF engine's tables use. The SDF engine records its table upload with that
-  pipeline (its holder leases it beside the set, and the engine takes it at
-  construction) and writes its mesh region (`SdfFrame.MeshDraws` laid out by
-  `SdfMeshRegion`) through a region, which nothing reads until P4-2c. The
-  engine's host tables, brick staging and the overlay's buffer still upload by
-  hand, so a new host upload goes through a region rather than a fourth
-  hand-built path. `GpuResidencyLawTests` pins the selector and byte-identical
-  region contents over `UploadModelGpu` (`tests/Shared`),
+  options 16 structures. `GpuResidency.Select(profile, bytes, readersInFlight)`
+  is the one choice of `InPlace`, `Ring` or `Staged`: in place only on coherent
+  unified memory with no reader in flight while the host writes, so a per-frame
+  owner (every SDF engine region, a pipeline's parameters) never gets it; the
+  default profile selects `Staged`. `GpuRegion`
+  (`src/Puck.Abstractions/Gpu/Residency`) writes a region under any policy, or
+  stages into an external destination its owner keeps; its staged copy is
+  `Puck.Shaders`' `region-copy.comp`, created from `GpuRegion.CopyPipeline` once
+  per device by `GpuRegionCopyPipelineCache` (built on the pool, leased by every
+  owner, counted under `gpu.region-copy`) and never by an owner, and its ranges
+  are `GpuUploadRuns`. The copy takes no push constants: the staging buffer
+  leads with a header and a run table. The SDF engine records every region copy
+  with that pipeline (its holder leases it beside the set, and the engine takes
+  it at construction). The overlay's buffer still uploads by hand, so a new host
+  upload goes through a region rather than a second hand-built path. On a device
+  with an aperture the selector picks `Ring`, whose buffers the neutral factory
+  places in host memory. `GpuResidencyLawTests` pins the policy table, the
+  staged header and runs, the external destination and byte-identical region
+  contents over `UploadModelGpu` (`tests/Shared`),
   `GpuRegionCopyPipelineCacheLawTests` one pipeline per device shared by its
   owners, and `pipeline.inspect` echoes the profile and the policy.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline

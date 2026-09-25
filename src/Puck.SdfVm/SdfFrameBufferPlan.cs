@@ -2,14 +2,9 @@ using Puck.Abstractions.Gpu;
 
 namespace Puck.SdfVm;
 
-/// <summary>The device-local buffers that one SDF-engine dispatch writes and a later dispatch in the same command list reads.</summary>
+/// <summary>The device-local buffers that one SDF-engine dispatch writes and a later dispatch in the same command list
+/// reads. The host-written tables are regions, whose copies the upload pass transitions itself.</summary>
 public enum SdfFrameBuffer {
-    /// <summary>The device-local viewport table the upload pass copies from the ring slot's host table.</summary>
-    Viewports,
-    /// <summary>The device-local dynamic-transform table the upload pass copies from the ring slot's host table.</summary>
-    DynamicTransforms,
-    /// <summary>The device-local frame instance grid the upload pass copies from the ring slot's host table.</summary>
-    InstanceGrid,
     /// <summary>The carve-bake brick pool the brick upload and bake passes write.</summary>
     BrickPool,
     /// <summary>The per-tile instance masks the mask pass writes.</summary>
@@ -24,18 +19,15 @@ public enum SdfFrameBuffer {
     /// <summary>The per-pixel visibility records (<c>sdf-visibility.hlsli</c>) the hit passes write and shading reads.</summary>
     PrimaryHits,
 }
-/// <summary>The SDF engine's dispatches in recording order. Brick work and the per-table uploads record only when they have work.</summary>
+/// <summary>The SDF engine's dispatches in recording order. Brick work and the region copies record only when they have work.</summary>
 public enum SdfFramePass {
-    /// <summary>A queued host-baked brick copied into the pool.</summary>
+    /// <summary>A queued host-baked brick copied into the pool by the brick staging region.</summary>
     BrickUpload,
     /// <summary>Carve-bake slices written into the pool.</summary>
     BrickBake,
-    /// <summary>The viewport table copied to its device-local twin.</summary>
-    UploadViewports,
-    /// <summary>The dynamic transforms copied to their device-local twin.</summary>
-    UploadDynamicTransforms,
-    /// <summary>The frame instance grid copied to its device-local twin.</summary>
-    UploadInstanceGrid,
+    /// <summary>The staged regions' copies of the host-written tables, which touch no frame buffer and transition what
+    /// they copy themselves.</summary>
+    Upload,
     /// <summary>The sky pre-pass.</summary>
     Sky,
     /// <summary>The instance-cull pass that builds each tile's instance mask.</summary>
@@ -98,25 +90,13 @@ public readonly record struct SdfBufferEdge(SdfFrameBuffer Buffer, SdfFramePass 
 /// </summary>
 public static class SdfFrameBufferPlan {
     /// <summary>The most buffers one pass touches.</summary>
-    public const int MaxUsesPerPass = 9;
+    public const int MaxUsesPerPass = 6;
 
     private static readonly SdfBufferUse[] BrickWrites = [new(Access: SdfBufferAccess.Write, Buffer: SdfFrameBuffer.BrickPool)];
-    private static readonly SdfBufferUse[] ViewportUpload = [new(Access: SdfBufferAccess.Write, Buffer: SdfFrameBuffer.Viewports)];
-    private static readonly SdfBufferUse[] DynamicTransformUpload = [new(Access: SdfBufferAccess.Write, Buffer: SdfFrameBuffer.DynamicTransforms)];
-    private static readonly SdfBufferUse[] InstanceGridUpload = [new(Access: SdfBufferAccess.Write, Buffer: SdfFrameBuffer.InstanceGrid)];
-    private static readonly SdfBufferUse[] SkyUses = [
-        new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.Viewports),
-        new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.DynamicTransforms),
-    ];
     private static readonly SdfBufferUse[] MaskUses = [
-        new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.Viewports),
-        new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.DynamicTransforms),
-        new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.InstanceGrid),
         new(Access: SdfBufferAccess.Write, Buffer: SdfFrameBuffer.InstanceMasks),
     ];
     private static readonly SdfBufferUse[] BeamUses = [
-        new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.Viewports),
-        new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.DynamicTransforms),
         new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.InstanceMasks),
         new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.BrickPool),
         new(Access: SdfBufferAccess.Write, Buffer: SdfFrameBuffer.Tiles),
@@ -132,21 +112,17 @@ public static class SdfFrameBufferPlan {
 
     /// <summary>The buffers <paramref name="pass"/> touches and how, in the order its transitions are recorded.</summary>
     /// <param name="pass">The dispatch.</param>
-    /// <returns>The pass's buffer uses; host-written tables and images are not listed, so the composite, which binds
-    /// only images, has none.</returns>
+    /// <returns>The pass's buffer uses; host-written tables and images are not listed, so the upload, the sky and the
+    /// composite have none.</returns>
     public static ReadOnlySpan<SdfBufferUse> Uses(SdfFramePass pass) => pass switch {
         SdfFramePass.BrickUpload or SdfFramePass.BrickBake => BrickWrites,
-        SdfFramePass.UploadViewports => ViewportUpload,
-        SdfFramePass.UploadDynamicTransforms => DynamicTransformUpload,
-        SdfFramePass.UploadInstanceGrid => InstanceGridUpload,
-        SdfFramePass.Sky => SkyUses,
+        SdfFramePass.Upload or SdfFramePass.Sky or SdfFramePass.Composite => [],
         SdfFramePass.Mask => MaskUses,
         SdfFramePass.Beam => BeamUses,
         SdfFramePass.CullArgs => CullArgsUses,
         SdfFramePass.Primary => PrimaryUses,
         SdfFramePass.Surface or SdfFramePass.Ambient => ResolveUses,
         SdfFramePass.Views => ViewsUses,
-        SdfFramePass.Composite => [],
         _ => throw new ArgumentOutOfRangeException(
             actualValue: pass,
             message: "Unknown SDF frame pass.",
@@ -204,9 +180,6 @@ public static class SdfFrameBufferPlan {
     private static SdfBufferUse[] HitPassUses(SdfBufferAccess primaryHits) => [
         new(Access: SdfBufferAccess.IndirectRead, Buffer: SdfFrameBuffer.ViewsArgs),
         new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.CullBounds),
-        new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.Viewports),
-        new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.DynamicTransforms),
-        new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.InstanceGrid),
         new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.InstanceMasks),
         new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.BrickPool),
         new(Access: SdfBufferAccess.Read, Buffer: SdfFrameBuffer.Tiles),

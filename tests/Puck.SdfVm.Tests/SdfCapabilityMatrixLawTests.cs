@@ -241,10 +241,10 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: "SdfPassPlanLawTests; SdfWorldEngineUploadLawTests",
             Green: false,
             Members: [
-                "SdfWorldEngine.FrameBufferBytes", "SdfWorldEngine.TileSize", "SdfWorldEngine.MaxFrameUploadTableWords",
+                "SdfWorldEngine.FrameBufferBytes", "SdfWorldEngine.TileSize",
                 "SdfWorldEngine.RequireOneCopyDispatch", "SdfWorldEngine.VisibilityRecordBytes",
                 "SdfWorldEngine.VisibilityRecordByteLength", "SdfEngineNode.VisibilityRecordBytes",
-                "SdfWorldEngine.DescriptorPoolSizes", "SdfWorldEngine.CheckAdmission",
+                "SdfWorldEngine.DescriptorPoolSizes", "SdfWorldEngine.DescriptorPools", "SdfWorldEngine.CheckAdmission",
             ]
         ),
         new(

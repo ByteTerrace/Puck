@@ -25,8 +25,6 @@ public sealed partial class ShaderRegisterBindingLawTests {
     // Every declaration that breaks the rule today. The list may only shrink: the change that fixes a declaration
     // deletes its entry, and no entry is ever added.
     private static readonly string[] KnownViolations = [
-        // The brick uploader, which leaves once brick staging uploads through a region.
-        "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-brick-upload.comp.hlsl brickPool register(u0) binding(1, 0)",
         // The SDF engine's hand-numbered bindings: P7b-20 moves the engine onto groups and removes these.
         "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-beam.comp.hlsl tiles register(u0) binding(3, 0)",
         "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-brick-bake.comp.hlsl brickPool register(u0) binding(1, 0)",
