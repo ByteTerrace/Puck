@@ -2,8 +2,6 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
 using Puck.Abstractions.Gpu;
-using Puck.DirectX.Apis;
-using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Xunit;
 
@@ -181,43 +179,6 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
         );
     }
 
-    // A context whose device is a software device, created; skips when the host has none that meets the floor.
-    private static DirectXDeviceContext WarpContext(GpuDeviceMemoryWork? memory) {
-        var context = new DirectXDeviceContext(
-            adapterLuid: 1L,
-            deviceApi: new WarpDeviceApi(),
-            minimumFeatureLevel: DirectXFeatureLevel.Level110
-        ) {
-            Memory = memory,
-        };
-
-        try {
-            _ = context.Device;
-        } catch (GpuDeviceUnavailableException exception) {
-            context.Dispose();
-            Assert.Skip(reason: $"no Direct3D 12 software device on this host: {exception.Message}");
-        }
-
-        return context;
-    }
-
-    // Creates every device on the software renderer and reads it through the native API.
-    private sealed class WarpDeviceApi : IDirectXDeviceApi {
-        private readonly DirectXNativeDeviceApi m_native = new();
-
-        public DirectXDevice CreateDevice(long adapterLuid, DirectXFeatureLevel minimumFeatureLevel) =>
-            m_native.CreateWarpDevice(minimumFeatureLevel: minimumFeatureLevel);
-        public DirectXDevice CreateWarpDevice(DirectXFeatureLevel minimumFeatureLevel) =>
-            m_native.CreateWarpDevice(minimumFeatureLevel: minimumFeatureLevel);
-        public long GetAdapterLuid(nint deviceHandle) =>
-            m_native.GetAdapterLuid(deviceHandle: deviceHandle);
-        public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) =>
-            m_native.GetDeviceCapabilities(deviceHandle: deviceHandle);
-        public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) =>
-            m_native.GetDeviceIdentity(deviceHandle: deviceHandle);
-        public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) =>
-            m_native.GetMemoryProfile(deviceHandle: deviceHandle);
-        public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) =>
-            m_native.ProbeMaxFeatureLevel(adapterLuid: adapterLuid);
-    }
+    private static DirectXDeviceContext WarpContext(GpuDeviceMemoryWork? memory) =>
+        DirectXTestDevices.Warp(memory: memory);
 }

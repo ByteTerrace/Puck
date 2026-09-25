@@ -30,6 +30,9 @@ namespace Puck.Vulkan.Messages;
 /// <param name="FixedViewport">The extent a fixed viewport and scissor cover from the origin, or
 /// <see langword="null"/> for a pipeline whose viewport and scissor are both dynamic state, set by the command buffer
 /// that draws with it; <see cref="DynamicStates"/> must then name both.</param>
+/// <param name="PipelineLayoutHandle">A native <c>VkPipelineLayout</c> the caller created and owns, which the pipeline
+/// is created with instead of a layout over <see cref="DescriptorBindings"/> and the push-constant range; zero to
+/// create that layout. With a layout given, the bindings are empty and the push-constant size zero.</param>
 public readonly record struct VulkanGraphicsPipelineCreateRequest(
     VulkanDeviceCommands Device,
     nint RenderPassHandle,
@@ -47,5 +50,6 @@ public readonly record struct VulkanGraphicsPipelineCreateRequest(
     VkPipelineMultisampleStateCreateInfo Multisample,
     VulkanPipelineCache? PipelineCache,
     VkPipelineDepthStencilStateCreateInfo? DepthStencil = null,
-    VkExtent2D? FixedViewport = null
+    VkExtent2D? FixedViewport = null,
+    nint PipelineLayoutHandle = 0
 );

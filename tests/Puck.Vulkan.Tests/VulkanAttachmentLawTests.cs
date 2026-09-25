@@ -100,7 +100,7 @@ public sealed class VulkanAttachmentLawTests {
     public void APipelineWhoseDepthTestDisagreesWithItsRenderPassIsRefused() {
         using var withDepth = RenderPass(description: ColorAndDepth);
         using var withoutDepth = RenderPass(description: ColorAndDepth with { Depth = null });
-        var factory = new VulkanGpuPipelineFactory(computePipelineApi: null!, deviceContext: null!, pipelineFactory: null!);
+        var factory = new VulkanGpuPipelineFactory(allocator: null!, computePipelineApi: null!, deviceContext: null!, pipelineFactory: null!);
         var untested = new GpuGraphicsPipelineDescription(
             EnableStorageBuffer: false,
             Name: "geometry",

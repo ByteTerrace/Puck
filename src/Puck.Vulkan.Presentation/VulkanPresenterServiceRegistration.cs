@@ -41,6 +41,7 @@ public static class VulkanPresenterServiceRegistration {
     // context and passing through the host's GpuCreationFaults when one is registered: the native APIs are resolved
     // here, once, so the provider never escapes into the renderer.
     private static Func<IVulkanDeviceContext, GpuDeviceServices> DeviceServices(IServiceProvider serviceProvider) {
+        var allocator = serviceProvider.GetRequiredService<IAllocator>();
         var bufferApi = serviceProvider.GetRequiredService<IVulkanBufferApi>();
         var commandBufferRecordingApi = serviceProvider.GetRequiredService<IVulkanCommandBufferRecordingApi>();
         var commandResourcesFactory = serviceProvider.GetRequiredService<IVulkanCommandResourcesFactory>();
@@ -75,6 +76,7 @@ public static class VulkanPresenterServiceRegistration {
                 offscreenImageApi: offscreenImageApi
             ),
             PipelineFactory = new VulkanGpuPipelineFactory(
+                allocator: allocator,
                 computePipelineApi: computePipelineApi,
                 deviceContext: deviceContext,
                 pipelineFactory: graphicsPipelineFactory

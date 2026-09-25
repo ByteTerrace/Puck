@@ -7,9 +7,9 @@ namespace Puck.DirectX;
 /// One Direct3D 12 device's two shader-visible descriptor heaps: a CBV/SRV/UAV heap of the device's reported
 /// <see cref="GpuDeviceCapabilities.ViewHeapSize"/> and a sampler heap of its reported
 /// <see cref="GpuDeviceCapabilities.SamplerHeapSize"/>, created once with the device and released with it. Every
-/// descriptor pool is a range of the view heap admitted through the device's <see cref="GpuDescriptorHeapBudget"/>, so
-/// a pool that does not fit is refused by name and the heaps never grow; every command list binds both heaps once
-/// (<see cref="Bind"/>).
+/// descriptor pool is a range of the view heap, and a pool holding samplers also a range of the sampler heap, admitted
+/// through the device's <see cref="GpuDescriptorHeapBudget"/>, so a pool that does not fit is refused by name and the
+/// heaps never grow; every command list binds both heaps once (<see cref="Bind"/>).
 /// <para>A storage clear needs a descriptor in the bound view heap for its GPU handle and one in a CPU-only heap for its
 /// CPU handle, so the device keeps <see cref="ClearDescriptors"/> of each: one range of the view heap, admitted with the
 /// heaps, and a CPU-only heap of the same size whose slot <c>i</c> mirrors the range's slot <c>i</c>. A clear holds its
@@ -89,6 +89,8 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
 
     private nuint ViewCpuStart { get; set; }
     private ulong ViewGpuStart { get; set; }
+    private nuint SamplerCpuStart { get; set; }
+    private ulong SamplerGpuStart { get; set; }
     private nuint ClearCpuStart { get; set; }
 
     /// <summary>Creates a device's heaps at the sizes its capabilities report, and counts both shader-visible heaps.</summary>
@@ -126,6 +128,8 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
                 type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
             ));
             heaps.SamplerIncrement = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+            heaps.SamplerCpuStart = DirectXConstants.GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)heaps.m_samplerHeap)).ptr;
+            heaps.SamplerGpuStart = DirectXConstants.GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)heaps.m_samplerHeap)).ptr;
             heaps.Count(
                 bytes: heaps.SamplerHeapBytes,
                 heap: heaps.m_samplerHeap
@@ -184,9 +188,10 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
             );
         }
     }
-    /// <summary>Admits one pool as a range of the view heap.</summary>
-    /// <param name="sizes">The pool's sizes; its <see cref="GpuDescriptorPoolSizes.HeapDescriptors"/> is the range's
-    /// length, and a pool of none takes no range.</param>
+    /// <summary>Admits one pool as a range of the view heap and a range of the sampler heap.</summary>
+    /// <param name="sizes">The pool's sizes; its <see cref="GpuDescriptorPoolSizes.HeapDescriptors"/> is the view range's
+    /// length and its <see cref="GpuDescriptorPoolSizes.SamplerHeapDescriptors"/> the sampler range's, and a pool of no
+    /// view or no sampler takes no range of that heap.</param>
     /// <returns>The pool, whose sets <c>AllocateSet</c> places inside its range.</returns>
     /// <exception cref="InvalidOperationException">No free range holds the pool, or
     /// <see cref="GpuDescriptorHeapBudget.MaxLivePools"/> pools are live; the message carries
@@ -210,6 +215,10 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
             ? 0U
             : admission.Ranges[0].Start
         );
+        var samplerStart = ((admission.SamplerRanges.Count == 0)
+            ? 0U
+            : admission.SamplerRanges[0].Start
+        );
 
         return new DirectXDescriptorPool {
             Admission = admission,
@@ -218,6 +227,10 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
             DescriptorSize = ViewIncrement,
             GpuBase = (ViewGpuStart + (((ulong)start) * ViewIncrement)),
             Heaps = this,
+            SamplerCapacity = sizes.SamplerHeapDescriptors,
+            SamplerCpuBase = (SamplerCpuStart + (((nuint)samplerStart) * SamplerIncrement)),
+            SamplerDescriptorSize = SamplerIncrement,
+            SamplerGpuBase = (SamplerGpuStart + (((ulong)samplerStart) * SamplerIncrement)),
         };
     }
     /// <summary>Returns a pool's range to the view heap. A pool of heaps already released returns nothing, since its

@@ -15,6 +15,10 @@ public sealed class VulkanGraphicsPipeline : IGpuPipeline {
     public nint DescriptorSetLayoutHandle { get; private set; }
     /// <summary>Gets the command table of the logical device that owns the pipeline.</summary>
     public VulkanDeviceCommands Device { get; }
+    /// <summary>Gets the native <c>VkDescriptorSetLayout</c> handle of each set of a pipeline created from a
+    /// <see cref="GpuGraphicsPipelineDescription.Layout"/>, indexed by set number, or empty for any other pipeline or
+    /// once disposed.</summary>
+    public IReadOnlyList<nint> GroupLayoutHandles { get; private set; }
     /// <summary>Gets the native <c>VkPipeline</c> handle, or zero once the pipeline has been disposed.</summary>
     public nint Handle { get; private set; }
     /// <summary>Gets the native <c>VkPipelineLayout</c> handle, or zero once disposed.</summary>
@@ -26,6 +30,9 @@ public sealed class VulkanGraphicsPipeline : IGpuPipeline {
     /// <param name="layoutHandle">The native <c>VkPipelineLayout</c> handle to own.</param>
     /// <param name="pipelineHandle">The native <c>VkPipeline</c> handle to own.</param>
     /// <param name="graphicsPipelineApi">The API used to destroy the pipeline and layouts on disposal.</param>
+    /// <param name="groupLayoutHandles">The native <c>VkDescriptorSetLayout</c> handle of each set of a pipeline created
+    /// from a <see cref="GpuGraphicsPipelineDescription.Layout"/>, indexed by set number, to own; empty or
+    /// <see langword="null"/> for any other pipeline.</param>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="graphicsPipelineApi"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="layoutHandle"/> or <paramref name="pipelineHandle"/> is zero.</exception>
     public VulkanGraphicsPipeline(
@@ -33,7 +40,8 @@ public sealed class VulkanGraphicsPipeline : IGpuPipeline {
         nint descriptorSetLayoutHandle,
         nint layoutHandle,
         nint pipelineHandle,
-        IVulkanGraphicsPipelineApi graphicsPipelineApi
+        IVulkanGraphicsPipelineApi graphicsPipelineApi,
+        IReadOnlyList<nint>? groupLayoutHandles = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: graphicsPipelineApi);
 
@@ -53,6 +61,7 @@ public sealed class VulkanGraphicsPipeline : IGpuPipeline {
 
         Device = device;
         DescriptorSetLayoutHandle = descriptorSetLayoutHandle;
+        GroupLayoutHandles = (groupLayoutHandles ?? []);
         LayoutHandle = layoutHandle;
         Handle = pipelineHandle;
         m_graphicsPipelineApi = graphicsPipelineApi;
@@ -73,8 +82,13 @@ public sealed class VulkanGraphicsPipeline : IGpuPipeline {
             device: Device,
             pipelineLayoutHandle: LayoutHandle
         );
+        VulkanPipelineLayouts.DestroySets(
+            device: Device,
+            setLayoutHandles: GroupLayoutHandles
+        );
         Handle = 0;
         DescriptorSetLayoutHandle = 0;
+        GroupLayoutHandles = [];
         LayoutHandle = 0;
         m_disposed = true;
     }

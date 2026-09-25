@@ -218,6 +218,7 @@ internal sealed class UploadModelGpu :
     // A shader module or pipeline: its own handle, plus the layout handles a pipeline carries.
     private sealed class Handles(nint handle, nint layout, nint setLayout) : IGpuComputePipeline, IGpuShaderModule {
         public nint DescriptorSetLayoutHandle => setLayout;
+        public IReadOnlyList<nint> GroupLayoutHandles => [];
         public nint Handle => handle;
         public nint LayoutHandle => layout;
 

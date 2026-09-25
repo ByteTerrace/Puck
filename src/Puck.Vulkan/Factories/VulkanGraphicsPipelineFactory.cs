@@ -149,6 +149,7 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
                 width: swapchain.ImageExtentWidth
             ),
             fragmentShaderModule: fragmentShaderModule,
+            groups: null,
             logicalDevice: logicalDevice,
             outputs: null,
             pushConstantBinding: pushConstantBinding,
@@ -168,11 +169,13 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
         uint textureSamplerCount = 64,
         bool enableStorageBuffer = true,
         GpuVertexInputLayout? vertexInput = null,
-        VulkanGraphicsOutputs? outputs = null
+        VulkanGraphicsOutputs? outputs = null,
+        VulkanGroupPipelineLayout? groups = null
     ) => Create(
         enableStorageBuffer: enableStorageBuffer,
         fixedViewport: null,
         fragmentShaderModule: fragmentShaderModule,
+        groups: groups,
         logicalDevice: logicalDevice,
         outputs: outputs,
         pushConstantBinding: pushConstantBinding,
@@ -192,7 +195,8 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
         uint textureSamplerCount,
         bool enableStorageBuffer,
         GpuVertexInputLayout? vertexInput,
-        VulkanGraphicsOutputs? outputs
+        VulkanGraphicsOutputs? outputs,
+        VulkanGroupPipelineLayout? groups
     ) {
         ArgumentNullException.ThrowIfNull(argument: logicalDevice);
         ArgumentNullException.ThrowIfNull(argument: renderPass);
@@ -257,10 +261,12 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
                     SType = StructureTypePipelineDepthStencilStateCreateInfo,
                 }
                 : null),
-            DescriptorBindings: BuildDescriptorBindings(
-                enableStorageBuffer: enableStorageBuffer,
-                textureSamplerCount: textureSamplerCount
-            ),
+            DescriptorBindings: ((groups is null)
+                ? BuildDescriptorBindings(
+                    enableStorageBuffer: enableStorageBuffer,
+                    textureSamplerCount: textureSamplerCount
+                )
+                : []),
             Device: logicalDevice.Commands,
             DynamicStates: ((fixedViewport is null)
                 ? [DynamicStateViewport, DynamicStateScissor]
@@ -273,6 +279,7 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
                 SampleShadingEnable = False,
             },
             PipelineCache: logicalDevice.PipelineCache,
+            PipelineLayoutHandle: (groups?.PipelineLayoutHandle ?? 0),
             PushConstantSize: (pushConstantBinding?.Size ?? 0),
             PushConstantStageFlags: (pushConstantBinding?.StageFlags ?? 0),
             Rasterization: new VkPipelineRasterizationStateCreateInfo {
@@ -298,6 +305,16 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
             request: request
         );
 
+        if (
+            !result.IsSuccess() &&
+            (groups is not null)
+        ) {
+            VulkanPipelineLayouts.Destroy(
+                device: logicalDevice.Commands,
+                layouts: groups
+            );
+        }
+
         result.ThrowIfFailed(operation: "vkCreateGraphicsPipelines");
 
         // A pipeline that binds no descriptors has no descriptor set layout (VulkanPipelineLayouts.Create).
@@ -320,6 +337,7 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
             descriptorSetLayoutHandle: descriptorSetLayoutHandle,
             device: logicalDevice.Commands,
             graphicsPipelineApi: m_graphicsPipelineApi,
+            groupLayoutHandles: groups?.SetLayoutHandles,
             layoutHandle: pipelineLayoutHandle,
             pipelineHandle: pipelineHandle
         );
