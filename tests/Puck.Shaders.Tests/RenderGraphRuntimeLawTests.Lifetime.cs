@@ -1,4 +1,5 @@
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -161,7 +162,17 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         using (runtime) {
             frames.Settle();
+
+            // A capture armed on the runtime, which no frame has forwarded yet, is refused by the loss.
+            var armed = CaptureRequest();
+
+            runtime.RequestCapture(request: armed);
             runtime.OnDeviceLost();
+            Assert.Equal(
+                actual: Assert.IsType<DeviceLostException>(@object: Outcome(request: armed).Error).Message,
+                expected: CaptureRequestSlot.DeviceLostReason
+            );
+            Assert.Null(@object: runtime.PendingCapturePath);
 
             // Nothing created on the lost device survives: every node's graph and package recorders, and the stand-in,
             // are released, and no instance has a completed output to show or capture.

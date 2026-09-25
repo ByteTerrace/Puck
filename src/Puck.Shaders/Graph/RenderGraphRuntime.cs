@@ -504,8 +504,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <summary>Releases every instance's device objects after the device was lost and recreated, so nothing of the old
     /// device survives: each node releases its graph and package recorders, the stand-ins are released, and every
     /// instance starts again from no completed output and no scheduling history, so the next frame renders every
-    /// instance something shows and rebuilds it on the new device.</summary>
+    /// instance something shows and rebuilds it on the new device. A capture still armed on the runtime is refused
+    /// (<see cref="CaptureRequestSlot.RefuseForDeviceLoss"/>), as the root's node refuses one forwarded to it.</summary>
     public void OnDeviceLost() {
+        m_capture.RefuseForDeviceLoss();
+
         foreach (var node in m_nodes) {
             node.OnDeviceLost();
         }

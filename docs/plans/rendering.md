@@ -546,8 +546,10 @@ its own passes through its node's `IGpuWorkSource`. The root instance is what
 the runtime returns and captures read: a `FrameCaptureRequest` armed on the
 runtime moves to the root's node once that node renders a graph, and until
 then `UnservedCaptureReason` names the root, so a withdrawn request is
-dropped. A device loss releases every node's graph and recorders and the
-stand-ins, and starts every instance again with no output and no history.
+dropped. A device loss refuses a capture still armed on the runtime as the
+root's node refuses one forwarded to it, releases every node's graph and
+recorders and the stand-ins, and starts every instance again with no output
+and no history.
 `RenderGraphRuntimeLawTests` hold it on the fake GPU: a camera on two
 screens rendered once a frame and counted, an off-view camera rendered zero
 times, a mirror and a self-bound input sampling the previous frame's image,
