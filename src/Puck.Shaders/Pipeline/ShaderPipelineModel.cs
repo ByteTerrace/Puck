@@ -119,13 +119,18 @@ public sealed record ResourceReference(
 /// forward would overwrite what is retained.</param>
 /// <param name="Initialization">How the first frame obtains valid contents. Only a version that forwards nothing
 /// declares it; a forwarded version's contents come from its predecessor.</param>
-/// <param name="SizeBytes">Buffer capacity in bytes, a multiple of four, or <see langword="null"/> for images. A buffer
-/// is a raw buffer of 32-bit words, read and written by byte address.</param>
+/// <param name="SizeBytes">A fixed buffer's capacity in bytes, a multiple of four and of <paramref name="StrideBytes"/>, or
+/// <see langword="null"/> for an image or a counted buffer. A buffer without a stride is a raw buffer of 32-bit words,
+/// read and written by byte address.</param>
 /// <param name="From">The predecessor version this one forwards, or <see langword="null"/> for a version whose writer
 /// starts from discarded contents. A predecessor has at most one successor, and its kind, format, extent and sample
 /// count equal this version's.</param>
 /// <param name="Samples">The sample count of an image. Only single-sampled images are executable, so any other count is
 /// refused by name.</param>
+/// <param name="StrideBytes">A structured buffer's element stride in bytes, a positive multiple of four, or
+/// <see langword="null"/> for a raw buffer. Only a package pass reaches a structured buffer.</param>
+/// <param name="Count">A counted buffer's size, which scales with a count the host resolves, in place of
+/// <paramref name="SizeBytes"/>. Only a package pass reaches a counted buffer.</param>
 public sealed record ShaderPipelineResource(
     string Name,
     ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image,
@@ -135,11 +140,115 @@ public sealed record ShaderPipelineResource(
     ShaderPipelineInitialization Initialization = ShaderPipelineInitialization.Undefined,
     ulong? SizeBytes = null,
     string? From = null,
-    uint Samples = 1
+    uint Samples = 1,
+    uint? StrideBytes = null,
+    ShaderPipelineBufferCount? Count = null
 ) {
     /// <summary>Gets whether the host supplies the resource rather than a pass producing it.</summary>
     [JsonIgnore]
     public bool IsExternal => (Initialization == ShaderPipelineInitialization.External);
+    /// <summary>Gets the bytes of one buffer element: a structured buffer's stride, or one 32-bit word of a raw
+    /// buffer.</summary>
+    [JsonIgnore]
+    public uint ElementBytes => (StrideBytes ?? 4U);
+    /// <summary>Gets whether only a package pass can reach the buffer: it is structured or counted, and the pipeline
+    /// node binds raw buffers of fixed size.</summary>
+    [JsonIgnore]
+    public bool IsPackageStorage => ((StrideBytes is not null) || (Count is not null));
+
+    /// <summary>Resolves a buffer's capacity: its fixed <see cref="SizeBytes"/>, or its <see cref="Count"/> of elements
+    /// against the host's counts.</summary>
+    /// <param name="counts">The counts a counted buffer scales with.</param>
+    /// <returns>The capacity in bytes.</returns>
+    /// <exception cref="InvalidOperationException">The resource is not a buffer, or declares neither size.</exception>
+    /// <exception cref="OverflowException">The capacity does not fit in 64 bits.</exception>
+    public ulong ResolveSizeBytes(ShaderPipelineStorageCounts counts) {
+        if (Kind != ShaderPipelineResourceKind.Buffer) {
+            throw new InvalidOperationException(message: $"Resource '{Name}' is not a buffer.");
+        }
+        if (SizeBytes is { } fixedBytes) {
+            return fixedBytes;
+        }
+        if (Count is not { } count) {
+            throw new InvalidOperationException(message: $"Buffer '{Name}' declares neither sizeBytes nor a count.");
+        }
+
+        return checked(((((ulong)ElementBytes) * count.Elements) * counts.UnitsOf(basis: count.Basis)));
+    }
+}
+/// <summary>A counted buffer's size: <see cref="Elements"/> elements per unit of <see cref="Basis"/>, each element
+/// <see cref="ShaderPipelineResource.ElementBytes"/> long.</summary>
+/// <param name="Basis">What the count scales with.</param>
+/// <param name="Elements">The elements per unit, at least one.</param>
+public sealed record ShaderPipelineBufferCount(
+    ShaderPipelineCountBasis Basis,
+    ulong Elements = 1
+);
+/// <summary>The counts a host resolves counted buffers against.</summary>
+/// <param name="Width">The frame extent's width in pixels.</param>
+/// <param name="Height">The frame extent's height in pixels.</param>
+/// <param name="Instances">The instances of the program the host renders.</param>
+/// <param name="ProgramWords">The words of the program the host renders.</param>
+public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Height, ulong Instances, ulong ProgramWords) {
+    /// <summary>Returns the units a basis counts.</summary>
+    /// <param name="basis">The basis.</param>
+    /// <returns>The pixels of the extent, the instances, or the program words.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="basis"/> is not a declared basis.</exception>
+    public ulong UnitsOf(ShaderPipelineCountBasis basis) => basis switch {
+        ShaderPipelineCountBasis.Extent => (((ulong)Width) * Height),
+        ShaderPipelineCountBasis.Instances => Instances,
+        ShaderPipelineCountBasis.ProgramWords => ProgramWords,
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: basis,
+            message: "Unknown count basis.",
+            paramName: nameof(basis)
+        ),
+    };
+}
+/// <summary>How a compute or package pass chooses its workgroup counts.</summary>
+/// <param name="Kind">The dispatch shape.</param>
+/// <param name="GroupCountX">A <see cref="ShaderPipelineDispatchKind.Groups"/> dispatch's group count in x, otherwise
+/// one.</param>
+/// <param name="GroupCountY">A <see cref="ShaderPipelineDispatchKind.Groups"/> dispatch's group count in y, otherwise
+/// one.</param>
+/// <param name="GroupCountZ">A <see cref="ShaderPipelineDispatchKind.Groups"/> dispatch's group count in z, otherwise
+/// one.</param>
+/// <param name="Arguments">An <see cref="ShaderPipelineDispatchKind.Indirect"/> dispatch's buffer version, which the
+/// pass reaches in the indirect-argument state and names in neither its inputs nor its outputs; otherwise
+/// <see langword="null"/>.</param>
+/// <param name="ArgumentsOffsetBytes">The byte offset of the three group-count words in <paramref name="Arguments"/>, a
+/// multiple of four.</param>
+public sealed record ShaderPipelineDispatch(
+    ShaderPipelineDispatchKind Kind,
+    uint GroupCountX = 1,
+    uint GroupCountY = 1,
+    uint GroupCountZ = 1,
+    string? Arguments = null,
+    ulong ArgumentsOffsetBytes = 0
+) {
+    /// <summary>The bytes an indirect dispatch reads: three 32-bit group counts.</summary>
+    public const ulong ArgumentBytes = 12;
+
+    /// <summary>Creates a dispatch of fixed group counts.</summary>
+    /// <param name="x">The group count in x.</param>
+    /// <param name="y">The group count in y.</param>
+    /// <param name="z">The group count in z.</param>
+    /// <returns>The dispatch.</returns>
+    public static ShaderPipelineDispatch Groups(uint x, uint y = 1, uint z = 1) => new(
+        GroupCountX: x,
+        GroupCountY: y,
+        GroupCountZ: z,
+        Kind: ShaderPipelineDispatchKind.Groups
+    );
+    /// <summary>Creates a dispatch whose group counts a buffer version holds.</summary>
+    /// <param name="arguments">The buffer version.</param>
+    /// <param name="offsetBytes">The byte offset of the group counts.</param>
+    /// <returns>The dispatch.</returns>
+    public static ShaderPipelineDispatch Indirect(string arguments, ulong offsetBytes = 0) => new(
+        Arguments: arguments,
+        ArgumentsOffsetBytes: offsetBytes,
+        Kind: ShaderPipelineDispatchKind.Indirect
+    );
 }
 /// <summary>One attribute of a geometry pass's vertices. The vertex stage reads attribute <c>n</c> as the
 /// <c>POSITION{n}</c> semantic, the <c>n</c>th input it declares.</summary>
@@ -245,6 +354,8 @@ public sealed record ShaderPipelineGeometry(
 /// <param name="Blend">A graphics pass's blend policy; <see langword="null"/> means
 /// <see cref="ShaderPipelineBlend.Opaque"/>, the only policy the planner admits.</param>
 /// <param name="AlphaTest">An alpha-test cutoff. The planner refuses every value by name.</param>
+/// <param name="Dispatch">A compute or package pass's dispatch shape; <see langword="null"/> means
+/// <see cref="ShaderPipelineDispatchKind.Extent"/>. A graphics pass declares none.</param>
 public sealed record ShaderPipelinePass(
     string Name,
     string Source,
@@ -260,8 +371,14 @@ public sealed record ShaderPipelinePass(
     ShaderPipelineGeometry? Geometry = null,
     ShaderPipelineDepthCompare? DepthCompare = null,
     ShaderPipelineBlend? Blend = null,
-    double? AlphaTest = null
+    double? AlphaTest = null,
+    ShaderPipelineDispatch? Dispatch = null
 ) {
+    /// <summary>Gets the version an indirect dispatch reads its group counts from, or <see langword="null"/>.</summary>
+    [JsonIgnore]
+    public string? DispatchArguments => ((Dispatch?.Kind == ShaderPipelineDispatchKind.Indirect)
+        ? Dispatch.Arguments
+        : null);
     /// <summary>Gets whether the pass draws through a render pass rather than dispatching.</summary>
     [JsonIgnore]
     public bool IsGraphics => (Kind is ShaderPipelinePassKind.Fullscreen or ShaderPipelinePassKind.Geometry);
@@ -395,6 +512,8 @@ public sealed class ShaderPipelineCompilationException : Exception {
 [JsonSerializable(typeof(ResourceReference))]
 [JsonSerializable(typeof(ShaderPipelineGeometry))]
 [JsonSerializable(typeof(ShaderPipelineVertexAttribute))]
+[JsonSerializable(typeof(ShaderPipelineDispatch))]
+[JsonSerializable(typeof(ShaderPipelineBufferCount))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
 public partial class ShaderPipelineJsonContext : JsonSerializerContext {
 }

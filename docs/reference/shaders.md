@@ -636,10 +636,34 @@ registers per type in the order its inputs and then its outputs are declared,
 so sampled images and read-only buffers take `t0`, `t1`, … and written images
 and buffers take `u0`, `u1`, … whatever their binding numbers are.
 
-A buffer resource is a raw buffer of 32-bit words. A pass reads it as a
-`ByteAddressBuffer` and writes it as an `RWByteAddressBuffer`, and both
-backends bind it as a raw view, so a shader addresses it in bytes. A buffer
-declares only its `sizeBytes`; there is no element type or stride to declare.
+A buffer resource a shader pass binds is a raw buffer of 32-bit words. A pass
+reads it as a `ByteAddressBuffer` and writes it as an `RWByteAddressBuffer`,
+and both backends bind it as a raw view, so a shader addresses it in bytes.
+Such a buffer declares only its `sizeBytes`.
+
+The planner also describes engine work that records itself, a frame graph's
+package passes, which the pipeline node never runs. For those it has three
+more pieces of vocabulary:
+
+- A pass's `dispatch` is `Extent` (enough workgroups to cover the frame, the
+  default and the only shape a shader pass records), `Groups` with fixed
+  `groupCountX`, `groupCountY` and `groupCountZ`, or `Indirect`, which reads
+  the three group counts from buffer version `arguments` at
+  `argumentsOffsetBytes`. The pass reaches that version in the
+  indirect-argument state, listed before its inputs, so the planner orders the
+  version's writer first and records a barrier into that state even after
+  shader reads: a read of another kind is another read state.
+- A buffer's `strideBytes` makes it a structured buffer of elements that size.
+- A buffer's `count` sizes it by `elements` per unit of a `basis` the host
+  resolves (`Extent` pixels, program `Instances`, or `ProgramWords`) in place of
+  `sizeBytes`; `ShaderPipelineResource.ResolveSizeBytes` computes the bytes.
+
+A shader pass declaring a `Groups` or `Indirect` dispatch is refused
+(`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding, or a document
+publishing, a buffer with a stride or a count (`SHADERPIPE_PACKAGE_STORAGE`).
+Malformed shapes and layouts are refused as `SHADERPIPE_DISPATCH_SHAPE`,
+`SHADERPIPE_DISPATCH_ARGUMENTS`, `SHADERPIPE_BUFFER_STRIDE` and
+`SHADERPIPE_BUFFER_COUNT`.
 
 A fullscreen pass draws one triangle that covers the target. By default its
 vertex stage derives the corners from `SV_VertexID` and no vertex buffer is

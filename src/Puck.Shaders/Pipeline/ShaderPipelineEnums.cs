@@ -74,3 +74,26 @@ public enum ShaderPipelineBlend : byte {
     /// <summary>A fragment adds to the attachment. Refused.</summary>
     Additive = 3,
 }
+/// <summary>Identifies how a compute or package pass chooses its workgroup counts. Only <see cref="Extent"/> executes
+/// in a shader pass; a package records its own dispatches, so the planner admits every shape there and refuses the
+/// others on a shader pass with <c>SHADERPIPE_DISPATCH_PACKAGE</c>.</summary>
+[JsonConverter(typeof(StrictEnumConverter<ShaderPipelineDispatchKind>))]
+public enum ShaderPipelineDispatchKind : byte {
+    /// <summary>Enough workgroups to cover the frame extent, one invocation per pixel.</summary>
+    Extent = 1,
+    /// <summary>The declared group counts.</summary>
+    Groups = 2,
+    /// <summary>Group counts a buffer version holds: three 32-bit words at a byte offset, which an earlier pass writes
+    /// and the dispatch reads as indirect arguments.</summary>
+    Indirect = 3,
+}
+/// <summary>Identifies what a counted buffer's element count scales with.</summary>
+[JsonConverter(typeof(StrictEnumConverter<ShaderPipelineCountBasis>))]
+public enum ShaderPipelineCountBasis : byte {
+    /// <summary>Per pixel of the frame extent.</summary>
+    Extent = 1,
+    /// <summary>Per instance of the program the host renders.</summary>
+    Instances = 2,
+    /// <summary>Per word of the program the host renders.</summary>
+    ProgramWords = 3,
+}

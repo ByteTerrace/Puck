@@ -396,6 +396,16 @@ public sealed partial class ShaderPipelineCompiler {
                     pass: pass
                 );
             }
+            ValidateDispatch(
+                diagnostics: diagnostics,
+                pass: pass,
+                resources: resources
+            );
+            ValidatePackageStorage(
+                diagnostics: diagnostics,
+                pass: pass,
+                resources: resources
+            );
             var bindings = new HashSet<(string Name, bool PreviousFrame)>();
             var bindingNumbers = new HashSet<uint>();
             var outputs = pass.OutputReferences.Select(selector: static output => output.Name).ToHashSet(comparer: StringComparer.Ordinal);
@@ -609,6 +619,16 @@ public sealed partial class ShaderPipelineCompiler {
                     message: $"Pipeline output '{output}' is a depth version; a depth attachment is never published.",
                     name: output
                 );
+            } else if (
+                (published.Kind == ShaderPipelineResourceKind.Buffer) &&
+                published.IsPackageStorage
+            ) {
+                Add(
+                    code: "SHADERPIPE_PACKAGE_STORAGE",
+                    diagnostics: diagnostics,
+                    message: $"Pipeline output '{output}' declares a stride or a count; a package's storage is never published.",
+                    name: output
+                );
             }
         }
         ValidateForwards(
@@ -734,14 +754,20 @@ public sealed partial class ShaderPipelineCompiler {
                 );
             }
         } else {
-            if (resource.SizeBytes is null or 0) {
+            if (
+                (resource.Count is null) &&
+                (resource.SizeBytes is null or 0)
+            ) {
                 Add(
                     diagnostics,
                     "SHADERPIPE_BUFFER_SIZE",
-                    $"Buffer resource '{resource.Name}' requires a non-zero sizeBytes.",
+                    $"Buffer resource '{resource.Name}' requires a non-zero sizeBytes or a count.",
                     resource.Name
                 );
-            } else if ((resource.SizeBytes.Value & 3) != 0) {
+            } else if (
+                (resource.SizeBytes is { } sizeBytes) &&
+                ((sizeBytes & 3) != 0)
+            ) {
                 Add(
                     diagnostics,
                     "SHADERPIPE_BUFFER_ALIGNMENT",
@@ -774,6 +800,10 @@ public sealed partial class ShaderPipelineCompiler {
                 );
             }
         }
+        ValidateBufferLayout(
+            diagnostics: diagnostics,
+            resource: resource
+        );
 
         if (resource.Kind == ShaderPipelineResourceKind.Depth) {
             ValidateDepth(
@@ -854,7 +884,7 @@ public sealed partial class ShaderPipelineCompiler {
 
             dependencies.Add(item: passDependencies);
 
-            foreach (var input in definition.Passes[passIndex].InputReferences) {
+            foreach (var input in ReadsOf(pass: definition.Passes[passIndex])) {
                 if (
                     !input.PreviousFrame &&
                     writerByResource.TryGetValue(
@@ -905,7 +935,7 @@ public sealed partial class ShaderPipelineCompiler {
             ) { continue; }
             var pass = definition.Passes[writer];
 
-            foreach (var reference in pass.OutputReferences.Concat(second: pass.InputReferences)) {
+            foreach (var reference in pass.OutputReferences.Concat(second: ReadsOf(pass: pass))) {
                 if (liveResources.Add(item: reference.Name)) { pendingResources.Push(item: reference.Name); }
             }
         }

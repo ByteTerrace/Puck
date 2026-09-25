@@ -1812,10 +1812,19 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
    version handshake, every ISA enum member and the packed-layout constants,
    and `--check` fails CI on a stale file. The frame block stays hand-written
    until item 7.
-4. The planner's vocabulary: an indirect-argument state, dispatch shapes,
-   strides, storage sized by instance or by program, and fragments. Done when
-   a law plans the SDF passes in `PassLabels`' order less the composite, with
-   exactly `SdfFrameBufferPlan`'s edges.
+4. Landed, the planner's vocabulary: a pass's `dispatch` (`Extent`, `Groups`,
+   or `Indirect` from a buffer version and offset, which the pass reaches in the
+   indirect-argument state), a buffer's `strideBytes`, and a buffer's `count`
+   by `Extent`, `Instances` or `ProgramWords` in place of `sizeBytes`. A read
+   of another kind than the prior reads records a barrier. The pipeline node
+   records none of it, so the planner refuses it on a shader pass.
+   `SdfPassPlanLawTests` builds the SDF passes as package passes from
+   `SdfFrameBufferPlan.Uses` and plans them in `PassLabels`' order less the
+   composite, with exactly `SdfFrameBufferPlan`'s edges between passes. The
+   engine records no graphics pass, so a package pass stays compute-shaped. A
+   single count basis cannot state the mask, tile and hit-record capacities,
+   which also scale with viewports and tiles; the cutover needs that before
+   the planner sizes them.
 5. The SDF pass interfaces over the four groups, with generated declarations;
    parity reads identically.
 6. The cutover, the riskiest commit: the package records into the graph's
