@@ -109,7 +109,7 @@ public sealed class WorldSearchJudgeScopeLawTests {
     public void ARowTheScoreReadsBringsTheRuleThatWritesIt() => Assert.Equal(
         actual: Scoped(job: new WorldSearchRow(
             Name: "moves",
-            Score: "material",
+            Score: ExpressionProgram.Parse(text: "material"),
             Tokens: "pieces",
             Turn: "turn",
             Verdict: "verdict"

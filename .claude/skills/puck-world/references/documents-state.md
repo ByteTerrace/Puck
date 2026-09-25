@@ -644,9 +644,10 @@ hashes and checkpoints. `world.search` narrates each job. Sharp edge: a token
 row whose `min` is a cell ordinal is refused — the off-board value must be no
 cell.
 
-`depth` (default 1) and `score` search deeper: `score` is an infix expression
-(the rule expression grammar, compiled like a rule binding, refused if it
-reads a host-only fact) required once `depth` exceeds one or `best` is
+`depth` (default 1) and `score` search deeper: `score` is a value expression
+(infix text in `.puck`, stored as its `instructions` program like every other
+document expression and refused by name as text, compiled like a rule binding,
+refused if it reads a host-only fact) required once `depth` exceeds one or `best` is
 authored. `best` is a keyed int row receiving `token`/`to`/`score` — the
 deepest completed depth's answer. Iterative-deepening negamax with alpha-beta:
 each accepted root candidate recurses one more ply (negated — the value is

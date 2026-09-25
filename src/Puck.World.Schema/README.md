@@ -2922,9 +2922,11 @@ skips a candidate whose geometry is valid—so `legal`/`reach`/`counts` are the
 same whether or not the job searches deeper.
 
 `depth` (default 1) and `score` ask what a position beyond the immediate ply is
-worth. `score` is an infix expression, in the rule expression grammar,
-compiled the same way a rule local is (`RuleCompiler.CompileExpression`
-over `ExpressionSpelling.TryParse`'s tokens) and refused at validation if it
+worth. `score` is a value expression, stored like every other expression the
+document holds as its `{ "instructions": [...] }` program (a `.puck` source
+writes it as infix text, and the reader refuses it written as text by name),
+compiled the same way a rule local is (`RuleCompiler.CompileExpression`) and
+refused at validation if it
 reads a fact only the world host answers—a scoped judge cannot evaluate one. It is
 required whenever `depth` exceeds one, or `best` is authored. `best` is a
 keyed integer row receiving the deepest completed depth's answer: `token` (the

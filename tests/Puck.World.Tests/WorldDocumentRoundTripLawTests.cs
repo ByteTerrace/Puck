@@ -140,7 +140,97 @@ public sealed class WorldDocumentRoundTripLawTests(WorldDocumentRoundTripLawTest
             userMessage: $"the corpus carries {programs} expression(s), a subprogram table: {subprograms}, a channel read: {channels}"
         );
     }
+    /// <summary>A search job's score is stored in the one expression form and nowhere else: the reader refuses the
+    /// score a corpus world writes once it is respelled as the infix text it prints as, and names the member it
+    /// refused, while the same document with the written IR reads back. Every world whose source names a search
+    /// section is held, and the corpus must carry at least one scored job.</summary>
+    [Fact]
+    public void ASearchScoreWrittenAsTextIsRefusedByName() {
+        var scored = 0;
+        var failures = new List<string>();
 
+        foreach (var relativePath in Corpus().Select(selector: static row => ((string)row.Data))) {
+            if (
+                !File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: relativePath)).Contains(
+                    comparisonType: StringComparison.Ordinal,
+                    value: "search"
+                ) ||
+                !TryBoot(
+                    relativePath: relativePath,
+                    worlds: out var worlds
+                )
+            ) {
+                continue;
+            }
+
+            foreach (var (source, definition) in worlds) {
+                var world = Path.GetFileName(path: source);
+                var tree = JsonNode.Parse(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition))!;
+
+                if (tree["search"]?["jobs"] is not JsonArray jobs) {
+                    continue;
+                }
+
+                for (var index = 0; (index < jobs.Count); index++) {
+                    if (
+                        (jobs[index] is not JsonObject job) ||
+                        (job["score"] is not JsonObject program)
+                    ) {
+                        continue;
+                    }
+
+                    scored++;
+
+                    var member = $"jobs[{index}].score";
+                    var ir = program.DeepClone();
+
+                    Assert.True(
+                        condition: ExpressionSpelling.TryPrint(
+                            program: ExpressionProgramJsonConverter.FromNode(node: ir),
+                            text: out var text
+                        ),
+                        userMessage: $"{world} {member} prints as no infix text"
+                    );
+                    job["score"] = text;
+
+                    if (Refusal(definition: definition, tree: tree) is not { } refusal) {
+                        failures.Add(item: $"{world} {member}: the text \"{text}\" is read as a score");
+                    } else if (!refusal.Contains(
+                        comparisonType: StringComparison.Ordinal,
+                        value: member
+                    )) {
+                        failures.Add(item: $"{world} {member}: the text \"{text}\" is refused without naming the member: {refusal}");
+                    }
+
+                    // The control: the same document, carrying the IR it wrote, reads back.
+                    job["score"] = ir;
+
+                    if (Refusal(definition: definition, tree: tree) is { } control) {
+                        failures.Add(item: $"{world} {member}: the written IR is refused: {control}");
+                    }
+                }
+            }
+        }
+
+        Assert.True(
+            condition: ((scored > 0) && (failures.Count == 0)),
+            userMessage: $"{scored} scored search job(s){Environment.NewLine}{string.Join(separator: Environment.NewLine, values: failures)}"
+        );
+    }
+
+    // Why the reader refuses a document tree, or null when it reads the tree.
+    private static string? Refusal(WorldDefinition definition, JsonNode tree) {
+        try {
+            _ = WorldDefinitionSerialization.Deserialize(
+                documentDirectory: definition.DocumentDirectory,
+                utf8Json: Encoding.UTF8.GetBytes(s: tree.ToJsonString())
+            );
+
+            return null;
+        } catch (InvalidDataException exception) {
+            return exception.Message;
+        }
+    }
     // A program's IR reads back as itself, and the infix text it prints as parses back to the same IR.
     private static void CheckProgram(JsonObject node, string route, List<string> failures) {
         ExpressionProgram program;
