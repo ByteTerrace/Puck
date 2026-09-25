@@ -899,10 +899,15 @@ numerical thresholds for memory peaks, and the intended publish mode and
 compiler-discovery policy. Run on the producer-built package, never a source
 rebuild, from a clean installation and cache, in the Native AOT form if
 applicable. It covers the existing foundation assets and toolchain; P5's
-user-content packaging is separate. Device loss has one policy: the offscreen
-host recovers the way the windowed host does, rebuilding its device through
-`IDeviceLostRecoverable` and resuming, where today only the windowed launcher
-recovers.
+user-content packaging is separate.
+
+Done: device loss has one policy, `DeviceLossRecovery`, which the windowed and
+the offscreen host both follow: a named `[device-lost]` console line, the
+render tree released while the lost device exists, and the device rebuilt in
+place through an `IDeviceRebuild`, the windowed host's through its presenter
+and the offscreen host's through its GPU activation. A capture armed at the
+loss is refused as `deviceLost` in the capture manifest. No canary injects a
+loss on a real device yet, so the recovery is proven only by fakes.
 
 Thresholds for frame-time median and tail and for reload stalls are deferred.
 They need wall-clock and GPU timing, which the owner has deferred with no date,
@@ -1442,9 +1447,13 @@ Phase 2, the services, follows the generated frame block, which has landed:
    placement: `CreateHostVisible` returns a host-writable buffer, with or without
    initial data, and `CreateDeviceLocal` one only the GPU writes.
    `DirectXBufferStatesLawTests` holds each placement's way into Direct3D 12's
-   indirect-argument state. The surface transfer objects the factory creates still
-   take a device context on each call; binding them to it is open work beside
-   the device-loss changes to the upload and import objects.
+   indirect-argument state. The surface readback, upload and import objects
+   `IGpuSurfaceTransferFactory` creates are bound to its device context too, and
+   none of their calls takes a device. Each holds its resources on the device of
+   its first use and is released before that device goes; on Vulkan a
+   readback, upload or import refuses a replaced device and a release after its
+   device is destroyed (`VulkanDeviceOwnership`), and a creation that fails part
+   way releases what it made. A readback only reads synchronously.
 10. Done: `IGpuDeviceContext.Services` (`GpuDeviceServices`) holds the recorder,
     bindings, queue submitter and every factory, and is the one way a consumer
     reaches a device-bound service. Direct3D 12's context creates the set in its

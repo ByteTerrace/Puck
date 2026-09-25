@@ -24,7 +24,6 @@ public sealed partial class SdfWorldEngine {
 
         return m_readback.Read(
             bytesPerPixel: 4,
-            deviceContext: m_deviceContext,
             format: Format,
             height: m_height,
             sourceImageHandle: m_storageImage.ImageHandle,

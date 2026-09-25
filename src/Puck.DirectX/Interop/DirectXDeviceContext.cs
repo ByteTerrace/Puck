@@ -436,26 +436,13 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return;
         }
 
-        var fence = ((ID3D12Fence*)m_idleFence);
-        var value = m_idleFenceValue;
-
-        ((ID3D12CommandQueue*)m_commandQueue)->Signal(
-            Value: value,
-            pFence: fence
+        DirectXCommandCalls.SignalAndWait(
+            calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device.Handle)),
+            fence: ((ID3D12Fence*)m_idleFence),
+            fenceEvent: m_idleFenceEvent,
+            fenceValue: ref m_idleFenceValue,
+            queue: ((ID3D12CommandQueue*)m_commandQueue)
         );
-        m_idleFenceValue++;
-
-        if (fence->GetCompletedValue() < value) {
-            fence->SetEventOnCompletion(
-                Value: value,
-                hEvent: m_idleFenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                dwMilliseconds: uint.MaxValue,
-                hHandle: m_idleFenceEvent
-            );
-        }
-
         DrainDebugMessages();
     }
     /// <inheritdoc/>
@@ -579,9 +566,13 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// valid; they rebuild their own device-derived resources. The old objects are released WITHOUT a GPU drain (the
     /// device is removed, so a Signal/wait would never complete; a COM Release on a removed device's objects is safe). The
     /// debug layer is NOT re-enabled here (it cannot be toggled per-process and can poison creation on some configs);
-    /// <see cref="EnsureCreated"/> applies the same opt-in gate it always does.</summary>
+    /// <see cref="EnsureCreated"/> applies the same opt-in gate it always does. A device that cannot be created yet is
+    /// still the loss being recovered from: a real removal leaves no capable adapter for seconds, so the host's recovery
+    /// waits and calls again.</summary>
     /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
     /// the old device; the message names each one, the old device is released, and no new device is created.</exception>
+    /// <exception cref="DeviceLostException">No device could be created yet; the context stays without one, and the next
+    /// call tries again.</exception>
     public void Recreate() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -591,9 +582,18 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         ReleaseDeviceObjects();
 
         // m_device is now null, so this rebuilds a fresh device + queue + fence + event.
-        EnsureCreated();
+        try {
+            EnsureCreated();
+        } catch (GpuDeviceUnavailableException exception) {
+            throw new DeviceLostException(
+                innerException: exception,
+                message: "The Direct3D 12 device could not be recreated yet (the adapter is unavailable).",
+                reasonCode: ((exception.InnerException as DirectXException)?.Result ?? 0)
+            );
+        }
     }
-    /// <summary>Releases the command queue and the owned device. With the debug layer on, every object the device still
+    /// <summary>Drains the queue, a removed device counting as drained (<see cref="DirectXCommandCalls.Drain"/>), then
+    /// releases the command queue and the owned device. With the debug layer on, every object the device still
     /// holds once the context has released its own is written as a <c>[d3d12-debug] live</c> line before the device is
     /// released. Safe to call more than once.</summary>
     /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
@@ -607,7 +607,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             (0 != m_commandQueue) &&
             (0 != m_idleFence)
         ) {
-            WaitIdle();
+            _ = DirectXCommandCalls.Drain(
+                calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device!.Handle)),
+                fence: ((ID3D12Fence*)m_idleFence),
+                fenceEvent: m_idleFenceEvent,
+                fenceValue: ref m_idleFenceValue,
+                queue: ((ID3D12CommandQueue*)m_commandQueue)
+            );
+            DrainDebugMessages();
         }
 
         m_disposed = true;

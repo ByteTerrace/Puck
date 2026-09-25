@@ -19,16 +19,6 @@ namespace Puck.Launcher;
 /// loop merely drains the resulting exit request (and honors <c>--exit-after</c> for scripted runs).
 /// </summary>
 public sealed class LauncherWindowHostedService : BackgroundService {
-    // A real device loss (driver crash/update, the adapter disabled/removed) leaves NO capable adapter for SECONDS: the
-    // fresh device create keeps failing until it returns. Recovery waits out that window — retrying the rebuild with this
-    // backoff for up to this budget — before giving up. These waits are ONE loss's recovery, so they do NOT advance the
-    // consecutive-loss streak above (which guards against a device that drops again the instant it is recovered).
-    private const int DeviceReacquireBackoffMilliseconds = 250;
-    private const double DeviceReacquireBudgetSeconds = 10.0;
-    // Cap on back-to-back device-loss recoveries with no successful frame between them, so a permanently-dead GPU (or a
-    // presenter that cannot recover) fails loudly instead of spinning forever. Reset to 0 after any good frame.
-    private const int MaxConsecutiveDeviceLossRecoveries = 8;
-
     private readonly IHostApplicationLifetime m_applicationLifetime;
     private readonly BufferedConsoleOutput m_bufferedOutput;
     private readonly FrameCaptureController? m_capture;
@@ -155,19 +145,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     values: sourceIds
                 )
             );
-        }
-    }
-    // A clean frame rendered: if it follows one or more device-loss recoveries, announce that rendering is back and clear
-    // the streak. (Without the announcement a recovery only logged "recovering…" then went quiet — reading as a failure
-    // even though presents had resumed.)
-    private void NoteFrameSucceeded(ref int streak) {
-        if (streak > 0) {
-            m_logger.LogInformation(
-                message: "Graphics device recovered; rendering resumed after {Attempts} attempt(s).",
-                streak
-            );
-
-            streak = 0;
         }
     }
     private long ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
@@ -323,9 +300,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     ? (startTimestamp + ((long)(exitAfter.TotalSeconds * frequency)))
                     : (long?)null
                 );
-                // Consecutive device-loss recoveries with no good frame in between; bounded so a permanently-dead GPU
-                // (or a backend that can't recover) surfaces the failure instead of spinning forever.
-                var deviceLossStreak = 0;
+                var deviceLoss = new DeviceLossRecovery(
+                    logger: m_logger,
+                    root: m_root,
+                    rootHostContext: m_rootHostContext,
+                    writeLine: m_bufferedOutput.WriteErrorLine
+                );
                 // Test hook: a one-shot synthetic device loss N seconds in, to exercise recovery without real GPU churn.
                 var syntheticDeviceLossAt = ResolveSyntheticDeviceLossTimestamp(
                     seconds: m_options.SyntheticDeviceLossSeconds,
@@ -596,14 +576,19 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             m_presenter.Present(surface: surface);
                         }
 
-                        NoteFrameSucceeded(streak: ref deviceLossStreak);
+                        deviceLoss.NoteFrameProduced();
                     } catch (DeviceLostException deviceLost) {
-                        if (!TryRecoverFromDeviceLoss(
-                            binding: window.CreateSurfaceBinding(),
+                        if (!deviceLoss.TryRecover(
                             deviceLost: deviceLost,
-                            height: height,
-                            streak: ref deviceLossStreak,
-                            width: width
+                            rebuild: ((m_presenter is IDeviceLostRecoverable recoverable)
+                                ? new PresenterDeviceRebuild(
+                                    Binding: window.CreateSurfaceBinding(),
+                                    Height: height,
+                                    Presenter: recoverable,
+                                    Width: width
+                                )
+                                : null
+                            )
                         )) {
                             // Unrecoverable (device never returned, presenter can't recover, or too many losses in a
                             // row). Shut DOWN cleanly rather than crashing: close the window and break to the normal
@@ -747,108 +732,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             fired = true;
 
             throw new DeviceLostException(message: "Synthetic device-loss test injection (PUCK_TEST_DEVICE_LOSS).");
-        }
-    }
-    /// <summary>Recovers from a graphics device loss on the pump thread: the render tree releases its device-derived GPU
-    /// resources (on the still-valid lost device), then the presenter rebuilds the device + presentation resources in
-    /// place; the next frame rebuilds the node resources on the new device. Returns <see langword="false"/> (so the caller
-    /// rethrows and the run ends) when the presenter cannot recover or recovery has failed too many times in a row.</summary>
-    private bool TryRecoverFromDeviceLoss(NativeSurfaceBinding binding, DeviceLostException deviceLost, uint width, uint height, ref int streak) {
-        ++streak;
-
-        if (m_presenter is not IDeviceLostRecoverable recoverable) {
-            m_logger.LogError(
-                exception: deviceLost,
-                message: "Graphics device lost (reason 0x{Reason:X}) but the active presenter cannot recover.",
-                deviceLost.ReasonCode
-            );
-
-            return false;
-        }
-
-        if (streak > MaxConsecutiveDeviceLossRecoveries) {
-            m_logger.LogError(
-                exception: deviceLost,
-                message: "Graphics device-loss recovery failed {Count} times in a row (reason 0x{Reason:X}); aborting the run.",
-                MaxConsecutiveDeviceLossRecoveries,
-                deviceLost.ReasonCode
-            );
-
-            return false;
-        }
-
-        m_logger.LogWarning(
-            exception: deviceLost,
-            message: "Graphics device lost (reason 0x{Reason:X}); recovering (attempt {Attempt}/{Max}).",
-            deviceLost.ReasonCode,
-            streak,
-            MaxConsecutiveDeviceLossRecoveries
-        );
-
-        // Drain in-flight GPU work BEFORE any teardown. On a genuinely lost device this faults and is swallowed
-        // (nothing will ever complete); on a still-healthy device — a recoverable RESET, or the synthetic test hook —
-        // it is essential, because destroying command pools / image views still referenced by pending work is a
-        // validation error and can crash the driver.
-        if (m_rootHostContext.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)) {
-            try {
-                deviceContext.WaitIdle();
-            } catch (DeviceLostException) {
-                // Device already lost; there is no in-flight work to wait on.
-            }
-        }
-
-        // Order matters: the node tree releases its GPU objects FIRST — they are children of the device and must go
-        // before it does — then the presenter destroys + recreates the device IN PLACE (so the capability-published
-        // context keeps its identity and nodes rebuild against the new handle next frame). Release once, here.
-        m_root.OnDeviceLost();
-
-        // Recreate the device, waiting out an extended device-ABSENT window: a real removal leaves no capable adapter
-        // for seconds, and the fresh create keeps failing (surfaced by the backend as another DeviceLostException) until
-        // it returns. Retry with backoff until the rebuild succeeds or the reacquire budget elapses.
-        var reacquireDeadlineTimestamp = (Stopwatch.GetTimestamp() + ((long)(DeviceReacquireBudgetSeconds * Stopwatch.Frequency)));
-        var waitedForDevice = false;
-
-        while (true) {
-            try {
-                recoverable.RecoverFromDeviceLoss(
-                    binding: binding,
-                    height: height,
-                    width: width
-                );
-
-                if (waitedForDevice) {
-                    m_logger.LogInformation(message: "A graphics device returned; presentation resources rebuilt.");
-                }
-
-                return true;
-            } catch (DeviceLostException reacquireLoss) {
-                if (Stopwatch.GetTimestamp() >= reacquireDeadlineTimestamp) {
-                    // The device did not return within the budget. This also covers the case where it CANNOT return in
-                    // this process: a full adapter removal (vs. a self-recovering driver reset) can leave the graphics
-                    // driver unable to reinitialize in-process — the fresh device create keeps failing even after the
-                    // adapter is back — and only a new process recovers. Either way, give up so the caller shuts down
-                    // cleanly rather than hanging.
-                    m_logger.LogError(
-                        exception: reacquireLoss,
-                        message: "The graphics device did not return within {Seconds}s of the loss (reason 0x{Reason:X}); it cannot be reinitialized in this process. Shutting down.",
-                        DeviceReacquireBudgetSeconds,
-                        reacquireLoss.ReasonCode
-                    );
-
-                    return false;
-                }
-
-                if (!waitedForDevice) {
-                    m_logger.LogWarning(
-                        message: "The graphics device is still absent; waiting up to {Seconds}s for it to return...",
-                        DeviceReacquireBudgetSeconds
-                    );
-
-                    waitedForDevice = true;
-                }
-
-                Thread.Sleep(millisecondsTimeout: DeviceReacquireBackoffMilliseconds);
-            }
         }
     }
 

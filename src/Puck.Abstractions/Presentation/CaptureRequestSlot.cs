@@ -10,6 +10,11 @@ namespace Puck.Abstractions.Presentation;
 /// (<see cref="FrameCaptureRequest.TryFail"/>) is withdrawn: the slot no longer reports it as pending, and drops it
 /// instead of serving or forwarding it.</remarks>
 public sealed class CaptureRequestSlot {
+    /// <summary>The reason a capture armed when the graphics device was lost is refused with
+    /// (<see cref="RefuseForDeviceLoss"/>), carried by the <see cref="Gpu.DeviceLostException"/> its request
+    /// completes with.</summary>
+    public const string DeviceLostReason = "the graphics device was lost before a frame served the capture";
+
     private FrameCaptureRequest? m_request;
 
     /// <summary>Gets the path armed on this slot, or <see langword="null"/>. A busy diagnostic, not a success
@@ -63,6 +68,11 @@ public sealed class CaptureRequestSlot {
         _ = m_request?.TryFail(error: error);
         m_request = null;
     }
+    /// <summary>Fails an unserved request with a <see cref="Gpu.DeviceLostException"/> carrying
+    /// <see cref="DeviceLostReason"/> and clears the slot — the device-loss path (<c>IRenderNode.OnDeviceLost</c>),
+    /// where the frame the request was armed for will not be produced on the lost device.</summary>
+    public void RefuseForDeviceLoss() =>
+        Refuse(error: new Gpu.DeviceLostException(message: DeviceLostReason));
     /// <summary>Serves the armed request, if any, and clears the slot before the write so a failing write cannot
     /// leave the slot busy. A failed write is reported to standard error; the request itself carries the outcome.</summary>
     /// <param name="failureLabel">The stderr prefix a failed write is reported under.</param>

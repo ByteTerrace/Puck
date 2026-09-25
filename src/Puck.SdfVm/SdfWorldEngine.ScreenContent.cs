@@ -114,7 +114,6 @@ public sealed partial class SdfWorldEngine {
 
         m_glyphAtlasUpload ??= m_gpu.SurfaceTransferFactory.CreateUpload();
         m_glyphAtlasView = m_glyphAtlasUpload.Upload(
-            deviceContext: m_deviceContext,
             format: Format,
             height: height,
             pixels: rgbaPixels,

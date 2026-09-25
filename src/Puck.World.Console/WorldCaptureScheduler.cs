@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Hosting;
@@ -27,6 +28,9 @@ public enum WorldCaptureRefusal : byte {
     /// budget first, and the detail names why the render chain could not serve it, naming the engine's pipeline build
     /// while the engine was not ready.</summary>
     Unserved,
+    /// <summary>The graphics device was lost while the capture was armed or being read back; the host rebuilt the
+    /// device and ran on, and the detail carries the loss's reason.</summary>
+    DeviceLost,
 }
 /// <summary>One scheduled capture's outcome, wire-shaped to the <c>puck.parity.manifest.v1</c> contract: either a
 /// frame and its census, or a refusal and its detail, never both and never neither.</summary>
@@ -633,6 +637,18 @@ public sealed class WorldCaptureScheduler {
     // steps, so the frame that completed the request showed the last tick published before completion was observed.
     private void Finalize(Pending pending, ulong? shownTick) {
         var result = pending.Request.Completion.GetAwaiter().GetResult();
+
+        if (result.Error is DeviceLostException deviceLost) {
+            Refuse(
+                detail: deviceLost.Message,
+                refusal: WorldCaptureRefusal.DeviceLost,
+                stateHash: pending.StateHash,
+                station: pending.Station,
+                tick: pending.Tick
+            );
+
+            return;
+        }
 
         if (result.Error is { } error) {
             Refuse(

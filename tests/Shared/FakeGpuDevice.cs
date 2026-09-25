@@ -158,28 +158,13 @@ internal sealed class FakeGpuDevice :
         public const nint ViewHandle = 11;
 
         public void Dispose() { }
-        public nint Upload(IGpuDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) => ViewHandle;
+        public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) => ViewHandle;
     }
     private sealed class Readback(byte reportVersion) : IGpuSurfaceReadback {
         private byte[] m_pixels = [];
 
         public void Dispose() { }
-        public bool IsReadComplete() => true;
-        public ReadOnlyMemory<byte> MapPixels() => m_pixels;
-        public ReadOnlyMemory<byte> Read(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
-            SubmitRead(
-                bytesPerPixel: bytesPerPixel,
-                deviceContext: deviceContext,
-                format: format,
-                height: height,
-                sourceImageHandle: sourceImageHandle,
-                sourceLayout: sourceLayout,
-                width: width
-            );
-
-            return m_pixels;
-        }
-        public void SubmitRead(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
+        public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
             var length = checked((int)((width * height) * bytesPerPixel));
 
             if (m_pixels.Length != length) {
@@ -192,6 +177,8 @@ internal sealed class FakeGpuDevice :
                 m_pixels[2] = reportVersion;
                 m_pixels[3] = reportVersion;
             }
+
+            return m_pixels;
         }
     }
 }

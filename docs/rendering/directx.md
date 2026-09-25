@@ -190,11 +190,31 @@ policy is chosen from it, is described under
 
 ## Result handling
 
-Native calls return `HRESULT`. The internal `HResultExtensions.ThrowIfFailed(operation)`
+Native calls return `HRESULT`. `HResultExtensions.ThrowIfFailed(operation)`
 turns a failing code into a `DirectXException` carrying the operation name and the
 `HRESULT`, matching `Puck.Vulkan`'s `VulkanException` pattern. (`EnumWarpAdapter` has no
 non-throwing overload and surfaces the framework's COM exception directly—it effectively
 never fails.)
+
+A removed device is not an ordinary failure. `DXGI_ERROR_DEVICE_REMOVED`,
+`DXGI_ERROR_DEVICE_RESET` and `DXGI_ERROR_DEVICE_HUNG` become the neutral
+`DeviceLostException`, which the host's device-loss recovery catches. The calls a
+removal reaches on a working device (mapping a resource, resetting and closing a
+command list, signalling a queue and arming a fence event) go through
+`DirectXCommandCalls` over an `IDirectXCommandCalls`, which calls each vtable slot
+and returns its `HRESULT`, because the generated wrappers throw a `COMException`
+that recovery never sees. The loss then carries the device's own
+`ID3D12Device::GetDeviceRemovedReason`, such as `DXGI_ERROR_DRIVER_INTERNAL_ERROR`
+for a page fault.
+
+A drain before releasing objects follows one rule: a removed device counts as
+drained. `DirectXCommandCalls.Drain` returns instead of throwing when the signal or
+the event arm reports a removal, because a removed device runs no further work and
+its fences read complete. Every release path drains that way (a surface upload's
+and an exportable image's `Dispose`, the context's own `Dispose`), so a node
+releasing its objects inside `IRenderNode.OnDeviceLost` never throws. Every frame
+path waits through `SignalAndWait`, which throws, so a loss mid-frame reaches
+recovery.
 
 ---
 

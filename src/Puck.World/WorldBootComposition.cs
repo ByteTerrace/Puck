@@ -416,10 +416,6 @@ public static class WorldBootComposition {
                 machines: sp.GetRequiredService<WorldMachineHost>(),
                 cameraCapture: sp.GetRequiredService<ICameraCaptureService>(),
                 windowCapture: sp.GetRequiredService<INativeImageCaptureService>(),
-                // The backend-neutral surface-transfer seam the Vulkan host's camera GPU tier imports its shared
-                // targets through: the services of whichever presenter's device context composes. A headless boot has
-                // no device context (null) and never publishes, so nothing reaches for it.
-                surfaceTransfers: sp.GetService<IGpuDeviceContext>()?.Services.SurfaceTransferFactory,
                 cameras: definition.Cameras,
                 anchors: sp.GetRequiredService<WorldClient>(),
                 stamps: sp.GetRequiredService<WorldStampPool>(),
@@ -1057,6 +1053,8 @@ public static class WorldBootComposition {
         // Resolved eagerly by the IRenderNode factory below, before anything touches the GPU — see its own remarks
         // for the per-backend bring-up (surfaceless Direct3D 12; a never-shown window for Vulkan).
         services.AddSingleton<WorldOffscreenGpuActivation>();
+        // The offscreen host rebuilds a lost device through the activation that brought it up.
+        services.AddSingleton<IDeviceRebuild>(implementationFactory: static sp => sp.GetRequiredService<WorldOffscreenGpuActivation>());
 
         services.AddSingleton(implementationFactory: static sp => {
             var hostSettings = sp.GetRequiredService<WorldHostSettings>();

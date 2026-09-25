@@ -19,10 +19,14 @@ namespace Puck.Launcher;
 /// (<see cref="IFixedStepSimulation.HoldsClock"/>): while a frame a step owes has not been served, for whatever reason
 /// the render chain cannot serve it yet, the loop keeps producing frames and draining the console but steps no further
 /// tick. The two other host loops never hold.</para>
+/// <para>A device loss follows the windowed host's policy (<see cref="DeviceLossRecovery"/>), rebuilding through the
+/// <see cref="IDeviceRebuild"/> the offscreen GPU activation registers; a loss it cannot recover from faults the
+/// run.</para>
 /// </summary>
 public sealed class OffscreenTickHostedService : BackgroundService {
     private readonly IHostApplicationLifetime m_applicationLifetime;
     private readonly BufferedConsoleOutput m_bufferedOutput;
+    private readonly IDeviceRebuild? m_deviceRebuild;
     private readonly IInputClock m_inputClock;
     private readonly StandardInputBacklog m_inputBacklog;
     private readonly InputRouter? m_inputRouter;
@@ -54,10 +58,12 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         CommandRegistry registry,
         TextCommandSource textSource,
         TerminalControl terminal,
-        StandardInputBacklog inputBacklog
+        StandardInputBacklog inputBacklog,
+        IEnumerable<IDeviceRebuild> deviceRebuilds
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
+        ArgumentNullException.ThrowIfNull(deviceRebuilds);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(inputRouters);
         ArgumentNullException.ThrowIfNull(logger);
@@ -74,6 +80,11 @@ public sealed class OffscreenTickHostedService : BackgroundService {
 
         m_applicationLifetime = applicationLifetime;
         m_bufferedOutput = bufferedOutput;
+        m_deviceRebuild = LauncherHostLoop.SingleOrDefault(
+            items: deviceRebuilds,
+            name: nameof(IDeviceRebuild),
+            hostDescription: "offscreen host"
+        );
         m_inputClock = inputClock;
         m_inputRouter = LauncherHostLoop.SingleOrDefault(
             items: inputRouters,
@@ -127,6 +138,12 @@ public sealed class OffscreenTickHostedService : BackgroundService {
             var frequency = Stopwatch.Frequency;
             var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
 
+            var deviceLoss = new DeviceLossRecovery(
+                logger: m_logger,
+                root: m_root,
+                rootHostContext: m_rootHostContext,
+                writeLine: m_bufferedOutput.WriteErrorLine
+            );
             var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
             var hostFrame = 0UL;
             var nextDeadline = Stopwatch.GetTimestamp();
@@ -183,7 +200,23 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                     TargetWidth: m_renderOptions.Width
                 );
 
-                _ = m_root.ProduceFrame(context: in frameContext);
+                // A loss follows the windowed host's policy: captures armed at it are refused by name, the device is
+                // rebuilt in place, and the loop steps on. A loss it cannot recover from ends the run as a fault.
+                try {
+                    _ = m_root.ProduceFrame(context: in frameContext);
+                    deviceLoss.NoteFrameProduced();
+                } catch (DeviceLostException deviceLost) {
+                    if (!deviceLoss.TryRecover(
+                        deviceLost: deviceLost,
+                        rebuild: m_deviceRebuild
+                    )) {
+                        throw;
+                    }
+
+                    m_bufferedOutput.Flush();
+
+                    continue;
+                }
 
                 m_bufferedOutput.Flush();
 

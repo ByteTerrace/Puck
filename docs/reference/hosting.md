@@ -182,7 +182,22 @@ The fields most often confused in `FrameContext` have distinct meanings:
 Every `IRenderNode` has a stable `NodeDescriptor`, produces one `Surface`, and
 is disposable. Hosting nodes that own children forward `OnDeviceLost` through
 the tree. Nodes that own device resources release stale handles there and
-rebuild them on a later frame; device loss must not advance or reset simulation.
+rebuild them on a later frame, and a node holding an armed capture refuses it
+(`CaptureRequestSlot.RefuseForDeviceLoss`); device loss must not advance or reset
+simulation.
+
+Both GPU hosts recover from a loss through one policy, `DeviceLossRecovery` in
+`Puck.Launcher`. It writes a `[device-lost] reason 0x…` line to standard error,
+drains what the device still runs, calls `OnDeviceLost` on the render root
+while the lost device still exists, and then rebuilds the device in place
+through an `IDeviceRebuild`, retrying every 250 ms for up to 10 seconds while
+the adapter is absent. The windowed host rebuilds through its presenter
+(`PresenterDeviceRebuild`). The offscreen host rebuilds through the rebuild
+the World's offscreen GPU activation registers: on Vulkan the presenter
+rebuilds on the hidden window's surface, and on Direct3D 12 the device context
+is recreated with no swap chain. More than eight losses with no frame between
+them, a device that does not return in time, or a host with nothing to rebuild
+through ends the run; the windowed host closes, and the offscreen host faults.
 
 For hosts that parallelize CPU stepping, `ISteppableRenderNode` divides the
 work into three phases:

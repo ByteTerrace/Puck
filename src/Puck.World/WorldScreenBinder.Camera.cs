@@ -567,7 +567,6 @@ internal sealed partial class WorldScreenBinder {
 
         var sharedEligible = (
             !device.SharedRefused &&
-            (m_hostsOnDirectX || (m_surfaceTransfers is not null)) &&
             OperatingSystem.IsWindowsVersionAtLeast(
             major: 10,
             minor: 0,
@@ -811,7 +810,7 @@ internal sealed partial class WorldScreenBinder {
             }
 
             if (!m_hostsOnDirectX) {
-                var transfers = (m_surfaceTransfers ?? throw new InvalidOperationException(message: "the Vulkan camera GPU tier needs the surface-transfer factory (absent on a headless boot)"));
+                var transfers = deviceContext.Services.SurfaceTransferFactory;
 
                 createdImports = new IGpuSurfaceImport[allocated.Length];
                 createdViews = new nint[allocated.Length];
@@ -819,7 +818,6 @@ internal sealed partial class WorldScreenBinder {
                 for (var index = 0; (index < allocated.Length); index++) {
                     createdImports[index] = transfers.CreateImport();
                     createdViews[index] = createdImports[index].Import(
-                        deviceContext: deviceContext,
                         format: pixelFormat,
                         height: checked((uint)height),
                         sharedHandle: handles[index],

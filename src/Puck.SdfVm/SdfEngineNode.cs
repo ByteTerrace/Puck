@@ -524,6 +524,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         m_glyphAtlasInitialized = false;
         m_uploadedGlyphAtlas = null;
         m_deviceContext = null;
+        // The frame an armed capture was owed is not produced on the lost device.
+        m_debugCapture.RefuseForDeviceLoss();
     }
     /// <inheritdoc/>
     public Surface ProduceFrame(in FrameContext context) {

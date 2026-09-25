@@ -287,12 +287,12 @@ public sealed class SurfaceCompositor : IDisposable {
             m_sharedImport ??= new VulkanSurfaceImport(
                 commandBufferRecordingApi: m_commandBufferRecordingApi,
                 commandResourcesFactory: m_commandResourcesFactory,
+                deviceContext: m_renderer,
                 externalMemoryApi: m_externalMemoryApi,
                 framebufferSetApi: m_framebufferSetApi,
                 queueSubmitter: m_queueSubmitter
             );
             imageViewHandle = m_sharedImport.Import(
-                deviceContext: m_renderer,
                 height: surface.Height,
                 sharedHandle: surface.SharedHandle,
                 vulkanFormat: vulkanFormat,
@@ -302,15 +302,15 @@ public sealed class SurfaceCompositor : IDisposable {
             var vulkanFormat = VulkanGpuFormats.ToVkFormat(gpuPixelFormat: GpuPixelFormats.FromSurfaceFormat(format: surface.Format));
 
             m_rootUpload ??= new VulkanSurfaceUpload(
+                bufferApi: m_bufferApi,
                 commandBufferRecordingApi: m_commandBufferRecordingApi,
                 commandResourcesFactory: m_commandResourcesFactory,
+                deviceContext: m_renderer,
                 framebufferSetApi: m_framebufferSetApi,
                 offscreenImageApi: m_offscreenImageApi,
-                queueSubmitter: m_queueSubmitter,
-                bufferApi: m_bufferApi
+                queueSubmitter: m_queueSubmitter
             );
             imageViewHandle = m_rootUpload.Upload(
-                deviceContext: m_renderer,
                 height: surface.Height,
                 pixels: surface.Pixels,
                 vulkanFormat: vulkanFormat,

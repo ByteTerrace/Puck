@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.System.Com;
@@ -65,10 +66,9 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
         void* mapped;
 
         try {
-            buffer->Map(
-                Subresource: 0,
-                pReadRange: ((D3D12_RANGE*)null),
-                ppData: &mapped
+            mapped = DirectXCommandCalls.Map(
+                calls: new DirectXDeviceCommandCalls(device: Device),
+                resource: buffer
             );
         } catch {
             _ = ((IUnknown*)buffer)->Release();

@@ -101,6 +101,7 @@ public static class VulkanPresenterServiceRegistration {
                 bufferApi: bufferApi,
                 commandBufferRecordingApi: commandBufferRecordingApi,
                 commandResourcesFactory: commandResourcesFactory,
+                deviceContext: deviceContext,
                 externalMemoryApi: externalMemoryApi,
                 frameSynchronizationApi: frameSynchronizationApi,
                 framebufferSetApi: framebufferSetApi,

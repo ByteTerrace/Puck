@@ -29,8 +29,9 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
     private readonly TemporaryDirectory m_directory = new();
 
     // A render chain that serves an armed request with the next frame it composes, writing the shown tick and the
-    // server's capture-scope hash into the PNG's first pixels.
-    private sealed class StampingFrameTarget(WorldServer server, bool serves) : ICaptureRequestTarget {
+    // server's capture-scope hash into the PNG's first pixels. One that loses its device instead refuses the armed
+    // request the way a capture-capable node's device-loss release does.
+    private sealed class StampingFrameTarget(WorldServer server, bool serves, bool losesDevice = false) : ICaptureRequestTarget {
         private FrameCaptureRequest? m_request;
 
         public int Frames { get; private set; }
@@ -38,6 +39,22 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
 
         public void Compose() {
             Frames++;
+
+            if (
+                losesDevice &&
+                (m_request is { } armed)
+            ) {
+                var slot = new CaptureRequestSlot();
+
+                m_request = null;
+                slot.Arm(
+                    pendingPath: null,
+                    request: armed
+                );
+                slot.RefuseForDeviceLoss();
+
+                return;
+            }
 
             if (
                 !serves ||
@@ -128,7 +145,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         private readonly HostRow m_row;
         private readonly ulong m_stepTicks;
 
-        public Run(string directory, bool honoursFrames, bool serves) {
+        public Run(string directory, bool honoursFrames, bool serves, bool losesDevice = false) {
             m_row = HostRow.Build(
                 definition: (Fixtures.BuildDocument() with {
                     Captures = new WorldCapturesSection(
@@ -148,6 +165,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                 name: "boot"
             );
             Target = new StampingFrameTarget(
+                losesDevice: losesDevice,
                 server: m_row.Server,
                 serves: serves
             );
@@ -313,6 +331,22 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             path1: m_directory.RootPath,
             path2: "first~10.png"
         )));
+    }
+    [Fact]
+    public void ACaptureArmedWhenTheDeviceIsLostIsRefusedAsDeviceLostNamingTheReason() {
+        using var run = new Run(
+            directory: m_directory.RootPath,
+            honoursFrames: true,
+            losesDevice: true,
+            serves: true
+        );
+
+        run.BurstThenDrain();
+
+        Assert.Equal(
+            expected: [("first:10:deviceLost:" + CaptureRequestSlot.DeviceLostReason), ("second:30:deviceLost:" + CaptureRequestSlot.DeviceLostReason)],
+            actual: ReadManifest(directory: m_directory.RootPath).Select(selector: static entry => $"{entry.GetProperty(propertyName: "station").GetString()}:{entry.GetProperty(propertyName: "tick").GetUInt64()}:{entry.GetProperty(propertyName: "refusal").GetString()}:{entry.GetProperty(propertyName: "detail").GetString()}")
+        );
     }
     [Fact]
     public void ACaptureNoFrameServesIsRefusedAsUnservedAndTheNextAsBusy() {
