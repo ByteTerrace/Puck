@@ -106,23 +106,14 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
         ReleaseCaptureResources();
         m_compositor.Dispose();
 
-        try {
-            m_deviceContext.Recreate();
-            m_compositor.Initialize(
-                binding: binding,
-                deviceContext: m_deviceContext,
-                height: height,
-                width: width
-            );
-        } catch (DirectXException exception) {
-            // Recreate reports an absent adapter as a loss itself; a swap chain the returning adapter cannot back yet is
-            // the same wait, so the host's recovery retries it rather than aborting the run.
-            throw new DeviceLostException(
-                message: "The Direct3D 12 swap chain could not be recreated yet (the adapter is unavailable).",
-                reasonCode: exception.Result,
-                innerException: exception
-            );
-        }
+        // A swap chain the returning adapter cannot back yet is the same wait as an absent adapter: Recreate's one retry
+        // rule, which the offscreen host's rebuild follows too.
+        m_deviceContext.Recreate(reinitialize: () => m_compositor.Initialize(
+            binding: binding,
+            deviceContext: m_deviceContext,
+            height: height,
+            width: width
+        ));
     }
 
     /// <inheritdoc/>

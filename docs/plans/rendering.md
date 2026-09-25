@@ -1079,8 +1079,11 @@ the offscreen host both follow: a named `[device-lost]` console line, the
 render tree released while the lost device exists, and the device rebuilt in
 place through an `IDeviceRebuild`, the windowed host's through its presenter
 and the offscreen host's through its GPU activation. A capture armed at the
-loss is refused as `deviceLost` in the capture manifest. No canary injects a
-loss on a real device yet, so the recovery is proven only by fakes.
+loss is refused as `deviceLost` in the capture manifest, and a run that gives up
+refuses it first too. `gpu.faults lose` injects a loss on a real device, and the
+`device-loss` and `device-loss-windowed` canaries recover from one on both
+backends with a capture armed at it. A driver-initiated removal (a timeout
+detection and recovery) is still exercised only by hand.
 
 Thresholds for frame-time median and tail and for reload stalls are deferred.
 They need wall-clock and GPU timing, which the owner has deferred with no date,

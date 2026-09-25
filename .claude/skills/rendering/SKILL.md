@@ -246,7 +246,11 @@ These are one-line cautions; the owning pages hold the derivations.
   (`CaptureRequestSlot.RefuseForDeviceLoss`), which the scheduler writes as a
   `deviceLost` refusal; both hosts recover through `DeviceLossRecovery`
   (`Puck.Launcher`), which releases the tree before rebuilding the device
-  through an `IDeviceRebuild`. Hosts settle owed
+  through an `IDeviceRebuild`, and before giving up. `gpu.faults lose` injects
+  a loss on a real device (`device-loss`, `device-loss-windowed`). On Direct3D 12 every create or
+  call a removal reaches on a frame or capture path goes through
+  `DirectXCommandCalls`, never the generated throwing wrapper, and a transfer
+  object stays on its first device (`DirectXDeviceOwnership`). Hosts settle owed
   frames (`SettleOwedFrames`) before disposing the render root, so no capture
   reaches the disposal refusal. `WorldCaptureScheduler`
   (`Puck.World.Console`) writes every armed capture as one manifest entry: the

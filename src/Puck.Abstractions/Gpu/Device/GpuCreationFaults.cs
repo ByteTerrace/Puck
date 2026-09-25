@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace Puck.Abstractions.Gpu;
@@ -7,8 +8,10 @@ namespace Puck.Abstractions.Gpu;
 /// fails, and how many of each kind have been made since the faults were last disarmed. A backend wraps the services it
 /// creates with its context through <see cref="Wrap"/>, so every creation of a counted kind passes through here first;
 /// an armed creation throws <see cref="GpuCreationFaultException"/> instead of reaching the device, and nothing is
-/// created. Only the <c>gpu.faults</c> console verb, which answers the operator alone, arms it, so a world document
-/// can never reach it.
+/// created. It also holds one armed device loss: a GPU host counts each frame it produces here
+/// (<see cref="ThrowIfLossDue"/>), and the armed frame throws <see cref="DeviceLostException"/> inside the frame body
+/// its device-loss policy guards. Only the <c>gpu.faults</c> console verb, which answers the operator alone, arms it,
+/// so a world document can never reach it.
 /// <para>
 /// Each kind holds at most one armed fault, counted from the moment it is armed, and a fault fires exactly once. The
 /// counts are creation calls, the failed one included, in the order the calls arrive: deterministic by count alone,
@@ -24,10 +27,18 @@ public sealed class GpuCreationFaults {
 
     private static readonly string[] KindNames = ["pipeline", "buffer", "image", "render-pass", "framebuffer", "shader-module", "command-pool", "bindings-pool"];
 
+    /// <summary>The refusal code every armed device loss's <see cref="DeviceLostException"/> message starts with.</summary>
+    public const string LossRefusalCode = "GPU_DEVICE_LOSS_FAULT";
+
     // Per kind: the one-based creation number the armed fault fails, or zero when none is armed.
     private readonly long[] m_armed = new long[KindCount];
     private readonly Lock m_gate = new();
     private readonly long[] m_seen = new long[KindCount];
+
+    // Frames counted since the last disarm, and the one-based frame the armed loss fires on, or zero.
+    private long m_framesSeen;
+    private long m_lossArmed;
+    private long m_revision;
 
     /// <summary>Gets every kind, in declaration order.</summary>
     public static ReadOnlySpan<GpuCreationKind> Kinds => [
@@ -160,13 +171,91 @@ public sealed class GpuCreationFaults {
 
         lock (m_gate) {
             m_armed[((int)kind)] = (m_seen[((int)kind)] + nth);
+            m_revision++;
         }
     }
-    /// <summary>Clears every armed fault and every kind's count of creations seen.</summary>
+    /// <summary>Arms a device loss on the <paramref name="nth"/> frame a GPU host produces from now, replacing any loss
+    /// already armed: the host's frame throws <see cref="DeviceLostException"/> (<see cref="ThrowIfLossDue"/>) and
+    /// recovers through its device-loss policy exactly as from a real loss, on a device that is still healthy.</summary>
+    /// <param name="nth">The one-based number, counted from now, of the frame that loses the device: 1 loses the
+    /// next.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nth"/> is less than 1.</exception>
+    public void ArmLoss(int nth = 1) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: 1,
+            value: nth
+        );
+
+        lock (m_gate) {
+            m_lossArmed = (m_framesSeen + nth);
+            m_revision++;
+        }
+    }
+    /// <summary>Clears every armed fault, the armed loss, every kind's count of creations seen and the count of frames
+    /// seen.</summary>
     public void Disarm() {
         lock (m_gate) {
             Array.Clear(array: m_armed);
             Array.Clear(array: m_seen);
+            m_framesSeen = 0L;
+            m_lossArmed = 0L;
+            m_revision++;
+        }
+    }
+    /// <summary>Counts one frame a GPU host is about to produce, and throws when it is the frame the armed loss fires
+    /// on, clearing the loss as it fires. A host calls this once per frame, inside the frame body its device-loss
+    /// policy guards.</summary>
+    /// <exception cref="DeviceLostException">This is the frame the armed loss fires on.</exception>
+    public void ThrowIfLossDue() {
+        long fired;
+
+        lock (m_gate) {
+            var seen = ++m_framesSeen;
+
+            if (m_lossArmed != seen) {
+                return;
+            }
+
+            m_lossArmed = 0L;
+            m_revision++;
+            fired = seen;
+        }
+
+        throw new DeviceLostException(message: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"{LossRefusalCode}: gpu.faults lost the device on frame {fired}, counted since the faults were last disarmed."
+        ));
+    }
+    /// <summary>Reads how many frames remain before the armed loss fires.</summary>
+    /// <param name="remaining">The one-based number, counted from now, of the frame that loses the device: 1 is the
+    /// next; zero when none is armed.</param>
+    /// <returns><see langword="true"/> when a loss is armed.</returns>
+    public bool TryGetArmedLoss(out long remaining) {
+        lock (m_gate) {
+            remaining = ((m_lossArmed == 0L)
+                ? 0L
+                : (m_lossArmed - m_framesSeen)
+            );
+
+            return (m_lossArmed != 0L);
+        }
+    }
+    /// <summary>Gets how many frames GPU hosts have counted since the faults were last disarmed.</summary>
+    public long FramesSeen {
+        get {
+            lock (m_gate) {
+                return m_framesSeen;
+            }
+        }
+    }
+    /// <summary>Gets a number that changes whenever the faults do: an arm, a disarm, or a fault or loss that fires and
+    /// clears. A consumer that stays refused until one of its recorded inputs changes records this as one of them, so
+    /// the operator's arming or clearing of a fault is a change it retries on.</summary>
+    public long Revision {
+        get {
+            lock (m_gate) {
+                return m_revision;
+            }
         }
     }
 
@@ -183,6 +272,7 @@ public sealed class GpuCreationFaults {
             }
 
             m_armed[((int)kind)] = 0L;
+            m_revision++;
             fired = seen;
         }
 

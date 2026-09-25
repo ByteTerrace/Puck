@@ -16,7 +16,8 @@ namespace Puck.Launcher.Tests;
 /// resources (which refuses an armed capture as <see cref="CaptureRequestSlot.DeviceLostReason"/>), and then rebuilds
 /// the device, retrying while it is absent within the reacquire budget. The windowed host rebuilds through its presenter
 /// (<see cref="PresenterDeviceRebuild"/>), the offscreen host through the <see cref="IDeviceRebuild"/> its activation
-/// registers, and a real offscreen host is run over a root whose first frame loses the device. No GPU is involved; the
+/// registers, and a real offscreen host is run over a root whose first frame loses the device. A run that gives up releases
+/// the tree and refuses the armed capture first, the same as one that recovers. No GPU is involved; the
 /// clock the budget is measured on is manual.
 /// </summary>
 public sealed class DeviceLossRecoveryLawTests {
@@ -111,9 +112,13 @@ public sealed class DeviceLossRecoveryLawTests {
             rebuild: rig.Rebuild
         ));
     }
+    /// <summary>A host with nothing to rebuild through ends the run, but only after the tree is drained and released,
+    /// so a capture armed at the loss is refused with the device-loss reason rather than left to end unserved or to meet
+    /// a disposed tree.</summary>
     [Fact]
-    public void AHostWithNothingToRebuildThroughEndsTheRunWithoutReleasingAnything() {
+    public async Task AHostWithNothingToRebuildThroughReleasesTheTreeAndRefusesTheArmedCaptureBeforeEndingTheRun() {
         var rig = new Rig();
+        var request = rig.Root.Arm();
 
         var recovered = rig.Recovery.TryRecover(
             deviceLost: new DeviceLostException(message: "removed"),
@@ -121,8 +126,50 @@ public sealed class DeviceLossRecoveryLawTests {
         );
 
         Assert.False(condition: recovered);
-        Assert.Empty(collection: rig.Log);
+        Assert.Equal(
+            actual: rig.Log,
+            expected: ["drain", "release"]
+        );
         _ = Assert.Single(collection: rig.Lines);
+        Assert.Equal(
+            actual: Assert.IsType<DeviceLostException>(@object: (await request.Completion).Error).Message,
+            expected: CaptureRequestSlot.DeviceLostReason
+        );
+    }
+    /// <summary>The loss past the consecutive cap ends the run the same way: drained, released and the armed capture
+    /// refused, with no rebuild attempted.</summary>
+    [Fact]
+    public async Task TheLossPastTheCapReleasesTheTreeAndRefusesTheArmedCaptureWithoutARebuild() {
+        var rig = new Rig();
+
+        for (var loss = 0; (loss < DeviceLossRecovery.MaxConsecutiveRecoveries); loss++) {
+            Assert.True(condition: rig.Recovery.TryRecover(
+                deviceLost: new DeviceLostException(message: "removed"),
+                rebuild: rig.Rebuild
+            ));
+        }
+
+        var request = rig.Root.Arm();
+        var rebuilds = rig.Rebuild.Calls;
+
+        rig.Log.Clear();
+
+        Assert.False(condition: rig.Recovery.TryRecover(
+            deviceLost: new DeviceLostException(message: "removed"),
+            rebuild: rig.Rebuild
+        ));
+        Assert.Equal(
+            actual: rig.Log,
+            expected: ["drain", "release"]
+        );
+        Assert.Equal(
+            actual: rig.Rebuild.Calls,
+            expected: rebuilds
+        );
+        Assert.Equal(
+            actual: Assert.IsType<DeviceLostException>(@object: (await request.Completion).Error).Message,
+            expected: CaptureRequestSlot.DeviceLostReason
+        );
     }
     [Fact]
     public void TheWindowedHostRebuildsThroughItsPresenterOnTheWindowsSurface() {
@@ -189,6 +236,55 @@ public sealed class DeviceLossRecoveryLawTests {
 
         Assert.Equal(
             actual: refusal.Message,
+            expected: CaptureRequestSlot.DeviceLostReason
+        );
+    }
+
+    /// <summary>The operator's <c>gpu.faults lose 2</c>: the offscreen host counts each frame against the faults, the
+    /// second loses the device on a healthy root, and the host recovers through its registered rebuild exactly as from
+    /// a real loss, refusing the capture armed at it, and renders on.</summary>
+    [Fact]
+    public async Task AnArmedLossLosesTheDeviceOnItsFrameAndTheOffscreenHostRecovers() {
+        var log = new List<string>();
+        var root = new ArmedRoot(log: log);
+        var request = root.Arm();
+        var rebuild = new ScriptedRebuild(
+            absentRebuilds: 0,
+            log: log
+        );
+        var faults = new GpuCreationFaults();
+        var builder = Host.CreateApplicationBuilder(settings: new HostApplicationBuilderSettings {
+            DisableDefaults = true,
+        });
+
+        faults.ArmLoss(nth: 2);
+        builder.Logging.ClearProviders();
+        builder.Services.AddSingleton(implementationInstance: new LauncherOptions {
+            ExitAfter = TimeSpan.FromMilliseconds(value: 300),
+        });
+        builder.Services.AddSingleton(implementationInstance: new OffscreenRenderOptions(
+            Height: 32U,
+            Width: 32U
+        ));
+        builder.Services.AddSingleton<IRenderNode>(implementationInstance: root);
+        builder.Services.AddSingleton<IDeviceRebuild>(implementationInstance: rebuild);
+        builder.Services.AddSingleton(implementationInstance: faults);
+        builder.Services.AddLauncherOffscreenTerminal();
+
+        using var host = builder.Build();
+        var pump = host.Services.GetServices<IHostedService>().OfType<OffscreenTickHostedService>().Single();
+
+        await WindowedHostFixture.RunAsync(host: host);
+
+        Assert.False(condition: pump.ExecuteTask!.IsFaulted);
+        Assert.Equal(
+            actual: log,
+            expected: ["release", "rebuild"]
+        );
+        Assert.False(condition: faults.TryGetArmedLoss(remaining: out _));
+        Assert.True(condition: (faults.FramesSeen > 2L));
+        Assert.Equal(
+            actual: Assert.IsType<DeviceLostException>(@object: (await request.Completion).Error).Message,
             expected: CaptureRequestSlot.DeviceLostReason
         );
     }

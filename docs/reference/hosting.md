@@ -198,6 +198,28 @@ rebuilds on the hidden window's surface, and on Direct3D 12 the device context
 is recreated with no swap chain. More than eight losses with no frame between
 them, a device that does not return in time, or a host with nothing to rebuild
 through ends the run; the windowed host closes, and the offscreen host faults.
+A run that ends has still drained and released the render tree first, so every
+capture armed at the loss is refused by name rather than left unserved.
+
+On Direct3D 12 both hosts follow one retry rule, in
+`DirectXDeviceContext.Recreate`: a rebuild that fails in Direct3D 12 itself,
+the device's creation or the windowed host's new swap chain, has not got its
+device back yet and is retried within the budget; any other failure ends the
+recovery. Every call a removal can reach on a frame or capture path, the
+command allocator, list and committed-resource creates included, answers
+through `DirectXCommandCalls`, so a removed device surfaces as the neutral
+device loss rather than a `COMException` the policy never sees. A surface
+upload, readback or import stays on the device it first created its objects on
+(`DirectXDeviceOwnership`, the peer of `VulkanDeviceOwnership`): its owner
+releases it before the device goes, and a holder that outlives a loss refuses
+the replacement device and its own late release by name.
+
+The operator's `gpu.faults lose [<n>]` loses the device on the nth frame a GPU
+host produces from then on, on a healthy GPU: each host counts its frames
+against the faults inside the frame body the policy guards, and the armed frame
+throws the device loss there, so the recovery runs exactly as for a real one.
+The `device-loss` and `device-loss-windowed` canaries run it on both backends
+with a capture armed at the loss.
 
 For hosts that parallelize CPU stepping, `ISteppableRenderNode` divides the
 work into three phases:

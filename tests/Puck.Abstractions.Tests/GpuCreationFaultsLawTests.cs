@@ -354,4 +354,84 @@ public sealed class GpuCreationFaultsLawTests {
             }
         }
     }
+    /// <summary>An armed loss fires exactly once, on the nth frame a host counts from the moment it was armed, as a
+    /// <see cref="DeviceLostException"/> naming its refusal code and frame; frames counted before the arming do not
+    /// count toward it, and every frame after it passes.</summary>
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [Theory]
+    public void AnArmedLossFiresExactlyOnceOnTheNthFrameCountedFromItsArming(int nth) {
+        var faults = new GpuCreationFaults();
+
+        faults.ThrowIfLossDue();
+        faults.ThrowIfLossDue();
+        faults.ArmLoss(nth: nth);
+        Assert.True(condition: faults.TryGetArmedLoss(remaining: out var remaining));
+        Assert.Equal(
+            actual: remaining,
+            expected: nth
+        );
+
+        for (var frame = 1; (frame < nth); frame++) {
+            faults.ThrowIfLossDue();
+        }
+
+        var loss = Assert.Throws<DeviceLostException>(testCode: faults.ThrowIfLossDue);
+
+        Assert.Equal(
+            actual: loss.Message,
+            expected: $"{GpuCreationFaults.LossRefusalCode}: gpu.faults lost the device on frame {(2 + nth)}, counted since the faults were last disarmed."
+        );
+        Assert.False(condition: faults.TryGetArmedLoss(remaining: out _));
+        faults.ThrowIfLossDue();
+        Assert.Equal(
+            actual: faults.FramesSeen,
+            expected: (3L + nth)
+        );
+
+        faults.Disarm();
+
+        Assert.Equal(
+            actual: faults.FramesSeen,
+            expected: 0L
+        );
+    }
+    /// <summary>The revision changes on every arm, loss arm and disarm, and when a creation fault or a loss fires and
+    /// clears, and on nothing else: a creation or frame that fires nothing leaves it where it was.</summary>
+    [Fact]
+    public void TheRevisionChangesOnEveryArmDisarmAndFiringAndOnNothingElse() {
+        var gpu = new FakeGpuDevice(countCalls: true);
+        var faults = new GpuCreationFaults();
+        var services = GpuCreationFaults.Wrap(
+            faults: faults,
+            services: gpu.Services
+        );
+        var revisions = new List<long> { faults.Revision };
+
+        void Note(bool changes) {
+            var revision = faults.Revision;
+
+            Assert.Equal(
+                actual: (revision != revisions[^1]),
+                expected: changes
+            );
+            revisions.Add(item: revision);
+        }
+
+        faults.Arm(kind: GpuCreationKind.CommandPool, nth: 2);
+        Note(changes: true);
+        _ = services.CommandPoolFactory.Create();
+        Note(changes: false);
+        _ = Assert.Throws<GpuCreationFaultException>(testCode: () => services.CommandPoolFactory.Create());
+        Note(changes: true);
+        faults.ArmLoss(nth: 2);
+        Note(changes: true);
+        faults.ThrowIfLossDue();
+        Note(changes: false);
+        _ = Assert.Throws<DeviceLostException>(testCode: faults.ThrowIfLossDue);
+        Note(changes: true);
+        faults.Disarm();
+        Note(changes: true);
+    }
 }

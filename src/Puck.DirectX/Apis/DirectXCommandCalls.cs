@@ -7,11 +7,33 @@ using Windows.Win32.Graphics.Direct3D12;
 
 namespace Puck.DirectX.Apis;
 
-/// <summary>Answers the Direct3D 12 calls a device removal reaches with their <c>HRESULT</c>: mapping a resource,
-/// resetting and closing a command list, signalling a queue and waiting on a fence. A removed device fails each of
-/// them with <c>DXGI_ERROR_DEVICE_REMOVED</c>, <c>_RESET</c> or <c>_HUNG</c>, which is an answer to translate, never an
-/// exception from the generated wrapper.</summary>
+/// <summary>Answers the Direct3D 12 calls a device removal reaches with their <c>HRESULT</c>: creating a command
+/// allocator, a command list and a committed resource, mapping a resource, resetting and closing a command list,
+/// signalling a queue and waiting on a fence. A removed device fails each of them with <c>DXGI_ERROR_DEVICE_REMOVED</c>,
+/// <c>_RESET</c> or <c>_HUNG</c>, which is an answer to translate, never an exception from the generated
+/// wrapper.</summary>
 public unsafe interface IDirectXCommandCalls {
+    /// <summary>Asks <c>ID3D12Device::CreateCommandAllocator</c>.</summary>
+    /// <param name="type">The command list type the allocator serves.</param>
+    /// <param name="allocator">Receives the allocator on success, owned by the caller.</param>
+    /// <returns>The call's result.</returns>
+    HRESULT CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator** allocator);
+    /// <summary>Asks <c>ID3D12Device::CreateCommandList</c> on node zero with no initial pipeline state; the list is
+    /// created open for recording.</summary>
+    /// <param name="type">The command list type.</param>
+    /// <param name="allocator">The allocator the list records into.</param>
+    /// <param name="commandList">Receives the list on success, owned by the caller.</param>
+    /// <returns>The call's result.</returns>
+    HRESULT CreateCommandList(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator* allocator, ID3D12GraphicsCommandList** commandList);
+    /// <summary>Asks <c>ID3D12Device::CreateCommittedResource</c>.</summary>
+    /// <param name="heapProperties">The heap the resource lives on.</param>
+    /// <param name="heapFlags">The heap's flags.</param>
+    /// <param name="description">The resource's description.</param>
+    /// <param name="initialState">The state it is created in.</param>
+    /// <param name="clearValue">The optimized clear value, or <see langword="null"/>.</param>
+    /// <param name="resource">Receives the resource on success, owned by the caller.</param>
+    /// <returns>The call's result.</returns>
+    HRESULT CreateCommittedResource(D3D12_HEAP_PROPERTIES* heapProperties, D3D12_HEAP_FLAGS heapFlags, D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE* clearValue, ID3D12Resource** resource);
     /// <summary>Asks <c>ID3D12Resource::Map</c> for subresource zero, reading nothing.</summary>
     /// <param name="resource">The resource mapped.</param>
     /// <param name="data">Receives the mapped pointer on success.</param>
@@ -59,8 +81,12 @@ public unsafe interface IDirectXCommandCalls {
 [SupportedOSPlatform("windows10.0.10240")]
 public readonly unsafe struct DirectXDeviceCommandCalls(ID3D12Device* device) : IDirectXCommandCalls {
     // The slots count IUnknown's three methods, ID3D12Object's four and ID3D12DeviceChild's one; a command list adds
-    // ID3D12CommandList's GetType before its own methods.
+    // ID3D12CommandList's GetType before its own methods. The device's own slots follow IUnknown's and ID3D12Object's,
+    // in the order DirectXConstants' device slots (CheckFeatureSupport 13, GetDeviceRemovedReason 37) are counted.
     private const int AllocatorResetSlot = 8;
+    private const int DeviceCreateCommandAllocatorSlot = 9;
+    private const int DeviceCreateCommandListSlot = 12;
+    private const int DeviceCreateCommittedResourceSlot = 27;
     private const int FenceCompletedValueSlot = 8;
     private const int FenceSetEventSlot = 9;
     private const int ListCloseSlot = 9;
@@ -79,6 +105,46 @@ public readonly unsafe struct DirectXDeviceCommandCalls(ID3D12Device* device) : 
 
     private static void** VtableOf(void* instance) => *((void***)instance);
 
+    /// <inheritdoc/>
+    public HRESULT CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator** allocator) {
+        var iid = ID3D12CommandAllocator.IID_Guid;
+
+        return ((delegate* unmanaged[Stdcall]<ID3D12Device*, D3D12_COMMAND_LIST_TYPE, Guid*, void**, HRESULT>)VtableOf(instance: device)[DeviceCreateCommandAllocatorSlot])(
+            device,
+            type,
+            &iid,
+            ((void**)allocator)
+        );
+    }
+    /// <inheritdoc/>
+    public HRESULT CreateCommandList(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator* allocator, ID3D12GraphicsCommandList** commandList) {
+        var iid = ID3D12GraphicsCommandList.IID_Guid;
+
+        return ((delegate* unmanaged[Stdcall]<ID3D12Device*, uint, D3D12_COMMAND_LIST_TYPE, ID3D12CommandAllocator*, ID3D12PipelineState*, Guid*, void**, HRESULT>)VtableOf(instance: device)[DeviceCreateCommandListSlot])(
+            device,
+            0U,
+            type,
+            allocator,
+            null,
+            &iid,
+            ((void**)commandList)
+        );
+    }
+    /// <inheritdoc/>
+    public HRESULT CreateCommittedResource(D3D12_HEAP_PROPERTIES* heapProperties, D3D12_HEAP_FLAGS heapFlags, D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE* clearValue, ID3D12Resource** resource) {
+        var iid = ID3D12Resource.IID_Guid;
+
+        return ((delegate* unmanaged[Stdcall]<ID3D12Device*, D3D12_HEAP_PROPERTIES*, D3D12_HEAP_FLAGS, D3D12_RESOURCE_DESC*, D3D12_RESOURCE_STATES, D3D12_CLEAR_VALUE*, Guid*, void**, HRESULT>)VtableOf(instance: device)[DeviceCreateCommittedResourceSlot])(
+            device,
+            heapProperties,
+            heapFlags,
+            description,
+            initialState,
+            clearValue,
+            &iid,
+            ((void**)resource)
+        );
+    }
     /// <inheritdoc/>
     public HRESULT Map(ID3D12Resource* resource, void** data) =>
         ((delegate* unmanaged[Stdcall]<ID3D12Resource*, uint, D3D12_RANGE*, void**, HRESULT>)VtableOf(instance: resource)[ResourceMapSlot])(
@@ -134,6 +200,81 @@ public readonly unsafe struct DirectXDeviceCommandCalls(ID3D12Device* device) : 
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public static unsafe class DirectXCommandCalls {
+    /// <summary>Creates a command allocator and a command list recording into it, the list open for recording. When the
+    /// list's creation fails the allocator is released before the failure propagates.</summary>
+    /// <typeparam name="TCalls">The calls' answerer.</typeparam>
+    /// <param name="calls">The calls.</param>
+    /// <param name="type">The command list type.</param>
+    /// <param name="allocator">Receives the allocator, owned by the caller.</param>
+    /// <returns>The command list, owned by the caller.</returns>
+    /// <exception cref="DeviceLostException">The device was removed.</exception>
+    /// <exception cref="DirectXException">A creation failed for another reason.</exception>
+    public static ID3D12GraphicsCommandList* CreateCommandList<TCalls>(TCalls calls, D3D12_COMMAND_LIST_TYPE type, out ID3D12CommandAllocator* allocator) where TCalls : IDirectXCommandCalls {
+        ID3D12CommandAllocator* created = null;
+        ID3D12GraphicsCommandList* commandList = null;
+
+        calls.CreateCommandAllocator(
+            allocator: &created,
+            type: type
+        ).ThrowIfFailed(
+            calls: calls,
+            operation: "ID3D12Device::CreateCommandAllocator"
+        );
+
+        try {
+            calls.CreateCommandList(
+                allocator: created,
+                commandList: &commandList,
+                type: type
+            ).ThrowIfFailed(
+                calls: calls,
+                operation: "ID3D12Device::CreateCommandList"
+            );
+        } catch {
+            if (created is not null) {
+                _ = created->Release();
+            }
+
+            throw;
+        }
+
+        allocator = created;
+
+        return commandList;
+    }
+    /// <summary>Creates a committed resource.</summary>
+    /// <typeparam name="TCalls">The calls' answerer.</typeparam>
+    /// <param name="calls">The calls.</param>
+    /// <param name="heapProperties">The heap the resource lives on.</param>
+    /// <param name="heapFlags">The heap's flags.</param>
+    /// <param name="description">The resource's description.</param>
+    /// <param name="initialState">The state it is created in.</param>
+    /// <param name="clearValue">The optimized clear value, or <see langword="null"/>.</param>
+    /// <returns>The resource, owned by the caller.</returns>
+    /// <exception cref="DeviceLostException">The device was removed.</exception>
+    /// <exception cref="DirectXException">The creation failed for another reason, such as exhausted memory.</exception>
+    public static ID3D12Resource* CreateCommittedResource<TCalls>(TCalls calls, in D3D12_HEAP_PROPERTIES heapProperties, D3D12_HEAP_FLAGS heapFlags, in D3D12_RESOURCE_DESC description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE? clearValue) where TCalls : IDirectXCommandCalls {
+        ID3D12Resource* resource = null;
+        var heap = heapProperties;
+        var resourceDescription = description;
+        var clear = clearValue.GetValueOrDefault();
+
+        calls.CreateCommittedResource(
+            clearValue: (clearValue.HasValue
+                ? &clear
+                : null),
+            description: &resourceDescription,
+            heapFlags: heapFlags,
+            heapProperties: &heap,
+            initialState: initialState,
+            resource: &resource
+        ).ThrowIfFailed(
+            calls: calls,
+            operation: "ID3D12Device::CreateCommittedResource"
+        );
+
+        return resource;
+    }
     /// <summary>Maps subresource zero of a resource for writing.</summary>
     /// <typeparam name="TCalls">The calls' answerer.</typeparam>
     /// <param name="calls">The calls.</param>

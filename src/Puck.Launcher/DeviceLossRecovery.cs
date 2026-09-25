@@ -41,7 +41,8 @@ public sealed record PresenterDeviceRebuild(IDeviceLostRecoverable Presenter, Na
 /// through an <see cref="IDeviceRebuild"/>, retrying every <see cref="ReacquireBackoff"/> while the adapter is absent,
 /// for up to <see cref="ReacquireBudget"/>. The fixed-step simulation is never touched. A host gives up when there is
 /// nothing to rebuild through, when the device does not return within the budget, or when
-/// <see cref="MaxConsecutiveRecoveries"/> losses follow one another with no frame produced between them.
+/// <see cref="MaxConsecutiveRecoveries"/> losses follow one another with no frame produced between them; it has drained
+/// and released the tree, refusing every armed capture, before it gives up, the same as when it recovers.
 /// </summary>
 public sealed class DeviceLossRecovery {
     /// <summary>The prefix of the console line written to standard error for each loss: <c>[device-lost] reason
@@ -121,32 +122,28 @@ public sealed class DeviceLossRecovery {
             handler: $"{LossLinePrefix} reason 0x{unchecked((uint)deviceLost.ReasonCode):X8}; recovering (attempt {m_streak}/{MaxConsecutiveRecoveries})"
         ));
 
+        var givesUp = ((rebuild is null) || (m_streak > MaxConsecutiveRecoveries));
+
         if (rebuild is null) {
             m_logger.LogError(
                 exception: deviceLost,
                 message: "Graphics device lost (reason 0x{Reason:X}), and this host has no way to rebuild it.",
                 deviceLost.ReasonCode
             );
-
-            return false;
-        }
-
-        if (m_streak > MaxConsecutiveRecoveries) {
+        } else if (givesUp) {
             m_logger.LogError(
                 exception: deviceLost,
                 message: "Graphics device-loss recovery failed {Count} times in a row (reason 0x{Reason:X}); ending the run.",
                 MaxConsecutiveRecoveries,
                 deviceLost.ReasonCode
             );
-
-            return false;
+        } else {
+            m_logger.LogWarning(
+                exception: deviceLost,
+                message: "Graphics device lost (reason 0x{Reason:X}); recovering.",
+                deviceLost.ReasonCode
+            );
         }
-
-        m_logger.LogWarning(
-            exception: deviceLost,
-            message: "Graphics device lost (reason 0x{Reason:X}); recovering.",
-            deviceLost.ReasonCode
-        );
 
         // A still-working device (a reset, or the synthetic loss) must finish its work before anything on it is
         // destroyed; a removed one has nothing left to finish, and the drain says so by throwing, which is tolerated.
@@ -154,8 +151,14 @@ public sealed class DeviceLossRecovery {
             deviceContext.TryWaitIdle();
         }
 
-        // Every object on the device is released before the device goes; the rebuild below replaces the device in place.
+        // Every object on the device is released before the device goes, and every capture armed at the loss is refused,
+        // whether or not the run goes on: a run that gives up must not leave a capture to end as unserved or to meet a
+        // disposed tree. The rebuild below replaces the device in place.
         m_root.OnDeviceLost();
+
+        if ((rebuild is null) || givesUp) {
+            return false;
+        }
 
         var deadline = (m_time.GetTimestamp() + ((long)(ReacquireBudget.TotalSeconds * m_time.TimestampFrequency)));
         var waited = false;

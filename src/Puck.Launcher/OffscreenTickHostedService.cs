@@ -27,6 +27,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
     private readonly IHostApplicationLifetime m_applicationLifetime;
     private readonly BufferedConsoleOutput m_bufferedOutput;
     private readonly IDeviceRebuild? m_deviceRebuild;
+    private readonly GpuCreationFaults? m_faults;
     private readonly IInputClock m_inputClock;
     private readonly StandardInputBacklog m_inputBacklog;
     private readonly InputRouter? m_inputRouter;
@@ -59,11 +60,13 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         TextCommandSource textSource,
         TerminalControl terminal,
         StandardInputBacklog inputBacklog,
-        IEnumerable<IDeviceRebuild> deviceRebuilds
+        IEnumerable<IDeviceRebuild> deviceRebuilds,
+        IEnumerable<GpuCreationFaults> faults
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
         ArgumentNullException.ThrowIfNull(deviceRebuilds);
+        ArgumentNullException.ThrowIfNull(faults);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(inputRouters);
         ArgumentNullException.ThrowIfNull(logger);
@@ -83,6 +86,11 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         m_deviceRebuild = LauncherHostLoop.SingleOrDefault(
             items: deviceRebuilds,
             name: nameof(IDeviceRebuild),
+            hostDescription: "offscreen host"
+        );
+        m_faults = LauncherHostLoop.SingleOrDefault(
+            items: faults,
+            name: nameof(GpuCreationFaults),
             hostDescription: "offscreen host"
         );
         m_inputClock = inputClock;
@@ -203,6 +211,8 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 // A loss follows the windowed host's policy: captures armed at it are refused by name, the device is
                 // rebuilt in place, and the loop steps on. A loss it cannot recover from ends the run as a fault.
                 try {
+                    // The operator's gpu.faults lose loses the device on its armed frame, here, like a real loss.
+                    m_faults?.ThrowIfLossDue();
                     _ = m_root.ProduceFrame(context: in frameContext);
                     deviceLoss.NoteFrameProduced();
                 } catch (DeviceLostException deviceLost) {
