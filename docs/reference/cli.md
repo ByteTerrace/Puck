@@ -637,8 +637,8 @@ break, and nothing wider:
   with the documents' own readers: a world reaches the layers it composes,
   the neighbour worlds its adjacencies name and the `.graph.json` documents
   its `views.pipelines` and `views.graphs` rows name, and a graph document
-  reaches the pass shaders it declares, each resolved as the host resolves
-  it. A world is read composed and parsed but not validated, so a world whose
+  reaches the pass shaders it declares and every file they include, each
+  resolved as the host resolves it. A world is read composed and parsed but not validated, so a world whose
   adjacencies or extensions need the host's resolvers still reaches them.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
 - A file no canary can execute is placed through the indexed C# sources it

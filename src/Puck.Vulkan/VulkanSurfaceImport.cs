@@ -9,7 +9,10 @@ namespace Puck.Vulkan;
 /// GPU memory — without any CPU round-trip: it imports the shared NT handle into a Vulkan image bound to the
 /// same device memory, then hands back a shader-readable view. The image is imported once (the handle is stable
 /// across frames) and transitioned to the shader-read-only layout. This is the zero-copy alternative to
-/// <see cref="VulkanSurfaceUpload"/>; producer/consumer are ordered by the producer's GPU fence.
+/// <see cref="VulkanSurfaceUpload"/>. It imports no fence or semaphore, so nothing orders the producer's writes
+/// against a Vulkan read on the GPU: today's producers finish each write with a CPU wait on their own device before
+/// publishing it, and a consumer holds the written slot through a CPU lease until its submission retires. Rendering
+/// plan P12b-4 adds a shared fence that Vulkan waits on as a timeline semaphore.
 /// </summary>
 public sealed class VulkanSurfaceImport : IDisposable {
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
@@ -92,7 +95,8 @@ public sealed class VulkanSurfaceImport : IDisposable {
         m_sharedHandle = 0;
     }
     // The shared image is produced by Direct3D 12 (which has no Vulkan layout). Bring it into the shader-read
-    // layout once; the producer's per-frame writes land in the same memory and are ordered by its GPU fence.
+    // layout once; the producer's per-frame writes land in the same memory, ordered only by the producer's CPU wait
+    // before it publishes a write and the consumer's CPU lease on what it samples (see the type's remarks).
     private void TransitionToShaderReadable(VulkanLogicalDevice device) {
         var commandBufferHandle = m_commandResources!.CommandBufferHandles[0];
 
