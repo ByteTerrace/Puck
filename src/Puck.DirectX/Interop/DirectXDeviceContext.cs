@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -48,7 +49,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     public DirectXDeviceContext()
         : this(
         adapterLuid: 0,
-        deviceApi: new Apis.DirectXNativeDeviceApi(),
+        deviceApi: new DirectXNativeDeviceApi(),
         minimumFeatureLevel: DirectXFeatureLevel.Level110
     ) {
     }
@@ -225,32 +226,41 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         // The device bring-up. No Direct3D 12 runtime, no adapter at the feature level, a device creation the driver
         // refuses, or a device below the Shader Model floor all mean this host has no usable Direct3D 12 device; a
-        // removed device during creation stays DeviceLostException.
+        // removed device during creation stays DeviceLostException. Any failure releases everything the bring-up
+        // created, so the next use starts it again rather than finding a device with no queue.
         try {
-            var adapterLuid = (m_adapterLuidProvider?.Invoke() ?? m_adapterLuid);
+            BringUp();
+        } catch (Exception exception) {
+            ReleaseDeviceObjects();
+            m_capabilities = null;
+            m_identity = null;
+            m_memoryProfile = default;
 
-            m_device = ((0 != adapterLuid)
-                ? m_deviceApi.CreateDevice(
-                    adapterLuid: adapterLuid,
-                    minimumFeatureLevel: FeatureLevel
-                )
-                : CreateDefaultDevice(minimumFeatureLevel: FeatureLevel)
-            );
+            if (exception is DirectXException or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException) {
+                throw new GpuDeviceUnavailableException(
+                    backend: "directx",
+                    innerException: exception,
+                    reason: exception.Message
+                );
+            }
 
-            EnsureShaderModelFloor(deviceHandle: m_device.Handle);
-            m_identity = m_deviceApi.GetDeviceIdentity(deviceHandle: m_device.Handle);
-            m_memoryProfile = m_deviceApi.GetMemoryProfile(deviceHandle: m_device.Handle);
-            m_capabilities = m_deviceApi.GetDeviceCapabilities(deviceHandle: m_device.Handle);
-        } catch (Exception exception) when ((exception is DirectXException or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)) {
-            m_device?.Dispose();
-            m_device = null;
-
-            throw new GpuDeviceUnavailableException(
-                backend: "directx",
-                innerException: exception,
-                reason: exception.Message
-            );
+            throw;
         }
+    }
+    private void BringUp() {
+        var adapterLuid = (m_adapterLuidProvider?.Invoke() ?? m_adapterLuid);
+
+        m_device = ((0 != adapterLuid)
+            ? m_deviceApi.CreateDevice(
+                adapterLuid: adapterLuid,
+                minimumFeatureLevel: FeatureLevel
+            )
+            : CreateDefaultDevice(minimumFeatureLevel: FeatureLevel)
+        );
+        m_identity = m_deviceApi.GetDeviceIdentity(deviceHandle: m_device.Handle);
+        m_memoryProfile = m_deviceApi.GetMemoryProfile(deviceHandle: m_device.Handle);
+        m_capabilities = m_deviceApi.GetDeviceCapabilities(deviceHandle: m_device.Handle);
+        EnsureShaderModelFloor(deviceHandle: m_device.Handle);
 
         // The info queue (present only when the debug layer loaded) lets DrainDebugMessages surface validation
         // messages to the console instead of only OutputDebugString.
@@ -303,12 +313,43 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             PipelineLibrary = DirectXPipelineLibrary.Create(
                 deviceHandle: m_device.Handle,
                 file: GpuPipelineCacheFile.Open(
-                    identity: m_identity!,
+                    identity: m_identity,
                     store: m_pipelineCacheStore,
                     work: m_pipelineCacheWork
                 )
             );
         }
+    }
+    // Releases the fence, its event, the queue, the info queue, the dispatch signature, the pipeline library and the
+    // device, without a GPU drain, leaving the context with no device.
+    private void ReleaseDeviceObjects() {
+        if (0 != m_idleFence) {
+            _ = ((IUnknown*)m_idleFence)->Release();
+            m_idleFence = 0;
+        }
+
+        if (!m_idleFenceEvent.IsNull) {
+            _ = PInvoke.CloseHandle(hObject: m_idleFenceEvent);
+            m_idleFenceEvent = HANDLE.Null;
+        }
+
+        if (0 != m_commandQueue) {
+            _ = ((IUnknown*)m_commandQueue)->Release();
+            m_commandQueue = 0;
+        }
+
+        if (0 != m_infoQueue) {
+            _ = ((IUnknown*)m_infoQueue)->Release();
+            m_infoQueue = 0;
+        }
+
+        ReleaseDispatchSignature();
+        // Serializing a removed device's library can fail; that is reported, and the file already on disk stays.
+        PipelineLibrary?.Dispose();
+        PipelineLibrary = null;
+        m_device?.Dispose();
+        m_device = null;
+        m_idleFenceValue = 1;
     }
     // The Shader Model 6.6 device floor — the DXIL peer of the Vulkan SPIR-V 1.6 floor enforced in
     // VulkanPhysicalDeviceSelector. Puck's DXIL kernels are compiled at -T *_6_6, so a device below SM 6.6 would reject
@@ -316,38 +357,17 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     // to the driver's actual support, and a runtime too old to recognize 6.6 fails the query outright — both are below
     // the floor. All four supported GPUs clear SM 6.6 on current drivers (the RTX 4070 reaches 6.7/6.8).
     private static void EnsureShaderModelFloor(nint deviceHandle) {
-        const D3D_SHADER_MODEL RequiredShaderModel = D3D_SHADER_MODEL.D3D_SHADER_MODEL_6_6;
-
-        var device = ((ID3D12Device*)deviceHandle);
-        var shaderModel = new D3D12_FEATURE_DATA_SHADER_MODEL {
-            HighestShaderModel = RequiredShaderModel,
-        };
-        var queried = false;
-
-        // CsWin32's friendly CheckFeatureSupport overload throws on a failing HRESULT (E_INVALIDARG on a runtime that
-        // does not recognize the requested model); treat any failure as "below the floor" and fall through to the throw.
-        try {
-            device->CheckFeatureSupport(
-                Feature: D3D12_FEATURE.D3D12_FEATURE_SHADER_MODEL,
-                FeatureSupportDataSize: ((uint)sizeof(D3D12_FEATURE_DATA_SHADER_MODEL)),
-                pFeatureSupportData: &shaderModel
-            );
-            queried = true;
-        } catch {
-            // Swallow — handled by the floor check below.
-        }
-
-        if (
-            queried &&
-            (shaderModel.HighestShaderModel >= RequiredShaderModel)
-        ) {
+        if (DirectXFeatureReads.ReachesShaderModel(
+            reported: out var reported,
+            required: D3D_SHADER_MODEL.D3D_SHADER_MODEL_6_6,
+            support: new DirectXDeviceFeatureSupport(device: ((ID3D12Device*)deviceHandle))
+        )) {
             return;
         }
 
-        var reported = (queried
-            ? $"{(((int)shaderModel.HighestShaderModel) >> 4)}.{((int)shaderModel.HighestShaderModel) & 0xF}"
-            : "unknown (feature query failed)"
-        );
+        if (reported.Length == 0) {
+            reported = "unknown (feature query failed)";
+        }
 
         throw new InvalidOperationException(message:
             ((((string)$"Direct3D 12 device reports Shader Model {reported}, below the required 6.6 floor. Puck's DXIL kernels are compiled at Shader Model 6.6 and cannot load on this device. Puck supports exactly four GPUs — RTX 2060 ") +
@@ -533,33 +553,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             instance: this
         );
 
-        if (0 != m_idleFence) {
-            _ = ((IUnknown*)m_idleFence)->Release();
-            m_idleFence = 0;
-        }
-
-        if (!m_idleFenceEvent.IsNull) {
-            _ = PInvoke.CloseHandle(hObject: m_idleFenceEvent);
-            m_idleFenceEvent = HANDLE.Null;
-        }
-
-        if (0 != m_commandQueue) {
-            _ = ((IUnknown*)m_commandQueue)->Release();
-            m_commandQueue = 0;
-        }
-
-        if (0 != m_infoQueue) {
-            _ = ((IUnknown*)m_infoQueue)->Release();
-            m_infoQueue = 0;
-        }
-
-        ReleaseDispatchSignature();
-        // Serializing a removed device's library can fail; that is reported, and the file already on disk stays.
-        PipelineLibrary?.Dispose();
-        PipelineLibrary = null;
-        m_device?.Dispose();
-        m_device = null;
-        m_idleFenceValue = 1;
+        ReleaseDeviceObjects();
 
         // m_device is now null, so this rebuilds a fresh device + queue + fence + event.
         EnsureCreated();
