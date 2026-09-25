@@ -1269,14 +1269,15 @@ groups from different pools. P7b is 22 commits in four phases, each done when
 its laws pass and `puck parity` holds; the services phase also reads identical
 counts before and after through `puck counters compare`.
 
-Phase 0 needs nothing else, and all of it but part of step 2 has landed:
+Phase 0 needs nothing else, and all of it has landed:
 
 1. Done: no ray-query path or acceleration-structure surface exists, and no
    world or schema names `host.rayQuery`.
-2. The command tables take the proc lookup through their constructors, and a
-   test stands in for the driver there. Still open: `VulkanProcResolver`
-   becomes an instance rather than a static class, and
-   `VulkanDestroyGuardLawTests` stops enumerating the tables by reflection.
+2. Done: `VulkanProcResolver` is an instance the command tables take through
+   their constructors, and `procedures.vulkan` is its counter set, registered
+   once. A test builds one over lookups that stand in for the driver, and
+   `VulkanDestroyGuardLawTests` finds the tables' destroy entry points from the
+   names they resolve rather than by reflection.
 3. Done: a law fails each link of the Vulkan boot chain and holds that
    everything built before it is destroyed once, in reverse.
 4. Done: under `--debug-layers`, Direct3D 12 teardown prints a `[d3d12-debug] live` line

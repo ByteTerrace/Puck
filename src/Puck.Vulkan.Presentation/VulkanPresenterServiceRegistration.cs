@@ -25,16 +25,17 @@ public static class VulkanPresenterServiceRegistration {
     // The key the backend's GpuPipelineCacheWork is registered under, and the name its counts report.
     private const string PipelineCacheBackend = "vulkan";
 
-    // The process's procedure resolutions (VulkanProcResolver.Work), listed once however often the backend is added.
-    private static void AddProcedureWork(IServiceCollection services) {
-        if (services.Any(predicate: static descriptor => ((descriptor.ServiceType == typeof(IWorkCounterSource)) && ReferenceEquals(
-            objA: descriptor.ImplementationInstance,
-            objB: VulkanProcResolver.Work
-        )))) {
+    // The host's one procedure resolver over the loader, and its resolutions as a counter source, registered once
+    // however often the backend is added. Creating the resolver never loads the loader.
+    private static void AddProcedures(IServiceCollection services) {
+        if (services.Any(predicate: static descriptor => (descriptor.ServiceType == typeof(VulkanProcResolver)))) {
             return;
         }
 
-        services.AddSingleton<IWorkCounterSource>(implementationInstance: VulkanProcResolver.Work);
+        var procedures = new VulkanProcResolver();
+
+        services.AddSingleton(implementationInstance: procedures);
+        services.AddSingleton<IWorkCounterSource>(implementationInstance: procedures.Work);
     }
 
     /// <summary>Registers the factories, command-buffer recorder, asset source, and shader loader the
@@ -43,7 +44,7 @@ public static class VulkanPresenterServiceRegistration {
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanFactories(this IServiceCollection services) {
         services.AddGpuPipelineCacheWork(backend: PipelineCacheBackend);
-        AddProcedureWork(services: services);
+        AddProcedures(services: services);
         services.TryAddSingleton<IVulkanInstanceFactory>(implementationFactory: static sp => new VulkanInstanceFactory(instanceApi: sp.GetRequiredService<IVulkanInstanceApi>()));
         services.TryAddSingleton<IVulkanSurfaceFactory>(implementationFactory: static sp => new VulkanSurfaceFactory(surfaceApi: sp.GetRequiredService<IVulkanSurfaceApi>()));
         services.TryAddSingleton<IVulkanPhysicalDeviceSelector>(implementationFactory: static sp => new VulkanPhysicalDeviceSelector(physicalDeviceApi: sp.GetRequiredService<IVulkanPhysicalDeviceApi>()));
@@ -101,6 +102,7 @@ public static class VulkanPresenterServiceRegistration {
     /// <summary>Registers one native API per Vulkan capability the renderer, compositor, and engine use.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanNativeApis(this IServiceCollection services) {
+        AddProcedures(services: services);
         services.TryAddSingleton<IVulkanBufferApi>(implementationFactory: static _ => new VulkanNativeBufferApi());
         services.TryAddSingleton<IVulkanCommandBufferRecordingApi>(implementationFactory: static sp => new VulkanNativeCommandBufferRecordingApi(allocator: sp.GetRequiredService<IAllocator>()));
         services.TryAddSingleton<IVulkanCommandResourcesApi>(implementationFactory: static _ => new VulkanNativeCommandResourcesApi());
@@ -111,8 +113,14 @@ public static class VulkanPresenterServiceRegistration {
         services.TryAddSingleton<IVulkanFramePresentationApi>(implementationFactory: static sp => new VulkanNativeFramePresentationApi(allocator: sp.GetRequiredService<IAllocator>()));
         services.TryAddSingleton<IVulkanFrameSynchronizationApi>(implementationFactory: static _ => new VulkanNativeFrameSynchronizationApi());
         services.TryAddSingleton<IVulkanGraphicsPipelineApi>(implementationFactory: static sp => new VulkanNativeGraphicsPipelineApi(allocator: sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanInstanceApi>(implementationFactory: static sp => new VulkanNativeInstanceApi(allocator: sp.GetRequiredService<IAllocator>()));
-        services.TryAddSingleton<IVulkanLogicalDeviceApi>(implementationFactory: static sp => new VulkanNativeLogicalDeviceApi(allocator: sp.GetRequiredService<IAllocator>()));
+        services.TryAddSingleton<IVulkanInstanceApi>(implementationFactory: static sp => new VulkanNativeInstanceApi(
+            allocator: sp.GetRequiredService<IAllocator>(),
+            procedures: sp.GetRequiredService<VulkanProcResolver>()
+        ));
+        services.TryAddSingleton<IVulkanLogicalDeviceApi>(implementationFactory: static sp => new VulkanNativeLogicalDeviceApi(
+            allocator: sp.GetRequiredService<IAllocator>(),
+            procedures: sp.GetRequiredService<VulkanProcResolver>()
+        ));
         services.TryAddSingleton<IVulkanOffscreenImageApi>(implementationFactory: static _ => new VulkanNativeOffscreenImageApi());
         services.TryAddSingleton<IVulkanPhysicalDeviceApi>(implementationFactory: static sp => new VulkanNativePhysicalDeviceApi(allocator: sp.GetRequiredService<IAllocator>()));
         services.TryAddSingleton<IVulkanRenderPassApi>(implementationFactory: static sp => new VulkanNativeRenderPassApi(allocator: sp.GetRequiredService<IAllocator>()));

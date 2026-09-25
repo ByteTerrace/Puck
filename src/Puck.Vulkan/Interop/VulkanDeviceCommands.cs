@@ -188,23 +188,16 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
     /// <summary>The <c>vkWaitForPresentKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_present_wait</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult> WaitForPresentKhr;
 
-    /// <summary>Resolves every entry point of the device identified by <paramref name="deviceHandle"/> through the
-    /// loader.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle; must be non-zero and must outlive the table.</param>
-    /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
-    /// <exception cref="InvalidOperationException">The device does not expose a required core entry point.</exception>
-    public VulkanDeviceCommands(nint deviceHandle) : this(
-        deviceHandle: deviceHandle,
-        getDeviceProcAddr: VulkanProcResolver.LoaderDeviceProcAddr
-    ) { }
     /// <summary>Resolves every entry point of the device identified by <paramref name="deviceHandle"/> through
-    /// <paramref name="getDeviceProcAddr"/>.</summary>
+    /// <paramref name="procedures"/>.</summary>
     /// <param name="deviceHandle">The native <c>VkDevice</c> handle; must be non-zero and must outlive the table.</param>
-    /// <param name="getDeviceProcAddr">A <c>vkGetDeviceProcAddr</c>-shaped resolver:
-    /// <see cref="VulkanProcResolver.LoaderDeviceProcAddr"/>, or one standing in for the driver.</param>
+    /// <param name="procedures">The resolver the entry points are resolved and counted through: the host's, or one
+    /// standing in for the driver.</param>
     /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="procedures"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The device does not expose a required core entry point.</exception>
-    public VulkanDeviceCommands(nint deviceHandle, delegate* unmanaged[Cdecl]<nint, byte*, nint> getDeviceProcAddr) {
+    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures) {
+        ArgumentNullException.ThrowIfNull(argument: procedures);
         VulkanArgument.RequireHandle(
             handle: deviceHandle,
             handleDescription: "logical-device",
@@ -212,430 +205,345 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
         );
 
         Handle = deviceHandle;
-        AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkAcquireNextImageKHR"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkAcquireNextImageKHR"u8
         ));
-        AllocateCommandBuffers = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        AllocateCommandBuffers = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferAllocateInfo, nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkAllocateCommandBuffers"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkAllocateCommandBuffers"u8
         ));
-        AllocateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        AllocateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetAllocateInfo, nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkAllocateDescriptorSets"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkAllocateDescriptorSets"u8
         ));
-        AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkAllocateMemory"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkAllocateMemory"u8
         ));
-        BeginCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferBeginInfo, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        BeginCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferBeginInfo, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkBeginCommandBuffer"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkBeginCommandBuffer"u8
         ));
-        BindBufferMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        BindBufferMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkBindBufferMemory"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkBindBufferMemory"u8
         ));
-        BindImageMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        BindImageMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkBindImageMemory"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkBindImageMemory"u8
         ));
-        CmdBeginDebugUtilsLabelExt = ((delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        CmdBeginDebugUtilsLabelExt = ((delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdBeginDebugUtilsLabelEXT"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdBeginDebugUtilsLabelEXT"u8
         ));
-        CmdBeginRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassBeginInfo, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdBeginRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassBeginInfo, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdBeginRenderPass"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdBeginRenderPass"u8
         ));
-        CmdBindDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdBindDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, uint, nint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdBindDescriptorSets"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdBindDescriptorSets"u8
         ));
-        CmdBindIndexBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdBindIndexBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdBindIndexBuffer"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdBindIndexBuffer"u8
         ));
-        CmdBindPipeline = ((delegate* unmanaged[Cdecl]<nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdBindPipeline = ((delegate* unmanaged[Cdecl]<nint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdBindPipeline"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdBindPipeline"u8
         ));
-        CmdBindVertexBuffers = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdBindVertexBuffers = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdBindVertexBuffers"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdBindVertexBuffers"u8
         ));
-        CmdBlitImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdBlitImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdBlitImage"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdBlitImage"u8
         ));
-        CmdClearColorImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdClearColorImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdClearColorImage"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdClearColorImage"u8
         ));
-        CmdCopyBufferToImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdCopyBufferToImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdCopyBufferToImage"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdCopyBufferToImage"u8
         ));
-        CmdCopyImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdCopyImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdCopyImage"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdCopyImage"u8
         ));
-        CmdCopyImageToBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdCopyImageToBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdCopyImageToBuffer"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdCopyImageToBuffer"u8
         ));
-        CmdDispatch = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdDispatch = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdDispatch"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdDispatch"u8
         ));
-        CmdDispatchIndirect = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdDispatchIndirect = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdDispatchIndirect"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdDispatchIndirect"u8
         ));
-        CmdDraw = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdDraw = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdDraw"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdDraw"u8
         ));
-        CmdDrawIndexed = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, int, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdDrawIndexed = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, int, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdDrawIndexed"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdDrawIndexed"u8
         ));
-        CmdEndDebugUtilsLabelExt = ((delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        CmdEndDebugUtilsLabelExt = ((delegate* unmanaged[Cdecl]<nint, void>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdEndDebugUtilsLabelEXT"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdEndDebugUtilsLabelEXT"u8
         ));
-        CmdEndRenderPass = ((delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdEndRenderPass = ((delegate* unmanaged[Cdecl]<nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdEndRenderPass"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdEndRenderPass"u8
         ));
-        CmdFillBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdFillBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdFillBuffer"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdFillBuffer"u8
         ));
-        CmdPipelineBarrier = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdPipelineBarrier = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdPipelineBarrier"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdPipelineBarrier"u8
         ));
-        CmdPushConstants = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdPushConstants = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdPushConstants"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdPushConstants"u8
         ));
-        CmdSetScissor = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdSetScissor = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdSetScissor"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdSetScissor"u8
         ));
-        CmdSetViewport = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        CmdSetViewport = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdSetViewport"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCmdSetViewport"u8
         ));
-        CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateBuffer"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateBuffer"u8
         ));
-        CreateCommandPool = ((delegate* unmanaged[Cdecl]<nint, in VkCommandPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateCommandPool = ((delegate* unmanaged[Cdecl]<nint, in VkCommandPoolCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateCommandPool"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateCommandPool"u8
         ));
-        CreateComputePipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateComputePipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateComputePipelines"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateComputePipelines"u8
         ));
-        CreateDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorPoolCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateDescriptorPool"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateDescriptorPool"u8
         ));
-        CreateDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateDescriptorSetLayout"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateDescriptorSetLayout"u8
         ));
-        CreateFence = ((delegate* unmanaged[Cdecl]<nint, in VkFenceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateFence = ((delegate* unmanaged[Cdecl]<nint, in VkFenceCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateFence"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateFence"u8
         ));
-        CreateFramebuffer = ((delegate* unmanaged[Cdecl]<nint, in VkFramebufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateFramebuffer = ((delegate* unmanaged[Cdecl]<nint, in VkFramebufferCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateFramebuffer"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateFramebuffer"u8
         ));
-        CreateGraphicsPipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateGraphicsPipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateGraphicsPipelines"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateGraphicsPipelines"u8
         ));
-        CreateImage = ((delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateImage = ((delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateImage"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateImage"u8
         ));
-        CreateImageView = ((delegate* unmanaged[Cdecl]<nint, in VkImageViewCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateImageView = ((delegate* unmanaged[Cdecl]<nint, in VkImageViewCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateImageView"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateImageView"u8
         ));
-        CreatePipelineCache = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineCacheCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreatePipelineCache = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineCacheCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreatePipelineCache"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreatePipelineCache"u8
         ));
-        CreatePipelineLayout = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreatePipelineLayout = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreatePipelineLayout"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreatePipelineLayout"u8
         ));
-        CreateRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateRenderPass"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateRenderPass"u8
         ));
-        CreateSampler = ((delegate* unmanaged[Cdecl]<nint, in VkSamplerCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateSampler = ((delegate* unmanaged[Cdecl]<nint, in VkSamplerCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateSampler"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateSampler"u8
         ));
-        CreateSemaphore = ((delegate* unmanaged[Cdecl]<nint, in VkSemaphoreCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateSemaphore = ((delegate* unmanaged[Cdecl]<nint, in VkSemaphoreCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateSemaphore"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateSemaphore"u8
         ));
-        CreateShaderModule = ((delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        CreateShaderModule = ((delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateShaderModule"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateShaderModule"u8
         ));
-        CreateSwapchainKhr = ((delegate* unmanaged[Cdecl]<nint, in VkSwapchainCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        CreateSwapchainKhr = ((delegate* unmanaged[Cdecl]<nint, in VkSwapchainCreateInfoKhr, nint, out nint, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCreateSwapchainKHR"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkCreateSwapchainKHR"u8
         ));
-        DestroyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyBuffer"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyBuffer"u8
         ));
-        DestroyCommandPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyCommandPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyCommandPool"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyCommandPool"u8
         ));
-        DestroyDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyDescriptorPool"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyDescriptorPool"u8
         ));
-        DestroyDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyDescriptorSetLayout"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyDescriptorSetLayout"u8
         ));
-        DestroyDevice = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyDevice = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyDevice"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyDevice"u8
         ));
-        DestroyFence = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyFence = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyFence"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyFence"u8
         ));
-        DestroyFramebuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyFramebuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyFramebuffer"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyFramebuffer"u8
         ));
-        DestroyImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyImage"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyImage"u8
         ));
-        DestroyImageView = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyImageView = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyImageView"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyImageView"u8
         ));
-        DestroyPipeline = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyPipeline = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyPipeline"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyPipeline"u8
         ));
-        DestroyPipelineCache = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyPipelineCache = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyPipelineCache"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyPipelineCache"u8
         ));
-        DestroyPipelineLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyPipelineLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyPipelineLayout"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyPipelineLayout"u8
         ));
-        DestroyRenderPass = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyRenderPass = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyRenderPass"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyRenderPass"u8
         ));
-        DestroySampler = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroySampler = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroySampler"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroySampler"u8
         ));
-        DestroySemaphore = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroySemaphore = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroySemaphore"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroySemaphore"u8
         ));
-        DestroyShaderModule = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        DestroyShaderModule = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroyShaderModule"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroyShaderModule"u8
         ));
-        DestroySwapchainKhr = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        DestroySwapchainKhr = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDestroySwapchainKHR"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDestroySwapchainKHR"u8
         ));
-        DeviceWaitIdle = ((delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        DeviceWaitIdle = ((delegate* unmanaged[Cdecl]<nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkDeviceWaitIdle"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkDeviceWaitIdle"u8
         ));
-        EndCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        EndCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkEndCommandBuffer"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkEndCommandBuffer"u8
         ));
-        FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkFreeMemory"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkFreeMemory"u8
         ));
-        GetBufferMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(
+        GetBufferMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkGetBufferMemoryRequirements"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkGetBufferMemoryRequirements"u8
         ));
-        GetDeviceQueue = ((delegate* unmanaged[Cdecl]<nint, uint, uint, out nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        GetDeviceQueue = ((delegate* unmanaged[Cdecl]<nint, uint, uint, out nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkGetDeviceQueue"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkGetDeviceQueue"u8
         ));
-        GetFenceStatus = ((delegate* unmanaged[Cdecl]<nint, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        GetFenceStatus = ((delegate* unmanaged[Cdecl]<nint, nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkGetFenceStatus"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkGetFenceStatus"u8
         ));
-        GetImageMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(
+        GetImageMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkGetImageMemoryRequirements"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkGetImageMemoryRequirements"u8
         ));
-        GetMemoryWin32HandleKhr = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryGetWin32HandleInfoKHR, out nint, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        GetMemoryWin32HandleKhr = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryGetWin32HandleInfoKHR, out nint, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkGetMemoryWin32HandleKHR"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkGetMemoryWin32HandleKHR"u8
         ));
-        GetMemoryWin32HandlePropertiesKhr = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out VkMemoryWin32HandlePropertiesKHR, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        GetMemoryWin32HandlePropertiesKhr = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out VkMemoryWin32HandlePropertiesKHR, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkGetMemoryWin32HandlePropertiesKHR"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkGetMemoryWin32HandlePropertiesKHR"u8
         ));
-        GetPipelineCacheData = ((delegate* unmanaged[Cdecl]<nint, nint, nuint*, void*, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        GetPipelineCacheData = ((delegate* unmanaged[Cdecl]<nint, nint, nuint*, void*, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkGetPipelineCacheData"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkGetPipelineCacheData"u8
         ));
-        GetPipelineExecutablePropertiesKhr = ((delegate* unmanaged[Cdecl]<nint, VkPipelineInfoKhr*, uint*, VkPipelineExecutablePropertiesKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        GetPipelineExecutablePropertiesKhr = ((delegate* unmanaged[Cdecl]<nint, VkPipelineInfoKhr*, uint*, VkPipelineExecutablePropertiesKhr*, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkGetPipelineExecutablePropertiesKHR"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkGetPipelineExecutablePropertiesKHR"u8
         ));
-        GetPipelineExecutableStatisticsKhr = ((delegate* unmanaged[Cdecl]<nint, VkPipelineExecutableInfoKhr*, uint*, VkPipelineExecutableStatisticKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        GetPipelineExecutableStatisticsKhr = ((delegate* unmanaged[Cdecl]<nint, VkPipelineExecutableInfoKhr*, uint*, VkPipelineExecutableStatisticKhr*, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkGetPipelineExecutableStatisticsKHR"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkGetPipelineExecutableStatisticsKHR"u8
         ));
-        GetSwapchainImagesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        GetSwapchainImagesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkGetSwapchainImagesKHR"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkGetSwapchainImagesKHR"u8
         ));
-        MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkMapMemory"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkMapMemory"u8
         ));
-        QueuePresentKhr = ((delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        QueuePresentKhr = ((delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkQueuePresentKHR"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkQueuePresentKHR"u8
         ));
-        QueueSubmit = ((delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        QueueSubmit = ((delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkQueueSubmit"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkQueueSubmit"u8
         ));
-        QueueWaitIdle = ((delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        QueueWaitIdle = ((delegate* unmanaged[Cdecl]<nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkQueueWaitIdle"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkQueueWaitIdle"u8
         ));
-        ResetFences = ((delegate* unmanaged[Cdecl]<nint, uint, in nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        ResetFences = ((delegate* unmanaged[Cdecl]<nint, uint, in nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkResetFences"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkResetFences"u8
         ));
-        UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkUnmapMemory"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkUnmapMemory"u8
         ));
-        UpdateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+        UpdateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkUpdateDescriptorSets"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkUpdateDescriptorSets"u8
         ));
-        WaitForFences = ((delegate* unmanaged[Cdecl]<nint, uint, in nint, uint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+        WaitForFences = ((delegate* unmanaged[Cdecl]<nint, uint, in nint, uint, ulong, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkWaitForFences"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkWaitForFences"u8
         ));
-        WaitForPresentKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+        WaitForPresentKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkWaitForPresentKHR"u8,
-            getDeviceProcAddr: getDeviceProcAddr
+            functionName: "vkWaitForPresentKHR"u8
         ));
         // Allocated last so a missing core entry point above never leaves a live handle behind.
         m_token = GCHandle.Alloc(value: this);

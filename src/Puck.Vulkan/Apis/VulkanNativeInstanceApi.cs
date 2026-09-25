@@ -28,6 +28,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     private const uint VulkanApiVersion13 = (1u << 22) | (3u << 12);
 
     private readonly IAllocator m_allocator;
+    private readonly VulkanProcResolver m_procedures;
     private readonly Lock m_syncRoot = new();
 
     private unsafe delegate* unmanaged[Cdecl]<in VkInstanceCreateInfo, nint, out nint, VkResult> m_createInstance;
@@ -35,11 +36,15 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeInstanceApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
-    public VulkanNativeInstanceApi(IAllocator allocator) {
+    /// <param name="procedures">The resolver the instance's command table is resolved and counted through.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> or <paramref name="procedures"/> is
+    /// <see langword="null"/>.</exception>
+    public VulkanNativeInstanceApi(IAllocator allocator, VulkanProcResolver procedures) {
         ArgumentNullException.ThrowIfNull(argument: allocator);
+        ArgumentNullException.ThrowIfNull(argument: procedures);
 
         m_allocator = allocator;
+        m_procedures = procedures;
     }
 
     // The messenger configuration shared by the standalone messenger (vkCreateDebugUtilsMessengerEXT) and the
@@ -213,7 +218,10 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
                 (0 != instanceHandle)
             ) {
                 try {
-                    instance = new VulkanInstanceCommands(instanceHandle: instanceHandle);
+                    instance = new VulkanInstanceCommands(
+                        instanceHandle: instanceHandle,
+                        procedures: m_procedures
+                    );
                 } catch {
                     DestroyUnresolvedInstance(instanceHandle: instanceHandle);
 
@@ -312,8 +320,8 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
 
     // An instance whose command table could not be built is still a live VkInstance; destroy it before the failure
     // propagates, resolving vkDestroyInstance alone because no table exists to hold it.
-    private static unsafe void DestroyUnresolvedInstance(nint instanceHandle) {
-        var destroyInstance = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
+    private unsafe void DestroyUnresolvedInstance(nint instanceHandle) {
+        var destroyInstance = ((delegate* unmanaged[Cdecl]<nint, nint, void>)m_procedures.ResolveOptionalInstanceProc(
             functionName: "vkDestroyInstance"u8,
             instanceHandle: instanceHandle
         ));

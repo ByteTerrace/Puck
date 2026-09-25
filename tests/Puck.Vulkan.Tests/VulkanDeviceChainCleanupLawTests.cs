@@ -247,8 +247,11 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
         public VkResult CreateInstance(VulkanInstanceCreateRequest request, out VulkanInstanceCommands? instance) {
             Reach(link: "instance");
             instance = new VulkanInstanceCommands(
-                getInstanceProcAddr: &GetProcAddr,
-                instanceHandle: InstanceHandle
+                instanceHandle: InstanceHandle,
+                procedures: new VulkanProcResolver(
+                    getDeviceProcAddr: &GetProcAddr,
+                    getInstanceProcAddr: &GetProcAddr
+                )
             );
             Log(entry: "create instance");
 
@@ -258,7 +261,10 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             Reach(link: "device");
             device = new VulkanDeviceCommands(
                 deviceHandle: DeviceHandle,
-                getDeviceProcAddr: &GetProcAddr
+                procedures: new VulkanProcResolver(
+                    getDeviceProcAddr: &GetProcAddr,
+                    getInstanceProcAddr: &GetProcAddr
+                )
             );
             Log(entry: "create device");
 

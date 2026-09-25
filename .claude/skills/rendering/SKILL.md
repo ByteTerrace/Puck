@@ -424,14 +424,15 @@ These are one-line cautions; the owning pages hold the derivations.
   runs in `RunStepAsync`, the one place `StepsOf`'s steps run; a new tool
   needs its kind in `RunsOf`. The static loaders count into process sets:
   `SdfWorldKernels.LoadWork`, `FullscreenPassNode.LoadWork`,
-  `ShaderSetManifest.LoadWork` (loads and bytecode bytes), and
-  `VulkanProcResolver.Work` (`procedures.vulkan`, every device- and
-  instance-level resolution). Each loader has an overload or constructor
-  parameter taking a fresh set, which is what a law counts into, since sibling
-  tests load shaders in parallel. `AddWorldShaderWork` registers the shader
+  `ShaderSetManifest.LoadWork` (loads and bytecode bytes). Each loader has an
+  overload or constructor parameter taking a fresh set, which is what a law
+  counts into, since sibling tests load shaders in parallel. `VulkanProcResolver`
+  is an instance the command tables take through their constructors; its `Work`
+  (`procedures.vulkan`) counts every device- and instance-level resolution made
+  through it. `AddWorldShaderWork` registers the shader
   sources and the `SdfWorldPipelineCache` singleton with its
   `gpu.sdf-pipelines` ledger in both presentation shapes, and `AddVulkanFactories` registers
-  `procedures.vulkan` once.
+  the host's one resolver and its `procedures.vulkan` once.
 
 ## Performance work
 

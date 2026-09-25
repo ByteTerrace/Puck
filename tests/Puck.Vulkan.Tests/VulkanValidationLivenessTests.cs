@@ -37,10 +37,14 @@ public sealed class VulkanValidationLivenessTests {
         Console.SetError(newError: captured);
 
         try {
+            var procedures = new VulkanProcResolver();
             VulkanInstance instance;
 
             try {
-                instance = new VulkanInstanceFactory(instanceApi: new VulkanNativeInstanceApi(allocator: new HeapAllocator())).Create(
+                instance = new VulkanInstanceFactory(instanceApi: new VulkanNativeInstanceApi(
+                    allocator: new HeapAllocator(),
+                    procedures: procedures
+                )).Create(
                     applicationName: nameof(VulkanValidationLivenessTests),
                     displayKind: NativeDisplayKind.Win32,
                     enableValidation: true
@@ -52,7 +56,7 @@ public sealed class VulkanValidationLivenessTests {
             }
 
             using (instance) {
-                var enumerate = ((delegate* unmanaged[Cdecl]<nint, uint*, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
+                var enumerate = ((delegate* unmanaged[Cdecl]<nint, uint*, nint, VkResult>)procedures.ResolveInstanceProc(
                     functionName: "vkEnumeratePhysicalDevices"u8,
                     instanceHandle: instance.Commands.Handle
                 ));
