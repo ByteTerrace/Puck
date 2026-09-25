@@ -208,7 +208,12 @@ These are one-line cautions; the owning pages hold the derivations.
   black. Inside view V's own render, any screen wired to V binds 0. A leased
   image (`Puck.Hosting.GpuImageLease`) stays in a `LeaseRetireList` until the
   submission that sampled it retires: `SdfEngineNode` keeps one list per
-  frame-ring slot, and the overlay's `OverlayFrameSlots` one for HUD frames. A
+  frame-ring slot, and a `ShaderPipelineRenderNode` one per frame slot, which
+  the overlay package moves its HUD frames' leases into
+  (`OverlayFrameSlots.MoveTo`). A lease retires only at its slot's next fence
+  wait, so one source can have as many leases outstanding as the node has
+  frames in flight (`RenderGraphRuntime.DefaultInFlightFrames`); a source that
+  counts its outstanding leases (`WorldOverlayFrameSources`) is sized by it. A
   new sampled-lease path holds its leases in that list rather than its own
   array. Not every image another producer keeps writing is leased yet: the
   desktop capture's GPU route (`CaptureFeed.Handle`) and the offscreen views'
@@ -284,7 +289,10 @@ These are one-line cautions; the owning pages hold the derivations.
   by `Describe` (the node's `NotReadyReason`), and the holder keeps its lease.
   A refused build is retried only when an input it was made from changes (the
   device, the kernels asked for, the set or its installed kernels, and the
-  holder's inputs: its `SdfWorldEngineOptions`, and for the node a kernel
+  operator's GPU faults (`GpuCreationFaults.Revision`, read through
+  `GpuDeviceServices.Faults` and re-read after a refused attempt, so the fault
+  that refused it is no change), and the holder's inputs: its
+  `SdfWorldEngineOptions`, and for the node a kernel
   reload request), or after `Release` on device loss. A build refused by the
   device's descriptor heap (`GpuDescriptorHeapRefusalException`,
   `GPU_DESCRIPTOR_HEAP`) has one input more, heap space: it is retried when
@@ -293,10 +301,11 @@ These are one-line cautions; the owning pages hold the derivations.
   refusal reads it. It is never retried
   because a frame arrived and never on a clock; a new input to a build joins
   its `inputsOf`. The node has no previous engine then and presents nothing
-  new; a view serves the image it served before. `UnifiedOverlayNode` refuses
-  its resources the same way (`ResourceRefusal`), presents the inner frame
-  unchanged, forwards captures to it, and retries after `OnDeviceLost`, or,
-  for a heap refusal, once the release revision moves. `SdfWorldEngine`'s
+  new; a view serves the image it served before. `UnifiedOverlayNode`, which
+  no World composes any longer (the overlay package draws the live overlay),
+  refuses its resources the same way (`ResourceRefusal`), presents the inner
+  frame unchanged, forwards captures to it, and retries after `OnDeviceLost`,
+  or, for a heap refusal, once the release revision moves. `SdfWorldEngine`'s
   constructor owns its creations through one `GpuCreationScope`, which
   releases them newest first when a later step throws, so a refusal leaks
   nothing (`SdfWorldEngineCreationFaultLawTests`,
@@ -378,9 +387,7 @@ These are one-line cautions; the owning pages hold the derivations.
   keeps its last image published (`m_installedUnrendered`) until a step, resume
   or reset renders. Selecting a float output on an installed graph builds
   that preview on the pool too (`IsBuildingPreview`); the old selection stays
-  published until the finished build is taken. A `FullscreenPassNode` retires a
-  replaced executor on its successor's second submission, never with a drain
-  (`DisposeRetired`). The Shaders tests drive the
+  published until the finished build is taken. The Shaders tests drive the
   frames around a build with `ShaderPipelineRenderNodeBuilds`
   (`ProduceUntilInstalled`, and `ProduceBuildStart`, which holds the fake's
   pipeline gate so the starting frame's outcome never depends on pool timing).
@@ -476,13 +483,20 @@ These are one-line cautions; the owning pages hold the derivations.
   options 16 structures. `GpuResidency.Select(profile, bytes)` is the one choice
   of `InPlace`, `Ring` or `Staged`, and the default profile selects `Staged`.
   `GpuRegion` (`src/Puck.Abstractions/Gpu/Residency`) writes a region under any
-  policy; its staged copy speaks `sdf-frame-upload.comp`'s ABI, and its ranges
-  are `GpuUploadRuns`, the same run list the SDF engine's tables use. No engine
-  consumer writes through a region yet. The SDF engine's host tables, brick
-  staging and the overlay's buffer still upload by hand, so a new host upload
-  goes through a region rather than a fourth hand-built path. `GpuResidencyLawTests`
-  pins the selector and byte-identical region contents over `UploadModelGpu`
-  (`tests/Shared`), and `pipeline.inspect` echoes the profile and the policy.
+  policy; its staged copy is `Puck.Shaders`' `region-copy.comp`, created from
+  `GpuRegion.CopyPipeline` once per device by `GpuRegionCopyPipelineCache`
+  (built on the pool, leased by every owner, counted under `gpu.region-copy`)
+  and never by an owner, and its ranges are `GpuUploadRuns`, the same run list
+  the SDF engine's tables use. The SDF engine records its table upload with that
+  pipeline (its holder leases it beside the set, and the engine takes it at
+  construction) and writes its mesh region (`SdfFrame.MeshDraws` laid out by
+  `SdfMeshRegion`) through a region, which nothing reads until P4-2c. The
+  engine's host tables, brick staging and the overlay's buffer still upload by
+  hand, so a new host upload goes through a region rather than a fourth
+  hand-built path. `GpuResidencyLawTests` pins the selector and byte-identical
+  region contents over `UploadModelGpu` (`tests/Shared`),
+  `GpuRegionCopyPipelineCacheLawTests` one pipeline per device shared by its
+  owners, and `pipeline.inspect` echoes the profile and the policy.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
@@ -524,8 +538,8 @@ These are one-line cautions; the owning pages hold the derivations.
   (`shaders.compiler`) counts requests, cache hits (`Pacing`) and each tool's
   runs in `RunStepAsync`, the one place `StepsOf`'s steps run; a new tool
   needs its kind in `RunsOf`. The static loaders count into process sets:
-  `SdfWorldKernels.LoadWork`, `FullscreenPassNode.LoadWork`,
-  `ShaderSetManifest.LoadWork` (loads and bytecode bytes). Each loader has an
+  `SdfWorldKernels.LoadWork` and `ShaderSetManifest.LoadWork` (loads and
+  bytecode bytes). Each loader has an
   overload or constructor parameter taking a fresh set, which is what a law
   counts into, since sibling tests load shaders in parallel. `VulkanProcResolver`
   is an instance the command tables take through their constructors; its `Work`
@@ -704,7 +718,7 @@ as the one-pass graph `RenderGraphDefinition.FromShaderSource` makes. Its
 `RenderGraphCompiler` owns the schema-tag check (`RENDERGRAPH_SCHEMA`) and plans
 with `ShaderPipelineCompiler` and never a second planner: a package pass enters
 the plan only as a `ShaderPipelinePackagePass` through the planner's internal
-package entry, ordered in the compute shape it reaches resources by, and the
+package entry, ordered by the versions it reads and writes, and the
 planner's public entry refuses a graph naming packages
 (`SHADERPIPE_PACKAGE_PASS`). A package's planned pass carries
 `ShaderPipelinePassKind.Package` with no `Declaration`: its `Package` step
@@ -716,14 +730,18 @@ passes alone; a `CompiledShaderPipeline` holds a package pass with no compiled
 shader, which the render node records through its package's recorder (the
 runtime below). A shader pass's kind is `ShaderPipelineDocumentPassKind`, which
 has no `Package` member, so the JSON reader refuses the name at
-`$.passes[n].kind`. A package pass keeps no descriptor binding, has no
-interface-by-source check, and takes a compute pass's accesses in `UseOf`. Every
+`$.passes[n].kind`. A package pass keeps no descriptor binding and has no
+interface-by-source check, and `UseOf` gives each of its references the use its
+port's `RenderGraphPortAccess` names (compute read or write, fragment-sampled
+read, color-attachment write), the same use a shader pass of that stage gets. Every
 checked-in `*.graph.json` plans alike through a pipeline host and the engine's
 catalog (`RenderGraphDocumentLawTests`), and `puck schema` regenerates
 `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 A package's ports are typed (`RenderGraphPackagePort`: an image, or a buffer
-with its stride and count), and a version bound to a port of another kind,
+with its stride and count, and its access), and a version bound to a port of another kind,
 stride or count is refused as `RENDERGRAPH_PACKAGE_INPUT` or `_OUTPUT`.
+`RenderGraphPackageBarrierLawTests` hold a shader, post and overlay chain's
+planned barriers to a hand-derived table.
 `sdf.bricks` publishes the world's brick pool as a buffer output counted by
 `BrickPoolVoxels`; `RenderGraphBufferEdgeLawTests` plans its edges. A buffer
 edge is one mechanism with the image edge: `ShaderPipelineResourceKind` lives
@@ -752,12 +770,25 @@ creates for its package id: the factory's `Build` creates its modules,
 pipelines and render passes in the candidate's `BackgroundBuild`, its `Create`
 takes them at install and allocates per-slot sets from the node's one pool
 (whose statement includes the factory's `SetBindings`), and a recorder records
-into the command buffer it is handed and never submits, waits or creates a
-pipeline. A draw inside a package goes through `RenderGraphPackageDraw`'s
-barriers, since the planner orders a package in a compute pass's shape. A
-recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
+into the command buffer it is handed and never submits, waits, creates a
+pipeline or records a barrier: the node records the pass's planned barriers
+first, so a drawing package's target arrives in `RenderTarget` and its sampled
+inputs in `ShaderReadOnly`, and its render pass leaves the target in
+`RenderTarget` (`ObservedPackageFactory` in `tests/Shared` counts a package's
+own barriers in the post and overlay laws). A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
 and the node publishes the input in the output's place, never a copy
-(`PublishedLayout`). `PostProcessPackage` serves every `post.<id>` and
+(`PublishedLayout`), only when the recording was told it may
+(`RenderGraphPackageRecording.MayStandIn`): never over a host's image bound in
+another layout than the node publishes in, since the node publishes in its
+output layout, the one its consumer's descriptor is written with, and hands a
+host's image back in the host's own. A lease declares the layout its producer's
+own submissions leave the image in (`SdfWorldEngine.OutputLayout`,
+shader-readable), which `SdfEngineNodeLeaseLawTests` holds against the
+engine's recorded transitions; a declared layout the producer does not leave
+it in shows only as Vulkan validation errors, since the Direct3D 12 recorder
+corrects a stated old layout from its tracked resource state. A Direct3D 12
+device created with the debug layer says so on stderr (`[d3d12] debug layer
+live`). `PostProcessPackage` serves every `post.<id>` and
 `OverlayPackage` serves `overlay`, which shares `OverlayFrameComposer` with
 `UnifiedOverlayNode`; a package pass's `config` binds against its package's
 schema in the graph compiler (`RENDERGRAPH_PACKAGE_CONFIG`). A graph naming an
@@ -773,12 +804,29 @@ refuses an external instance's reads and any previous-frame read of one.
 `SdfEngineNode` is the `sdf.world` producer; it counts acquisitions
 (`OutputLeases`) and disposes an engine a new extent replaced only once its
 output is released (`RetiringEngines`). The
-root instance is the runtime's output and its capture target, with
-`UnservedCaptureReason` naming the root until it has produced.
+root instance is the runtime's output and its default capture target; the root
+may be an external producer when nothing is drawn over it.
+`RenderGraphRuntime.CaptureTarget` arms a capture of any instance. A graph
+instance serves one only on a frame it renders with every image input it shows
+bound to a completed output, never a stand-in, and an external producer from
+the next frame it produces; until then `UnservedCaptureReasonOf` names why.
 `RenderGraphRuntimeLawTests` pin the P11 checks on the fake, a steady frame
-at zero allocations included. No live view renders through a graph yet; the
-renderer still composes views through `SdfEngineNode`'s children and
-`ViewStack` until P11b wires the runtime in.
+at zero allocations included.
+The main view runs through the runtime. `WorldRootGraph` synthesizes a world's
+default graph as a document value the graph compiler plans: `world` (the
+`sdf.world` producer), then, when anything is drawn over it, the root `main`
+reading it with one `post.<id>` pass per `render.extensions` entry in order and
+the overlay last in a windowed World. With nothing drawn over it (offscreen, no
+extensions) `world` is the root. A config that does not bind is the compiler's
+`RENDERGRAPH_PACKAGE_CONFIG`, which the boot's pre-flight
+(`WorldPostBuildWiring`) reports as a refused definition. `WorldRenderRoot`
+builds the engine node, the packages and the runtime for both GPU shapes, and
+`RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
+what captures, `world.screenshot` and readiness read. A `captures` row may name
+`world` (`WorldCaptureRow.Instance`) to capture the world beneath the root's
+passes. Panes, screens and `views.graphs` rows still render through
+`SdfEngineNode`'s children, `ViewStack` and `WorldPipelineRuntime` until the
+rest of P11b moves them.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):

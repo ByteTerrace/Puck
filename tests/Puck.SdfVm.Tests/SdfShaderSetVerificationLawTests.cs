@@ -23,7 +23,6 @@ public sealed class SdfShaderSetVerificationLawTests {
         static kernels => kernels with { BrickUpload = Changed },
         static kernels => kernels with { Composite = Changed },
         static kernels => kernels with { CullArgs = Changed },
-        static kernels => kernels with { FrameUpload = Changed },
         static kernels => kernels with { InstanceCull = Changed },
         static kernels => kernels with { Primary = Changed },
         static kernels => kernels with { Sky = Changed },
@@ -39,7 +38,7 @@ public sealed class SdfShaderSetVerificationLawTests {
         var baseline = SdfTestPipelines.Kernels();
         var keys = OneKernelChanged.Select(selector: change => change(arg: baseline).ContentKey()).ToHashSet(comparer: StringComparer.Ordinal);
 
-        Assert.Equal(expected: 14, actual: OneKernelChanged.Length);
+        Assert.Equal(expected: 13, actual: OneKernelChanged.Length);
         Assert.Equal(expected: OneKernelChanged.Length, actual: keys.Count);
         Assert.DoesNotContain(collection: keys, expected: baseline.ContentKey());
     }
@@ -70,6 +69,10 @@ public sealed class SdfShaderSetVerificationLawTests {
             radius: 1f
         );
 
+        using var regionCopy = SdfTestPipelines.RegionCopy(
+            device: gpu,
+            ledger: ledger
+        );
         using var pipelines = SdfTestPipelines.Build(
             device: gpu,
             kernels: kernels,
@@ -87,6 +90,7 @@ public sealed class SdfShaderSetVerificationLawTests {
                 WorkLedger: ledger
             ),
             pipelines: pipelines,
+            regionCopy: regionCopy,
             width: Extent
         );
 

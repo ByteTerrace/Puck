@@ -36,6 +36,8 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
 
         public int Frames { get; private set; }
         public string? PendingCapturePath => m_request?.Path;
+        // The paths of the captures this target served.
+        public List<string> Served { get; } = [];
 
         public void Compose() {
             Frames++;
@@ -64,6 +66,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             }
 
             m_request = null;
+            Served.Add(item: request.Path);
             _ = request.Write(writer: path => {
                 var tick = (server.NextInputTick - 1UL);
                 var rgba = new byte[((8 * 2) * 4)];
@@ -145,7 +148,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         private readonly HostRow m_row;
         private readonly ulong m_stepTicks;
 
-        public Run(string directory, bool honoursFrames, bool serves, bool losesDevice = false) {
+        public Run(string directory, bool honoursFrames, bool serves, bool losesDevice = false, string? secondInstance = null, bool rendersWorld = true) {
             m_row = HostRow.Build(
                 definition: (Fixtures.BuildDocument() with {
                     Captures = new WorldCapturesSection(
@@ -155,10 +158,12 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                                 station: "first",
                                 tick: FirstTick
                             ),
-                            Row(
+                            (Row(
                                 station: "second",
                                 tick: SecondTick
-                            ),
+                            ) with {
+                                Instance = secondInstance,
+                            }),
                         ]
                     ),
                 }),
@@ -169,9 +174,18 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                 server: m_row.Server,
                 serves: serves
             );
+            WorldTarget = new StampingFrameTarget(
+                losesDevice: losesDevice,
+                server: m_row.Server,
+                serves: serves
+            );
             Scheduler = new WorldCaptureScheduler(
                 backend: "vulkan",
-                captureTarget: () => Target,
+                captureTarget: instance => ((instance is null)
+                    ? Target
+                    : ((rendersWorld && (instance == WorldViewGraphs.WorldInstance))
+                        ? WorldTarget
+                        : throw new ArgumentException(message: $"The render graph has no instance '{instance}'."))),
                 directory: directory,
                 server: m_row.Server,
                 worldFile: "fixture.world.json"
@@ -201,6 +215,8 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         public WorldCaptureScheduler Scheduler { get; }
         public CaptureStepSimulation Simulation { get; }
         public StampingFrameTarget Target { get; }
+        // The target a row naming the world instance is armed on.
+        public StampingFrameTarget WorldTarget { get; }
 
         private static WorldCaptureRow Row(string station, ulong tick) => new(
             Palette: [new WorldCapturePaletteEntry(
@@ -224,6 +240,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                 );
                 owed = 0UL;
                 Target.Compose();
+                WorldTarget.Compose();
             } while (m_pump.AccumulatorTicks >= m_stepTicks);
 
             Scheduler.Drain();
@@ -306,6 +323,46 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                 actual: shown.Hash
             );
         }
+    }
+    [Fact]
+    public void ARowNamingAnInstanceIsCapturedFromThatInstanceAndOneTheGraphLacksIsRefusedByName() {
+        using (var run = new Run(
+            directory: m_directory.RootPath,
+            honoursFrames: true,
+            secondInstance: WorldViewGraphs.WorldInstance,
+            serves: true
+        )) {
+            run.BurstThenDrain();
+
+            // The first row reads the root and the second the world, each served by the frame showing its tick.
+            Assert.Equal(
+                expected: (Path.Combine(path1: m_directory.RootPath, path2: "first~10.png"), Path.Combine(path1: m_directory.RootPath, path2: "second~30.png")),
+                actual: (Assert.Single(collection: run.Target.Served), Assert.Single(collection: run.WorldTarget.Served))
+            );
+            Assert.All(
+                action: static entry => Assert.False(condition: entry.TryGetProperty(
+                    propertyName: "refusal",
+                    value: out _
+                )),
+                collection: ReadManifest(directory: m_directory.RootPath)
+            );
+        }
+
+        // A render graph without the instance a row names refuses its capture by name, and the run steps on.
+        using var unknown = new Run(
+            directory: m_directory.RootPath,
+            honoursFrames: true,
+            rendersWorld: false,
+            secondInstance: WorldViewGraphs.WorldInstance,
+            serves: true
+        );
+
+        unknown.BurstThenDrain();
+        Assert.Equal(
+            expected: ["first:10::", "second:30:failed:the render graph cannot capture instance 'world' (The render graph has no instance 'world'.)"],
+            actual: ReadManifest(directory: m_directory.RootPath).Select(selector: static entry => $"{entry.GetProperty(propertyName: "station").GetString()}:{entry.GetProperty(propertyName: "tick").GetUInt64()}:{(entry.TryGetProperty(propertyName: "refusal", value: out var refusal) ? refusal.GetString() : string.Empty)}:{(entry.TryGetProperty(propertyName: "detail", value: out var detail) ? detail.GetString() : string.Empty)}")
+        );
+        Assert.Empty(collection: unknown.WorldTarget.Served);
     }
     [Fact]
     public void ControlWithoutTheFrameStopTheBurstRefusesBothCapturesByName() {

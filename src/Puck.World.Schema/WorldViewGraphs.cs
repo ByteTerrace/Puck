@@ -5,6 +5,14 @@ namespace Puck.World;
 /// <summary>Reads <c>views.graphs</c> rows as the render-graph instances the scheduler plans: one instance per row,
 /// reading the instances its inputs name.</summary>
 public static class WorldViewGraphs {
+    /// <summary>The name of the instance that renders the SDF world, the <c>sdf.world</c> producer the root reads,
+    /// before any post pass or the overlay is drawn over it. A <c>captures</c> row names it to capture the world
+    /// alone.</summary>
+    public const string WorldInstance = "world";
+    /// <summary>The name of the root graph instance composition synthesizes when the world has a pass to draw over its
+    /// SDF world: each <c>render.extensions</c> pass in order, then the overlay.</summary>
+    public const string MainInstance = "main";
+
     /// <summary>Returns a row's refresh as the scheduler reads it: every frame when the row authors none, and an
     /// invalid refresh when it authors both or neither rate inside its <c>refresh</c>.</summary>
     /// <param name="graph">The row.</param>

@@ -1,6 +1,7 @@
 using System.Runtime.ExceptionServices;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
@@ -11,10 +12,15 @@ namespace Puck.SdfVm;
 // built from its set (a capacity or export rebuild reuses it) and is released on device loss and disposal. The holder
 // builds its engines here (TryBuild), which refuses a failed build by name instead of throwing it, and tries it again only
 // when an input it was built from changes.
+//
+// The holder also leases its device's region-copy pipeline from the cache's GpuRegionCopyPipelineCache in the same
+// background acquire, and the set is ready only once that pipeline is too: an engine records its table upload and mesh
+// region with it.
 internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
-    private readonly BackgroundBuild<SdfWorldPipelineLease> m_acquire = new();
+    private readonly BackgroundBuild<Leases> m_acquire = new();
 
     private SdfWorldPipelineLease? m_lease;
+    private GpuRegionCopyPipelineLease? m_regionCopy;
     // The latest refused engine build and what it was built from, until a build succeeds or the lease is released.
     private Exception? m_refusal;
     private long m_refusedHeapRevision;
@@ -23,10 +29,12 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
 
     // The ready set, or null before the lease's set has built.
     public SdfWorldPipelines? Current => m_lease?.Current;
+    // The device's ready region-copy pipeline, or null before it has built.
+    public GpuRegionCopyPipeline? RegionCopy => m_regionCopy?.Current;
 
-    // Returns the ready set; the first call starts taking the lease and every call until the set has built returns
-    // null. A lease or build that failed rethrows its exception here, on the frame thread, so a device loss reaches the
-    // host's recovery; the next call starts again.
+    // Returns the ready set once the region-copy pipeline is ready too; the first call starts taking both leases and
+    // every call until both have built returns null. A lease or build that failed rethrows its exception here, on the
+    // frame thread, so a device loss reaches the host's recovery; the next call starts again.
     public SdfWorldPipelines? Poll(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
         if (m_lease is null) {
             if (!m_acquire.IsPending) {
@@ -40,7 +48,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
 
             if (!m_acquire.TryTake(
                 error: out var error,
-                result: out var lease
+                result: out var leases
             )) {
                 return null;
             }
@@ -49,10 +57,16 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
                 ExceptionDispatchInfo.Throw(source: error);
             }
 
-            m_lease = lease!;
+            m_lease = leases!.Set;
+            m_regionCopy = leases.RegionCopy;
         }
 
-        return m_lease.Poll();
+        var set = m_lease.Poll();
+
+        return ((m_regionCopy!.Poll() is null)
+            ? null
+            : set
+        );
     }
     // Names where the holder's engine build stands while it has no engine: refused, not yet asked for, its lease still
     // being taken (the deployed kernels loading), or its set's build and that build's progress. Builds a string, so it
@@ -73,9 +87,11 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     // it, and forgets a refused build: the next build is tried afresh. Call after disposing every engine built from the
     // set and before the device goes away.
     public void Release() {
-        m_acquire.CancelAndWait(discard: static lease => lease.Release());
+        m_acquire.CancelAndWait(discard: static leases => leases.Release());
         m_lease?.Release();
         m_lease = null;
+        m_regionCopy?.Release();
+        m_regionCopy = null;
         m_refusal = null;
         m_refusedInputs = null;
     }
@@ -86,19 +102,22 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     // the error stream under the holder's label; the holder presents what it already presented.
     //
     // A refused build is tried again only when something it was built from changes: the device, the kernels asked for,
-    // the pipeline set or the kernels installed in it, or the holder's own inputs (its engine options, and anything else
+    // the pipeline set or the kernels installed in it, the operator's GPU faults (GpuCreationFaults.Revision: an arm, a
+    // disarm, or a fault firing elsewhere, never the one that refused this build), or the holder's own inputs (its engine options, and anything else
     // it names, such as a kernel reload request). A frame that changes none of them tries nothing, so a persistent
     // failure is attempted once per change, never once per frame, and never on a clock. A build the device's descriptor
     // heap refused (GpuDescriptorHeapRefusalException) has one input more, heap space: it is tried again when the heap's
     // release revision (IGpuBindings.HeapReleaseRevision) moves, as another owner returns its pools; a refusal of any
     // other kind never reads it. Release (a device loss or disposal) forgets the refusal. The inputs are read with inputsOf only when a build is due or a refusal is being
     // checked, never while the set builds. A device loss is never refused: it reaches the host's recovery.
-    public SdfWorldEngine? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, TInputs, SdfWorldEngine> construct) where TInputs : IEquatable<TInputs> {
+    public SdfWorldEngine? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, IGpuComputePipeline, TInputs, SdfWorldEngine> construct) where TInputs : IEquatable<TInputs> {
         var key = new BuildKey(
             Device: device,
+            FaultsRevision: (device.Services.Faults?.Revision ?? 0L),
             HostsOnDirectX: hostsOnDirectX,
             IncludeBrickPipelines: includeBrickPipelines,
             Kernels: kernels,
+            RegionCopy: RegionCopy,
             Set: Current,
             SetKernels: Current?.Kernels
         );
@@ -140,7 +159,8 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
 
             var engine = construct(
                 arg1: pipelines,
-                arg2: inputs
+                arg2: RegionCopy!,
+                arg3: inputs
             );
 
             m_refusal = null;
@@ -156,10 +176,13 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
                 Console.Error.WriteLine(value: $"[{label}] engine build refused, retried when its inputs change: {refusal.Message}");
             }
 
-            // The key is read again: the attempt may have taken the lease or installed the set it failed with.
+            // The key is read again: the attempt may have taken the lease or installed the set it failed with, and a
+            // creation fault that fired inside it moved the faults' revision, which is no change the build could retry on.
             m_refusal = refusal;
             m_refusedHeapRevision = heapRevision;
             m_refusedKey = (key with {
+                FaultsRevision = (device.Services.Faults?.Revision ?? 0L),
+                RegionCopy = RegionCopy,
                 Set = Current,
                 SetKernels = Current?.Kernels,
             });
@@ -176,13 +199,34 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
         (m_lease?.TryMakePrivate() ?? false);
 
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
-    private readonly record struct BuildKey(IGpuDeviceContext? Device, SdfWorldKernels? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, SdfWorldPipelines? Set, SdfWorldKernels? SetKernels);
+    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfWorldKernels? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuRegionCopyPipeline? RegionCopy, SdfWorldPipelines? Set, SdfWorldKernels? SetKernels);
 
-    // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame.
+    // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. A region-copy
+    // acquire that throws releases the set's lease it took first.
     private void Start(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) =>
-        m_acquire.Start(build: _ => cache.Acquire(
-            device: device,
-            includeBrickPipelines: includeBrickPipelines,
-            kernels: (kernels ?? cache.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX)))
-        ));
+        m_acquire.Start(build: _ => {
+            var set = cache.Acquire(
+                device: device,
+                includeBrickPipelines: includeBrickPipelines,
+                kernels: (kernels ?? cache.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX)))
+            );
+
+            try {
+                return new Leases(
+                    RegionCopy: cache.RegionCopy.Acquire(device: device),
+                    Set: set
+                );
+            } catch {
+                set.Release();
+                throw;
+            }
+        });
+
+    // The two leases one background acquire takes.
+    private sealed record Leases(SdfWorldPipelineLease Set, GpuRegionCopyPipelineLease RegionCopy) {
+        public void Release() {
+            Set.Release();
+            RegionCopy.Release();
+        }
+    }
 }

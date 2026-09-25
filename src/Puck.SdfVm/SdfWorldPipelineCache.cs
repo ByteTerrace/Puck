@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
@@ -37,6 +38,19 @@ public sealed class SdfWorldPipelineCache {
         name: WorkSourceName
     );
 
+    /// <summary>Initializes a new instance of the <see cref="SdfWorldPipelineCache"/> class.</summary>
+    /// <param name="regionCopy">The composition's region-copy pipelines, which every holder of a set also leases its
+    /// device's copy pipeline from.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="regionCopy"/> is <see langword="null"/>.</exception>
+    public SdfWorldPipelineCache(GpuRegionCopyPipelineCache regionCopy) {
+        ArgumentNullException.ThrowIfNull(argument: regionCopy);
+
+        RegionCopy = regionCopy;
+    }
+
+    /// <summary>Gets the composition's region-copy pipelines, one a device, which an engine's table upload and mesh
+    /// region record with.</summary>
+    public GpuRegionCopyPipelineCache RegionCopy { get; }
     /// <summary>Gets the number of sets a new lease can join: every set with a lease, less any a reload made private
     /// to its node.</summary>
     public int SharedSets {

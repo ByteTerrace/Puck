@@ -30,11 +30,12 @@ internal static class SdfFilmingViewEngine {
         }
 
         engine = pipelines.TryBuild(
-            construct: static (ready, inputs) => new SdfWorldEngine(
+            construct: static (ready, regionCopy, inputs) => new SdfWorldEngine(
                 device: inputs.Device,
                 height: inputs.Height,
                 options: inputs.Options,
                 pipelines: ready,
+                regionCopy: regionCopy,
                 width: inputs.Width
             ),
             device: device,

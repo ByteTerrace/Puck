@@ -12,7 +12,9 @@ namespace Puck.Shaders;
 /// takes them when the graph installs, creates the fullscreen triangle's vertex buffer and one sampler per frame slot,
 /// and allocates one descriptor set per frame slot from the instance's pool. Each frame it writes the input into the
 /// slot's set and records the render pass and the draw over a framebuffer on the output image, created the first time
-/// that image is drawn into and kept for the recorder's life.
+/// that image is drawn into and kept for the recorder's life. Its ports are a fragment-sampled input and a
+/// color-attachment output, so the input arrives shader-readable and the output in render-target layout, which its
+/// render pass leaves it in; it records no barrier.
 /// </para>
 /// </summary>
 public sealed class PostProcessPackage : IRenderGraphPackageFactory {
@@ -292,11 +294,6 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 imageViewHandle: input.Image.ImageViewHandle,
                 samplerHandle: m_samplers[recording.Slot]
             );
-            RenderGraphPackageDraw.Enter(
-                commandBuffer: command,
-                recorder: recorder,
-                target: in output
-            );
             recorder.BeginRenderPass(
                 command,
                 framebuffer
@@ -335,11 +332,6 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 )
             );
             recorder.EndRenderPass(commandBufferHandle: command);
-            RenderGraphPackageDraw.Leave(
-                commandBuffer: command,
-                recorder: recorder,
-                target: in output
-            );
 
             return RenderGraphPackageOutcome.Drew;
         }

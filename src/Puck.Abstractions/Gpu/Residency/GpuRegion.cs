@@ -23,8 +23,9 @@ namespace Puck.Abstractions.Gpu;
 /// buffer at <see cref="CopyDestinationBinding"/>, <see cref="CopyWorkgroupSize"/> threads per group, with the push
 /// constants <c>(count, runCount, offset, tableBase)</c> in uints: thread <c>i</c> below <c>count</c> copies
 /// <c>destination[word] = source[tableBase + word]</c>, where <c>word</c> is <c>offset + i</c> for one run and, for two
-/// or more, is found in the <c>(table offset, first thread)</c> pairs the staging buffer leads with. The SDF engine's
-/// <c>sdf-frame-upload.comp</c> is that kernel.
+/// or more, is found in the <c>(table offset, first thread)</c> pairs the staging buffer leads with. That kernel is
+/// <c>Puck.Shaders</c>' <c>region-copy.comp</c>, created from <see cref="CopyPipeline"/> once per device and leased by
+/// every owner (<c>GpuRegionCopyPipelineCache</c>).
 /// </para>
 /// </summary>
 public sealed class GpuRegion : IDisposable {
@@ -83,8 +84,8 @@ public sealed class GpuRegion : IDisposable {
     /// <param name="buffers">The factory that creates the host-visible and device-local buffers.</param>
     /// <param name="bindings">The bindings service the staged policy's copy sets come from.</param>
     /// <param name="recorder">The recorder the staged policy's copy is recorded through.</param>
-    /// <param name="copyPipeline">The copy kernel's pipeline, built from <see cref="CopyBindings"/> and a
-    /// <see cref="CopyPushByteLength"/>-byte push range; read only under the staged policy. The caller owns it.</param>
+    /// <param name="copyPipeline">The copy kernel's pipeline, created from <see cref="CopyPipeline"/>; read only under the
+    /// staged policy. The caller owns it and keeps it alive while the region records copies.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
@@ -208,6 +209,18 @@ public sealed class GpuRegion : IDisposable {
             Kind: GpuComputeBindingKind.StorageBufferReadWrite
         ),
     ];
+    /// <summary>Gets the copy kernel's pipeline description: <see cref="CopyBindings"/>, a
+    /// <see cref="CopyPushByteLength"/>-byte push range, and each register at its binding number.</summary>
+    public static GpuComputePipelineDescription CopyPipeline { get; } = new(
+        Bindings: CopyBindings,
+        Name: "region-copy",
+        PushConstantBinding: new GpuPushConstantBinding(
+            data: new byte[CopyPushByteLength],
+            offset: 0,
+            stageFlags: GpuShaderStage.Compute
+        ),
+        Registers: GpuRegisterNumbering.Binding
+    );
 
     /// <summary>Returns the descriptor pool a <see cref="GpuResidencyPolicy.Staged"/> region creates: one
     /// <see cref="CopyBindings"/> set per frame slot. A region under any other policy creates none.</summary>

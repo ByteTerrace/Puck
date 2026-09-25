@@ -24,8 +24,9 @@ public sealed partial class SdfWorldEngine {
         Width: m_width
     );
 
-    /// <summary>Refuses, by name and before anything is allocated, an engine whose descriptor pool the device's heaps
-    /// cannot admit (<see cref="IGpuBindings.CanAdmit"/>), so nothing grows. The constructor calls it first, with the
+    /// <summary>Refuses, by name and before anything is allocated, an engine whose descriptor pool, beside the copy pool
+    /// its mesh region creates under the staged policy, the device's heaps cannot admit
+    /// (<see cref="IGpuBindings.CanAdmit"/>), so nothing grows. The constructor calls it first, with the
     /// arguments it was given, so every creation site is admitted and one building through a pipeline source's
     /// refusing build records the refusal like any other.</summary>
     /// <param name="device">The device the engine would be created on.</param>
@@ -43,10 +44,13 @@ public sealed partial class SdfWorldEngine {
 
         if (!device.Services.Bindings.CanAdmit(
             owner: "SDF world engine",
-            pools: [DescriptorPoolSizes(
-                brickPool: brickPool,
-                brickUpload: (brickPool && (pipelines.OptionalPipeline(index: BrickUploadPipelineIndex) is not null))
-            )],
+            pools: [
+                DescriptorPoolSizes(
+                    brickPool: brickPool,
+                    brickUpload: (brickPool && (pipelines.OptionalPipeline(index: BrickUploadPipelineIndex) is not null))
+                ),
+                MeshRegionPoolSizes,
+            ],
             refusal: out var refusal
         )) {
             throw new GpuDescriptorHeapRefusalException(message: refusal);
@@ -70,7 +74,7 @@ public sealed partial class SdfWorldEngine {
             sets.Add(item: PipelineLayouts.Composite);
 
             for (var table = 0; (table < FrameUploadTableCount); table++) {
-                sets.Add(item: PipelineLayouts.FrameUpload);
+                sets.Add(item: GpuRegion.CopyBindings);
             }
         }
         if (brickPool) {
@@ -235,8 +239,8 @@ public sealed partial class SdfWorldEngine {
             WriteStorageBufferReadOnly(binding: FrameInstanceGridBindingIndex, buffer: gridDevice, set: views);
             var upload = m_frameUploadSets[((slot * FrameUploadTableCount) + 2)];
 
-            WriteStorageBufferReadOnly(binding: FrameUploadSourceBindingIndex, buffer: grids[slot], set: upload);
-            WriteStorageBufferReadWrite(binding: FrameUploadDestinationBindingIndex, buffer: gridDevice, set: upload);
+            WriteStorageBufferReadOnly(binding: GpuRegion.CopySourceBinding, buffer: grids[slot], set: upload);
+            WriteStorageBufferReadWrite(binding: GpuRegion.CopyDestinationBinding, buffer: gridDevice, set: upload);
         }
     }
 }

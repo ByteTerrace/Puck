@@ -348,7 +348,8 @@ profile and the policy chosen for a pipeline instance's parameter bytes.
 
 The neutral buffer factory places a ring's host-visible buffers in the first
 host-visible, host-coherent memory type, not in the device-local aperture the
-profile reports, and no engine consumer writes through a region yet.
+profile reports. The SDF engine's mesh region is the only engine consumer that
+writes through a region.
 
 ---
 

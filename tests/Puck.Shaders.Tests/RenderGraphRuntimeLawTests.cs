@@ -21,19 +21,20 @@ public sealed partial class RenderGraphRuntimeLawTests {
         new RenderGraphPackage(
             Id: Camera,
             Inputs: [],
-            Outputs: [RenderGraphPackagePort.Image],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Summary: "A camera view whose recorder counts its renders."
         ),
         new RenderGraphPackage(
             Id: Over,
-            Inputs: [RenderGraphPackagePort.Image],
-            Outputs: [RenderGraphPackagePort.Image],
+            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
             Summary: "A pass drawn over its input, which may draw nothing."
         ),
         new RenderGraphPackage(
             Id: Pool,
             Inputs: [],
             Outputs: [RenderGraphPackagePort.Buffer(
+                access: RenderGraphPortAccess.ComputeWrite,
                 count: null,
                 strideBytes: null
             )],
@@ -261,12 +262,15 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
     }
     /// <summary>What one instance's package recorders recorded: creations, disposals, records, and the last record's
-    /// extent, output buffer and output image layout.</summary>
+    /// extent, output buffer and the image layouts it was handed.</summary>
     private sealed class Counter {
         public int Created;
         public int Disposed;
         public uint Height;
         public nint InputImage;
+        public GpuImageLayout InputLayout;
+        // Whether the last record was told it may stand in.
+        public bool MayStandIn;
         // A lease every recording holds in its frame's list, or none.
         public GpuImageLease Lease;
         public nint OutputBuffer;
@@ -280,6 +284,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public void Dispose() => counter.Disposed++;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             counter.Records++;
+            counter.MayStandIn = recording.MayStandIn;
             recording.Leases.Hold(lease: in counter.Lease);
             counter.Width = recording.Width;
             counter.Height = recording.Height;
@@ -288,6 +293,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
             counter.InputImage = ((recording.Inputs.Length == 0)
                 ? 0
                 : recording.Inputs[0].Image.ImageHandle);
+            counter.InputLayout = ((recording.Inputs.Length == 0)
+                ? GpuImageLayout.Undefined
+                : recording.Inputs[0].Image.Layout);
             counter.OutputImage = recording.Outputs[0].Image.ImageHandle;
 
             return counter.Outcome;

@@ -256,6 +256,7 @@ public static class VulkanPresenterServiceRegistration {
         services.TryAddSingleton<IVulkanDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
         services.TryAddSingleton<VulkanQueueSubmitter>();
         services.TryAddSingleton(implementationFactory: sp => new SurfaceCompositor(
+            allocator: sp.GetRequiredService<IAllocator>(),
             bufferApi: sp.GetRequiredService<IVulkanBufferApi>(),
             commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>(),
             commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),

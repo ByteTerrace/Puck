@@ -1,18 +1,20 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
-using Puck.Overlays;
+using Puck.Abstractions.Presentation;
 using Puck.SdfVm;
+using Puck.Shaders;
 
 namespace Puck.World;
 
 /// <summary>
 /// A mutable singleton holder for the live render nodes, so console verbs can read them without depending on the
-/// render composition. Program's <see cref="Puck.Hosting.IRenderNode"/> factory stores the built producer, the
-/// overlay, and the render host here; each is <see langword="null"/> until the renderer is built on the first frame.
-/// It is also the <see cref="IGpuWorkRegistry"/> whose nodes the <c>gpu</c> section of <c>world.counters</c> reports:
-/// the engine node, its hosted children that count their work, the overlay, and the offscreen views
-/// <see cref="WorldScreenBinder"/> registers. It is the host's <see cref="IWorldEngineReadiness"/> too: the engine node's
-/// readiness, not ready until the render factory has composed that node.
+/// render composition. The <see cref="Puck.Hosting.IRenderNode"/> factory stores the engine node and the render graph's
+/// root here; each is <see langword="null"/> until the renderer is built on the first frame. It is also the
+/// <see cref="IGpuWorkRegistry"/> whose nodes the <c>gpu</c> section of <c>world.counters</c> reports: the engine node,
+/// its hosted children that count their work, each graph instance the render graph renders, and the offscreen views
+/// <see cref="WorldScreenBinder"/> registers. It is the host's <see cref="IWorldEngineReadiness"/> too: ready once the
+/// engine node is and the graph's root has a completed output rendered over it, not before the render factory has
+/// composed either.
 /// </summary>
 internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     private readonly Lock m_gate = new();
@@ -39,23 +41,36 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <summary>The SDF engine node the render root wraps, or <see langword="null"/> until the render factory has run.</summary>
     public SdfEngineNode? Node { get; set; }
     /// <inheritdoc/>
-    public bool IsReady => (Node?.IsReady ?? false);
+    public bool IsReady => (
+        (Node?.IsReady ?? false) &&
+        (Root?.Runtime.UnservedCaptureReason is null)
+    );
     /// <inheritdoc/>
-    public string? NotReadyReason => ((Node is { } node)
-        ? node.NotReadyReason
+    /// <remarks>The engine node's reason while it builds, then the render graph's while its root has not rendered over
+    /// a completed world output.</remarks>
+    public string? NotReadyReason => (((Node is { } node) && (Root is { } root))
+        ? (node.NotReadyReason ?? root.Runtime.UnservedCaptureReason)
         : "the renderer has not been composed: no frame has been produced"
     );
-    /// <summary>The unified overlay decorator, or <see langword="null"/> when the overlay was not composed —
-    /// <c>world.counters gpu</c> reports its pass beside the engine's.</summary>
-    public UnifiedOverlayNode? Overlay { get; set; }
-    /// <summary>The assembled render host, or <see langword="null"/> until the render factory has run — the
-    /// <c>world.screenshot</c> verb arms captures through its <see cref="SdfWorldRender.RequestCapture"/> (which
-    /// routes to the OUTERMOST decorator, so the readback lands on the final composed frame).</summary>
-    public SdfWorldRender? Render { get; set; }
+    /// <summary>The render graph's root, the render host every captured and presented frame comes from, or
+    /// <see langword="null"/> until the render factory has run. <c>world.screenshot</c> arms captures on it, so the
+    /// readback is the frame the display shows.</summary>
+    public RenderGraphRuntimeNode? Root { get; set; }
 
+    /// <summary>Returns the capture target of a render-graph instance: the root for <see langword="null"/>, else the
+    /// instance the name names.</summary>
+    /// <param name="instance">The instance a capture reads, or <see langword="null"/> for the root.</param>
+    /// <returns>The target, or <see langword="null"/> until the render factory has run.</returns>
+    /// <exception cref="ArgumentException">The render graph has no instance of that name.</exception>
+    public ICaptureRequestTarget? CaptureTarget(string? instance) => ((Root is not { } root)
+        ? null
+        : ((instance is null)
+            ? root
+            : root.Runtime.CaptureTarget(instance: instance)));
     /// <inheritdoc/>
     /// <remarks>The engine node reads as <c>world</c>, its hosted children that count their work by their registered
-    /// names, the overlay as <c>overlay</c>, and each registered view as <c>view:&lt;name&gt;</c>.</remarks>
+    /// names, each render-graph instance that renders a graph by its instance name (the root's passes are its post
+    /// passes and the overlay), and each registered view as <c>view:&lt;name&gt;</c>.</remarks>
     public void CopyNodes(List<GpuWorkNode> nodes) {
         ArgumentNullException.ThrowIfNull(nodes);
 
@@ -77,12 +92,20 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
             }
         }
 
-        if (Overlay is { } overlay) {
-            nodes.Add(item: new GpuWorkNode(
-                Lifetime: overlay.WorkLifetime,
-                Name: "overlay",
-                Work: overlay.Work
-            ));
+        if (Root?.Runtime is { } runtime) {
+            for (var index = 0; (index < runtime.Instances.Instances.Count); index++) {
+                if (runtime.Producer(instance: index) is not null) {
+                    continue;
+                }
+
+                var instance = runtime.Node(instance: index);
+
+                nodes.Add(item: new GpuWorkNode(
+                    Lifetime: instance,
+                    Name: runtime.Instances.Instances[index].Name,
+                    Work: instance
+                ));
+            }
         }
 
         lock (m_gate) {

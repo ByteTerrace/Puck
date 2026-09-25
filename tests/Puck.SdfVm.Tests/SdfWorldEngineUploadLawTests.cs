@@ -4,6 +4,7 @@ using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
@@ -178,8 +179,8 @@ public sealed class SdfWorldEngineUploadLawTests {
             brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: frame),
             height: Extent,
-            kernels: Kernels(),
-            pipelines: new SdfWorldPipelineCache(),
+            kernels: SdfTestPipelines.Kernels(),
+            pipelines: SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode),
             width: Extent
         );
         var context = new FrameContext(
@@ -247,10 +248,98 @@ public sealed class SdfWorldEngineUploadLawTests {
             ).ToArray()
         );
     }
+    [Fact]
+    public void TheMeshRegionHoldsAKnownDrawSetAndOwesOnlyTheWordsANewSetChanges() {
+        using var rig = new Rig(slots: 1);
+        var quad = new SdfMesh(
+            indices: new uint[] { 0, 1, 2, 0, 2, 3 },
+            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
+        );
+        var triangle = new SdfMesh(
+            indices: new uint[] { 0, 1, 2 },
+            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 0f, y: 0f, z: 1f), new(x: 1f, y: 0f, z: 0f) }
+        );
+        var moved = Matrix4x4.CreateTranslation(xPosition: 1f, yPosition: 2f, zPosition: 3f);
+        SdfMeshDraw[] draws = [
+            new(Material: 4, Mesh: quad, ObjectToWorld: moved),
+            new(Material: 5, Mesh: triangle, ObjectToWorld: Matrix4x4.CreateScale(scale: 2f)),
+            new(Material: 6, Mesh: quad, ObjectToWorld: Matrix4x4.Identity),
+        ];
+        var layout = new SdfMeshRegionLayout(
+            DrawCount: 3,
+            IndexCount: 9,
+            VertexCount: 7
+        );
+        var expected = new List<uint>();
 
-    // The upload kernel is the one the model GPU runs, so its copies land in the device-local tables.
-    private static SdfWorldKernels Kernels() =>
-        SdfTestPipelines.Kernels() with { FrameUpload = new byte[] { UploadModelGpu.FrameUploadBytecode } };
+        // A draw's record: its matrix row by row, its material, then its mesh's first index, index count and base vertex.
+        void Record(Matrix4x4 matrix, uint material, uint firstIndex, uint indexCount, uint baseVertex) {
+            float[] rows = [
+                matrix.M11, matrix.M12, matrix.M13, matrix.M14,
+                matrix.M21, matrix.M22, matrix.M23, matrix.M24,
+                matrix.M31, matrix.M32, matrix.M33, matrix.M34,
+                matrix.M41, matrix.M42, matrix.M43, matrix.M44,
+            ];
+
+            expected.AddRange(collection: rows.Select(selector: BitConverter.SingleToUInt32Bits));
+            expected.AddRange(collection: [material, firstIndex, indexCount, baseVertex]);
+        }
+
+        Record(baseVertex: 0, firstIndex: 0, indexCount: 6, material: 4, matrix: moved);
+        Record(matrix: Matrix4x4.CreateScale(scale: 2f), material: 5, firstIndex: 6, indexCount: 3, baseVertex: 4);
+        Record(matrix: Matrix4x4.Identity, material: 6, firstIndex: 0, indexCount: 6, baseVertex: 0);
+
+        foreach (var position in quad.Positions.ToArray().Concat(second: triangle.Positions.ToArray())) {
+            expected.AddRange(collection: [
+                BitConverter.SingleToUInt32Bits(value: position.X),
+                BitConverter.SingleToUInt32Bits(value: position.Y),
+                BitConverter.SingleToUInt32Bits(value: position.Z),
+            ]);
+        }
+
+        expected.AddRange(collection: quad.Indices.ToArray().Concat(second: triangle.Indices.ToArray()));
+
+        rig.Warm();
+        rig.Render(time: 0f);
+
+        var stillBytes = rig.Gpu.HostBytes();
+
+        rig.Render(
+            meshDraws: draws,
+            time: 0f
+        );
+
+        Assert.Equal(expected: layout, actual: rig.Engine.MeshRegionLayout);
+        Assert.Equal(expected: layout.Bytes, actual: SdfMeshRegion.BytesOf(draws: draws));
+        Assert.Equal(expected: layout.Bytes, actual: rig.Engine.MeshRegionBytes);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: layout.Bytes)
+        );
+
+        // The same list again repacks nothing, and a list moving one draw owes the one word its translation changed.
+        rig.Render(
+            meshDraws: draws,
+            time: 0f
+        );
+        Assert.Equal(expected: stillBytes, actual: rig.Gpu.HostBytes());
+
+        SdfMeshDraw[] shifted = [draws[0], draws[1], (draws[2] with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 0f, yPosition: 0f, zPosition: 7f) })];
+
+        rig.Render(
+            meshDraws: shifted,
+            time: 0f
+        );
+        Assert.Equal(expected: (stillBytes + sizeof(uint)), actual: rig.Gpu.HostBytes());
+
+        var shiftedWords = rig.Gpu.DeviceLocal(sizeBytes: layout.Bytes);
+
+        Assert.Equal(
+            expected: BitConverter.SingleToUInt32Bits(value: 7f),
+            actual: BitConverter.ToUInt32(startIndex: ((((2 * SdfMeshRegion.DrawWords) + 14) * sizeof(uint))), value: shiftedWords)
+        );
+    }
+
     // One 64×64 view looking at the origin, at the given time, carrying the given transforms.
     private static SdfFrame Frame(SdfProgram program, float time, DynamicTransform[] transforms) => new(
         Program: program,
@@ -326,6 +415,7 @@ public sealed class SdfWorldEngineUploadLawTests {
         private readonly DynamicTransform[] m_transforms;
 
         private SdfWorldPipelines m_pipelines = null!;
+        private GpuRegionCopyPipeline m_regionCopy = null!;
 
         public Rig(int slots) {
             Gpu = new UploadModelGpu(reportVersion: SdfIsa.Version);
@@ -345,6 +435,7 @@ public sealed class SdfWorldEngineUploadLawTests {
         public void Dispose() {
             Engine.Dispose();
             m_pipelines.Dispose();
+            m_regionCopy.Dispose();
         }
         // Moves one slot to a pose no earlier frame gave it.
         public void Move(int slot) {
@@ -359,10 +450,11 @@ public sealed class SdfWorldEngineUploadLawTests {
         public void Rebuild() {
             Engine.Dispose();
             m_pipelines.Dispose();
+            m_regionCopy.Dispose();
             Engine = Build();
         }
         // Renders one frame at the given time, by default resetting the tallies first so they read that frame's writes.
-        public void Render(float time, bool resetTallies = true) {
+        public void Render(float time, bool resetTallies = true, IReadOnlyList<SdfMeshDraw>? meshDraws = null) {
             if (resetTallies) {
                 Gpu.ResetTallies();
             }
@@ -385,6 +477,7 @@ public sealed class SdfWorldEngineUploadLawTests {
                 time: time,
                 transforms: m_transforms
             ) with {
+                MeshDraws = (meshDraws ?? []),
                 MovedTransforms = m_moved,
             });
         }
@@ -401,9 +494,14 @@ public sealed class SdfWorldEngineUploadLawTests {
                 name: "gpu.sdf-engine"
             );
 
+            m_regionCopy = SdfTestPipelines.RegionCopy(
+                device: Gpu,
+                kernel: UploadModelGpu.RegionCopyBytecode,
+                ledger: ledger
+            );
             m_pipelines = SdfTestPipelines.Build(
                 device: Gpu,
-                kernels: Kernels(),
+                kernels: SdfTestPipelines.Kernels(),
                 ledger: ledger
             );
 
@@ -418,6 +516,7 @@ public sealed class SdfWorldEngineUploadLawTests {
                     WorkLedger: ledger
                 ),
                 pipelines: m_pipelines,
+                regionCopy: m_regionCopy,
                 width: Extent
             );
         }

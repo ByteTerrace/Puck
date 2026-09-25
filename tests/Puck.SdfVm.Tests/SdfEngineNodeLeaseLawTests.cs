@@ -32,7 +32,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
         // A frame nothing produced hands out the same image again, each acquisition counted.
         Assert.Equal(
             actual: (second.Image.ImageViewHandle, second.Image.Width, second.Image.Height, second.Image.Format, second.Layout, rig.Node.OutputLeases),
-            expected: (first.Image.ImageViewHandle, Extent, Extent, SurfaceFormat.R8G8B8A8Unorm, GpuImageLayout.General, 2)
+            expected: (first.Image.ImageViewHandle, Extent, Extent, SurfaceFormat.R8G8B8A8Unorm, GpuImageLayout.ShaderReadOnly, 2)
         );
         Assert.Equal(
             actual: first.Lease.ImageViewHandle,
@@ -45,6 +45,33 @@ public sealed class SdfEngineNodeLeaseLawTests {
             actual: rig.Node.OutputLeases,
             expected: 0
         );
+    }
+    // A consumer's planned barriers start from the lease's declared layout and hand the image back in it, so it must be
+    // the layout the engine's own recording leaves the output in, which is also the one its next frame starts from.
+    [Fact]
+    public void ALeaseDeclaresTheLayoutTheEngineLeavesItsOutputIn() {
+        using var rig = new Rig();
+
+        rig.Gpu.ImageTransitions = [];
+        rig.ProduceFirst();
+        Assert.True(condition: rig.Node.Produce(
+            context: rig.Context,
+            height: Extent,
+            width: Extent
+        ));
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var output));
+
+        var transitions = rig.Gpu.ImageTransitions.Where(predicate: transition => (transition.Image == output.Image.ImageHandle)).ToArray();
+
+        Assert.Equal(
+            actual: transitions[^1].New,
+            expected: output.Layout
+        );
+        Assert.Contains(
+            collection: transitions,
+            filter: transition => (transition.Old == output.Layout)
+        );
+        output.Lease.Retire();
     }
     [Fact]
     public void AnEngineReplacedWhileLeasedIsDisposedOnlyAfterRelease() {
@@ -162,6 +189,8 @@ public sealed class SdfEngineNodeLeaseLawTests {
     private sealed class Rig : IDisposable {
         public Rig() {
             var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+
+            Gpu = gpu;
             var builder = new SdfProgramBuilder();
 
             builder.Sphere(
@@ -195,7 +224,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
                 frameSource: new FixedFrameSource(frame: frame),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
-                pipelines: new SdfWorldPipelineCache(),
+                pipelines: SdfTestPipelines.Cache(),
                 width: Extent
             );
             Context = new FrameContext(
@@ -213,6 +242,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
         }
 
         public FrameContext Context { get; }
+        public FakeGpuDevice Gpu { get; }
         public SdfEngineNode Node { get; }
 
         public void Dispose() => Node.Dispose();

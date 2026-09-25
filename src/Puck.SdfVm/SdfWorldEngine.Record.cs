@@ -15,10 +15,7 @@ public sealed partial class SdfWorldEngine {
         // The non-export consumer set spans TWO stages — the presenter's fragment blit AND another engine's COMPUTE
         // sampler (a view engine's output bound as a screen source) — so the resting-stage scope names both; under
         // the frame ring the begin-of-frame re-transition below must order after whichever consumer read it last.
-        var restingLayout = (m_exportMode
-            ? GpuImageLayout.External
-            : GpuImageLayout.ShaderReadOnly
-        );
+        var restingLayout = OutputLayout;
         var restingStage = (m_exportMode
             ? GpuStage.ComputeShader
             : GpuStage.FragmentShader | GpuStage.ComputeShader
@@ -106,6 +103,7 @@ public sealed partial class SdfWorldEngine {
         // passes do with them), copying only the ranges that changed. Each reader's buffer transitions make the
         // device-local tables' writes visible to it.
         RecordFrameUpload(commandBuffer: commandBuffer);
+        RecordMeshRegionCopy(commandBuffer: commandBuffer);
         m_work.LeavePass();
 
         // Cadence gate: when this frame's inputs are byte-identical to the last RENDERED frame's
@@ -523,7 +521,7 @@ public sealed partial class SdfWorldEngine {
                 count += ((uint)owed.Length(index: run));
             }
 
-            // FrameUploadPush { count, runCount, offset, tableBase } — KEEP IN SYNC with sdf-frame-upload.comp.hlsl.
+            // RegionCopyPush { count, runCount, offset, tableBase }: KEEP IN SYNC with region-copy.comp.hlsl.
             push[0] = count; push[1] = ((uint)owed.Count); push[2] = ((uint)owed.Start(index: 0)); push[3] = FrameUploadRunTableWords;
             recorder.PushConstants(
                 bindPoint: GpuBindPoint.Compute,
@@ -535,7 +533,7 @@ public sealed partial class SdfWorldEngine {
             );
             recorder.Dispatch(
                 commandBufferHandle: commandBuffer,
-                groupCountX: ((count + (FrameUploadWorkgroupSize - 1)) / FrameUploadWorkgroupSize),
+                groupCountX: ((count + (GpuRegion.CopyWorkgroupSize - 1)) / GpuRegion.CopyWorkgroupSize),
                 groupCountY: 1,
                 groupCountZ: 1
             );

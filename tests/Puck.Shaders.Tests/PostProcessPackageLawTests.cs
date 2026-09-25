@@ -1,19 +1,21 @@
 using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// Laws of the <c>post.&lt;id&gt;</c> package (<see cref="PostProcessPackage"/>) on <see cref="FakePipelineGpu"/>: the
-/// shipped film-grain set run as a package pass of a graph records what <see cref="FullscreenPassNode"/> records for the
-/// same set over the same input (the render pass and graphics pipeline it is created for, the vertex buffer and the
-/// draw, the input written at the set's binding, and the frame block pushed byte for byte, bound config and live changes
-/// included); its pipeline is built off the frame thread and released with its graph on replacement, device loss and
-/// disposal; a config that does not bind is refused by the graph compiler by name; and a steady frame allocates
-/// nothing.
+/// shipped film-grain set run as a package pass of a graph records a pinned recording over its input (the render pass
+/// and graphics pipeline it is created for, the vertex buffer and the draw, the input written at the set's binding, and
+/// the frame block pushed byte for byte, bound config and live changes included), the one the fullscreen pass node it
+/// replaced recorded for the same set; it is handed its input shader-readable and its target in render-target layout by
+/// the node's planned
+/// barriers and records none of its own; its pipeline is built off the frame thread and released with its graph on
+/// replacement, device loss and disposal; a config that does not bind is refused by the graph compiler by name; and a
+/// steady frame allocates nothing.
 /// </summary>
 public sealed class PostProcessPackageLawTests {
     private const uint Extent = 64;
@@ -66,14 +68,15 @@ public sealed class PostProcessPackageLawTests {
         Schema: RenderGraphSchemas.Graph
     );
     private static JsonElement Json(string text) => JsonDocument.Parse(json: text).RootElement.Clone();
-    // A node running the film-grain set as the graph's one package pass over the bound input.
-    private static ShaderPipelineRenderNode PackageNode(FakePipelineGpu gpu, JsonElement? config) {
+    // A node running the film-grain set as the graph's one package pass over the bound input, through the factory a law
+    // wraps it in, if any.
+    private static ShaderPipelineRenderNode PackageNode(FakePipelineGpu gpu, JsonElement? config, Func<PostProcessPackage, IRenderGraphPackageFactory>? wrap = null) {
         var manifest = FilmGrain();
         var package = new PostProcessPackage(manifest: manifest);
         var packages = new RenderGraphPackageRecorders();
 
         packages.Register(
-            factory: package,
+            factory: (wrap?.Invoke(arg: package) ?? package),
             package: package.Id
         );
 
@@ -99,20 +102,17 @@ public sealed class PostProcessPackageLawTests {
 
         return node;
     }
-    // The same set run by the node it replaces, over an inner node publishing the same input.
-    private static FullscreenPassNode AdapterNode(FakePipelineGpu gpu, JsonElement? config) {
-        var manifest = FilmGrain();
-
-        return new FullscreenPassNode(
-            config: manifest.BindConfig(config: config),
-            deviceContext: gpu,
-            height: Extent,
-            hostsOnDirectX: false,
-            inner: new InputNode(),
-            manifest: manifest,
-            width: Extent
-        );
-    }
+    // The recording the law pins for four frames: the fullscreen pass the set is drawn by, the input at the set's binding,
+    // and each frame's pushed frame block, whose frame counter counts from one and whose tail is the bound config
+    // (intensity, seed, then the set's remaining fields) in hex.
+    private static Recorded Pinned(string configHex) => new(
+        Commands: [.. Enumerable.Repeat(count: 4, element: new[] { "vertices 24 8", "draw 0 3" }).SelectMany(selector: static pair => pair)],
+        Pipeline: "sdf-film-grain 1 False  112 Fragment, Compute 8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
+        Pushes: [.. Enumerable.Range(count: 4, start: 1).Select(selector: frame => $"Graphics Fragment, Compute 4000000040000000{new string(c: '0', count: 48)}{frame:X2}000000E0C4{new string(c: '0', count: 108)}18000000{configHex}")],
+        RenderPass: "GpuColorAttachment { Format = R8G8B8A8Unorm, Load = Clear, Store = Store, FinalLayout = RenderTarget } ",
+        RenderPasses: 4,
+        Writes: [.. Enumerable.Repeat(count: 4, element: $"0 {Input.ImageViewHandle}")]
+    );
     private static void ProduceUntilPublished(IRenderNode node) => Assert.True(
         condition: SpinWait.SpinUntil(
             condition: () => !node.ProduceFrame(context: default).IsEmpty,
@@ -144,29 +144,29 @@ public sealed class PostProcessPackageLawTests {
             Writes: [.. gpu.DescriptorWrites.Select(selector: static write => $"{write.Binding} {write.Handle}")]
         );
     }
-    private static void AssertSameRecording(Recorded adapter, Recorded package) {
+    private static void AssertSameRecording(Recorded expected, Recorded package) {
         Assert.Equal(
-            expected: adapter.RenderPass,
+            expected: expected.RenderPass,
             actual: package.RenderPass
         );
         Assert.Equal(
-            expected: adapter.Pipeline,
+            expected: expected.Pipeline,
             actual: package.Pipeline
         );
         Assert.Equal(
-            expected: adapter.Commands,
+            expected: expected.Commands,
             actual: package.Commands
         );
         Assert.Equal(
-            expected: adapter.Writes,
+            expected: expected.Writes,
             actual: package.Writes
         );
         Assert.Equal(
-            expected: adapter.Pushes,
+            expected: expected.Pushes,
             actual: package.Pushes
         );
         Assert.Equal(
-            expected: adapter.RenderPasses,
+            expected: expected.RenderPasses,
             actual: package.RenderPasses
         );
         Assert.Equal(
@@ -175,67 +175,82 @@ public sealed class PostProcessPackageLawTests {
         );
     }
 
-    [InlineData(null)]
-    [InlineData("""{"intensity":0.3,"seed":7}""")]
+    [InlineData(null, "CDCC4C3D000000000000803F00000000")]
+    [InlineData("""{"intensity":0.3,"seed":7}""", "9A99993E070000000000803F00000000")]
     [Theory]
-    public void APostPassRecordsWhatTheFullscreenPassNodeRecordsForTheSameSetAndConfig(string? config) {
-        var bound = ((config is null)
-            ? ((JsonElement?)null)
-            : Json(text: config));
-        var adapterGpu = new FakePipelineGpu();
-        var packageGpu = new FakePipelineGpu();
-        using var adapter = AdapterNode(
-            config: bound,
-            gpu: adapterGpu
-        );
+    public void APostPassRecordsThePinnedRecordingForItsSetAndConfig(string? config, string configHex) {
+        var gpu = new FakePipelineGpu();
         using var package = PackageNode(
-            config: bound,
-            gpu: packageGpu
+            config: ((config is null)
+                ? null
+                : Json(text: config)),
+            gpu: gpu
         );
 
         AssertSameRecording(
-            adapter: Record(
-                gpu: adapterGpu,
-                node: adapter
-            ),
+            expected: Pinned(configHex: configHex),
             package: Record(
-                gpu: packageGpu,
+                gpu: gpu,
                 node: package
             )
         );
     }
     [Fact]
-    public void ALiveConfigChangeReachesThePushedFrameBlockAsTheFullscreenPassNodeCarriesIt() {
-        var adapterGpu = new FakePipelineGpu();
-        var packageGpu = new FakePipelineGpu();
-        using var adapter = AdapterNode(
-            config: null,
-            gpu: adapterGpu
-        );
+    public void ALiveConfigChangeReachesThePushedFrameBlockFromTheNextFrame() {
+        var gpu = new FakePipelineGpu();
         using var package = PackageNode(
             config: null,
-            gpu: packageGpu
+            gpu: gpu
         );
+        var recorded = Record(
+            before: frame => Assert.True(condition: ((frame != 2) || package.TrySetConfig(
+                config: Json(text: """{"intensity":0.75}"""),
+                passName: Pass,
+                reason: out _
+            ))),
+            gpu: gpu,
+            node: package
+        );
+        var before = Pinned(configHex: "CDCC4C3D000000000000803F00000000");
+        var after = Pinned(configHex: "0000403F000000000000803F00000000");
 
         AssertSameRecording(
-            adapter: Record(
-                before: frame => Assert.True(condition: ((frame != 2) || adapter.TrySetConfig(
-                    field: "intensity",
-                    value: 0.75f
-                ))),
-                gpu: adapterGpu,
-                node: adapter
-            ),
-            package: Record(
-                before: frame => Assert.True(condition: ((frame != 2) || package.TrySetConfig(
-                    config: Json(text: """{"intensity":0.75}"""),
-                    passName: Pass,
-                    reason: out _
-                ))),
-                gpu: packageGpu,
-                node: package
-            )
+            expected: (before with {
+                Pushes = [.. before.Pushes.Take(count: 2), .. after.Pushes.Skip(count: 2)],
+            }),
+            package: recorded
         );
+    }
+    [Fact]
+    public void APostPassDrawsIntoItsPlannedLayoutsAndRecordsNoBarrierOfItsOwn() {
+        var gpu = new FakePipelineGpu();
+        ObservedPackageFactory? observed = null;
+        using var node = PackageNode(
+            config: null,
+            gpu: gpu,
+            wrap: package => (observed = new ObservedPackageFactory(
+                barriers: () => gpu.Barriers.Count,
+                inner: package
+            ))
+        );
+
+        ProduceUntilPublished(node: node);
+        gpu.Recording = true;
+
+        for (var frame = 0; (frame < 4); frame++) {
+            _ = node.ProduceFrame(context: default);
+        }
+
+        gpu.Recording = false;
+
+        // The node records the barriers around the draw: every frame the target moves into render-target layout before
+        // it and on to publication after it.
+        Assert.NotEmpty(collection: gpu.Barriers);
+        Assert.Equal(
+            expected: (0, (GpuImageLayout.ShaderReadOnly, GpuImageLayout.RenderTarget), RenderGraphPackageOutcome.Drew),
+            actual: (observed!.PackageBarriers, observed.Layouts, observed.Outcome)
+        );
+        Assert.True(condition: (observed.Records >= 4));
     }
     [Fact]
     public void AConfigThatDoesNotBindIsRefusedByTheGraphCompilerNamingThePass() {
@@ -347,20 +362,4 @@ public sealed class PostProcessPackageLawTests {
     }
 
     private sealed record Recorded(string RenderPass, string Pipeline, IReadOnlyList<string> Commands, IReadOnlyList<string> Writes, IReadOnlyList<string> Pushes, int RenderPasses);
-    // An inner node publishing the law's input image every frame.
-    private sealed class InputNode : IRenderNode {
-        public NodeDescriptor Descriptor { get; } = new(
-            Name: "input",
-            SurfaceId: SurfaceId.New()
-        );
-
-        public void Dispose() { }
-        public Surface ProduceFrame(in FrameContext context) => Surface.SameDeviceImage(
-            format: SurfaceFormat.R8G8B8A8Unorm,
-            height: Extent,
-            imageHandle: Input.ImageHandle,
-            imageViewHandle: Input.ImageViewHandle,
-            width: Extent
-        );
-    }
 }

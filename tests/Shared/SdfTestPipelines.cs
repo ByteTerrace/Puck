@@ -2,6 +2,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
+using Puck.Shaders;
 using Xunit;
 
 namespace Puck.Testing;
@@ -18,6 +19,18 @@ internal static class SdfTestPipelines {
             kernels: kernels,
             ledger: ledger
         );
+    // A composition's pipeline cache whose region-copy pipelines are created from a one-byte kernel of the caller's
+    // choosing (UploadModelGpu.RegionCopyBytecode for a GPU that runs the copies).
+    public static SdfWorldPipelineCache Cache(byte regionCopy = 1) =>
+        new(regionCopy: new GpuRegionCopyPipelineCache(kernel: new byte[] { regionCopy }));
+    // Builds a region-copy pipeline on the calling thread for an engine a harness drives directly, counting into the
+    // ledger the engine will count into.
+    public static GpuRegionCopyPipeline RegionCopy(IGpuDeviceContext device, GpuWorkLedger ledger, byte kernel = 1) =>
+        GpuRegionCopyPipelineCache.Build(
+            device: device,
+            kernel: new byte[] { kernel },
+            ledger: ledger
+        );
     // A kernel set whose every kernel is one byte, the beam's chosen by the caller so two sets can differ by one kernel,
     // and whose brick kernels are empty, so no set built from it has brick pipelines.
     public static SdfWorldKernels Kernels(byte beam = 1) {
@@ -30,7 +43,6 @@ internal static class SdfTestPipelines {
             BrickUpload: ReadOnlyMemory<byte>.Empty,
             Composite: code,
             CullArgs: code,
-            FrameUpload: code,
             InstanceCull: code,
             Primary: code,
             Sky: code,
