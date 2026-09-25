@@ -412,6 +412,15 @@ file sealed class FaultingBufferFactory(IGpuBufferFactory inner, GpuCreationFaul
             usage: usage
         );
     }
+    public IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
+        Enter(kind: GpuCreationKind.Buffer);
+
+        return inner.CreateHostVisibleDeviceLocal(
+            name: name,
+            sizeBytes: sizeBytes,
+            usage: usage
+        );
+    }
     public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Buffer);
 

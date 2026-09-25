@@ -10,7 +10,8 @@ namespace Puck.Shaders.Tests;
 /// records it by hand. The definition is built from <see cref="SdfFrameBufferPlan.Uses"/>: a write starts a buffer's
 /// version, a read-write forwards the latest version, a read binds it, and an indirect read is the pass's indirect
 /// dispatch arguments; a buffer read before any pass writes it (the brick pool, which world-scoped brick work fills) is
-/// external. The planner must order the passes as <see cref="SdfWorldEngine.PassLabels"/> less the composite, and plan,
+/// external. The planner must order the passes as <see cref="SdfWorldEngine.PassLabels"/> less the composite and the
+/// upload, whose region copies touch no frame buffer and are the regions' own, and plan,
 /// between passes of the frame, exactly the buffer transitions <see cref="SdfFrameBufferPlan.Edges"/> derives. The one
 /// image chain (sky, then views shading over it) is the passes' published output and is not part of the buffer plan.
 /// Every buffer is counted over the capacities it grows with, and at every capacity the planner's size is the engine's
@@ -18,13 +19,13 @@ namespace Puck.Shaders.Tests;
 /// </summary>
 public sealed class SdfPassPlanLawTests {
     private const string Composite = "composite";
+    private const string Upload = "upload";
 
     // The engine's ledger label for each dispatch, mirrored because the engine keeps the pairing only in the order of its
-    // Record methods. Brick work is null: it is world-scoped and joins the views through the external brick pool. The
-    // three table uploads share the one upload pass.
+    // Record methods. Brick work is null: it is world-scoped and joins the views through the external brick pool. So is the
+    // upload: its region copies transition what they copy themselves.
     private static string? LabelOf(SdfFramePass pass) => pass switch {
-        SdfFramePass.BrickUpload or SdfFramePass.BrickBake => null,
-        SdfFramePass.UploadViewports or SdfFramePass.UploadDynamicTransforms or SdfFramePass.UploadInstanceGrid => "upload",
+        SdfFramePass.BrickUpload or SdfFramePass.BrickBake or SdfFramePass.Upload => null,
         SdfFramePass.Sky => "sky",
         SdfFramePass.Mask => "mask",
         SdfFramePass.Beam => "beam",
@@ -43,9 +44,6 @@ public sealed class SdfPassPlanLawTests {
     // Each buffer's element stride and size, counted by the capacities it grows with. The brick pool is counted as the
     // sdf.bricks package's port declares it; the indirect arguments and the dispatch box are fixed records.
     private static (uint Stride, ulong? SizeBytes, IReadOnlyList<ShaderPipelineCountTerm>? Count) StorageOf(SdfFrameBuffer buffer, SdfFrameCapacity capacity) => buffer switch {
-        SdfFrameBuffer.Viewports => (96, null, [Term(1, ShaderPipelineCountBasis.Viewports)]),
-        SdfFrameBuffer.DynamicTransforms => (48, null, [Term(1, ShaderPipelineCountBasis.DynamicTransforms)]),
-        SdfFrameBuffer.InstanceGrid => (4, null, [Term(1, ShaderPipelineCountBasis.InstanceGridWords)]),
         SdfFrameBuffer.BrickPool => (4, null, [Term(1, ShaderPipelineCountBasis.BrickPoolVoxels)]),
         SdfFrameBuffer.InstanceMasks => (4, null, [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)]),
         // Four tile planes per tile, then two float3 part-bound corners in each of the primary and AO bands per instance.
@@ -56,7 +54,7 @@ public sealed class SdfPassPlanLawTests {
         SdfFrameBuffer.ViewsArgs => (4, ShaderPipelineDispatch.ArgumentBytes, null),
         // The dispatch box: the group origin, then the exclusive group end, four uints.
         SdfFrameBuffer.CullBounds => (4, (4 * sizeof(uint)), null),
-        SdfFrameBuffer.PrimaryHits => ((uint)SdfWorldEngine.VisibilityRecordByteLength, null, [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)]),
+        SdfFrameBuffer.PrimaryHits => (((uint)SdfWorldEngine.VisibilityRecordByteLength), null, [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)]),
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(buffer)),
     };
     // The counts a host resolves for an engine of this capacity, each derived as the engine derives it.
@@ -65,16 +63,13 @@ public sealed class SdfPassPlanLawTests {
         Width: capacity.Width
     ) {
         BrickPoolVoxels = ((ulong)capacity.BrickPoolVoxels),
-        DynamicTransforms = ((ulong)capacity.DynamicTransforms),
-        InstanceGridWords = ((ulong)SdfInstanceGrid.WordCapacity(maxInstances: capacity.Instances)),
         InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: capacity.Instances)),
         Instances = ((ulong)capacity.Instances),
         Tiles = capacity.Tiles,
         Viewports = capacity.Viewports,
     };
-    private static SdfFrameCapacity Capacity(uint width, uint height, uint viewports, int instances, int dynamicTransforms) => new(
+    private static SdfFrameCapacity Capacity(uint width, uint height, uint viewports, int instances) => new(
         BrickPoolVoxels: SdfWorldEngine.DefaultBrickPoolVoxelCapacity,
-        DynamicTransforms: dynamicTransforms,
         Height: height,
         Instances: instances,
         Viewports: viewports,
@@ -106,7 +101,6 @@ public sealed class SdfPassPlanLawTests {
     );
 
     private static SdfFrameCapacity Default { get; } = Capacity(
-        dynamicTransforms: 1,
         height: 64,
         instances: 1,
         viewports: 1,
@@ -199,16 +193,16 @@ public sealed class SdfPassPlanLawTests {
     }
 
     [Fact]
-    public void ThePlannedOrderIsTheEnginesPassOrderLessTheComposite() {
+    public void ThePlannedOrderIsTheEnginesPassOrderLessTheCompositeAndTheUpload() {
         var labels = SdfWorldEngine.PassLabels.ToArray();
 
         Assert.Equal(
             actual: Frame.Select(selector: static pass => LabelOf(pass: pass)!).Distinct(),
-            expected: labels.Where(predicate: static label => (label != Composite))
+            expected: labels.Where(predicate: static label => ((label != Composite) && (label != Upload)))
         );
         Assert.Equal(
             actual: Plan(capacity: Default).PassOrder,
-            expected: labels.Where(predicate: static label => (label != Composite))
+            expected: labels.Where(predicate: static label => ((label != Composite) && (label != Upload)))
         );
     }
     [Fact]
@@ -243,15 +237,14 @@ public sealed class SdfPassPlanLawTests {
             expected: expected
         );
     }
-    [InlineData(64U, 64U, 1U, 1, 1)]
-    [InlineData(100U, 37U, 2U, 33, 5)]
-    [InlineData(17U, 300U, 3U, 65, 2)]
-    [InlineData(1920U, 1080U, 4U, 1000, 300)]
-    [InlineData(2560U, 1440U, SdfWorldEngine.MaxViewports, 4097, 64)]
+    [InlineData(64U, 64U, 1U, 1)]
+    [InlineData(100U, 37U, 2U, 33)]
+    [InlineData(17U, 300U, 3U, 65)]
+    [InlineData(1920U, 1080U, 4U, 1000)]
+    [InlineData(2560U, 1440U, SdfWorldEngine.MaxViewports, 4097)]
     [Theory]
-    public void ThePlannerSizesEveryBufferAsTheEngineAllocatesIt(uint width, uint height, uint viewports, int instances, int dynamicTransforms) {
+    public void ThePlannerSizesEveryBufferAsTheEngineAllocatesIt(uint width, uint height, uint viewports, int instances) {
         var capacity = Capacity(
-            dynamicTransforms: dynamicTransforms,
             height: height,
             instances: instances,
             viewports: viewports,

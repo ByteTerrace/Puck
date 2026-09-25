@@ -268,7 +268,7 @@ internal static class WorldPostBuildWiring {
                 (echo.RebuildOrigin is { } origin)
             ) {
                 definitionSource.SourcePath = origin;
-                // The rendering host resolves views.pipelines sources against this same moved directory from here
+                // The rendering host resolves views.graphs sources against this same moved directory from here
                 // on — presentation-only, so a headless boot has no runtime to rebase.
                 graphHost?.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: origin));
             }

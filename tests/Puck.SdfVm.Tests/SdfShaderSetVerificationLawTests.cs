@@ -20,7 +20,6 @@ public sealed class SdfShaderSetVerificationLawTests {
         static kernels => kernels with { Ambient = Changed },
         static kernels => kernels with { Beam = Changed },
         static kernels => kernels with { BrickBake = Changed },
-        static kernels => kernels with { BrickUpload = Changed },
         static kernels => kernels with { Composite = Changed },
         static kernels => kernels with { CullArgs = Changed },
         static kernels => kernels with { InstanceCull = Changed },
@@ -38,7 +37,7 @@ public sealed class SdfShaderSetVerificationLawTests {
         var baseline = SdfTestPipelines.Kernels();
         var keys = OneKernelChanged.Select(selector: change => change(arg: baseline).ContentKey()).ToHashSet(comparer: StringComparer.Ordinal);
 
-        Assert.Equal(expected: 13, actual: OneKernelChanged.Length);
+        Assert.Equal(expected: 12, actual: OneKernelChanged.Length);
         Assert.Equal(expected: OneKernelChanged.Length, actual: keys.Count);
         Assert.DoesNotContain(collection: keys, expected: baseline.ContentKey());
     }

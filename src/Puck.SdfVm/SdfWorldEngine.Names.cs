@@ -8,9 +8,6 @@ public sealed partial class SdfWorldEngine {
     /// pipelines by their kernel's pipeline name.</summary>
     internal const string ObjectOwner = "sdf.world";
 
-    // The part each frame-upload table's objects are named by, in FrameUploadTableCount order.
-    private static readonly string[] FrameUploadTableNames = ["viewports", "dynamic-transforms", "instance-grid"];
-
     // The debug name of one of the engine's objects: its role, a detail within the role, and its frame slot or item.
     private static GpuObjectName NameOf(string part, string? detail = null, int index = GpuObjectName.NoIndex) =>
         new(

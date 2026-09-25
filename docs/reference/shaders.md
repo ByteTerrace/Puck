@@ -661,13 +661,16 @@ reference.
 
 `Assets/Shaders/Residency/region-copy.comp.hlsl` is the staged residency
 policy's copy: one dispatch moves the owed word ranges of a host-written block
-from its staging buffer (binding 0) into the device-local buffer its readers
-bind (binding 1), one thread a word, with each register at its binding number.
+from its staging buffer (binding 0) into the buffer its readers bind
+(binding 1), one thread a word, with each register at its binding number. It
+takes no push constants: the staging buffer leads with a header (the word
+count, the run count, where the block starts and the destination word the
+block's word 0 lands at) and a run table.
 `GpuRegion` (`Puck.Abstractions`) owns its ABI and pipeline description
 (`GpuRegion.CopyPipeline`). `GpuRegionCopyPipelineCache` creates one pipeline
 a device from it, on the thread pool, and every owner leases that pipeline
-rather than creating its own: the SDF engine records its table upload and its
-mesh region with it. The cache counts what it creates under `gpu.region-copy`.
+rather than creating its own: the SDF engine records every region's copy with
+it, its brick staging into the brick pool included. The cache counts what it creates under `gpu.region-copy`.
 
 ## Probe kinds (`puck.probe.manifest.v1`)
 
@@ -1081,7 +1084,8 @@ through `GpuWorkReport`, the one writer of work lines, and `pipeline.wait <name>
 waits until the nth submission since the last reset (or since boot, if it was
 never reset) has completed. The record ends with two lines the node does not
 write: `memory:`, the device's memory profile, and `residency:`, the policy
-`GpuResidency.Select` chooses for the instance's parameter bytes
+`GpuResidency.Select` chooses for the instance's parameter bytes with the node's
+frame ring reading them while the host writes
 (`ShaderPipelinePlan.ParameterBytes`, each pass's frame prefix and config
 together). The parameters still reach a pass as push constants, so the policy
 reports what the device would choose rather than how the bytes travel; see

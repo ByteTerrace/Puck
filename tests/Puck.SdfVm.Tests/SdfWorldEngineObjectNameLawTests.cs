@@ -9,11 +9,15 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// The naming law for <see cref="SdfWorldEngine"/> and its pipeline set: with naming on, every object they create
 /// reaches the device named from the engine's own identity (<c>sdf.world</c>, its tables, sets
-/// and pipelines by role), and two identical constructions name the same objects alike; with naming off, the device's
-/// naming is never called.
+/// and pipelines by role, and each host-written table's region by its table), and two identical constructions name the
+/// same objects alike; with naming off, the device's naming is never called.
 /// </summary>
 public sealed class SdfWorldEngineObjectNameLawTests {
     private const uint Extent = 16;
+
+    // The regions construction creates, by the part their objects are named under: the host-written tables, then the
+    // brick staging.
+    private static readonly string[] RegionParts = ["program", "viewports", "dynamic-transforms", "instance-grid", "screen-surfaces", "screen-lights", "volumes", "decals", "brick-staging"];
 
     private static IReadOnlyList<string> NamesOfOneConstruction(bool naming) {
         var recording = new RecordingGpuObjectNaming(isEnabled: naming);
@@ -39,15 +43,18 @@ public sealed class SdfWorldEngineObjectNameLawTests {
         using var pipelines = SdfWorldPipelines.Build(
             cancellationToken: CancellationToken.None,
             device: gpu,
-            includeBrickPipelines: false,
-            kernels: SdfTestPipelines.Kernels(),
+            includeBrickPipelines: true,
+            // A brick pool's engine needs the carve baker, which the fake kernel set leaves out.
+            kernels: (SdfTestPipelines.Kernels() with {
+                BrickBake = new byte[] { 1 },
+            }),
             ledger: ledger
         );
         using var engine = new SdfWorldEngine(
             device: gpu,
             height: Extent,
             options: new SdfWorldEngineOptions(
-                BrickPoolVoxelCapacity: 0,
+                BrickPoolVoxelCapacity: SdfBrickPoolLayout.VoxelsPerBrick,
                 Program: builder.Build(),
                 ViewportCapacity: 2,
                 WorkLedger: ledger
@@ -71,17 +78,36 @@ public sealed class SdfWorldEngineObjectNameLawTests {
             collection: names
         );
         Assert.Contains(collection: names, expected: "Buffer sdf.world/tiles");
-        Assert.Contains(collection: names, expected: "Buffer sdf.world/viewports/host[0]");
-        Assert.Contains(collection: names, expected: "Buffer sdf.world/viewports");
+        Assert.Contains(collection: names, expected: "Buffer sdf.world/brick-pool");
         Assert.Contains(collection: names, expected: "Image sdf.world/output");
         Assert.Contains(collection: names, expected: "DescriptorPool sdf.world/descriptors");
         Assert.Contains(collection: names, expected: "DescriptorSet sdf.world/views[1]");
-        Assert.Contains(collection: names, expected: "DescriptorSet sdf.world/dynamic-transforms/upload[0]");
         Assert.Contains(collection: names, expected: "CommandPool sdf.world/commands[1]");
         Assert.Contains(
             collection: names,
             filter: static name => name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Pipeline sdf.world/")
         );
+    }
+    [Fact]
+    public void EveryRegionIsNamedByItsTable() {
+        var names = NamesOfOneConstruction(naming: true);
+
+        // The fake's default memory profile stages every region: one staging buffer and copy set per ring slot, a copy
+        // pool, and a device-local destination except where the region stages into the brick pool.
+        foreach (var part in RegionParts) {
+            for (var slot = 0; (slot < SdfWorldEngine.FrameRingSize); slot++) {
+                Assert.Contains(collection: names, expected: $"Buffer sdf.world/{part}[{slot}]");
+                Assert.Contains(collection: names, expected: $"DescriptorSet sdf.world/{part}[{slot}]");
+            }
+
+            Assert.Contains(collection: names, expected: $"DescriptorPool sdf.world/{part}");
+
+            if (part == "brick-staging") {
+                Assert.DoesNotContain(collection: names, expected: $"Buffer sdf.world/{part}");
+            } else {
+                Assert.Contains(collection: names, expected: $"Buffer sdf.world/{part}");
+            }
+        }
     }
     [Fact]
     public void TwoIdenticalConstructionsNameTheSameObjectsAlike() =>

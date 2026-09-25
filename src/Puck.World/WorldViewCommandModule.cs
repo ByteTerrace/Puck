@@ -203,7 +203,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.state",
-            description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name> | pipeline:<name>, appended :missing when a pipeline slot names a views.pipelines row the render engine has not registered). A query (always echoes) — the pipe-assertable composition read.",
+            description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name> | instance:<name>, appended :missing when an instance slot names a views.graphs row the render graph does not run). A query (always echoes) — the pipe-assertable composition read.",
             handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.view.state"

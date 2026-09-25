@@ -13,21 +13,19 @@ public sealed partial class SdfWorldEngine {
         RequireScreenIndex(screenIndex: screenIndex);
 
         var descriptorBase = (screenIndex * DecalWordsPerCell);
-        var decalWords = DecalWords;
 
         // CADENCE GATE: same producer-level fix as SetScreenDecal — a slot that is ALREADY clear (gridCols already 0)
         // must not look like a change; a caller that clears every frame (mirroring SetScreenDecal's every-frame poll)
         // would otherwise defeat the gate exactly as the unconditional bump did.
-        if (decalWords[(descriptorBase + 0)] == 0u) {
+        if (DecalWords[(descriptorBase + 0)] == 0u) {
             return;
         }
 
-        decalWords[(descriptorBase + 0)] = 0u; // gridCols 0 => inert (the image/procedural path applies)
-        decalWords[(descriptorBase + 1)] = 0u;
-        decalWords[(descriptorBase + 2)] = 0u;
-        decalWords[(descriptorBase + 3)] = 0u;
-        m_decals.MarkChanged(
-            length: (DecalWordsPerCell * sizeof(uint)),
+        // gridCols 0 => inert (the image/procedural path applies).
+        ReadOnlySpan<uint> cleared = [0u, 0u, 0u, 0u];
+
+        _ = m_decalRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: cleared),
             offset: (descriptorBase * sizeof(uint))
         );
         // CADENCE GATE: revision-track the REAL decal change (see SetScreenDecal).
@@ -145,8 +143,8 @@ public sealed partial class SdfWorldEngine {
         var decalWords = DecalWords;
         var cellWordStart = (((int)cellBase) * DecalWordsPerCell);
         var cellDestination = decalWords.Slice(
-            start: cellWordStart,
-            length: cellWords.Length
+            length: cellWords.Length,
+            start: cellWordStart
         );
 
         // A provider that re-supplies the same decal every produced frame (e.g. the diegetic terminal mirroring an
@@ -162,18 +160,14 @@ public sealed partial class SdfWorldEngine {
             return;
         }
 
-        decalWords[(descriptorBase + 0)] = ((uint)columns);
-        decalWords[(descriptorBase + 1)] = ((uint)rows);
-        decalWords[(descriptorBase + 2)] = cellBase;
-        decalWords[(descriptorBase + 3)] = distanceRangeBits;
-        cellWords.CopyTo(destination: cellDestination);
-        // Every ring slot's buffer must catch up with the patched descriptor and cells when its turn comes.
-        m_decals.MarkChanged(
-            length: (DecalWordsPerCell * sizeof(uint)),
+        ReadOnlySpan<uint> descriptor = [((uint)columns), ((uint)rows), cellBase, distanceRangeBits];
+
+        _ = m_decalRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: descriptor),
             offset: (descriptorBase * sizeof(uint))
         );
-        m_decals.MarkChanged(
-            length: (cellWords.Length * sizeof(uint)),
+        _ = m_decalRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: cellWords),
             offset: (cellWordStart * sizeof(uint))
         );
         // CADENCE GATE: the decal buffer is revision-tracked (not re-hashed each frame — it is 820 KB), so a REAL decal
@@ -248,15 +242,15 @@ public sealed partial class SdfWorldEngine {
         floats[4] = unitUp.X; floats[5] = unitUp.Y; floats[6] = unitUp.Z; floats[7] = halfHeight;
         floats[8] = origin.X; floats[9] = origin.Y; floats[10] = origin.Z; floats[11] = 0f;
         // SdfEngineNode polls this every frame via transform providers, often with an unchanged value (a static screen,
-        // or a rig sampled at the same pose); the ring table owes the slots only the bytes that actually changed.
-        _ = m_screenSurfaces.Write(
+        // or a rig sampled at the same pose); the region owes only the words that actually changed.
+        _ = m_screenSurfaceRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: floats),
             offset: (screenIndex * ScreenSurfaceByteLength)
         );
     }
 
-    // The decal mirror as the descriptor band + cell region's words.
-    private Span<uint> DecalWords => MemoryMarshal.Cast<byte, uint>(span: m_decals.Current.AsSpan());
+    // The decal table as the descriptor band + cell region's words.
+    private ReadOnlySpan<uint> DecalWords => MemoryMarshal.Cast<byte, uint>(span: m_decalRegion.Contents);
 
     /// <summary>Throws if <paramref name="screenIndex"/> falls outside <c>0..<see cref="MaxScreenSurfaces"/>-1</c>.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>

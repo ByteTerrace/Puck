@@ -24,6 +24,7 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="memory"/> is not a defined value.</exception>
     public static (uint PreferredProperties, bool RequireProperties, GpuMemoryRole Role) MemoryProperties(VulkanBufferMemory memory) => memory switch {
         VulkanBufferMemory.HostCoherent => (MemoryPropertyHostVisibleBit | MemoryPropertyHostCoherentBit, true, GpuMemoryRole.HostVisible),
+        VulkanBufferMemory.HostCoherentDeviceLocal => (MemoryPropertyDeviceLocalBit | MemoryPropertyHostVisibleBit | MemoryPropertyHostCoherentBit, true, GpuMemoryRole.HostVisibleDeviceLocal),
         VulkanBufferMemory.DeviceLocal => (MemoryPropertyDeviceLocalBit, true, GpuMemoryRole.DeviceLocal),
         VulkanBufferMemory.PreferDeviceLocal => (MemoryPropertyDeviceLocalBit, false, GpuMemoryRole.DeviceLocal),
         _ => throw new ArgumentOutOfRangeException(

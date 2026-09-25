@@ -8,13 +8,8 @@ namespace Puck.SdfVm.Tests;
 /// the buffer between <c>UNORDERED_ACCESS</c> and the read states its bindings need and Vulkan records a buffer memory
 /// barrier with the matching scopes.</summary>
 public sealed class SdfFrameBufferPlanLawTests {
-    private static readonly SdfFramePass[] Uploads = [
-        SdfFramePass.UploadViewports,
-        SdfFramePass.UploadDynamicTransforms,
-        SdfFramePass.UploadInstanceGrid,
-    ];
     private static readonly SdfFramePass[] RenderedFrame = [
-        .. Uploads,
+        SdfFramePass.Upload,
         SdfFramePass.Sky,
         SdfFramePass.Mask,
         SdfFramePass.Beam,
@@ -38,9 +33,6 @@ public sealed class SdfFrameBufferPlanLawTests {
     [Fact]
     public void ARenderedFrameRecordsTheInventoriedEdges() {
         SdfBufferEdge[] expected = [
-            Edge(after: SdfBufferAccess.Read, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.Viewports, consumer: SdfFramePass.Sky, producer: SdfFramePass.UploadViewports),
-            Edge(after: SdfBufferAccess.Read, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.DynamicTransforms, consumer: SdfFramePass.Sky, producer: SdfFramePass.UploadDynamicTransforms),
-            Edge(after: SdfBufferAccess.Read, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.InstanceGrid, consumer: SdfFramePass.Mask, producer: SdfFramePass.UploadInstanceGrid),
             Edge(after: SdfBufferAccess.Read, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.InstanceMasks, consumer: SdfFramePass.Beam, producer: SdfFramePass.Mask),
             Edge(after: SdfBufferAccess.Read, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.Tiles, consumer: SdfFramePass.CullArgs, producer: SdfFramePass.Beam),
             Edge(after: SdfBufferAccess.IndirectRead, before: SdfBufferAccess.Write, buffer: SdfFrameBuffer.ViewsArgs, consumer: SdfFramePass.Primary, producer: SdfFramePass.CullArgs),
@@ -69,12 +61,12 @@ public sealed class SdfFrameBufferPlanLawTests {
         );
         Assert.Equal(
             actual: edges.Length,
-            expected: 12
+            expected: 9
         );
     }
     [Fact]
     public void ASkippedFrameOwesNoTransition() {
-        Assert.Empty(collection: SdfFrameBufferPlan.Edges(passes: [.. Uploads, SdfFramePass.Composite]));
+        Assert.Empty(collection: SdfFrameBufferPlan.Edges(passes: [SdfFramePass.Upload, SdfFramePass.Composite]));
     }
     [Fact]
     public void EveryHazardInARecordingHasExactlyOneEdge() {

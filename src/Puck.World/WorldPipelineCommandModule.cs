@@ -19,7 +19,8 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
     private const int DefaultWaitSeconds = 30;
 
     // Reopens the inspection record the node closed and ends it with the device's memory profile and the residency
-    // the selector chooses for the instance's parameter region; a host without a device reports the default profile.
+    // the selector chooses for the instance's parameter region, which the node writes while its frame ring still reads
+    // it; a host without a device reports the default profile.
     private void AppendResidency(StringBuilder builder, ShaderPipelinePlan plan) {
         var profile = (renderProbe?.Device?.MemoryProfile ?? default);
         var bytes = plan.ParameterBytes;
@@ -31,7 +32,8 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             provider: CultureInfo.InvariantCulture,
             handler: $"\n{ConsoleRecord.ContinuationIndent}residency: parameters={bytes} bytes policy={GpuResidency.Name(policy: GpuResidency.Select(
                 byteCount: bytes,
-                profile: profile
+                profile: profile,
+                readersInFlight: true
             ))}]"
         );
     }
@@ -412,7 +414,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
         yield return CommandDefinition.WithWireArgs(
             name: "pipeline.commit",
-            description: "pipeline.commit <name> — commit the instance's previewed overrides, time scale and output into its views.pipelines row. The commit names the row revision and the installed source it was previewed against, and is refused by name when either has moved; world.save then writes it.",
+            description: "pipeline.commit <name> — commit the instance's previewed overrides, time scale and output into its views.graphs row. The commit names the row revision and the installed source it was previewed against, and is refused by name when either has moved; world.save then writes it.",
             bindability: CommandBindability.Unbindable,
             routing: CommandRouting.Simulation,
             handler: (context, args) => {

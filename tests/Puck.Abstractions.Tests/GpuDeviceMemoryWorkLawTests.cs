@@ -47,11 +47,15 @@ public sealed class GpuDeviceMemoryWorkLawTests {
         Assert.Equal(expected: 2048L, actual: work.Held);
     }
     [Fact]
-    public void OnlyTheDeviceLocalRoleCounts() {
+    public void OnlyTheRolesInTheAdaptersMemoryCount() {
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
 
         Assert.True(condition: GpuDeviceMemoryWork.IsCounted(role: GpuMemoryRole.DeviceLocal));
+        Assert.True(condition: GpuDeviceMemoryWork.IsCounted(role: GpuMemoryRole.HostVisibleDeviceLocal));
         Assert.False(condition: GpuDeviceMemoryWork.IsCounted(role: GpuMemoryRole.HostVisible));
+        Assert.True(condition: Allocate(work: work, allocation: 0x20, bytes: 1024L, role: GpuMemoryRole.HostVisibleDeviceLocal));
+        Assert.True(condition: work.CountReleased(allocation: 0x20, device: Device));
+        work = new GpuDeviceMemoryWork(backend: "vulkan");
         Assert.False(condition: Allocate(work: work, allocation: 0x10, bytes: 4096L, role: GpuMemoryRole.HostVisible));
         Assert.False(condition: work.CountReleased(allocation: 0x10, device: Device));
         Assert.Equal(expected: (0L, 0L), actual: (Read(kind: GpuDeviceMemoryWork.Allocated, work: work), work.Held));

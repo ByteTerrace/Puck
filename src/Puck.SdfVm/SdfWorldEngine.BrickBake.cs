@@ -168,7 +168,7 @@ public sealed partial class SdfWorldEngine {
     /// <param name="dimY">Voxels along Y.</param>
     /// <param name="dimZ">Voxels along Z.</param>
     /// <param name="voxels">Stored-scale voxel values, X fastest, then Y, then Z.</param>
-    /// <exception cref="InvalidOperationException">The engine has no brick upload path.</exception>
+    /// <exception cref="InvalidOperationException">The engine has no brick pool.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A slot, dimension, pool range, or voxel count is invalid.</exception>
     public void UploadBrick(int slot, int dimX, int dimY, int dimZ, ReadOnlySpan<float> voxels) {
         ObjectDisposedException.ThrowIf(
@@ -176,11 +176,8 @@ public sealed partial class SdfWorldEngine {
             instance: this
         );
 
-        if (
-            !m_brickPoolEnabled ||
-            (m_brickUploadPipeline is null)
-        ) {
-            throw new InvalidOperationException(message: "This engine has no brick pool or no upload kernel; UploadBrick is unavailable.");
+        if (m_brickRegion is null) {
+            throw new InvalidOperationException(message: "This engine has no brick pool; UploadBrick is unavailable.");
         }
 
         if (

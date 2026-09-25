@@ -51,6 +51,9 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
 
         var lines = DebugLines(output: output);
 
+        // The layer's own words, for the record of a run.
+        Console.Error.Write(value: output.ToString());
+
         Assert.Contains(
             collection: lines,
             filter: static line => (line.StartsWith(

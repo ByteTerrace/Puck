@@ -11,7 +11,8 @@ namespace Puck.Cli.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: <c>puck counters</c> tags every count it reads from <c>world.counters --json</c> with the class
-/// the World's legend declares (a GPU node's submission and revision are pacing), refuses a reading it cannot trust,
+/// the World's legend declares, loosened to a per-backend-deterministic pass's class (a GPU node's submission and
+/// revision are pacing), refuses a reading it cannot trust,
 /// and <c>puck counters compare</c> holds two reports to each other by class — exit 0 when every comparable count
 /// agrees, exit 1 naming the kind, pass and node of each difference, pacing never compared, an allocation reading
 /// compared only as zero or not zero, and exit 2 for a file that is not a report.
@@ -20,7 +21,7 @@ public sealed class CountersLawTests {
     private const string Reading = """
         {"sources":[{"name":"state.arena","counts":{"state.arena.visits":12}}],
          "gpu":{"device":{"backend":"vulkan","adapter":"Example GPU","vendor":4318,"device":10118,"driver":"566.36","driver.raw":2374860800,"api":"1.4.303","driver.name":"","driver.id":0,"conformance":""},
-                "nodes":[{"name":"world","sample":{"submission":61,"revision":3,"passes":[{"label":"upload","state":"executed","counts":{"gpu.dispatches":1}},{"label":"sky","state":"skipped"}],"outside":{"gpu.command-buffers":1}},"lifetime":{"gpu.created.pipelines":14}}]},
+                "nodes":[{"name":"world","sample":{"submission":61,"revision":3,"passes":[{"label":"upload","class":"per-backend-deterministic","state":"executed","counts":{"gpu.dispatches":1}},{"label":"mask","class":"deterministic","state":"executed","counts":{"gpu.dispatches":1}},{"label":"sky","class":"deterministic","state":"skipped"}],"outside":{"gpu.command-buffers":1}},"lifetime":{"gpu.created.pipelines":14}}]},
          "allocation":{"gcMode":"workstation, concurrent","windows":{"world.counters.read":0}},
          "kinds":{"state.arena.visits":{"unit":"lanes","class":"deterministic"},"gpu.dispatches":{"unit":"count","class":"deterministic"},"gpu.command-buffers":{"unit":"count","class":"deterministic"},"gpu.created.pipelines":{"unit":"count","class":"per-backend-deterministic"}}}
         """;
@@ -113,7 +114,8 @@ public sealed class CountersLawTests {
             };
 
         Assert.Equal(actual: Class(kind: "state.arena.visits"), expected: "deterministic");
-        Assert.Equal(actual: Class(kind: "gpu.dispatches", pass: "upload"), expected: "deterministic");
+        Assert.Equal(actual: Class(kind: "gpu.dispatches", pass: "upload"), expected: "per-backend-deterministic");
+        Assert.Equal(actual: Class(kind: "gpu.dispatches", pass: "mask"), expected: "deterministic");
         Assert.Equal(actual: Class(kind: "gpu.command-buffers"), expected: "deterministic");
         Assert.Equal(actual: Class(kind: "gpu.created.pipelines"), expected: "per-backend-deterministic");
         Assert.Equal(actual: Class(kind: CountersReading.SubmissionKind), expected: "pacing");
@@ -123,7 +125,7 @@ public sealed class CountersLawTests {
         Assert.Equal(actual: run.Device, expected: Device(backend: "vulkan"));
         Assert.Equal(
             actual: run.Passes.Select(selector: static pass => $"{pass.Node}/{pass.Label}/{pass.State}"),
-            expected: ["world/upload/Executed", "world/sky/Skipped"]
+            expected: ["world/upload/Executed", "world/mask/Executed", "world/sky/Skipped"]
         );
     }
     [Fact]
@@ -147,6 +149,7 @@ public sealed class CountersLawTests {
         Assert.Contains(expectedSubstring: "device reports vulkan", actualString: Refusal(backend: "directx", reading: Reading));
         Assert.Contains(expectedSubstring: "not in the reading's kinds legend", actualString: Refusal(reading: Reading.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"state.arena.other\":{\"unit\"", oldValue: "\"state.arena.visits\":{\"unit\"")));
         Assert.Contains(expectedSubstring: "unknown class", actualString: Refusal(reading: Reading.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"class\":\"PerBackend\"", oldValue: "\"class\":\"per-backend-deterministic\"")));
+        Assert.Contains(expectedSubstring: "pass 'mask' has the unknown class 'pacing'", actualString: Refusal(reading: Reading.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"label\":\"mask\",\"class\":\"pacing\"", oldValue: "\"label\":\"mask\",\"class\":\"deterministic\"")));
         Assert.Contains(expectedSubstring: "device is unavailable", actualString: Refusal(reading: """{"sources":[],"gpu":{"device":null,"nodes":[]},"allocation":{"gcMode":"x","windows":{}},"kinds":{}}"""));
         Assert.Contains(expectedSubstring: "no gpu section", actualString: Refusal(reading: """{"sources":[],"allocation":{"gcMode":"x","windows":{}},"kinds":{}}"""));
     }
@@ -176,6 +179,14 @@ public sealed class CountersLawTests {
     [Fact]
     public void AcrossBackendsOnlyDeterministicCountsAndPassStatesMustAgree() {
         Assert.Empty(collection: CountersComparison.AcrossBackends(left: Run(backend: "vulkan"), right: Run(backend: "directx", pipelines: 15L, submission: 90L, allocated: 64L)));
+
+        // A count in a pass whose work follows the device reads per-backend-deterministic, so the backends may differ.
+        var perDevice = Run(backend: "directx", dispatches: 2L);
+
+        Assert.Empty(collection: CountersComparison.AcrossBackends(
+            left: (Run(backend: "vulkan") with { Counts = [.. Run(backend: "vulkan").Counts.Select(selector: static count => ((count.Pass == "upload") ? (count with { Class = WorkClass.PerBackendDeterministic }) : count))] }),
+            right: (perDevice with { Counts = [.. perDevice.Counts.Select(selector: static count => ((count.Pass == "upload") ? (count with { Class = WorkClass.PerBackendDeterministic }) : count))] })
+        ));
 
         var differences = CountersComparison.AcrossBackends(left: Run(backend: "vulkan"), right: Run(backend: "directx", dispatches: 2L, sky: GpuPassState.Executed));
 

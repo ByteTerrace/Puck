@@ -438,15 +438,25 @@ These are one-line cautions; the owning pages hold the derivations.
   [Vulkan](../../../docs/rendering/vulkan.md#pipeline-cache).
 - **`RenderFrame` submits and waits; `SubmitFrame` does not.** Harnesses use
   the first, the live node the second.
-- **Host uploads go through the mirrors.** The viewport, dynamic-transform and
-  instance-grid device-local tables persist across frames and receive only
-  changed ranges; the ring tables (screen surfaces, screen lights, volumes,
-  decals) owe each slot only the ranges it is behind by. Change those tables only
-  through `StageTableEntry`, `StageTableRow`, `StageInstanceGrid`, or
-  `SdfRingTable.Write` / `MarkChanged` (`SdfWorldEngine.Uploads.cs`); a direct
-  buffer write is lost or overwritten. A still frame writes only its viewport
-  rows. The byte counts are pinned by `SdfWorldEngineUploadLawTests` over
-  `UploadModelGpu`, which runs the upload kernel's copies.
+- **Host uploads go through regions.** Every table the engine's kernels read
+  from the host (program words, viewport rows, dynamic transforms, the frame
+  instance grid, screen surfaces, screen lights, volumes, glyph decals, mesh
+  draws) is a `GpuRegion` (`SdfWorldEngine.Regions.cs`, created by
+  `CreateRegion` under `GpuResidency.Select` with the frame ring's reader in
+  flight), and brick staging is a staged region whose destination is the brick
+  pool (`Target` names the brick's slot). Change a table only through its
+  region's `Write`, which owes each run of words that differs; a direct buffer
+  write is lost or overwritten. The upload pass flushes the slot's share, records
+  each staged copy, then one buffer transition per copied buffer; the region
+  tables are not in `SdfFrameBufferPlan`. What it writes and records follows the
+  device's policy, so `upload` is per-backend-deterministic
+  (`SdfWorldEngine.PassClasses`, a per-pass class `GpuWorkLedger.Configure`
+  carries into `world.counters --json`, which `puck counters` loosens its counts
+  by); keep region writes inside that pass. A copy past one row of 65,535 groups
+  dispatches more rows (`GpuRegion.CopyGroups`), so no table size is refused. A
+  still frame writes only the viewport word its time moved. The byte counts are
+  pinned by `SdfWorldEngineUploadLawTests` over `UploadModelGpu`, which runs the
+  copies.
 - **Dynamic transforms move by the moved set, never by a diff.**
   `SdfCompositionFrameSource` keeps the table across frames; an emitter repacks
   only owners whose inputs moved or that are still settling
@@ -479,21 +489,31 @@ These are one-line cautions; the owning pages hold the derivations.
   Vulkan through `GpuMemoryProfile.FromVulkan` over the device type and
   `vkGetPhysicalDeviceMemoryProperties`, Direct3D 12 through
   `DirectXNativeDeviceApi.MemoryProfile` over the architecture, adapter and
-  options 16 structures. `GpuResidency.Select(profile, bytes)` is the one choice
-  of `InPlace`, `Ring` or `Staged`, and the default profile selects `Staged`.
-  `GpuRegion` (`src/Puck.Abstractions/Gpu/Residency`) writes a region under any
-  policy; its staged copy is `Puck.Shaders`' `region-copy.comp`, created from
-  `GpuRegion.CopyPipeline` once per device by `GpuRegionCopyPipelineCache`
-  (built on the pool, leased by every owner, counted under `gpu.region-copy`)
-  and never by an owner, and its ranges are `GpuUploadRuns`, the same run list
-  the SDF engine's tables use. The SDF engine records its table upload with that
-  pipeline (its holder leases it beside the set, and the engine takes it at
-  construction) and writes its mesh region (`SdfFrame.MeshDraws` laid out by
-  `SdfMeshRegion`) through a region, which nothing reads until P4-2c. The
-  engine's host tables, brick staging and the overlay's buffer still upload by
-  hand, so a new host upload goes through a region rather than a fourth
-  hand-built path. `GpuResidencyLawTests` pins the selector and byte-identical
-  region contents over `UploadModelGpu` (`tests/Shared`),
+  options 16 structures. `GpuResidency.Select(profile, bytes, readersInFlight)`
+  is the one choice of `InPlace`, `Ring` or `Staged`: in place only on coherent
+  unified memory with no reader in flight while the host writes, so a per-frame
+  owner (every SDF engine region, a pipeline's parameters) never gets it; the
+  default profile selects `Staged`. `GpuRegion`
+  (`src/Puck.Abstractions/Gpu/Residency`) writes a region under any policy, or
+  stages into an external destination its owner keeps; its staged copy is
+  `Puck.Shaders`' `region-copy.comp`, created from `GpuRegion.CopyPipeline` once
+  per device by `GpuRegionCopyPipelineCache` (built on the pool, leased by every
+  owner, counted under `gpu.region-copy`) and never by an owner, and its ranges
+  are `GpuUploadRuns`. The copy takes no push constants: the staging buffer
+  leads with a header and a run table. The SDF engine records every region copy
+  with that pipeline (its holder leases it beside the set, and the engine takes
+  it at construction). The overlay's buffer still uploads by hand, so a new host
+  upload goes through a region rather than a second hand-built path. A ring's
+  buffers live where `GpuResidency.RingMemory(profile)` says: in the
+  device-local aperture on a discrete adapter that exposes one
+  (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, a Vulkan
+  `DEVICE_LOCAL|HOST_VISIBLE|HOST_COHERENT` allocation or a Direct3D 12
+  `GPU_UPLOAD` heap, role `GpuMemoryRole.HostVisibleDeviceLocal`, counted under
+  `memory.<backend>`), in host memory on unified memory
+  (`GpuMemoryProfile.UnifiedMemory`). `GpuResidencyLawTests` pins the policy
+  table, the ring memory, the staged header and runs, a copy past one dispatch
+  row, the external destination and byte-identical region
+  contents over `UploadModelGpu` (`tests/Shared`),
   `GpuRegionCopyPipelineCacheLawTests` one pipeline per device shared by its
   owners, and `pipeline.inspect` echoes the profile and the policy.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
@@ -528,8 +548,10 @@ These are one-line cautions; the owning pages hold the derivations.
   creating member of `GpuDeviceServices` (buffers, images, pipelines,
   descriptor pools and sets, command pools, render passes) takes a
   `GpuObjectName`: owner, part, optional detail and index, such as
-  `sdf.world/viewports/host[1]` (the SDF engine's objects by role through
-  `SdfWorldEngine.NameOf`, its pipelines by kernel pipeline name),
+  `sdf.world/viewports[1]` (the SDF engine's objects by role through
+  `SdfWorldEngine.NameOf`, its pipelines by kernel pipeline name; a
+  `GpuRegion` takes its owner's name and names each slot's buffer and copy set
+  at the slot's index, its own destination and copy pool bare),
   `<instance>/<pass or resource>[slot]` for a shader pipeline or graph package,
   `overlay/pass`, `render-graph/stand-in`, `gpu.region-copy/<pipeline>`.
   `GpuObjectName.ToString` is the one place a name becomes text; a site never
@@ -541,16 +563,20 @@ These are one-line cautions; the owning pages hold the derivations.
   states, allocators and command lists (Direct3D 12 views, pools, sets and
   render passes are not objects there). Off, `Name` returns before formatting,
   so a named creation allocates nothing (`GpuObjectNamingLawTests`, over
-  `FakeGpuDevice` with `RecordingGpuObjectNaming`); the counting and fault
+  `FakeGpuDevice` with `RecordingGpuObjectNaming`, which fails on a member
+  taking a name that it has no row for); the counting and fault
   decorators pass every name through and carry `Naming` over. A new creating
   member takes a name and its backends hand the object to the naming;
-  `SdfWorldEngineObjectNameLawTests` holds the engine's names. To trace a
+  `SdfWorldEngineObjectNameLawTests` holds the engine's names, every region's
+  included. To trace a
   validation message, run with `--debug-layers` (`puck canary --debug-layers`,
   or the World flag) and read the name the message prints beside the handle:
   the validation layer names each object a `[vulkan-debug] validation` line
   lists, and a `[d3d12-debug]` message or teardown `live` line carries the
   name of the object it reports (`DirectXDebugLayerLivenessTests` holds the
-  `live` line to its leaked buffer's name). A clean run prints no such line,
+  `live` line to its leaked buffer's name, and `VulkanValidationLivenessTests`
+  the object tracker's leak message, which lists each object on the line after
+  its prefix, as `VkBuffer 0x…[owner/part]`). A clean run prints no such line,
   so names appear only when something is reported.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
@@ -558,7 +584,11 @@ These are one-line cautions; the owning pages hold the derivations.
   paced by the clock or a cross-process cache `Pacing`.
   `world.counters --json` publishes the classes in its `kinds` legend, and
   `puck counters` compares only what the class allows, so a new kind's class
-  is part of its contract.
+  is part of its contract. A pass carries a class too
+  (`GpuWorkLedger.Configure`'s `passClasses`, written on each pass of the JSON):
+  a pass whose work follows the device, as the SDF engine's `upload` follows its
+  residency policy, is `PerBackendDeterministic`, and its deterministic kinds
+  read that class.
 - **Lifetime counts outside the nodes are `WorkCounterSet`s.** A source that
   needs only named kinds holds a `WorkCounterSet` (interlocked, allocation-free
   reads) rather than a hand-written `IWorkCounterSource`. `ShaderCompiler.Work`

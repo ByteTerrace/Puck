@@ -857,7 +857,7 @@ public sealed class WorldSiloLifecycleLawTests {
             replacement.DrainAsync(ct: TestContext.Current.CancellationToken)
         );
     }
-    // Law: an activated row resolves views.pipelines rows against the executable's own directory — a hosted
+    // Law: an activated row resolves views.graphs rows against the executable's own directory — a hosted
     // world's definition arrives from cloud storage, never a local file, so it has no document directory of its
     // own — rather than refusing every override with SourcesUnattached, and the same boot check the desktop host
     // runs right after loading a document runs here too: a bad override value in the activated document is

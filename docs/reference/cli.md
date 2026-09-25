@@ -1282,14 +1282,17 @@ class:
 | Class | Meaning | Compared |
 |---|---|---|
 | `deterministic` | The same inputs give the same count on every run and backend: simulation counts at a pinned tick, and the GPU counts of one submission. | Across backends in one run, and between two reports. |
-| `per-backend-deterministic` | The same on every run of one backend: the GPU objects a node creates. | Between two reports, backend by backend. |
+| `per-backend-deterministic` | The same on every run of one backend: the GPU objects a node creates, and the counts of a pass whose work follows the device (the SDF engine's `upload`, which follows its residency policy). | Between two reports, backend by backend. |
 | `pacing` | Depends on timing or on state outside the run: which submission a read lands on, skipped presents, the compile cache's hits. | Never. |
 | `allocation-zero-nonzero` | A managed-allocation reading from `AllocationWindow.Measure` over a named window (`world.counters.read`), recorded with the GC mode. | Only as zero or not zero. |
 
 Each kind's class is declared by the kind's owner (`WorkKind.Class`) and
-reaches the collector through the `kinds` legend of `world.counters --json`. A
-node's submission and revision identities are not kinds; the collector records
-them as `pacing`.
+reaches the collector through the `kinds` legend of `world.counters --json`.
+Each pass there also carries a class, `deterministic` or
+`per-backend-deterministic`, which the node declares (`GpuWorkLedger.Configure`);
+a deterministic kind counted in a per-backend-deterministic pass is recorded as
+per-backend-deterministic. A node's submission and revision identities are not
+kinds; the collector records them as `pacing`.
 
 The run prints the report's path, then one line for each deterministic count or
 pass state that differs between the two backends, naming its kind, pass and

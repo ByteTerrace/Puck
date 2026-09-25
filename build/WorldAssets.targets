@@ -3,7 +3,7 @@
          to one tree-mode run of the CLI's compile verb, which writes the documents the game ships, beside each that
          draws as a world its compiled world (<name>.puckb), and at the root the one bake pack (bakes.puckbake) holding
          the creation bakes those compiled worlds name and the package store (packages/) holding one compiled shader
-         package per pipeline source their views.pipelines rows name, so no device compiles a shipped pipeline and the
+         package per graph source their views.graphs rows name, so no device compiles a shipped pipeline and the
          run needs dxc as the shader build does, into this project's intermediate directory; the output's
          Assets/worlds carries exactly those. Nothing is written into the source tree, and neither the sources nor the
          tree's own documents are shipped from it: a document name resolves to its .puck source where one emits a

@@ -99,11 +99,10 @@ public sealed partial class SdfWorldEngine {
         // The work counted before UploadPass (the brick upload and bake slices, the begin-of-frame transitions and
         // barrier) or after CompositePass is counted outside every pass.
         m_work.EnterPass(pass: UploadPass);
-        // The table upload runs on every frame, skipped ones included (the tables are this frame's inputs whatever the
-        // passes do with them), copying only the ranges that changed. Each reader's buffer transitions make the
-        // device-local tables' writes visible to it.
-        RecordFrameUpload(commandBuffer: commandBuffer);
-        RecordMeshRegionCopy(commandBuffer: commandBuffer);
+        // The region copies run on every frame, skipped ones included (the tables are this frame's inputs whatever the
+        // passes do with them), copying only the words the staged regions owe, then transitioning each copied buffer
+        // for the passes that read it.
+        RecordRegionCopies(commandBuffer: commandBuffer);
         m_work.LeavePass();
 
         // Cadence gate: when this frame's inputs are byte-identical to the last RENDERED frame's
@@ -473,100 +472,29 @@ public sealed partial class SdfWorldEngine {
 
         m_imageInitialized = true;
     }
-    // The table upload: one copy dispatch per device-local table (viewports, dynamic transforms, the frame instance
-    // grid) that owes any range, covering every owed range from this ring slot's staging buffer — see
-    // m_frameUploadPipeline and SdfWorldEngine.Uploads.cs for the staging layout. A table with nothing owed records
-    // nothing, and a frame with nothing owed binds no pipeline. The push constant array is reused across the dispatches
-    // because both backends copy push data at record time.
-    private void RecordFrameUpload(nint commandBuffer) {
-        var recorder = m_gpu.Recorder;
-        var push = MemoryMarshal.Cast<byte, uint>(span: m_frameUploadPush.AsSpan());
-        var bound = false;
-
-        for (var table = 0; (table < FrameUploadTableCount); table++) {
-            var owed = m_tableUploads[table];
-
-            if (owed.Count == 0) {
-                continue;
-            }
-
-            if (!bound) {
-                recorder.BeginDebugGroup(
-                    commandBufferHandle: commandBuffer,
-                    label: "upload"
-                );
-                recorder.BindPipeline(
-                    bindPoint: GpuBindPoint.Compute,
-                    commandBufferHandle: commandBuffer,
-                    pipelineHandle: m_frameUploadPipeline.Handle
-                );
-                bound = true;
-            }
-
-            RecordBufferBarriers(
-                commandBuffer: commandBuffer,
-                pass: FrameUploadPasses[table]
-            );
-            recorder.BindDescriptorSet(
-                bindPoint: GpuBindPoint.Compute,
-                commandBufferHandle: commandBuffer,
-                descriptorSetHandle: m_frameUploadSets[((m_currentSlot * FrameUploadTableCount) + table)],
-                group: 0,
-                pipelineLayoutHandle: m_frameUploadPipeline.LayoutHandle
-            );
-
-            var count = 0u;
-
-            for (var run = 0; (run < owed.Count); run++) {
-                count += ((uint)owed.Length(index: run));
-            }
-
-            // RegionCopyPush { count, runCount, offset, tableBase }: KEEP IN SYNC with region-copy.comp.hlsl.
-            push[0] = count; push[1] = ((uint)owed.Count); push[2] = ((uint)owed.Start(index: 0)); push[3] = FrameUploadRunTableWords;
-            recorder.PushConstants(
-                bindPoint: GpuBindPoint.Compute,
-                commandBufferHandle: commandBuffer,
-                data: m_frameUploadPush,
-                offset: 0,
-                pipelineLayoutHandle: m_frameUploadPipeline.LayoutHandle,
-                stageFlags: GpuShaderStage.Compute
-            );
-            recorder.Dispatch(
-                commandBufferHandle: commandBuffer,
-                groupCountX: ((count + (GpuRegion.CopyWorkgroupSize - 1)) / GpuRegion.CopyWorkgroupSize),
-                groupCountY: 1,
-                groupCountZ: 1
-            );
-            owed.Clear();
-        }
-
-        if (bound) {
-            recorder.EndDebugGroup(
-                commandBufferHandle: commandBuffer
-            );
-        }
-    }
-    // One queued host-baked brick per produced frame: its voxels go into this ring slot's staging buffer and one
-    // dispatch copies them to the pool.
+    // One queued host-baked brick per produced frame: the brick staging region, retargeted at the brick's slot in the
+    // pool, owes every voxel written and copies them there through the device's region-copy pipeline. The pool's
+    // hazards are the frame buffer plan's, as for the bake that writes it.
     private void RecordBrickUpload(nint commandBuffer) {
         if (
-            (m_brickUploadPipeline is null) ||
-            (m_brickUploads.Count == 0) ||
-            (m_brickUploadStaging[m_currentSlot] is not { } staging)
+            (m_brickRegion is not { } region) ||
+            (m_brickUploads.Count == 0)
         ) {
             return;
         }
 
         var (slot, count, voxels) = m_brickUploads.Dequeue();
         var recorder = m_gpu.Recorder;
-        var push = MemoryMarshal.Cast<byte, uint>(span: m_brickUploadPush.AsSpan());
 
-        staging.Write<float>(data: voxels.AsSpan(
-            length: count,
-            start: 0
-        ));
-        push[0] = ((uint)SdfBrickPoolLayout.SlotWordOffset(slot: slot)); push[1] = ((uint)count); push[2] = 0u; push[3] = 0u;
-
+        region.Target(destinationWord: SdfBrickPoolLayout.SlotWordOffset(slot: slot));
+        _ = region.Write(
+            bytes: MemoryMarshal.AsBytes(span: voxels.AsSpan(
+                length: count,
+                start: 0
+            )),
+            offset: 0
+        );
+        region.Flush(slot: m_currentSlot);
         RecordBufferBarriers(
             commandBuffer: commandBuffer,
             pass: SdfFramePass.BrickUpload
@@ -575,31 +503,9 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer,
             label: "brick-upload"
         );
-        recorder.BindPipeline(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            pipelineHandle: m_brickUploadPipeline.Handle
-        );
-        recorder.BindDescriptorSet(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            descriptorSetHandle: m_brickUploadSets[m_currentSlot],
-            group: 0,
-            pipelineLayoutHandle: m_brickUploadPipeline.LayoutHandle
-        );
-        recorder.PushConstants(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            data: m_brickUploadPush,
-            offset: 0,
-            pipelineLayoutHandle: m_brickUploadPipeline.LayoutHandle,
-            stageFlags: GpuShaderStage.Compute
-        );
-        recorder.Dispatch(
-            commandBufferHandle: commandBuffer,
-            groupCountX: ((((uint)count) + (BrickBakeWorkgroupSize - 1)) / BrickBakeWorkgroupSize),
-            groupCountY: 1,
-            groupCountZ: 1
+        region.RecordCopy(
+            commandBuffer: commandBuffer,
+            slot: m_currentSlot
         );
         recorder.EndDebugGroup(
             commandBufferHandle: commandBuffer

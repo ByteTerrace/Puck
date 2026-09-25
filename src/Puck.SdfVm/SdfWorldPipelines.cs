@@ -130,7 +130,6 @@ public sealed class SdfWorldPipelines : IDisposable {
         "sdf-sky" => kernels.Sky,
         "sdf-world-composite" => kernels.Composite,
         "sdf-brick-bake" => kernels.BrickBake,
-        "sdf-brick-upload" => kernels.BrickUpload,
         _ => throw new ArgumentException(
             message: $"Unknown SDF kernel '{name}'.",
             paramName: nameof(name)

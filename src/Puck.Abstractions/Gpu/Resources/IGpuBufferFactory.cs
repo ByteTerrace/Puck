@@ -9,7 +9,9 @@ namespace Puck.Abstractions.Gpu;
 /// index, constant and indirect-argument states. A device-local buffer is a Vulkan <c>DEVICE_LOCAL</c> allocation or a
 /// Direct3D 12 default-heap buffer created in <c>COMMON</c>; with <see cref="GpuBufferUsage.Storage"/> it allows
 /// unordered access, and an indirect dispatch reading one a shader wrote transitions it into
-/// <c>INDIRECT_ARGUMENT</c> first.</para>
+/// <c>INDIRECT_ARGUMENT</c> first. A host-visible device-local buffer is a Vulkan <c>DEVICE_LOCAL</c>,
+/// <c>HOST_VISIBLE</c> and <c>HOST_COHERENT</c> allocation or a Direct3D 12 <c>GPU_UPLOAD</c>-heap buffer, mapped and
+/// read-only to shaders like a host-visible one, but in the adapter's memory.</para>
 /// </summary>
 public interface IGpuBufferFactory {
     /// <summary>Creates a device-local buffer.</summary>
@@ -28,6 +30,17 @@ public interface IGpuBufferFactory {
     /// <exception cref="ArgumentException"><paramref name="sizeBytes"/> is zero.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="usage"/> is empty or undefined.</exception>
     IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name);
+    /// <summary>Creates a host-visible buffer in the device-local aperture: host writes reach the adapter's memory
+    /// through a coherent mapping, and the GPU reads it at device-local speed. Only a device whose memory profile reports
+    /// host-visible device-local memory on a discrete adapter (<see cref="GpuResidency.RingMemory"/>) has one; elsewhere
+    /// the creation fails.</summary>
+    /// <param name="sizeBytes">The size, in bytes, of the buffer; not zero.</param>
+    /// <param name="usage">The usages; <see cref="GpuBufferUsages.Validate"/> states the rules.</param>
+    /// <param name="name">The object's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
+    /// <returns>A new, owning <see cref="IGpuStorageBuffer"/>, its contents undefined until written.</returns>
+    /// <exception cref="ArgumentException"><paramref name="sizeBytes"/> is zero.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="usage"/> is empty or undefined.</exception>
+    IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name);
     /// <summary>Creates a host-visible buffer holding a copy of the supplied bytes.</summary>
     /// <param name="data">The bytes to copy in; not empty.</param>
     /// <param name="usage">The usages; <see cref="GpuBufferUsages.Validate"/> states the rules.</param>

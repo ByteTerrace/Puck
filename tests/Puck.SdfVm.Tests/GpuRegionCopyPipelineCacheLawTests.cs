@@ -114,6 +114,7 @@ public sealed class GpuRegionCopyPipelineCacheLawTests {
             buffers: gpu.Services.BufferFactory,
             byteCount: byteCount,
             copyPipeline: pipeline,
+            memory: GpuHostVisibleMemory.Host,
             policy: policy,
             recorder: gpu.Services.Recorder,
             slotCount: slots,

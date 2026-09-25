@@ -221,7 +221,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: "SdfPassPlanLawTests; SdfWorldEngineWorkLawTests; world-counters canary",
             Green: false,
             Members: [
-                "SdfWorldEngine.PassLabels", "SdfEngineNode.PassLabels", "SdfWorldEngine.Work", "SdfWorldEngine.WorkLifetime",
+                "SdfWorldEngine.PassLabels", "SdfWorldEngine.PassClasses", "SdfEngineNode.PassLabels", "SdfWorldEngine.Work", "SdfWorldEngine.WorkLifetime",
                 "SdfEngineNode.Work", "SdfEngineNode.WorkLifetime", "SdfWorldEngineOptions.WorkLedger", "SdfWorldEngine.DebugLabel",
             ]
         ),
@@ -231,10 +231,10 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: "SdfPassPlanLawTests; SdfWorldEngineUploadLawTests",
             Green: false,
             Members: [
-                "SdfWorldEngine.FrameBufferBytes", "SdfWorldEngine.TileSize", "SdfWorldEngine.MaxFrameUploadTableWords",
-                "SdfWorldEngine.RequireOneCopyDispatch", "SdfWorldEngine.VisibilityRecordBytes",
+                "SdfWorldEngine.FrameBufferBytes", "SdfWorldEngine.TileSize",
+                "SdfWorldEngine.VisibilityRecordBytes",
                 "SdfWorldEngine.VisibilityRecordByteLength", "SdfEngineNode.VisibilityRecordBytes",
-                "SdfWorldEngine.DescriptorPoolSizes", "SdfWorldEngine.CheckAdmission",
+                "SdfWorldEngine.DescriptorPoolSizes", "SdfWorldEngine.DescriptorPools", "SdfWorldEngine.CheckAdmission",
             ]
         ),
         new(
