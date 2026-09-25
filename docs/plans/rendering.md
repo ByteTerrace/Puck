@@ -1098,7 +1098,7 @@ follow its device-bound services, its one recorder and the SDF engine's groups.
    primary writes every active pixel it dispatches, misses included. It is the
    one freshness test: it replaced the `TileEmpty` neighbour test in the
    silhouette sky blend, the `visibility` debug view (mode 11,
-   `debug.view.visibility`) colors each pixel by its current record's kind, and
+   `world.debug-view visibility`) colors each pixel by its current record's kind, and
    P4-2c's mesh resolve reads through it rather than a second test. For SDF-only
    frames it answers exactly as the `TileEmpty` test did, since every tile
    outside the box is empty and every record inside it is current, so parity is
