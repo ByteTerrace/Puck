@@ -1,11 +1,11 @@
-// The terminal's blit (single-source HLSL; DXC compiles it to SPIR-V for Vulkan and DXIL for DirectX): sample
-// the one surface the root node produced, 1:1, onto the swapchain. The source texture matches the framebuffer
-// extent, so screen UV is fragment coord over texture size.
+// The Vulkan presenter's blit (DXC compiles it to SPIR-V): sample the one surface the root node produced, 1:1, onto the
+// swapchain. The source texture matches the framebuffer extent, so screen UV is fragment coord over texture size.
 //
-// On Vulkan the texture+sampler fuse into one combined image sampler at set 0, binding 0 (what the backend's
-// descriptor layout expects); on DirectX they stay separate at t0/s0. One declaration, both bindings.
-[[vk::combinedImageSampler]][[vk::binding(0, 0)]] Texture2D sourceTexture : register(t0);
-[[vk::combinedImageSampler]][[vk::binding(0, 0)]] SamplerState sourceSampler : register(s0);
+// The source is a separate image and sampler in the pass group, set 3, with each register equal to its binding: the
+// layout SurfaceCompositor plans through VulkanGroupLayouts.Plan. The Direct3D 12 presenter blits with its own
+// surface-blit shaders.
+[[vk::binding(0, 3)]] Texture2D sourceTexture : register(t0, space3);
+[[vk::binding(1, 3)]] SamplerState sourceSampler : register(s1, space3);
 
 float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     uint width;
