@@ -211,10 +211,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
 
         m_passes[planned.Index] = runtime;
-        InstallPackage(
-            planned: planned,
-            runtime: runtime
-        );
 
         var objects = built.TakePass(index: planned.Index);
 
@@ -272,10 +268,17 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
         runtime.Sets = new nint[m_inFlight];
         runtime.Samplers = new nint[m_inFlight];
+        runtime.PackageSetBindings = (objects.PackageFactory?.SetBindings.Count ?? 0);
         AllocateSlotObjects(
             descriptorPool: ref descriptorPool,
             graphPool: graphPool,
             pass: runtime
+        );
+        InstallPackage(
+            descriptorPool: descriptorPool,
+            objects: objects,
+            planned: planned,
+            runtime: runtime
         );
     }
     // A capture armed after a selection reads that selection: while its float preview builds, the published image is still
@@ -480,6 +483,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
             var graphPool = GraphDescriptorPool(
                 inFlight: m_inFlight,
+                packages: m_packages,
                 plan: plan
             );
             var descriptorPool = ((nint)0);
@@ -661,6 +665,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 owner: $"shader pipeline {m_descriptor.Name}",
                 pools: DescriptorPools(
                     inFlight: m_inFlight,
+                    packages: m_packages,
                     plan: next.Plan,
                     preview: key.Preview.HasValue
                 ),
@@ -962,11 +967,28 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             }
         }
     }
-    // Writes the pass's frame block: its bound config, then every frame member through the layout's host writer, or, with
-    // sentinels on, every member's echo sentinel.
     private void PushFrameConstants(RuntimePass pass, in FrameContext context, nint command, nint layout, uint width, uint height, IGpuRecorder recorder, GpuBindPoint bindPoint) {
         Span<byte> bytes = stackalloc byte[((int)pass.ParametersLayout.SizeBytes)];
 
+        WriteFrameBlock(
+            bytes: bytes,
+            context: in context,
+            height: height,
+            pass: pass,
+            width: width
+        );
+        recorder.PushConstants(
+            bindPoint: bindPoint,
+            commandBufferHandle: command,
+            data: bytes,
+            offset: 0,
+            pipelineLayoutHandle: layout,
+            stageFlags: FrameBlockStages
+        );
+    }
+    // Writes the pass's frame block: its bound config, then every frame member through the layout's host writer, or, with
+    // sentinels on, every member's echo sentinel.
+    private void WriteFrameBlock(RuntimePass pass, in FrameContext context, uint width, uint height, Span<byte> bytes) {
         if (Sentinels) {
             ShaderInterfaceEcho.WriteSentinels(
                 block: bytes,
@@ -983,19 +1005,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 width: width
             );
         }
-        recorder.PushConstants(
-            bindPoint: bindPoint,
-            commandBufferHandle: command,
-            data: bytes,
-            offset: 0,
-            pipelineLayoutHandle: layout,
-            stageFlags: FrameBlockStages
-        );
     }
     private void Record(RuntimePass pass, int slot, in FrameContext context, List<nint> commands) {
         if (pass.Package is not null) {
             RecordPackage(
                 commands: commands,
+                context: in context,
                 pass: pass,
                 slot: slot
             );
@@ -1801,6 +1816,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         public List<GpuComputeBinding> Bindings = [];
 
+        // A package pass's per-slot set bindings, which its recorder allocates from the graph's pool.
+        public int PackageSetBindings;
         public IGpuComputePipeline? Compute;
         public IGpuCommandPool[]? Draw;
         public IGpuFramebuffer[]? Framebuffers;

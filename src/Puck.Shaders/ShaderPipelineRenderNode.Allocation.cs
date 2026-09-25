@@ -31,23 +31,29 @@ public sealed partial class ShaderPipelineRenderNode {
 
     /// <summary>States the descriptor pools a node creates for an installed <paramref name="plan"/>: one pool holding a
     /// set per in-flight frame for every pass that binds a descriptor, when any does, then the float preview's one pool
-    /// (<see cref="PreviewDescriptorPool"/>) when it has a preview. A package pass binds its own descriptors and has no
-    /// set here. The node's own pool creation reads the same
-    /// statement, so an admission computed from it before anything is allocated is what the node requests.</summary>
+    /// (<see cref="PreviewDescriptorPool"/>) when it has a preview. A package pass's sets are the ones its factory
+    /// states (<see cref="IRenderGraphPackageFactory.SetBindings"/>), which its recorder allocates from the same pool.
+    /// The node's own pool creation reads the same statement, so an admission computed from it before anything is
+    /// allocated is what the node requests.</summary>
     /// <param name="plan">The pipeline plan the node installs.</param>
     /// <param name="inFlight">The node's frames in flight.</param>
     /// <param name="preview">Whether the node presents a float preview.</param>
+    /// <param name="packages">The recorders the node's package passes run through.</param>
     /// <returns>Each pool's sizes, in creation order.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="plan"/> or <paramref name="packages"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlight"/> is zero.</exception>
-    public static IReadOnlyList<GpuDescriptorPoolSizes> DescriptorPools(ShaderPipelinePlan plan, uint inFlight, bool preview) {
+    /// <exception cref="InvalidDataException">A package pass names a package no recorder serves.</exception>
+    public static IReadOnlyList<GpuDescriptorPoolSizes> DescriptorPools(ShaderPipelinePlan plan, uint inFlight, bool preview, RenderGraphPackageRecorders packages) {
         ArgumentNullException.ThrowIfNull(argument: plan);
+        ArgumentNullException.ThrowIfNull(argument: packages);
         ArgumentOutOfRangeException.ThrowIfZero(value: inFlight);
 
         var pools = new List<GpuDescriptorPoolSizes>(capacity: 2);
 
         if (GraphDescriptorPool(
             inFlight: inFlight,
+            packages: packages,
             plan: plan
         ) is { } graph) {
             pools.Add(item: graph);
@@ -61,20 +67,22 @@ public sealed partial class ShaderPipelineRenderNode {
 
     // The graph's one descriptor pool: a set per in-flight frame for each pass that binds a descriptor, or none when no
     // pass does.
-    private static GpuDescriptorPoolSizes? GraphDescriptorPool(ShaderPipelinePlan plan, uint inFlight) {
+    private static GpuDescriptorPoolSizes? GraphDescriptorPool(ShaderPipelinePlan plan, uint inFlight, RenderGraphPackageRecorders packages) {
         var specs = VersionSpecs(plan: plan);
         var sets = new List<IReadOnlyList<GpuComputeBinding>>();
 
         foreach (var planned in plan.Passes) {
-            // A package pass has no declaration and binds its own descriptors: its recorder records it.
-            if (planned.Declaration is not { } declaration) {
-                continue;
-            }
-
-            var bindings = Descriptors(
-                pass: declaration,
-                specs: specs
-            );
+            // A package pass has no declaration; its recorder allocates the sets its factory states.
+            var bindings = ((planned.Declaration is { } declaration)
+                ? Descriptors(
+                    pass: declaration,
+                    specs: specs
+                )
+                : packages.FactoryFor(
+                    instance: plan.Definition.Name,
+                    package: planned.Package!.Package,
+                    pass: planned.Name
+                ).SetBindings);
 
             if (bindings.Count == 0) {
                 continue;
@@ -101,7 +109,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var bindings = m_gpu.Bindings;
 
         if (
-            (pass.Bindings.Count != 0) &&
+            ((pass.Bindings.Count != 0) || (pass.PackageSetBindings != 0)) &&
             (descriptorPool == 0)
         ) {
             descriptorPool = bindings.CreatePool(sizes: (graphPool ?? throw new InvalidOperationException(message: "The plan states no descriptor pool for a pass that binds descriptors.")));

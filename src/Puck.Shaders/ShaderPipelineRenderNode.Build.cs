@@ -19,7 +19,8 @@ namespace Puck.Shaders;
 // objects on the device being released. The replaced graph is never drained on the frame thread; see
 // ShaderPipelineRenderNode.Retirement.cs.
 public sealed partial class ShaderPipelineRenderNode {
-    private const GpuShaderStage FrameBlockStages = GpuShaderStage.Compute | GpuShaderStage.Fragment;
+    // The stages every pass's frame block is pushed to, a package's included.
+    internal const GpuShaderStage FrameBlockStages = GpuShaderStage.Compute | GpuShaderStage.Fragment;
 
     private readonly BackgroundBuild<GraphBuild> m_build = new();
 
@@ -186,7 +187,9 @@ public sealed partial class ShaderPipelineRenderNode {
             DirectX: m_directX,
             Gpu: m_gpu,
             InFlight: m_inFlight,
-            Key: key
+            Instance: m_descriptor.Name,
+            Key: key,
+            Packages: m_packages
         );
 
         m_buildKey = key;
@@ -270,7 +273,7 @@ public sealed partial class ShaderPipelineRenderNode {
             );
     }
     // Everything a build reads, captured on the frame thread when it starts; a build never touches the node.
-    private sealed record BuildRequest(BuildKey Key, GpuDeviceServices Gpu, IGpuDeviceContext Device, bool DirectX, uint InFlight);
+    private sealed record BuildRequest(BuildKey Key, GpuDeviceServices Gpu, IGpuDeviceContext Device, bool DirectX, uint InFlight, string Instance, RenderGraphPackageRecorders Packages);
     // The pipeline and module set of one candidate, built on the thread pool. The install takes each object into the
     // runtime graph and clears it here, so disposing a build releases exactly what was never taken.
     private sealed class GraphBuild : IDisposable {
@@ -297,6 +300,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
                     build.Passes[planned.Index] = objects;
                     objects.Create(
+                        cancellationToken: cancellationToken,
                         compiled: pipeline.Shaders.GetValueOrDefault(key: planned.Name),
                         planned: planned,
                         request: request,
@@ -340,23 +344,43 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
     // One pass's pipeline and modules: for a compute pass its module and pipeline; for a fullscreen pass its two modules,
-    // the render pass it draws in, and the graphics pipeline created for that render pass. The images it draws into are
-    // the graph's, allocated on the frame thread.
+    // the render pass it draws in, and the graphics pipeline created for that render pass; for a package pass what its
+    // package's factory builds. The images it draws into are the graph's, allocated on the frame thread.
     private sealed class PassObjects : IDisposable {
         public List<GpuComputeBinding> Bindings = [];
         public IGpuComputePipeline? Compute;
         public (uint Width, uint Height) Extent;
         public IGpuPipeline? Graphics;
+        public IRenderGraphPackageFactory? PackageFactory;
+        public RenderGraphPackageRecorderContext? PackageContext;
+        public IDisposable? PackageBuilt;
         public IGpuShaderModule? Primary;
         public IGpuRenderPass? RenderPass;
         public IGpuShaderModule? Secondary;
 
-        public void Create(ShaderPipelinePlannedPass planned, CompiledShader? compiled, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs) {
-            // A package pass creates no module or pipeline, and binds its own descriptors: its recorder records it.
+        public void Create(ShaderPipelinePlannedPass planned, CompiledShader? compiled, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs, CancellationToken cancellationToken) {
+            // A package pass's objects are whatever its factory builds; its recorder binds its own descriptors.
             if (planned.Declaration is not { } declaration) {
-                Extent = planned.Package!.ResolveExtent(
+                var step = planned.Package!;
+
+                Extent = step.ResolveExtent(
                     frameHeight: request.Key.Height,
                     frameWidth: request.Key.Width
+                );
+                PackageFactory = request.Packages.FactoryFor(
+                    instance: request.Instance,
+                    package: step.Package,
+                    pass: planned.Name
+                );
+                PackageContext = PackageContextOf(
+                    extent: Extent,
+                    planned: planned,
+                    request: request,
+                    specs: specs
+                );
+                PackageBuilt = PackageFactory.Build(
+                    cancellationToken: cancellationToken,
+                    context: PackageContext
                 );
 
                 return;
@@ -533,6 +557,8 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         public void Dispose() {
+            PackageBuilt?.Dispose();
+            PackageBuilt = null;
             Compute?.Dispose();
             Compute = null;
             Graphics?.Dispose();

@@ -482,15 +482,19 @@ public sealed record ShaderPipelinePass(
 /// <param name="Outputs">The versions it writes.</param>
 /// <param name="Dispatch">Its dispatch shape; <see langword="null"/> means
 /// <see cref="ShaderPipelineDispatchKind.Extent"/>.</param>
+/// <param name="Config">The package's config schema with each field defaulting to the pass's bound value, which lays out
+/// its frame block after the frame members; <see langword="null"/> when the package takes no config.</param>
 public sealed record ShaderPipelinePackagePass(
     string Name,
     string Package,
     IReadOnlyList<ResourceReference> Inputs,
     IReadOnlyList<ResourceReference> Outputs,
-    ShaderPipelineDispatch? Dispatch = null
+    ShaderPipelineDispatch? Dispatch = null,
+    IReadOnlyDictionary<string, ShaderConfigField>? Config = null
 ) {
     // The compute-shaped pass the planner orders it as; nothing compiles its empty entry point.
     internal ShaderPipelinePass Shape() => new(
+        Config: Config,
         Dispatch: Dispatch,
         EntryPoint: string.Empty,
         Inputs: Inputs,

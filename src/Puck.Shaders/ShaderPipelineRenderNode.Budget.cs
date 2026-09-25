@@ -224,7 +224,8 @@ public sealed partial class ShaderPipelineRenderNode {
         ((storage.Declaration.Kind == ShaderPipelineResourceKind.Depth)
             ? GpuImageUsage.DepthAttachment
             : GpuImageUsage.Sampled | GpuImageUsage.Storage | (plan.Passes.Any(predicate: pass => (
-                (pass.Declaration?.IsGraphics == true) &&
+                // A package may draw into what it writes (RenderGraphPackageDraw), as a graphics pass does.
+                ((pass.Declaration?.IsGraphics == true) || (pass.Kind == ShaderPipelinePassKind.Package)) &&
                 pass.Outputs.Any(predicate: output => storage.Versions.Contains(value: output.Name))
             ))
                 ? GpuImageUsage.ColorAttachment

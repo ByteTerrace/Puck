@@ -211,15 +211,20 @@ public sealed partial class RenderGraphRuntimeLawTests {
     );
 
     /// <summary>The fake recorders and what they recorded, per instance.</summary>
-    private sealed class Recorders {
+    private sealed class Recorders : IRenderGraphPackageFactory {
         public Recorders(params string[] serves) {
             foreach (var package in serves) {
                 Registry.Register(
-                    factory: Create,
+                    factory: this,
                     package: package
                 );
             }
         }
+
+        public IReadOnlyList<GpuComputeBinding> SetBindings => [];
+
+        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, nint descriptorPool) => Create(context: context);
 
         public Dictionary<string, Counter> ByInstance { get; } = new(comparer: StringComparer.Ordinal);
         public RenderGraphPackageRecorders Registry { get; } = new();

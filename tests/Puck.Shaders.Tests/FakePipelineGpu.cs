@@ -63,6 +63,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     /// <summary>Gets every descriptor write while <see cref="Recording"/> is on, in writing order: the set, the binding,
     /// and the image view or buffer handle written.</summary>
     public List<(nint Set, uint Binding, nint Handle)> DescriptorWrites { get; } = [];
+    /// <summary>Gets every push-constant write recorded while <see cref="Recording"/>: its bind point, stages and bytes.</summary>
+    public List<(GpuBindPoint BindPoint, GpuShaderStage Stages, byte[] Data)> PushedConstants { get; } = [];
 
     /// <summary>Gets or sets the one-based creation number that throws instead of creating; 0 never throws.</summary>
     public int FailAtCreation { get; set; }
@@ -392,7 +394,11 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             PeakLiveBytes = LiveBytes;
         }
     }
-    public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) { }
+    public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
+        if (Recording) {
+            PushedConstants.Add(item: (bindPoint, stageFlags, data.ToArray()));
+        }
+    }
     public void SetScissor(nint commandBufferHandle, GpuPixelRect rect) { }
     public void Submit(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
     public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => Submissions++;
