@@ -49,15 +49,27 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     /// <summary>Gets the frame's lease list.</summary>
     public LeaseRetireList Leases { get; } = Leases;
 }
+/// <summary>What a package pass's recording did with its outputs this frame.</summary>
+public enum RenderGraphPackageOutcome : byte {
+    /// <summary>The recording wrote every output.</summary>
+    Drew = 0,
+    /// <summary>The recording wrote nothing, so each output port stands for the version bound to the input port at its
+    /// position: the instance publishes and captures that input's image in place of the output's, with no copy. An
+    /// instance accepts it only from a pass each of whose outputs is an image no other pass of its graph touches, bound
+    /// beside an input image of its format.</summary>
+    DrewNothing = 1,
+}
 /// <summary>Records one package pass of one installed graph. The instance creates it when the graph installs and
 /// disposes it with that graph: when a replacement retires it, on device loss and at disposal, always after the
 /// submissions that recorded it are done with and before the device it recorded on is released.</summary>
 public interface IRenderGraphPackageRecorder : IDisposable {
     /// <summary>Records the pass's work for one frame. It must not submit, wait or create a pipeline: the instance
     /// submits the command buffer with the rest of its frame, and the pipelines were built off the frame thread
-    /// (<see cref="IRenderGraphPackageFactory.Build"/>).</summary>
+    /// (<see cref="IRenderGraphPackageFactory.Build"/>). A recording that draws nothing records nothing and says so,
+    /// and never copies an input into an output to stand for it.</summary>
     /// <param name="recording">The frame's command buffer and bound versions.</param>
-    void Record(in RenderGraphPackageRecording recording);
+    /// <returns>Whether the recording wrote its outputs, or left each to stand for its input.</returns>
+    RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording);
 }
 /// <summary>Makes the recorders of one package id. A candidate graph's package passes build with its shader passes:
 /// <see cref="Build"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the graph

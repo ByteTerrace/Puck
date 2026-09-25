@@ -63,6 +63,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     /// <summary>Gets every descriptor write while <see cref="Recording"/> is on, in writing order: the set, the binding,
     /// and the image view or buffer handle written.</summary>
     public List<(nint Set, uint Binding, nint Handle)> DescriptorWrites { get; } = [];
+    /// <summary>Gets every readback, in reading order: the image read and the layout it was read in.</summary>
+    public List<(nint Image, GpuImageLayout Layout)> Readbacks { get; } = [];
     /// <summary>Gets every push-constant write recorded while <see cref="Recording"/>: its bind point, stages and bytes.</summary>
     public List<(GpuBindPoint BindPoint, GpuShaderStage Stages, byte[] Data)> PushedConstants { get; } = [];
 
@@ -519,6 +521,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public void Dispose() => m_staging?.Dispose();
         public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
             var bytes = ((((ulong)width) * height) * bytesPerPixel);
+
+            gpu.Readbacks.Add(item: (sourceImageHandle, sourceLayout));
 
             if (StagingBytes != bytes) {
                 m_staging?.Dispose();

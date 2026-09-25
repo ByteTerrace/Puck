@@ -261,7 +261,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             m_geometry.Dispose();
             m_built.Dispose();
         }
-        public void Record(in RenderGraphPackageRecording recording) {
+        public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             var input = recording.Inputs[0];
             var output = recording.Outputs[0];
             var target = (output.Owned ?? throw new InvalidDataException(message: $"Output '{output.Version}' is not an image the instance owns, so it cannot be drawn into."));
@@ -339,6 +339,8 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 recorder: recorder,
                 target: in output
             );
+
+            return RenderGraphPackageOutcome.Drew;
         }
     }
 }
