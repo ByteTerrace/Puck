@@ -4,6 +4,7 @@ using Puck.Shaders;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.Testing;
 
 using Xunit;
 
@@ -349,7 +350,7 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
                 ))
             ) {
                 CreateNode = static name => new ShaderPipelineRenderNode(
-                    deviceContext: new AbsentPipelineDevice(),
+                    deviceContext: new RefusingGpuDevice(),
                     height: 4,
                     hostsOnDirectX: false,
                     name: name,
