@@ -56,7 +56,7 @@ public readonly record struct ShaderPipelineAccessState(GpuImageLayout Layout, G
     /// <param name="use">The state the next use needs.</param>
     /// <returns><see langword="true"/> when the use adds an access this state lacks.</returns>
     public bool ChangesReadState(ShaderPipelineAccessState use) =>
-        ((Access != GpuComputeAccess.None) && ((use.Access & ~Access) != 0));
+        ((Access != GpuAccess.None) && ((use.Access & ~Access) != 0));
     /// <summary>Returns the state after <paramref name="use"/> follows this one: the use alone when a barrier separates
     /// them, or the union of reads when a read follows reads of the same kind in the same layout with no
     /// barrier.</summary>

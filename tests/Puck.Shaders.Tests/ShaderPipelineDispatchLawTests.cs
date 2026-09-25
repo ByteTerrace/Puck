@@ -114,9 +114,9 @@ public sealed class ShaderPipelineDispatchLawTests {
         Assert.Equal(
             actual: arguments.Use,
             expected: new ShaderPipelineAccessState(
-                Access: GpuComputeAccess.IndirectCommandRead,
+                Access: GpuAccess.IndirectCommandRead,
                 Layout: GpuImageLayout.Undefined,
-                Stage: GpuComputeStage.DrawIndirect
+                Stage: GpuStage.DrawIndirect
             )
         );
         // A shader read already made the write visible, but the arguments are another read state, so the planner
@@ -124,13 +124,13 @@ public sealed class ShaderPipelineDispatchLawTests {
         Assert.Equal(
             actual: arguments.Barrier,
             expected: new ShaderPipelineBarrier(
-                DestinationAccess: GpuComputeAccess.IndirectCommandRead,
-                DestinationStage: GpuComputeStage.DrawIndirect,
+                DestinationAccess: GpuAccess.IndirectCommandRead,
+                DestinationStage: GpuStage.DrawIndirect,
                 Kind: ShaderPipelineBarrierKind.Buffer,
                 NewLayout: GpuImageLayout.Undefined,
                 OldLayout: GpuImageLayout.Undefined,
-                SourceAccess: GpuComputeAccess.ShaderRead,
-                SourceStage: GpuComputeStage.ComputeShader
+                SourceAccess: GpuAccess.ShaderRead,
+                SourceStage: GpuStage.ComputeShader
             )
         );
         Assert.Equal(
@@ -171,9 +171,9 @@ public sealed class ShaderPipelineDispatchLawTests {
     [Fact]
     public void AReadOfTheSameKindAfterReadsRecordsNothing() {
         var reads = new ShaderPipelineAccessState(
-            Access: GpuComputeAccess.ShaderRead,
+            Access: GpuAccess.ShaderRead,
             Layout: GpuImageLayout.Undefined,
-            Stage: GpuComputeStage.ComputeShader
+            Stage: GpuStage.ComputeShader
         );
 
         Assert.False(condition: ShaderPipelineAccessState.Fresh.ChangesReadState(use: reads));

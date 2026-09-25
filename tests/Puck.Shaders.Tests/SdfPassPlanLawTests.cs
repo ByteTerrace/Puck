@@ -176,7 +176,7 @@ public sealed class SdfPassPlanLawTests {
     [Fact]
     public void ThePlannedBufferBarriersBetweenPassesAreExactlyTheEnginesEdges() {
         var plan = Plan();
-        var planned = new List<(SdfFrameBuffer Buffer, string Producer, string Consumer, GpuComputeAccess SourceAccess, GpuComputeAccess DestinationAccess, GpuComputeStage SourceStage, GpuComputeStage DestinationStage)>();
+        var planned = new List<(SdfFrameBuffer Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)>();
 
         foreach (var pass in plan.Passes) {
             foreach (var access in pass.Accesses) {

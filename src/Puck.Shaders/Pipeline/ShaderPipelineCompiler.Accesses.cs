@@ -13,9 +13,9 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineCompiler {
     // An indirect dispatch reads its group counts in the indirect-argument state, before any shader stage runs.
     private static ShaderPipelineAccessState ArgumentsUse { get; } = new(
-        Access: GpuComputeAccess.IndirectCommandRead,
+        Access: GpuAccess.IndirectCommandRead,
         Layout: GpuImageLayout.Undefined,
-        Stage: GpuComputeStage.DrawIndirect
+        Stage: GpuStage.DrawIndirect
     );
 
     // A pass's references in recording order, each with whether it writes: an indirect dispatch's arguments (read in
