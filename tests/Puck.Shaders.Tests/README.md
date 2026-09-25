@@ -20,6 +20,12 @@ allocation in steady-state frames, building every candidate's modules and
 pipelines off the frame thread while the installed graph keeps presenting, and
 retiring the old graph only once the queue has finished with it, without a
 device drain.
+`RenderGraphRuntimeLawTests` run `RenderGraphRuntime` on the same fake, with
+cameras as package graphs whose fake recorders count their records: demand
+(a camera on two screens renders once a frame, an off-view one never), extent,
+previous-frame and buffer edges bound to what their producers published,
+captures from the root, device loss, disposal, and zero managed allocation in
+steady frames. The fake records descriptor writes while `Recording` is on.
 `ShaderPipelineVersionLawTests` cover forwarding: readers ordered before an
 overwrite, each refusal by name, one storage per chain, and a node that records
 exactly the barriers the plan gives each access.

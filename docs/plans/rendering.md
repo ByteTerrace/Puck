@@ -500,7 +500,7 @@ for that price.
 
 P11b owes the rest of the package. The live renderer does not run graphs:
 `SdfEngineNode`'s child composition, `ViewStack` and `WorldPipelineRuntime`
-still render every view, nothing feeds the scheduler a frame, and
+still render every view, no host feeds the scheduler a frame, and
 `views.pipelines` rows and layout slots do not name graph instances yet. P11b
 wires `WorldBootComposition`'s node tree onto graph instances fed by the
 scheduler, puts the live schedule's extents and prices in `world.budget`,
@@ -509,16 +509,53 @@ including the `puck.shader.pipeline.v1` schema. Folding that schema into the
 graph document is more than a tag change: the pipeline document's top-level
 `config`, which the planner already refuses, goes with it; the tests and the
 `puck affected` path filter that glob `*.pipeline.json` move with the
-suffix; and a single `.hlsl` source still reads as a one-pass graph. Four
+suffix; and a single `.hlsl` source still reads as a one-pass graph. Five
 P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
-planner only through its package entry, and planned buffer edges. Package
+planner only through its package entry, planned buffer edges, and the graph
+runtime. Package
 ports are typed with a buffer's stride and count, `sdf.bricks` publishes the
 brick pool as a buffer output, and an instance read carries the version's
 kind, so the scheduler orders a buffer producer before its readers at no
 extent while the planner records the read's buffer barrier; no world row
-declares a buffer edge and nothing records one until the graph runtime lands.
+declares a buffer edge yet.
+
+The runtime is `RenderGraphRuntime` in `src/Puck.Shaders/Graph`, beside the
+node it drives, since `Puck.Hosting` cannot reach `Puck.Shaders`. It owns an
+instance set, schedules each frame into one of two alternating schedules, and
+renders each scheduled instance through its own `ShaderPipelineRenderNode`,
+resized to the scheduled extent. That node's one submission records the
+graph's shader passes and its package passes in the planner's order with the
+planner's barriers: a package pass hands its command buffer and the versions
+bound to its ports to a recorder that `RenderGraphPackageRecorders` holds by
+package id, and a graph naming a package with no recorder is refused by name
+when it installs. Before an instance renders, each external version is bound
+to the frame of its producer's output the schedule names: an image to the
+published image, a buffer to the buffer of the frame slot that wrote it. A
+slower producer is read at its latest completed frame, and a previous-frame
+edge, a self-read included, at the output before this frame's. An image
+input with no completed output yet binds a one-texel transparent-black
+stand-in, so a mirror renders its first frame; an instance whose buffer
+producer has not produced does not render. A bound image may have any
+extent, since a producer renders at its own footprint's. Each instance counts
+its own passes through its node's `IGpuWorkSource`. The root instance is what
+the runtime returns and captures read: a `FrameCaptureRequest` armed on the
+runtime moves to the root's node once that node renders a graph, and until
+then `UnservedCaptureReason` names the root, so a withdrawn request is
+dropped. A device loss releases every node's graph and recorders and the
+stand-ins, and starts every instance again with no output and no history.
+`RenderGraphRuntimeLawTests` hold it on the fake GPU: a camera on two
+screens rendered once a frame and counted, an off-view camera rendered zero
+times, a mirror and a self-bound input sampling the previous frame's image,
+a quarter-screen view at a quarter extent, a buffer edge binding the
+producer's buffer, captures served from the root or refused by name, the
+device-loss and disposal releases, and a steady frame allocating nothing over
+64 frames. Nothing drives the runtime yet: `WorldBootComposition` keeps its
+hand-built tree, no host registers a recorder, the `sdf.world`, `post.<id>`
+and `overlay` adapters are the next item, and the node allocates only
+fixed-size buffers, so a counted package buffer such as `sdf.bricks`'s brick
+pool cannot be an instance's storage until the host supplies its counts.
 A world may author its own root graph
 in `views.graphs`; when it does not, composition synthesizes the default one,
 `sdf.world` then each `render.extensions` pass as `post.<id>` then `overlay`,

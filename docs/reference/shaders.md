@@ -302,9 +302,19 @@ ceiling (one display), its rate, and the passes its graph plans to. The server
 plans each row's source for that price. A document analysed without its
 sources reports why the passes are unplanned.
 
-The live renderer does not run graphs yet. `views.pipelines`, the SDF engine's
-child composition and `ViewStack` still render every view, and moving them onto
-graph instances is P11b in
+`RenderGraphRuntime` runs a set of instances. Each frame it schedules the set,
+then renders each scheduled instance through its own `ShaderPipelineRenderNode`
+at the scheduled extent. One submission per instance records the graph's
+shader passes and, through the recorder `RenderGraphPackageRecorders` holds
+for each package id, its package passes, all in the planner's order. A
+`RenderGraphRuntimeGraph` binds each external version to a producer instance;
+the runtime binds it to the frame of that producer's output the schedule
+names, and to a transparent-black stand-in while the producer has none. A
+bound image may have any extent. Captures read the root instance's output,
+and each instance counts its own passes. The live renderer does not use the
+runtime yet: `views.pipelines`, the SDF engine's child composition and
+`ViewStack` still render every view, and no host registers a package
+recorder. Moving them onto graph instances is P11b in
 [the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
 
 ## Pass interfaces
