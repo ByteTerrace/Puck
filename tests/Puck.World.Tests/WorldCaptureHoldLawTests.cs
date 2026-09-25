@@ -80,7 +80,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
 
         public Run(string directory, bool holdsClock) {
             var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
-                BeforeComputePipeline = () => m_gate.Wait(),
+                BeforeComputePipeline = _ => m_gate.Wait(),
             };
 
             m_row = HostRow.Build(

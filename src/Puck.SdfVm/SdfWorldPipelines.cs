@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Puck.Abstractions.Gpu;
 
 namespace Puck.SdfVm;
@@ -8,11 +9,13 @@ namespace Puck.SdfVm;
 /// kernel to native code, which can take seconds per pipeline with its cache cold, so <see cref="SdfWorldPipelineCache"/>
 /// builds this set on the thread pool (<see cref="Puck.Hosting.BackgroundBuild{T}"/>) for every node and view that leases
 /// it, and each constructs its engine only once the set is ready; the frame thread never waits on the driver's compiler.
+/// A build creates up to <see cref="BuildConcurrency"/> pipelines at once and checks its cancel between pipelines.
 /// <para>
 /// Building and preparing a reload are safe on any thread: they only create objects on the device and count them into
 /// the ledger the set was built with. Everything else runs on the thread that renders with the set. The set is disposed
-/// after every engine built from it, and before the device goes away — so a build still in flight must be waited for
-/// (<see cref="Puck.Hosting.BackgroundBuild{T}.CancelAndWait"/>) before a device loss or disposal releases the device.
+/// after every engine built from it, and before the device goes away — so a build still in flight must be canceled and
+/// waited for (<see cref="Puck.Hosting.BackgroundBuild{T}.CancelAndWait"/>) before a device loss or disposal releases the
+/// device; the wait covers only the pipelines already in the driver.
 /// </para>
 /// </summary>
 public sealed class SdfWorldPipelines : IDisposable {
@@ -39,7 +42,7 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// <summary>Gets the kernel set the installed pipelines were created from; a committed reload replaces it.</summary>
     public SdfWorldKernels Kernels => m_kernels;
 
-    private static PipelineVersion CreateVersion(GpuDeviceServices gpu, IGpuDeviceContext device, GpuComputePipelineDescription description, ReadOnlyMemory<byte> bytecode) {
+    private static PipelineVersion CreateVersion(GpuDeviceServices gpu, GpuComputePipelineDescription description, ReadOnlyMemory<byte> bytecode) {
         var shader = gpu.ShaderModuleFactory.Create(
             bytecode: bytecode,
             stage: GpuShaderStage.Compute
@@ -57,6 +60,57 @@ public sealed class SdfWorldPipelines : IDisposable {
             shader.Dispose();
             throw;
         }
+    }
+    // Creates every item's pipeline, at most BuildConcurrency at once, starting them in list order: this thread is one
+    // creator and pool tasks are the others. Each creator claims the next item only after checking the token and the
+    // failure flag, so a cancel or a failure waits only for the creations already in the driver. Anything created is
+    // released before the cancel or the first failure is thrown.
+    private static PipelineVersion[] CreateAll(GpuDeviceServices gpu, List<Creation> work, SdfWorldPipelineBuildProgress? progress, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var created = new PipelineVersion?[work.Count];
+        var creators = new CreationRun(
+            cancellationToken: cancellationToken,
+            created: created,
+            gpu: gpu,
+            progress: progress,
+            work: work
+        );
+        var helpers = new Task[Math.Max(
+            val1: 0,
+            val2: (Math.Min(
+                val1: BuildConcurrency,
+                val2: work.Count
+            ) - 1)
+        )];
+
+        for (var helper = 0; (helper < helpers.Length); helper++) {
+            helpers[helper] = Task.Run(
+                action: creators.Run,
+                cancellationToken: CancellationToken.None
+            );
+        }
+
+        creators.Run();
+
+        // A creator catches everything it throws, so the wait never faults.
+        Task.WaitAll(tasks: helpers);
+
+        if ((creators.Failure is null) && (Array.IndexOf(
+            array: created,
+            value: null
+        ) < 0)) {
+            return created!;
+        }
+
+        foreach (var version in created) {
+            version?.Dispose();
+        }
+
+        creators.Failure?.Throw();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        throw new InvalidOperationException(message: "The pipeline build stopped without a cancel or a failure.");
     }
     private static ReadOnlyMemory<byte> KernelBytes(in SdfWorldKernels kernels, string name) => name switch {
         "sdf-beam" => kernels.Beam,
@@ -79,21 +133,34 @@ public sealed class SdfWorldPipelines : IDisposable {
         ),
     };
 
-    /// <summary>Creates every engine pipeline for a kernel set. Safe on any thread; the token is checked before each
-    /// pipeline, so a canceled build stops within one pipeline creation and releases what it had created.</summary>
+    /// <summary>Gets the most pipelines one build or reload creates at once: one fewer than the machine's processors,
+    /// from one to four, so the thread that pumps frames keeps a processor while the driver translates kernels. A cancel
+    /// waits for at most this many creations.</summary>
+    public static int BuildConcurrency { get; } = Math.Clamp(
+        max: 4,
+        min: 1,
+        value: (Environment.ProcessorCount - 1)
+    );
+
+    /// <summary>Creates every engine pipeline for a kernel set, up to <see cref="BuildConcurrency"/> at once: the
+    /// calling thread creates one at a time and the thread pool runs the rest beside it. Pipelines start in
+    /// <c>SdfWorldEngine.PipelineLayouts.BuildOrder</c>, the three views variants last. Safe on any thread. The token is
+    /// checked before each pipeline and never during one, so a canceled build stops once the creations already in the
+    /// driver return and releases everything it created; a failed creation stops the rest the same way.</summary>
     /// <param name="device">The device the pipelines are created on; the set creates them through its services, counted
     /// through its own wrapper over <paramref name="ledger"/>.</param>
     /// <param name="kernels">The compiled kernel set for the device's backend.</param>
     /// <param name="includeBrickPipelines">Whether to build the brick bake and upload pipelines, for an engine with a
     /// brick pool.</param>
     /// <param name="ledger">The ledger that counts the shader modules and pipelines created: the pipeline cache's, or a
-    /// harness's own.</param>
-    /// <param name="cancellationToken">Stops the build between pipelines.</param>
+    /// harness's own. The counts do not depend on the order the pipelines are created in.</param>
+    /// <param name="cancellationToken">The token that stops the build between pipelines.</param>
+    /// <param name="progress">The progress the build reports each created pipeline to, or <see langword="null"/>.</param>
     /// <returns>The built set, owned by the caller.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="ledger"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="OperationCanceledException">The build was canceled.</exception>
-    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfWorldKernels kernels, bool includeBrickPipelines, GpuWorkLedger ledger, CancellationToken cancellationToken) {
+    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfWorldKernels kernels, bool includeBrickPipelines, GpuWorkLedger ledger, CancellationToken cancellationToken, SdfWorldPipelineBuildProgress? progress = null) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(ledger);
 
@@ -102,38 +169,41 @@ public sealed class SdfWorldPipelines : IDisposable {
             services: device.Services
         );
         var specs = SdfWorldEngine.PipelineLayouts.Specs;
+        var work = new List<Creation>(capacity: specs.Length);
+
+        foreach (var index in SdfWorldEngine.PipelineLayouts.BuildOrder) {
+            var spec = specs[index];
+            var bytecode = KernelBytes(
+                kernels: kernels,
+                name: spec.Description.Name
+            );
+
+            if (spec.Brick && (!includeBrickPipelines || bytecode.IsEmpty)) {
+                continue;
+            }
+
+            work.Add(item: new Creation(
+                Bytecode: bytecode,
+                Description: spec.Description,
+                Index: index
+            ));
+        }
+
+        progress?.Begin(total: work.Count);
+
+        var created = CreateAll(
+            cancellationToken: cancellationToken,
+            gpu: counted,
+            progress: progress,
+            work: work
+        );
         var slots = new Slot?[specs.Length];
 
-        try {
-            for (var index = 0; (index < specs.Length); index++) {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var spec = specs[index];
-                var bytecode = KernelBytes(
-                    kernels: kernels,
-                    name: spec.Description.Name
-                );
-
-                if (spec.Brick && (!includeBrickPipelines || bytecode.IsEmpty)) {
-                    continue;
-                }
-
-                slots[index] = new Slot(
-                    current: CreateVersion(
-                        bytecode: bytecode,
-                        description: spec.Description,
-                        device: device,
-                        gpu: counted
-                    ),
-                    description: spec.Description
-                );
-            }
-        } catch {
-            foreach (var slot in slots) {
-                slot?.Dispose();
-            }
-
-            throw;
+        for (var item = 0; (item < work.Count); item++) {
+            slots[work[item].Index] = new Slot(
+                current: created[item],
+                description: work[item].Description
+            );
         }
 
         // The driver's cache now holds whatever this build compiled; write it out from this build thread, not the frame's.
@@ -175,41 +245,42 @@ public sealed class SdfWorldPipelines : IDisposable {
         );
 
         var baseline = m_kernels;
-        var replacements = new List<(int Index, PipelineVersion Version)>();
+        var work = new List<Creation>();
 
-        try {
-            for (var index = 0; (index < m_slots.Length); index++) {
-                if (m_slots[index] is not { } slot) {
-                    continue;
-                }
-
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var bytecode = KernelBytes(
-                    kernels: kernels,
-                    name: slot.Description.Name
-                );
-
-                if (bytecode.Span.SequenceEqual(other: KernelBytes(
-                    kernels: baseline,
-                    name: slot.Description.Name
-                ).Span)) {
-                    continue;
-                }
-
-                replacements.Add(item: (index, CreateVersion(
-                    bytecode: bytecode,
-                    description: slot.Description,
-                    device: m_device,
-                    gpu: m_gpu
-                )));
-            }
-        } catch {
-            foreach (var (_, version) in replacements) {
-                version.Dispose();
+        for (var index = 0; (index < m_slots.Length); index++) {
+            if (m_slots[index] is not { } slot) {
+                continue;
             }
 
-            throw;
+            var bytecode = KernelBytes(
+                kernels: kernels,
+                name: slot.Description.Name
+            );
+
+            if (bytecode.Span.SequenceEqual(other: KernelBytes(
+                kernels: baseline,
+                name: slot.Description.Name
+            ).Span)) {
+                continue;
+            }
+
+            work.Add(item: new Creation(
+                Bytecode: bytecode,
+                Description: slot.Description,
+                Index: index
+            ));
+        }
+
+        var created = CreateAll(
+            cancellationToken: cancellationToken,
+            gpu: m_gpu,
+            progress: null,
+            work: work
+        );
+        var replacements = new (int Index, PipelineVersion Version)[work.Count];
+
+        for (var item = 0; (item < work.Count); item++) {
+            replacements[item] = (work[item].Index, created[item]);
         }
 
         (m_device as IGpuPipelineCache)?.Persist();
@@ -217,7 +288,7 @@ public sealed class SdfWorldPipelines : IDisposable {
         return new SdfWorldPipelineReload(
             baseline: baseline,
             kernels: kernels,
-            replacements: [.. replacements],
+            replacements: replacements,
             target: this
         );
     }
@@ -249,6 +320,42 @@ public sealed class SdfWorldPipelines : IDisposable {
 
         if (!reload.Baseline.Equals(other: m_kernels)) {
             throw new InvalidOperationException(message: "The reload was prepared against kernels that are no longer installed.");
+        }
+    }
+
+    // One pipeline a build or reload creates: the slot it fills, its description, and its kernel.
+    private readonly record struct Creation(int Index, GpuComputePipelineDescription Description, ReadOnlyMemory<byte> Bytecode);
+    // The creators of one CreateAll call, sharing its next unclaimed item and its first failure.
+    private sealed class CreationRun(GpuDeviceServices gpu, List<Creation> work, PipelineVersion?[] created, SdfWorldPipelineBuildProgress? progress, CancellationToken cancellationToken) {
+        private int m_failed;
+        private int m_next = -1;
+
+        public ExceptionDispatchInfo? Failure { get; private set; }
+
+        public void Run() {
+            try {
+                while (!cancellationToken.IsCancellationRequested && (Volatile.Read(location: ref m_failed) == 0)) {
+                    var item = Interlocked.Increment(location: ref m_next);
+
+                    if (item >= work.Count) {
+                        return;
+                    }
+
+                    created[item] = CreateVersion(
+                        bytecode: work[item].Bytecode,
+                        description: work[item].Description,
+                        gpu: gpu
+                    );
+                    progress?.Advance();
+                }
+            } catch (Exception exception) {
+                if (Interlocked.Exchange(
+                    location1: ref m_failed,
+                    value: 1
+                ) == 0) {
+                    Failure = ExceptionDispatchInfo.Capture(source: exception);
+                }
+            }
         }
     }
 
