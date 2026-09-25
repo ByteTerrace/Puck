@@ -3,7 +3,7 @@ using Puck.Abstractions.Documents;
 
 namespace Puck.Shaders;
 
-/// <summary>Identifies a compute, fullscreen graphics, or indexed geometry pipeline pass.</summary>
+/// <summary>Identifies a compute, fullscreen graphics, indexed geometry, or engine package pass.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelinePassKind>))]
 public enum ShaderPipelinePassKind : byte {
     /// <summary>A compute dispatch.</summary>
@@ -13,6 +13,11 @@ public enum ShaderPipelinePassKind : byte {
     /// <summary>A graphics pass that draws its declared vertices as an indexed triangle list into its color attachment,
     /// optionally tested against and writing a depth attachment.</summary>
     Geometry = 3,
+    /// <summary>Engine work a frame graph names under <c>packages</c>, whose source is its package id. The package
+    /// records its own work and binds its own descriptors; the planner orders, versions and barriers it by the versions
+    /// it reads and writes, which it reaches as a compute pass does. A document's <c>passes</c> never declare it, and
+    /// the planner refuses one there with <c>SHADERPIPE_PACKAGE_PASS</c>.</summary>
+    Package = 4,
 }
 /// <summary>Identifies a pipeline image, raw buffer, or depth resource.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineResourceKind>))]

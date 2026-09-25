@@ -238,17 +238,19 @@ declares no binding. `RenderGraphPackageCatalog` is what a host offers:
 
 `RenderGraphCompiler` checks the package passes against the catalog, then plans
 the whole graph with `ShaderPipelineCompiler`. The planner sees a package pass
-as a compute pass whose source is `package:<id>`, so one planner orders every
-pass, versions and barriers every access, and keeps history. A version
-declared `External` is an input the host binds, such as another instance's
-output, and `RenderGraphPlan.Inputs` lists them. A graph that reads its own
-output reads a `history` version's previous frame, exactly as a pipeline does.
-The refusals are `RENDERGRAPH_SCHEMA`, `RENDERGRAPH_DOCUMENT_SHAPE`,
-`RENDERGRAPH_PACKAGE_UNKNOWN`, `RENDERGRAPH_PACKAGE_PORTS`,
-`RENDERGRAPH_PACKAGE_BINDING`, `RENDERGRAPH_PACKAGE_INPUT`,
-`RENDERGRAPH_PACKAGE_OUTPUT`, and `RENDERGRAPH_SOURCE_RESERVED` for a shader
-pass whose source starts with `package:`. A planner refusal keeps its
-`SHADERPIPE_` code.
+as its own kind, `Package`, whose source is its package id: it binds no
+descriptors and compiles nothing, and it reaches its versions as a compute pass
+does. One planner orders every pass, versions and barriers every access, and
+keeps history. A version declared `External` is an input the host binds, such
+as another instance's output, and `RenderGraphPlan.Inputs` lists them. A graph
+that reads its own output reads a `history` version's previous frame, exactly
+as a pipeline does. The refusals are `RENDERGRAPH_SCHEMA`,
+`RENDERGRAPH_DOCUMENT_SHAPE`, `RENDERGRAPH_PACKAGE_UNKNOWN`,
+`RENDERGRAPH_PACKAGE_PORTS`, `RENDERGRAPH_PACKAGE_BINDING`,
+`RENDERGRAPH_PACKAGE_INPUT` and `RENDERGRAPH_PACKAGE_OUTPUT`. A planner refusal
+keeps its `SHADERPIPE_` code, among them `SHADERPIPE_PACKAGE_PASS` for a pass
+in a pipeline's or a graph's `passes` that declares the `Package` kind, which
+only the `packages` member declares.
 
 A world names graph instances in `views.graphs`. Each row names a graph
 `source`, relative to the world document as a `views.pipelines` source is, an

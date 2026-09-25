@@ -5,8 +5,9 @@ namespace Puck.Shaders.Tests;
 /// <summary>
 /// Laws for the <c>puck.render.graph.v1</c> document: a graph of shader and package passes validates and plans through
 /// the one pipeline planner, each package refusal is named, a planner refusal passes through with its own code, a view
-/// reading its own output goes through the planner's history resource, and every checked-in pipeline document is a
-/// graph document that plans identically once its tag names the graph schema.
+/// reading its own output goes through the planner's history resource, a package pass plans as its own kind that only a
+/// graph's packages member declares, and every checked-in pipeline document is a graph document that plans identically
+/// once its tag names the graph schema.
 /// </summary>
 public sealed class RenderGraphDocumentLawTests {
     private const string Graph = """
@@ -57,8 +58,12 @@ public sealed class RenderGraphDocumentLawTests {
         Assert.Equal(expected: ["screen"], actual: plan.Inputs);
         Assert.Equal(expected: ["final"], actual: plan.Outputs);
         Assert.Equal(
-            expected: (RenderGraphCompiler.PackageSourcePrefix + RenderGraphPackageCatalog.Overlay),
-            actual: plan.Pipeline.Passes[2].Declaration.Source
+            expected: (ShaderPipelinePassKind.Package, RenderGraphPackageCatalog.Overlay),
+            actual: (plan.Pipeline.Passes[2].Declaration.Kind, plan.Pipeline.Passes[2].Declaration.Source)
+        );
+        Assert.All(
+            action: static reference => Assert.Null(@object: reference.Binding),
+            collection: plan.Pipeline.Passes[2].Declaration.InputReferences.Concat(second: plan.Pipeline.Passes[2].Declaration.OutputReferences)
         );
         Assert.Equal(expected: [0], actual: plan.Pipeline.Passes[1].Dependencies);
         Assert.Equal(expected: [1], actual: plan.Pipeline.Passes[2].Dependencies);
@@ -86,10 +91,6 @@ public sealed class RenderGraphDocumentLawTests {
             actual: Codes(json: Edit(change: static document => document["$schema"] = "puck.shader.pipeline.v1"))
         );
         Assert.Equal(
-            expected: ["RENDERGRAPH_SOURCE_RESERVED"],
-            actual: Codes(json: Edit(change: static document => document["passes"]![0]!["source"] = "package:overlay"))
-        );
-        Assert.Equal(
             expected: ["RENDERGRAPH_PACKAGE_OUTPUT"],
             actual: Codes(json: Edit(change: static document => {
                 document["resources"]!.AsArray().Add(item: new JsonObject { ["name"] = "counts", ["kind"] = "Buffer", ["sizeBytes"] = 16 });
@@ -106,6 +107,28 @@ public sealed class RenderGraphDocumentLawTests {
         Assert.Contains(
             collection: Codes(json: Edit(change: static document => Package(document: document, name: "world")["inputs"] = Refs("scene"))),
             expected: "RENDERGRAPH_PACKAGE_PORTS"
+        );
+        Assert.Equal(
+            expected: ["SHADERPIPE_PACKAGE_PASS"],
+            actual: Codes(json: Edit(change: static document => document["passes"]![0]!["kind"] = nameof(ShaderPipelinePassKind.Package)))
+        );
+    }
+    [Fact]
+    public void APipelinePassOfThePackageKindIsRefused() {
+        var planned = new ShaderPipelineCompiler().TryCompile(
+            definition: ShaderPipelineDefinition.FromShaderSource(
+                kind: ShaderPipelinePassKind.Package,
+                name: "stray",
+                sourcePath: "stray.hlsl"
+            ),
+            diagnostics: out var diagnostics,
+            plan: out _
+        );
+
+        Assert.False(condition: planned);
+        Assert.Equal(
+            expected: ["SHADERPIPE_PACKAGE_PASS"],
+            actual: diagnostics.Select(selector: static diagnostic => diagnostic.Code)
         );
     }
     [Fact]

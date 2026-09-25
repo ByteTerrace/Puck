@@ -1,10 +1,13 @@
+using Puck.Abstractions.Counting;
+
 namespace Puck.Hosting.Tests;
 
 /// <summary>
 /// Laws for the render-graph demand scheduler: an instance renders only when something rendering shows it and at most
 /// once a frame, at the extent its footprint needs, at its declared refresh with consumers reading its latest completed
-/// output, and within the policy's pass-pixel budget; a view that sees itself reads its previous frame, and a loop of
-/// same-frame reads is refused naming every instance in it.
+/// output, and within the policy's pass-pixel budget; a view that sees itself reads its previous frame, a loop of
+/// same-frame reads is refused naming every instance in it, a refused frame leaves its schedule unchanged, and a steady
+/// frame scheduled into two alternating schedules allocates nothing and matches a run given fresh ones.
 /// </summary>
 public sealed class RenderGraphSchedulerLawTests {
     private const int DisplayHeight = 1080;
@@ -42,18 +45,20 @@ public sealed class RenderGraphSchedulerLawTests {
         Instance: instance,
         Width: 1
     );
-    // Schedules frames 0..count-1 with the same visibility and returns every schedule.
-    private static List<RenderGraphSchedule> Run(RenderGraphInstanceSet set, int count, Func<long, RenderGraphFrame> frame) {
+    // Schedules frames 0..count-1 with the same visibility, each into a schedule of its own, and returns every schedule.
+    private static List<RenderGraphSchedule> Run(RenderGraphInstanceSet set, long count, Func<long, RenderGraphFrame> frame) {
         var schedules = new List<RenderGraphSchedule>();
         var history = RenderGraphHistory.Empty(set: set);
 
         for (var index = 0L; (index < count); index++) {
-            var schedule = RenderGraphScheduler.Schedule(
+            var schedule = new RenderGraphSchedule(set: set);
+
+            RenderGraphScheduler.Schedule(
                 frame: frame(arg: index),
                 history: history,
+                schedule: schedule,
                 set: set
             );
-
             schedules.Add(item: schedule);
             history = schedule.Next;
         }
@@ -437,6 +442,8 @@ public sealed class RenderGraphSchedulerLawTests {
             Instance(name: "main")
         );
 
+        var schedule = new RenderGraphSchedule(set: set);
+
         Assert.Throws<ArgumentException>(testCode: () => RenderGraphScheduler.Schedule(
             frame: Frame(
                 footprints: [new RenderGraphFootprint(Consumer: "main", Height: 0.2, Producer: "security", Width: 0.2)],
@@ -444,7 +451,105 @@ public sealed class RenderGraphSchedulerLawTests {
                 roots: [Full(instance: "main")]
             ),
             history: RenderGraphHistory.Empty(set: set),
+            schedule: schedule,
             set: set
         ));
+        Assert.Equal(expected: -1L, actual: schedule.Frame);
+        Assert.Empty(collection: schedule.Renders);
+        Assert.Throws<ArgumentException>(testCode: () => RenderGraphScheduler.Schedule(
+            frame: Frame(
+                index: 0,
+                roots: [Full(instance: "main")]
+            ),
+            history: schedule.Next,
+            schedule: schedule,
+            set: set
+        ));
+    }
+    [Fact]
+    public void ASteadyFrameSchedulesWithoutAllocating() {
+        var set = Set(
+            Instance(name: "north"),
+            Instance(name: "south"),
+            Instance(
+                name: "security",
+                refresh: RenderGraphRefresh.Every(divisor: 3)
+            ),
+            Instance(
+                name: "mirror",
+                reads: [new RenderGraphRead(Producer: "mirror")]
+            ),
+            Instance(
+                name: "main",
+                reads: [new RenderGraphRead(Producer: "north"), new RenderGraphRead(Producer: "south"), new RenderGraphRead(Producer: "security")]
+            )
+        );
+        RenderGraphRoot[] roots = [
+            Full(instance: "main"),
+            new RenderGraphRoot(Height: 0.25, Instance: "mirror", Width: 0.25),
+        ];
+        RenderGraphFootprint[] footprints = [
+            new RenderGraphFootprint(Consumer: "main", Height: 0.25, Producer: "north", Width: 0.25),
+            new RenderGraphFootprint(Consumer: "main", Height: 0.25, Producer: "south", Width: 0.25),
+            new RenderGraphFootprint(Consumer: "main", Height: 0.2, Producer: "security", Width: 0.2),
+            new RenderGraphFootprint(Consumer: "mirror", Height: 0.5, Producer: "mirror", Width: 0.5),
+        ];
+        // The budget fits one quarter-axis camera, so the north and south cameras alternate through the sort.
+        const long Budget = (480 * 270);
+        RenderGraphSchedule[] schedules = [new(set: set), new(set: set)];
+        var history = RenderGraphHistory.Empty(set: set);
+        var frame = 0L;
+
+        for (var warm = 0; (warm < 8); warm++) {
+            Step();
+        }
+
+        Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: () => {
+            for (var repetition = 0; (repetition < 64); repetition++) {
+                Step();
+            }
+        }));
+
+        // Reusing the two schedules changes no result: the last frame matches a run that gave every frame a fresh one.
+        var reference = Run(
+            count: frame,
+            frame: index => Frame(
+                budget: Budget,
+                footprints: footprints,
+                index: index,
+                roots: roots
+            ),
+            set: set
+        )[^1];
+        var last = schedules[((frame - 1) % 2)];
+
+        Assert.Equal(expected: reference.Frame, actual: last.Frame);
+        Assert.Equal(expected: reference.PassPixels, actual: last.PassPixels);
+        Assert.Equal(expected: reference.Instances, actual: last.Instances);
+        Assert.Equal(expected: reference.Renders, actual: last.Renders);
+        Assert.Equal(expected: reference.Reads, actual: last.Reads);
+
+        for (var index = 0; (index < set.Instances.Count); index++) {
+            Assert.Equal(expected: reference.Next.LatestFrame(index: index), actual: last.Next.LatestFrame(index: index));
+            Assert.Equal(expected: reference.Next.Allocated(index: index), actual: last.Next.Allocated(index: index));
+        }
+
+        void Step() {
+            var schedule = schedules[(frame % 2)];
+
+            RenderGraphScheduler.Schedule(
+                frame: Frame(
+                    budget: Budget,
+                    footprints: footprints,
+                    index: frame,
+                    roots: roots
+                ),
+                history: history,
+                schedule: schedule,
+                set: set
+            );
+            history = schedule.Next;
+            frame++;
+        }
     }
 }

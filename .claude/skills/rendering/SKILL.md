@@ -520,16 +520,22 @@ The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
 document's members plus `packages`, engine passes named by
 `RenderGraphPackageCatalog` id. `RenderGraphCompiler` plans it with
 `ShaderPipelineCompiler` and never a second planner: a package pass enters the
-plan as a compute pass whose source is `package:<id>`
-(`RenderGraphCompiler.PackageSourcePrefix`), and a shader pass may not use that
-prefix. A new document member goes on `RenderGraphDefinition` only when a
+plan as `ShaderPipelinePassKind.Package`, whose source is its package id, through
+the planner's internal package entry, and a document's `passes` declaring that
+kind are refused with `SHADERPIPE_PACKAGE_PASS`. A package pass keeps no
+descriptor binding, has no interface-by-source check, and takes a compute pass's
+accesses in `UseOf`. A new document member goes on `RenderGraphDefinition` only when a
 pipeline document cannot say it, because every checked-in `*.pipeline.json`
 must plan identically as a graph (`RenderGraphDocumentLawTests`), and
 `puck schema` regenerates `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 Views are instances scheduled by `RenderGraphScheduler` (`src/Puck.Hosting/Graph`),
 a pure function of the instance set, the frame's roots and footprints, and the
-previous history; `RenderGraphSchedulerLawTests` pins demand, extent, refresh,
-self-reads, cycles and the pass-pixel budget. A world's instances are
+previous history. It fills a caller-owned `RenderGraphSchedule`, whose `Next`
+it rewrites, so the next frame goes into another schedule; a refused frame
+leaves the schedule unchanged, and a host alternating two schedules allocates
+nothing in a steady frame. `RenderGraphSchedulerLawTests` pins demand, extent,
+refresh, self-reads, cycles, the pass-pixel budget and that zero-allocation
+steady frame. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
 priced by `WorldPresentationCost` in the cost report and `world.budget`. No
 live view renders through a graph yet; the renderer still composes views

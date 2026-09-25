@@ -155,19 +155,20 @@
             "type": "string"
           },
           "source": {
-            "description": "The HLSL source\u0027s path, relative to the pipeline document.",
+            "description": "The HLSL source\u0027s path, relative to the pipeline document; a package pass\u0027s package id.",
             "type": "string"
           },
           "entryPoint": {
-            "description": "The entry point compiled by the shader compiler: a compute pass\u0027s kernel, or a graphics pass\u0027s fragment stage.",
+            "description": "The entry point compiled by the shader compiler: a compute pass\u0027s kernel, or a graphics pass\u0027s fragment stage. A package pass compiles nothing and leaves it empty.",
             "type": "string"
           },
           "kind": {
-            "description": "Compute, fullscreen graphics, or indexed geometry.",
+            "description": "Compute, fullscreen graphics, or indexed geometry; a frame graph\u0027s package passes are Package.",
             "enum": [
               "Compute",
               "Fullscreen",
-              "Geometry"
+              "Geometry",
+              "Package"
             ],
             "title": "ShaderPipelinePassKind"
           },
