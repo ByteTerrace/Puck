@@ -356,6 +356,17 @@ These are one-line cautions; the owning pages hold the derivations.
   removed device as drained so `OnDeviceLost` never throws.
   `DirectXCommandCallsLawTests` fakes each call's `HRESULT`. The owning
   explanation is [Direct3D 12](../../../docs/rendering/directx.md#result-handling).
+- **A Direct3D 12 descriptor pool is a range of the device's heap.** Each
+  device has one shader-visible view heap and one sampler heap
+  (`DirectXShaderVisibleHeaps`), created and released with the device; a pool
+  is admitted into the view heap through its `GpuDescriptorHeapBudget`, every
+  recording binds both heaps once at `BeginCommandBuffer`, and a clear takes one
+  of the device's clear slots. A pool owner states its pools statically, creates
+  them from that statement, and checks `IGpuBindings.CanAdmit` before it
+  allocates, so a candidate that does not fit is refused with
+  `GPU_DESCRIPTOR_HEAP` and nothing grows; a new owner does the same, and a new
+  shader-visible heap is never created. The owning explanation is
+  [Direct3D 12](../../../docs/rendering/directx.md#descriptor-heaps).
 - **Every pipeline goes through the device's persistent cache.** Vulkan's
   `VulkanLogicalDevice.PipelineCache` and Direct3D 12's
   `DirectXDeviceContext.PipelineLibrary` sit under every compute and graphics

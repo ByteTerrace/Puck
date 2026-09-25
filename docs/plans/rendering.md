@@ -635,8 +635,8 @@ sub-steps, in this order:
     graphics pipeline and render pass with the same `BackgroundBuild` before the
     candidate installs. Creating the recorder on the frame thread only takes the
     built objects and allocates its descriptor objects from the node's pool
-    statement (`ShaderPipelineRenderNode.DescriptorPools`), one pool per node as
-    P7b-14a-3 decides.
+    statement (`ShaderPipelineRenderNode.DescriptorPools`), the one pool per node
+    that P7b-14a-3 gives it.
   - Each frame the recorder writes the input port's image into the slot's set,
     pushes the config block, and records the render pass and the draw over a
     framebuffer on the output port's image. The framebuffer is cached per
@@ -1698,8 +1698,8 @@ Phase 3, the groups, follows phase 2:
       device that reports neither, as a Vulkan device does. Every pool owner
       states its pools statically and creates them from that statement:
       `SdfWorldEngine.DescriptorPoolSizes`, `UnifiedOverlayNode.DescriptorPoolSizes`,
-      `ShaderPipelineRenderNode.DescriptorPools` (a pass's pool per in-flight
-      slot, then `PreviewDescriptorPool` per slot) and
+      `ShaderPipelineRenderNode.DescriptorPools` (one pool for the graph, then
+      `PreviewDescriptorPool` for a float preview) and
       `GpuRegion.CopyPoolSizes`. `TryAdmit` takes a candidate's statement
       and either allocates one view range per pool that holds a descriptor or
       refuses the whole candidate by name with its demand, allocating
@@ -1710,26 +1710,47 @@ Phase 3, the groups, follows phase 2:
       admission, release and reuse, the live-pool refusal, the bytes), and on
       the fakes one law per owner that its statement equals the pools it
       creates (`SdfWorldEngineWorkLawTests`, `UnifiedOverlayWorkLawTests`,
-      `ShaderPipelineRenderNodeLawTests`, `GpuResidencyLawTests`). Nothing
-      admits through the budget yet. The choice and the two rejected sizings
-      are in [the decisions](../decisions/rendering.md#how-worlds-reach-the-gpu).
-    - 14a-3, the heap in place: `DirectXGpuBindings` creates the two
-      shader-visible heaps once per device from the device's
-      `GpuDescriptorHeapBudget` and a pool allocates its range from them
-      instead of a heap of its own; each command list binds the device's
-      heaps once, and the heaps' bytes count under `memory.directx`. An owner
-      is admitted before it allocates, and a pipeline candidate that does not
-      fit is refused by name at install while the installed graph keeps
-      presenting. The pipeline node holds one pool for all its passes and
-      in-flight slots rather than one per pass and slot: a node at
-      `ShaderPipelineLimits.MaxPasses` with three frames in flight otherwise
-      holds 387 pools, so three such nodes would pass `MaxLivePools`. It
-      also reads `ResourceBindingTier`, and on Vulkan the device creation
-      refuses a `MaxBoundDescriptorSets` below four or a
-      `MaxPushConstantBytes` below four by name. Check: `puck parity` and
-      the GPU canaries on Direct3D 12, whose sources the coverage index does
-      not map because it is recorded on Vulkan, so every Direct3D 12 canary
-      runs (unverified against a Direct3D 12 recording).
+      `ShaderPipelineRenderNodeLawTests`, `GpuResidencyLawTests`). The choice and the two rejected sizings are in [the decisions](../decisions/rendering.md#how-worlds-reach-the-gpu).
+    - 14a-3, done: the heap in place. `DirectXGpuBindings` creates the two
+      shader-visible heaps, `DirectXShaderVisibleHeaps`, when its context
+      brings a device up, from the device's `GpuDescriptorHeapBudget`, and
+      releases them with the device on `Recreate` and `Dispose`. A pool is a
+      range of the view heap, which `DestroyPool` returns for the next pool,
+      and `BeginCommandBuffer` binds both heaps once per recording. A storage
+      clear takes one of `DirectXShaderVisibleHeaps.ClearDescriptors` slots, a
+      range of the view heap admitted with the heaps and mirrored by one
+      CPU-only heap, instead of two heaps of its own. Both shader-visible
+      heaps count under `memory.directx` as device-local allocations, and
+      their release ends those entries before the device's teardown. An
+      owner is admitted before it allocates through `IGpuBindings.CanAdmit`,
+      which a Vulkan device always grants: the pipeline node checks a
+      candidate at install and a float preview when it is selected, and every
+      SDF engine creation site checks through `SdfWorldEngine.CheckAdmission`.
+      A refusal carries `GPU_DESCRIPTOR_HEAP` and names the owner, and the
+      installed graph keeps presenting. `UnifiedOverlayNode` and `GpuRegion`
+      are not admitted beforehand: the overlay creates one pool with the node,
+      and no engine consumer writes through a region yet. The pipeline node
+      holds one pool for all its passes and in-flight slots and one for its
+      float preview, rather than one per pass and slot: a node at
+      `ShaderPipelineLimits.MaxPasses` with three frames in flight would
+      otherwise hold 387 pools, so three such nodes would pass
+      `MaxLivePools`. Vulkan device creation refuses a
+      `MaxBoundDescriptorSets` below four or a `MaxPushConstantBytes` below
+      four by name (`VulkanLogicalDeviceFactory.RequireGroupedBinding`). Laws:
+      `DirectXShaderVisibleHeapsLawTests` on a WARP device (one heap pair per
+      device, recreated on `Recreate`; pools as ranges and a released range
+      reused; whole-or-nothing refusal by name; the heaps' bytes counted and
+      ended at teardown; a clear's slot returned when its command list is
+      reset), `ShaderPipelineRenderNodeLawTests.Descriptors` (one pool for the
+      graph and one for the preview; a candidate refused at install with
+      nothing grown; a replaced graph's range reused),
+      `SdfWorldEngineWorkLawTests`, `GpuDescriptorHeapBudgetLawTests` and
+      `VulkanGroupedBindingFloorLawTests`. Its GPU check is `puck parity` and
+      every Direct3D 12 canary: the coverage index is recorded on Vulkan and
+      does not map Direct3D 12 sources.
+      The surface compositor and the surface upload in
+      `Puck.DirectX.Presentation` still create shader-visible heaps of their
+      own on command lists of their own.
 
     14b, the groups. Each commit lands with `puck parity` unchanged, and the
     canaries named are those `tests/Puck.Affected/canary-coverage.json` maps
