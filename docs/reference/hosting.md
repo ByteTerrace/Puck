@@ -250,7 +250,15 @@ and the frame's pass-pixel budget:
 
 The schedule lists every instance with its status, extent, divisor, passes and
 price, the renders in order, and the frame of its output each rendering
-consumer reads. Nothing renders through it yet: the live renderer still
+consumer reads. The caller owns it: `Schedule` fills a `RenderGraphSchedule`
+created for the set, together with the history the next frame reads
+(`RenderGraphSchedule.Next`). Scheduling into a schedule replaces everything it
+held, and a refused frame leaves it unchanged. The next frame goes into another
+schedule, because a schedule's own `Next` cannot be its input. A host that
+alternates two schedules schedules a steady frame without allocating once their
+read lists have grown to the frame's reads, and `RenderGraphFrame` is a value,
+so describing each frame over the same root and footprint lists allocates
+nothing either. Nothing renders through it yet: the live renderer still
 composes its views itself, and moving it onto the scheduler is P11b in
 [the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
 

@@ -463,7 +463,12 @@ off view scheduled zero times, a mirror reading its previous frame, a
 same-frame loop refused naming both instances, a quarter-screen view scheduled
 at a quarter of the extent, a divisor honoured while consumers read the latest
 completed output, and a budget that defers the freshest instance and starves
-none. The world validator refuses a same-frame loop of `views.graphs` inputs by
+none. A schedule is a buffer its caller owns: `RenderGraphScheduler.Schedule`
+fills a `RenderGraphSchedule` and its next history from the instance set, the
+frame and the previous history, and a host alternating two schedules schedules
+a steady frame without allocating, which the same laws pin with
+`AllocationWindow` over 64 frames against a run given fresh schedules. The
+world validator refuses a same-frame loop of `views.graphs` inputs by
 the scheduler's rule. Every instance appears in the cost report's
 presentation dimension (`WorldPresentationCost`) and in `world.budget` with its
 extent ceiling, rate and planned passes; the server plans each row's source
@@ -475,12 +480,11 @@ still render every view, nothing feeds the scheduler a frame, and
 `views.pipelines` rows and layout slots do not name graph instances yet. P11b
 wires `WorldBootComposition`'s node tree onto graph instances fed by the
 scheduler, puts the live schedule's extents and prices in `world.budget`,
-runs the parity and counted-GPU checks, makes a steady-state schedule
-allocate nothing (today each `Schedule` call allocates its result and the
-next history), and makes the deletions P11 lists,
+runs the parity and counted-GPU checks, and makes the deletions P11 lists,
 including the `puck.shader.pipeline.v1` schema, whose documents then need only
-their tag changed. The first-class package pass kind in
-`ShaderPipelineCompiler` has landed.
+their tag changed. Two P11b items have landed: the first-class package pass
+kind in `ShaderPipelineCompiler`, and a steady-state schedule that allocates
+nothing.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
