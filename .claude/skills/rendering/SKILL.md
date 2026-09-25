@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and ViewStack, how world render data reaches SdfFrame, Puck.Shaders manifests and pipelines, render.extensions, and Puck.ShaderVm. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
+description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and ViewStack, how world render data reaches SdfFrame, Puck.Shaders manifests and pipelines, and render.extensions. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
 ---
 
 # Rendering
@@ -33,7 +33,6 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldPipelineRuntime`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
 | Shader manifests, pipelines, builds | `src/Puck.Shaders`, `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
 | Image sources and producers | `src/Puck.Abstractions/Sources` (contract, upload layout, conversion reference, verdict); `src/Puck.Shaders/Assets/Shaders/Sources` (conversion kernels); `WorldImageProducerVocabulary`/`WorldImageProducerSettings` (`src/Puck.World.Schema`); `WorldImageProducers`, `WorldCaptureGate` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.Producers.cs` | [the World guide's image producers](../../../src/Puck.World/README.md#image-producers), [rendering plan P12](../../../docs/plans/rendering.md#p12--image-sources) |
-| Generic shader VM | `src/Puck.ShaderVm`, `Assets/Shaders/ShaderVm/shader-vm.hlsli` | [`Puck.ShaderVm` README](../../../src/Puck.ShaderVm/README.md) |
 | Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds), [Vulkan](../../../docs/rendering/vulkan.md), [Direct3D 12](../../../docs/rendering/directx.md) |
 
 Before adding a mechanism, find the existing one (`CLAUDE.md` rule 8): ask the
@@ -505,7 +504,7 @@ field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, and its
 shader consumer in the same change. What a document field means belongs to
 `puck-world`.
 
-## Shader manifests, pipelines, and ShaderVm
+## Shader manifests and pipelines
 
 `docs/reference/shaders.md` owns the `puck.shader.manifest.v1` and
 `puck.shader.pipeline.v1` contracts and pipeline live development; the
@@ -648,9 +647,6 @@ a camera device only creates them, and the colorimetry is constant-buffer data.
 The Direct3D 12 surface compositor's blit is build DXIL
 (`surface-blit.*.hlsl`, `PuckShaderSpirvEnabled` false). No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
-`Puck.ShaderVm` is not wired into any kernel or
-host, and no check compares its host and GPU interpreters — never describe it
-as the render path or claim the two agree.
 
 ## Verifying
 

@@ -63,16 +63,15 @@ Engine services          Puck.AdvancedGamingBrick
                          Puck.GamingBricks.Forge  Puck.GamingBricks.Transpiler
                          Puck.HumbleGamingBrick  Puck.HumbleGamingBrick.Forge
                          Puck.Launcher  Puck.Overlays  Puck.Physics
-                         Puck.Recording  Puck.SdfVm  Puck.ShaderVm
-                         Puck.SignedDistance  Puck.State  Puck.State.Generators
-                         Puck.State.Rules  Puck.State.Search
-                         Puck.State.Topology  Puck.State.Vectors  Puck.Text
-                         Puck.Transpiler  Puck.World.Addons
-                         Puck.World.Authoring  Puck.World.Client
-                         Puck.World.Console  Puck.World.Embeddings
-                         Puck.World.Machines  Puck.World.Protocol
-                         Puck.World.Schema  Puck.World.Server
-                         Puck.World.Transpiler
+                         Puck.Recording  Puck.SdfVm  Puck.SignedDistance
+                         Puck.State  Puck.State.Generators  Puck.State.Rules
+                         Puck.State.Search  Puck.State.Topology
+                         Puck.State.Vectors  Puck.Text  Puck.Transpiler
+                         Puck.World.Addons  Puck.World.Authoring
+                         Puck.World.Client  Puck.World.Console
+                         Puck.World.Embeddings  Puck.World.Machines
+                         Puck.World.Protocol  Puck.World.Schema
+                         Puck.World.Server  Puck.World.Transpiler
 Presentation             Puck.DirectX.Presentation  Puck.Launcher.Linux
                          Puck.Launcher.Windows  Puck.Vulkan.Presentation
 Backends                 Puck.DirectX  Puck.Vulkan
@@ -93,16 +92,16 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.Launcher.Tests  Puck.Maths.Tests
                          Puck.Networking.Tests  Puck.Physics.Tests
                          Puck.Platform.Windows.Tests  Puck.Recording.Tests
-                         Puck.SdfVm.Tests  Puck.ShaderVm.Tests
-                         Puck.Shaders.Tests  Puck.SignedDistance.Tests
-                         Puck.State.Generators.Tests  Puck.State.Rebuild.Corpus
-                         Puck.State.Rules.Tests  Puck.State.Search.Tests
-                         Puck.State.Tests  Puck.State.Topology.Tests
-                         Puck.State.Vectors.Tests  Puck.Text.Tests
-                         Puck.Vulkan.Tests  Puck.World.Agents.Tests
-                         Puck.World.Azure.Tests  Puck.World.Browser.Tests
-                         Puck.World.Protocol.Tests  Puck.World.Schema.Tests
-                         Puck.World.Tests  Puck.World.Transpiler.Tests
+                         Puck.SdfVm.Tests  Puck.Shaders.Tests
+                         Puck.SignedDistance.Tests  Puck.State.Generators.Tests
+                         Puck.State.Rebuild.Corpus  Puck.State.Rules.Tests
+                         Puck.State.Search.Tests  Puck.State.Tests
+                         Puck.State.Topology.Tests  Puck.State.Vectors.Tests
+                         Puck.Text.Tests  Puck.Vulkan.Tests
+                         Puck.World.Agents.Tests  Puck.World.Azure.Tests
+                         Puck.World.Browser.Tests  Puck.World.Protocol.Tests
+                         Puck.World.Schema.Tests  Puck.World.Tests
+                         Puck.World.Transpiler.Tests
 (Tool)                   Puck.Cli
 (Analyzer)               Puck.Analyzers
 ```
