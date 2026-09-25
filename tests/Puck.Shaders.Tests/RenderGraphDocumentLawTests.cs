@@ -176,7 +176,7 @@ public sealed class RenderGraphDocumentLawTests {
                     path2: directory
                 ),
                 searchOption: SearchOption.AllDirectories,
-                searchPattern: "*.pipeline.json"
+                searchPattern: "*.graph.json"
             ))
             .Where(predicate: static path => !path.Replace(newChar: '/', oldChar: '\\').Split(separator: '/').Any(predicate: static segment => (segment is "bin" or "obj")))
             .Order(comparer: StringComparer.Ordinal)

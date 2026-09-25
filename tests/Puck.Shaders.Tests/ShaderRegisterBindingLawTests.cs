@@ -8,7 +8,7 @@ namespace Puck.Shaders.Tests;
 /// its descriptor set, so no backend remaps a register. These laws read every HLSL source and include the build
 /// compiles or packages: the shader items each <c>src</c> project declares for <c>build/Shaders.targets</c>, the graph's package-library kernels, and the
 /// pipeline sources <c>build/WorldAssets.targets</c> hands the tree run that fills the shipped package store, with
-/// every source a shipped <c>*.pipeline.json</c> names. They hold every declaration that carries both a
+/// every source a shipped <c>*.graph.json</c> names. They hold every declaration that carries both a
 /// <c>[[vk::binding(N, S)]]</c> and a <c>register(xN, spaceS)</c> to that rule.</summary>
 public sealed partial class ShaderRegisterBindingLawTests {
     // The item types build/Shaders.targets compiles, or hashes as includes of what it compiles, the pipeline sources
@@ -233,7 +233,7 @@ public sealed partial class ShaderRegisterBindingLawTests {
             }
         }
     }
-    // The shader sources a pipeline document's passes name, relative to the document.
+    // The shader sources a graph document's passes name, relative to the document.
     private static IEnumerable<string> PipelineSources(string pipeline) {
         using var document = System.Text.Json.JsonDocument.Parse(json: File.ReadAllText(path: pipeline));
 
@@ -282,14 +282,14 @@ public sealed partial class ShaderRegisterBindingLawTests {
         }
     }
     // The build's shader sources and includes, grouped by the project that declares them, in ordinal path order. A
-    // pipeline document among them stands for the sources its passes name.
+    // graph document among them stands for the sources its passes name.
     private static IEnumerable<string[]> ShippedShaderProjects(string root) {
         foreach (var project in ShaderItems(root: root).GroupBy(keySelector: static item => item.Project)) {
             var files = project
                 .Select(selector: static item => item.File)
                 .SelectMany(selector: static file => (file.EndsWith(
                     comparisonType: StringComparison.Ordinal,
-                    value: ".pipeline.json"
+                    value: ".graph.json"
                 )
                     ? PipelineSources(pipeline: file)
                     : [file]))

@@ -504,7 +504,7 @@ runs the parity and counted-GPU checks, and makes the deletions P11 lists,
 including the `puck.shader.pipeline.v1` schema. Folding that schema into the
 graph document is more than a tag change: the pipeline document's top-level
 `config`, which the planner already refuses, goes with it; the tests and the
-`puck affected` path filter that glob `*.pipeline.json` move with the
+`puck affected` path filter that glob `*.graph.json` move with the
 suffix; and a single `.hlsl` source still reads as a one-pass graph. Four
 P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a

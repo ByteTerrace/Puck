@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "ink",
-        "source": "../pipelines/ink.pipeline.json",
+        "source": "../pipelines/ink.graph.json",
         "timeScale": 1
       }
     ]

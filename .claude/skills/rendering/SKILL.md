@@ -587,7 +587,7 @@ is `ShaderPipelineDocumentPassKind`, which has no `Package` member, so the JSON
 reader refuses the name at `$.passes[n].kind`. A package pass keeps no
 descriptor binding, has no interface-by-source check, and takes a compute pass's
 accesses in `UseOf`. A new document member goes on `RenderGraphDefinition` only when a
-pipeline document cannot say it, because every checked-in `*.pipeline.json`
+pipeline document cannot say it, because every checked-in `*.graph.json`
 must plan identically as a graph (`RenderGraphDocumentLawTests`), and
 `puck schema` regenerates `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 A package's ports are typed (`RenderGraphPackagePort`: an image, or a buffer

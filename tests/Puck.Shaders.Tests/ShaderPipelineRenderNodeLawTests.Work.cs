@@ -337,11 +337,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     public void ThePipelineCountersCanaryExpectsWhatTheNodeCountsForItsFixtures() {
         var positive = CountersScriptLines(pipeline: CanaryPipeline(
             canary: "pipeline-feedback",
-            fileName: "feedback.pipeline.json"
+            fileName: "feedback.graph.json"
         ));
         var fourPass = CountersScriptLines(pipeline: CanaryPipeline(
             canary: "pipeline-counters",
-            fileName: "four-pass.pipeline.json"
+            fileName: "four-pass.graph.json"
         ));
 
         // Each leg's own exact lines hold on its own fixture, and the positive's turn red on the four-pass variant.
@@ -371,7 +371,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
 
             Assert.Equal(
                 actual: residency.GetProperty(propertyName: "text").GetString(),
-                expected: $"{Puck.Commands.ConsoleRecord.ContinuationIndent}residency: parameters={CanaryPipeline(canary: "pipeline-feedback", fileName: "feedback.pipeline.json").Plan.ParameterBytes} bytes policy="
+                expected: $"{Puck.Commands.ConsoleRecord.ContinuationIndent}residency: parameters={CanaryPipeline(canary: "pipeline-feedback", fileName: "feedback.graph.json").Plan.ParameterBytes} bytes policy="
             );
         }
         // The canary's per-pass lines are continuation lines of the inspect answer, indented by its framing.

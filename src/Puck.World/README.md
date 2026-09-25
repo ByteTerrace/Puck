@@ -499,7 +499,7 @@ states the contract.
 A row naming a package reads the same way:
 
 ```text
-puck shaders package src/Puck.World/Assets/pipelines/ink.pipeline.json --output artifacts/packages/ink
+puck shaders package src/Puck.World/Assets/pipelines/ink.graph.json --output artifacts/packages/ink
 pipeline.load ink ../../../../artifacts/packages/ink
 pipeline.wait ink installed
 ```
@@ -558,7 +558,7 @@ validation. The rendered host creates it only after the mutation is accepted.
 To try a one-off shader in the example's existing slot, run
 `pipeline.load ink ../pipelines/moth.hlsl`; it replaces that instance's source
 through the same background compilation path. Return with
-`pipeline.load ink ../pipelines/ink.pipeline.json`.
+`pipeline.load ink ../pipelines/ink.graph.json`.
 
 Loading a new row does not change the active layout: select its name in a layout
 slot. The [shader reference](../../docs/reference/shaders.md#shader-pipelines-and-live-development)

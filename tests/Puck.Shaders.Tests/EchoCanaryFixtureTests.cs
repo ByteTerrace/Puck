@@ -19,7 +19,7 @@ public sealed class EchoCanaryFixtureTests {
 
     [Fact]
     public void The_echo_pass_is_the_generated_echo_of_its_pass_interface() {
-        var shaderInterface = PassOf(document: "echo.pipeline.json").Parameters.Interface;
+        var shaderInterface = PassOf(document: "echo.graph.json").Parameters.Interface;
 
         Assert.Equal(
             actual: File.ReadAllText(path: FixturePath(fileName: "frame.echo.hlsl")),
@@ -28,7 +28,7 @@ public sealed class EchoCanaryFixtureTests {
     }
     [Fact]
     public void The_perturbed_echo_differs_from_the_generator_only_by_its_named_edits() {
-        var shaderInterface = PassOf(document: "perturbed.pipeline.json").Parameters.Interface;
+        var shaderInterface = PassOf(document: "perturbed.graph.json").Parameters.Interface;
         var echo = ShaderInterfaceEcho.Generate(shaderInterface: shaderInterface);
         var declarations = ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface);
 
@@ -59,8 +59,8 @@ public sealed class EchoCanaryFixtureTests {
             )
         );
     }
-    [InlineData("echo.pipeline.json")]
-    [InlineData("perturbed.pipeline.json")]
+    [InlineData("echo.graph.json")]
+    [InlineData("perturbed.graph.json")]
     [Theory]
     public void The_echo_image_holds_one_pixel_per_member_and_the_canary_captures_that_extent(string document) {
         var pass = PassOf(document: document);
@@ -94,7 +94,7 @@ public sealed class EchoCanaryFixtureTests {
     }
     [Fact]
     public void The_sentinels_fill_every_member_word_and_leave_the_padding_zero() {
-        var layout = PassOf(document: "echo.pipeline.json").Parameters;
+        var layout = PassOf(document: "echo.graph.json").Parameters;
         var block = new byte[layout.SizeBytes];
 
         block.AsSpan().Fill(value: 0xCD);
@@ -146,7 +146,7 @@ public sealed class EchoCanaryFixtureTests {
         try {
             var loader = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache.FullName));
 
-            foreach (var (document, exact) in ((ReadOnlySpan<(string, bool)>)[("echo.pipeline.json", true), ("perturbed.pipeline.json", false)])) {
+            foreach (var (document, exact) in ((ReadOnlySpan<(string, bool)>)[("echo.graph.json", true), ("perturbed.graph.json", false)])) {
                 var result = loader.Load(
                     cancellationToken: TestContext.Current.CancellationToken,
                     name: "echo",

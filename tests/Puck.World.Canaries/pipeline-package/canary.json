@@ -7,13 +7,13 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "fixtures": [
-    "tint.pipeline.json",
+    "tint.graph.json",
     "tint.hlsl"
   ],
   "positive": {
     "world": "tests/Puck.World.Canaries/pipeline-package/fixture.world.json",
     "script": "positive.script.txt",
-    "package": { "source": "tint.pipeline.json", "output": "tint" },
+    "package": { "source": "tint.graph.json", "output": "tint" },
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
@@ -60,7 +60,7 @@
   "discriminating": {
     "world": "tests/Puck.World.Canaries/pipeline-package/fixture.world.json",
     "script": "discriminating.script.txt",
-    "package": { "source": "tint.pipeline.json", "output": "tint", "alter": "tint.hlsl" },
+    "package": { "source": "tint.graph.json", "output": "tint", "alter": "tint.hlsl" },
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },

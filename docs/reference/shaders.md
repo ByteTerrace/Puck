@@ -790,7 +790,7 @@ indices, binds both ranges and draws the indices.
 
 ### Loading and installing
 
-See the [three-pass ink pipeline](../../src/Puck.World/Assets/pipelines/ink.pipeline.json)
+See the [three-pass ink pipeline](../../src/Puck.World/Assets/pipelines/ink.graph.json)
 for a complete example: a floating-point feedback simulation feeds a color
 pass, followed by a fullscreen HLSL finish. Each source file lives beside its
 pipeline document. Source paths in the pipeline resolve relative to that
@@ -1014,7 +1014,7 @@ names the image version the instance shows, and `timeScale` sets its clock
 rate:
 
 ```json
-{ "name": "ink", "source": "../pipelines/ink.pipeline.json", "timeScale": 0,
+{ "name": "ink", "source": "../pipelines/ink.graph.json", "timeScale": 0,
   "output": "image", "overrides": { "visualize": { "exposure": 0.5 } } }
 ```
 
@@ -1141,7 +1141,7 @@ path. Only the `default` variant is built today; every variant of a pass reads
 the same interface, so a quality tier cannot change what a pass reads.
 
 ```sh
-puck shaders package src/Puck.World/Assets/pipelines/ink.pipeline.json --output artifacts/ink
+puck shaders package src/Puck.World/Assets/pipelines/ink.graph.json --output artifacts/ink
 puck shaders pipeline artifacts/ink
 ```
 

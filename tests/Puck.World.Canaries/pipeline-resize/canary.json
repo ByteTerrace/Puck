@@ -12,8 +12,8 @@
   ],
   "timeoutSeconds": 60,
   "fixtures": [
-    "resize.pipeline.json",
-    "fixed-history.pipeline.json"
+    "resize.graph.json",
+    "fixed-history.graph.json"
   ],
   "positive": {
     "world": "tests/Puck.World.Canaries/pipeline-resize/fixture.world.json",

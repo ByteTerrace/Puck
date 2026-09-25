@@ -6,7 +6,7 @@ namespace Puck.World.Schema.Tests;
 /// <summary>
 /// Laws for the cost report's presentation dimension and the frame-graph schema: every <c>views.graphs</c> row appears
 /// with its extent ceiling, rate and passes, a document-only analysis names why its passes are unplanned, and the
-/// generated <c>puck.render.graph.v1</c> schema admits a graph and every checked-in pipeline document retagged as one.
+/// generated <c>puck.render.graph.v1</c> schema admits a graph and every checked-in graph document.
 /// </summary>
 public sealed class WorldPresentationCostLawTests {
     private static WorldDefinition Document(params WorldViewGraph[] graphs) => new(
@@ -101,7 +101,7 @@ public sealed class WorldPresentationCostLawTests {
             .SelectMany(selector: directory => Directory.EnumerateFiles(
                 path: Path.Combine(path1: root, path2: directory),
                 searchOption: SearchOption.AllDirectories,
-                searchPattern: "*.pipeline.json"
+                searchPattern: "*.graph.json"
             ))
             .Where(predicate: static path => !path.Replace(newChar: '/', oldChar: '\\').Split(separator: '/').Any(predicate: static segment => (segment is "bin" or "obj")))
             .ToArray();

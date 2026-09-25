@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "feedback",
-        "source": "fixed-history.pipeline.json",
+        "source": "fixed-history.graph.json",
         "timeScale": 1
       }
     ]

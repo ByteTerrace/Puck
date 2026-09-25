@@ -50,7 +50,7 @@ public sealed class ShaderPipelineLoaderTests {
         }
         var path = Path.Combine(
             path1: fixture.Directory,
-            path2: "graph.pipeline.json"
+            path2: "transitive.graph.json"
         );
 
         File.WriteAllText(

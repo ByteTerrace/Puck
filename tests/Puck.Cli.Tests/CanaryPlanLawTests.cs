@@ -53,7 +53,7 @@ public sealed class CanaryPlanLawTests {
         var package = new CanaryPackage(
             Alter: null,
             OutputName: "tint",
-            SourcePath: "tint.pipeline.json"
+            SourcePath: "tint.graph.json"
         );
         var relaunch = new CanaryRelaunch(
             Commands: [],
@@ -124,7 +124,7 @@ public sealed class CanaryPlanLawTests {
             actual: CanaryCommand.Plan(
                 manifests: [
                     Manifest(id: "first", shape: CanaryBootShape.Offscreen, positive: (Leg(name: "positive") with { Package = package }), requirements: "gpu"),
-                    Manifest(id: "second", shape: CanaryBootShape.Offscreen, positive: (Leg(name: "positive") with { Package = (package with { SourcePath = "other/tint.pipeline.json" }) }), requirements: "gpu"),
+                    Manifest(id: "second", shape: CanaryBootShape.Offscreen, positive: (Leg(name: "positive") with { Package = (package with { SourcePath = "other/tint.graph.json" }) }), requirements: "gpu"),
                 ],
                 namedWorldArtifact: false
             ).PackageSpawns

@@ -44,7 +44,7 @@ public sealed partial class ShaderPackageLawTests {
             reflectDxil: false,
             store: fixture.Output(name: "store")
         );
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
         var (stored, package) = await packager.StoreAsync(
             cancellationToken: Token,
             name: "graph",
@@ -150,7 +150,7 @@ public sealed partial class ShaderPackageLawTests {
             reflectDxil: false,
             store: fixture.Output(name: "store")
         );
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
 
         Assert.Equal(
             actual: (await packager.StoreAsync(cancellationToken: Token, name: "graph", source: source)).Result.Status,
@@ -281,7 +281,7 @@ public sealed partial class ShaderPackageLawTests {
             reflectDxil: false,
             store: fixture.Output(name: "store")
         );
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
         var (stored, package) = await packager.StoreAsync(
             cancellationToken: Token,
             name: "graph",
