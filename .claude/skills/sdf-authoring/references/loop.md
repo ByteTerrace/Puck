@@ -40,7 +40,7 @@ boundary on stderr. A second edit to the same row inside one tick is refused:
 Against a world booted `--world <file>.puck`:
 
 - `world.load <path>` and `world.reload` read `.puck` through
-  `WorldDefinitionFileSource.TryLoad` with the `PuckDocumentComposer`
+  `WorldDefinitionLoader.TryLoadFileForAdmission` with the `PuckDocumentComposer`
   document source, so editing the `.puck` file and running `world.reload`
   recompiles it (basis chain included) with no restart. A re-read that no
   longer compiles or validates leaves the running world untouched and echoes

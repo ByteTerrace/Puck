@@ -240,7 +240,131 @@ public sealed class DeferredVerbEchoLawTests {
         Assert.Contains("retiring", result.Value.Output, StringComparison.Ordinal);
         Assert.False(condition: echoes.TryTake(host.Envelope.CorrelationId, out _, out _));
     }
+    /// <summary>A verdict that arrived before its line's handler returned is that line's own answer on the stdin
+    /// driver's path (a Simulation-routed line, a session that settles nothing, an observer printing results), and
+    /// <c>wire.errors</c> counts it once; the table's late-verdict sink never sees it, so it is printed once.</summary>
+    [InlineData("world.reset")]
+    [InlineData("world.undo")]
+    [InlineData("edit")]
+    [Theory]
+    public void ARefusalSettledBeforeItsLineReturnedIsTheLinesAnswerAndCounted(string verb) {
+        var host = new CompletionHost { RefuseInline = true };
+        var link = new LoopbackTransport(server: host);
+        var echoes = new WorldDeferredVerbEchoes();
+        var published = 0;
 
+        echoes.Completed += _ => published++;
+
+        var (answers, registry) = DriveOneLine(handler: () => verb switch {
+            "world.reset" => link.SubmitRebuild(new WorldRebuildRequest(WorldRebuildKind.Reset, null, null, false), Principal.Console, echoes, verb),
+            "world.undo" => link.SubmitUndo(1, Principal.Console, echoes, verb),
+            _ => link.Submit(new WorldMutation.RemoveKit(Principal.Console, "one"), echoes, verb),
+        });
+        var answer = Assert.Single(collection: answers);
+
+        Assert.True(condition: answer.IsError);
+        Assert.StartsWith(actualString: answer.Output, expectedStartString: $"[{verb}: world.retiring retiring]");
+        Assert.Equal(actual: published, expected: 0);
+        Assert.Equal(actual: registry.Submit(line: "wire.errors").Output, expected: "[wire.errors: 1 rejected]");
+    }
+    /// <summary>A mutation verdict that arrives after its line returned is published through the table exactly once,
+    /// and the line itself answered nothing; the control for the law above.</summary>
+    [Fact]
+    public void AMutationVerdictArrivingLaterIsPublishedOnceAndNotAnswered() {
+        var host = new CompletionHost();
+        var link = new LoopbackTransport(server: host);
+        var echoes = new WorldDeferredVerbEchoes();
+        var published = new List<Puck.Commands.CommandResult>();
+
+        echoes.Completed += published.Add;
+
+        var (answers, _) = DriveOneLine(handler: () => link.Submit(new WorldMutation.RemoveKit(Principal.Console, "one"), echoes, "edit"));
+
+        Assert.Empty(collection: answers);
+        Assert.Empty(collection: published);
+        host.Completion!(new WorldSubmissionResult.Refusal(Code: "late.refused", Detail: "late detail"));
+
+        var verdict = Assert.Single(collection: published);
+
+        Assert.True(condition: verdict.IsError);
+        Assert.Equal(actual: verdict.Output, expected: "[edit: late.refused late detail]");
+    }
+    /// <summary>A codec refusal names the codec's own reason in the line's answer, not only in the transport's
+    /// narration.</summary>
+    [Fact]
+    public void ACodecRefusalAnswerNamesTheCodecsReason() {
+        var link = new LoopbackTransport(server: new CompletionHost());
+        var oversized = new string(c: 'x', count: (WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Mutation) + 1));
+
+        var (answers, _) = DriveOneLine(handler: () => link.Submit(new WorldMutation.RemoveKit(Principal.Console, oversized), new WorldDeferredVerbEchoes(), "edit"));
+        var answer = Assert.Single(collection: answers);
+
+        Assert.True(condition: answer.IsError);
+        Assert.Contains(actualString: answer.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "world.transport.codec_refused the submission could not be encoded or decoded: PayloadTooLarge");
+    }
+
+    // Submits one Simulation-routed line the way the stdin driver does and applies its tick, returning every result
+    // an output observer printed and the registry that counted them.
+    private static (List<Puck.Commands.CommandResult> Answers, Puck.Commands.CommandRegistry Registry) DriveOneLine(Func<Puck.Commands.CommandResult> handler) {
+        var answers = new List<Puck.Commands.CommandResult>();
+        var registry = new Puck.Commands.CommandRegistry(
+            modules: [new LineModule(handler: handler)],
+            observers: [new AnswerObserver(answers: answers)]
+        );
+        var router = new Puck.Commands.InputRouter(
+            bindings: new NoBindings(),
+            principalResolver: new ConsolePrincipal(),
+            registry: registry
+        );
+        var source = new Puck.Commands.TextCommandSource(registry: registry);
+
+        using (var session = source.CreateSession(
+            principal: Principal.Console,
+            simulationSink: router.ConsoleTextSink
+        )) {
+            session.Enqueue(line: "line");
+            source.Collect();
+
+            var snapshot = router.SnapshotForTick(
+                tick: 1UL,
+                windowEndTick: ulong.MaxValue
+            );
+
+            registry.ApplySnapshot(snapshot: in snapshot);
+        }
+
+        router.Dispose();
+
+        return (answers, registry);
+    }
+
+    private sealed class LineModule(Func<Puck.Commands.CommandResult> handler) : Puck.Commands.ICommandModule {
+        public IEnumerable<Puck.Commands.CommandDefinition> GetCommands() {
+            yield return Puck.Commands.CommandDefinition.WithWireArgs(
+                bindability: Puck.Commands.CommandBindability.Unbindable,
+                description: "Submits the edit under test.",
+                handler: (_, _) => handler(),
+                name: "line",
+                routing: Puck.Commands.CommandRouting.Simulation
+            );
+        }
+    }
+    private sealed class AnswerObserver(List<Puck.Commands.CommandResult> answers) : Puck.Commands.ICommandObserver {
+        public void OnCommand(in Puck.Commands.CommandActivation activation) {
+            if (
+                (activation.Text is not null) &&
+                !string.IsNullOrEmpty(value: activation.Result.Output)
+            ) {
+                answers.Add(item: activation.Result);
+            }
+        }
+    }
+    private sealed class NoBindings : Puck.Commands.IInputBindings {
+        public IReadOnlyList<Puck.Commands.CommandBinding>? Resolve(int slot, string source) => null;
+    }
+    private sealed class ConsolePrincipal : Puck.Commands.IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
+    }
     private sealed class CompletionHost : IWorldServerHost {
         public Action<WorldSubmissionResult>? Completion { get; private set; }
         public SubmissionEnvelope Envelope { get; private set; }

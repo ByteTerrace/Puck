@@ -1016,6 +1016,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             catalog: m_machineCatalog,
             catalogFingerprint: m_catalogFingerprint,
             admission: out admission,
+            contentHash: out _,
             instanceIdentity: name,
             neighbours: instanceNeighbours,
             path: resolvedPath,

@@ -11,10 +11,11 @@ using Puck.Assets;
 namespace Puck.World;
 
 /// <summary>Loads and validates a world document from a file, always alongside the canonical content-address pin of
-/// the exact bytes read — the one implementation both the console's <c>world.load</c>/<c>world.reload</c> handlers
-/// (<c>Puck.World.WorldMutationCommandModule</c>, via <c>WorldDefinitionLoader.TryLoadFile</c>) and the replay
-/// tape's offline re-drive (<c>Puck.World.WorldReplaySnapshot.Drive</c>, through <c>WorldServer.ApplyRebuild</c>)
-/// share, so a live read and a re-drive's later re-read of the same path compute the hash the same way.
+/// the exact bytes read — the composition and pin every file read shares: <see cref="WorldDefinitionLoader.TryLoadFileForAdmission"/> (the
+/// boot, instance starts, <c>world.load</c>/<c>world.reload</c> and the replay drive's re-read of what they pinned)
+/// draws and admits what it composes, so a live read and a re-drive's later re-read of the same path compute the
+/// hash the same way. <see cref="TryLoad"/> and <see cref="TryLoadLocally"/> admit a document without drawing it,
+/// for a caller that inspects or gates a file rather than running it.
 /// Puck.World.Server depends on Puck.World.Schema already, so this is the lowest layer both can reach without a new
 /// project reference.</summary>
 public static partial class WorldDefinitionFileSource {
