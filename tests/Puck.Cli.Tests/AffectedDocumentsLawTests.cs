@@ -6,22 +6,26 @@ namespace Puck.Cli.Tests;
 
 /// <summary>
 /// Laws for <see cref="AffectedDocuments"/>: a graph document reaches the pass sources it declares, resolved beside it as
-/// the loader resolves them, and nothing it does not name; a canary reaches the graph documents and shader sources its
+/// the loader resolves them, and the includes they reach, and nothing it does not name; a canary reaches the graph documents and shader sources its
 /// worlds and fixtures name, so on the real tree a graph pass source chooses the canary that runs it; and the Direct3D 11
 /// camera kernel, compiled through its own item, reaches the C# that loads it.
 /// </summary>
 public sealed class AffectedDocumentsLawTests {
     [Fact]
-    public void AGraphDocumentReachesThePassSourcesItNames() {
+    public void AGraphDocumentReachesThePassSourcesItNamesAndTheirIncludes() {
         var directory = Directory.CreateTempSubdirectory(prefix: "puck-affected-graph-");
 
         try {
             var passes = Directory.CreateDirectory(path: Path.Combine(path1: directory.FullName, path2: "passes"));
             var named = Path.Combine(path1: passes.FullName, path2: "fill.hlsl");
             var unnamed = Path.Combine(path1: passes.FullName, path2: "other.hlsl");
+            var include = Path.Combine(path1: passes.FullName, path2: "common.hlsli");
+            var unincluded = Path.Combine(path1: passes.FullName, path2: "unused.hlsli");
             var graph = Path.Combine(path1: directory.FullName, path2: "fill.graph.json");
 
-            File.WriteAllText(contents: "[numthreads(8, 8, 1)] void main() {}", path: named);
+            File.WriteAllText(contents: "#include \"common.hlsli\"\n[numthreads(8, 8, 1)] void main() {}", path: named);
+            File.WriteAllText(contents: "static const uint Fill = 1;", path: include);
+            File.WriteAllText(contents: "static const uint Unused = 1;", path: unincluded);
             File.WriteAllText(contents: "[numthreads(8, 8, 1)] void main() {}", path: unnamed);
             File.WriteAllText(
                 contents: """
@@ -39,7 +43,7 @@ public sealed class AffectedDocumentsLawTests {
             Assert.Equal(actual: AffectedDocuments.PassSources(graphPath: graph), expected: [Path.GetFullPath(path: named)]);
             Assert.Equal(
                 actual: AffectedDocuments.Reach(path: graph).Order(comparer: StringComparer.OrdinalIgnoreCase),
-                expected: [Path.GetFullPath(path: graph), Path.GetFullPath(path: named)]
+                expected: [Path.GetFullPath(path: graph), Path.GetFullPath(path: include), Path.GetFullPath(path: named)]
             );
         } finally {
             directory.Delete(recursive: true);
@@ -64,8 +68,8 @@ public sealed class AffectedDocumentsLawTests {
         Assert.Empty(collection: plan.Unmapped);
     }
     /// <summary>On the real tree: the resample kernel reaches the canary whose fixture graph names it, each ink pass
-    /// source reaches the canary whose world names the ink graph, and the camera conversion kernel reaches its
-    /// loader.</summary>
+    /// source reaches the canary whose world names the ink graph, the include the source-conversion passes share
+    /// reaches that canary, and the camera conversion kernel reaches its loader.</summary>
     [Fact]
     public void OnTheTreeAGraphPassSourceReachesTheCanaryThatRunsIt() {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
@@ -78,6 +82,8 @@ public sealed class AffectedDocumentsLawTests {
         foreach (var ink in ((string[])["ink-finish", "ink-simulation", "ink-visualize"])) {
             Assert.Contains(collection: reachedBy[$"src/Puck.World/Assets/pipelines/{ink}.hlsl"], expected: "pipeline-ink");
         }
+
+        Assert.Contains(collection: reachedBy["src/Puck.Shaders/Assets/Shaders/Sources/image-source.hlsli"], expected: "source-conversion");
 
         var kernels = AffectedStandIns.Kernels(
             projects: AffectedCommand.Projects(model: ArchitectureModel.Load(repositoryRoot: repositoryRoot), repositoryRoot: repositoryRoot),
