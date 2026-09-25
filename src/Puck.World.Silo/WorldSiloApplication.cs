@@ -23,6 +23,15 @@ public static class WorldSiloApplication {
         builtIns: [new WorldServerExtension()],
         directories: directories
     );
+    /// <summary>Attaches the silo console to its pending-verb table the way the World host does: a late verdict and
+    /// an evicted line print, and an eviction counts in <c>wire.errors</c>.</summary>
+    /// <param name="services">The built silo's services, holding its <see cref="Puck.World.Protocol.WorldDeferredVerbEchoes"/>
+    /// and <see cref="CommandRegistry"/>.</param>
+    /// <returns>The attached answers.</returns>
+    public static WorldDeferredVerbAnswers AnswerDeferredVerbs(IServiceProvider services) => WorldDeferredVerbAnswers.Attach(
+        echoes: services.GetRequiredService<Puck.World.Protocol.WorldDeferredVerbEchoes>(),
+        registry: services.GetRequiredService<CommandRegistry>()
+    );
     /// <summary>Runs the ordinary silo with the extensions installed in --extensions-dir, or in the default
     /// directories when it is absent.</summary>
     /// <param name="args">The silo's ordinary command-line arguments.</param>
@@ -212,6 +221,7 @@ public static class WorldSiloApplication {
 
             return 1;
         }
+        _ = AnswerDeferredVerbs(services: host.Services);
         var silo = host.Services.GetRequiredService<WorldSiloHost>();
         HostResourceUnavailableException? unavailable = null;
 
