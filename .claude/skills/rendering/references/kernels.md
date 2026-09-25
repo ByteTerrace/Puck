@@ -80,12 +80,17 @@ defined by hand for an A/B comparison. No build defines it. A frame the
 cadence gate skips runs none of the march dispatches and re-composites the
 retained image; `world.cadence off` disables the gate for measurement.
 
-The visibility record is 80 bytes per full-extent pixel per viewport
-(`PrimaryHitByteLength`), allocated as width × height × viewport capacity.
-`sdf-visibility.hlsli` owns its five rows: V (t, identity, material, march
-flags), C (terminal radius, threshold, seam blend weight and other material),
-L (lanes), N (geometric normal and gradient magnitude) and S (curvature, the
-surface/AO query count, raw AO, and surface flags). Primary writes V, C and L;
+The visibility record is 60 bytes per full-extent pixel per viewport
+(`PrimaryHitByteLength`), allocated as width × height × viewport capacity;
+`world.budget` prints the allocated bytes. `sdf-visibility.hlsli` owns its
+fifteen words in five rows: V (t, identity, material, march flags), exact; C
+(terminal radius, threshold, then the seam blend weight as a 15-bit fraction
+packed with its other material plus one); L (the four lanes, as authored
+floats); N (a 16-bit octahedral geometric normal and the gradient magnitude);
+and S (curvature and raw AO as halves, then the surface flags packed with the
+saturated surface/AO query count). The packing moves presentation pixels by at
+most one code against the full record and leaves identity and state exact.
+Primary writes V, C and L;
 surface writes N and S; ambient updates S. Every reader and writer uses the
 module's typed load and store functions, so a layout change edits only that
 module and `PrimaryHitByteLength`. A record is current only inside the frame's

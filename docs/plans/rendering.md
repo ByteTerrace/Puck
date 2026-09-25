@@ -658,7 +658,6 @@ P17 still owes:
 
 The SDF engine's frame data is written by hand in three places: an `SdfFrame`
 field, a numbered row in the packed buffer, and an HLSL accessor.
-`resample.comp.hlsl` compiles but has no consumer.
 
 ## The forcing artifact
 
@@ -1119,10 +1118,19 @@ follow its device-bound services, its one recorder and the SDF engine's groups.
    background records and the block to an SDF record where it went, with a
    no-move leg as the negative control; it proves current-kind reads after a
    move, not a difference between the two tests.
-4. P4-1c, the compact-record trial: a smaller encoding, measured in counted
-   work and bytes against the full record, kept only if it stays within one
-   least-significant bit, the limit below, and costs fewer counted bytes than
-   the full record.
+4. P4-1c, landed, the compact record: fifteen words instead of twenty, 60
+   bytes a pixel of each viewport's full extent instead of 80. V stays exact;
+   the seam weight packs as a 15-bit fraction beside its partner material plus
+   one, the geometric normal is a 16-bit octahedral pair, curvature and ambient
+   occlusion are halves, and the surface flags share a word with the saturated
+   query count. The lanes stay authored floats, because they are anonymous
+   state no station exercises. `world.budget` prints the allocated bytes: the
+   counters workload's 256×144 extent reads 8,847,360 bytes on both backends,
+   against 11,796,480 for the full record, and 1920×1080 saves 41,472,000 bytes
+   per reserved viewport. `puck counters compare` shows no counted-work change
+   beyond the kernels' bytecode. Each backend's parity captures move by at most
+   one code in any tile against the full record's (mean tile delta at most
+   0.012), and every state hash is unchanged.
 5. P4-2a, landed, the GPU-free contracts: `ViewProjection` in
    `Puck.Abstractions/Cameras`, `SdfMesh`, `SdfMeshDraw` and
    `SdfFrame.MeshDraws`, with laws that include the fixed-point raycast bounded
@@ -1159,8 +1167,7 @@ beside analytic triangles. `SDF_MONOLITHIC_VIEWS` is deleted.
 which follows P4-1. `sdf-world.hlsli` changes in P4 first; the views and
 cull-args kernels and `SdfWorldEngine`'s partials change in P7b first. Whichever
 lands second re-records the work laws and counter baselines, and rebuilds
-compiled shaders rather than merging them. Open: whether the compact record
-survives its trial.
+compiled shaders rather than merging them.
 
 ### P5 — Reproducible authoring and packaged dependencies
 
@@ -1386,8 +1393,8 @@ Phase 3, the groups, follows phase 2:
 12. Done: `ShaderRegisterBindingLawTests` holds every shader the build compiles
     to a register number equal to its binding and a space equal to its set. It
     also holds the pipeline sources the World's package store is built from.
-    It names each declaration that breaks the rule: the SDF engine's, which
-    P7b-19 and P7b-20 remove, and the resample kernel's, which P11b ports. The
+    It also holds the graph's package-library kernels. It names each declaration
+    that breaks the rule: the SDF engine's, which P7b-19 and P7b-20 remove. The
     list may only shrink. Direct3D 12 numbers a compute pipeline's registers at
     its binding numbers unless the description declares
     `GpuRegisterNumbering.PackedByClass`, which only the SDF engine and the
@@ -1499,10 +1506,11 @@ Phase 3, the groups, follows phase 2:
     - 14b-3, the pipeline node and the sources it runs:
       `ShaderPipelineRenderNode` and its float preview
       (`pipeline-preview.frag.hlsl`), the shipped ink pipeline
-      (`ink-simulation.hlsl`, `ink-visualize.hlsl`) and the seven canary
-      sources under `pipeline-edit`, `pipeline-feedback`, `pipeline-shapes`
-      and `pipeline-supersede`. Canaries: `no-device-compile`, the thirteen
-      `pipeline-*` and `source-conversion`.
+      (`ink-simulation.hlsl`, `ink-visualize.hlsl`), the package library's
+      `resample.hlsl`, and the seven canary sources under `pipeline-edit`,
+      `pipeline-feedback`, `pipeline-shapes` and `pipeline-supersede`.
+      Canaries: `no-device-compile`, the thirteen `pipeline-*`,
+      `source-conversion` and `resample-reconstruction`.
     - 14b-4, the overlay: `overlay-unified.frag.hlsl`'s nineteen combined
       declarations and `UnifiedOverlayNode`'s pool. Canaries:
       `instrument-clock-source`, `music-conditional-layer-and-embellishment`,
@@ -1515,8 +1523,9 @@ Phase 3, the groups, follows phase 2:
       (binding 44), and the engine's binding lists in
       `SdfWorldEngine.Pipelines.cs`. Canaries: 20 mapped, the 14b-5 set
       without `sdf-decode-sign-refusal`, plus `sdf-visibility-fresh`, which
-      the index has not recorded yet. `resample.comp.hlsl`, which nothing
-      dispatches, takes a separate image and sampler with P11b's port.
+      the index has not recorded yet. The package library's `resample.hlsl`,
+      which took the SDF-side kernel's place, moves with the pipeline node's
+      sources in 14b-3.
     - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
       then states a `GpuBindingKind`, `ShaderSetManifestBindingKind`, and
       `GpuDescriptorPoolSizes.CombinedImageSamplerCount`, with their last
@@ -2047,12 +2056,15 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups.
-P11b keeps one resample pass, a port of `resample.comp.hlsl`, in the graph's
-package library. The port keeps the composite's reconstruction, bilinear
-blending toward clamped Catmull-Rom by `UpscaleSharpness`, which today's
-`resample.comp.hlsl` lacks, so the render-scale lever survives the composite's
-deletion; P14 deletes any SDF-side copy, and the pixelate interface
-fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
+P11b keeps one resample pass in the graph's package library: the `resample`
+package, whose kernel `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`
+holds the SDF composite's reconstruction: an exact copy at equal extent, bilinear at sharpness
+0, clamped Catmull-Rom at sharpness 1 and a blend between, all through formatted
+loads with no sampler state. The `resample-reconstruction` canary holds it to the
+analytic bilinear and Catmull-Rom values of a known step on both backends. Render
+scale moving onto it, which deletes the `RenderScaleQ` lanes, is a later P11b
+commit; cropping a source is P13's mapping, not a resample config. The pixelate
+interface fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
 P11b's `sdf.world` adapter submits through `SdfWorldEngine`'s ring as an
 external producer whose output image the graph imports. Before P12, a screen's
 matrix row is green when host leases and instance reads serve it. Without the

@@ -112,7 +112,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const uint VolumeBindingIndex = 48;
     private const uint PrimaryHitBindingIndex = 49; // sdfVisibilityRecords written by primary, surface and ambient: u5, after the five source images
     private const uint PrimaryHitReadBindingIndex = 50; // the same buffer read-only for views: t45, after the cull buffer (sdf-visibility.hlsli)
-    private const int PrimaryHitByteLength = (5 * 16); // the visibility record's V, C, L, N and S rows; paired with sdf-visibility.hlsli's SdfVisibilityWords
+    private const int PrimaryHitByteLength = (15 * sizeof(uint)); // the visibility record's fifteen words in its V, C, L, N and S rows; paired with sdf-visibility.hlsli's SdfVisibilityWords
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.
     private const int VolumeByteLength = ((sizeof(float) * 4) * SdfVolume.VectorsPerEntry);
     private const uint WorkgroupEdge = 8;
@@ -256,6 +256,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuComputePipeline m_surfacePipeline;
     private readonly IGpuComputePipeline m_ambientPipeline;
     private readonly IGpuBuffer m_primaryHitBuffer;
+    private readonly ulong m_visibilityRecordBytes;
     private readonly uint m_width;
 
     private SdfCadenceDiagnostics m_cadenceDiagnostics;
@@ -607,8 +608,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // One full-extent slice per viewport, like the source textures: changing regions must never overrun a
         // buffer sized for a previous layout. Shared across frame slots; Record orders primary writes before
         // shading reads and this frame's writes after the preceding frame's reads.
+        m_visibilityRecordBytes = checked((((((ulong)width) * height) * m_viewportCapacity) * PrimaryHitByteLength));
         m_primaryHitBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: checked((((((ulong)width) * height) * m_viewportCapacity) * PrimaryHitByteLength)),
+            sizeBytes: m_visibilityRecordBytes,
             usage: GpuBufferUsage.Storage
         );
         // The per-tile instance mask: same (viewport, tile) indexing as the cull buffer, GPU-written by instance

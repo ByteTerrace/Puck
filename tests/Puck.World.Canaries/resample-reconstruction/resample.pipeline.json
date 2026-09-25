@@ -1,0 +1,45 @@
+{
+  "$schema": "puck.shader.pipeline.v1",
+  "name": "resample",
+  "resources": [
+    {
+      "name": "step",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 16, "height": 16 }
+    },
+    {
+      "name": "resampled",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 64, "height": 64 }
+    }
+  ],
+  "passes": [
+    {
+      "name": "seed",
+      "source": "seed.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [ { "name": "step", "binding": 0 } ]
+    },
+    {
+      "name": "resample",
+      "source": "../../../src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "inputs": [ { "name": "step", "binding": 1 } ],
+      "outputs": [ { "name": "resampled", "binding": 0 } ],
+      "config": {
+        "sharpness": {
+          "default": 0,
+          "max": 1,
+          "description": "Reconstruction sharpness: 0 is bilinear, 1 clamped Catmull-Rom.",
+          "min": 0,
+          "type": "float"
+        }
+      }
+    }
+  ],
+  "outputs": ["resampled"]
+}
