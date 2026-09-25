@@ -295,7 +295,11 @@ public sealed class TeardownAfterFaultLawTests {
         public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) => throw Reached();
         public IGpuSubmissionFence CreateSubmissionFence() => throw Reached();
         public IGpuSurfaceUpload CreateUpload() => throw Reached();
-        public void DestroyPool(nint poolHandle) => throw Reached();
+        public void DestroyPool(nint poolHandle) {
+            if (0 != poolHandle) {
+                throw Reached();
+            }
+        }
         public void DestroySampler(nint samplerHandle) => throw Reached();
         public void Submit(ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
         public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw Reached();

@@ -244,12 +244,10 @@ public sealed class GpuRegion : IDisposable {
 
         m_disposed = true;
 
-        if (m_copyPool != 0) {
-            m_bindings.DestroyPool(
-                poolHandle: m_copyPool
-            );
-            m_copyPool = 0;
-        }
+        m_bindings.DestroyPool(
+            poolHandle: m_copyPool
+        );
+        m_copyPool = 0;
 
         foreach (var buffer in m_ownedBuffers) {
             buffer.Dispose();

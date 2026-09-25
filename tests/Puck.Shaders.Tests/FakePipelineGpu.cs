@@ -300,7 +300,11 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
         gpu: this
     );
     public IGpuSurfaceUpload CreateUpload() => throw new NotSupportedException();
-    public void DestroyPool(nint poolHandle) => Destroy(handle: poolHandle);
+    public void DestroyPool(nint poolHandle) {
+        if (0 != poolHandle) {
+            Destroy(handle: poolHandle);
+        }
+    }
     public void DestroySampler(nint samplerHandle) => Destroy(handle: samplerHandle);
     public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) { }
     public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }

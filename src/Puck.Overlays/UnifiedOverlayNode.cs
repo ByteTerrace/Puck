@@ -676,13 +676,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             m_sampler = 0;
         }
 
-        if (0 != m_descriptorPool) {
-            m_bindings.DestroyPool(
-                poolHandle: m_descriptorPool
-            );
-            m_descriptorPool = 0;
-            m_descriptorSet = 0;
-        }
+        m_bindings.DestroyPool(
+            poolHandle: m_descriptorPool
+        );
+        m_descriptorPool = 0;
+        m_descriptorSet = 0;
 
         m_pipeline?.Dispose();
         m_pipeline = null;

@@ -1284,9 +1284,10 @@ Phase 0 needs nothing else, and all of it but part of step 2 has landed:
 
 Phase 1 follows P3, which has landed:
 
-5. Direct3D 12 skips destroying descriptor pool zero, so the zero guards in
-   `GpuRegion.Dispose`, `UnifiedOverlayNode` and `ShaderPipelineRenderNode` and
-   its float preview are deleted.
+5. Done: destroying descriptor pool zero does nothing and reaches no device on
+   either backend, so `GpuRegion.Dispose`, `UnifiedOverlayNode` and
+   `ShaderPipelineRenderNode` and its float preview destroy their pools
+   unguarded.
 6. `memory.vulkan` and `memory.directx` count device-local bytes allocated and
    released (per-backend-deterministic) at their actual size, and the peak
    (pacing); `QualificationJudge` gains the peak device-local threshold.

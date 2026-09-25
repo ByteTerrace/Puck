@@ -78,6 +78,10 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) => SamplerSentinel;
     /// <inheritdoc/>
     public void DestroyPool(nint poolHandle) {
+        if (0 == poolHandle) {
+            return;
+        }
+
         var gcHandle = GCHandle.FromIntPtr(value: poolHandle);
         var pool = ((DirectXDescriptorPool)gcHandle.Target!);
 

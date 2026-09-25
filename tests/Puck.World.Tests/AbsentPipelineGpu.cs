@@ -52,7 +52,11 @@ internal sealed class AbsentPipelineGpu : IGpuComputeServices, IGpuComputeComman
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw new NotSupportedException();
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => throw new NotSupportedException();
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => throw new NotSupportedException();
-    void IGpuBindings.DestroyPool(nint poolHandle) => throw new NotSupportedException();
+    void IGpuBindings.DestroyPool(nint poolHandle) {
+        if (0 != poolHandle) {
+            throw new NotSupportedException();
+        }
+    }
     void IGpuBindings.DestroySampler(nint samplerHandle) => throw new NotSupportedException();
     void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw new NotSupportedException();
     void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => throw new NotSupportedException();

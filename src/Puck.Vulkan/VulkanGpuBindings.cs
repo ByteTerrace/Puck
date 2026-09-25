@@ -90,11 +90,18 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
         ));
     }
     /// <inheritdoc/>
-    public void DestroyPool(nint poolHandle) =>
+    /// <remarks>Pool zero returns before reading the device context's logical device, which a device that never
+    /// came up does not have.</remarks>
+    public void DestroyPool(nint poolHandle) {
+        if (0 == poolHandle) {
+            return;
+        }
+
         allocator.DestroyPool(
             device: Device,
             poolHandle: poolHandle
         );
+    }
     /// <inheritdoc/>
     public void DestroySampler(nint samplerHandle) =>
         allocator.DestroySampler(

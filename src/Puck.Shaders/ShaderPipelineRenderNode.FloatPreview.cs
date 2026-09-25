@@ -365,11 +365,9 @@ public sealed partial class ShaderPipelineRenderNode {
                 }
             }
             foreach (var pool in m_descriptorPools) {
-                if (pool != 0) {
-                    m_gpu.Bindings.DestroyPool(
-                        poolHandle: pool
-                    );
-                }
+                m_gpu.Bindings.DestroyPool(
+                    poolHandle: pool
+                );
             }
         }
         public IGpuImage GetTarget(int slot) => m_targets[slot];

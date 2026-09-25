@@ -255,7 +255,11 @@ public sealed class FullscreenPassNodeConfigTests {
         nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => throw new NotSupportedException();
         IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => throw new NotSupportedException();
         IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => throw new NotSupportedException();
-        void IGpuBindings.DestroyPool(nint poolHandle) => throw new NotSupportedException();
+        void IGpuBindings.DestroyPool(nint poolHandle) {
+            if (0 != poolHandle) {
+                throw new NotSupportedException();
+            }
+        }
         void IGpuBindings.DestroySampler(nint samplerHandle) => throw new NotSupportedException();
         void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) => throw new NotSupportedException();
         void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw new NotSupportedException();

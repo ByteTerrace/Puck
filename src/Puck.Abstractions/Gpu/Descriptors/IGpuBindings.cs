@@ -21,8 +21,10 @@ public interface IGpuBindings {
     /// <param name="filter">The min/mag filter.</param>
     /// <returns>The native sampler handle.</returns>
     nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear);
-    /// <summary>Destroys a descriptor pool and every set allocated from it.</summary>
-    /// <param name="poolHandle">The native descriptor pool handle.</param>
+    /// <summary>Destroys a descriptor pool and every set allocated from it. Destroying pool zero does nothing and
+    /// reaches no device on either backend, as destroying <c>VK_NULL_HANDLE</c> does on Vulkan, so an owner that
+    /// never created its pool destroys it unguarded.</summary>
+    /// <param name="poolHandle">The native descriptor pool handle, or zero.</param>
     void DestroyPool(nint poolHandle);
     /// <summary>Destroys a sampler.</summary>
     /// <param name="samplerHandle">The native sampler handle.</param>

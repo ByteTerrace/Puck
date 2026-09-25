@@ -1754,11 +1754,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             }
             if (PoolsDescriptors is not null) {
                 foreach (var pool in PoolsDescriptors) {
-                    if (pool != 0) {
-                        gpu.Bindings.DestroyPool(
-                            poolHandle: pool
-                        );
-                    }
+                    gpu.Bindings.DestroyPool(
+                        poolHandle: pool
+                    );
                 }
             }
             if (Samplers is not null) {
