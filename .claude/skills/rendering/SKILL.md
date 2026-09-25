@@ -331,6 +331,15 @@ These are one-line cautions; the owning pages hold the derivations.
   frames around a build with `ShaderPipelineRenderNodeBuilds`
   (`ProduceUntilInstalled`, and `ProduceBuildStart`, which holds the fake's
   pipeline gate so the starting frame's outcome never depends on pool timing).
+- **A Direct3D 12 removal is translated where it is returned.** A call a
+  removal reaches (map, command-list reset and close, queue signal, fence event)
+  goes through `DirectXCommandCalls` over `IDirectXCommandCalls`, never the
+  generated wrapper, whose `COMException` recovery never sees; a removal becomes
+  `DeviceLostException` carrying `GetDeviceRemovedReason`. A frame path waits
+  with `SignalAndWait`; a release path drains with `Drain`, which counts a
+  removed device as drained so `OnDeviceLost` never throws.
+  `DirectXCommandCallsLawTests` fakes each call's `HRESULT`. The owning
+  explanation is [Direct3D 12](../../../docs/rendering/directx.md#result-handling).
 - **Every pipeline goes through the device's persistent cache.** Vulkan's
   `VulkanLogicalDevice.PipelineCache` and Direct3D 12's
   `DirectXDeviceContext.PipelineLibrary` sit under every compute and graphics
