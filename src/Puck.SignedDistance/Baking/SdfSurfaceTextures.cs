@@ -88,12 +88,7 @@ internal static class SdfSurfaceTextures {
                     occlusion[at] = texel.Occlusion;
                     material[at] = texel.Material;
 
-                    (ushort R, ushort G, ushort B) light = ((texel.Material < glow.Length) ? glow[texel.Material] : (Zero, Zero, Zero));
-
-                    BinaryPrimitives.WriteUInt16LittleEndian(destination: emission.AsSpan(start: (at * 8)), value: light.R);
-                    BinaryPrimitives.WriteUInt16LittleEndian(destination: emission.AsSpan(start: ((at * 8) + 2)), value: light.G);
-                    BinaryPrimitives.WriteUInt16LittleEndian(destination: emission.AsSpan(start: ((at * 8) + 4)), value: light.B);
-                    BinaryPrimitives.WriteUInt16LittleEndian(destination: emission.AsSpan(start: ((at * 8) + 6)), value: One);
+                    WriteEmission(glow: glow, level: emission, material: texel.Material, texel: at);
                 }
             }
         }
@@ -148,6 +143,18 @@ internal static class SdfSurfaceTextures {
         }
 
         return emission;
+    }
+    /// <summary>Writes one emission texel in the usage's source format (<see cref="SdfBakeTextureUsage.Emission"/>):
+    /// <paramref name="material"/>'s emitted light, or none for a material outside <paramref name="glow"/> (a miss
+    /// passes -1), and an alpha of one.</summary>
+    public static void WriteEmission(byte[] level, int texel, (ushort R, ushort G, ushort B)[] glow, int material) {
+        (ushort R, ushort G, ushort B) light = ((((uint)material) < ((uint)glow.Length)) ? glow[material] : (Zero, Zero, Zero));
+        var at = level.AsSpan(start: (texel * 8));
+
+        BinaryPrimitives.WriteUInt16LittleEndian(destination: at, value: light.R);
+        BinaryPrimitives.WriteUInt16LittleEndian(destination: at[2..], value: light.G);
+        BinaryPrimitives.WriteUInt16LittleEndian(destination: at[4..], value: light.B);
+        BinaryPrimitives.WriteUInt16LittleEndian(destination: at[6..], value: One);
     }
 
     private static Vector3 Vector(double[] values, int vertex) =>

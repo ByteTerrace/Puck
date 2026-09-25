@@ -590,8 +590,8 @@ into an indexed mesh, five surface textures and an octahedral impostor
 Every texture is a tile-aware mip chain that ends at one texel per tile, filtered
 in its declared space, and stored block-compressed by the CPU codecs in
 `Puck.Assets.Textures`: albedo as BC7 in sRGB, normals as BC5 octahedral pairs,
-occlusion and impostor depth as BC4, and emission as BC6H, while material
-identity stays uncompressed with majority mips. The encoders write the same
+occlusion and impostor depth as BC4, and surface and impostor emission as BC6H,
+while material identity stays uncompressed with majority mips. The encoders write the same
 bytes on every machine and each has an exact decoder as its test oracle.
 Dual contouring won the extraction: it strays from the field about half as far
 as surface nets did, for about a tenth more evaluations over a whole bake, and
@@ -618,8 +618,6 @@ P17 still owes:
   every level and sampling each probe texel on both backends, which needs a GPU
   image of a block-compressed format with mip levels; `BakeSamplingFixtureLawTests`
   holds the fixture's GPU-free half;
-- an emission texture for the impostor (BC7 and unsigned BC6H write and read
-  every mode, the partitioned and two-region ones included);
 - the parity world shipping its bakes, and the check that a missing bake draws
   through its field and then switches.
 
