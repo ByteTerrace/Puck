@@ -63,6 +63,8 @@ internal static class AffectedSelection {
     /// <param name="worldClosure">The projects the World executable is built from, itself included.</param>
     /// <param name="declaresTests">Whether a changed <c>.puck</c> source declares <c>test</c> blocks.</param>
     /// <param name="catalogInputs">Whether a changed file is an input of the shipped catalog's tree compile.</param>
+    /// <param name="canariesReaching">The canaries whose manifest worlds and fixtures reach a changed file through the
+    /// documents they name (<see cref="AffectedDocuments"/>); none when none do.</param>
     /// <param name="standInsFor">The indexed sources a changed file the index does not know stands for
     /// (<see cref="AffectedStandIns"/>): their canaries are its canaries, and a file with an indexed stand-in is not
     /// unmapped.</param>
@@ -76,7 +78,8 @@ internal static class AffectedSelection {
         IReadOnlySet<string> worldClosure,
         Func<string, bool> declaresTests,
         Func<string, string?, bool> catalogInputs,
-        Func<string, IReadOnlyList<string>> standInsFor
+        Func<string, IReadOnlyList<string>> standInsFor,
+        Func<string, IReadOnlySet<string>> canariesReaching
     ) {
         var catalog = false;
         var everything = false;
@@ -105,19 +108,26 @@ internal static class AffectedSelection {
                 _ = worlds.Add(item: path);
             }
 
+            var named = false;
+
             foreach (var canary in canaries) {
                 if (
                     IsUnder(path: path, directory: canary.Directory) ||
                     canary.Files.Contains(value: path, comparer: StringComparer.Ordinal)
                 ) {
+                    named = true;
                     _ = selected.Add(item: canary.Id);
                 }
             }
 
-            var mapped = coverage.TryGetValue(key: path, value: out var executedBy);
+            var reaching = canariesReaching(arg: path);
 
-            if (mapped) {
-                selected.UnionWith(other: executedBy!);
+            selected.UnionWith(other: reaching);
+
+            var mapped = (coverage.TryGetValue(key: path, value: out var executedBy) || named || (reaching.Count > 0));
+
+            if (executedBy is not null) {
+                selected.UnionWith(other: executedBy);
             } else {
                 foreach (var standIn in standInsFor(arg: path)) {
                     if (coverage.TryGetValue(key: standIn, value: out var standInExecutedBy)) {
