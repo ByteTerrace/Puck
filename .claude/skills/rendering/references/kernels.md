@@ -52,13 +52,13 @@ buffer-layout, or C# ISA changes need a rebuild.
 ## The frame
 
 Ten counted passes, labelled by `SdfWorldEngine.PassLabels` for
-`world.counters gpu`; brick upload and bake dispatches are recorded in addition when
+`world.counters gpu`; the brick staging copy and bake dispatches are recorded in addition when
 work is pending, and count outside every pass. A cadence-skipped frame marks
 `sky` through `views` skipped (`SdfWorldEngine.CadenceSkippedPassLabels`):
 
 | Label | Kernel | Does |
 |---|---|---|
-| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies each changed range of the viewport rows, dynamic transforms, and frame grid from the ring slot's host-visible buffer into the persistent device-local tables, one dispatch per table that owes any; two or more runs also stage a run table the kernel binary-searches (`SdfWorldEngine.Uploads.cs`). March kernels bind only the device-local tables. A still frame copies only the rows its time moved. |
+| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged region owes (program words, viewport rows, dynamic transforms, frame grid, screen surfaces, screen lights, volumes, decals, mesh draws) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldEngine.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A still frame copies only the viewport word its time moved. |
 | `sky` | `sdf-sky.comp` | Fills every non-child viewport pixel with sky before any tile is culled. Shares the views bindings. |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
@@ -110,8 +110,8 @@ so the reference is not charged for passes it does not run.
 
 ## Buffer hazards
 
-Every device-local buffer one dispatch writes and a later dispatch in the same
-command list reads is declared in `SdfFrameBufferPlan.Uses`, and
+Every device-local frame buffer one dispatch writes and a later dispatch in the
+same command list reads is declared in `SdfFrameBufferPlan.Uses`, and
 `SdfFrameBufferHazards` turns consecutive uses into `TransitionBuffer` calls:
 one whenever either use writes or the two reach the buffer differently. The
 first use in a list owes nothing; the top-of-frame barrier orders it after the
@@ -124,8 +124,9 @@ surface and ambient and read-only for views. Global memory barriers remain only 
 images: the cross-frame gate, sky to views, and views to composite. A new
 dispatch, a new device-local buffer, or a binding-kind change edits the plan
 and the inventory in `SdfFrameBufferPlanLawTests` together; a use left out of
-the plan races on both backends. A rendered frame records ten buffer transitions,
-twelve with brick upload and bake work.
+the plan races on both backends. A rendered frame records seven buffer transitions,
+nine with brick upload and bake work. The host-written tables are regions, not
+frame buffers: the upload pass transitions each buffer it copied into, once.
 
 ## Views variants
 

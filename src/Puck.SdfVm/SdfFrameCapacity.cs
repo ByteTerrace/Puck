@@ -7,9 +7,8 @@ namespace Puck.SdfVm;
 /// <param name="Height">The composited output height in pixels.</param>
 /// <param name="Viewports">The viewport slots provisioned.</param>
 /// <param name="Instances">The program instances provisioned.</param>
-/// <param name="DynamicTransforms">The dynamic-transform slots provisioned.</param>
 /// <param name="BrickPoolVoxels">The carve-bake brick pool's voxel capacity; zero allocates a one-voxel filler.</param>
-public readonly record struct SdfFrameCapacity(uint Width, uint Height, uint Viewports, int Instances, int DynamicTransforms, int BrickPoolVoxels) {
+public readonly record struct SdfFrameCapacity(uint Width, uint Height, uint Viewports, int Instances, int BrickPoolVoxels) {
     /// <summary>Gets the tile columns of one viewport.</summary>
     public uint TileGridX => ((Width + (SdfWorldEngine.TileSize - 1)) / SdfWorldEngine.TileSize);
     /// <summary>Gets the tile rows of one viewport.</summary>

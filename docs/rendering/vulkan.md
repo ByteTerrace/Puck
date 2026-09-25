@@ -337,8 +337,9 @@ device memory by a share of the device-local bytes (see
 `GpuResidency.Select` chooses where a region the host writes every
 frame lives from the profile and the region's size. A region within
 one-sixteenth (`GpuResidency.HostVisibleShare`) of the host-visible
-device-local heap is written in place on coherent unified memory and through a
-per-frame ring otherwise. Any other region, and any region on a device that
+device-local heap is written in place on coherent unified memory when no
+submission reading it is in flight while the host writes, and through a
+per-frame ring otherwise, which is every per-frame owner's case. Any other region, and any region on a device that
 reports no host-visible device-local memory, is staged and copied by a compute
 dispatch. `GpuRegion` writes a region under whichever policy was chosen, over
 the neutral buffer, descriptor and recorder interfaces, so both backends share
@@ -346,10 +347,13 @@ it. Direct3D 12 fills the same profile from its own queries; see
 [its memory profile](directx.md#memory-profile). `pipeline.inspect` prints the
 profile and the policy chosen for a pipeline instance's parameter bytes.
 
-The neutral buffer factory places a ring's host-visible buffers in the first
-host-visible, host-coherent memory type, not in the device-local aperture the
-profile reports. The SDF engine's mesh region is the only engine consumer that
-writes through a region.
+`GpuResidency.RingMemory` places a ring's buffers in the device-local aperture
+on a discrete adapter that exposes one: `CreateHostVisibleDeviceLocal`
+allocates a `DEVICE_LOCAL`, `HOST_VISIBLE` and `HOST_COHERENT` memory type
+(Direct3D 12 uses a `GPU_UPLOAD` heap), counted under `memory.vulkan` because
+it is the adapter's memory. On unified memory (`GpuMemoryProfile.UnifiedMemory`:
+an integrated or CPU device, or Direct3D 12's `UMA`) a ring's buffers are
+ordinary host-visible buffers in the device's one pool.
 
 ---
 

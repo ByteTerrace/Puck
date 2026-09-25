@@ -181,6 +181,12 @@ fills it from three native structures:
 - `D3D12_FEATURE_DATA_D3D12_OPTIONS16`: a discrete adapter's dedicated memory is
   host-writable only when it supports GPU upload heaps.
 
+A unified-memory profile reports `UnifiedMemory`. On a discrete adapter with
+GPU upload heaps, a region's ring lives in them
+(`IGpuBufferFactory.CreateHostVisibleDeviceLocal` creates a mapped buffer on a
+`GPU_UPLOAD` heap, counted under `memory.directx`); on unified memory it is an
+ordinary `UPLOAD`-heap buffer.
+
 A device that will not answer the architecture query reports the default
 profile, which selects the staged copy. What the profile is for, and how a
 policy is chosen from it, is described under

@@ -7,7 +7,8 @@ namespace Puck.DirectX;
 /// Counts the backend's resources into its <c>memory.directx</c> <see cref="GpuDeviceMemoryWork"/> by their
 /// <see cref="GpuMemoryRole"/>, each at the size <c>ID3D12Device::GetResourceAllocationInfo</c> reports for its
 /// description: a <c>DEFAULT</c>-heap buffer or texture, exported textures included, and a resource opened from a shared
-/// handle are <see cref="GpuMemoryRole.DeviceLocal"/>; an <c>UPLOAD</c> or <c>READBACK</c> buffer is
+/// handle are <see cref="GpuMemoryRole.DeviceLocal"/>; a <c>GPU_UPLOAD</c> buffer is
+/// <see cref="GpuMemoryRole.HostVisibleDeviceLocal"/>; an <c>UPLOAD</c> or <c>READBACK</c> buffer is
 /// <see cref="GpuMemoryRole.HostVisible"/>. Swapchain buffers, which DXGI allocates, never reach here. Each entry is
 /// keyed by the device the resource reports (<c>ID3D12DeviceChild::GetDevice</c>), so a release after the context
 /// recreated its device still reaches the entry the old device made. An owner counts the release with

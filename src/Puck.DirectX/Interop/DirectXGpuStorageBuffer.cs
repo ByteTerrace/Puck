@@ -1,21 +1,36 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.System.Com;
 
 namespace Puck.DirectX.Interop;
 
 /// <summary>
-/// A Direct3D 12 upload-heap buffer implementing <see cref="IGpuStorageBuffer"/>. Permanently mapped for
-/// host writes; its <see cref="IGpuStorageBuffer"/> write operations copy data without mapping/unmapping overhead.
+/// A Direct3D 12 upload-heap or GPU-upload-heap buffer implementing <see cref="IGpuStorageBuffer"/>. Permanently mapped
+/// for host writes; its <see cref="IGpuStorageBuffer"/> write operations copy data without mapping/unmapping overhead.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
+    private readonly GpuDeviceMemoryWork? m_memory;
+
     private nint m_buffer;
     private void* m_mapped;
     private bool m_disposed;
 
-    /// <summary>Initializes a new instance taking ownership of an already-created upload-heap buffer.</summary>
-    public DirectXGpuStorageBuffer(nint bufferHandle, ulong sizeBytes, void* mapped) {
+    /// <summary>Initializes a new instance taking ownership of an already-created, mapped upload-heap or GPU-upload-heap
+    /// buffer.</summary>
+    /// <param name="bufferHandle">The native <c>ID3D12Resource</c>; ownership moves to the new instance.</param>
+    /// <param name="sizeBytes">The buffer's size, in bytes.</param>
+    /// <param name="mapped">The buffer's persistent mapping.</param>
+    /// <param name="memory">The device-local counts a GPU-upload-heap buffer was counted into, whose release this owner
+    /// counts, or <see langword="null"/>; an upload-heap buffer was counted into none, so its release counts
+    /// nothing.</param>
+    /// <param name="state">The state the buffer was created in, which the resource-state tracker starts it at:
+    /// <see cref="DirectXGpuBufferFactory.HostVisibleState"/> on an upload heap,
+    /// <see cref="DirectXGpuBufferFactory.DeviceLocalState"/> on a GPU upload heap.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bufferHandle"/> is zero.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="mapped"/> is <see langword="null"/>.</exception>
+    public DirectXGpuStorageBuffer(nint bufferHandle, ulong sizeBytes, void* mapped, GpuDeviceMemoryWork? memory = null, D3D12_RESOURCE_STATES state = DirectXGpuBufferFactory.HostVisibleState) {
         ArgumentOutOfRangeException.ThrowIfZero(value: bufferHandle);
 
         if (mapped is null) {
@@ -28,9 +43,10 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
         m_buffer = bufferHandle;
         DirectXResourceStates.Register(
             resource: m_buffer,
-            state: DirectXGpuBufferFactory.HostVisibleState
+            state: state
         );
         m_mapped = mapped;
+        m_memory = memory;
         SizeBytes = sizeBytes;
     }
 
@@ -83,6 +99,10 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
 
         if (0 != m_buffer) {
             DirectXResourceStates.Forget(resource: m_buffer);
+            DirectXDeviceMemory.CountReleased(
+                memory: m_memory,
+                resource: m_buffer
+            );
             _ = ((IUnknown*)m_buffer)->Release();
             m_buffer = 0;
         }

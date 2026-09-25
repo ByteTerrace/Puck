@@ -560,6 +560,12 @@ file sealed class CountingBufferFactory(IGpuBufferFactory inner, GpuWorkLedger l
             sizeBytes: sizeBytes,
             usage: usage
         ));
+    public IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
+        WrapHostVisible(buffer: inner.CreateHostVisibleDeviceLocal(
+            name: name,
+            sizeBytes: sizeBytes,
+            usage: usage
+        ));
     public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) {
         var buffer = WrapHostVisible(buffer: inner.CreateHostVisible(
             data: data,

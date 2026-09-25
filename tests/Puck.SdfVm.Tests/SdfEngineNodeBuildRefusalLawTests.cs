@@ -96,10 +96,10 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
     [Fact]
     public void AnEngineTheHeapCannotAdmitIsRefusedByNameAllocatesNothingAndRetriesOnlyOnAChangedInput() {
         using var rig = new Rig(reportVersion: SdfIsa.Version);
-        var demand = (SdfWorldEngine.DescriptorPoolSizes(
-            brickPool: false,
-            brickUpload: false
-        ).HeapDescriptors + GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize).HeapDescriptors);
+        var demand = SdfWorldEngine.DescriptorPools(brickPool: false).Aggregate(
+            func: static (sum, pool) => (sum + pool.HeapDescriptors),
+            seed: 0U
+        );
         var heap = Heap(views: (demand - 1U));
 
         rig.Gpu.DescriptorHeap = heap;
@@ -159,10 +159,10 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
     public void AHeapRefusedEngineRetriesExactlyOnceAfterAnotherOwnerReleasesItsPool() {
         using var rig = new Rig(reportVersion: SdfIsa.Version);
         IGpuBindings bindings = rig.Gpu;
-        var demand = (SdfWorldEngine.DescriptorPoolSizes(
-            brickPool: false,
-            brickUpload: false
-        ).HeapDescriptors + GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize).HeapDescriptors);
+        var demand = SdfWorldEngine.DescriptorPools(brickPool: false).Aggregate(
+            func: static (sum, pool) => (sum + pool.HeapDescriptors),
+            seed: 0U
+        );
         var heap = Heap(views: demand);
 
         rig.Gpu.DescriptorHeap = heap;
@@ -197,7 +197,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         // What is left is the copy pool of a mesh region the admission covers and no frame has drawn yet.
         Assert.Equal(
             actual: (rig.Gpu.Admissions, rig.Gpu.PoolsCreated.Count, heap.FreeViewDescriptors),
-            expected: (2, 2, GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize).HeapDescriptors)
+            expected: (2, 10, GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize).HeapDescriptors)
         );
     }
     [Fact]
@@ -374,8 +374,9 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         }
 
         public ref readonly FrameContext Context => ref m_context;
-        // Each engine construction creates one descriptor pool and the pipeline set none, so the pools are the attempts.
-        public int EngineAttempts => Gpu.Created.Count(predicate: static created => (created.Kind == "descriptor pool"));
+        // Each engine construction that reaches its own descriptor pool creates exactly one, after its regions' copy pools,
+        // and the pipeline set none, so the engine's own pools are the attempts.
+        public int EngineAttempts => Gpu.PoolsCreated.Count(predicate: static pool => (pool == SdfWorldEngine.DescriptorPoolSizes(brickPool: false)));
         public GpuCreationFaults Faults { get; }
         public FakeGpuDevice Gpu { get; }
         public SdfEngineNode Node { get; }

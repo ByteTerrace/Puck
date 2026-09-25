@@ -78,7 +78,7 @@ public sealed partial class SdfWorldEngine {
             value: in m_dynamicTransformRevision
         );
         hash.Add(values: dynamicsRevision);
-        hash.Add(values: m_screenSurfaces.Current);
+        hash.Add(values: m_screenSurfaceRegion.Contents);
         hash.Add(values: m_screenLightScratch);
 
         return hash.Value;
@@ -104,7 +104,7 @@ public sealed partial class SdfWorldEngine {
     //                          set: every moving entity's position/orientation/lanes + soft-shadow participation), so
     //                          the table is never re-hashed. Also covers the frame instance grid (a pure function of these transforms +
     //                          the program).
-    //   - m_screenSurfaces   : the screen-surface sampling table (a slab riding a dynamic rig re-poses here).
+    //   - m_screenSurfaceRegion : the screen-surface sampling table (a slab riding a dynamic rig re-poses here).
     //   - m_screenLightScratch : per-screen glow colors + the environment row (ambient/sun/slice) + the grid-overlay
     //                          rows + the engine-bench lever rows (soft-shadow/AO/shadow-distance/screen-lights) + the
     //                          shadow-proxy rows + the analytic-normal and shadow-cull toggles — every shading lever.

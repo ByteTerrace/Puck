@@ -4,8 +4,13 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    /// <summary>Gets the currently allocated program-word capacity, including any growth during live uploads.</summary>
-    public int ProgramWordCapacity => m_programWordCapacity;
+    /// <summary>Gets the program words the engine is provisioned for: the options' reserve, or the program region's
+    /// words once a program has grown it past that. The region itself holds the live program and grows by half again
+    /// when a larger one is uploaded.</summary>
+    public int ProgramWordCapacity => Math.Max(
+        val1: m_programWordCapacity,
+        val2: m_programWordReserve
+    );
     /// <summary>Gets the bytes allocated for the visibility records: one record of <see cref="VisibilityRecordByteLength"/>
     /// bytes for every pixel of the full extent in every viewport the engine reserves.</summary>
     public ulong VisibilityRecordBytes => FrameBufferBytes(
@@ -17,54 +22,50 @@ public sealed partial class SdfWorldEngine {
 
     private SdfFrameCapacity FrameCapacity => new(
         BrickPoolVoxels: m_brickPoolVoxelCapacity,
-        DynamicTransforms: m_dynamicTransformCapacity,
         Height: m_height,
         Instances: m_instanceCapacity,
         Viewports: m_viewportCapacity,
         Width: m_width
     );
 
-    /// <summary>Refuses, by name and before anything is allocated, an engine whose descriptor pool, beside the copy pool
-    /// its mesh region creates under the staged policy, the device's heaps cannot admit
-    /// (<see cref="IGpuBindings.CanAdmit"/>), so nothing grows. The constructor calls it first, with the
-    /// arguments it was given, so every creation site is admitted and one building through a pipeline source's
-    /// refusing build records the refusal like any other.</summary>
+    /// <summary>Refuses, by name and before anything is allocated, an engine whose descriptor pools
+    /// (<see cref="DescriptorPools"/>) the device's heaps cannot admit (<see cref="IGpuBindings.CanAdmit"/>), so nothing
+    /// grows. The constructor calls it first, with the arguments it was given, so every creation site is admitted and
+    /// one building through a pipeline source's refusing build records the refusal like any other.</summary>
     /// <param name="device">The device the engine would be created on.</param>
-    /// <param name="pipelines">The pipelines it would use; the brick upload pipeline's presence sizes the pool.</param>
     /// <param name="options">The options it would be created with.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">The device's heaps cannot admit the engine's pool; the message
+    /// <exception cref="InvalidOperationException">The device's heaps cannot admit the engine's pools; the message
     /// carries <see cref="GpuDescriptorHeapBudget.RefusalCode"/>.</exception>
-    public static void CheckAdmission(IGpuDeviceContext device, SdfWorldPipelines pipelines, SdfWorldEngineOptions options) {
+    public static void CheckAdmission(IGpuDeviceContext device, SdfWorldEngineOptions options) {
         ArgumentNullException.ThrowIfNull(argument: device);
-        ArgumentNullException.ThrowIfNull(argument: pipelines);
         ArgumentNullException.ThrowIfNull(argument: options);
-
-        var brickPool = (options.BrickPoolVoxelCapacity > 0);
 
         if (!device.Services.Bindings.CanAdmit(
             owner: "SDF world engine",
-            pools: [
-                DescriptorPoolSizes(
-                    brickPool: brickPool,
-                    brickUpload: (brickPool && (pipelines.OptionalPipeline(index: BrickUploadPipelineIndex) is not null))
-                ),
-                MeshRegionPoolSizes,
-            ],
+            pools: DescriptorPools(brickPool: (options.BrickPoolVoxelCapacity > 0)),
             refusal: out var refusal
         )) {
             throw new GpuDescriptorHeapRefusalException(message: refusal);
         }
     }
-    /// <summary>Returns the one descriptor pool an engine creates, the statement its construction creates the pool from
-    /// and a device's heap admits it by: one cull-args set (bound once to shared device-local buffers), then per frame
-    /// ring slot the beam, instance-cull, views and composite sets and one copy set per frame upload table, which
-    /// rebind that slot's buffers; with a brick pool, one bake set per brick slot and, when bricks upload, one per ring
-    /// slot. Array bindings count every element.</summary>
+    /// <summary>Returns every descriptor pool an engine may create, which a device's heap admits it by: its own
+    /// (<see cref="DescriptorPoolSizes"/>), then the copy pool each of its regions creates under the staged policy
+    /// (<see cref="GpuRegion.CopyPoolSizes"/>), whatever policy the device selects: the eight per-frame tables, the mesh
+    /// region, and with a brick pool the brick staging.</summary>
     /// <param name="brickPool">Whether the engine keeps a brick pool.</param>
-    /// <param name="brickUpload">Whether it uploads bricks, which needs a brick pool.</param>
+    /// <returns>The pools' sizes, the engine's own first.</returns>
+    public static GpuDescriptorPoolSizes[] DescriptorPools(bool brickPool) => [
+        DescriptorPoolSizes(brickPool: brickPool),
+        .. RegionPoolSizes(brickPool: brickPool),
+    ];
+    /// <summary>Returns the one descriptor pool an engine creates itself, the statement its construction creates the
+    /// pool from: one cull-args set (bound once to shared device-local buffers), then per frame ring slot the beam,
+    /// instance-cull, views and composite sets, which bind that slot's buffers; with a brick pool, one bake set per
+    /// brick slot. Array bindings count every element.</summary>
+    /// <param name="brickPool">Whether the engine keeps a brick pool.</param>
     /// <returns>The pool's sizes.</returns>
-    public static GpuDescriptorPoolSizes DescriptorPoolSizes(bool brickPool, bool brickUpload) {
+    public static GpuDescriptorPoolSizes DescriptorPoolSizes(bool brickPool) {
         var sets = new List<IReadOnlyList<GpuComputeBinding>> { PipelineLayouts.CullArgs };
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {
@@ -72,35 +73,24 @@ public sealed partial class SdfWorldEngine {
             sets.Add(item: PipelineLayouts.InstanceCull);
             sets.Add(item: PipelineLayouts.Views);
             sets.Add(item: PipelineLayouts.Composite);
-
-            for (var table = 0; (table < FrameUploadTableCount); table++) {
-                sets.Add(item: GpuRegion.CopyBindings);
-            }
         }
         if (brickPool) {
             for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {
                 sets.Add(item: PipelineLayouts.BrickBake);
-            }
-            if (brickUpload) {
-                for (var slot = 0; (slot < FrameRingSize); slot++) {
-                    sets.Add(item: PipelineLayouts.BrickBake);
-                }
             }
         }
 
         return GpuDescriptorPoolSizes.ForSets([.. sets]);
     }
     /// <summary>Returns the bytes the engine allocates for one of its device-local frame buffers at a capacity, the one
-    /// statement of each buffer's size that construction and program growth allocate by.</summary>
+    /// statement of each buffer's size that construction and program growth allocate by. The host-written tables are
+    /// regions, sized where the engine creates them.</summary>
     /// <param name="buffer">The buffer.</param>
     /// <param name="capacity">The capacities the buffer is sized for.</param>
     /// <returns>The buffer's size in bytes.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="buffer"/> is not a declared buffer.</exception>
     /// <exception cref="OverflowException">The size does not fit in 64 bits.</exception>
     public static ulong FrameBufferBytes(SdfFrameBuffer buffer, SdfFrameCapacity capacity) => buffer switch {
-        SdfFrameBuffer.Viewports => checked((((ulong)capacity.Viewports) * ViewportByteLength)),
-        SdfFrameBuffer.DynamicTransforms => checked((((ulong)capacity.DynamicTransforms) * DynamicTransformByteLength)),
-        SdfFrameBuffer.InstanceGrid => checked((((ulong)SdfInstanceGrid.WordCapacity(maxInstances: capacity.Instances)) * sizeof(uint))),
         SdfFrameBuffer.BrickPool => checked((((ulong)Math.Max(
             val1: 1,
             val2: capacity.BrickPoolVoxels
@@ -118,7 +108,9 @@ public sealed partial class SdfWorldEngine {
         ),
     };
 
-    // Called only by UploadProgram, with every frame-ring fence retired. No per-frame allocations.
+    // Called only by UploadProgram. Grows the program region, or the instance-grid region with the instance masks and
+    // tiles, after draining the frame ring; a new region starts owing every word, so the program write and grid stage
+    // that follow send it whole. No per-frame allocations.
     private void EnsureProgramCapacity(SdfProgram program) {
         if ((program.Words.Length <= m_programWordCapacity) && (program.Instances.Count <= m_instanceCapacity)) {
             return;
@@ -133,62 +125,40 @@ public sealed partial class SdfWorldEngine {
         var maskWords = SdfProgram.InstanceMaskWordCountFor(instanceCount: instances);
         var inputScratch = (growInstances ? new SdfInstanceGridInput[instances] : m_instanceGridInputScratch);
         var workspace = (growInstances ? new SdfInstanceGrid.Workspace(maxInstances: instances) : m_instanceGridWorkspace);
-        var replacements = new List<IGpuBuffer>(capacity: (FrameRingSize + 4));
+        var replacements = new List<IDisposable>(capacity: 4);
         var committed = false;
 
-        IGpuStorageBuffer HostBuffer(ulong bytes, in GpuObjectName name) {
-            var buffer = m_gpu.BufferFactory.CreateHostVisible(name: name, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
-
-            replacements.Add(item: buffer);
-            return buffer;
+        T Replacement<T>(T created) where T : IDisposable {
+            replacements.Add(item: created);
+            return created;
         }
-        IGpuBuffer DeviceBuffer(ulong bytes, in GpuObjectName name) {
-            var buffer = m_gpu.BufferFactory.CreateDeviceLocal(name: name, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+        IGpuBuffer DeviceBuffer(SdfFrameBuffer buffer, in GpuObjectName name) => Replacement(created: m_gpu.BufferFactory.CreateDeviceLocal(
+            name: name,
+            sizeBytes: FrameBufferBytes(buffer: buffer, capacity: grown),
+            usage: GpuBufferUsage.Storage
+        ));
 
-            replacements.Add(item: buffer);
-            return buffer;
-        }
-
-        if (growInstances) {
-            RequireOneCopyDispatch(
-                byteLength: checked((((ulong)gridWords) * sizeof(uint))),
-                table: "instance-grid"
-            );
-        }
+        WaitForFrameRing();
 
         try {
-            // Allocate the entire replacement before changing any binding or releasing an old buffer.
-            var programBuffer = (growProgram ? HostBuffer(bytes: checked((((ulong)words) * sizeof(uint))), name: NameOf(part: "program")) : m_programBuffer);
-            var grids = (growInstances ? new IGpuStorageBuffer[FrameRingSize] : m_instanceGridBuffers);
+            // Create the entire replacement before changing any binding or releasing an old region or buffer.
+            var programRegion = (growProgram ? Replacement(created: CreateRegion(byteCount: checked((words * sizeof(uint))), name: NameOf(part: "program"))) : m_programRegion);
+            var gridRegion = (growInstances ? Replacement(created: CreateRegion(byteCount: checked((gridWords * sizeof(uint))), name: NameOf(part: "instance-grid"))) : m_instanceGridRegion);
+            var masks = (growInstances ? DeviceBuffer(buffer: SdfFrameBuffer.InstanceMasks, name: NameOf(part: "instance-masks")) : m_instanceMaskBuffer);
+            var tiles = (growInstances ? DeviceBuffer(buffer: SdfFrameBuffer.Tiles, name: NameOf(part: "tiles")) : m_tileBuffer);
 
-            if (growInstances) {
-                for (var slot = 0; (slot < FrameRingSize); slot++) {
-                    grids[slot] = HostBuffer(bytes: FrameUploadStagingBytes(tableBytes: checked((gridWords * sizeof(uint)))), name: NameOf(detail: "host", index: slot, part: "instance-grid"));
-                }
-            }
-            var gridDevice = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.InstanceGrid, capacity: grown), name: NameOf(part: "instance-grid")) : m_instanceGridDeviceBuffer);
-            var masks = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.InstanceMasks, capacity: grown), name: NameOf(part: "instance-masks")) : m_instanceMaskBuffer);
-            var tiles = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.Tiles, capacity: grown), name: NameOf(part: "tiles")) : m_tileBuffer);
+            var (oldProgram, oldGrid, oldMasks, oldTiles) = (m_programRegion, m_instanceGridRegion, m_instanceMaskBuffer, m_tileBuffer);
 
-            var oldGrids = ((IGpuStorageBuffer[])m_instanceGridBuffers.Clone());
+            (m_programRegion, m_instanceGridRegion, m_instanceMaskBuffer, m_tileBuffer) = (programRegion, gridRegion, masks, tiles);
 
             try {
-                BindProgramCapacity(gridDevice: gridDevice, grids: grids, masks: masks, program: programBuffer, tiles: tiles);
+                BindProgramCapacity();
             } catch {
-                BindProgramCapacity(gridDevice: m_instanceGridDeviceBuffer, grids: m_instanceGridBuffers, masks: m_instanceMaskBuffer, program: m_programBuffer, tiles: m_tileBuffer);
+                (m_programRegion, m_instanceGridRegion, m_instanceMaskBuffer, m_tileBuffer) = (oldProgram, oldGrid, oldMasks, oldTiles);
+                BindProgramCapacity();
                 throw;
             }
 
-            var oldProgram = m_programBuffer;
-            var oldGridDevice = m_instanceGridDeviceBuffer;
-            var oldMasks = m_instanceMaskBuffer;
-            var oldTiles = m_tileBuffer;
-
-            m_programBuffer = programBuffer;
-            m_instanceGridDeviceBuffer = gridDevice;
-            m_instanceMaskBuffer = masks;
-            m_tileBuffer = tiles;
-            grids.CopyTo(array: m_instanceGridBuffers, index: 0);
             m_instanceGridInputScratch = inputScratch;
             m_instanceGridWorkspace = workspace;
             m_programWordCapacity = words;
@@ -197,21 +167,17 @@ public sealed partial class SdfWorldEngine {
             m_instanceMaskWordCount = maskWords;
             committed = true;
 
-            // A replaced buffer's contents are undefined: the next program write and grid stage start from nothing.
             if (growProgram) {
-                m_programBufferCurrent = false;
                 oldProgram.Dispose();
             }
             if (growInstances) {
-                ForgetInstanceGridResidency(wordCapacity: gridWords);
-                oldGridDevice.Dispose();
+                oldGrid.Dispose();
                 oldMasks.Dispose();
                 oldTiles.Dispose();
-                foreach (var buffer in oldGrids) { buffer.Dispose(); }
             }
         } finally {
             if (!committed) {
-                foreach (var buffer in replacements) { buffer.Dispose(); }
+                foreach (var replacement in replacements) { replacement.Dispose(); }
             }
         }
     }
@@ -220,27 +186,19 @@ public sealed partial class SdfWorldEngine {
         return ((required <= current) ? current : (int)Math.Max(val1: required, val2: Math.Min(val1: ceiling, val2: (((long)current) + Math.Max(val1: 1, val2: (current / 2))))));
     }
     // The same descriptor contracts as construction: views/primary/surface/ambient share viewsSets.
-    private void BindProgramCapacity(IGpuStorageBuffer program, IGpuStorageBuffer[] grids, IGpuBuffer gridDevice, IGpuBuffer masks, IGpuBuffer tiles) {
-        WriteStorageBufferReadOnly(binding: TileBindingIndex, buffer: tiles, set: m_cullArgsSet);
+    private void BindProgramCapacity() {
+        WriteStorageBufferReadOnly(binding: TileBindingIndex, buffer: m_tileBuffer, set: m_cullArgsSet);
         for (var slot = 0; (slot < FrameRingSize); slot++) {
             var beam = m_beamSets[slot];
             var cull = m_instanceCullSets[slot];
             var views = m_viewsSets[slot];
 
-            WriteStorageBuffer(binding: ProgramBindingIndex, buffer: program, set: beam);
-            WriteStorageBuffer(binding: ProgramBindingIndex, buffer: program, set: cull);
-            WriteStorageBuffer(binding: ProgramBindingIndex, buffer: program, set: views);
-            WriteStorageBufferReadWrite(binding: TileBindingIndex, buffer: tiles, set: beam);
-            WriteStorageBufferReadOnly(binding: TileBindingIndex, buffer: tiles, set: views);
-            WriteStorageBufferReadOnly(binding: InstanceMaskBindingIndex, buffer: masks, set: beam);
-            WriteStorageBufferReadWrite(binding: InstanceMaskBindingIndex, buffer: masks, set: cull);
-            WriteStorageBufferReadOnly(binding: InstanceMaskBindingIndex, buffer: masks, set: views);
-            WriteStorageBufferReadOnly(binding: FrameInstanceGridBindingIndex, buffer: gridDevice, set: cull);
-            WriteStorageBufferReadOnly(binding: FrameInstanceGridBindingIndex, buffer: gridDevice, set: views);
-            var upload = m_frameUploadSets[((slot * FrameUploadTableCount) + 2)];
-
-            WriteStorageBufferReadOnly(binding: GpuRegion.CopySourceBinding, buffer: grids[slot], set: upload);
-            WriteStorageBufferReadWrite(binding: GpuRegion.CopyDestinationBinding, buffer: gridDevice, set: upload);
+            BindRegions(slot: slot);
+            WriteStorageBufferReadWrite(binding: TileBindingIndex, buffer: m_tileBuffer, set: beam);
+            WriteStorageBufferReadOnly(binding: TileBindingIndex, buffer: m_tileBuffer, set: views);
+            WriteStorageBufferReadOnly(binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer, set: beam);
+            WriteStorageBufferReadWrite(binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer, set: cull);
+            WriteStorageBufferReadOnly(binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer, set: views);
         }
     }
 }
