@@ -1,0 +1,10 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 45
+# The pane's one-pass graph compiled and installed, and a few of its frames submitted.
+pipeline.wait pane compiled 40
+pipeline.wait pane installed 10
+pipeline.wait pane submitted 3 10
+# The composed display, captured at the render graph's root once the pane has frames to show.
+world.wait 10
+world.screenshot {run}/frame.png
+world.wait 10
