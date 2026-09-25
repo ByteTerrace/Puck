@@ -101,7 +101,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] P1a durable functional fixtures (four slices landed; the memory budget is in).
 - [x] P2 per-pass work counters and the collector.
 - [ ] P1b foundation qualification against the candidate that ships the forcing world (`puck qualify` and the release profile are in; the first runs on the reference GPUs are not).
-- [ ] P3 attachments and indexed geometry (P3-1 landed on the CPU side).
+- [x] P3 attachments and indexed geometry.
 - [ ] P4 shared opaque visibility.
 - [x] P5 reproducible authoring and packaged dependencies.
 - [ ] P6 representation experiments.

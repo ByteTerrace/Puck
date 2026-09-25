@@ -439,8 +439,8 @@ frame ring does not. The one state-shaped path that reaches the GPU is the
 physics field lattice, mirrored on the client by `WorldClientFieldLattice` and
 uploaded by `WorldFieldEmitter` one field per produced frame.
 
-P11's CPU half has landed; its second half, P11b, waits on P3-2 and P7's
-binding groups. The frame graph is a document, `puck.render.graph.v1`
+P11's CPU half has landed; its second half, P11b, waits on P7's binding
+groups. The frame graph is a document, `puck.render.graph.v1`
 (`RenderGraphDefinition` in `src/Puck.Shaders/Graph`). Its members are the
 pipeline document's, plus `packages`: engine work named by package id from
 `RenderGraphPackageCatalog`, which offers `sdf.world`, `overlay` and one
@@ -611,9 +611,8 @@ against exact thresholds.
 
 P17 still owes:
 
-- drawing a bake, which needs P3-2's indexed geometry and P4's shared
-  visibility, and choosing per placement between a bake and the field by P6's
-  measured cost;
+- drawing a bake, which needs P4's shared visibility, and choosing per
+  placement between a bake and the field by P6's measured cost;
 - the device half of the bake sampling check: uploading the BC7, BC5 and BC6H
   textures of `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json` with
   every level and sampling each probe texel on both backends, which needs a GPU
