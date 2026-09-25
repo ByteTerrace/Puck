@@ -103,13 +103,6 @@ rendered image beyond `puck parity`, so a kernel change is judged by running
 | `Sdf/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | Overworld overlay, the Vulkan surface compositor, and `sdf-film-grain` |
 | `Sdf/sdf-film-grain.frag.hlsl` | Fullscreen integer-hashed film grain over the inner render node's output, declared by `sdf-film-grain.puck.shader.json`. | The `sdf-film-grain` `render.extensions` entry |
 
-## Neutral image kernel
-
-This compiles, but no code loads it.
-
-| Shader | Role |
-|---|---|
-
 ## Validation rule
 
 A generated `.spv` or `.dxil` file without a matching `.hlsl` source is stale by

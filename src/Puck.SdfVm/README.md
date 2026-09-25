@@ -80,7 +80,8 @@ kernel ships in three compiled variants
 CoreOps also strips the remaining exotic cases. The program selects the smallest
 variant that supports its operations, reducing shader size and register pressure.
 
-The hit buffer reserves an 80-byte record per active pixel. Primary traversal preserves
+The hit buffer reserves one record per active pixel, `SdfVisibilityWords` words
+(`sdf-visibility.hlsli`, 60 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
 data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
