@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
@@ -142,9 +143,11 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         m_deferredCommandList = commandList;
         m_pendingFenceValue = ++m_fenceValue;
 
-        queue->Signal(
-            Value: m_pendingFenceValue,
-            pFence: ((ID3D12Fence*)m_fence)
+        DirectXCommandCalls.Signal(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
+            fence: ((ID3D12Fence*)m_fence),
+            queue: queue,
+            value: m_pendingFenceValue
         );
 
         m_readInFlight = true;
@@ -327,7 +330,10 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             NumBarriers: 1,
             pBarriers: &toShaderResource
         );
-        cmdList->Close();
+        DirectXCommandCalls.Close(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
+            commandList: cmdList
+        );
     }
     // Maps the readback buffer, un-pads each row into the tightly packed output buffer, and unmaps. Shared by the
     // blocking Read (immediately after the wait) and the pipelined MapPixels (after the fence poll reports complete).
@@ -335,12 +341,9 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         var height = m_currentHeight;
         var packedRowBytes = (m_currentWidth * m_currentBytesPerPixel);
 
-        void* mapped;
-
-        ((ID3D12Resource*)m_readbackBuffer)->Map(
-            Subresource: 0,
-            pReadRange: ((D3D12_RANGE*)null),
-            ppData: &mapped
+        var mapped = DirectXCommandCalls.Map(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
+            resource: ((ID3D12Resource*)m_readbackBuffer)
         );
 
         try {

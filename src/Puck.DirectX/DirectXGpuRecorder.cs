@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
@@ -32,15 +33,18 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
 
         state.ReleaseRetainedResources();
         state.BufferStates.Reset();
-        allocator->Reset();
-        commandList->Reset(
-            pAllocator: allocator,
-            pInitialState: null
+        DirectXCommandCalls.Reset(
+            allocator: allocator,
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
+            commandList: commandList
         );
     }
     /// <inheritdoc/>
     public void EndCommandBuffer(nint commandBufferHandle) =>
-        ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList)->Close();
+        DirectXCommandCalls.Close(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
+            commandList: ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList)
+        );
     /// <inheritdoc/>
     public void BeginDebugGroup(nint commandBufferHandle, string label) =>
         DirectXDebugLabel.Begin(

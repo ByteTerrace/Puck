@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -336,10 +337,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         var allocator = ((ID3D12CommandAllocator*)m_commandAllocators[frameIndex]);
         var commandList = ((ID3D12GraphicsCommandList*)commandListHandle);
 
-        allocator->Reset();
-        commandList->Reset(
-            pAllocator: allocator,
-            pInitialState: null
+        var calls = DirectXDeviceCommandCalls.Of(deviceContext: deviceContext);
+
+        DirectXCommandCalls.Reset(
+            allocator: allocator,
+            calls: calls,
+            commandList: commandList
         );
 
         // The present-path fullscreen blit as a GPU-capture debug group (PIX event) — the Direct3D 12 peer of the
@@ -358,7 +361,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         );
         DirectXDebugLabel.End(commandList: commandList);
 
-        commandList->Close();
+        DirectXCommandCalls.Close(
+            calls: calls,
+            commandList: commandList
+        );
 
         var executable = ((ID3D12CommandList*)commandListHandle);
         var commandQueue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
@@ -377,9 +383,11 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         // slot (FrameCount presents from now) proves the GPU is done with the allocator/list just submitted above.
         var fenceValue = m_nextFrameFenceValue;
 
-        commandQueue->Signal(
-            Value: fenceValue,
-            pFence: ((ID3D12Fence*)m_frameFence)
+        DirectXCommandCalls.Signal(
+            calls: calls,
+            fence: ((ID3D12Fence*)m_frameFence),
+            queue: commandQueue,
+            value: fenceValue
         );
         m_frameFenceValues[frameIndex] = fenceValue;
         m_nextFrameFenceValue = (fenceValue + 1);
@@ -924,7 +932,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
             );
             m_commandLists[i] = ((nint)commandList);
-            ((ID3D12GraphicsCommandList*)commandList)->Close();
+            DirectXCommandCalls.Close(
+                calls: new DirectXDeviceCommandCalls(device: device),
+                commandList: ((ID3D12GraphicsCommandList*)commandList)
+            );
 
             // A fresh allocator has nothing recorded against it yet, so its slot needs no wait before first use.
             m_frameFenceValues[i] = 0;

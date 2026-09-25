@@ -430,26 +430,13 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return;
         }
 
-        var fence = ((ID3D12Fence*)m_idleFence);
-        var value = m_idleFenceValue;
-
-        ((ID3D12CommandQueue*)m_commandQueue)->Signal(
-            Value: value,
-            pFence: fence
+        DirectXCommandCalls.SignalAndWait(
+            calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device.Handle)),
+            fence: ((ID3D12Fence*)m_idleFence),
+            fenceEvent: m_idleFenceEvent,
+            fenceValue: ref m_idleFenceValue,
+            queue: ((ID3D12CommandQueue*)m_commandQueue)
         );
-        m_idleFenceValue++;
-
-        if (fence->GetCompletedValue() < value) {
-            fence->SetEventOnCompletion(
-                Value: value,
-                hEvent: m_idleFenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                dwMilliseconds: uint.MaxValue,
-                hHandle: m_idleFenceEvent
-            );
-        }
-
         DrainDebugMessages();
     }
     /// <inheritdoc/>
@@ -587,7 +574,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         // m_device is now null, so this rebuilds a fresh device + queue + fence + event.
         EnsureCreated();
     }
-    /// <summary>Releases the command queue and the owned device. With the debug layer on, every object the device still
+    /// <summary>Drains the queue, a removed device counting as drained (<see cref="DirectXCommandCalls.Drain"/>), then
+    /// releases the command queue and the owned device. With the debug layer on, every object the device still
     /// holds once the context has released its own is written as a <c>[d3d12-debug] live</c> line before the device is
     /// released. Safe to call more than once.</summary>
     /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
@@ -601,7 +589,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             (0 != m_commandQueue) &&
             (0 != m_idleFence)
         ) {
-            WaitIdle();
+            _ = DirectXCommandCalls.Drain(
+                calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device!.Handle)),
+                fence: ((ID3D12Fence*)m_idleFence),
+                fenceEvent: m_idleFenceEvent,
+                fenceValue: ref m_idleFenceValue,
+                queue: ((ID3D12CommandQueue*)m_commandQueue)
+            );
+            DrainDebugMessages();
         }
 
         m_disposed = true;
