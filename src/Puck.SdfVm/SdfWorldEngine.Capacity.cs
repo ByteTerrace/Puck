@@ -25,8 +25,9 @@ public sealed partial class SdfWorldEngine {
     );
 
     /// <summary>Refuses, by name and before anything is allocated, an engine whose descriptor pool the device's heaps
-    /// cannot admit (<see cref="IGpuBindings.CanAdmit"/>), so nothing grows. Every creation site calls it with the
-    /// arguments it constructs the engine from.</summary>
+    /// cannot admit (<see cref="IGpuBindings.CanAdmit"/>), so nothing grows. The constructor calls it first, with the
+    /// arguments it was given, so every creation site is admitted and one building through a pipeline source's
+    /// refusing build records the refusal like any other.</summary>
     /// <param name="device">The device the engine would be created on.</param>
     /// <param name="pipelines">The pipelines it would use; the brick upload pipeline's presence sizes the pool.</param>
     /// <param name="options">The options it would be created with.</param>

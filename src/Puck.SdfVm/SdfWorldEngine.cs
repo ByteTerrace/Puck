@@ -406,8 +406,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <exception cref="ArgumentException">A dimension is zero, the viewport capacity is 0 or above
     /// <see cref="MaxViewports"/>, or the options enable a brick pool the pipelines were built without.</exception>
     /// <exception cref="ObjectDisposedException"><paramref name="pipelines"/> has been disposed.</exception>
-    /// <exception cref="InvalidOperationException">The loaded shader bytecode does not report the host's
-    /// <see cref="Puck.SignedDistance.SdfIsa.Version"/>.</exception>
+    /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the engine's pool
+    /// (<see cref="CheckAdmission"/>, checked before anything is allocated), or the loaded shader bytecode does not report
+    /// the host's <see cref="Puck.SignedDistance.SdfIsa.Version"/>.</exception>
     public SdfWorldEngine(IGpuDeviceContext device, SdfWorldPipelines pipelines, uint width, uint height, SdfWorldEngineOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pipelines);
@@ -435,6 +436,14 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         if ((options.BrickPoolVoxelCapacity > 0) && !pipelines.IncludesBrickPipelines) {
             throw new ArgumentException(message: "The options enable a brick pool, but the pipelines were built without the brick bake and upload pipelines.");
         }
+
+        // Before anything is allocated, so an engine the device's descriptor heap cannot hold is refused with nothing
+        // to release, and a holder building through SdfWorldPipelineSource.TryBuild records it as a named refusal.
+        CheckAdmission(
+            device: device,
+            options: options,
+            pipelines: pipelines
+        );
 
         m_work = (options.WorkLedger ?? new GpuWorkLedger(
             framesInFlight: FrameRingSize,

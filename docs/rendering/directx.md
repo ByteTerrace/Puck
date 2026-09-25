@@ -205,8 +205,10 @@ device up and releases them when the context releases it, on `Recreate` and
 - **Owners are admitted before they allocate.** `IGpuBindings.CanAdmit` checks
   a candidate's whole statement of pools and allocates nothing. The pipeline
   node checks a candidate at install and a float preview when it is selected;
-  each SDF engine creation site checks through `SdfWorldEngine.CheckAdmission`.
-  A candidate that does not fit is refused by name, and whatever is installed
+  an SDF engine's construction checks through `SdfWorldEngine.CheckAdmission`
+  before it allocates, so its holder records the refusal like any other failed
+  engine build and tries again only when the build's inputs change. A
+  candidate that does not fit is refused by name, and whatever is installed
   keeps presenting.
 - **Every command list binds the pair once.** `DirectXGpuRecorder.BeginCommandBuffer`
   binds both heaps after the reset, so `BindDescriptorSet` sets only the

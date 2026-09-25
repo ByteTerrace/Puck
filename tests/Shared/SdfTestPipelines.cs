@@ -53,7 +53,7 @@ internal static class SdfTestPipelines {
                 return node.IsReady;
             },
             timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+        ), userMessage: node.NotReadyReason);
 
         return surface;
     }

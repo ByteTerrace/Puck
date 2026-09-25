@@ -45,6 +45,8 @@ internal sealed class FakeGpuDevice :
 
     private readonly bool m_trackObjects;
 
+    private int m_admissions;
+
     /// <summary>Initializes a new instance of the <see cref="FakeGpuDevice"/> class.</summary>
     /// <param name="reportVersion">The ISA version a 1×1 readback reports.</param>
     /// <param name="countCalls">Whether each wrapped member counts its calls into <see cref="Calls"/>.</param>
@@ -105,6 +107,9 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets every descriptor pool created, in creation order, as its creation sized it.</summary>
     public List<GpuDescriptorPoolSizes> PoolsCreated { get; } = [];
 
+    /// <summary>Gets the number of <see cref="IGpuBindings.CanAdmit"/> calls, admitted or refused. Counted whether or not
+    /// the device counts calls, and synchronized, so a harness whose pipelines build on the thread pool can read it.</summary>
+    public int Admissions => Volatile.Read(location: ref m_admissions);
     /// <summary>Gets or sets the descriptor heap <see cref="IGpuBindings.CanAdmit"/> checks a candidate against, or
     /// <see langword="null"/> to admit every candidate, as a Vulkan device does.</summary>
     public GpuDescriptorHeapBudget? DescriptorHeap { get; set; }
@@ -225,6 +230,7 @@ internal sealed class FakeGpuDevice :
     }
     bool IGpuBindings.CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) {
         Hit(key: "IGpuBindings.CanAdmit");
+        _ = Interlocked.Increment(location: ref m_admissions);
 
         if (DescriptorHeap is { } heap) {
             return heap.CanAdmit(

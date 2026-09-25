@@ -15,9 +15,10 @@ namespace Puck.SdfVm.Tests;
 /// first frame, and the rebuild after a device loss disposed the previous one), so a failed build has no previous engine
 /// to present: the produced frame returns nothing new rather than throwing, <see cref="SdfEngineNode.NotReadyReason"/>
 /// names the refusal, and everything the failed construction created is released while the pipeline set's lease is
-/// kept. A refused build is tried again only when one of its inputs changes (the program, a kernel reload request, the
-/// device); frames that change none of them attempt nothing. Each engine attempt creates exactly one descriptor pool,
-/// which is how the laws count attempts.
+/// kept. A refused build is tried again only when one of its inputs changes (the program, the extent, a kernel reload
+/// request, the device); frames that change none of them attempt nothing. Each engine attempt that passes admission
+/// creates exactly one descriptor pool, which is how the laws count attempts; an attempt the device's descriptor heap
+/// refuses creates nothing, and the fake counts its admissions instead.
 /// </summary>
 public sealed class SdfEngineNodeBuildRefusalLawTests {
     private const uint Extent = 32;
@@ -93,6 +94,68 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         );
     }
     [Fact]
+    public void AnEngineTheHeapCannotAdmitIsRefusedByNameAllocatesNothingAndRetriesOnlyOnAChangedInput() {
+        using var rig = new Rig(reportVersion: SdfIsa.Version);
+        var demand = SdfWorldEngine.DescriptorPoolSizes(
+            brickPool: false,
+            brickUpload: false
+        ).HeapDescriptors;
+        var heap = Heap(views: (demand - 1U));
+
+        rig.Gpu.DescriptorHeap = heap;
+
+        var refusal = rig.ProduceUntilRefused();
+
+        // The refusal is a named build refusal, never a throw out of the frame, and the construction was refused before
+        // it allocated: nothing but the pipeline set exists, no pool was created and the heap lent nothing.
+        Assert.True(condition: refusal.IsEmpty);
+        Assert.Contains(
+            expectedSubstring: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view descriptors",
+            actualString: rig.Node.NotReadyReason
+        );
+        rig.AssertNothingButThePipelineSetWasCreated();
+        Assert.Empty(collection: rig.Gpu.PoolsCreated);
+        Assert.Equal(
+            actual: (heap.FreeViewDescriptors, heap.LivePools),
+            expected: ((demand - 1U), 0)
+        );
+        Assert.Equal(
+            actual: rig.Gpu.Admissions,
+            expected: 1
+        );
+
+        // Frames that change no input ask the heap nothing again.
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.Equal(
+            actual: rig.Gpu.Admissions,
+            expected: 1
+        );
+
+        // A new extent is a changed input: one attempt, refused the same way, and then none again.
+        Assert.False(condition: rig.Node.Produce(
+            context: in rig.Context,
+            height: (Extent * 2U),
+            width: (Extent * 2U)
+        ));
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.Equal(
+            actual: rig.Gpu.Admissions,
+            expected: 2
+        );
+        Assert.Empty(collection: rig.Gpu.PoolsCreated);
+
+        // A heap that holds the pool admits the next changed build, which creates the engine and its one pool.
+        rig.Gpu.DescriptorHeap = Heap(views: demand);
+        rig.ChangeProgram();
+        _ = rig.Node.ProduceFrame(context: in rig.Context);
+        Assert.True(condition: rig.Node.IsReady);
+        Assert.Null(@object: rig.Node.NotReadyReason);
+        Assert.Equal(
+            actual: (rig.Gpu.Admissions, rig.EngineAttempts),
+            expected: (3, 1)
+        );
+    }
+    [Fact]
     public void APersistentRefusalBuildsOnceAndEachChangedInputRetriesOnce() {
         using var rig = new Rig(reportVersion: unchecked((byte)(SdfIsa.Version + 1)));
 
@@ -125,6 +188,17 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         Assert.False(condition: rig.Node.IsReady);
         rig.AssertOnlyThePipelineSetIsHeld();
     }
+
+    // A Direct3D 12 heap of the given view descriptors, the only kind an engine's pool takes.
+    private static GpuDescriptorHeapBudget Heap(uint views) => new(capabilities: (GpuDeviceCapabilities.FromDirectX(
+        resourceBindingTier: 3,
+        rootSignatureVersion: "1.1",
+        samplerHeapSize: 0,
+        shaderModel: "6.6",
+        viewHeapSize: 0
+    ) with {
+        ViewHeapSize = views,
+    }));
 
     // The fake as a device context whose services pass through creation faults, as a backend's do.
     private sealed class FaultingDevice(FakeGpuDevice gpu, GpuCreationFaults faults) : IGpuDeviceContext {
@@ -238,6 +312,17 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
             Assert.Contains(
                 collection: Gpu.Created,
                 filter: static created => (IsPipelineSetObject(created: created) && (created.DisposeCount == 0))
+            );
+            Assert.Equal(
+                actual: Gpu.Memory.Held,
+                expected: 0L
+            );
+        }
+        // Nothing but the pipeline set's pipelines and shader modules was ever created, and no device-local memory is held.
+        public void AssertNothingButThePipelineSetWasCreated() {
+            Assert.All(
+                action: static created => Assert.True(condition: IsPipelineSetObject(created: created)),
+                collection: Gpu.Created
             );
             Assert.Equal(
                 actual: Gpu.Memory.Held,

@@ -1750,8 +1750,9 @@ Phase 3, the groups, follows phase 2:
       their release ends those entries before the device's teardown. An
       owner is admitted before it allocates through `IGpuBindings.CanAdmit`,
       which a Vulkan device always grants: the pipeline node checks a
-      candidate at install and a float preview when it is selected, and every
-      SDF engine creation site checks through `SdfWorldEngine.CheckAdmission`.
+      candidate at install and a float preview when it is selected, and an
+      SDF engine's construction checks through `SdfWorldEngine.CheckAdmission`
+      before it allocates, which its holder's build refuses by name.
       A refusal carries `GPU_DESCRIPTOR_HEAP` and names the owner, and the
       installed graph keeps presenting. `UnifiedOverlayNode` and `GpuRegion`
       are not admitted beforehand: the overlay creates one pool with the node,

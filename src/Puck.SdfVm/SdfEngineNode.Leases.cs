@@ -12,8 +12,8 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
     // Replaced engines whose output a consumer still holds, each disposed when its last acquisition is released.
     private readonly List<RetiringEngine> m_retiringEngines = [];
 
-    // The token of the current engine's acquisitions: raised for every engine the node builds, so an acquisition of an
-    // engine a device loss released never matches a later one.
+    // The token of the current engine's acquisitions: raised for every engine the node creates (never for a refused
+    // build), so an acquisition of an engine a device loss released never matches a later one.
     private int m_engineToken;
     // The current engine's acquisitions not yet released.
     private int m_outputAcquisitions;
