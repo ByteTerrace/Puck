@@ -1989,34 +1989,46 @@ packaging, and compiled worlds in the runtime and delivery programme.
 
 ## Sequencing
 
-**Foundation.** P1a, then P2, then P1b and P3 in parallel, then P4, then P5,
-then P6. P1a and P5's design can proceed independently. P1b does not block P3
-or P4, and neither blocks releasing the foundation. Image-only packaging stays
+**Foundation.** P2, P3 and P5 are complete. P1a and P1b stay open beside the
+rest: neither blocks P4 or releasing the foundation. P4's GPU-free commits
+(P4-0, P4-1a and P4-2a) have landed. P4-1b and P4-1c need nothing else, and
+its remaining commits follow P7b's device-bound services, its one recorder and
+the SDF engine's groups, as P4's build sequence orders them. P6 follows P4. Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
-owner at a time. P1a is under way.
+owner at a time.
 
-**Contracts.** P7 lands beside P3, because P3's planner reads the interface P7
-declares, and P7's spike gates P8. P8 lands beside P5-2 or after it, because a
-package's manifest and interface hash extend P5's source closure. P7 and P8 do
-not read simulation state, so they do not wait on the state rebuild.
+**Contracts.** P7's memory profile and residency selector have landed, and P7b
+is under way: steps 5, 7, 8, 9 and 12 have landed. Step 6 needs nothing else;
+steps 10 and 11 follow step 9. The groups run in order from step 13, the
+GPU-free group contract, which the rest of phase 3 builds on; step 20, the SDF
+engine's groups, also follows P4-1. P8 has landed pending its GPU canaries, and
+its frame group moves from push constants to a descriptor set when step 15
+puts pipelines on groups. P7 and P8 do not read simulation state, so they do
+not wait on the state rebuild.
 
-**The frame graph and nesting.** P11 follows P3 and P7. P12 follows P11, and
-P13 follows P12. P14 follows P4, P7b, P8, P11, and P12, because the engine's
-composition and screens need somewhere to go before it moves. P7b's services
-and P4-1 run beside each other; P7b's SDF groups follow P4-1, and P4-2's mesh
-work follows both. P15 and P16 both
-follow P14: P15 also needs P4, and P16, the smallest package in this group,
-needs P14's float working targets. P17 follows P3, P4, P5, and compiled worlds.
+**The frame graph and nesting.** P11's CPU half has landed, and so have two of
+P11b's items: the first-class package pass kind and a steady-state schedule
+that allocates nothing. The rest of P11b waits on P7b's binding groups. P12's
+source contract, producers and conversion passes have landed; P12b, the graph
+wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
+P11b and P12b, because the engine's composition and screens need somewhere to
+go before it moves; its generated instruction-set declarations (P14-3) and the
+planner's vocabulary (P14-4) needed none of them and have landed. P4-2's mesh
+work follows P4-1 and P7b's services. P15 and P16 both follow P14: P15 also needs P4, and P16, the smallest package
+in this group, needs P14's float working targets. P17's CPU half, the bakes and
+their texture codecs, has landed; drawing a bake follows P4 and choosing
+between a bake and the field follows P6.
 
-**Bound state.** P9 follows P8 for the frame group it fills. It is written
-against the state interface of
+**Bound state.** P9's CPU half has landed; its frame-group half fills the
+frame group P8 declares. It is written against the state interface of
 [the presentation view](runtime-and-delivery.md#the-presentation-view), which
 the runtime and delivery programme owns. P10 is last in this group: a bound
 member and an overridden member have to compose by a stated rule, so it needs
-P5-1 as well as P7's residency policies, P8's interface, and P9's mirror.
+P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
+which have landed.
 
-The longest dependency chain runs from P1a and P2 through P3 and P7 to P11
-and P12, joins P8 (which also waits on P5-2), and ends with P14 and then P15.
+The longest remaining chain runs through P7b's groups to P11b and P12b, then
+P14, and ends with P15.
 
 ## Verification summary
 
