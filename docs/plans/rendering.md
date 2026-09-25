@@ -1858,16 +1858,22 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 4. Landed, the planner's vocabulary: a pass's `dispatch` (`Extent`, `Groups`,
    or `Indirect` from a buffer version and offset, which the pass reaches in the
    indirect-argument state), a buffer's `strideBytes`, and a buffer's `count`
-   by `Extent`, `Instances` or `ProgramWords` in place of `sizeBytes`. A read
-   of another kind than the prior reads records a barrier. The pipeline node
-   records none of it, so the planner refuses it on a shader pass.
-   `SdfPassPlanLawTests` builds the SDF passes as package passes from
-   `SdfFrameBufferPlan.Uses` and plans them in `PassLabels`' order less the
-   composite, with exactly `SdfFrameBufferPlan`'s edges between passes. The
-   engine records no graphics pass, so a package pass stays compute-shaped. A
-   single count basis cannot state the mask, tile and hit-record capacities,
-   which also scale with viewports and tiles; the cutover needs that before
-   the planner sizes them.
+   in place of `sizeBytes`. A count is a sum of terms, each `elements` per unit
+   of a product of bases: `Extent`, `Instances`, `ProgramWords`, `Viewports`,
+   `Tiles`, `DynamicTransforms`, `InstanceMaskWords` and `InstanceGridWords`.
+   A term names each basis once, no two terms name the same bases, and a
+   buffer scaling with a basis the host resolves to zero units is refused by
+   the basis's name. A read of another kind than the prior reads records a
+   barrier. The pipeline node records none of it, so the planner refuses it on
+   a shader pass. `SdfPassPlanLawTests` builds the SDF passes as package
+   passes from `SdfFrameBufferPlan.Uses` and plans them in `PassLabels`' order
+   less the composite, with exactly `SdfFrameBufferPlan`'s edges between
+   passes, and at several viewport, tile and instance capacities sizes every
+   SDF buffer exactly as `SdfWorldEngine.FrameBufferBytes`, the one statement
+   of the engine's allocations. The engine records no graphics pass, so a
+   package pass stays compute-shaped. The zero-unit refusal means the cutover
+   must resolve at least one instance for a program with none, since the cull
+   buffer's part-bound term scales with instances.
 5. The SDF pass interfaces over the four groups, with generated declarations;
    parity reads identically.
 6. The cutover, the riskiest commit: the package records into the graph's

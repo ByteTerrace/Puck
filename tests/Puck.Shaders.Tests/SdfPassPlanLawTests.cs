@@ -1,5 +1,6 @@
 using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
+using Puck.SignedDistance;
 
 namespace Puck.Shaders.Tests;
 
@@ -11,6 +12,8 @@ namespace Puck.Shaders.Tests;
 /// external. The planner must order the passes as <see cref="SdfWorldEngine.PassLabels"/> less the composite, and plan,
 /// between passes of the frame, exactly the buffer transitions <see cref="SdfFrameBufferPlan.Edges"/> derives. The one
 /// image chain (sky, then views shading over it) is the passes' published output and is not part of the buffer plan.
+/// Every buffer is counted over the capacities it grows with, and at every capacity the planner's size is the engine's
+/// allocation, <see cref="SdfWorldEngine.FrameBufferBytes"/>.
 /// </summary>
 public sealed class SdfPassPlanLawTests {
     private const string Composite = "composite";
@@ -32,26 +35,53 @@ public sealed class SdfPassPlanLawTests {
         SdfFramePass.Composite => Composite,
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(pass)),
     };
-    // Each buffer's element stride and size: fixed where the engine allocates a fixed table, counted by the basis its
-    // capacity grows with otherwise. The masks, tile planes and hit records also scale with the viewport and tile counts,
-    // which no count basis carries; the edges this law checks do not depend on any capacity.
-    private static (uint Stride, ulong? SizeBytes, ShaderPipelineBufferCount? Count) StorageOf(SdfFrameBuffer buffer) => buffer switch {
-        SdfFrameBuffer.Viewports => (96, ((ulong)(SdfWorldEngine.MaxViewports * 96)), null),
-        SdfFrameBuffer.DynamicTransforms => (48, null, new ShaderPipelineBufferCount(Basis: ShaderPipelineCountBasis.Instances)),
-        SdfFrameBuffer.InstanceGrid => (4, null, new ShaderPipelineBufferCount(Basis: ShaderPipelineCountBasis.Instances)),
-        SdfFrameBuffer.BrickPool => (4, ((ulong)(SdfWorldEngine.DefaultBrickPoolVoxelCapacity * 4)), null),
-        SdfFrameBuffer.InstanceMasks => (4, null, new ShaderPipelineBufferCount(Basis: ShaderPipelineCountBasis.Instances)),
-        SdfFrameBuffer.Tiles => (4, null, new ShaderPipelineBufferCount(
-            Basis: ShaderPipelineCountBasis.Instances,
-            Elements: 12
-        )),
+    private static ShaderPipelineCountTerm Term(ulong elements, params ShaderPipelineCountBasis[] per) => new(
+        Elements: elements,
+        Per: per
+    );
+    // Each buffer's element stride and size, counted by the capacities it grows with. The brick pool is sized once for
+    // the world and the cull bounds are a fixed record, so both are fixed at the engine's own size.
+    private static (uint Stride, ulong? SizeBytes, IReadOnlyList<ShaderPipelineCountTerm>? Count) StorageOf(SdfFrameBuffer buffer, SdfFrameCapacity capacity) => buffer switch {
+        SdfFrameBuffer.Viewports => (96, null, [Term(1, ShaderPipelineCountBasis.Viewports)]),
+        SdfFrameBuffer.DynamicTransforms => (48, null, [Term(1, ShaderPipelineCountBasis.DynamicTransforms)]),
+        SdfFrameBuffer.InstanceGrid => (4, null, [Term(1, ShaderPipelineCountBasis.InstanceGridWords)]),
+        SdfFrameBuffer.BrickPool => (4, SdfWorldEngine.FrameBufferBytes(buffer: buffer, capacity: capacity), null),
+        SdfFrameBuffer.InstanceMasks => (4, null, [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)]),
+        // Four tile planes per tile, then two float3 part-bound corners in each of the primary and AO bands per instance.
+        SdfFrameBuffer.Tiles => (4, null, [
+            Term(4, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles),
+            Term(12, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Instances),
+        ]),
         SdfFrameBuffer.ViewsArgs => (4, ShaderPipelineDispatch.ArgumentBytes, null),
-        SdfFrameBuffer.CullBounds => (4, 8, null),
-        SdfFrameBuffer.PrimaryHits => (80, null, new ShaderPipelineBufferCount(Basis: ShaderPipelineCountBasis.Extent)),
+        SdfFrameBuffer.CullBounds => (4, SdfWorldEngine.FrameBufferBytes(buffer: buffer, capacity: capacity), null),
+        SdfFrameBuffer.PrimaryHits => (80, null, [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)]),
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(buffer)),
     };
-    private static ShaderPipelineResource Buffer(SdfFrameBuffer buffer, string name, string? from, bool external) {
-        var (stride, size, count) = StorageOf(buffer: buffer);
+    // The counts a host resolves for an engine of this capacity, each derived as the engine derives it.
+    private static ShaderPipelineStorageCounts CountsOf(SdfFrameCapacity capacity) => new(
+        Height: capacity.Height,
+        Width: capacity.Width
+    ) {
+        DynamicTransforms = ((ulong)capacity.DynamicTransforms),
+        InstanceGridWords = ((ulong)SdfInstanceGrid.WordCapacity(maxInstances: capacity.Instances)),
+        InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: capacity.Instances)),
+        Instances = ((ulong)capacity.Instances),
+        Tiles = capacity.Tiles,
+        Viewports = capacity.Viewports,
+    };
+    private static SdfFrameCapacity Capacity(uint width, uint height, uint viewports, int instances, int dynamicTransforms) => new(
+        BrickPoolVoxels: SdfWorldEngine.DefaultBrickPoolVoxelCapacity,
+        DynamicTransforms: dynamicTransforms,
+        Height: height,
+        Instances: instances,
+        Viewports: viewports,
+        Width: width
+    );
+    private static ShaderPipelineResource Buffer(SdfFrameBuffer buffer, SdfFrameCapacity capacity, string name, string? from, bool external) {
+        var (stride, size, count) = StorageOf(
+            buffer: buffer,
+            capacity: capacity
+        );
 
         return new ShaderPipelineResource(
             Count: count,
@@ -72,10 +102,17 @@ public sealed class SdfPassPlanLawTests {
         Name: name
     );
 
+    private static SdfFrameCapacity Default { get; } = Capacity(
+        dynamicTransforms: 1,
+        height: 64,
+        instances: 1,
+        viewports: 1,
+        width: 64
+    );
     // The dispatches of one rendered view, in recording order: every labelled pass but the composite.
     private static SdfFramePass[] Frame { get; } = [.. Enum.GetValues<SdfFramePass>().Where(predicate: static pass => ((LabelOf(pass: pass) is { } label) && (label != Composite)))];
 
-    private static ShaderPipelinePlan Plan() {
+    private static ShaderPipelinePlan Plan(SdfFrameCapacity capacity) {
         var latest = new Dictionary<SdfFrameBuffer, string>();
         var resources = new List<ShaderPipelineResource> {
             Image(
@@ -105,20 +142,20 @@ public sealed class SdfPassPlanLawTests {
                 switch (use.Access) {
                     case SdfBufferAccess.Write:
                         Assert.False(condition: latest.ContainsKey(key: buffer), userMessage: $"{buffer} is written twice from discarded contents in one frame.");
-                        resources.Add(item: Buffer(buffer: buffer, external: false, from: null, name: root));
+                        resources.Add(item: Buffer(buffer: buffer, capacity: capacity, external: false, from: null, name: root));
                         latest[buffer] = root;
                         outputs.Add(item: root);
                         break;
                     case SdfBufferAccess.ReadWrite:
                         var forwarded = $"{root}.{label}";
 
-                        resources.Add(item: Buffer(buffer: buffer, external: false, from: latest[buffer], name: forwarded));
+                        resources.Add(item: Buffer(buffer: buffer, capacity: capacity, external: false, from: latest[buffer], name: forwarded));
                         latest[buffer] = forwarded;
                         outputs.Add(item: forwarded);
                         break;
                     default:
                         if (!latest.ContainsKey(key: buffer)) {
-                            resources.Add(item: Buffer(buffer: buffer, external: true, from: null, name: root));
+                            resources.Add(item: Buffer(buffer: buffer, capacity: capacity, external: true, from: null, name: root));
                             latest[buffer] = root;
                         }
                         if (use.Access == SdfBufferAccess.IndirectRead) {
@@ -169,13 +206,13 @@ public sealed class SdfPassPlanLawTests {
             expected: labels.Where(predicate: static label => (label != Composite))
         );
         Assert.Equal(
-            actual: Plan().PassOrder,
+            actual: Plan(capacity: Default).PassOrder,
             expected: labels.Where(predicate: static label => (label != Composite))
         );
     }
     [Fact]
     public void ThePlannedBufferBarriersBetweenPassesAreExactlyTheEnginesEdges() {
-        var plan = Plan();
+        var plan = Plan(capacity: Default);
         var planned = new List<(SdfFrameBuffer Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)>();
 
         foreach (var pass in plan.Passes) {
@@ -205,12 +242,44 @@ public sealed class SdfPassPlanLawTests {
             expected: expected
         );
     }
+    [InlineData(64U, 64U, 1U, 1, 1)]
+    [InlineData(100U, 37U, 2U, 33, 5)]
+    [InlineData(17U, 300U, 3U, 65, 2)]
+    [InlineData(1920U, 1080U, 4U, 1000, 300)]
+    [InlineData(2560U, 1440U, SdfWorldEngine.MaxViewports, 4097, 64)]
+    [Theory]
+    public void ThePlannerSizesEveryBufferAsTheEngineAllocatesIt(uint width, uint height, uint viewports, int instances, int dynamicTransforms) {
+        var capacity = Capacity(
+            dynamicTransforms: dynamicTransforms,
+            height: height,
+            instances: instances,
+            viewports: viewports,
+            width: width
+        );
+        var counts = CountsOf(capacity: capacity);
+        var buffers = Plan(capacity: capacity).Storages.Where(predicate: static storage => (storage.Declaration.Kind == ShaderPipelineResourceKind.Buffer)).ToArray();
+
+        Assert.Equal(
+            actual: buffers.Select(selector: static storage => Enum.Parse<SdfFrameBuffer>(value: storage.Name)).Order(),
+            expected: Enum.GetValues<SdfFrameBuffer>().Order()
+        );
+        Assert.All(
+            action: storage => Assert.Equal(
+                actual: storage.Declaration.ResolveSizeBytes(counts: counts),
+                expected: SdfWorldEngine.FrameBufferBytes(
+                    buffer: Enum.Parse<SdfFrameBuffer>(value: storage.Name),
+                    capacity: capacity
+                )
+            ),
+            collection: buffers
+        );
+    }
     [Fact]
     public void EachBuffersFirstUseInTheFrameStartsFromOutsideIt() {
         // The engine owes nothing for a buffer's first use in a command list: its top-of-frame barrier, or the brick
         // work's own, orders it. The planner gives exactly that use a cross-frame or host prior, and every later use a
         // pass prior.
-        var plan = Plan();
+        var plan = Plan(capacity: Default);
 
         foreach (var storage in plan.Storages.Where(predicate: static storage => (storage.Declaration.Kind == ShaderPipelineResourceKind.Buffer))) {
             var priors = plan.Passes.SelectMany(selector: static pass => pass.Accesses).Where(predicate: access => (access.Storage == storage.Index)).Select(selector: static access => access.PriorKind).ToArray();

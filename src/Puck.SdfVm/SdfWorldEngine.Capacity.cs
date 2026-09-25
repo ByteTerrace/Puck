@@ -7,6 +7,43 @@ public sealed partial class SdfWorldEngine {
     /// <summary>Gets the currently allocated program-word capacity, including any growth during live uploads.</summary>
     public int ProgramWordCapacity => m_programWordCapacity;
 
+    private SdfFrameCapacity FrameCapacity => new(
+        BrickPoolVoxels: m_brickPoolVoxelCapacity,
+        DynamicTransforms: m_dynamicTransformCapacity,
+        Height: m_height,
+        Instances: m_instanceCapacity,
+        Viewports: m_viewportCapacity,
+        Width: m_width
+    );
+
+    /// <summary>Returns the bytes the engine allocates for one of its device-local frame buffers at a capacity, the one
+    /// statement of each buffer's size that construction and program growth allocate by.</summary>
+    /// <param name="buffer">The buffer.</param>
+    /// <param name="capacity">The capacities the buffer is sized for.</param>
+    /// <returns>The buffer's size in bytes.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="buffer"/> is not a declared buffer.</exception>
+    /// <exception cref="OverflowException">The size does not fit in 64 bits.</exception>
+    public static ulong FrameBufferBytes(SdfFrameBuffer buffer, SdfFrameCapacity capacity) => buffer switch {
+        SdfFrameBuffer.Viewports => checked((((ulong)capacity.Viewports) * ViewportByteLength)),
+        SdfFrameBuffer.DynamicTransforms => checked((((ulong)capacity.DynamicTransforms) * DynamicTransformByteLength)),
+        SdfFrameBuffer.InstanceGrid => checked((((ulong)SdfInstanceGrid.WordCapacity(maxInstances: capacity.Instances)) * sizeof(uint))),
+        SdfFrameBuffer.BrickPool => checked((((ulong)Math.Max(
+            val1: 1,
+            val2: capacity.BrickPoolVoxels
+        )) * sizeof(float))),
+        SdfFrameBuffer.InstanceMasks => checked(((((ulong)capacity.Viewports) * capacity.Tiles) * (((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: capacity.Instances)) * sizeof(uint)))),
+        // Four tile planes per tile, then the primary and AO part-bound bands per instance, per viewport.
+        SdfFrameBuffer.Tiles => checked(((((ulong)capacity.Viewports) * ((TilePlaneCount * capacity.Tiles) + (((ulong)PartBoundFloatCount) * ((uint)capacity.Instances)))) * sizeof(float))),
+        SdfFrameBuffer.ViewsArgs => ViewsArgsByteLength,
+        SdfFrameBuffer.CullBounds => CullBoundsByteLength,
+        SdfFrameBuffer.PrimaryHits => checked(((((ulong)capacity.Width) * capacity.Height) * (((ulong)capacity.Viewports) * PrimaryHitByteLength))),
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: buffer,
+            message: "Unknown SDF frame buffer.",
+            paramName: nameof(buffer)
+        ),
+    };
+
     // Called only by UploadProgram, with every frame-ring fence retired. No per-frame allocations.
     private void EnsureProgramCapacity(SdfProgram program) {
         if ((program.Words.Length <= m_programWordCapacity) && (program.Instances.Count <= m_instanceCapacity)) {
@@ -17,9 +54,9 @@ public sealed partial class SdfWorldEngine {
         var instances = GrowCapacity(m_instanceCapacity, program.Instances.Count, SdfProgramBuilder.MaxInstances);
         var growProgram = (words != m_programWordCapacity);
         var growInstances = (instances != m_instanceCapacity);
+        var grown = (FrameCapacity with { Instances = instances });
         var gridWords = SdfInstanceGrid.WordCapacity(maxInstances: instances);
         var maskWords = SdfProgram.InstanceMaskWordCountFor(instanceCount: instances);
-        var maskStorageWords = checked((maskWords + ((maskWords + 31) / 32)));
         var inputScratch = (growInstances ? new SdfInstanceGridInput[instances] : m_instanceGridInputScratch);
         var workspace = (growInstances ? new SdfInstanceGrid.Workspace(maxInstances: instances) : m_instanceGridWorkspace);
         var replacements = new List<IGpuBuffer>(capacity: (FrameRingSize + 4));
@@ -55,10 +92,9 @@ public sealed partial class SdfWorldEngine {
                     grids[slot] = HostBuffer(bytes: FrameUploadStagingBytes(tableBytes: checked((gridWords * sizeof(uint)))));
                 }
             }
-            var gridDevice = (growInstances ? DeviceBuffer(bytes: checked((((ulong)gridWords) * sizeof(uint)))) : m_instanceGridDeviceBuffer);
-            var masks = (growInstances ? DeviceBuffer(bytes: checked(((((((ulong)m_viewportCapacity) * m_tileGridX) * m_tileGridY) * ((uint)maskStorageWords)) * sizeof(uint)))) : m_instanceMaskBuffer);
-            var tiles = (growInstances ? DeviceBuffer(bytes: checked(((((ulong)m_viewportCapacity) *
-                (((((ulong)TilePlaneCount) * m_tileGridX) * m_tileGridY) + (((ulong)PartBoundFloatCount) * ((uint)instances)))) * sizeof(float)))) : m_tileBuffer);
+            var gridDevice = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.InstanceGrid, capacity: grown)) : m_instanceGridDeviceBuffer);
+            var masks = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.InstanceMasks, capacity: grown)) : m_instanceMaskBuffer);
+            var tiles = (growInstances ? DeviceBuffer(bytes: FrameBufferBytes(buffer: SdfFrameBuffer.Tiles, capacity: grown)) : m_tileBuffer);
 
             var oldGrids = ((IGpuStorageBuffer[])m_instanceGridBuffers.Clone());
 

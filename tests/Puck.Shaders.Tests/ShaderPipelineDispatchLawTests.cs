@@ -10,7 +10,12 @@ namespace Puck.Shaders.Tests;
 /// shader pass by name, and admits them on a package pass.
 /// </summary>
 public sealed class ShaderPipelineDispatchLawTests {
-    private static ShaderPipelineResource Words(string name, ulong sizeBytes = 16, uint? stride = null, ShaderPipelineBufferCount? count = null, ShaderPipelineInitialization initialization = ShaderPipelineInitialization.Undefined) => new(
+    // A count of one term.
+    private static ShaderPipelineCountTerm[] Per(ShaderPipelineCountBasis basis, ulong elements = 1) => [new(
+        Elements: elements,
+        Per: [basis]
+    )];
+    private static ShaderPipelineResource Words(string name, ulong sizeBytes = 16, uint? stride = null, IReadOnlyList<ShaderPipelineCountTerm>? count = null, ShaderPipelineInitialization initialization = ShaderPipelineInitialization.Undefined) => new(
         Count: count,
         Initialization: initialization,
         Kind: ShaderPipelineResourceKind.Buffer,
@@ -46,9 +51,9 @@ public sealed class ShaderPipelineDispatchLawTests {
                 Words(name: "peeked"),
                 Words(name: "result"),
                 Words(
-                    count: new ShaderPipelineBufferCount(
-                        Basis: ShaderPipelineCountBasis.Instances,
-                        Elements: 2
+                    count: Per(
+                        basis: ShaderPipelineCountBasis.Instances,
+                        elements: 2
                     ),
                     name: "table",
                     stride: 16
@@ -141,24 +146,35 @@ public sealed class ShaderPipelineDispatchLawTests {
     [Fact]
     public void TheVocabularyReadsFromADocument() {
         var resource = System.Text.Json.JsonSerializer.Deserialize(
-            json: """{ "name": "table", "kind": "Buffer", "strideBytes": 16, "count": { "basis": "Instances", "elements": 2 } }""",
+            json: """{ "name": "table", "kind": "Buffer", "strideBytes": 16, "count": [{ "per": ["Viewports", "Tiles"], "elements": 4 }, { "per": ["Instances"], "elements": 2 }] }""",
             jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineResource
         );
         var pass = System.Text.Json.JsonSerializer.Deserialize(
             json: """{ "name": "consume", "source": "p", "entryPoint": "", "kind": "Compute", "dispatch": { "kind": "Indirect", "arguments": "args", "argumentsOffsetBytes": 12 } }""",
             jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelinePass
         );
+        var expected = Words(
+            count: [
+                new ShaderPipelineCountTerm(
+                    Elements: 4,
+                    Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles]
+                ),
+                new ShaderPipelineCountTerm(
+                    Elements: 2,
+                    Per: [ShaderPipelineCountBasis.Instances]
+                ),
+            ],
+            name: "table",
+            stride: 16
+        );
 
         Assert.Equal(
-            actual: resource,
-            expected: Words(
-                count: new ShaderPipelineBufferCount(
-                    Basis: ShaderPipelineCountBasis.Instances,
-                    Elements: 2
-                ),
-                name: "table",
-                stride: 16
-            )
+            actual: resource! with { Count = null },
+            expected: expected with { Count = null }
+        );
+        Assert.Equal(
+            actual: resource.Count,
+            expected: expected.Count
         );
         Assert.Equal(
             actual: pass!.Dispatch,
@@ -191,16 +207,22 @@ public sealed class ShaderPipelineDispatchLawTests {
     public void ACountedBufferResolvesItsCapacityFromTheHostsCounts() {
         var counts = new ShaderPipelineStorageCounts(
             Height: 4,
-            Instances: 7,
-            ProgramWords: 100,
             Width: 8
-        );
+        ) {
+            DynamicTransforms = 5,
+            InstanceGridWords = 11,
+            InstanceMaskWords = 2,
+            Instances = 7,
+            ProgramWords = 100,
+            Tiles = 6,
+            Viewports = 3,
+        };
 
         Assert.Equal(
             actual: Words(
-                count: new ShaderPipelineBufferCount(
-                    Basis: ShaderPipelineCountBasis.Instances,
-                    Elements: 2
+                count: Per(
+                    basis: ShaderPipelineCountBasis.Instances,
+                    elements: 2
                 ),
                 name: "a",
                 stride: 16
@@ -209,7 +231,7 @@ public sealed class ShaderPipelineDispatchLawTests {
         );
         Assert.Equal(
             actual: Words(
-                count: new ShaderPipelineBufferCount(Basis: ShaderPipelineCountBasis.Extent),
+                count: Per(basis: ShaderPipelineCountBasis.Extent),
                 name: "b",
                 stride: 80
             ).ResolveSizeBytes(counts: counts),
@@ -217,10 +239,35 @@ public sealed class ShaderPipelineDispatchLawTests {
         );
         Assert.Equal(
             actual: Words(
-                count: new ShaderPipelineBufferCount(Basis: ShaderPipelineCountBasis.ProgramWords),
+                count: Per(basis: ShaderPipelineCountBasis.ProgramWords),
                 name: "c"
             ).ResolveSizeBytes(counts: counts),
             expected: 400UL
+        );
+        // Every basis resolves to its own count.
+        Assert.Equal(
+            actual: Enum.GetValues<ShaderPipelineCountBasis>().Select(selector: basis => (Words(
+                count: Per(basis: basis),
+                name: basis.ToString()
+            ).ResolveSizeBytes(counts: counts) / 4UL)),
+            expected: [32UL, 7UL, 100UL, 3UL, 6UL, 5UL, 2UL, 11UL]
+        );
+        // A count is the sum of its terms, each the product of its bases' units.
+        Assert.Equal(
+            actual: Words(
+                count: [
+                    new ShaderPipelineCountTerm(
+                        Elements: 4,
+                        Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles]
+                    ),
+                    new ShaderPipelineCountTerm(
+                        Elements: 12,
+                        Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Instances]
+                    ),
+                ],
+                name: "e"
+            ).ResolveSizeBytes(counts: counts),
+            expected: (4UL * (((4UL * 3UL) * 6UL) + ((12UL * 3UL) * 7UL)))
         );
         Assert.Equal(
             actual: Words(
@@ -261,7 +308,7 @@ public sealed class ShaderPipelineDispatchLawTests {
             code: "SHADERPIPE_PACKAGE_STORAGE",
             outputs: ["out"],
             passes: [Pass(inputs: [], kind: ShaderPipelinePassKind.Package, name: "write", outputs: ["out"])],
-            resources: [Words(count: new ShaderPipelineBufferCount(Basis: ShaderPipelineCountBasis.Instances), name: "out")]
+            resources: [Words(count: Per(basis: ShaderPipelineCountBasis.Instances), name: "out")]
         );
     }
     [Fact]
@@ -284,7 +331,50 @@ public sealed class ShaderPipelineDispatchLawTests {
         AssertRefused(code: "SHADERPIPE_DISPATCH_SHAPE", outputs: ["out"], passes: [writer, Consume(dispatch: new ShaderPipelineDispatch(Arguments: "args", Kind: ShaderPipelineDispatchKind.Extent))], resources: resources);
         AssertRefused(code: "SHADERPIPE_BUFFER_STRIDE", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(name: "out", sizeBytes: 24, stride: 16)]);
         AssertRefused(code: "SHADERPIPE_BUFFER_STRIDE", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(name: "out", stride: 6)]);
-        AssertRefused(code: "SHADERPIPE_BUFFER_COUNT", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(count: new ShaderPipelineBufferCount(Basis: ShaderPipelineCountBasis.Instances, Elements: 0), name: "out")]);
-        AssertRefused(code: "SHADERPIPE_BUFFER_SIZE", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(name: "out") with { Count = new ShaderPipelineBufferCount(Basis: ShaderPipelineCountBasis.Instances) }]);
+        AssertRefused(code: "SHADERPIPE_BUFFER_SIZE", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(name: "out") with { Count = Per(basis: ShaderPipelineCountBasis.Instances) }]);
+
+        // A count has one spelling: at least one term, each with elements, one or more declared bases named once, and
+        // no two terms over the same bases.
+        IReadOnlyList<ShaderPipelineCountTerm>[] malformed = [
+            [],
+            Per(basis: ShaderPipelineCountBasis.Instances, elements: 0),
+            [new ShaderPipelineCountTerm(Per: [])],
+            Per(basis: ((ShaderPipelineCountBasis)99)),
+            [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.Tiles])],
+            [
+                new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles]),
+                new ShaderPipelineCountTerm(Elements: 3, Per: [ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.Viewports]),
+            ],
+        ];
+
+        foreach (var count in malformed) {
+            AssertRefused(code: "SHADERPIPE_BUFFER_COUNT", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(count: count, name: "out")]);
+        }
+    }
+    [Fact]
+    public void ACountedBufferScalingWithABasisTheHostResolvesToZeroIsRefusedNamingTheBasis() {
+        var table = Words(
+            count: [
+                new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Extent]),
+                new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles]),
+            ],
+            name: "table"
+        );
+        var counts = new ShaderPipelineStorageCounts(
+            Height: 2,
+            Width: 2
+        ) {
+            Viewports = 1,
+        };
+        var exception = Assert.Throws<InvalidOperationException>(testCode: () => table.ResolveSizeBytes(counts: counts));
+
+        Assert.Contains(
+            actualString: exception.Message,
+            expectedSubstring: nameof(ShaderPipelineCountBasis.Tiles)
+        );
+        Assert.Equal(
+            actual: table.ResolveSizeBytes(counts: counts with { Tiles = 5 }),
+            expected: (4UL * (4UL + 5UL))
+        );
     }
 }
