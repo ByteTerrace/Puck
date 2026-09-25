@@ -956,6 +956,7 @@ public sealed partial class WorldInstanceHost {
             catalog: m_machineCatalog,
             catalogFingerprint: m_catalogFingerprint,
             admission: out var admission,
+            contentHash: out _,
             instanceIdentity: instanceName,
             neighbours: neighbours,
             path: resolvedPath,

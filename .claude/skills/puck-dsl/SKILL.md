@@ -80,8 +80,8 @@ must be valid alone: Parlor's basis declares no bodies and each game owns its se
 running console reads `.puck` the same way:
 
 - `world.reload` re-reads the current origin through
-  `WorldDefinitionFileSource.TryLoad` with the `PuckDocumentComposer` document
-  source, so an edited `.puck` world (and its basis chain) recompiles in place.
+  `WorldDefinitionLoader.TryLoadFileForAdmission` with the `PuckDocumentComposer`
+  document source, so an edited `.puck` world (and its basis chain) recompiles in place.
   The composer compiles through `WorldCompileCache`, so only the sources whose
   recorded file facts (their bytes, their modules', their locks' and assets',
   every probed path, and the listing and sources of each directory a basis

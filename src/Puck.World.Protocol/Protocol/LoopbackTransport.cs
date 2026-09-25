@@ -98,6 +98,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         }
         if (TryNextEnvelope(
             envelope: out var envelope,
+            failure: out var failure,
             operationId: operationId,
             payload: payload,
             principal: principal
@@ -110,18 +111,21 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             return envelope.CorrelationId;
         }
 
-        completion?.Invoke(new WorldSubmissionResult.Refusal(
-            Code: "world.transport.codec_refused",
-            Detail: "the submission could not be encoded or decoded"
-        ));
+        completion?.Invoke(CodecRefusal(failure: failure));
         return 0;
     }
+    // The transport verdict for a payload the canonical frame refused, naming the codec's own reason.
+    private static WorldSubmissionResult.Refusal CodecRefusal(WorldCodecFailure failure) => new(
+        Code: "world.transport.codec_refused",
+        Detail: $"the submission could not be encoded or decoded: {failure}"
+    );
     // Encodes and decodes a typed payload, taps its canonical value with the envelope's principal, then submits it.
     // The payload's concrete leaf type proves that decoding returned the expected union case.
     private long SubmitTapped<TPayload, TValue>(TPayload payload, Principal principal, Func<TPayload, TValue> selectValue, Action<TValue, Principal>? tap, Action<WorldSubmissionResult>? completion = null) where TPayload : WorldSubmissionPayload {
         if (
             TryNextEnvelope(
             envelope: out var envelope,
+            failure: out var failure,
             payload: payload,
             principal: principal
         ) &&
@@ -136,15 +140,15 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             return envelope.CorrelationId;
         }
 
-        completion?.Invoke(new WorldSubmissionResult.Refusal(Code: "world.transport.codec_refused", Detail: "the submission could not be encoded or decoded"));
+        completion?.Invoke(CodecRefusal(failure: failure));
         return 0;
     }
     // The ALWAYS-BYTES rule: even the in-process link is defined by the same canonical frame a future socket carries.
     // A refusal is a transport verdict printed by name; invalid caller state never escapes as an invariant exception.
-    private bool TryNextEnvelope(Principal principal, WorldSubmissionPayload payload, out SubmissionEnvelope envelope, Guid operationId = default) {
+    private bool TryNextEnvelope(Principal principal, WorldSubmissionPayload payload, out SubmissionEnvelope envelope, out WorldCodecFailure failure, Guid operationId = default) {
         if (
             !WorldFrameCodec.TryEncode(
-            failure: out var failure,
+            failure: out failure,
             frame: out var frame,
             operationId: operationId,
             payload: payload
@@ -200,7 +204,8 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         if (TryNextEnvelope(
             principal: principal,
             payload: new WorldSubmissionPayload.Query(Value: query),
-            envelope: out var envelope
+            envelope: out var envelope,
+            failure: out _
         )) {
             if (envelope.Payload is WorldSubmissionPayload.Query canonical) {
                 QueryTap?.Invoke(
@@ -256,6 +261,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                 if (
                     TryNextEnvelope(
                     envelope: out var commandEnvelope,
+                    failure: out _,
                     operationId: operationId,
                     payload: command,
                     principal: principal
@@ -335,7 +341,8 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             TryNextEnvelope(
             principal: request.Principal,
             payload: new WorldSubmissionPayload.Session(Value: request),
-            envelope: out var envelope
+            envelope: out var envelope,
+            failure: out _
         ) &&
             (envelope.Payload is WorldSubmissionPayload.Session canonical)
         ) {

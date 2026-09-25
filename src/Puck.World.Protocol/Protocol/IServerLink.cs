@@ -114,22 +114,18 @@ public static class ServerLinkSubmissions {
     /// <param name="mutation">The world mutation to apply.</param>
     /// <param name="echoes">The pending-verb table the echo subscriber consumes.</param>
     /// <param name="verb">The submitting verb, exactly as its response line spells it.</param>
-    /// <returns>A result with no output of its own that settles with the tick-boundary verdict.</returns>
+    /// <returns>The verdict itself when the link refused the submission before returning; otherwise a result with no
+    /// output of its own that settles with the tick-boundary verdict, which <paramref name="echoes"/> publishes.</returns>
     public static CommandResult Submit(this IServerLink link, WorldMutation mutation, WorldDeferredVerbEchoes echoes, string verb) {
         var settlement = new CommandSettlement();
 
-        _ = link.SubmitWorldMutation(mutation: mutation, completion: result => {
-            var verdict = result switch {
-                WorldSubmissionResult.Mutation reply when reply.Outcome.Applied => new CommandResult(Output: $"[{verb}: {reply.Outcome.Code} {reply.Outcome.Detail}]"),
-                WorldSubmissionResult.Mutation reply => CommandResult.Error(output: $"[{verb}: {reply.Outcome.Code} {reply.Outcome.Detail}]"),
-                WorldSubmissionResult.Refusal refusal => CommandResult.Error(output: $"[{verb}: {refusal.Code} {refusal.Detail}]"),
-                _ => CommandResult.Error(output: $"[{verb}: no authoritative mutation verdict; inspect state before any retry]"),
-            };
-
-            settlement.Settle(result: verdict);
-            echoes.Publish(result: verdict);
-        });
-        return CommandResult.Settling(settlement: settlement);
+        _ = link.SubmitWorldMutation(mutation: mutation, completion: result => settlement.Settle(result: result switch {
+            WorldSubmissionResult.Mutation reply when reply.Outcome.Applied => new CommandResult(Output: $"[{verb}: {reply.Outcome.Code} {reply.Outcome.Detail}]"),
+            WorldSubmissionResult.Mutation reply => CommandResult.Error(output: $"[{verb}: {reply.Outcome.Code} {reply.Outcome.Detail}]"),
+            WorldSubmissionResult.Refusal refusal => CommandResult.Error(output: $"[{verb}: {refusal.Code} {refusal.Detail}]"),
+            _ => CommandResult.Error(output: $"[{verb}: no authoritative mutation verdict; inspect state before any retry]"),
+        }));
+        return CommandResult.Settling(late: echoes.Publish, settlement: settlement);
     }
     /// <summary>Submits a validated authority command for one entity. Applies synchronously at submit (like a grant or
     /// a session request), so a query following it in the same script observes its effect.</summary>
@@ -201,7 +197,8 @@ public static class ServerLinkSubmissions {
     /// <param name="principal">The acting identity.</param>
     /// <param name="echoes">The pending-verb table the echo subscriber consumes.</param>
     /// <param name="verb">The submitting verb, exactly as its response line spells it.</param>
-    /// <returns>A result with no output of its own that settles with the tick-boundary verdict.</returns>
+    /// <returns>The transport refusal itself when the link refused the submission before returning; otherwise a result
+    /// with no output of its own that settles with the tick-boundary verdict.</returns>
     public static CommandResult SubmitRebuild(this IServerLink link, WorldRebuildRequest request, Principal principal, WorldDeferredVerbEchoes echoes, string verb) =>
         SubmitDeferred(link, new WorldSubmissionPayload.Rebuild(Value: request), principal, echoes, verb);
     /// <summary>Submits an undo and waits for its local tick-boundary verdict.</summary>

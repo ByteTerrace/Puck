@@ -233,19 +233,23 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 // The console-side validate (ApplyRebuild revalidates the SAME candidate again at the tick boundary
                 // below) — both reuse server.Neighbours, the ONE live-session resolver this repository wires (a
                 // document SWAP, not a per-mutation check; see WorldServer.Neighbours' own remarks).
-                if (!WorldDefinitionFileSource.TryLoad(
-                    path: fullPath,
-                    definition: out var loaded,
+                if (!WorldDefinitionLoader.TryLoadFileForAdmission(
+                    admission: out var admission,
+                    catalog: machineCatalog,
                     contentHash: out var contentHash,
-                    reason: out var reason,
+                    documents: server.RebuildDocuments,
+                    instanceIdentity: server.InstanceIdentity,
                     neighbours: server.ResolveRebuildNeighbours(path: fullPath),
-                    documents: server.RebuildDocuments
+                    path: fullPath,
+                    reason: out var reason
                 )) {
                     return CommandResult.Error(output: $"[world.load: {reason}]");
                 }
 
+                var loaded = admission!.Definition;
+
                 if (!textCatalog.TryValidate(
-                    definition: loaded!,
+                    definition: loaded,
                     origin: fullPath,
                     reason: out reason
                 )) {
@@ -256,7 +260,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     echoes: echoes,
                     request: new WorldRebuildRequest(
                         ContentHash: contentHash,
-                        Definition: loaded!,
+                        Definition: loaded,
                         Force: force,
                         Kind: WorldRebuildKind.Load,
                         PathHint: fullPath
@@ -285,19 +289,23 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var path = definitionSource.SourcePath;
 
                 // See world.load's own remarks: reuses server.Neighbours, the one live-session resolver.
-                if (!WorldDefinitionFileSource.TryLoad(
-                    path: path,
-                    definition: out var loaded,
+                if (!WorldDefinitionLoader.TryLoadFileForAdmission(
+                    admission: out var admission,
+                    catalog: machineCatalog,
                     contentHash: out var contentHash,
-                    reason: out var reason,
+                    documents: server.RebuildDocuments,
+                    instanceIdentity: server.InstanceIdentity,
                     neighbours: server.ResolveRebuildNeighbours(path: path),
-                    documents: server.RebuildDocuments
+                    path: path,
+                    reason: out var reason
                 )) {
                     return CommandResult.Error(output: $"[world.reload: {reason}]");
                 }
 
+                var loaded = admission!.Definition;
+
                 if (!textCatalog.TryValidate(
-                    definition: loaded!,
+                    definition: loaded,
                     origin: path,
                     reason: out reason
                 )) {
@@ -308,7 +316,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     echoes: echoes,
                     request: new WorldRebuildRequest(
                         ContentHash: contentHash,
-                        Definition: loaded!,
+                        Definition: loaded,
                         Force: false,
                         Kind: WorldRebuildKind.Reload,
                         PathHint: path

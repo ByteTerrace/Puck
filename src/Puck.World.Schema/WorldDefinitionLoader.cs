@@ -79,10 +79,10 @@ public static partial class WorldDefinitionLoader {
     // consume or replace; only the final document earns a receipt and compiles its rules.
     private static bool TryPrepareAndAdmit(WorldDefinition definition, string sourceName, string instanceIdentity,
         IWorldNeighbourResolver? neighbours, out WorldDefinitionAdmission? resolved, out string reason, IMachineValidationCatalog? catalog = null,
-        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null) {
+        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, bool proveNeighbours = true) {
         resolved = null;
         if (!TryPrepareBootValues(compiled: compiled, definition: definition, instanceIdentity: instanceIdentity, overrides: overrides, reason: out reason, resolved: out var prepared, sourceName: sourceName)) { return false; }
-        if (!WorldDefinitionValidator.TryAdmit(admission: out resolved, definition: prepared!, machines: catalog, neighbours: neighbours, reason: out var refusal)) {
+        if (!WorldDefinitionValidator.TryAdmitCore(admission: out resolved, definition: prepared!, machines: catalog, neighbours: neighbours, proveNeighbours: proveNeighbours, reason: out var refusal)) {
             reason = $"{sourceName} document validation refused: {refusal}";
             return false;
         }
@@ -254,19 +254,14 @@ public static partial class WorldDefinitionLoader {
         definition = admission?.Definition;
         return accepted;
     }
-    /// <summary>Loads and validates a world document from a file — the public seam the runtime <c>world.load</c> verb
-    /// reuses so it never reimplements the deserialize → schema-check → validate path. Any failure yields a one-line
-    /// reason (line endings collapsed) and <see langword="false"/>, and the three failure classes are named apart:
-    /// an absent file, an unreadable file, and an invalid document. An incomplete document — one missing a section the
-    /// canonical writer emits — is invalid like any other; the validator names every missing section. A broad catch is
-    /// deliberate: a load boundary must never throw out of <see cref="TryLoadFile"/>. Delegates to
-    /// <see cref="WorldDefinitionFileSource.TryLoad"/> — the one implementation this console path and the replay
-    /// tape's offline re-drive (<c>Server.WorldServer.ApplyRebuild</c>, on a replay drive) share, so a live read and a
-    /// re-drive's later re-read of the same path compute the same content hash — and then resolves every first-fill
-    /// <see cref="Draw"/> site (<see cref="WorldDrawBootResolver"/>) keyed off <paramref name="instanceIdentity"/>,
-    /// so a fresh boot and a fresh <c>world.instance.start</c> draw independently while each stays reproducible. The
-    /// content hash the inner load computes (and replay CAS-pinning elsewhere compares) is taken over the raw authored
-    /// bytes, before this resolution step — a draw's outcome never moves the pin.</summary>
+    /// <summary>Loads and validates a world document from a file through <see cref="TryLoadFileForAdmission"/>,
+    /// keeping only the admitted definition. Any failure yields a one-line reason (line endings collapsed) and
+    /// <see langword="false"/>, and the three failure classes are named apart: an absent file, an unreadable file, and
+    /// an invalid document. An incomplete document — one missing a section the canonical writer emits — is invalid
+    /// like any other; the validator names every missing section. A broad catch is deliberate: a load boundary must
+    /// never throw out of <see cref="TryLoadFile"/>. Every first-fill <see cref="Draw"/> site resolves
+    /// (<see cref="WorldDrawBootResolver"/>) keyed off <paramref name="instanceIdentity"/>, so a fresh boot and a fresh
+    /// <c>world.instance.start</c> draw independently while each stays reproducible.</summary>
     /// <param name="path">The file to load.</param>
     /// <param name="definition">The loaded, draw-resolved definition on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
@@ -281,7 +276,7 @@ public static partial class WorldDefinitionLoader {
     /// <returns><see langword="true"/> when the file loaded and validated.</returns>
     public static bool TryLoadFile(string path, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         var accepted = TryLoadFileForAdmission(admission: out var admission, catalog: catalog, catalogFingerprint: catalogFingerprint,
-            instanceIdentity: instanceIdentity, neighbours: neighbours, path: path, reason: out reason);
+            contentHash: out _, instanceIdentity: instanceIdentity, neighbours: neighbours, path: path, reason: out reason);
 
         definition = admission?.Definition;
         return accepted;
@@ -337,6 +332,7 @@ public static partial class WorldDefinitionLoader {
         if (TryLoadFileForAdmission(
             path: path,
             admission: out var loaded,
+            contentHash: out _,
             reason: out var reason,
             neighbours: neighbours,
             catalogFingerprint: catalogFingerprint,
