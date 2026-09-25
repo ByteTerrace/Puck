@@ -519,7 +519,7 @@ shader consumer in the same change. What a document field means belongs to
 ## Shader manifests and pipelines
 
 `docs/reference/shaders.md` owns the `puck.shader.manifest.v1` and
-`puck.shader.pipeline.v1` contracts and pipeline live development; the
+`puck.render.graph.v1` contracts and pipeline live development; the
 `pipeline.*` console verbs are defined in `WorldPipelineCommandModule` and their
 document semantics belong to `puck-world`. Post-render passes are
 `render.extensions` rows naming shader sets shipped beside the SDF kernels; the
@@ -576,20 +576,29 @@ yet; `GpuComputeBindingKind` and `ShaderSetManifestBindingKind` still carry the
 combined image sampler until the backends bind sampler tables.
 
 The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
-[frame graphs](../../../docs/reference/shaders.md#frame-graphs)): the pipeline
-document's members plus `packages`, engine passes named by
-`RenderGraphPackageCatalog` id. `RenderGraphCompiler` plans it with
-`ShaderPipelineCompiler` and never a second planner: a package pass enters the
-plan only as a `ShaderPipelinePackagePass` through the planner's internal
-package entry, ordered in the compute shape it reaches resources by, and its
-planned pass carries `ShaderPipelinePassKind.Package`. A document's pass kind
-is `ShaderPipelineDocumentPassKind`, which has no `Package` member, so the JSON
-reader refuses the name at `$.passes[n].kind`. A package pass keeps no
-descriptor binding, has no interface-by-source check, and takes a compute pass's
-accesses in `UseOf`. A new document member goes on `RenderGraphDefinition` only when a
-pipeline document cannot say it, because every checked-in `*.graph.json`
-must plan identically as a graph (`RenderGraphDocumentLawTests`), and
-`puck schema` regenerates `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
+[frame graphs](../../../docs/reference/shaders.md#frame-graphs)) and the one
+pass-graph document (`RenderGraphDefinition`, files named `*.graph.json`): a
+pipeline is a graph of shader passes a world names, and a lone `.hlsl` reads
+as the one-pass graph `RenderGraphDefinition.FromShaderSource` makes. Its
+`packages` are engine passes named by `RenderGraphPackageCatalog` id.
+`RenderGraphCompiler` owns the schema-tag check (`RENDERGRAPH_SCHEMA`) and plans
+with `ShaderPipelineCompiler` and never a second planner: a package pass enters
+the plan only as a `ShaderPipelinePackagePass` through the planner's internal
+package entry, ordered in the compute shape it reaches resources by, and the
+planner's public entry refuses a graph naming packages
+(`SHADERPIPE_PACKAGE_PASS`). A package's planned pass carries
+`ShaderPipelinePassKind.Package` and no `Declaration`, so every plan consumer
+reads the planned kind first. Pipeline readers (the loader, the packager,
+`ShaderPipelineSource`, the `puck shaders` verbs) plan through
+`RenderGraphCompiler.ShaderPasses`, whose catalog is empty, and
+`CompiledShaderPipeline` refuses a package pass, so the render node sees shader
+passes alone. A shader pass's kind is `ShaderPipelineDocumentPassKind`, which
+has no `Package` member, so the JSON reader refuses the name at
+`$.passes[n].kind`. A package pass keeps no descriptor binding, has no
+interface-by-source check, and takes a compute pass's accesses in `UseOf`. Every
+checked-in `*.graph.json` plans alike through a pipeline host and the engine's
+catalog (`RenderGraphDocumentLawTests`), and `puck schema` regenerates
+`src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 A package's ports are typed (`RenderGraphPackagePort`: an image, or a buffer
 with its stride and count), and a version bound to a port of another kind,
 stride or count is refused as `RENDERGRAPH_PACKAGE_INPUT` or `_OUTPUT`.
@@ -628,7 +637,8 @@ source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`) up to
 draws from a mapping until P13b.
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
-declares a language, and a one-off source is an `.hlsl` compute pass. A pass
+declares a language, and a one-off source is an `.hlsl` compute pass read as a
+one-pass graph. A pass
 reads its frame values and config only through its frame block
 ([the frame block](../../../docs/reference/shaders.md#the-frame-block)): the
 `ShaderFrameInterface` members, then its config fields in ordinal name order,

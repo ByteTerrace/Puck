@@ -106,17 +106,24 @@ ship, and a runtime re-check would duplicate the build's gate.
 
 ## Multi-pass shader pipelines
 
-`ShaderPipelineDefinition` describes a connected graph of compute, fullscreen
-and geometry passes. Each pass names its HLSL source and declares its entry point, workgroup, resource
-inputs and outputs, and optional per-pass config. `ShaderPipelineCompiler` validates the
-immutable graph before `ShaderPipelineLoader` snapshots sources/includes and
-compiles every live pass to both SPIR-V and DXIL. A failed pass refuses the
-whole candidate so a running renderer can keep its last installed graph.
+A pipeline is a [frame graph](#frame-graphs) of shader passes that a world
+names: a `puck.render.graph.v1` document (`RenderGraphDefinition`) whose
+compute, fullscreen and geometry passes each name an HLSL source and declare
+an entry point, workgroup, resource inputs and outputs, and optional per-pass
+config. `RenderGraphCompiler` checks the document and plans it with
+`ShaderPipelineCompiler` before `ShaderPipelineLoader` snapshots
+sources/includes and compiles every live pass to both SPIR-V and DXIL. A
+pipeline's host offers no package (`RenderGraphCompiler.ShaderPasses`), so a
+graph naming one is refused as `RENDERGRAPH_PACKAGE_UNKNOWN`. A failed pass
+refuses the whole candidate so a running renderer can keep its last installed
+graph.
 
-HLSL is the one source language. A one-off `.hlsl` source loads as a compute
-pass with entry point `main`; any other extension requires a JSON pipeline.
-Pipeline-level `config` is currently rejected; declare fields on each pass so
-the packed parameter block has one unambiguous ABI.
+HLSL is the one source language. A one-off `.hlsl` source loads as a one-pass
+graph (`RenderGraphDefinition.FromShaderSource`): a compute pass with entry
+point `main` writing one image; any other extension requires a graph document.
+Config is declared on each pass, so the packed parameter block has one
+unambiguous ABI; the document has no top-level `config`, and the reader refuses
+one as an unknown member.
 
 ### The frame block
 
@@ -197,12 +204,12 @@ declared extent (`SHADERPIPE_ATTACHMENT_EXTENT`).
 ## Frame graphs
 
 A `puck.render.graph.v1` document describes a frame as passes connected by
-named image and buffer versions. It has the pipeline document's members with
-the same shapes, `name`, `resources`, `passes` and `outputs`, plus `packages`:
-passes of engine work named by package instead of by shader source. A
-pipeline document's content is therefore a graph with no packages, and a
-pipeline is a graph a world names. `puck schema` writes the document's schema
-to `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
+named image and buffer versions. It is the one pass-graph document: its members
+are `name`, `resources`, `passes` and `outputs`, plus `packages`, passes of
+engine work named by package instead of by shader source. A pipeline is a
+graph of shader passes alone that a world names. A graph document's file name
+ends in `.graph.json`. `puck schema` writes the document's schema to
+`src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 
 ```json
 {
@@ -242,11 +249,18 @@ offers:
 | `resample` | one image input, one image output | The input reconstructed at the output's extent: an exact copy at the same extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its kernel is `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`. |
 | `post.<set id>` | one image input, one image output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
 
-`RenderGraphCompiler` checks the package passes against the catalog, then plans
-the whole graph with `ShaderPipelineCompiler`. The planner sees a package pass
-as its own kind, `Package`, whose source is its package id: it binds no
-descriptors and compiles nothing, and it reaches its versions as a compute pass
-does. One planner orders every pass, versions and barriers every access, and
+`RenderGraphCompiler` checks the schema tag and the package passes against the
+catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
+planner. Package work enters the planner only through the graph compiler; the
+planner's own document entry refuses a graph naming package passes
+(`SHADERPIPE_PACKAGE_PASS`). The planner sees a package pass as its own kind,
+`Package`, whose planned pass carries no declaration, and the graph plan's step
+names its package: it binds no descriptors and compiles nothing, and it reaches
+its versions as a compute pass does. A plan consumer reads a planned pass's
+kind before its declaration, and a pipeline candidate
+(`CompiledShaderPipeline`) refuses a plan holding a package pass, so the render
+node, the packager and the loader see shader passes alone. One planner orders
+every pass, versions and barriers every access, and
 keeps history. A version declared `External` is an input the host binds, such
 as another instance's output, and `RenderGraphPlan.Inputs` lists them. A graph
 that reads its own output reads a `history` version's previous frame, exactly
@@ -615,10 +629,10 @@ pipeline is never called one. This runtime's
 former “study” name was accidental; neither the runtime, the document
 vocabulary, nor a compatibility alias restores it.
 
-`puck.shader.pipeline.v1` documents declare resources, passes and outputs.
-JSON is the authoritative pipeline model; any future `.puck` pipeline
+A pipeline's `puck.render.graph.v1` document declares resources, passes and
+outputs. JSON is the authoritative graph model; any future `.puck` graph
 vocabulary must lower into it and reuse its validation rather than introduce a
-second graph compiler. A world names a pipeline document, a one-off shader or a
+second graph compiler. A world names a graph document, a one-off shader or a
 [package](#packaging-a-pipeline) by path, and that path loads the JSON model: no
 `.puck` vocabulary for authoring one exists yet.
 
@@ -793,7 +807,7 @@ indices, binds both ranges and draws the indices.
 See the [three-pass ink pipeline](../../src/Puck.World/Assets/pipelines/ink.graph.json)
 for a complete example: a floating-point feedback simulation feeds a color
 pass, followed by a fullscreen HLSL finish. Each source file lives beside its
-pipeline document. Source paths in the pipeline resolve relative to that
+graph document. Source paths in the pipeline resolve relative to that
 document; the world's path to the pipeline resolves relative to the world.
 
 The loader compiles the whole candidate before the host installs it, and
@@ -802,7 +816,7 @@ reports one `ShaderPipelineLoadStatus`. `Compiled` carries the candidate.
 changed during compilation, and the host schedules the whole pipeline again.
 `Unsupported` means a required shader tool is absent from this environment.
 A failed pass leaves the last successful pipeline running. Watched editing includes
-the pipeline document, shader files and includes. A candidate captures each
+the graph document, shader files and includes. A candidate captures each
 source revision, and a source edit during compilation triggers a debounced
 whole-pipeline retry. Superseded compiler tasks are canceled and retired after
 their native processes finish. Retiring the replaced graph accounts for its
@@ -1052,7 +1066,7 @@ graph that failed to compile is never the installed one, so its values are
 never committed. `world.save` writes only committed values, through the atomic
 file writer, so a failed write leaves the previous document complete.
 
-For a pipeline document or a one-off shader, the source identity covers only
+For a graph document or a one-off shader, the source identity covers only
 the file the row names; its pass sources and includes are outside it. For a
 package, it is the content pin of the canonical manifest, which pins every file
 of the source closure, so an edit anywhere in a package is a changed source.
@@ -1175,7 +1189,7 @@ manifest's own name is refused.
 |-----|---------|
 | `$schema` | `puck.shader.package.v1`. |
 | `name` | The pipeline's name. |
-| `document` | The logical path loading starts from: the pipeline document or the one-off shader. |
+| `document` | The logical path loading starts from: the graph document or the one-off shader. |
 | `compiler` | `{ version, tools: [ { name, version } ] }`: the compiler revision every pass compiled under, and the first line each native tool's `--version` query printed. |
 | `capabilities` | `{ targetFloor: { vulkan, shaderModel }, imageFormats, buffers, workgroupInvocations, parameterBytes }`, derived from the plan: the target every stage compiles to, every image format a storage declares, whether a raw buffer is bound, the largest compute workgroup, and the largest pass parameter block. |
 | `files[]` | `{ path, pin, bytes }` for every authored file of the closure, ordered by path. `pin` is the `sha256/<hex64>` content pin of the file's UTF-8 text, the same hash the cache key records; `bytes` is its length on disk. |
@@ -1215,7 +1229,7 @@ holds files but no manifest is refused as `SHADERPKG_OUTPUT` rather than
 replaced.
 
 A package is not a sandbox. Loading one runs its GPU code with the same trust
-as a pipeline document on disk.
+as a graph document on disk.
 
 ### Limits
 
@@ -1242,7 +1256,7 @@ instance may hold is bounded separately by its
 
 A `views.pipelines` row's `source` names a package the way it names any other
 source: by path, relative to the world document. A path that is a directory is
-a package; any other path is a pipeline document or a one-off shader.
+a package; any other path is a graph document or a one-off shader.
 
 ```json
 { "name": "ink", "source": "../packages/ink", "overrides": { "visualize": { "exposure": 0.5 } } }
@@ -1434,7 +1448,7 @@ only by the fake. The suite also compiles every canary
 document; the broken edit fails in its middle pass. A missing GPU or compiler
 is reported as unsupported, not passed. CPU tests alone do not establish GPU
 correctness. `puck parity` checks its authored
-rendering cases; it is not blanket coverage of arbitrary pipeline documents.
+rendering cases; it is not blanket coverage of arbitrary graph documents.
 
 `ShaderPackageLawTests` hold the source closure and packages over the fixtures
 in `tests/Puck.Shaders.Tests/Assets/ShaderPackages`. They check that a

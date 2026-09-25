@@ -568,7 +568,7 @@ puck shaders pipeline <source> [--inspect] [--toolchain <directory>] [--cache <d
 
 `compile` writes SPIR-V and DXIL for one HLSL source stage; `--entry` names its
 entry point and defaults to `main`. `pipeline`
-loads a pipeline document or synthesizes a one-pass pipeline from a shader,
+loads a `puck.render.graph.v1` graph document or reads a one-off shader as a one-pass graph,
 validates its resource graph, and compiles every planned pass. `--inspect`
 prints the execution order, dependencies and named outputs without compiling
 shaders or creating a GPU device. A source or document that does not compile or
@@ -586,12 +586,12 @@ from the model and its first differing line; CI runs it beside
 `puck schema --check`.
 
 `interface` prints the [frame-block](shaders.md#the-frame-block) declarations
-each pass of a pipeline document or one-off shader reads, or those a shader-set
+each pass of a graph document or one-off shader reads, or those a shader-set
 manifest's stages read; `--write` writes each as `<interface>.interface.hlsli`
 beside its source instead, which a shader set, compiled at build, checks in, and
 `--echo` also generates each interface's echo pass as `<interface>.echo.hlsl`.
 
-`package` compiles a pipeline document or one-off shader and writes its
+`package` compiles a graph document or one-off shader and writes its
 `puck.shader.package.v1` package to `--output`: the source closure, each pass's
 interface and generated declarations, and its SPIR-V and DXIL binaries, with a
 manifest recording the compiler they were built with. Loading a package runs no

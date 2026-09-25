@@ -562,7 +562,7 @@ through the same background compilation path. Return with
 
 Loading a new row does not change the active layout: select its name in a layout
 slot. The [shader reference](../../docs/reference/shaders.md#shader-pipelines-and-live-development)
-owns the pipeline document and pass contracts.
+owns the graph document and pass contracts.
 
 [The Moth shader](Assets/pipelines/moth.hlsl) remains a one-pass procedural
 character example; its header controls poses and framing. Its

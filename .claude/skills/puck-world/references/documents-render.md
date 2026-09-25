@@ -193,7 +193,7 @@ background compilation and frame-boundary installation; none belongs in the
 schema. Use [the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.world.json)
 for the live three-pass editing workflow. The
 [shader reference](../../../../docs/reference/shaders.md#shader-pipelines-and-live-development)
-owns the GPU pipeline document contract.
+owns the `puck.render.graph.v1` document contract a pipeline row's source is written in.
 
 ### Kit producer `flock` — bounded local perception
 
