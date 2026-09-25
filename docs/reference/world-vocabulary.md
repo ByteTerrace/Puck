@@ -819,7 +819,7 @@ graph "name" { … }
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
-| `name` (required) | header | name | — | `name` | — | The instance's name, which another instance's input names. |
+| `name` (required) | header | name | — | `name` | — | The instance's name, which a layout slot, another instance's input and the pipeline verbs name. |
 
 Printed back as `graph` when the node carries `name`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 

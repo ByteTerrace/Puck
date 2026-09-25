@@ -75,12 +75,12 @@ public sealed class WorldViewGraphLawTests {
             Row(name: "security"),
             Row(
                 inputs: [new WorldViewGraphInput(Instance: "security", Resource: "feed")],
-                name: "main"
+                name: "monitor"
             )
         ),
         denied: Document(Row(
             inputs: [new WorldViewGraphInput(Instance: "security", Resource: "feed")],
-            name: "main"
+            name: "monitor"
         )),
         expected: "views.graphs[0].inputs[0].instance 'security' names no views.graphs row."
     );
@@ -127,17 +127,81 @@ public sealed class WorldViewGraphLawTests {
                 Row(name: "security"),
                 Row(
                     inputs: [new WorldViewGraphInput(Instance: "security", Resource: "left"), new WorldViewGraphInput(Instance: "security", Resource: "right")],
-                    name: "main"
+                    name: "monitor"
                 )
             ),
             denied: Document(
                 Row(name: "security"),
                 Row(
                     inputs: [new WorldViewGraphInput(Instance: "security", Resource: "left"), new WorldViewGraphInput(Instance: "security", Resource: "left")],
-                    name: "main"
+                    name: "monitor"
                 )
             ),
             expected: "views.graphs[1].inputs[1].resource 'left' is bound more than once."
+        );
+    }
+    [Fact]
+    public void ARowNamesExactlyOneOfASourceAndAPackageAndAPackageReadsNothing() {
+        Refuses(
+            control: Document(Row(name: "security")),
+            denied: Document(Row(name: "security") with { Package = "sdf.world" }),
+            expected: "views.graphs[0] must author exactly one of source and package."
+        );
+        Refuses(
+            control: Document(Row(name: "security")),
+            denied: Document(Row(name: "security") with { Source = null }),
+            expected: "views.graphs[0] must author exactly one of source and package."
+        );
+        Refuses(
+            control: Document(
+                Row(name: "security"),
+                new WorldViewGraph(Name: "scene", Package: "sdf.world")
+            ),
+            denied: Document(
+                Row(name: "security"),
+                new WorldViewGraph(Inputs: [new WorldViewGraphInput(Instance: "security", Resource: "feed")], Name: "scene", Package: "sdf.world")
+            ),
+            expected: "views.graphs[1].inputs: package instance 'scene' renders through its producer, which reads no input."
+        );
+    }
+    [Fact]
+    public void ASynthesizedNameIsTheWorldsOnlyWhenItNamesItsRoot() {
+        var authored = Document(
+            new WorldViewGraph(Name: WorldViewGraphs.WorldInstance, Package: "sdf.world"),
+            Row(
+                inputs: [new WorldViewGraphInput(Instance: WorldViewGraphs.WorldInstance, Resource: "feed")],
+                name: WorldViewGraphs.MainInstance
+            )
+        );
+
+        Refuses(
+            control: (authored with { ViewsRaw = (authored.Views with { Root = WorldViewGraphs.MainInstance }) }),
+            denied: authored,
+            expected: "views.graphs[0].name 'world' is an instance of the render graph composition synthesizes"
+        );
+        Refuses(
+            control: (authored with { ViewsRaw = (authored.Views with { Root = WorldViewGraphs.MainInstance }) }),
+            denied: (authored with { ViewsRaw = (authored.Views with { Root = "absent" }) }),
+            expected: "views.root 'absent' names no views.graphs row."
+        );
+    }
+    [Fact]
+    public void ASlotShowsAGraphRowByItsName() {
+        var document = Document(Row(name: "security"));
+
+        WorldDefinition Slot(string instance) => (document with {
+            ViewsRaw = (document.Views with {
+                Layouts = [new WorldViewLayout(
+                    Name: "panes",
+                    Slots: [new WorldViewSlot() with { Instance = instance }]
+                )],
+            }),
+        });
+
+        Refuses(
+            control: Slot(instance: "security"),
+            denied: Slot(instance: "lobby"),
+            expected: "views.layouts[0].slots[0].instance 'lobby' names no views.graphs row."
         );
     }
     [Fact]
@@ -174,7 +238,7 @@ public sealed class WorldViewGraphLawTests {
             ),
             Row(
                 inputs: [new WorldViewGraphInput(Instance: "security", Resource: "screen")],
-                name: "main"
+                name: "monitor"
             ),
             (Row(name: "missing") with { Source = "graphs/absent.graph.json" })
         );

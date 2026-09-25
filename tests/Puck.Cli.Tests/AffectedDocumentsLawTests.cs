@@ -77,7 +77,7 @@ public sealed class AffectedDocumentsLawTests {
 
         var reachedBy = AffectedDocuments.ReachedBy(canaries: canaries, repositoryRoot: repositoryRoot);
 
-        Assert.Contains(collection: reachedBy["src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl"], expected: "resample-reconstruction");
+        Assert.Contains(collection: reachedBy["src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl"], expected: "resample-reconstruction");
 
         foreach (var ink in ((string[])["ink-finish", "ink-simulation", "ink-visualize"])) {
             Assert.Contains(collection: reachedBy[$"src/Puck.World/Assets/pipelines/{ink}.hlsl"], expected: "pipeline-ink");

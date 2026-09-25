@@ -77,21 +77,29 @@ public sealed record RenderGraphRuntimeRefusal(RenderGraphRuntimeRefusalCode Cod
 /// </summary>
 public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposable {
     private readonly CaptureRequestSlot m_capture = new();
-    private readonly InstanceCaptureTarget[] m_captureTargets;
-    private readonly Output[] m_current;
+    // Each instance's capture target by name, created when first asked for and kept across a reconfiguration, so a target
+    // a caller holds keeps reading the instance of its name.
+    private readonly Dictionary<string, InstanceCaptureTarget> m_captureTargets = new(comparer: StringComparer.Ordinal);
+
     private readonly IGpuDeviceContext m_device;
-    private readonly Binding[][] m_inputs;
+    private readonly bool m_hostsOnDirectX;
+    private readonly uint m_inFlightFrames;
+    private readonly RenderGraphPackageRecorders m_packages;
+
+    private Output[] m_current;
+    // Each instance's graph, or null for an external instance and for a graph instance whose graph is not installed yet.
+    private RenderGraphRuntimeGraph?[] m_graphs;
+    private Binding[][] m_inputs;
     // Each instance's node, or null for an external instance, which has its producer instead.
-    private readonly ShaderPipelineRenderNode?[] m_nodes;
-    private readonly Output[] m_previous;
-    private readonly IRenderGraphExternalProducer?[] m_producers;
-    private readonly int m_root;
-    private readonly RenderGraphSchedule[] m_schedules;
-    private readonly RenderGraphInstanceSet m_set;
+    private ShaderPipelineRenderNode?[] m_nodes;
+    private Output[] m_previous;
+    private IRenderGraphExternalProducer?[] m_producers;
+    private int m_root;
+    private RenderGraphSchedule[] m_schedules;
+    private RenderGraphInstanceSet m_set;
     // Each graph instance's producer whose stand-in its latest render bound, or null when every image input it bound was a
     // completed output; a capture of the instance waits until it is null.
-    private readonly string?[] m_standInReads;
-
+    private string?[] m_standInReads;
     // The instance the capture armed on the runtime reads.
     private int m_captureInstance;
     private bool m_disposed;
@@ -100,9 +108,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private int m_turn;
     private int m_unproduced;
 
-    private RenderGraphRuntime(RenderGraphInstanceSet set, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, Binding[][] inputs, int root, IGpuDeviceContext device) {
+    private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, bool hostsOnDirectX, uint inFlightFrames) {
         m_current = new Output[nodes.Length];
         m_device = device;
+        m_graphs = graphs;
+        m_hostsOnDirectX = hostsOnDirectX;
+        m_inFlightFrames = inFlightFrames;
+        m_packages = packages;
         m_history = RenderGraphHistory.Empty(set: set);
         m_inputs = inputs;
         m_nodes = nodes;
@@ -116,14 +128,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_set = set;
         m_standInReads = new string?[nodes.Length];
         m_captureInstance = root;
-        m_captureTargets = new InstanceCaptureTarget[nodes.Length];
-
-        for (var index = 0; (index < nodes.Length); index++) {
-            m_captureTargets[index] = new InstanceCaptureTarget(
-                index: index,
-                runtime: this
-            );
-        }
 
         Array.Fill(
             array: m_current,
@@ -182,7 +186,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         _ => GpuPixelFormat.R8G8B8A8Unorm,
     });
     // Validates one instance's graph against its instance and resolves its inputs to producer indices.
-    private static bool TryResolve(RenderGraphInstanceSet set, int index, RenderGraphRuntimeGraph graph, RenderGraphPackageRecorders packages, Published[] published, [NotNullWhen(returnValue: true)] out Binding[]? bindings, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal) {
+    private static bool TryResolve(RenderGraphInstanceSet set, int index, RenderGraphRuntimeGraph graph, RenderGraphPackageRecorders packages, Published?[] published, [NotNullWhen(returnValue: true)] out Binding[]? bindings, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal) {
         var instance = set.Instances[index];
         var plan = graph.Pipeline.Plan;
 
@@ -333,7 +337,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// its package registers.</summary>
     /// <param name="set">The instances.</param>
     /// <param name="graphs">Each instance's graph, parallel to <see cref="RenderGraphInstanceSet.Instances"/>, and
-    /// <see langword="null"/> for an external instance.</param>
+    /// <see langword="null"/> for an external instance and for a graph instance whose graph is not compiled yet, which
+    /// renders nothing until <see cref="TryInstall"/> gives it one; its consumers bind a stand-in meanwhile.</param>
     /// <param name="root">The name of the instance the display shows and captures read, which renders a graph.</param>
     /// <param name="packages">The recorders the graphs' package passes run through, and the external producers.</param>
     /// <param name="deviceContext">The device every instance records on.</param>
@@ -344,9 +349,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <param name="inFlightFrames">Each instance's frames in flight, at least two, since an instance's history and its
     /// previous-frame reads live in its previous frame slot.</param>
     /// <returns><see langword="true"/> when the graphs installed.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="set"/>, <paramref name="graphs"/>, the entry of an
-    /// instance that renders a graph, <paramref name="root"/>, <paramref name="packages"/> or
-    /// <paramref name="deviceContext"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="set"/>, <paramref name="graphs"/>,
+    /// <paramref name="root"/>, <paramref name="packages"/> or <paramref name="deviceContext"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlightFrames"/> is less than two.</exception>
     /// <exception cref="InvalidDataException">A graph cannot be installed on a node: its shader compilation failed, or
     /// its plan is not one a node runs.</exception>
@@ -387,36 +392,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             return false;
         }
 
-        for (var index = 0; (index < graphs.Count); index++) {
-            var instance = set.Instances[index];
+        if (RefuseExternal(
+            graphs: graphs,
+            packages: packages,
+            set: set
+        ) is { } external) {
+            refusal = external;
 
-            if (instance.Kind == RenderGraphInstanceKind.Graph) {
-                ArgumentNullException.ThrowIfNull(
-                    argument: graphs[index],
-                    paramName: nameof(graphs)
-                );
-
-                continue;
-            }
-
-            var reason = ((graphs[index] is not null)
-                ? "is given a graph, but its producer renders it"
-                : ((instance.Output != ShaderPipelineResourceKind.Image)
-                    ? $"declares a {instance.Output} output, but an external producer hands out images"
-                    : (packages.ServesProducer(package: instance.ExternalPackage!)
-                        ? null
-                        : "names a package no external producer serves")));
-
-            if (reason is not null) {
-                refusal = Refuse(
-                    RenderGraphRuntimeRefusalCode.ExternalProducer,
-                    $"External instance '{instance.Name}' of package '{instance.ExternalPackage}' {reason}.",
-                    instance.Name,
-                    instance.ExternalPackage!
-                );
-
-                return false;
-            }
+            return false;
         }
 
         var producers = new IRenderGraphExternalProducer?[graphs.Count];
@@ -427,78 +410,61 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 var instance = set.Instances[index];
 
                 if (instance.Kind == RenderGraphInstanceKind.External) {
-                    producers[index] = packages.CreateProducer(context: new RenderGraphExternalProducerContext(
-                        Device: deviceContext,
-                        HostsOnDirectX: hostsOnDirectX,
-                        Instance: instance.Name,
-                        Package: instance.ExternalPackage!
-                    ));
-                }
-            }
-
-            var published = new Published[graphs.Count];
-
-            for (var index = 0; (index < graphs.Count); index++) {
-                published[index] = PublishedBy(
-                    graph: graphs[index],
-                    producer: producers[index]
-                );
-            }
-
-            var inputs = new Binding[graphs.Count][];
-
-            for (var index = 0; (index < graphs.Count); index++) {
-                if (graphs[index] is not { } graph) {
-                    inputs[index] = [];
-
-                    continue;
-                }
-                if (!TryResolve(
-                    bindings: out var bindings,
-                    graph: graph,
-                    index: index,
-                    packages: packages,
-                    published: published,
-                    refusal: out refusal,
-                    set: set
-                )) {
-                    DisposeAll(
-                        nodes: nodes,
-                        producers: producers
+                    producers[index] = CreateProducer(
+                        deviceContext: deviceContext,
+                        hostsOnDirectX: hostsOnDirectX,
+                        instance: instance,
+                        packages: packages
                     );
-
-                    return false;
                 }
-
-                inputs[index] = bindings;
             }
+
+            if (!TryBindAll(
+                graphs: graphs,
+                inputs: out var inputs,
+                packages: packages,
+                producers: producers,
+                refusal: out refusal,
+                set: set
+            )) {
+                DisposeAll(
+                    nodes: nodes,
+                    producers: producers
+                );
+
+                return false;
+            }
+
+            var installed = new RenderGraphRuntimeGraph?[graphs.Count];
+
             for (var index = 0; (index < graphs.Count); index++) {
-                if (graphs[index] is not { } graph) {
+                if (set.Instances[index].Kind != RenderGraphInstanceKind.Graph) {
                     continue;
                 }
 
-                // The extent is a placeholder: the instance's first render requests its scheduled extent before the node
-                // builds anything.
-                var node = new ShaderPipelineRenderNode(
+                nodes[index] = CreateNode(
                     deviceContext: deviceContext,
-                    height: 1,
                     hostsOnDirectX: hostsOnDirectX,
                     inFlightFrames: inFlightFrames,
                     name: set.Instances[index].Name,
-                    outputLayout: GpuImageLayout.ShaderReadOnly,
-                    packages: packages,
-                    width: 1
+                    packages: packages
                 );
 
-                nodes[index] = node;
-                node.Swap(pipeline: graph.Pipeline);
+                if (graphs[index] is { } graph) {
+                    nodes[index]!.Swap(pipeline: graph.Pipeline);
+                    installed[index] = graph;
+                }
             }
 
             refusal = null;
             runtime = new RenderGraphRuntime(
                 device: deviceContext,
+                graphs: installed,
+                hostsOnDirectX: hostsOnDirectX,
+                inFlightFrames: inFlightFrames,
                 inputs: inputs,
                 nodes: nodes,
+                packages: packages,
                 producers: producers,
                 root: rootIndex,
                 set: set
@@ -515,9 +481,97 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         }
     }
 
+    // Why an external instance cannot run as given, or null when every one can: it was given a graph, declares an output
+    // that is not an image, or names a package no external producer serves.
+    private static RenderGraphRuntimeRefusal? RefuseExternal(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, RenderGraphPackageRecorders packages) {
+        for (var index = 0; (index < graphs.Count); index++) {
+            var instance = set.Instances[index];
+
+            if (instance.Kind == RenderGraphInstanceKind.Graph) {
+                continue;
+            }
+
+            var reason = ((graphs[index] is not null)
+                ? "is given a graph, but its producer renders it"
+                : ((instance.Output != ShaderPipelineResourceKind.Image)
+                    ? $"declares a {instance.Output} output, but an external producer hands out images"
+                    : (packages.ServesProducer(package: instance.ExternalPackage!)
+                        ? null
+                        : "names a package no external producer serves")));
+
+            if (reason is not null) {
+                return Refuse(
+                    RenderGraphRuntimeRefusalCode.ExternalProducer,
+                    $"External instance '{instance.Name}' of package '{instance.ExternalPackage}' {reason}.",
+                    instance.Name,
+                    instance.ExternalPackage!
+                );
+            }
+        }
+
+        return null;
+    }
+    // Resolves every installed graph's inputs against what each producer publishes.
+    private static bool TryBindAll(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, IRenderGraphExternalProducer?[] producers, RenderGraphPackageRecorders packages, [NotNullWhen(returnValue: true)] out Binding[][]? inputs, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal) {
+        var published = new Published?[graphs.Count];
+
+        for (var index = 0; (index < graphs.Count); index++) {
+            published[index] = PublishedBy(
+                graph: graphs[index],
+                producer: producers[index]
+            );
+        }
+
+        inputs = new Binding[graphs.Count][];
+
+        for (var index = 0; (index < graphs.Count); index++) {
+            if (graphs[index] is not { } graph) {
+                inputs[index] = [];
+
+                continue;
+            }
+            if (!TryResolve(
+                bindings: out var bindings,
+                graph: graph,
+                index: index,
+                packages: packages,
+                published: published,
+                refusal: out refusal,
+                set: set
+            )) {
+                inputs = null;
+
+                return false;
+            }
+
+            inputs[index] = bindings;
+        }
+
+        refusal = null;
+
+        return true;
+    }
+    private static IRenderGraphExternalProducer CreateProducer(RenderGraphInstance instance, RenderGraphPackageRecorders packages, IGpuDeviceContext deviceContext, bool hostsOnDirectX) => packages.CreateProducer(context: new RenderGraphExternalProducerContext(
+        Device: deviceContext,
+        HostsOnDirectX: hostsOnDirectX,
+        Instance: instance.Name,
+        Package: instance.ExternalPackage!
+    ));
+    // The extent is a placeholder: the instance's first render requests its scheduled extent before the node builds
+    // anything.
+    private static ShaderPipelineRenderNode CreateNode(string name, RenderGraphPackageRecorders packages, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames) => new(
+        deviceContext: deviceContext,
+        height: 1,
+        hostsOnDirectX: hostsOnDirectX,
+        inFlightFrames: inFlightFrames,
+        name: name,
+        outputLayout: GpuImageLayout.ShaderReadOnly,
+        packages: packages,
+        width: 1
+    );
     // What an instance publishes to its consumers: its graph's default output as its node presents it, or its external
-    // producer's images.
-    private static Published PublishedBy(RenderGraphRuntimeGraph? graph, IRenderGraphExternalProducer? producer) {
+    // producer's images; nothing known for a graph instance whose graph is not installed yet.
+    private static Published? PublishedBy(RenderGraphRuntimeGraph? graph, IRenderGraphExternalProducer? producer) {
         if (producer is not null) {
             return new Published(
                 Format: PixelFormatOf(format: producer.Format),
@@ -525,10 +579,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             );
         }
 
-        var plan = graph!.Pipeline.Plan;
+        if (graph is null) {
+            return null;
+        }
+
+        var plan = graph.Pipeline.Plan;
 
         if (plan.FindResource(name: plan.DefaultOutput) is not { } output) {
-            return default;
+            return default(Published);
         }
 
         var declaration = plan.Storages[output.Storage].Declaration;
@@ -544,20 +602,24 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             ));
     }
     // Why a consumer's external version cannot bind what its producer publishes, or null when it can: an image of
-    // another format, or a buffer larger than the producer's.
-    private static (string Declared, string Published)? Mismatch(ShaderPipelineResource declaration, Published published) {
+    // another format, or a buffer larger than the producer's. A producer that publishes nothing known yet, a graph instance
+    // whose graph is not installed, is checked when its graph installs.
+    private static (string Declared, string Published)? Mismatch(ShaderPipelineResource declaration, Published? published) {
+        if (published is not { } known) {
+            return null;
+        }
         if (declaration.Kind == ShaderPipelineResourceKind.Buffer) {
             var size = declaration.SizeBytes.GetValueOrDefault();
 
-            return ((size > published.SizeBytes)
-                ? ($"a {size}-byte buffer", $"a {published.SizeBytes}-byte buffer")
+            return ((size > known.SizeBytes)
+                ? ($"a {size}-byte buffer", $"a {known.SizeBytes}-byte buffer")
                 : null);
         }
 
         var format = ShaderPipelineRenderNode.ParseFormat(format: declaration.Format);
 
-        return ((format != published.Format)
-            ? ($"{format}", $"{published.Format}")
+        return ((format != known.Format)
+            ? ($"{format}", $"{known.Format}")
             : null);
     }
     private static void DisposeAll(ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers) {
@@ -948,7 +1010,25 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <returns>The instance's target, the same object on every call.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The set has no instance of that name.</exception>
-    public ICaptureRequestTarget CaptureTarget(string instance) => m_captureTargets[IndexOf(instance: instance)];
+    public ICaptureRequestTarget CaptureTarget(string instance) {
+        _ = IndexOf(instance: instance);
+
+        if (!m_captureTargets.TryGetValue(
+            key: instance,
+            value: out var target
+        )) {
+            target = new InstanceCaptureTarget(
+                name: instance,
+                runtime: this
+            );
+            m_captureTargets.Add(
+                key: instance,
+                value: target
+            );
+        }
+
+        return target;
+    }
     /// <summary>Returns why a capture of one instance would not be served by the frame the runtime produces now, phrased
     /// as the refusal of a capture that waited on it reads: the instance has no completed output, or its latest render
     /// bound a stand-in for a producer that has none. It builds a string, so a caller polls it only to report.</summary>
@@ -989,14 +1069,27 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <returns>The instance's work source.</returns>
     public IGpuWorkSource Work(int instance) => (((IGpuWorkSource?)m_nodes[instance]) ?? m_producers[instance]!.Work);
 
-    // One instance's capture target: a capture armed on it arms the runtime's one slot for that instance.
-    private sealed class InstanceCaptureTarget(RenderGraphRuntime runtime, int index) : ICaptureRequestTarget {
+    // One instance's capture target: a capture armed on it arms the runtime's one slot for the instance of its name, and is
+    // refused once a reconfiguration has removed that instance.
+    private sealed class InstanceCaptureTarget(RenderGraphRuntime runtime, string name) : ICaptureRequestTarget {
         public string? PendingCapturePath => runtime.PendingCapturePath;
 
-        public void RequestCapture(FrameCaptureRequest request) => runtime.Arm(
-            index: index,
-            request: request
-        );
+        public void RequestCapture(FrameCaptureRequest request) {
+            ArgumentNullException.ThrowIfNull(argument: request);
+
+            var index = runtime.m_set.IndexOf(name: name);
+
+            if (index < 0) {
+                _ = request.TryFail(error: new InvalidOperationException(message: $"The render graph no longer has an instance '{name}'."));
+
+                return;
+            }
+
+            runtime.Arm(
+                index: index,
+                request: request
+            );
+        }
     }
     // What a producer instance publishes: an image's format, or a buffer's size in bytes.
     private readonly record struct Published(GpuPixelFormat Format, ulong SizeBytes);

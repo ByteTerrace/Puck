@@ -13,6 +13,22 @@ public static class WorldViewGraphs {
     /// SDF world: each <c>render.extensions</c> pass in order, then the overlay.</summary>
     public const string MainInstance = "main";
 
+    /// <summary>Returns whether a name is one of the instances of the render graph composition synthesizes, which a
+    /// <c>views.graphs</c> row may take only in a world that names its own root.</summary>
+    /// <param name="name">The name.</param>
+    /// <returns><see langword="true"/> for <see cref="WorldInstance"/> and <see cref="MainInstance"/>.</returns>
+    public static bool IsSynthesized(string name) => (
+        string.Equals(
+            a: name,
+            b: WorldInstance,
+            comparisonType: StringComparison.Ordinal
+        ) ||
+        string.Equals(
+            a: name,
+            b: MainInstance,
+            comparisonType: StringComparison.Ordinal
+        )
+    );
     /// <summary>Returns a row's refresh as the scheduler reads it: every frame when the row authors none, and an
     /// invalid refresh when it authors both or neither rate inside its <c>refresh</c>.</summary>
     /// <param name="graph">The row.</param>
@@ -29,8 +45,9 @@ public static class WorldViewGraphs {
             : RenderGraphRefresh.EveryFrame
         );
     }
-    /// <summary>Returns the rows as render-graph instances, in row order. Several inputs bound to one producer are one
-    /// read, a previous-frame read only when every one of them is.</summary>
+    /// <summary>Returns the rows as render-graph instances, in row order: a row naming a package is that package's
+    /// external producer, and any other row renders its graph. Several inputs bound to one producer are one read, a
+    /// previous-frame read only when every one of them is.</summary>
     /// <param name="graphs">The rows.</param>
     /// <param name="passes">The passes one render of a row's graph records.</param>
     /// <returns>The instances.</returns>
@@ -46,6 +63,7 @@ public static class WorldViewGraphs {
             var graph = graphs[index];
 
             instances[index] = new RenderGraphInstance(
+                ExternalPackage: graph.Package,
                 Name: graph.Name,
                 Passes: passes(arg: graph),
                 Reads: [.. (graph.Inputs ?? [])

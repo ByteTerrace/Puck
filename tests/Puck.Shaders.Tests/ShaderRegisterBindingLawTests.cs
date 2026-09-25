@@ -18,7 +18,6 @@ public sealed partial class ShaderRegisterBindingLawTests {
         "Direct3D11KernelSource",
         "FragmentShaderSource",
         "PuckWorldPipelineSource",
-        "RenderGraphPackageSource",
         "ShaderInclude",
         "VertexShaderSource",
     ];
@@ -481,8 +480,8 @@ public sealed partial class ShaderRegisterBindingLawTests {
             expected: []
         );
         Assert.Contains(
-            collection: filesByType["RenderGraphPackageSource"],
-            expected: "src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl"
+            collection: filesByType["ComputeShaderSource"],
+            expected: "src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl"
         );
     }
     [Fact]
