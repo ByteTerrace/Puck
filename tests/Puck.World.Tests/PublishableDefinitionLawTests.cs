@@ -11,9 +11,10 @@ public sealed class PublishableDefinitionLawTests {
     private const string CensusRow = "census";
 
     // A world whose body census reads a state row, so a boot must fill that row before it can admit the document.
-    private static string CensusWorld(Draw? draw) {
+    internal static WorldDefinition CensusDefinition(Draw? draw) {
         var document = Fixtures.BuildDocument();
-        var definition = (document with {
+
+        return (document with {
             PopulationRaw = (document.Population with {
                 CapacityRaw = null,
                 CapacityRow = CensusRow,
@@ -26,9 +27,9 @@ public sealed class PublishableDefinitionLawTests {
                 Draw: draw
             ),
         ]);
-
-        return Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition));
     }
+
+    private static string CensusWorld(Draw? draw) => Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: CensusDefinition(draw: draw)));
 
     [Fact]
     public void APublishedDefinitionComesBackUndrawn() {

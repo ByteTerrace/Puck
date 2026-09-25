@@ -55,17 +55,33 @@ public static partial class WorldDefinitionLoader {
             return false;
         }
         parsed = (parsed! with { DocumentDirectory = documentDirectory });
-        try {
-            if (!TryPrepareAndAdmit(catalog: catalog, definition: parsed, instanceIdentity: BootInstanceName, neighbours: null,
-                    proveNeighbours: false, reason: out reason, resolved: out _, sourceName: sourceName)) {
-                return false;
-            }
-        } catch (Exception exception) {
-            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+        if (!TryProvePublishable(catalog: catalog, definition: parsed, reason: out reason, sourceName: sourceName)) {
             return false;
         }
         definition = parsed;
         return true;
+    }
+    /// <summary>Proves a published, undrawn definition admits, the proof <see cref="TryReadPublishable"/> runs after
+    /// it parses: a copy is drawn for <see cref="BootInstanceName"/>, settled and admitted exactly as a boot admits
+    /// it, validating the facts the document owns (its neighbours are published beside it and prove nothing yet);
+    /// the drawn copy is discarded and <paramref name="definition"/> is never modified. A caller holding a parsed
+    /// published definition, such as a release transition comparing two packages, proves it here rather than
+    /// validating it undrawn.</summary>
+    /// <param name="definition">The parsed, undrawn definition.</param>
+    /// <param name="sourceName">The origin echoed in refusals.</param>
+    /// <param name="reason">The named refusal, classed as <see cref="TryLoadFileForAdmission"/> classes its own, or
+    /// empty on success.</param>
+    /// <param name="catalog">The selected catalog, or null to defer provider checks.</param>
+    /// <returns>Whether a drawn copy of the definition was admitted.</returns>
+    public static bool TryProvePublishable(WorldDefinition definition, string sourceName, out string reason, IMachineValidationCatalog? catalog = null) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        try {
+            return TryPrepareAndAdmit(catalog: catalog, definition: definition, instanceIdentity: BootInstanceName, neighbours: null,
+                proveNeighbours: false, reason: out reason, resolved: out _, sourceName: sourceName);
+        } catch (Exception exception) {
+            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            return false;
+        }
     }
     /// <summary>Loads a file and retains the final, draw-resolved document's validation and programs — the one door
     /// every document file is admitted through: the boot, an instance start, a transfer's destination,

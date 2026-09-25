@@ -1802,7 +1802,8 @@ returns a file's content pin alone, for a caller comparing bytes against a recor
 A release publishes a definition undrawn, since draws are instance state:
 `WorldDefinitionLoader.TryReadPublishable` returns the parsed, undrawn document once a copy
 drawn for the boot instance admits, and `puck world prepare`, `puck world release`, the
-official package scan and a release bootstrap read through it. Bytes, files, and asynchronous loads resolve boot draws, state-backed
+official package scan and a release bootstrap read through it; `WorldDefinitionLoader.TryProvePublishable` is
+that same proof for a definition already parsed, which a release metadata transition runs on both of its packages. Bytes, files, and asynchronous loads resolve boot draws, state-backed
 document values, a caller's `overrides` rewrite of the loaded document, and state-row
 settlement before full admission, in that order. A preflight uses the existing
 generator and row validators for inputs that drawing can consume or replace; invalid
