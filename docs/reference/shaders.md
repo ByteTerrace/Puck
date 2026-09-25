@@ -363,7 +363,7 @@ and each output then stands for the input at its position: the instance
 publishes that input's image with no copy, in its own layout
 (`ShaderPipelineRenderNode.PublishedLayout`), and a root capture reads it. An
 output another pass reads, that is history, that would stand for a previous
-frame's input, or that is not an RGBA8 image beside an input image of its
+frame's input or for an input a later pass overwrites, or that is not an RGBA8 image beside an input image of its
 format is refused by name when its pass draws nothing: a previous frame's
 instance rests in the layout its own role left it in. So is an output standing for a host's image bound in another layout
 than the instance publishes in: the instance publishes every image in its output

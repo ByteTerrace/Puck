@@ -778,7 +778,7 @@ inputs in `ShaderReadOnly`, and its render pass leaves the target in
 own barriers in the post and overlay laws). A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
 and the node publishes the input in the output's place, never a copy
 (`PublishedLayout`), only when the recording was told it may
-(`RenderGraphPackageRecording.MayStandIn`): never for a previous frame's input, whose instance rests in the layout its own role left, and never over a host's image bound in
+(`RenderGraphPackageRecording.MayStandIn`): never for a previous frame's input, whose instance rests in the layout its own role left, never for an input a later pass overwrites, and never over a host's image bound in
 another layout than the node publishes in, since the node publishes in its
 output layout, the one its consumer's descriptor is written with, and hands a
 host's image back in the host's own. A lease declares the layout its producer's

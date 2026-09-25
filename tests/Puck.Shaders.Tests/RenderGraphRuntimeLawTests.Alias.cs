@@ -9,7 +9,7 @@ namespace Puck.Shaders.Tests;
 /// that image in its own layout (a host's, or an owned input's planned one), a frame that draws again publishes the
 /// output, a drawing pass is handed its input shader-readable and its target in render-target layout, every image
 /// barrier starts from the layout the last one left, and a pass whose output another pass reads, or would stand for a
-/// previous frame's input, is refused by name when it draws nothing.
+/// previous frame's input or for an input a later pass overwrites, is refused by name when it draws nothing.
 /// </summary>
 public sealed partial class RenderGraphRuntimeLawTests {
     // The root's graph: the world it reads, and one package pass drawn over it into the published image, or, with a
@@ -321,7 +321,84 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
         }
     }
+    /// <summary>An input a later pass overwrites, by writing the version that forwards it, holds that pass's contents
+    /// once the frame ends, so an output standing for it would publish pixels the package never read: the pass is
+    /// refused by name when it draws nothing.</summary>
+    [Fact]
+    public void AnOutputCannotStandForAnInputALaterPassOverwritesAndIsRefusedByName() {
+        var gpu = new FakePipelineGpu();
 
+        var (runtime, frames, recorders) = OverScene(
+            gpu: gpu,
+            root: ForwardedOverGraph()
+        );
+
+        using (runtime) {
+            frames.Settle();
+            recorders.Of(instance: "main").Outcome = RenderGraphPackageOutcome.DrewNothing;
+
+            var refusal = Assert.Throws<InvalidOperationException>(testCode: () => frames.Next());
+
+            Assert.Contains(
+                expectedSubstring: "Package pass 'over' drew nothing, but its output 'composed' would stand for 'lit', which pass 'tone' overwrites later in the frame",
+                actualString: refusal.Message
+            );
+        }
+    }
+
+    // The root's graph with an owned input a later pass forwards: a compute pass shades the world into an image, the
+    // package pass draws over that image, and a later compute pass writes the version forwarding it, which the graph
+    // also publishes.
+    private static CompiledShaderPipeline ForwardedOverGraph() => Compile(definition: new RenderGraphDefinition(
+        Name: "forwarded-over",
+        Outputs: ["composed", "toned"],
+        Packages: [new RenderGraphPackagePass(
+            Inputs: ["lit"],
+            Name: "over",
+            Outputs: ["composed"],
+            Package: Over
+        )],
+        Passes: [
+            new ShaderPipelinePass(
+                EntryPoint: "main",
+                Inputs: [new ResourceReference(
+                    Binding: 0,
+                    Name: "world"
+                )],
+                Kind: ShaderPipelineDocumentPassKind.Compute,
+                Name: "shade",
+                Outputs: [new ResourceReference(
+                    Binding: 1,
+                    Name: "lit"
+                )],
+                Source: "shade.hlsl"
+            ),
+            new ShaderPipelinePass(
+                EntryPoint: "main",
+                Inputs: [new ResourceReference(
+                    Binding: 0,
+                    Name: "world"
+                )],
+                Kind: ShaderPipelineDocumentPassKind.Compute,
+                Name: "tone",
+                Outputs: [new ResourceReference(
+                    Binding: 1,
+                    Name: "toned"
+                )],
+                Source: "tone.hlsl"
+            ),
+        ],
+        Resources: [
+            Image(
+                external: true,
+                name: "world"
+            ),
+            Image(name: "lit"),
+            (Image(name: "toned") with { From = "lit" }),
+            Image(name: "composed"),
+        ],
+        Schema: RenderGraphSchemas.Graph
+    ));
     // The root's graph with a history input read at its previous frame: a compute pass accumulates the world into a
     // history image, and the package pass draws over that image's previous frame into the published one.
     private static CompiledShaderPipeline HistoryOverGraph() => Compile(definition: new RenderGraphDefinition(
