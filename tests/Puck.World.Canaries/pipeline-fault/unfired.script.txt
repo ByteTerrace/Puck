@@ -7,6 +7,9 @@ pipeline.wait feedback submitted 1 10
 pipeline.step feedback
 pipeline.wait feedback submitted 2 10
 pipeline.inspect feedback
+# The SDF view's engine is ready before the counts restart: the fault counts every image any device service creates,
+# and an engine still building would take one.
+world.wait ready 45
 gpu.faults disarm
 gpu.faults arm image 7
 # The edit installs while paused without rendering, so the paused instance still presents submission 2, and the
