@@ -17,6 +17,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     IGpuCommandPoolFactory, IGpuPipelineFactory, IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory,
     IGpuBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuRenderPassFactory {
     private readonly Dictionary<nint, Created> m_byHandle = [];
+    private readonly Dictionary<nint, GpuDescriptorAdmission> m_poolRanges = [];
     private readonly Lock m_gate = new();
 
     private int m_gateThread;
@@ -28,6 +29,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     /// <summary>Gets every descriptor pool created so far, in creation order, as its creation sized it.</summary>
     public List<GpuDescriptorPoolSizes> DescriptorPools { get; } = [];
 
+    /// <summary>Gets or sets the device descriptor heap every pool is a range of, as on Direct3D 12: a pool is admitted
+    /// into it at creation and returns its range when destroyed, and <see cref="IGpuBindings.CanAdmit"/> checks a
+    /// candidate against it. <see langword="null"/> admits every pool, as on Vulkan.</summary>
+    public GpuDescriptorHeapBudget? DescriptorHeap { get; set; }
     /// <summary>Gets the number of creations so far.</summary>
     public int CreationCount => CreatedObjects.Count;
     /// <summary>Gets the bytes of every image and buffer created and not yet disposed: an image is its width times its
@@ -288,10 +293,64 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         sizeBytes: sizeBytes
     );
     public IGpuSurfaceImport CreateImport() => throw new NotSupportedException();
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) {
+        lock (m_gate) {
+            if (DescriptorHeap is { } heap) {
+                return heap.CanAdmit(
+                    owner: owner,
+                    pools: pools,
+                    refusal: out refusal
+                );
+            }
+        }
+
+        refusal = string.Empty;
+
+        return true;
+    }
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
+        GpuDescriptorAdmission? admission = null;
+
+        lock (m_gate) {
+            if (
+                (DescriptorHeap is { } heap) &&
+                !heap.TryAdmit(
+                    admission: out admission,
+                    owner: "descriptor pool",
+                    pools: [sizes],
+                    refusal: out var refusal
+                )
+            ) {
+                throw new InvalidOperationException(message: refusal);
+            }
+        }
+
+        nint handle;
+
+        try {
+            handle = Create(kind: "descriptor pool").Handle;
+        } catch {
+            if (admission is not null) {
+                lock (m_gate) {
+                    DescriptorHeap!.Release(admission: admission);
+                }
+            }
+
+            throw;
+        }
+
         DescriptorPools.Add(item: sizes);
 
-        return Create(kind: "descriptor pool").Handle;
+        if (admission is not null) {
+            lock (m_gate) {
+                m_poolRanges.Add(
+                    key: handle,
+                    value: admission
+                );
+            }
+        }
+
+        return handle;
     }
     public IGpuSurfaceReadback CreateReadback() => (ReadbackSupported
         ? new FakeReadback(gpu: this)
@@ -303,9 +362,20 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     );
     public IGpuSurfaceUpload CreateUpload() => throw new NotSupportedException();
     public void DestroyPool(nint poolHandle) {
-        if (0 != poolHandle) {
-            Destroy(handle: poolHandle);
+        if (0 == poolHandle) {
+            return;
         }
+
+        lock (m_gate) {
+            if (m_poolRanges.Remove(
+                key: poolHandle,
+                value: out var admission
+            )) {
+                DescriptorHeap!.Release(admission: admission);
+            }
+        }
+
+        Destroy(handle: poolHandle);
     }
     public void DestroySampler(nint samplerHandle) => Destroy(handle: samplerHandle);
     public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) { }

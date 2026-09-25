@@ -49,6 +49,16 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
             poolHandle: poolHandle
         );
     /// <inheritdoc/>
+    /// <remarks>Every candidate fits: each pool is a <c>VkDescriptorPool</c> of its own, sized by its creation.</remarks>
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: owner);
+        ArgumentNullException.ThrowIfNull(argument: pools);
+
+        refusal = string.Empty;
+
+        return true;
+    }
+    /// <inheritdoc/>
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
         var poolSizes = BuildPoolSizes(
             combinedImageSamplerCount: sizes.CombinedImageSamplerCount,

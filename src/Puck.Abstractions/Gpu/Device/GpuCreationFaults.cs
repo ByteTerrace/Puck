@@ -232,6 +232,12 @@ file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults)
             descriptorSetLayoutHandle: descriptorSetLayoutHandle,
             poolHandle: poolHandle
         );
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) =>
+        inner.CanAdmit(
+            owner: owner,
+            pools: pools,
+            refusal: out refusal
+        );
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
         Enter(kind: GpuCreationKind.BindingsPool);
 

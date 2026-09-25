@@ -84,6 +84,7 @@ internal sealed class RefusingGpuDevice :
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reach(member: "IGpuRecorder.MemoryBarrier");
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reach(member: "IGpuRecorder.TransitionBuffer");
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw Reach(member: "IGpuBindings.AllocateSet");
+    bool IGpuBindings.CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) => throw Reach(member: "IGpuBindings.CanAdmit");
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => throw Reach(member: "IGpuBindings.CreatePool");
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => throw Reach(member: "IGpuBindings.CreateSampler");
     void IGpuBindings.DestroyPool(nint poolHandle) {

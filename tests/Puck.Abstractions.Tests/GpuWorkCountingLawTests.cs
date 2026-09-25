@@ -153,6 +153,7 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuRecorder.TransitionBuffer"] = (rig => rig.Services.Recorder.TransitionBuffer(bufferHandle: 3, commandBufferHandle: 2, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader, sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader), [(GpuWork.BufferBarriers, 1L)]),
             ["IGpuPipelineFactory.Create(compute)"] = (rig => rig.Services.PipelineFactory.Create(computeShaderModule: null!, description: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
             ["IGpuBindings.AllocateSet"] = (rig => rig.Services.Bindings.AllocateSet(descriptorSetLayoutHandle: 3, poolHandle: 2), [(GpuWork.DescriptorSetsCreated, 1L)]),
+            ["IGpuBindings.CanAdmit"] = (rig => _ = rig.Services.Bindings.CanAdmit(owner: "candidate", pools: [], refusal: out _), none),
             ["IGpuBindings.CreatePool"] = (rig => rig.Services.Bindings.CreatePool(sizes: new GpuDescriptorPoolSizes(CombinedImageSamplerCount: 0, MaxSets: 1, StorageBufferCount: 1, StorageImageCount: 0)), [(GpuWork.DescriptorPoolsCreated, 1L)]),
             ["IGpuBindings.CreateSampler"] = (rig => rig.Services.Bindings.CreateSampler(filter: GpuSamplerFilter.Nearest), none),
             ["IGpuBindings.DestroyPool"] = (rig => rig.Services.Bindings.DestroyPool(poolHandle: 2), none),

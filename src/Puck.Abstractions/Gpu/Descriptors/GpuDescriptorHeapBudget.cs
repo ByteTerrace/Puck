@@ -15,12 +15,13 @@ namespace Puck.Abstractions.Gpu;
 public sealed class GpuDescriptorHeapBudget {
     /// <summary>The most descriptor pools live at once on one device. It bounds the range allocator's bookkeeping, not
     /// descriptors: the documented worst cases are 69 SDF engines (one main, 64 registered views and 4 sessions, one
-    /// pool each) and one overlay, which leave 954 pools for pipeline nodes and their previews. A pipeline node that
-    /// holds one pool for all its passes and in-flight slots makes that 477 pipeline instances with previews, past any
-    /// layout; one that holds a pool per pass and slot needs up to <c>ShaderPipelineLimits.MaxPasses</c> × its in-flight
-    /// frames, so a few maximal nodes would reach the limit. Refused by name past it, like
+    /// pool each), one overlay and a Direct3D 12 device's range for storage clears, which leave 953 pools for pipeline
+    /// nodes and their previews. A pipeline node holds one pool for all its passes and in-flight slots and one for its
+    /// float preview, which makes that 476 pipeline instances with previews, past any layout. Refused by name past it, like
     /// <c>ShaderPipelineLimits.MaxPasses</c>.</summary>
     public const int MaxLivePools = 1024;
+    /// <summary>The code every refusal of a candidate that does not fit carries, whichever owner it names.</summary>
+    public const string RefusalCode = "GPU_DESCRIPTOR_HEAP";
 
     private readonly GpuRangeAllocator m_views;
 
@@ -97,7 +98,7 @@ public sealed class GpuDescriptorHeapBudget {
                 }
 
                 admission = null;
-                refusal = $"'{owner}' needs {pools.Sum(selector: static pool => ((long)pool.HeapDescriptors))} view descriptors in {pools.Count} pool(s) and is refused: {exception.Message}";
+                refusal = $"[{RefusalCode}] '{owner}' needs {pools.Sum(selector: static pool => ((long)pool.HeapDescriptors))} view descriptors in {pools.Count} pool(s) and is refused: {exception.Message}";
 
                 return false;
             }
@@ -108,6 +109,28 @@ public sealed class GpuDescriptorHeapBudget {
             ranges: starts.AsReadOnly()
         );
         refusal = string.Empty;
+
+        return true;
+    }
+    /// <summary>Checks whether a candidate's pools fit the free ranges now, allocating nothing: an admission
+    /// <see cref="TryAdmit"/> would grant is taken and at once released, so the heap is left as it was found.</summary>
+    /// <param name="owner">The candidate's name, echoed in a refusal.</param>
+    /// <param name="pools">The pools the candidate would create, each as its pool creation states it.</param>
+    /// <param name="refusal">Why the candidate does not fit, or empty when it does.</param>
+    /// <returns>Whether the candidate fits.</returns>
+    /// <exception cref="ArgumentException"><paramref name="owner"/> is empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="pools"/> is <see langword="null"/>.</exception>
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) {
+        if (!TryAdmit(
+            admission: out var admission,
+            owner: owner,
+            pools: pools,
+            refusal: out refusal
+        )) {
+            return false;
+        }
+
+        Release(admission: admission);
 
         return true;
     }

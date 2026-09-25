@@ -81,6 +81,9 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets every descriptor pool created, in creation order, as its creation sized it.</summary>
     public List<GpuDescriptorPoolSizes> PoolsCreated { get; } = [];
 
+    /// <summary>Gets or sets the descriptor heap <see cref="IGpuBindings.CanAdmit"/> checks a candidate against, or
+    /// <see langword="null"/> to admit every candidate, as a Vulkan device does.</summary>
+    public GpuDescriptorHeapBudget? DescriptorHeap { get; set; }
     /// <summary>Gets the number of submissions made, fenced or not.</summary>
     public int Submissions { get; private set; }
 
@@ -137,6 +140,21 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuBindings.AllocateSet");
 
         return 7;
+    }
+    bool IGpuBindings.CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) {
+        Hit(key: "IGpuBindings.CanAdmit");
+
+        if (DescriptorHeap is { } heap) {
+            return heap.CanAdmit(
+                owner: owner,
+                pools: pools,
+                refusal: out refusal
+            );
+        }
+
+        refusal = string.Empty;
+
+        return true;
     }
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) {
         Hit(key: "IGpuBindings.CreatePool");

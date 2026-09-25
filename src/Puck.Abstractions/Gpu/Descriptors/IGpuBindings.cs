@@ -10,7 +10,20 @@ public interface IGpuBindings {
     /// <param name="descriptorSetLayoutHandle">The pipeline's descriptor set layout handle.</param>
     /// <returns>The native descriptor set handle, owned by the pool.</returns>
     nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle);
-    /// <summary>Creates a descriptor pool for combined image samplers, storage buffers, and storage images.</summary>
+    /// <summary>Checks, before an owner allocates anything, whether the pools it would create fit the device's
+    /// descriptor heaps now, allocating nothing. On Direct3D 12 each pool is a range of the device's one shader-visible
+    /// view heap (<see cref="GpuDescriptorHeapBudget.CanAdmit"/>), and a candidate that does not fit is refused whole,
+    /// its refusal carrying <see cref="GpuDescriptorHeapBudget.RefusalCode"/> and naming the owner. A Vulkan pool is a
+    /// descriptor pool of its own, so every candidate fits there.</summary>
+    /// <param name="owner">The candidate's name, echoed in a refusal.</param>
+    /// <param name="pools">The pools the candidate would create, from the statement its pool creation reads.</param>
+    /// <param name="refusal">Why the candidate does not fit, or empty when it does.</param>
+    /// <returns>Whether the candidate fits.</returns>
+    bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal);
+    /// <summary>Creates a descriptor pool for combined image samplers, storage buffers, and storage images. On
+    /// Direct3D 12 the pool is a range of the device's shader-visible view heap, and a pool no free range holds is
+    /// refused with an <see cref="InvalidOperationException"/> carrying <see cref="GpuDescriptorHeapBudget.RefusalCode"/>;
+    /// an owner checks <see cref="CanAdmit"/> first, so it is refused before it allocates.</summary>
     /// <param name="sizes">The per-descriptor-kind capacity the pool must provide, derived from the binding lists
     /// of the sets it backs (see <see cref="GpuDescriptorPoolSizes.ForSets"/>) rather than hand-tallied.</param>
     /// <returns>The native descriptor pool handle.</returns>

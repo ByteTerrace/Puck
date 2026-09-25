@@ -86,28 +86,31 @@ public sealed class DirectXPipelineLayout : IDisposable {
     }
 }
 /// <summary>
-/// Encodes a shader-visible CBV_SRV_UAV descriptor heap together with the cached base addresses and
-/// descriptor increment size needed to write and bind descriptors without re-querying the device.
-/// Stored in a <see cref="GCHandle"/>.
+/// A descriptor pool: one range of its device's shader-visible CBV_SRV_UAV heap
+/// (<see cref="DirectXShaderVisibleHeaps"/>), with the range's base addresses and the descriptor increment needed to
+/// write descriptors without re-querying the device. Stored in a <see cref="GCHandle"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXDescriptorPool {
-    public nint HeapHandle;
+    /// <summary>The range the heap admitted, or <see langword="null"/> once returned (or for a pool of no descriptor,
+    /// which holds an empty admission).</summary>
+    public GpuDescriptorAdmission? Admission;
+    /// <summary>The device heaps the range belongs to.</summary>
+    public DirectXShaderVisibleHeaps? Heaps;
     public uint DescriptorSize;
     public uint Capacity;
     public nuint CpuBase;
     public ulong GpuBase;
     /// <summary>The next free heap slot; <c>AllocateSet</c> bump-allocates each set's region from here, so multiple
-    /// independent sets can share one pool (one shader-visible heap) without overlapping — like a Vulkan pool.</summary>
+    /// independent sets can share one pool (one range of the device's view heap) without overlapping — like a Vulkan pool.</summary>
     public uint NextOffset;
 }
 /// <summary>
-/// A range inside a <see cref="DirectXDescriptorPool"/>'s heap, allocated once via
+/// A range inside a <see cref="DirectXDescriptorPool"/>'s range of the device's view heap, allocated once via
 /// <c>IGpuBindings.AllocateSet</c>. Stored in a <see cref="GCHandle"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXDescriptorSet {
-    public nint HeapHandle;
     public uint DescriptorSize;
     public nuint CpuBase;
     public ulong GpuBase;

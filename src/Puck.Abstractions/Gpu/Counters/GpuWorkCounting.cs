@@ -371,6 +371,12 @@ file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : C
             ),
             lifetimeIndex: GpuWork.DescriptorSetsCreatedIndex
         );
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) =>
+        inner.CanAdmit(
+            owner: owner,
+            pools: pools,
+            refusal: out refusal
+        );
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) =>
         Created(
             created: inner.CreatePool(sizes: in sizes),

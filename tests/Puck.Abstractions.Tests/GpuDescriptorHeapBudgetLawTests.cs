@@ -6,7 +6,8 @@ namespace Puck.Abstractions.Tests;
 /// Laws for <see cref="GpuDescriptorHeapBudget"/>: each heap takes the size the device reports, the guaranteed minimum
 /// when a Direct3D 12 runtime does not answer, and a device with no shared heap is refused by name; a candidate's pools are
 /// admitted as one view range each, a pool holding no descriptor takes none, and a candidate that does not fit is refused
-/// by name with its demand and leaves the heap as it found it; a released admission's ranges serve the next candidate;
+/// by name with its demand and leaves the heap as it found it; a check allocates nothing and refuses with
+/// <see cref="GpuDescriptorHeapBudget.RefusalCode"/>; a released admission's ranges serve the next candidate;
 /// more than <see cref="GpuDescriptorHeapBudget.MaxLivePools"/> live pools are refused by name; and a heap's bytes are
 /// its descriptors at the device's increment.
 /// </summary>
@@ -122,6 +123,33 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
         Assert.Equal(
             actual: (heap.FreeViewDescriptors, heap.LivePools),
             expected: (60u, 2)
+        );
+    }
+    [Fact]
+    public void ACheckAllocatesNothingAndRefusesByTheOneCode() {
+        var heap = new GpuDescriptorHeapBudget(capabilities: Heap(views: 100));
+
+        Assert.True(condition: heap.CanAdmit(
+            owner: "fits",
+            pools: [Pool(sampled: 60), Pool(sampled: 40)],
+            refusal: out var admitted
+        ));
+        Assert.Equal(
+            actual: (admitted, heap.FreeViewDescriptors, heap.LivePools),
+            expected: (string.Empty, 100u, 0)
+        );
+        Assert.False(condition: heap.CanAdmit(
+            owner: "over",
+            pools: [Pool(sampled: 60), Pool(sampled: 41)],
+            refusal: out var refusal
+        ));
+        Assert.StartsWith(
+            actualString: refusal,
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'over' needs 101 view descriptors in 2 pool(s) and is refused: "
+        );
+        Assert.Equal(
+            actual: (heap.FreeViewDescriptors, heap.LivePools),
+            expected: (100u, 0)
         );
     }
     [Fact]

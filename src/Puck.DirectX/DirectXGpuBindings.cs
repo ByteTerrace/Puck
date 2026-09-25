@@ -3,31 +3,66 @@ using System.Runtime.Versioning;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
-using Windows.Win32.System.Com;
 using static Puck.DirectX.DirectXConstants;
 
 namespace Puck.DirectX;
 
 /// <summary>
-/// Implements <see cref="IGpuBindings"/> for Direct3D 12 using shader-visible CBV_SRV_UAV descriptor
-/// heaps. Each <see cref="CreatePool"/> call allocates one heap; <see cref="AllocateSet"/> bump-allocates a
-/// region of that heap to each set (advancing a per-pool cursor by the layout's slot count and bounds-checking
-/// against the heap capacity), so multiple independent sets can share one pool like a Vulkan descriptor pool.
-/// Samplers are static in D3D12 root signatures, so <see cref="CreateSampler"/> returns a non-zero sentinel
-/// and <see cref="DestroySampler"/> is a no-op.
+/// Implements <see cref="IGpuBindings"/> for Direct3D 12 over the device's two shader-visible descriptor heaps
+/// (<see cref="DirectXShaderVisibleHeaps"/>), which it creates when its device context brings a device up
+/// (<see cref="CreateDeviceHeaps"/>) and releases when the context releases the device (<see cref="ReleaseDeviceHeaps"/>),
+/// so a recreated device gets a fresh pair. Each <see cref="CreatePool"/> admits one range of the view heap through the
+/// device's <see cref="GpuDescriptorHeapBudget"/> and <see cref="DestroyPool"/> returns it; <see cref="AllocateSet"/>
+/// bump-allocates each set's region inside its pool's range (advancing a per-pool cursor by the layout's slot count and
+/// bounds-checking against the range), so several sets share one pool like a Vulkan descriptor pool. Samplers are static
+/// in Direct3D 12 root signatures, so <see cref="CreateSampler"/> returns a non-zero sentinel and
+/// <see cref="DestroySampler"/> is a no-op.
 /// </summary>
 /// <param name="deviceContext">The device context whose current device creates every heap and view.</param>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext) : IGpuBindings {
     private const nint SamplerSentinel = 1;
 
+    private DirectXShaderVisibleHeaps? m_heaps;
+
+    /// <summary>Gets the current device's shader-visible heaps, creating the device first when it does not exist yet.</summary>
+    /// <exception cref="GpuDeviceUnavailableException">No device could be created.</exception>
+    public DirectXShaderVisibleHeaps Heaps {
+        get {
+            _ = deviceContext.Device;
+
+            return (m_heaps ?? throw new InvalidOperationException(message: "The Direct3D 12 device was brought up without its shader-visible descriptor heaps."));
+        }
+    }
+
+    /// <summary>Creates the shader-visible heaps of a device just brought up, at the sizes its capabilities report.
+    /// Its context calls it once per device, before any pool is created on it.</summary>
+    /// <param name="device">The device.</param>
+    /// <param name="capabilities">The device's capability report.</param>
+    /// <exception cref="InvalidOperationException">The previous device's heaps were not released.</exception>
+    public void CreateDeviceHeaps(ID3D12Device* device, GpuDeviceCapabilities capabilities) {
+        if (m_heaps is not null) {
+            throw new InvalidOperationException(message: "The previous device's shader-visible descriptor heaps are still held.");
+        }
+
+        m_heaps = DirectXShaderVisibleHeaps.Create(
+            capabilities: capabilities,
+            device: device,
+            memory: deviceContext.Memory
+        );
+    }
+    /// <summary>Releases the current device's heaps and ends their memory entries, before the device itself is
+    /// released. Pools still held afterwards return nothing when destroyed. Does nothing when no heaps are held.</summary>
+    public void ReleaseDeviceHeaps() {
+        var heaps = m_heaps;
+
+        m_heaps = null;
+        heaps?.Dispose();
+    }
     /// <inheritdoc/>
     public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {
         var pool = ((DirectXDescriptorPool)GCHandle.FromIntPtr(value: poolHandle).Target!);
         var layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: descriptorSetLayoutHandle).Target!);
-        // Bump-allocate this set's own region from the pool's single shader-visible heap so multiple independent
-        // sets can share one pool (matching a Vulkan pool) instead of every set aliasing the whole heap. The first
-        // set lands at offset 0, so single-set-per-pool callers are unaffected.
         var offset = pool.NextOffset;
         var slotCount = layout.DescriptorSlotCount;
 
@@ -41,37 +76,21 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             CpuBase = (pool.CpuBase + (((nuint)offset) * pool.DescriptorSize)),
             DescriptorSize = pool.DescriptorSize,
             GpuBase = (pool.GpuBase + (((ulong)offset) * pool.DescriptorSize)),
-            HeapHandle = pool.HeapHandle,
             SlotByBinding = layout.SlotByBinding,
         };
 
         return GCHandle.ToIntPtr(value: GCHandle.Alloc(value: set));
     }
     /// <inheritdoc/>
-    public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
-        var totalDescriptors = ((sizes.CombinedImageSamplerCount + sizes.StorageBufferCount) + sizes.StorageImageCount);
-        var capacity = ((totalDescriptors > 0)
-            ? totalDescriptors
-            : 1
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) =>
+        Heaps.CanAdmit(
+            owner: owner,
+            pools: pools,
+            refusal: out refusal
         );
-        var heapPtr = DirectXDescriptorHeaps.Create(
-            count: capacity,
-            device: device,
-            shaderVisible: true,
-            type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
-        );
-        var descriptorSize = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-        var pool = new DirectXDescriptorPool {
-            HeapHandle = ((nint)heapPtr),
-            DescriptorSize = descriptorSize,
-            Capacity = capacity,
-            CpuBase = GetCpuHeapStart(heap: heapPtr).ptr,
-            GpuBase = GetGpuHeapStart(heap: heapPtr).ptr,
-        };
-
-        return GCHandle.ToIntPtr(value: GCHandle.Alloc(value: pool));
-    }
+    /// <inheritdoc/>
+    public nint CreatePool(in GpuDescriptorPoolSizes sizes) =>
+        GCHandle.ToIntPtr(value: GCHandle.Alloc(value: Heaps.AllocatePool(sizes: in sizes)));
     /// <inheritdoc/>
     // The filter is ignored: Direct3D 12 samplers are static in the root signature, so the filter is baked into the
     // compute pipeline's static sampler (via the factory's samplerFilter) rather than carried by this handle.
@@ -85,11 +104,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         var gcHandle = GCHandle.FromIntPtr(value: poolHandle);
         var pool = ((DirectXDescriptorPool)gcHandle.Target!);
 
-        if (0 != pool.HeapHandle) {
-            _ = ((IUnknown*)pool.HeapHandle)->Release();
-            pool.HeapHandle = 0;
-        }
-
+        pool.Heaps?.ReleasePool(pool: pool);
         gcHandle.Free();
     }
     /// <inheritdoc/>

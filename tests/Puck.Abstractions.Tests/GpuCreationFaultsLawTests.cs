@@ -40,6 +40,7 @@ public sealed class GpuCreationFaultsLawTests {
     // The members of the wrapped interfaces that create nothing counted, and are forwarded without asking the faults.
     private static readonly string[] PassThroughs = [
         "IGpuBindings.AllocateSet",
+        "IGpuBindings.CanAdmit",
         "IGpuBindings.CreateSampler",
         "IGpuBindings.DestroyPool",
         "IGpuBindings.DestroySampler",
@@ -307,6 +308,7 @@ public sealed class GpuCreationFaultsLawTests {
         }
 
         _ = bindings.AllocateSet(descriptorSetLayoutHandle: 1, poolHandle: 2);
+        _ = bindings.CanAdmit(owner: "candidate", pools: [], refusal: out _);
         _ = bindings.CreateSampler();
         bindings.DestroyPool(poolHandle: 2);
         bindings.DestroySampler(samplerHandle: 3);
