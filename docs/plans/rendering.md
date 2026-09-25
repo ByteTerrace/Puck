@@ -631,7 +631,7 @@ P17 still owes:
 The two largest kernel includes are `sdf-vm.hlsli` (4,584 lines) and
 `sdf-world.hlsli` (2,814 lines). The frame data is written by hand in three
 places: an `SdfFrame` field, a numbered row in the packed buffer, and an HLSL
-accessor. `resample.comp.hlsl` compiles but has no consumer.
+accessor.
 
 ## The forcing artifact
 
@@ -1344,8 +1344,8 @@ Phase 3, the groups, follows phase 2:
 12. Done: `ShaderRegisterBindingLawTests` holds every shader the build compiles
     to a register number equal to its binding and a space equal to its set. It
     also holds the pipeline sources the World's package store is built from.
-    It names each declaration that breaks the rule: the SDF engine's, which
-    P7b-19 and P7b-20 remove, and the resample kernel's, which P11b ports. The
+    It also holds the graph's package-library kernels. It names each declaration
+    that breaks the rule: the SDF engine's, which P7b-19 and P7b-20 remove. The
     list may only shrink. Direct3D 12 numbers a compute pipeline's registers at
     its binding numbers unless the description declares
     `GpuRegisterNumbering.PackedByClass`, which only the SDF engine and the
@@ -1866,9 +1866,15 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups.
-P11b keeps one resample pass, a port of `resample.comp.hlsl`, in the graph's
-package library; P14 deletes any SDF-side copy, and the pixelate interface
-fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
+P11b keeps one resample pass in the graph's package library: the `resample`
+package, whose kernel `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`
+holds the SDF composite's reconstruction: an exact copy at equal extent, bilinear at sharpness
+0, clamped Catmull-Rom at sharpness 1 and a blend between, all through formatted
+loads with no sampler state. The `resample-reconstruction` canary holds it to the
+analytic bilinear and Catmull-Rom values of a known step on both backends. Render
+scale moving onto it, which deletes the `RenderScaleQ` lanes, is a later P11b
+commit; cropping a source is P13's mapping, not a resample config. The pixelate
+interface fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
 P11b's `sdf.world` adapter submits through `SdfWorldEngine`'s ring as an
 external producer whose output image the graph imports. Before P12, a screen's
 matrix row is green when host leases and instance reads serve it. Without the

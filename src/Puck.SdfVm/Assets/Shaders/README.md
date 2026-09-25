@@ -109,7 +109,6 @@ This compiles, but no code loads it.
 
 | Shader | Role |
 |---|---|
-| `Resample/resample.comp.hlsl` | Sampled-image compute resample/crop/pixelation primitive. Source filter is chosen by the host sampler. |
 
 ## Validation rule
 

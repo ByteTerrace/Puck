@@ -6,18 +6,19 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>A resource's Direct3D 12 register number equals its Vulkan binding number, and its register space equals
 /// its descriptor set, so no backend remaps a register. These laws read every HLSL source and include the build
-/// compiles or packages: the shader items each <c>src</c> project declares for <c>build/Shaders.targets</c>, and the
+/// compiles or packages: the shader items each <c>src</c> project declares for <c>build/Shaders.targets</c>, the graph's package-library kernels, and the
 /// pipeline sources <c>build/WorldAssets.targets</c> hands the tree run that fills the shipped package store, with
 /// every source a shipped <c>*.pipeline.json</c> names. They hold every declaration that carries both a
 /// <c>[[vk::binding(N, S)]]</c> and a <c>register(xN, spaceS)</c> to that rule.</summary>
 public sealed partial class ShaderRegisterBindingLawTests {
-    // The item types build/Shaders.targets compiles, or hashes as includes of what it compiles, and the pipeline sources
-    // build/WorldAssets.targets packages into the store beside the shipped worlds.
+    // The item types build/Shaders.targets compiles, or hashes as includes of what it compiles, the pipeline sources
+    // build/WorldAssets.targets packages into the store beside the shipped worlds, and the graph's package-library kernels.
     private static readonly string[] ShaderItemTypes = [
         "ComputeShaderSource",
         "Direct3D11KernelSource",
         "FragmentShaderSource",
         "PuckWorldPipelineSource",
+        "RenderGraphPackageSource",
         "ShaderInclude",
         "VertexShaderSource",
     ];
@@ -119,9 +120,6 @@ public sealed partial class ShaderRegisterBindingLawTests {
         "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.hlsli sdfScreenLights register(t38) binding(11, 0)",
         "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.hlsli sdfVolumes register(t43) binding(48, 0)",
         "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.hlsli viewports register(t1) binding(2, 0)",
-        // The resample kernel: P11b ports it into the graph's package library, and P14 deletes this copy.
-        "src/Puck.SdfVm/Assets/Shaders/Resample/resample.comp.hlsl Source register(t0) binding(1, 0)",
-        "src/Puck.SdfVm/Assets/Shaders/Resample/resample.comp.hlsl SourceSampler register(s0) binding(1, 0)",
     ];
 
     [GeneratedRegex(pattern: @"vk::binding\(\s*(?<binding>\d+)\s*(?:,\s*(?<set>\d+)\s*)?\)")]
