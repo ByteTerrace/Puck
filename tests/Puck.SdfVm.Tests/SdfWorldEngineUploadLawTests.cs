@@ -477,6 +477,124 @@ public sealed class SdfWorldEngineUploadLawTests {
 
         return MemoryMarshal.AsBytes(span: packed.AsSpan()).ToArray();
     }
+
+    /// <summary>Every region's copy sets are reserved when the engine is built, beside its pool, so another owner taking
+    /// every descriptor range left after that cannot refuse a region the frame thread creates or replaces: the first
+    /// frame that draws a mesh, a frame that grows the mesh region, and program uploads that grow the program region and
+    /// the instance grid all stage with no pool created after construction.</summary>
+    [Fact]
+    public void RegionsCreatedOrGrownAfterConstructionTakeNoDescriptorRangeAnotherOwnerCouldHaveFilled() {
+        var heap = new GpuDescriptorHeapBudget(capabilities: (GpuDeviceCapabilities.FromDirectX(
+            resourceBindingTier: 3,
+            rootSignatureVersion: "1.1",
+            samplerHeapSize: 0,
+            shaderModel: "6.6",
+            staticSamplerHeapSize: 0,
+            viewHeapSize: 0
+        ) with {
+            ViewHeapSize = 65536U,
+        }));
+
+        using var rig = new Rig(
+            heap: heap,
+            slots: 1
+        );
+
+        // The engine created exactly the pools its admission states, every region's copy pool among them.
+        Assert.Equal(
+            actual: rig.Gpu.PoolsCreated.CountBy(keySelector: static pool => pool).ToDictionary(),
+            expected: SdfWorldEngine.DescriptorPools(brickPool: false).CountBy(keySelector: static pool => pool).ToDictionary()
+        );
+
+        var pools = rig.Gpu.PoolsCreated.Count;
+
+        // Another owner takes every range the engine left.
+        if (heap.FreeViewDescriptors > 0U) {
+            Assert.True(condition: heap.TryAdmit(
+                admission: out _,
+                owner: "another owner",
+                pools: [new GpuDescriptorPoolSizes(
+                    CombinedImageSamplerCount: 0U,
+                    MaxSets: 1U,
+                    StorageBufferCount: heap.FreeViewDescriptors,
+                    StorageImageCount: 0U
+                )],
+                refusal: out var refusal
+            ), userMessage: refusal);
+        }
+
+        var quad = new SdfMesh(
+            indices: new uint[] { 0, 1, 2, 0, 2, 3 },
+            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
+        );
+        SdfMeshDraw[] one = [new(Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)];
+        var many = Enumerable.Range(count: 8, start: 0).Select(selector: index => new SdfMeshDraw(
+            Material: index,
+            Mesh: quad,
+            ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: index, yPosition: 0f, zPosition: 0f)
+        )).ToArray();
+
+        rig.Render(
+            meshDraws: one,
+            time: 0f
+        );
+        Assert.Equal(expected: SdfMeshRegion.BytesOf(draws: one), actual: rig.Engine.MeshRegionBytes);
+
+        rig.Render(
+            meshDraws: many,
+            time: 0f
+        );
+        Assert.True(condition: (rig.Engine.MeshRegionBytes >= SdfMeshRegion.BytesOf(draws: many)));
+
+        // A program past the region's words grows the program region and stages whole into it; one with instances past
+        // the engine's reserve grows the instance grid.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        for (var sphere = 0; (sphere < 4); sphere++) {
+            builder.Sphere(
+                material: material,
+                radius: (1f + sphere)
+            );
+        }
+
+        var larger = builder.Build();
+        var words = Program(albedo: Vector3.One).Words.Length;
+        var grown = Math.Max(
+            val1: larger.Words.Length,
+            val2: (words + (words / 2))
+        );
+
+        rig.Engine.UploadProgram(program: larger);
+        rig.Render(time: 0f);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: larger.Words).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(grown * sizeof(uint))))[..(larger.Words.Length * sizeof(uint))]
+        );
+
+        builder = new SdfProgramBuilder();
+
+        var instanceMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        for (var instance = 0; (instance < 4); instance++) {
+            _ = builder.Instance(
+                boundCenter: new Vector3(x: (3f * instance), y: 0f, z: 0f),
+                boundRadius: 1f,
+                emit: emitter => emitter.Sphere(
+                    material: instanceMaterial,
+                    radius: 1f
+                )
+            );
+        }
+
+        var instanced = builder.Build();
+
+        Assert.True(condition: (instanced.Instances.Count > larger.Instances.Count));
+        rig.Engine.UploadProgram(program: instanced);
+        rig.Render(time: 0f);
+        Assert.Equal(expected: pools, actual: rig.Gpu.PoolsCreated.Count);
+    }
+
     private static SdfProgram Program(Vector3 albedo) {
         var builder = new SdfProgramBuilder();
 
@@ -517,8 +635,9 @@ public sealed class SdfWorldEngineUploadLawTests {
         private SdfWorldPipelines m_pipelines = null!;
         private GpuRegionCopyPipeline m_regionCopy = null!;
 
-        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default) {
+        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null) {
             Gpu = new UploadModelGpu(reportVersion: SdfIsa.Version) {
+                DescriptorHeap = heap,
                 MemoryProfile = profile,
             };
             m_programWordReserve = programWordReserve;

@@ -261,7 +261,7 @@ top), outside the replace-band suppression — see [views.md](views.md).
 INSTANCE built from an `OverlayCapacity` — the host's declared counts
 (`Seats`, `HudPanels`, `HudElementsPerPanel`, `HudSeatPanelsPerSeat`,
 `HudElementsPerSeatPanel`). `Puck.Overlays` restates no World number: the
-composition root (`WorldBootComposition`'s one `new UnifiedOverlayNode`)
+composition root (`WorldBootComposition`'s one `new OverlayPackage`)
 supplies `Puck.World.Client.WorldOverlayCapacity.FromSchema()` — `Seats =
 WorldBodiesLimits.LocalSeatCount`, the four HUD ceilings from
 `WorldHudCapacity` (`MaxSeatPanels` is the seat-panel count). Render costs stay
@@ -298,7 +298,7 @@ beside the others.
 
 ## Bands — what `replace` replaces
 
-`UnifiedOverlayNode.ProduceFrame`, per frame: feed tick → `RefreshFrame`
+`OverlayFrameComposer.Compose`, once per frame the `overlay` package records: feed tick → `RefreshFrame`
 (snapshot the structure once) → UNDER band (its own
 `BeginChannel(Hud)` scope) → BASE slot → OVER band. The base slot is: if any
 live panel declares `Replace`, the replace panels draw IN DOCUMENT ORDER

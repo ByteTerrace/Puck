@@ -154,8 +154,9 @@ public static class RenderGraphHitWalk {
             );
         }
     }
-    /// <summary>Walks a point on the display: the topmost pane under it (the last in <paramref name="panes"/> whose face
-    /// holds it), then, when that pane shows an instance, a ray through that instance's camera into its world.</summary>
+    /// <summary>Walks a point on the display: the topmost pane under it (<see cref="SourcePanes.Topmost"/>, the last in
+    /// <paramref name="panes"/> whose face holds it), then, when that pane shows an instance, a ray through that
+    /// instance's camera into its world.</summary>
     /// <param name="set">The instances.</param>
     /// <param name="scene">What each instance shows.</param>
     /// <param name="panes">The panes the display shows, in drawing order; only <see cref="SourcePlacement.Pane"/>
@@ -177,23 +178,16 @@ public static class RenderGraphHitWalk {
         ArgumentNullException.ThrowIfNull(argument: panes);
         ArgumentOutOfRangeException.ThrowIfNegative(value: maxDepth);
 
-        for (var index = (panes.Count - 1); (index >= 0); index--) {
+        var index = SourcePanes.Topmost(
+            displayHeight: displayHeight,
+            displayWidth: displayWidth,
+            hit: out var hit,
+            panes: panes,
+            point: point
+        );
+
+        if (index >= 0) {
             var mapping = panes[index];
-
-            if (mapping.Placement is not SourcePlacement.Pane) {
-                continue;
-            }
-
-            var hit = mapping.MapDisplayPoint(
-                displayHeight: displayHeight,
-                displayWidth: displayWidth,
-                point: point
-            );
-
-            if (hit.Outcome == SourceHitOutcome.OutsidePlacement) {
-                continue;
-            }
-
             var step = new RenderGraphHitStep(
                 Hit: hit,
                 Instance: -1,

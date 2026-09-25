@@ -1534,7 +1534,7 @@ rebuild (`world.reload`, `world.load`, `world.reset`) that replaces the arena
 and search behind them, so a reading never goes down, and `state.rules`. A
 rendering shape adds the shader compiler's `shaders.compiler` (requests, cache
 hits and each native tool's runs) and the process's shader loads,
-`shaders.sdf-kernels`, `shaders.fullscreen-pass` and `shaders.set-manifest`
+`shaders.sdf-kernels` and `shaders.set-manifest`
 (loads and the bytecode bytes they read); each backend adds its
 `pipeline-cache.<backend>` and `memory.<backend>` (device-local bytes
 allocated and released at their allocation sizes, and the peak held; swapchain

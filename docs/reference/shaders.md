@@ -369,9 +369,10 @@ A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
 and each output then stands for the input at its position: the instance
 publishes that input's image with no copy, in its own layout
 (`ShaderPipelineRenderNode.PublishedLayout`), and a root capture reads it. An
-output another pass reads, that is history, or that is not an RGBA8 image
-beside an input image of its format is refused by name when its pass draws
-nothing. So is an output standing for a host's image bound in another layout
+output another pass reads, that is history, that would stand for a previous
+frame's input or for an input a later pass overwrites, or that is not an RGBA8 image beside an input image of its
+format is refused by name when its pass draws nothing: a previous frame's
+instance rests in the layout its own role left it in. So is an output standing for a host's image bound in another layout
 than the instance publishes in: the instance publishes every image in its output
 layout, the one its consumer's descriptor is written with (the display samples
 the root shader-readable), and hands a host's image back in the host's own. The
@@ -611,7 +612,8 @@ hash, for a caller building its own pipelines.
 pass's whole config, which its frame block carries from the next frame the node
 renders; the World's parameter bindings write one scalar-`float` field of every
 pass composed from one `render.extensions` id through it
-(`WorldPostRenderExtensionPasses`).
+(`WorldPostRenderExtensionPasses`), over each pass's own config, so an id the
+document names twice keeps each entry's other fields.
 
 | Type | Role |
 |------|------|

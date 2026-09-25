@@ -49,10 +49,12 @@ public sealed partial class SdfWorldEngine {
             throw new GpuDescriptorHeapRefusalException(message: refusal);
         }
     }
-    /// <summary>Returns every descriptor pool an engine may create, which a device's heap admits it by: its own
-    /// (<see cref="DescriptorPoolSizes"/>), then the copy pool each of its regions creates under the staged policy
-    /// (<see cref="GpuRegion.CopyPoolSizes"/>), whatever policy the device selects: the eight per-frame tables, the mesh
-    /// region, and with a brick pool the brick staging.</summary>
+    /// <summary>Returns every descriptor pool an engine creates, which a device's heap admits it by: its own
+    /// (<see cref="DescriptorPoolSizes"/>), then the pool of the copy sets it reserves for each of its regions
+    /// (<see cref="GpuRegionCopySets"/>, sized by <see cref="GpuRegion.CopyPoolSizes"/>), whatever policy the device
+    /// selects: the eight per-frame tables, the mesh region, and with a brick pool the brick staging. Construction creates
+    /// all of them, so no later frame, the first to draw a mesh or a growing program included, takes a descriptor
+    /// range.</summary>
     /// <param name="brickPool">Whether the engine keeps a brick pool.</param>
     /// <returns>The pools' sizes, the engine's own first.</returns>
     public static GpuDescriptorPoolSizes[] DescriptorPools(bool brickPool) => [
@@ -110,7 +112,9 @@ public sealed partial class SdfWorldEngine {
 
     // Called only by UploadProgram. Grows the program region, or the instance-grid region with the instance masks and
     // tiles, after draining the frame ring; a new region starts owing every word, so the program write and grid stage
-    // that follow send it whole. No per-frame allocations.
+    // that follow send it whole. A new region writes the copy sets reserved for its
+    // table, so growth takes no descriptor range; if the replacement is abandoned, the region kept rewrites them before
+    // its next copy. No per-frame allocations.
     private void EnsureProgramCapacity(SdfProgram program) {
         if ((program.Words.Length <= m_programWordCapacity) && (program.Instances.Count <= m_instanceCapacity)) {
             return;
@@ -142,8 +146,8 @@ public sealed partial class SdfWorldEngine {
 
         try {
             // Create the entire replacement before changing any binding or releasing an old region or buffer.
-            var programRegion = (growProgram ? Replacement(created: CreateRegion(byteCount: checked((words * sizeof(uint))), name: NameOf(part: "program"))) : m_programRegion);
-            var gridRegion = (growInstances ? Replacement(created: CreateRegion(byteCount: checked((gridWords * sizeof(uint))), name: NameOf(part: "instance-grid"))) : m_instanceGridRegion);
+            var programRegion = (growProgram ? Replacement(created: CreateRegion(byteCount: checked((words * sizeof(uint))), region: ProgramRegionIndex)) : m_programRegion);
+            var gridRegion = (growInstances ? Replacement(created: CreateRegion(byteCount: checked((gridWords * sizeof(uint))), region: InstanceGridRegionIndex)) : m_instanceGridRegion);
             var masks = (growInstances ? DeviceBuffer(buffer: SdfFrameBuffer.InstanceMasks, name: NameOf(part: "instance-masks")) : m_instanceMaskBuffer);
             var tiles = (growInstances ? DeviceBuffer(buffer: SdfFrameBuffer.Tiles, name: NameOf(part: "tiles")) : m_tileBuffer);
 

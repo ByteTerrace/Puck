@@ -62,6 +62,12 @@ internal sealed class UploadModelGpu :
         };
     }
 
+    /// <summary>Gets or sets the descriptor heap every pool is admitted into, or <see langword="null"/> for none; the heap
+    /// of the wrapped <see cref="FakeGpuDevice"/>.</summary>
+    public GpuDescriptorHeapBudget? DescriptorHeap {
+        get => m_inner.DescriptorHeap;
+        set => m_inner.DescriptorHeap = value;
+    }
     /// <summary>Gets every descriptor pool created, in creation order, as its creation sized it.</summary>
     public IReadOnlyList<GpuDescriptorPoolSizes> PoolsCreated => m_inner.PoolsCreated;
     public long AdapterLuid => 0L;

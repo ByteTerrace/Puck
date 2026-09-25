@@ -32,14 +32,14 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
 
         // The engine creates no pipeline, shader module, render pass or framebuffer: it records with the set it is
         // handed. It creates buffers, images (the ISA handshake's two included), a command pool per ring slot, its one
-        // descriptor pool, and under the default profile's staged policy one copy pool per region: the eight tables and
-        // the brick staging.
+        // descriptor pool, and whatever policy the device selects the copy pool it reserves for each region: the eight
+        // tables, the mesh region and the brick staging.
         Assert.Equal(actual: expected[GpuCreationKind.Pipeline], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.ShaderModule], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.RenderPass], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.Framebuffer], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.CommandPool], expected: ((long)SdfWorldEngine.FrameRingSize));
-        Assert.Equal(actual: expected[GpuCreationKind.BindingsPool], expected: 10L);
+        Assert.Equal(actual: expected[GpuCreationKind.BindingsPool], expected: 11L);
         Assert.True(condition: (expected[GpuCreationKind.Buffer] > SdfBrickPoolLayout.MaxBricks));
         Assert.True(condition: (expected[GpuCreationKind.Image] > 2L));
 

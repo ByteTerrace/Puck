@@ -496,40 +496,42 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // of megabytes, which a ring holds once per slot. A larger program grows the region by half again.
         m_programWordReserve = options.ProgramWordCapacity;
         m_programWordCapacity = options.Program.Words.Length;
+        // Every region's copy sets, before any region writes them: the copy pools the admission states.
+        m_regionCopySets = ReserveRegionCopySets(scope: scope);
         // The host-written tables, each a region the kernels bind through its slot's buffer (SdfWorldEngine.Regions.cs).
         // The screen-surface table is always MaxScreenSurfaces entries, indexed directly by screen index, so Stage 1's
         // binding stays valid for a program with none: an all-zero undeclared entry is never addressed.
         m_programRegion = scope.Own(created: CreateRegion(
             byteCount: checked((m_programWordCapacity * sizeof(uint))),
-            name: NameOf(part: "program")
+            region: ProgramRegionIndex
         ));
         m_viewportRegion = scope.Own(created: CreateRegion(
             byteCount: m_viewportScratch.Length,
-            name: NameOf(part: "viewports")
+            region: ViewportRegionIndex
         ));
         m_dynamicTransformRegion = scope.Own(created: CreateRegion(
             byteCount: checked((m_dynamicTransformCapacity * DynamicTransformByteLength)),
-            name: NameOf(part: "dynamic-transforms")
+            region: DynamicTransformRegionIndex
         ));
         m_instanceGridRegion = scope.Own(created: CreateRegion(
             byteCount: checked((m_instanceGridWordCapacity * sizeof(uint))),
-            name: NameOf(part: "instance-grid")
+            region: InstanceGridRegionIndex
         ));
         m_screenSurfaceRegion = scope.Own(created: CreateRegion(
             byteCount: (MaxScreenSurfaces * ScreenSurfaceByteLength),
-            name: NameOf(part: "screen-surfaces")
+            region: ScreenSurfaceRegionIndex
         ));
         m_screenLightRegion = scope.Own(created: CreateRegion(
             byteCount: m_screenLightScratch.Length,
-            name: NameOf(part: "screen-lights")
+            region: ScreenLightRegionIndex
         ));
         m_volumeRegion = scope.Own(created: CreateRegion(
             byteCount: m_volumeScratch.Length,
-            name: NameOf(part: "volumes")
+            region: VolumeRegionIndex
         ));
         m_decalRegion = scope.Own(created: CreateRegion(
             byteCount: ((DecalBufferCells * DecalWordsPerCell) * sizeof(uint)),
-            name: NameOf(part: "decals")
+            region: DecalRegionIndex
         ));
         // The cull buffer is GPU-written by the beam prepass (a UAV), so it is device-local (a Direct3D 12 default heap).
         // Four tile planes followed by two world-space bound corners per instance per viewport. The beam refits
@@ -598,8 +600,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                     val2: m_brickPoolVoxelCapacity
                 ) * sizeof(float)),
                 copyPipeline: m_regionCopyPipeline,
+                copySets: m_regionCopySets[BrickStagingRegionIndex],
                 destination: m_brickPoolBuffer,
-                name: NameOf(part: "brick-staging"),
+                name: RegionName(region: BrickStagingRegionIndex),
                 recorder: gpu.Recorder,
                 slotCount: FrameRingSize
             ))
@@ -945,7 +948,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             requestBuffer?.Dispose();
         }
 
-        m_brickRegion?.Dispose();
         m_brickPoolBuffer.Dispose();
         m_bindings.DestroySampler(
             samplerHandle: m_screenSampler

@@ -18,7 +18,7 @@ namespace Puck.Abstractions.Gpu;
 /// </para>
 /// <para>
 /// A staged region's destination is either its own device-local buffer or an external one the owner keeps
-/// (<see cref="GpuRegion(IGpuBuffer, int, int, IGpuBufferFactory, IGpuBindings, IGpuRecorder, IGpuComputePipeline, in GpuObjectName)"/>):
+/// (<see cref="GpuRegion(IGpuBuffer, int, int, IGpuBufferFactory, IGpuBindings, IGpuRecorder, IGpuComputePipeline, in GpuObjectName, GpuRegionCopySets)"/>):
 /// its word 0 lands at the word <see cref="Target"/> names, and since other work may write the destination, a
 /// retargeted region owes every word written after it.
 /// </para>
@@ -32,7 +32,8 @@ namespace Puck.Abstractions.Gpu;
 /// <c>i</c>, takes <c>word</c> as that run's block offset plus <c>i</c> minus its first thread, and copies
 /// <c>destination[destinationBase + word] = source[blockBase + word]</c>. That kernel is <c>Puck.Shaders</c>'
 /// <c>region-copy.comp</c>, created from <see cref="CopyPipeline"/> once per device and leased by every owner
-/// (<c>GpuRegionCopyPipelineCache</c>).
+/// (<c>GpuRegionCopyPipelineCache</c>). Its copy sets are a <see cref="GpuRegionCopySets"/> the region creates, or one
+/// its owner reserved when it was admitted, so a region the owner creates at a later frame takes no descriptor range.
 /// </para>
 /// </summary>
 public sealed class GpuRegion : IDisposable {
@@ -66,10 +67,13 @@ public sealed class GpuRegion : IDisposable {
 
     private readonly byte[] m_contents;
     private readonly IGpuComputePipeline m_copyPipeline;
-    private readonly nint[] m_copySets;
+    // The staged policy's copy sets: its owner's reserved sets, or its own; null under the other policies.
+    private readonly GpuRegionCopySets? m_copySets;
     private readonly IGpuBindings m_bindings;
     private readonly IGpuBuffer? m_destination;
     private readonly bool m_external;
+    // Whether the region created its copy sets itself, and so destroys them with it.
+    private readonly bool m_ownsCopySets;
     private readonly List<IGpuBuffer> m_ownedBuffers = [];
     // The ranges each host-visible buffer still owes: one list under InPlace and Staged, one per slot under Ring.
     private readonly GpuUploadRuns[] m_owed;
@@ -78,7 +82,6 @@ public sealed class GpuRegion : IDisposable {
     private readonly uint[] m_header;
     private readonly IGpuStorageBuffer[] m_hostBuffers;
 
-    private nint m_copyPool;
     private int m_destinationWord;
     private bool m_disposed;
     // The leading words the destination is known to hold as Contents once every owed word has reached it: the whole
@@ -103,17 +106,23 @@ public sealed class GpuRegion : IDisposable {
     /// staged policy. The caller owns it and keeps it alive while the region records copies.</param>
     /// <param name="name">The region's debug name, from its creator's identity: each slot's host-visible buffer and copy
     /// set is named at its slot's index, and the device-local buffer and the copy pool bare.</param>
+    /// <param name="copySets">The copy sets its owner reserved for the region, which a staged region writes in place of
+    /// creating its own, or <see langword="null"/> to create them (named by <paramref name="name"/>); read only under the
+    /// staged policy. The owner keeps them after the region is disposed.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> or <paramref name="memory"/> is not a
     /// defined value, <paramref name="byteCount"/> is not positive or not a whole number of uints, or
     /// <paramref name="slotCount"/> is not positive.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name) : this(
+    /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
+    /// <paramref name="slotCount"/>.</exception>
+    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null) : this(
         bindings: bindings,
         buffers: buffers,
         byteCount: byteCount,
         copyPipeline: copyPipeline,
+        copySets: copySets,
         destination: null,
         memory: memory,
         name: in name,
@@ -136,14 +145,22 @@ public sealed class GpuRegion : IDisposable {
     /// it and keeps it alive while the region records copies.</param>
     /// <param name="name">The region's debug name, from its creator's identity: each slot's staging buffer and copy set
     /// is named at its slot's index, and the copy pool bare; the destination keeps its owner's name.</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <param name="copySets">The copy sets its owner reserved for the region, which it writes in place of creating its
+    /// own, or <see langword="null"/> to create them (named by <paramref name="name"/>). The owner keeps them after the
+    /// region is disposed.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="destination"/>, <paramref name="buffers"/>,
+    /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not positive or not a whole number
     /// of uints, or <paramref name="slotCount"/> is not positive.</exception>
-    public GpuRegion(IGpuBuffer destination, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name) : this(
+    /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
+    /// <paramref name="slotCount"/>.</exception>
+    public GpuRegion(IGpuBuffer destination, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null) : this(
         bindings: bindings,
         buffers: buffers,
         byteCount: byteCount,
         copyPipeline: copyPipeline,
+        copySets: copySets,
         destination: (destination ?? throw new ArgumentNullException(paramName: nameof(destination))),
         memory: GpuHostVisibleMemory.Host,
         name: in name,
@@ -152,7 +169,7 @@ public sealed class GpuRegion : IDisposable {
         slotCount: slotCount
     ) { }
 
-    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, int byteCount, int slotCount, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name) {
+    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, int byteCount, int slotCount, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets) {
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
@@ -160,6 +177,15 @@ public sealed class GpuRegion : IDisposable {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: byteCount);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: slotCount);
 
+        if (
+            (copySets is not null) &&
+            (copySets.SlotCount != slotCount)
+        ) {
+            throw new ArgumentException(
+                message: $"The reserved copy sets hold {copySets.SlotCount} slot(s), but the region has {slotCount}.",
+                paramName: nameof(copySets)
+            );
+        }
         if ((byteCount % sizeof(uint)) != 0) {
             throw new ArgumentOutOfRangeException(
                 actualValue: byteCount,
@@ -195,10 +221,6 @@ public sealed class GpuRegion : IDisposable {
         SlotCount = slotCount;
         m_contents = new byte[byteCount];
         m_copyPipeline = copyPipeline;
-        m_copySets = new nint[((policy == GpuResidencyPolicy.Staged)
-            ? slotCount
-            : 0
-        )];
         m_bindings = bindings;
         m_destination = destination;
         m_external = (destination is not null);
@@ -270,7 +292,17 @@ public sealed class GpuRegion : IDisposable {
                     m_ownedBuffers.Add(item: m_destination);
                 }
 
-                CreateCopySets(name: name);
+                m_ownsCopySets = (copySets is null);
+                m_copySets = (copySets ?? new GpuRegionCopySets(
+                    bindings: bindings,
+                    copyPipeline: copyPipeline,
+                    name: in name,
+                    slotCount: slotCount
+                ));
+
+                for (var slot = 0; (slot < slotCount); slot++) {
+                    WriteCopySet(slot: slot);
+                }
             }
         } catch {
             Dispose();
@@ -315,7 +347,8 @@ public sealed class GpuRegion : IDisposable {
             : (CopyMaxGroupsPerDimension, ((uint)((groups + (CopyMaxGroupsPerDimension - 1UL)) / CopyMaxGroupsPerDimension)))
         );
     }
-    /// <summary>Returns the descriptor pool a <see cref="GpuResidencyPolicy.Staged"/> region creates: one
+    /// <summary>Returns the descriptor pool of a <see cref="GpuResidencyPolicy.Staged"/> region's copy sets
+    /// (<see cref="GpuRegionCopySets"/>), which the region creates unless its owner reserved them: one
     /// <see cref="CopyBindings"/> set per frame slot. A region under any other policy creates none.</summary>
     /// <param name="slotCount">The frame slots the region serves.</param>
     /// <returns>The copy pool's sizes.</returns>
@@ -370,8 +403,8 @@ public sealed class GpuRegion : IDisposable {
             _ => m_hostBuffers[0],
         };
     }
-    /// <summary>Releases the region's buffers and, under the staged policy, its copy descriptor sets; an external
-    /// destination stays its owner's. The caller retires every submission that reads the region first. Disposing twice
+    /// <summary>Releases the region's buffers and, under the staged policy, the copy descriptor sets it created; an
+    /// external destination and reserved copy sets stay their owner's. The caller retires every submission that reads the region first. Disposing twice
     /// does nothing.</summary>
     public void Dispose() {
         if (m_disposed) {
@@ -380,10 +413,9 @@ public sealed class GpuRegion : IDisposable {
 
         m_disposed = true;
 
-        m_bindings.DestroyPool(
-            poolHandle: m_copyPool
-        );
-        m_copyPool = 0;
+        if (m_ownsCopySets) {
+            m_copySets?.Dispose();
+        }
 
         foreach (var buffer in m_ownedBuffers) {
             buffer.Dispose();
@@ -451,6 +483,15 @@ public sealed class GpuRegion : IDisposable {
             throw new InvalidOperationException(message: $"The region owes words slot {slot}'s staging buffer does not hold; flush the slot after the last write and before recording its copy.");
         }
 
+        // Another region its owner's reserved sets serve wrote the slot's set since this one did, as a replacement the
+        // owner abandoned does; the slot's last submission has retired, so the set is rewritten before it is bound.
+        if (!m_copySets!.IsWrittenBy(
+            region: this,
+            slot: slot
+        )) {
+            WriteCopySet(slot: slot);
+        }
+
         m_recorder.BindPipeline(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
@@ -459,7 +500,7 @@ public sealed class GpuRegion : IDisposable {
         m_recorder.BindDescriptorSet(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            descriptorSetHandle: m_copySets[slot],
+            descriptorSetHandle: m_copySets.SetOf(slot: slot),
             group: 0,
             pipelineLayoutHandle: m_copyPipeline.LayoutHandle
         );
@@ -579,38 +620,30 @@ public sealed class GpuRegion : IDisposable {
         return owed;
     }
 
-    // One copy set per slot from one pool: the slot's staging buffer as the source, the destination as the destination.
-    private void CreateCopySets(in GpuObjectName name) {
-        m_copyPool = m_bindings.CreatePool(
-            name: name,
-            sizes: CopyPoolSizes(slotCount: SlotCount)
+    // Writes the slot's staging buffer as the source and the destination as the destination into the slot's copy set.
+    private void WriteCopySet(int slot) {
+        var set = m_copySets!.SetOf(slot: slot);
+
+        m_bindings.WriteBuffer(
+            binding: CopySourceBinding,
+            bufferHandle: m_hostBuffers[slot].BufferHandle,
+            bufferSize: m_hostBuffers[slot].SizeBytes,
+            descriptorSetHandle: set,
+            elementStride: sizeof(uint),
+            kind: GpuBindingKind.ReadOnlyBuffer
         );
-
-        for (var slot = 0; (slot < SlotCount); slot++) {
-            var set = m_bindings.AllocateSet(
-                descriptorSetLayoutHandle: m_copyPipeline.DescriptorSetLayoutHandle,
-                name: name.At(index: slot),
-                poolHandle: m_copyPool
-            );
-
-            m_bindings.WriteBuffer(
-                binding: CopySourceBinding,
-                bufferHandle: m_hostBuffers[slot].BufferHandle,
-                bufferSize: m_hostBuffers[slot].SizeBytes,
-                descriptorSetHandle: set,
-                elementStride: sizeof(uint),
-                kind: GpuBindingKind.ReadOnlyBuffer
-            );
-            m_bindings.WriteBuffer(
-                binding: CopyDestinationBinding,
-                bufferHandle: m_destination!.BufferHandle,
-                bufferSize: m_destination.SizeBytes,
-                descriptorSetHandle: set,
-                elementStride: sizeof(uint),
-                kind: GpuBindingKind.ReadWriteBuffer
-            );
-            m_copySets[slot] = set;
-        }
+        m_bindings.WriteBuffer(
+            binding: CopyDestinationBinding,
+            bufferHandle: m_destination!.BufferHandle,
+            bufferSize: m_destination.SizeBytes,
+            descriptorSetHandle: set,
+            elementStride: sizeof(uint),
+            kind: GpuBindingKind.ReadWriteBuffer
+        );
+        m_copySets.WrittenBy(
+            region: this,
+            slot: slot
+        );
     }
     // Owes words [startWord, endWord) in every buffer.
     private void Owe(int startWord, int endWord) {

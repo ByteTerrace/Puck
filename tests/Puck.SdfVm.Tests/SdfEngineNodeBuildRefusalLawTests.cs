@@ -194,10 +194,11 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         rig.ProduceUnchanged(frames: Frames);
         Assert.True(condition: rig.Node.IsReady);
         Assert.Null(@object: rig.Node.NotReadyReason);
-        // What is left is the copy pool of a mesh region the admission covers and no frame has drawn yet.
+        // Nothing is left: the engine reserved every region's copy pool beside its own, the mesh region's before any frame
+        // drew a mesh.
         Assert.Equal(
             actual: (rig.Gpu.Admissions, rig.Gpu.PoolsCreated.Count, heap.FreeViewDescriptors),
-            expected: (2, 10, GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize).HeapDescriptors)
+            expected: (2, 11, 0U)
         );
     }
     [Fact]
@@ -374,8 +375,8 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         }
 
         public ref readonly FrameContext Context => ref m_context;
-        // Each engine construction that reaches its own descriptor pool creates exactly one, after its regions' copy pools,
-        // and the pipeline set none, so the engine's own pools are the attempts.
+        // Each engine construction that reaches its own descriptor pool creates exactly one, after the copy pools it
+        // reserves for its regions, and the pipeline set none, so the engine's own pools are the attempts.
         public int EngineAttempts => Gpu.PoolsCreated.Count(predicate: static pool => (pool == SdfWorldEngine.DescriptorPoolSizes(brickPool: false)));
         public GpuCreationFaults Faults { get; }
         public FakeGpuDevice Gpu { get; }
