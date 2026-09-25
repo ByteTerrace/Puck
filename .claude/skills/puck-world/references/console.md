@@ -139,8 +139,12 @@ Three echo models — do not conflate them:
    also reaches the per-verb echo. An entry pushed out of the full table
    (`WorldDeferredVerbEchoes.Capacity` pending) answers
    `[<verb>: evicted unanswered — …]` on stderr and counts in `wire.errors`
-   (the table's `Evicted` event, which `WorldPostBuildWiring` prints and
-   counts), since no echo will name it again. A verb that submits through
+   (the table's `Evicted` event), since no echo will name it again; the table
+   remembers its last `EvictedMemory` evicted ids, so the authority's later
+   verdict for one is neither printed nor counted a second time.
+   `WorldDeferredVerbAnswers` (`Puck.World.Console`) is the one host wiring
+   for all of this: `WorldPostBuildWiring` and the silo both attach it, and the
+   World echo tap passes each echo to its `Answer`. A verb that submits through
    the plain `Submit(link, mutation)` overload (`world.generate`,
    `world.state.cell.set`, `world.state.cell.remove`) registers nothing, so
    its only observable answer is the universal `[world.mutation: … applied]`/
