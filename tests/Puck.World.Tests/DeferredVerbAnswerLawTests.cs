@@ -45,6 +45,54 @@ public sealed class DeferredVerbAnswerLawTests {
         Assert.Equal(actual: verdict, expected: "[world.undo: dropped 1, 0 remaining]");
         Assert.Equal(actual: fixture.Server.JournalLength, expected: 0);
     }
+
+    // A narration sink that keeps each line, standing in for the console sink every composition root binds.
+    private sealed class RecordingNarrationSink : IWorldNarrationSink {
+        public List<string> Lines { get; } = [];
+
+        public void Narrate(in WorldNarration narration) => Lines.Add(item: narration.Text);
+    }
+
+    [Fact]
+    public void AnAppliedAndARefusedUndoEachReportOneLine() {
+        using var fixture = Fixtures.FreshServer();
+        var link = new LoopbackTransport(server: fixture.Server);
+        var echoes = new WorldDeferredVerbEchoes();
+        var narration = new RecordingNarrationSink();
+        var verdicts = new List<string>();
+
+        using var attached = fixture.Server.AttachNarrationSink(sink: narration);
+
+        JournalOneEdit(fixture: fixture);
+        fixture.Server.EchoTap = echo => {
+            if (echoes.Settle(echo: in echo) is { } verdict) {
+                verdicts.Add(item: verdict);
+            }
+        };
+
+        // The first undo drops the one edit; the second finds nothing to undo and is refused.
+        for (var line = 0; (line < 2); line++) {
+            Assert.False(condition: link.SubmitUndo(
+                count: 1,
+                echoes: echoes,
+                principal: Principal.Console,
+                verb: "world.undo"
+            ).IsError);
+            fixture.Step();
+        }
+
+        Assert.Equal(
+            actual: verdicts,
+            expected: ["[world.undo: dropped 1, 0 remaining]", "[world.undo: undo refused: nothing to undo]"]
+        );
+        Assert.DoesNotContain(
+            collection: narration.Lines,
+            filter: static line => line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "[world.undo:"
+            )
+        );
+    }
     [Fact]
     public void ACodecRefusalWithAnAnswerIsReportedOnlyByThatAnswer() {
         using var fixture = Fixtures.FreshServer();
