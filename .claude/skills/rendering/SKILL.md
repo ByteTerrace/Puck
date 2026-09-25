@@ -946,8 +946,8 @@ an edit whose second image `gpu.faults` fails on the real device, refused with
 `GPU_CREATION_FAULT` while the instance's owned bytes return to its installed
 graph's and a clean retry installs, two indexed, depth-tested geometry passes continuing one color and one depth
 attachment, with a fullscreen pass sampling by UV the right way up,
-a generated echo pass reading back every frame-block sentinel (a hand-perturbed
-offset turns its pixels red), and, in a World with `dxc` hidden from its path,
+a generated echo pass reading back every frame-block sentinel (an echo expecting
+two members to hold each other's sentinel turns their pixels red), and, in a World with `dxc` hidden from its path,
 the shipped ink pipeline rendering from its stored package and a relocated
 package from its binaries while an unpackaged source row is refused by
 `SHADERPKG_ABSENT`.

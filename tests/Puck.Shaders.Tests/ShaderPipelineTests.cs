@@ -666,6 +666,51 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
+    public void Planner_rejects_two_passes_compiling_one_source_with_different_interfaces() {
+        static ShaderPipelinePass Tinted(string name, string output, ShaderValueType tint) =>
+            Pass(
+                name,
+                [],
+                [new ResourceReference(
+                    output,
+                    As: "target"
+                )]
+            ) with {
+                Config = new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) { ["tint"] = new(Type: tint) },
+                Source = "tint.hlsl",
+            };
+        RenderGraphDefinition Definition(ShaderValueType second) => new(
+            "shared-source",
+            [Image("a"), Image("b")],
+            [Tinted(
+                    "first",
+                    "a",
+                    ShaderValueType.Float
+                ), Tinted(
+                    "second",
+                    "b",
+                    second
+                )],
+            ["a", "b"]
+        );
+
+        var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: Definition(second: ShaderValueType.Float4)));
+        var conflict = Assert.Single(
+            collection: error.Diagnostics,
+            predicate: static diagnostic => (diagnostic.Code == "SHADERPIPE_INTERFACE_CONFLICT")
+        );
+
+        Assert.Contains(
+            actualString: conflict.Message,
+            expectedSubstring: "Passes 'first' and 'second' compile 'tint.hlsl' with different config"
+        );
+        // Passes whose ports and config read one interface share the source.
+        Assert.Equal(
+            actual: new ShaderPipelineCompiler().Compile(definition: Definition(second: ShaderValueType.Float)).Passes.Count,
+            expected: 2
+        );
+    }
+    [Fact]
     public void Planner_rejects_nonportable_workgroup_dimensions_and_invocations() {
         var oversizedDimension = new RenderGraphDefinition(
             "group-dimension",

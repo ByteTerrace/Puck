@@ -1066,7 +1066,13 @@ it takes. The node wraps every GPU service it holds once, so each dispatch,
 draw, barrier, bind, descriptor write, push-constant byte and clear it records
 is counted where it is made, into the pass being recorded. The zero clears that
 start the first frame after an install or a reset count in the first pass. The
-float preview and the output transitions count outside every pass. A
+float preview and the output transitions count outside every pass. What the
+node does between submissions to install or rebuild a graph, the sets it
+writes and the pass blocks it sends to every frame slot, counts in no
+submission, whether the install succeeds, fails partway or follows a device
+loss. An install and a reset both leave every slot holding each pass's current
+block, so the first frame after either uploads only what changed since, however
+many frames ran before it. A
 submission's counts become readable (`IGpuWorkSource.TryReadCompleted`) only
 once its fence has signaled. The node checks at the start of every produced
 frame, paused frames included. Each submission has an identity that starts at
@@ -1602,7 +1608,7 @@ captures read the override's arithmetic. Its discriminating leg commits
 nothing, so the source row reads the default, and alters a package file, so the
 package row fails with `SHADERPKG_FILE_PIN`. The budget canary caps a paused
 feedback instance at 256 KiB with `pipeline.budget` and loads an edit whose
-256x256 history peaks at 1650688 bytes, the capture readback's staging buffer
+256x256 history peaks at 1656832 bytes, the capture readback's staging buffer
 included. The edit is refused by
 `SHADERPIPE_BUDGET` with those exact counts, the paused capture is unchanged,
 a step still renders through the installed graph, and an in-budget edit then
@@ -1616,8 +1622,8 @@ the next capture of the same extent.
 Run with `puck canary --debug-layers`, any validation message fails it. The Direct3D 12 drain does not report the layer's pipeline-library miss
 (`LOADPIPELINE_NAMENOTFOUND`), which the cache counts as `gpu.pipeline-cache.misses`. The echo canary runs
 a generated echo pass with `pipeline.sentinels` on and reads every frame-block
-member back as its sentinel; its discriminating leg's hand-perturbed
-declarations turn its pixels red. The no-device-compile canary hides DXC from the World's
+member back as its sentinel; its discriminating leg's echo expects time and
+timeDelta to hold each other's sentinel, which turns those two pixels red. The no-device-compile canary hides DXC from the World's
 search path: the shipped ink pipeline, named by source, renders from the build's
 stored package, the tint source is refused by `SHADERPKG_ABSENT`, and the tint
 package renders from its binaries; its discriminating leg names the Moth shader
@@ -1627,7 +1633,7 @@ through `gpu.faults`: it arms the second image created after a paused feedback
 instance loads the corrected edit, so the edit creates one image and fails at
 the next. `pipeline.wait installed` fails with `GPU_CREATION_FAULT` naming
 image creation 2, `gpu.faults list` reads nothing armed after exactly two image
-creations, `pipeline.inspect` reads the installed graph's 49152 bytes again,
+creations, `pipeline.inspect` reads the installed graph's 52224 bytes again,
 the installed graph still steps, and the same edit reloaded with nothing armed
 creates its six images and installs. Run with `puck canary --debug-layers`, any
 validation message fails it. Its discriminating leg arms the seventh image,

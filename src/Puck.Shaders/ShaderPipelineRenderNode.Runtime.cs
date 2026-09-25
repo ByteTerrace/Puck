@@ -97,7 +97,7 @@ public sealed partial class ShaderPipelineRenderNode {
             : throw new InvalidDataException(message: $"Invalid parameters for pass {planned.Name}.")
         );
         // A grouped pass's frame set per slot, its pass block's region, and where each of its ports binds in its pass
-        // group; null for a pushed or package pass.
+        // group; null for a package pass.
         public nint[]? FrameSets;
         public GpuRegion? PassRegion;
         public PortBinding[]? PortBindings;

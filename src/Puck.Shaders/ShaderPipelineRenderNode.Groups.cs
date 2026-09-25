@@ -6,8 +6,8 @@ namespace Puck.Shaders;
 // A document pass binds groups (ShaderFrameInterface.ForPass): the frame group at set 0, whose block the node writes once
 // a frame into its frame region, and its pass group at set 3, whose block (the pass's extent and config) lives in the
 // pass's own region and whose bindings are its ports. Each slot's frame and pass sets take their constant buffers and
-// the pass's samplers once, when they are allocated; a frame writes only the ports. A shader set's pass (a pushed layout)
-// keeps the one pushed block and its combined samplers.
+// the pass's samplers once, when they are allocated; a frame writes only the ports. A package pass receives its frame
+// block pushed and binds its own resources.
 public sealed partial class ShaderPipelineRenderNode {
     private const uint FrameGroup = ((uint)ShaderInterfaceGroup.Frame);
     private const uint PassGroup = ((uint)ShaderInterfaceGroup.Pass);
@@ -85,13 +85,6 @@ public sealed partial class ShaderPipelineRenderNode {
             slotCount: ((int)m_inFlight),
             usage: GpuBufferUsage.Uniform
         );
-        // Every slot holds the pass block from the start, so a slot's first frame uploads only what changed since, as every
-        // later one does.
-        WritePassBlock(pass: pass);
-        for (var slot = 0; (slot < m_inFlight); slot++) {
-            pass.PassRegion.Flush(slot: slot);
-        }
-
         for (var slot = 0; (slot < m_inFlight); slot++) {
             pass.FrameSets![slot] = bindings.AllocateSet(
                 descriptorPool,
@@ -126,6 +119,21 @@ public sealed partial class ShaderPipelineRenderNode {
                         samplerHandle: pass.Samplers[slot]
                     );
                 }
+            }
+        }
+    }
+    // Sends every pass's current block to every slot, so each slot's next frame uploads only what changes after this, as
+    // every later one does, however many frames ran before: an install seeds the blocks once the live config is preserved
+    // into them, and a reset seeds them again.
+    private void SeedPassRegions() {
+        foreach (var pass in m_passes) {
+            if (pass.PassRegion is not { } region) {
+                continue;
+            }
+
+            WritePassBlock(pass: pass);
+            for (var slot = 0; (slot < m_inFlight); slot++) {
+                region.Flush(slot: slot);
             }
         }
     }

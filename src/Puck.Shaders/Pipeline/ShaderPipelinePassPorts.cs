@@ -30,6 +30,8 @@ public static partial class ShaderPipelinePassPorts {
     /// <param name="reference">The port.</param>
     /// <returns>The identifier.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reference"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The port names no <c>as</c> and its resource's name reads as no HLSL
+    /// identifier, as a name made only of separators does.</exception>
     public static string Identifier(ResourceReference reference) {
         ArgumentNullException.ThrowIfNull(argument: reference);
 
@@ -42,6 +44,10 @@ public static partial class ShaderPipelinePassPorts {
             ? (char.ToLowerInvariant(c: word[0]) + word[1..])
             : (char.ToUpperInvariant(c: word[0]) + word[1..]))));
 
+        if (!IdentifierPattern().IsMatch(input: camel)) {
+            throw new InvalidDataException(message: $"port '{reference.Name}' reads as '{camel}', which is not an HLSL identifier (an ASCII letter followed by ASCII letters and digits); name the port with \"as\".");
+        }
+
         return (reference.PreviousFrame
             ? ("previous" + char.ToUpperInvariant(c: camel[0]) + camel[1..])
             : camel);
@@ -52,7 +58,8 @@ public static partial class ShaderPipelinePassPorts {
     /// <returns>The members, each in <see cref="ShaderInterfaceGroup.Pass"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="pass"/> or <paramref name="resources"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">A port names an <c>as</c> that is not an HLSL identifier, names a version
+    /// <exception cref="InvalidDataException">A port names an <c>as</c> that is not an HLSL identifier, reads as none
+    /// without one, names a version
     /// the graph does not declare, or reads as a frame value, a config field of the pass or another member of it.</exception>
     public static IReadOnlyList<ShaderInterfaceMember> Members(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> resources) {
         ArgumentNullException.ThrowIfNull(argument: pass);
@@ -206,7 +213,7 @@ public static partial class ShaderPipelinePassPorts {
 
     [GeneratedRegex(pattern: @"//[^\n]*|/\*.*?\*/", options: RegexOptions.Singleline)]
     private static partial Regex CommentPattern();
-    // A port's identifier, refusing an "as" that is not an HLSL identifier.
+    // A port's identifier, refusing one that is not an HLSL identifier by the pass that declares it.
     private static string Checked(ShaderPipelinePass pass, ResourceReference reference) {
         if (
             (reference.As is { } named) &&
@@ -215,7 +222,11 @@ public static partial class ShaderPipelinePassPorts {
             throw new InvalidDataException(message: $"pass '{pass.Name}' port '{reference.Name}' names \"as\": \"{named}\", which is not an HLSL identifier (an ASCII letter followed by ASCII letters and digits).");
         }
 
-        return Identifier(reference: reference);
+        try {
+            return Identifier(reference: reference);
+        } catch (InvalidDataException exception) {
+            throw new InvalidDataException(message: $"pass '{pass.Name}' {exception.Message}");
+        }
     }
     private static ShaderPipelineResource Resource(string name, ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> resources) =>
         (resources.TryGetValue(

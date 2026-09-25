@@ -19,7 +19,7 @@ namespace Puck.Shaders;
 // objects on the device being released. The replaced graph is never drained on the frame thread; see
 // ShaderPipelineRenderNode.Retirement.cs.
 public sealed partial class ShaderPipelineRenderNode {
-    // The stages every pass's frame block is pushed to, a package's included.
+    // The stages a package pass's frame block is pushed to.
     internal const GpuShaderStage FrameBlockStages = GpuShaderStage.Compute | GpuShaderStage.Fragment;
 
     private readonly BackgroundBuild<GraphBuild> m_build = new();

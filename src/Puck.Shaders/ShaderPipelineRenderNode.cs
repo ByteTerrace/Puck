@@ -750,6 +750,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 next: m_passes,
                 previous: previousPasses
             );
+            SeedPassRegions();
+            // What an install counts belongs to no submission, whether it installs, fails partway or rebuilds after a
+            // device loss.
+            m_work.Discard();
             m_installedUnrendered = true;
             // A rebuild of the installed pipeline after a device loss keeps its revision: the loss already withdrew the
             // sample, and the passes are the ones it had.
@@ -759,6 +763,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 ConfigureWork();
             }
         } catch (Exception error) {
+            m_work.Discard();
             m_preview?.Dispose();
             DisposeGraph(
                 passes: m_passes,
@@ -1519,7 +1524,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     }
     /// <summary>Clears all history state and resets the presentation counter. Submissions in flight complete first; the
     /// completed work sample is then withdrawn, and <see cref="ResetSubmission"/> marks where counting since this reset
-    /// begins.</summary>
+    /// begins. Every slot holds each pass's current block again, so what the first frame after a reset uploads
+    /// never depends on how many frames ran before it.</summary>
     public void Reset() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -1531,6 +1537,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         m_steps = 0;
         m_outputRefreshRequested = false;
         Publish(surface: default);
+        SeedPassRegions();
         ResetWork();
     }
     /// <summary>Requests a new frame extent. The pipeline is rebuilt at the new extent as a candidate beside the

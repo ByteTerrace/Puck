@@ -53,8 +53,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     }
     /// <summary>The feedback graph; <paramref name="historyFormat"/> distinguishes a replacement whose history cannot
     /// be carried over, so every resource of the graph it replaces must retire. <paramref name="historyDimensions"/>
-    /// replaces the history's fixed 32x32 extent, for a history whose extent follows the frame or differs.</summary>
-    private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null) {
+    /// replaces the history's fixed 32x32 extent, for a history whose extent follows the frame or differs.
+    /// <paramref name="convertConfig"/> gives the convert pass a config, for a law that sets it live.</summary>
+    private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null, IReadOnlyDictionary<string, ShaderConfigField>? convertConfig = null) {
         var definition = new RenderGraphDefinition(
             name: "feedback",
             outputs: ["image"],
@@ -79,7 +80,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                     outputs: [new ResourceReference(
                         Name: "gray"
                     )]
-                ),
+                ) with {
+                    Config = convertConfig,
+                },
                 Pass(
                     inputs: [new ResourceReference(
                         Name: "gray"

@@ -110,6 +110,18 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         );
         Withdraw();
     }
+    /// <summary>Drops the work counted since the last submission sealed, keeping the published sample and every sealed
+    /// submission: setup a node does between submissions, such as installing or rebuilding its graph, belongs to no
+    /// submission, whether it succeeded, failed partway, or ran after a device loss.</summary>
+    /// <exception cref="InvalidOperationException">A pass is running.</exception>
+    public void Discard() {
+        if (m_currentPass >= 0) {
+            throw new InvalidOperationException(message: $"Pass {m_currentPass} is still running; leave it before discarding the work being recorded.");
+        }
+
+        m_open?.Free();
+        m_open = null;
+    }
     /// <summary>Marks a pass as running; the work counted until <see cref="LeavePass"/> is that pass's.</summary>
     /// <param name="pass">The zero-based pass index in the configured labels.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="pass"/> is not a configured pass.</exception>

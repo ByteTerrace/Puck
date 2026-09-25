@@ -362,7 +362,8 @@ lies; a source with no stored package compiles in a checkout that has DXC and
 is refused by `SHADERPKG_ABSENT` where nothing can compile it. The shipped rows
 name the ink pipeline and the Moth shader; film grain is a shader set whose
 bytecode the SDF build compiles. The `pipeline-echo` canary runs the generated
-echo with `pipeline.sentinels` on and a hand-perturbed copy of the declarations.
+echo with `pipeline.sentinels` on and a copy that expects two members to hold
+each other's sentinel.
 The `no-device-compile` canary hides DXC from the World's path and renders the
 shipped ink pipeline from its stored package and a relocated package from its
 binaries, while an unpackaged source is refused. Both canaries wait for their
@@ -2007,7 +2008,7 @@ Phase 3, the groups, follows phase 2:
       (`pipeline-preview.frag.hlsl`) reads a separate image and sampler in
       the pass group, set 3. Canaries: `no-device-compile`, every
       `pipeline-*`, `source-conversion` and `resample-reconstruction`.
-    - 14b-4, the overlay: `overlay-unified.frag.hlsl`'s nineteen combined
+    - 14b-4, the overlay: `overlay-unified.frag.hlsl`'s eighteen combined
       declarations and `UnifiedOverlayNode`'s pool. Canaries:
       `instrument-clock-source`, `music-conditional-layer-and-embellishment`,
       `voice-babble` and `world-seat-binding-recompose`.

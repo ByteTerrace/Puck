@@ -152,15 +152,48 @@ public sealed class ShaderPipelinePortLawTests {
     [InlineData("history", true, null, "previousHistory")]
     [InlineData("history", true, "past", "past")]
     [InlineData("output", false, "image", "image")]
+    [InlineData("_", true, null, null)]
+    [InlineData("-.", false, null, null)]
+    [InlineData("2d-map", false, null, null)]
     [Theory]
-    public void A_port_reads_as_its_resource_name_in_camel_case_unless_it_names_as(string name, bool previousFrame, string? alias, string expected) {
+    public void A_port_reads_as_its_resource_name_in_camel_case_unless_it_names_as(string name, bool previousFrame, string? alias, string? expected) {
+        var reference = new ResourceReference(
+            As: alias,
+            Name: name,
+            PreviousFrame: previousFrame
+        );
+
+        if (expected is null) {
+            Assert.Contains(
+                actualString: Assert.Throws<InvalidDataException>(testCode: () => ShaderPipelinePassPorts.Identifier(reference: reference)).Message,
+                expectedSubstring: "not an HLSL identifier"
+            );
+            return;
+        }
+
         Assert.Equal(
-            actual: ShaderPipelinePassPorts.Identifier(reference: new ResourceReference(
-                As: alias,
-                Name: name,
-                PreviousFrame: previousFrame
-            )),
+            actual: ShaderPipelinePassPorts.Identifier(reference: reference),
             expected: expected
+        );
+    }
+    [InlineData("_")]
+    [InlineData("2d-map")]
+    [Theory]
+    public void A_resource_name_reading_as_no_identifier_is_refused_by_the_pass(string name) {
+        var message = InterfaceRefusal(definition: Definition(
+            extra: [Image(
+                name,
+                external: true
+            )],
+            pass: Pass(
+                input: name,
+                output: "output"
+            )
+        ));
+
+        Assert.Contains(
+            actualString: message,
+            expectedSubstring: $"pass 'pass' port '{name}' reads as"
         );
     }
     [Fact]
