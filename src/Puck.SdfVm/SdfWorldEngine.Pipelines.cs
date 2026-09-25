@@ -143,7 +143,7 @@ public sealed partial class SdfWorldEngine {
                 Kind: GpuComputeBindingKind.StorageBufferRead
             ),
         ];
-        // Cull-args reduction: cull buffer read (3) + the views indirect args written (5) + the bbox origin written (6).
+        // Cull-args reduction: cull buffer read (3) + the views indirect args written (5) + the dispatch box written (6).
         internal static readonly GpuComputeBinding[] CullArgs = [
             new GpuComputeBinding(
                 Binding: TileBindingIndex,
@@ -159,7 +159,7 @@ public sealed partial class SdfWorldEngine {
             ),
         ];
         // Stage 1 (per-view SDF): program (1) + viewports (2) + dynamic entity transforms (9) + the source array (4) +
-        // the GPU-computed bbox origin (8) + the screen-surface table (10) + THIRTY-TWO separate screen-source
+        // the GPU-computed dispatch box (8) + the screen-surface table (10) + THIRTY-TWO separate screen-source
         // SampledImage bindings (12..43 — DXC cannot fuse an ARRAY texture into one Vulkan combined-image-sampler, so
         // each screen index gets its own binding; the pipeline factory bakes in ONE static nearest sampler PER
         // SampledImage binding on Direct3D 12, all sharing that one filter) + the per-tile instance mask read (7) and

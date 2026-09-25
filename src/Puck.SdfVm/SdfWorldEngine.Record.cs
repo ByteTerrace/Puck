@@ -256,7 +256,8 @@ public sealed partial class SdfWorldEngine {
             m_work.EnterPass(pass: CullArgsPass);
 
             // Cull-args reduction (a single invocation): reduce the cull buffer to the surviving-tile bbox, writing Stage
-            // 1's INDIRECT dispatch group counts + the bbox group origin — so the GPU, not the CPU, sizes the views grid.
+            // 1's INDIRECT dispatch group counts + the dispatch box (group origin and exclusive end) — so the GPU, not
+            // the CPU, sizes the views grid.
             RecordBufferBarriers(
                 commandBuffer: commandBuffer,
                 pass: SdfFramePass.CullArgs
@@ -297,7 +298,7 @@ public sealed partial class SdfWorldEngine {
             m_work.LeavePass();
 
             // Primary's buffer transitions carry the indirect args into the indirect-argument state (Direct3D 12's
-            // ExecuteIndirect needs that per-resource state) and the bbox origin into its read state. The cull buffer and the
+            // ExecuteIndirect needs that per-resource state) and the dispatch box into its read state. The cull buffer and the
             // upload twins are already in their read states from the passes before.
             RecordHitPass(
                 commandBuffer: commandBuffer,
