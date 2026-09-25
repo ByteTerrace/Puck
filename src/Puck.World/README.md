@@ -316,11 +316,15 @@ served or refused. Whatever keeps the render chain from serving the capture
 (the engine's pipelines still building on a cold driver shader cache, or a
 device being rebuilt), the host keeps producing frames and answering the
 console but steps no further tick, and the time it waits is spent, not owed,
-so serving the capture releases no burst. The hold is bounded: once the run
-has held its clock for 60 seconds in all (`WorldCaptureScheduler.HoldBudgetSeconds`),
-the capture is refused as `unserved` with the reason the chain gave, such as
-"the engine's pipelines never installed", and the run steps on; a later
-capture the chain still cannot serve is refused at once. `world.counters`
+so serving the capture releases no burst. The hold is bounded, and counts
+from readiness: while the engine's pipeline set builds (or rebuilds after a
+device loss), the run may hold its clock for 180 seconds in all
+(`WorldCaptureScheduler.BuildHoldBudgetSeconds`), and once the engine is ready
+for 60 seconds in all (`WorldCaptureScheduler.HoldBudgetSeconds`). Past either,
+the capture is refused as `unserved` and the run steps on; a refusal the build
+caused names it and its progress, such as "the engine's pipeline set is
+building (5 of 14 pipelines created)", and a later capture the chain still
+cannot serve is refused at once. `world.counters`
 reports the hold under `world.captures`: `world.captures.held` (engine ticks
 withheld) and `world.captures.ticks-while-armed` (ticks stepped while a
 capture waited, which stays 0 offscreen). A capture still waiting when the run
@@ -593,7 +597,12 @@ Facts a script needs:
   pending simulation traffic applies, so a scripted write-then-read pair
   (`world.row.set` then `world.status`, `player.bind` then
   `player.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
-  `world.wait` are the explicit waits.
+  `world.wait` are the explicit waits. `world.wait ready <seconds>` waits for
+  the rendering engine instead of a tick count: it holds the session until
+  the engine's pipeline set is installed and it has produced its first frame,
+  or the deadline passes, and reports which on standard error. A script that
+  reads rendered work (`world.counters gpu`) waits on it, since a cold driver
+  cache can hold the first frame back for many ticks.
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
   after a `world.wait` that releases at tick R runs before tick R+1. The

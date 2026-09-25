@@ -73,9 +73,13 @@ named `refusal` with its `detail` (the vocabulary is in the
 [parity README](../../tests/Puck.Parity/README.md)). While a capture waits for
 its frame, `AwaitsFrame` holds, and the host composes that frame before its
 next step. The offscreen host goes further and steps no tick past the armed one
-until the capture is served or refused (`HoldsClock`), bounded by
-`HoldBudgetSeconds` of holding per run, after which the capture is refused as
-`unserved` with the render chain's reason. `Drain` decides whatever is still
+until the capture is served or refused (`HoldsClock`). The hold counts from
+readiness: time held while the engine is not ready (`IWorldEngineReadiness`,
+its pipeline set not yet installed or no frame produced from it) is spent from
+`BuildHoldBudgetSeconds` (180) per run, and time held once it is ready from
+`HoldBudgetSeconds` (60). Past either, the capture is refused as `unserved`,
+naming the engine's pipeline build and its progress when the build spent the
+budget. `Drain` decides whatever is still
 owed a frame as the run ends, before the host disposes the render chain. The
 scheduler counts `world.captures.held` and `world.captures.ticks-while-armed`
 under its `world.captures` work source. It lives here rather than in `Puck.World.Client` because it reads

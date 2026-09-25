@@ -233,9 +233,13 @@ These are one-line cautions; the owning pages hold the derivations.
   `IFixedStepSimulation.AwaitsFrame` until a frame serves it, so the pump
   composes that tick's frame before stepping on. Offscreen the pump also holds
   its clock (`IFixedStepSimulation.HoldsClock`): no tick past the armed one
-  runs until the capture is served or refused, bounded by
-  `WorldCaptureScheduler.HoldBudgetSeconds`, after which it is refused as
-  `unserved` naming `SdfEngineNode.UnservedCaptureReason`. A refused request is
+  runs until the capture is served or refused. The hold counts from
+  readiness (`IWorldEngineReadiness`, the render probe over
+  `SdfEngineNode.IsReady`): time held while the engine is not ready is spent
+  from `WorldCaptureScheduler.BuildHoldBudgetSeconds`, and time held once it is
+  from `HoldBudgetSeconds`; past either the capture is refused as `unserved`,
+  naming `SdfEngineNode.NotReadyReason` (the build and its progress) when the
+  build spent it. A refused request is
   withdrawn with `FrameCaptureRequest.TryFail`, and `CaptureRequestSlot` drops
   a withdrawn request rather than serving or forwarding it. Hosts settle owed
   frames (`SettleOwedFrames`) before disposing the render root, so no capture
@@ -251,10 +255,19 @@ These are one-line cautions; the owning pages hold the derivations.
   each of them, its one cache: one set per device, `SdfWorldKernels.ContentKey`
   and brick-pipeline choice, built on the thread pool
   (`Puck.Hosting.BackgroundBuild`) by the first lease and shared by the rest.
-  A holder (`SdfWorldPipelineSource`) takes its lease off the frame thread,
-  presents nothing new until the set installs, keeps the lease across engine
-  rebuilds, and releases it on device loss and disposal; the last release
-  waits out an in-flight build and disposes the set. The cache counts the
+  A build creates up to `SdfWorldPipelines.BuildConcurrency` pipelines at once
+  on the pool, in `PipelineLayouts.BuildOrder` (the views variants last), and
+  checks its token between pipelines, never inside a driver call; its counts do
+  not depend on the order. A holder (`SdfWorldPipelineSource`) takes its lease
+  off the frame thread, presents nothing new until the set installs, keeps the
+  lease across engine rebuilds, and releases it on device loss and disposal;
+  the last release cancels an in-flight build inside the cache's gate
+  (`BackgroundBuild.Detach`), then waits outside it for only the pipelines
+  already in the driver, and disposes the set. `SdfEngineNode.IsReady` (set
+  installed and first frame produced) is the one readiness fact: the console
+  waits on it with `world.wait ready <seconds>`, and whatever reads counted
+  world passes (`puck counters`, the `world-counters` canary, `puck qualify`)
+  waits on it, never on a tick count. The cache counts the
   pipelines and shader modules it creates under `gpu.sdf-pipelines`, never in
   a node's or view's ledger, and reads each backend's deployed kernels once
   (`LoadDeployed`). A kernel reload replaces pipelines in place, so a node
@@ -263,7 +276,10 @@ These are one-line cautions; the owning pages hold the derivations.
   engine. A harness that drives a node polls `SdfEngineNode.IsReady`
   (`SdfTestPipelines.ProduceFirstFrame` in `tests/Shared`, whose `Kernels` is the one fake kernel set);
   `SdfPipelineBuildLivenessLawTests` holds the factory and proves the pump
-  still drains the console. `ShaderPipelineRenderNode` builds each candidate's
+  still drains the console, and that a device loss or the last release waits
+  for exactly the `BuildConcurrency` creations in the driver, counted through
+  the factory; `SdfWorldPipelinesLawTests` pins the concurrency bound, the
+  build order and a cancel mid-build the same way. `ShaderPipelineRenderNode` builds each candidate's
   modules, pipelines and the render passes they are created for through
   the same `BackgroundBuild`, started by the next produced frame (never by
   `Swap`, `Resize` or `SelectOutput`, so the presenter's swap-then-resize builds
