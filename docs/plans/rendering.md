@@ -839,10 +839,16 @@ keys and text to a focused passthrough source, sends each release where its
 press went, and returns focus to the game on Control, Alt and Escape.
 `RenderGraphHitWalk` in `src/Puck.Hosting/Graph` continues a hit on a rendered
 source through the producer's camera up to a depth limit, normally
-`RenderGraphInstanceSet.NestingDepth`. The pipeline pane's pointer
+`RenderGraphInstanceSet.NestingDepth`, entering at the topmost pane under a
+display point by the one rule `SourcePanes.Topmost` states: the last pane in
+drawing order whose face holds the point, a letterbox bar or bezel covering what
+is beneath. `SourcePanePicker` is the CPU `ISourcePicker` over that rule: it picks
+from the pane mappings last published to it, and a point its topmost pane holds
+off the source picks nothing. The pipeline pane's pointer
 (`WorldFramePresenter.UpdatePipelinePointer`) maps through its pane's
 `SourceMapping`. The laws are `SourceMappingLawTests`,
-`SourcePointerCommandLawTests`, `RenderGraphHitWalkLawTests`,
+`SourcePointerCommandLawTests`, `SourcePanePickerLawTests`,
+`RenderGraphHitWalkLawTests`,
 `SourceFocusLawTests`, `WorldScreenInputLawTests` and the Maths
 `vector.ray-plane-*` laws.
 
@@ -852,7 +858,7 @@ mirrors, and the GPU does not yet draw from the mapping. `SourceHandle` stands
 in for P12's producer id until P12b names sources in the graph. No host feeds
 `SourceFocus` or delivers a focused source's input to its window, no module
 registers the pointer commands or reads them into a machine, and no host
-implements `ISourcePicker`. The recorded Windows run, a click reaching a
+publishes its panes to `SourcePanePicker` yet. The recorded Windows run, a click reaching a
 captured editor window at the mapped point and the chord returning input to the
 game, belongs to P13b.
 
@@ -2603,9 +2609,9 @@ on P7b's groups.
    over standard input at a light-gun screen and observes the pixel the
    machine reports, with identical state hashes on every run and backend. It
    needs a machine that reads a pointer, which none does yet.
-3. The presentation destination. The CPU half can land now; GPU picking
-   follows P4. A host `ISourcePicker` answers hover and highlight from the
-   published mappings, and later from P4's visibility record.
+3. The presentation destination. The CPU picker has landed
+   (`SourcePanePicker`); a host publishing its panes to it moves with the views
+   the graph root now owns, and GPU picking follows P4's visibility record.
 4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
    `SourceFocus`, a focused capture source's window receives pointer and key
    events at `SourcePassthrough.ToClient`'s client coordinates, and the chord

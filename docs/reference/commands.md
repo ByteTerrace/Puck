@@ -612,7 +612,7 @@ A mapped point goes to one `SourceDestination`:
 
 | Destination | What reaches it |
 |---|---|
-| `Presentation` | Hover and highlight. `ISourcePicker` is the seam, and a host may answer it by GPU picking because nothing reaches state. |
+| `Presentation` | Hover and highlight. `ISourcePicker` is the seam, and a host may answer it by GPU picking because nothing reaches state. `SourcePanePicker` answers it on the CPU from published pane mappings: the topmost pane under the point, by `SourcePanes.Topmost`, the last in drawing order whose face holds it. |
 | `Simulation` | A pointer ray that arrives as the `source.pointer.origin` and `source.pointer.direction` Axis3D commands (`SourcePointerCommands`) in a tick's snapshot, quantized by `CommandValueQuantization.QuantizeAxis3D` and mapped from document data. `TryValidate` refuses a pane here, because a pane's aspect ratio depends on the host's display. |
 | `Passthrough` | An external window on the host. `SourcePassthrough.ToClient` scales a source pixel into the window's client area in physical and logical pixels. Only a source whose `SourceOpener` is the local user may take this destination, and `TryValidate` refuses it by name for a source a document opened. |
 
