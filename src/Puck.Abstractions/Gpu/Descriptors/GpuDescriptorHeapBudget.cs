@@ -27,6 +27,8 @@ public sealed class GpuDescriptorHeapBudget {
     private readonly GpuRangeAllocator m_samplers;
     private readonly GpuRangeAllocator m_views;
 
+    private long m_releaseRevision;
+
     /// <summary>Initializes a new instance of the <see cref="GpuDescriptorHeapBudget"/> class from a device's
     /// capabilities.</summary>
     /// <param name="capabilities">The device's capability report.</param>
@@ -58,6 +60,11 @@ public sealed class GpuDescriptorHeapBudget {
         );
     }
 
+    /// <summary>Gets the release revision: how many admissions <see cref="Release"/> has returned to the heaps. A
+    /// candidate refused with <see cref="RefusalCode"/> can fit only once ranges are returned, so heap space is a build
+    /// input for that refusal alone: an owner refused by the heap tries again when this changes, and a
+    /// <see cref="CanAdmit"/> check, which returns what it took at once, never moves it.</summary>
+    public long ReleaseRevision => Volatile.Read(location: ref m_releaseRevision);
     /// <summary>Gets the pools holding views live now.</summary>
     public int LivePools => m_views.LiveRanges;
     /// <summary>Gets the sampler descriptors not admitted to any pool.</summary>
@@ -153,17 +160,26 @@ public sealed class GpuDescriptorHeapBudget {
             return false;
         }
 
-        Release(admission: admission);
+        Return(admission: admission);
 
         return true;
     }
-    /// <summary>Returns an admission's ranges to the heap.</summary>
+    /// <summary>Returns an admission's ranges to the heap and advances <see cref="ReleaseRevision"/> when it held
+    /// any.</summary>
     /// <param name="admission">The admission <see cref="TryAdmit"/> returned.</param>
     /// <exception cref="ArgumentNullException"><paramref name="admission"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException"><paramref name="admission"/> was released already.</exception>
     public void Release(GpuDescriptorAdmission admission) {
         ArgumentNullException.ThrowIfNull(argument: admission);
 
+        Return(admission: admission);
+
+        if ((admission.Ranges.Count + admission.SamplerRanges.Count) > 0) {
+            _ = Interlocked.Increment(location: ref m_releaseRevision);
+        }
+    }
+
+    private void Return(GpuDescriptorAdmission admission) {
         Free(
             allocator: m_views,
             ranges: admission.Ranges
@@ -173,7 +189,6 @@ public sealed class GpuDescriptorHeapBudget {
             ranges: admission.SamplerRanges
         );
     }
-
     private static void Free(GpuRangeAllocator allocator, IReadOnlyList<(uint Start, uint Count)> ranges) {
         foreach (var (start, _) in ranges) {
             _ = allocator.Free(start: start);

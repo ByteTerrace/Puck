@@ -38,12 +38,29 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
     }
 
     /// <inheritdoc/>
-    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) =>
-        allocator.AllocateSet(
+    /// <remarks>Zero: each pool is a <c>VkDescriptorPool</c> of its own, never refused by a shared heap.</remarks>
+    public long HeapReleaseRevision => 0L;
+
+    /// <inheritdoc/>
+    /// <remarks>A set of a group's layout is recorded under that group in the device's
+    /// <see cref="VulkanLogicalDevice.SetGroups"/>, which a <c>VkDescriptorSet</c> handle cannot carry, until its pool is
+    /// destroyed.</remarks>
+    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {
+        var logicalDevice = deviceContext.LogicalDevice;
+        var set = allocator.AllocateSet(
             descriptorSetLayoutHandle: descriptorSetLayoutHandle,
-            device: Device,
+            device: logicalDevice.Commands,
             poolHandle: poolHandle
         );
+
+        logicalDevice.SetGroups.AddSet(
+            poolHandle: poolHandle,
+            setHandle: set,
+            setLayoutHandle: descriptorSetLayoutHandle
+        );
+
+        return set;
+    }
     /// <inheritdoc/>
     /// <remarks>Every candidate fits: each pool is a <c>VkDescriptorPool</c> of its own, sized by its creation.</remarks>
     public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) {
@@ -99,8 +116,11 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
             return;
         }
 
+        var logicalDevice = deviceContext.LogicalDevice;
+
+        logicalDevice.SetGroups.RemovePool(poolHandle: poolHandle);
         allocator.DestroyPool(
-            device: Device,
+            device: logicalDevice.Commands,
             poolHandle: poolHandle
         );
     }
@@ -138,6 +158,36 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
             descriptorSetHandle: descriptorSetHandle,
             device: Device,
             imageViewHandle: imageViewHandle,
+            samplerHandle: samplerHandle
+        );
+    /// <inheritdoc/>
+    public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
+        IGpuBindings.RequireConstantBufferSize(bufferSize: bufferSize);
+        allocator.WriteUniformBuffer(
+            arrayElement: arrayElement,
+            binding: binding,
+            bufferHandle: bufferHandle,
+            bufferSize: bufferSize,
+            descriptorSetHandle: descriptorSetHandle,
+            device: Device
+        );
+    }
+    /// <inheritdoc/>
+    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) =>
+        allocator.WriteSampledImage(
+            arrayElement: arrayElement,
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
+            device: Device,
+            imageViewHandle: imageViewHandle
+        );
+    /// <inheritdoc/>
+    public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) =>
+        allocator.WriteSampler(
+            arrayElement: arrayElement,
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
+            device: Device,
             samplerHandle: samplerHandle
         );
     /// <inheritdoc/>

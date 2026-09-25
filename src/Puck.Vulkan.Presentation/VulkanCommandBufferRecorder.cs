@@ -147,6 +147,7 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
                     commandBufferHandle: request.CommandBufferHandle,
                     descriptorSetHandle: drawCommand.DescriptorSetHandle,
                     device: request.Device,
+                    firstSet: 0,
                     pipelineLayoutHandle: currentPipelineLayoutHandle
                 );
             }

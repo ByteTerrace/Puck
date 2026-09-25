@@ -216,7 +216,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             RenderPasses.Add(item: (fake.RenderPass.Description, fake.Colors, fake.Depth));
         }
     }
-    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) { }
+    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) { }
     public void BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) => RecordGraphics(buffer: bufferHandle, command: ((format == GpuIndexFormat.UInt16) ? "indices16" : "indices32"), count: 0, offsetBytes: offsetBytes, sizeBytes: sizeBytes);
     public void BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) { }
     public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => RecordGraphics(buffer: bufferHandle, command: "vertices", count: strideBytes, offsetBytes: 0, sizeBytes: sizeBytes);
@@ -308,6 +308,9 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
         return true;
     }
+
+    public long HeapReleaseRevision => (DescriptorHeap?.ReleaseRevision ?? 0L);
+
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
         GpuDescriptorAdmission? admission = null;
 
@@ -321,7 +324,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
                     refusal: out var refusal
                 )
             ) {
-                throw new InvalidOperationException(message: refusal);
+                throw new GpuDescriptorHeapRefusalException(message: refusal);
             }
         }
 
@@ -418,6 +421,9 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             StructuredBufferWrites++;
         }
     }
+    public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) { }
+    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
+    public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
     public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
 
     /// <summary>One created object: its creation number, kind, handle, the bytes it occupies, and how often it was

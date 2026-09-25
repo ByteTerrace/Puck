@@ -339,7 +339,8 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
             graphicsPipelineApi: m_graphicsPipelineApi,
             groupLayoutHandles: groups?.SetLayoutHandles,
             layoutHandle: pipelineLayoutHandle,
-            pipelineHandle: pipelineHandle
+            pipelineHandle: pipelineHandle,
+            setGroups: logicalDevice.SetGroups
         );
     }
 }

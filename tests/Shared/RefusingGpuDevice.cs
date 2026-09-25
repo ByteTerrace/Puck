@@ -69,7 +69,7 @@ internal sealed class RefusingGpuDevice :
     void IGpuRecorder.BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area) => throw Reach(member: "IGpuRecorder.BeginRenderPass");
     void IGpuRecorder.EndRenderPass(nint commandBufferHandle) => throw Reach(member: "IGpuRecorder.EndRenderPass");
     void IGpuRecorder.BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => throw Reach(member: "IGpuRecorder.BindPipeline");
-    void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) => throw Reach(member: "IGpuRecorder.BindDescriptorSet");
+    void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) => throw Reach(member: "IGpuRecorder.BindDescriptorSet");
     void IGpuRecorder.PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) => throw Reach(member: "IGpuRecorder.PushConstants");
     void IGpuRecorder.BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => throw Reach(member: "IGpuRecorder.BindVertexBuffer");
     void IGpuRecorder.BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) => throw Reach(member: "IGpuRecorder.BindIndexBuffer");
@@ -83,6 +83,10 @@ internal sealed class RefusingGpuDevice :
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reach(member: "IGpuRecorder.TransitionImageLayout");
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reach(member: "IGpuRecorder.MemoryBarrier");
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reach(member: "IGpuRecorder.TransitionBuffer");
+
+    // A revision read reaches no device: a holder reads it to decide whether a refused build is due again.
+    long IGpuBindings.HeapReleaseRevision => 0L;
+
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw Reach(member: "IGpuBindings.AllocateSet");
     bool IGpuBindings.CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) => throw Reach(member: "IGpuBindings.CanAdmit");
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => throw Reach(member: "IGpuBindings.CreatePool");
@@ -95,6 +99,9 @@ internal sealed class RefusingGpuDevice :
     void IGpuBindings.DestroySampler(nint samplerHandle) => throw Reach(member: "IGpuBindings.DestroySampler");
     void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw Reach(member: "IGpuBindings.WriteCombinedImageSampler");
     void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => throw Reach(member: "IGpuBindings.WriteBuffer");
+    void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) => throw Reach(member: "IGpuBindings.WriteConstantBuffer");
+    void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reach(member: "IGpuBindings.WriteSampledImage");
+    void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) => throw Reach(member: "IGpuBindings.WriteSampler");
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reach(member: "IGpuBindings.WriteStorageImage");
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => throw Reach(member: "IGpuQueueSubmitter.CreateSubmissionFence");
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) => throw Reach(member: "IGpuQueueSubmitter.Submit");

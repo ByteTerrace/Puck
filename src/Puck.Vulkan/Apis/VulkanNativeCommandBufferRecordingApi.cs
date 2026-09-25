@@ -135,7 +135,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         }
     }
     /// <inheritdoc/>
-    public void BindComputeDescriptorSets(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, ReadOnlySpan<nint> descriptorSetHandles) {
+    public void BindComputeDescriptorSets(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, uint firstSet, ReadOnlySpan<nint> descriptorSetHandles) {
         var bindDescriptorSets = device.CmdBindDescriptorSets;
 
         fixed (nint* descriptorSetHandlesPointer = descriptorSetHandles) {
@@ -143,7 +143,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 commandBufferHandle,
                 ComputePipelineBindPoint,
                 pipelineLayoutHandle,
-                0,
+                firstSet,
                 ((uint)descriptorSetHandles.Length),
                 ((nint)descriptorSetHandlesPointer),
                 0,
@@ -162,7 +162,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void BindDescriptorSet(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) {
+    public void BindDescriptorSet(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, uint firstSet, nint descriptorSetHandle) {
         ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
@@ -191,7 +191,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             commandBufferHandle,
             GraphicsPipelineBindPoint,
             pipelineLayoutHandle,
-            0,
+            firstSet,
             1,
             ((nint)descriptorSetHandles),
             0,

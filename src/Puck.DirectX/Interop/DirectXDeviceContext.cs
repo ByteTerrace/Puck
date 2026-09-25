@@ -173,6 +173,9 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// with the device and released with it, so a recreated device has a fresh pair.</summary>
     /// <exception cref="GpuDeviceUnavailableException">No device could be created.</exception>
     public DirectXShaderVisibleHeaps DescriptorHeaps => m_bindings.Heaps;
+    /// <summary>Gets the context's own bindings, beneath any creation-fault wrapper its <c>Services</c> carry: what
+    /// counts the handles its pools and sets hold (<see cref="DirectXGpuBindings.LiveHandles"/>).</summary>
+    public DirectXGpuBindings DescriptorBindings => m_bindings;
     /// <inheritdoc />
     public DirectXDevice Device {
         get {

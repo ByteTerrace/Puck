@@ -122,6 +122,11 @@ public sealed class DirectXGroupLayout {
             ordinal: group.Ordinal
         );
         var slots = new uint[(group.Bindings[^1].Binding + 1)];
+        var kinds = new GpuBindingKind?[slots.Length];
+
+        foreach (var binding in group.Bindings) {
+            kinds[binding.Binding] = binding.Kind;
+        }
 
         foreach (var table in ((ReadOnlySpan<DirectXRootParameter?>)[views, samplers])) {
             foreach (var range in (table?.Ranges ?? [])) {
@@ -129,6 +134,7 @@ public sealed class DirectXGroupLayout {
             }
         }
 
+        KindByBinding = kinds;
         Ordinal = group.Ordinal;
         SamplerSlotCount = (samplers?.DescriptorCount ?? 0U);
         SamplerTableIndex = ((samplers is null)
@@ -141,6 +147,9 @@ public sealed class DirectXGroupLayout {
             : ((int)views.Index));
     }
 
+    /// <summary>Gets each binding's kind, indexed by binding number, or <see langword="null"/> where the group declares
+    /// no binding.</summary>
+    public IReadOnlyList<GpuBindingKind?> KindByBinding { get; }
     /// <summary>Gets the group's ordinal.</summary>
     public uint Ordinal { get; }
     /// <summary>Gets the sampler table's length in descriptors, or zero when the group holds no sampler.</summary>
@@ -186,6 +195,10 @@ public sealed class DirectXDescriptorPool {
     /// <summary>The next free sampler slot, which <c>AllocateSet</c> bump-allocates a group's sampler table from as it
     /// does views from <see cref="NextOffset"/>.</summary>
     public uint SamplerNextOffset;
+
+    /// <summary>The <see cref="System.Runtime.InteropServices.GCHandle"/> of every set <c>AllocateSet</c> placed in the
+    /// pool, which <c>DestroyPool</c> frees with the pool's own, so a pool's sets release with it.</summary>
+    public List<nint> SetHandles { get; } = [];
 }
 /// <summary>
 /// A range inside a <see cref="DirectXDescriptorPool"/>'s range of the device's view heap, allocated once via

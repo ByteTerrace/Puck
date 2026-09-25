@@ -1035,6 +1035,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: handle,
                 descriptorSetHandle: descriptor,
+                group: 0,
                 pipelineLayoutHandle: pass.Compute.LayoutHandle
             );
             var extent = (pass.Width, pass.Height);
@@ -1121,6 +1122,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 bindPoint: GpuBindPoint.Graphics,
                 commandBufferHandle: command,
                 descriptorSetHandle: descriptor,
+                group: 0,
                 pipelineLayoutHandle: pipeline.LayoutHandle
             );
         }

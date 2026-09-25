@@ -17,6 +17,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     private SdfWorldPipelineLease? m_lease;
     // The latest refused engine build and what it was built from, until a build succeeds or the lease is released.
     private Exception? m_refusal;
+    private long m_refusedHeapRevision;
     private object? m_refusedInputs;
     private BuildKey m_refusedKey;
 
@@ -57,7 +58,9 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     // being taken (the deployed kernels loading), or its set's build and that build's progress. Builds a string, so it
     // is read only to report.
     public string Describe() => ((m_refusal is { } refusal)
-        ? $"the engine's build was refused and is retried when its inputs change: {refusal.Message}"
+        ? $"the engine's build was refused and is retried when its inputs change{((refusal is GpuDescriptorHeapRefusalException)
+            ? " or another owner returns descriptor heap space"
+            : string.Empty)}: {refusal.Message}"
         : ((m_lease is { } lease)
             ? $"the engine's pipeline set is {lease.Progress.Describe()}"
             : (m_acquire.IsPending
@@ -85,8 +88,10 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     // A refused build is tried again only when something it was built from changes: the device, the kernels asked for,
     // the pipeline set or the kernels installed in it, or the holder's own inputs (its engine options, and anything else
     // it names, such as a kernel reload request). A frame that changes none of them tries nothing, so a persistent
-    // failure is attempted once per change, never once per frame, and never on a clock. Release (a device loss or
-    // disposal) forgets the refusal. The inputs are read with inputsOf only when a build is due or a refusal is being
+    // failure is attempted once per change, never once per frame, and never on a clock. A build the device's descriptor
+    // heap refused (GpuDescriptorHeapRefusalException) has one input more, heap space: it is tried again when the heap's
+    // release revision (IGpuBindings.HeapReleaseRevision) moves, as another owner returns its pools; a refusal of any
+    // other kind never reads it. Release (a device loss or disposal) forgets the refusal. The inputs are read with inputsOf only when a build is due or a refusal is being
     // checked, never while the set builds. A device loss is never refused: it reaches the host's recovery.
     public SdfWorldEngine? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, TInputs, SdfWorldEngine> construct) where TInputs : IEquatable<TInputs> {
         var key = new BuildKey(
@@ -99,6 +104,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
         );
         TInputs inputs = default!;
         var inputsRead = false;
+        var heapRevision = device.Services.Bindings.HeapReleaseRevision;
 
         if (m_refusal is not null) {
             inputs = inputsOf(arg: state);
@@ -107,7 +113,11 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
             if (
                 (m_refusedKey == key) &&
                 (m_refusedInputs is TInputs refused) &&
-                inputs.Equals(other: refused)
+                inputs.Equals(other: refused) &&
+                (
+                    (m_refusal is not GpuDescriptorHeapRefusalException) ||
+                    (heapRevision == m_refusedHeapRevision)
+                )
             ) {
                 return null;
             }
@@ -148,6 +158,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
 
             // The key is read again: the attempt may have taken the lease or installed the set it failed with.
             m_refusal = refusal;
+            m_refusedHeapRevision = heapRevision;
             m_refusedKey = (key with {
                 Set = Current,
                 SetKernels = Current?.Kernels,

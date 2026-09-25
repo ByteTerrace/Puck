@@ -43,12 +43,20 @@ public interface IGpuRecorder {
     /// <see cref="GpuBindPoint.Compute"/> for an <see cref="IGpuComputePipeline"/>.</param>
     /// <param name="pipelineHandle">The pipeline's <c>Handle</c>.</param>
     void BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle);
-    /// <summary>Binds a descriptor set at set 0 of a bind point.</summary>
+    /// <summary>Binds a descriptor set at a group of a bind point. On Vulkan the group is the set number
+    /// (<c>firstSet</c>); on Direct3D 12 a group's set sets the group's view table and then its sampler table, at the
+    /// root parameter indices <c>DirectXRootLayout.Plan</c> gave the pipeline, and a set of any other pipeline sets its
+    /// one descriptor table. A set binds only at its own group (<see cref="IGpuBindings.AllocateSet"/>): any other
+    /// group is refused by name.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="bindPoint">The bind point of the pipeline the set is read by.</param>
     /// <param name="pipelineLayoutHandle">That pipeline's layout.</param>
+    /// <param name="group">The group the set is bound at: its ordinal for a group's set, zero for a set of a pipeline
+    /// created without a layout description.</param>
     /// <param name="descriptorSetHandle">The descriptor set, allocated against that layout.</param>
-    void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle);
+    /// <exception cref="InvalidOperationException">The set belongs to another group, or the pipeline has no such
+    /// group.</exception>
+    void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle);
     /// <summary>Records an update of a range of a bind point's push-constant block.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="bindPoint">The bind point of the pipeline the range is read by.</param>

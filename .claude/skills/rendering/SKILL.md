@@ -275,12 +275,18 @@ These are one-line cautions; the owning pages hold the derivations.
   A refused build is retried only when an input it was made from changes (the
   device, the kernels asked for, the set or its installed kernels, and the
   holder's inputs: its `SdfWorldEngineOptions`, and for the node a kernel
-  reload request), or after `Release` on device loss. It is never retried
+  reload request), or after `Release` on device loss. A build refused by the
+  device's descriptor heap (`GpuDescriptorHeapRefusalException`,
+  `GPU_DESCRIPTOR_HEAP`) has one input more, heap space: it is retried when
+  `IGpuBindings.HeapReleaseRevision` (`GpuDescriptorHeapBudget.ReleaseRevision`,
+  which moves only when a pool's ranges are returned) changes, and no other
+  refusal reads it. It is never retried
   because a frame arrived and never on a clock; a new input to a build joins
   its `inputsOf`. The node has no previous engine then and presents nothing
   new; a view serves the image it served before. `UnifiedOverlayNode` refuses
   its resources the same way (`ResourceRefusal`), presents the inner frame
-  unchanged, forwards captures to it, and retries only after `OnDeviceLost`. `SdfWorldEngine`'s
+  unchanged, forwards captures to it, and retries after `OnDeviceLost`, or,
+  for a heap refusal, once the release revision moves. `SdfWorldEngine`'s
   constructor owns its creations through one `GpuCreationScope`, which
   releases them newest first when a later step throws, so a refusal leaks
   nothing (`SdfWorldEngineCreationFaultLawTests`,
@@ -658,9 +664,21 @@ it replaces. Its `GroupLayoutHandles` are what a group's set is allocated
 against, from a pool sized by `GpuDescriptorPoolSizes.ForGroups`; on Direct3D
 12 that pool's samplers are a range of the sampler heap.
 `DirectXGroupedLayoutLawTests` and `VulkanGroupedPipelineLayoutLawTests` hold the
-created layouts to the same tables. No shipped pipeline is created from a plan
-yet, no write fills a group's constant buffer, separate image or sampler, and no
-recorder binds a set by its group's ordinal; `GpuComputeBindingKind` and
+created layouts to the same tables. A group's set takes its constant buffers,
+separate images and samplers through `IGpuBindings.WriteConstantBuffer`
+(a view a non-zero multiple of `IGpuBindings.ConstantBufferAlignment`),
+`WriteSampledImage` and `WriteSampler`; on Direct3D 12 a write of a kind the
+group does not declare at that binding is refused, and a sampler handle names
+only its filter, created as a descriptor in the set's sampler table.
+`IGpuRecorder.BindDescriptorSet` takes the group: Vulkan's `firstSet`, and on
+Direct3D 12 the bound pipeline's view table, then its sampler table, for that
+group. A set belongs to the group of the layout it was allocated against (group
+0 for any other layout), which a Vulkan set handle records in
+`VulkanLogicalDevice.SetGroups`, and a bind at any other group is refused by
+name on both backends. A pool's sets release with it
+(`DirectXGpuBindings.LiveHandles`). `DirectXGroupedBindingLawTests` and
+`VulkanGroupedBindingLawTests` hold the writes and binds. No shipped pipeline
+is created from a plan yet; `GpuComputeBindingKind` and
 `ShaderSetManifestBindingKind` still carry the combined image sampler until the
 owners move onto groups.
 

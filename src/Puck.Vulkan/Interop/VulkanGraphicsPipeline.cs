@@ -8,6 +8,7 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanGraphicsPipeline : IGpuPipeline {
     private readonly IVulkanGraphicsPipelineApi m_graphicsPipelineApi;
+    private readonly VulkanDescriptorSetGroups? m_setGroups;
 
     private bool m_disposed;
 
@@ -33,6 +34,8 @@ public sealed class VulkanGraphicsPipeline : IGpuPipeline {
     /// <param name="groupLayoutHandles">The native <c>VkDescriptorSetLayout</c> handle of each set of a pipeline created
     /// from a <see cref="GpuGraphicsPipelineDescription.Layout"/>, indexed by set number, to own; empty or
     /// <see langword="null"/> for any other pipeline.</param>
+    /// <param name="setGroups">The device's set groups, which record <paramref name="groupLayoutHandles"/> for as long as
+    /// the pipeline lives, or <see langword="null"/> for a pipeline of no group.</param>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="graphicsPipelineApi"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="layoutHandle"/> or <paramref name="pipelineHandle"/> is zero.</exception>
     public VulkanGraphicsPipeline(
@@ -41,7 +44,8 @@ public sealed class VulkanGraphicsPipeline : IGpuPipeline {
         nint layoutHandle,
         nint pipelineHandle,
         IVulkanGraphicsPipelineApi graphicsPipelineApi,
-        IReadOnlyList<nint>? groupLayoutHandles = null
+        IReadOnlyList<nint>? groupLayoutHandles = null,
+        VulkanDescriptorSetGroups? setGroups = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: graphicsPipelineApi);
 
@@ -65,6 +69,8 @@ public sealed class VulkanGraphicsPipeline : IGpuPipeline {
         LayoutHandle = layoutHandle;
         Handle = pipelineHandle;
         m_graphicsPipelineApi = graphicsPipelineApi;
+        m_setGroups = setGroups;
+        m_setGroups?.AddLayouts(setLayoutHandles: GroupLayoutHandles);
     }
 
     /// <summary>Destroys the owned pipeline, pipeline layout, and descriptor set layout. Safe to call more than once.</summary>
@@ -82,6 +88,7 @@ public sealed class VulkanGraphicsPipeline : IGpuPipeline {
             device: Device,
             pipelineLayoutHandle: LayoutHandle
         );
+        m_setGroups?.RemoveLayouts(setLayoutHandles: GroupLayoutHandles);
         VulkanPipelineLayouts.DestroySets(
             device: Device,
             setLayoutHandles: GroupLayoutHandles

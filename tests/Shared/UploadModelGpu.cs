@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 
@@ -14,6 +15,10 @@ namespace Puck.Testing;
 /// or, for two or more, found in the source's leading <c>(table offset, prefix)</c> run table (a linear search here; the
 /// kernel's binary search finds the same run). Recording order is execution order here, as it is on one queue behind
 /// the barriers the caller records. A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
+/// <para>Shader modules and pipelines are created on the thread pool, several at once
+/// (<c>SdfWorldPipelines.BuildConcurrency</c>), so handles come from an interlocked counter and the upload kernel is
+/// identified by the handles of the modules built from its bytecode and the pipelines built from those modules, each a
+/// concurrent set, never by one shared field a concurrent build could overwrite.</para>
 /// </summary>
 internal sealed class UploadModelGpu :
     IGpuDeviceContext,
@@ -27,14 +32,17 @@ internal sealed class UploadModelGpu :
 
     private readonly Dictionary<(nint Set, uint Binding), nint> m_bindings = [];
     private readonly Dictionary<nint, MemoryBuffer> m_buffers = [];
+
     private readonly FakeGpuDevice m_inner;
+
     private readonly byte[] m_push = new byte[16];
+    private readonly ConcurrentDictionary<nint, byte> m_uploadModules = new();
+    private readonly ConcurrentDictionary<nint, byte> m_uploadPipelines = new();
 
     private nint m_boundPipeline;
     private nint m_boundSet;
-    private nint m_nextHandle = 0x1000;
-    private nint m_uploadModule;
-    private nint m_uploadPipeline;
+
+    private long m_nextHandle = 0x1000;
 
     /// <summary>Initializes a new instance of the <see cref="UploadModelGpu"/> class.</summary>
     /// <param name="reportVersion">The ISA version a 1×1 readback reports.</param>
@@ -106,8 +114,11 @@ internal sealed class UploadModelGpu :
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         var pipeline = new Handles(handle: NextHandle(), layout: NextHandle(), setLayout: NextHandle());
 
-        if (computeShaderModule.Handle == m_uploadModule) {
-            m_uploadPipeline = pipeline.Handle;
+        if (m_uploadModules.ContainsKey(key: computeShaderModule.Handle)) {
+            _ = m_uploadPipelines.TryAdd(
+                key: pipeline.Handle,
+                value: 0
+            );
         }
 
         return pipeline;
@@ -119,7 +130,10 @@ internal sealed class UploadModelGpu :
             !bytecode.IsEmpty &&
             (bytecode.Span[0] == FrameUploadBytecode)
         ) {
-            m_uploadModule = module.Handle;
+            _ = m_uploadModules.TryAdd(
+                key: module.Handle,
+                value: 0
+            );
         }
 
         return module;
@@ -128,6 +142,9 @@ internal sealed class UploadModelGpu :
     IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) => throw new NotSupportedException();
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => throw new NotSupportedException();
+
+    long IGpuBindings.HeapReleaseRevision => m_inner.Services.Bindings.HeapReleaseRevision;
+
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => NextHandle();
     bool IGpuBindings.CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) => m_inner.Services.Bindings.CanAdmit(owner: owner, pools: pools, refusal: out refusal);
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => m_inner.Services.Bindings.CreatePool(sizes: sizes);
@@ -136,6 +153,9 @@ internal sealed class UploadModelGpu :
     void IGpuBindings.DestroySampler(nint samplerHandle) { }
     void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) { }
     void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+    void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) { }
+    void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
+    void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) { }
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) { }
@@ -154,13 +174,10 @@ internal sealed class UploadModelGpu :
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
-    void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) => m_boundSet = descriptorSetHandle;
+    void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) => m_boundSet = descriptorSetHandle;
     void IGpuRecorder.BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => m_boundPipeline = pipelineHandle;
     void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
-        if (
-            (0 == m_uploadPipeline) ||
-            (m_boundPipeline != m_uploadPipeline)
-        ) {
+        if (!m_uploadPipelines.ContainsKey(key: m_boundPipeline)) {
             return;
         }
 
@@ -189,10 +206,7 @@ internal sealed class UploadModelGpu :
         UploadCopies++;
     }
     void IGpuRecorder.PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
-        if (
-            (0 != m_uploadPipeline) &&
-            (m_boundPipeline == m_uploadPipeline)
-        ) {
+        if (m_uploadPipelines.ContainsKey(key: m_boundPipeline)) {
             data.CopyTo(destination: m_push.AsSpan(start: ((int)offset)));
         }
     }
@@ -209,7 +223,7 @@ internal sealed class UploadModelGpu :
 
         return buffer;
     }
-    private nint NextHandle() => m_nextHandle++;
+    private nint NextHandle() => ((nint)Interlocked.Increment(location: ref m_nextHandle));
     private MemoryBuffer Single(bool hostVisible, ulong sizeBytes) => m_buffers.Values.Single(predicate: buffer =>
         ((buffer.HostVisible == hostVisible) &&
         (buffer.SizeBytes == sizeBytes))

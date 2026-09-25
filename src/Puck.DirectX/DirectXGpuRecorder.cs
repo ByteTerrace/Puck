@@ -74,30 +74,60 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         commandList->IASetPrimitiveTopology(PrimitiveTopology: D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     }
     /// <inheritdoc/>
-    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) {
+    /// <remarks>A group's set sets the group's view table and then its sampler table, at the root parameter indices the
+    /// bound pipeline's plan gave that group (<see cref="DirectXGroupLayout"/>, from its
+    /// <see cref="DirectXPipelineLayout.GroupHandles"/>); a set of any other pipeline sets its one descriptor
+    /// table.</remarks>
+    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
         var layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
+        var own = (set.Group?.Ordinal ?? 0U);
 
-        if (set.Group is { } group) {
-            throw new NotSupportedException(message: $"A set of group {group.Ordinal} binds through its group's view and sampler tables, which BindDescriptorSet does not set.");
+        if (own != group) {
+            throw new InvalidOperationException(message: $"A set of group {own} is bound at group {group}; a set binds only at its own group.");
         }
-        if (0 > layout.DescriptorTableParamIndex) {
+
+        if (set.Group is null) {
+            if (0 > layout.DescriptorTableParamIndex) {
+                return;
+            }
+
+            SetTable(
+                bindPoint: bindPoint,
+                commandList: commandList,
+                gpuBase: set.GpuBase,
+                rootParameterIndex: layout.DescriptorTableParamIndex
+            );
+
             return;
         }
 
-        var handle = new D3D12_GPU_DESCRIPTOR_HANDLE { ptr = set.GpuBase };
+        if (
+            (group >= ((uint)layout.GroupHandles.Length)) ||
+            (0 == layout.GroupHandles[group])
+        ) {
+            throw new InvalidOperationException(message: $"A set of group {group} is bound to a pipeline that has no group {group}.");
+        }
 
-        if (bindPoint == GpuBindPoint.Compute) {
-            commandList->SetComputeRootDescriptorTable(
-                BaseDescriptor: handle,
-                RootParameterIndex: ((uint)layout.DescriptorTableParamIndex)
+        var planned = ((DirectXGroupLayout)GCHandle.FromIntPtr(value: layout.GroupHandles[group]).Target!);
+
+        if (0 <= planned.ViewTableIndex) {
+            SetTable(
+                bindPoint: bindPoint,
+                commandList: commandList,
+                gpuBase: set.GpuBase,
+                rootParameterIndex: planned.ViewTableIndex
             );
-        } else {
-            commandList->SetGraphicsRootDescriptorTable(
-                BaseDescriptor: handle,
-                RootParameterIndex: ((uint)layout.DescriptorTableParamIndex)
+        }
+
+        if (0 <= planned.SamplerTableIndex) {
+            SetTable(
+                bindPoint: bindPoint,
+                commandList: commandList,
+                gpuBase: set.SamplerGpuBase,
+                rootParameterIndex: planned.SamplerTableIndex
             );
         }
     }
@@ -625,6 +655,21 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         );
 
         return descriptors;
+    }
+    private static void SetTable(ID3D12GraphicsCommandList* commandList, GpuBindPoint bindPoint, int rootParameterIndex, ulong gpuBase) {
+        var handle = new D3D12_GPU_DESCRIPTOR_HANDLE { ptr = gpuBase };
+
+        if (bindPoint == GpuBindPoint.Compute) {
+            commandList->SetComputeRootDescriptorTable(
+                BaseDescriptor: handle,
+                RootParameterIndex: ((uint)rootParameterIndex)
+            );
+        } else {
+            commandList->SetGraphicsRootDescriptorTable(
+                BaseDescriptor: handle,
+                RootParameterIndex: ((uint)rootParameterIndex)
+            );
+        }
     }
     private static DirectXCommandBufferState DecodeState(nint commandBufferHandle) =>
         DirectXCommandBufferState.Decode(commandBufferHandle: commandBufferHandle);

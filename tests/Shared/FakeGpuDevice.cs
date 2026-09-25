@@ -47,6 +47,11 @@ internal sealed class FakeGpuDevice :
 
     private int m_admissions;
 
+    // Each live pool's admission into DescriptorHeap, by pool handle, and the next handle a pool takes while a heap is
+    // set and objects are not tracked, so each such pool is released by its own handle.
+    private readonly Dictionary<nint, (GpuDescriptorHeapBudget Heap, GpuDescriptorAdmission Admission)> m_heapPools = [];
+    private nint m_nextHeapPool = 0x10000;
+
     /// <summary>Initializes a new instance of the <see cref="FakeGpuDevice"/> class.</summary>
     /// <param name="reportVersion">The ISA version a 1×1 readback reports.</param>
     /// <param name="countCalls">Whether each wrapped member counts its calls into <see cref="Calls"/>.</param>
@@ -111,7 +116,9 @@ internal sealed class FakeGpuDevice :
     /// the device counts calls, and synchronized, so a harness whose pipelines build on the thread pool can read it.</summary>
     public int Admissions => Volatile.Read(location: ref m_admissions);
     /// <summary>Gets or sets the descriptor heap <see cref="IGpuBindings.CanAdmit"/> checks a candidate against, or
-    /// <see langword="null"/> to admit every candidate, as a Vulkan device does.</summary>
+    /// <see langword="null"/> to admit every candidate, as a Vulkan device does. While one is set, each created pool is
+    /// admitted into it, or refused with <see cref="GpuDescriptorHeapRefusalException"/>, and returns its ranges when
+    /// destroyed, as a Direct3D 12 device's pools do.</summary>
     public GpuDescriptorHeapBudget? DescriptorHeap { get; set; }
     /// <summary>Gets the number of submissions made, fenced or not.</summary>
     public int Submissions { get; private set; }
@@ -184,7 +191,7 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area) => Hit(key: "IGpuRecorder.BeginRenderPass");
     void IGpuRecorder.EndRenderPass(nint commandBufferHandle) => Hit(key: "IGpuRecorder.EndRenderPass");
     void IGpuRecorder.BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => Hit(key: "IGpuRecorder.BindPipeline");
-    void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) => Hit(key: "IGpuRecorder.BindDescriptorSet");
+    void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) => Hit(key: "IGpuRecorder.BindDescriptorSet");
     void IGpuRecorder.PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) => Hit(key: "IGpuRecorder.PushConstants");
     void IGpuRecorder.BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => Hit(key: "IGpuRecorder.BindVertexBuffer");
     void IGpuRecorder.BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) => Hit(key: "IGpuRecorder.BindIndexBuffer");
@@ -244,11 +251,44 @@ internal sealed class FakeGpuDevice :
 
         return true;
     }
+
+    long IGpuBindings.HeapReleaseRevision {
+        get {
+            Hit(key: "IGpuBindings.HeapReleaseRevision");
+
+            return (DescriptorHeap?.ReleaseRevision ?? 0L);
+        }
+    }
+
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) {
         Hit(key: "IGpuBindings.CreatePool");
+
+        GpuDescriptorAdmission? admission = null;
+        var heap = DescriptorHeap;
+
+        if (
+            (heap is not null) &&
+            !heap.TryAdmit(
+                admission: out admission,
+                owner: "descriptor pool",
+                pools: [sizes],
+                refusal: out var refusal
+            )
+        ) {
+            throw new GpuDescriptorHeapRefusalException(message: refusal);
+        }
+
         PoolsCreated.Add(item: sizes);
 
-        return (Track(kind: "descriptor pool")?.Handle ?? 8);
+        var handle = (Track(kind: "descriptor pool")?.Handle ?? ((heap is null)
+            ? 8
+            : m_nextHeapPool++));
+
+        if (heap is not null) {
+            m_heapPools[handle] = (heap, admission!);
+        }
+
+        return handle;
     }
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) {
         Hit(key: "IGpuBindings.CreateSampler");
@@ -257,6 +297,14 @@ internal sealed class FakeGpuDevice :
     }
     void IGpuBindings.DestroyPool(nint poolHandle) {
         Hit(key: "IGpuBindings.DestroyPool");
+
+        if (m_heapPools.Remove(
+            key: poolHandle,
+            value: out var admitted
+        )) {
+            admitted.Heap.Release(admission: admitted.Admission);
+        }
+
         ReleaseHandle(handle: poolHandle);
     }
     void IGpuBindings.DestroySampler(nint samplerHandle) {
@@ -265,6 +313,9 @@ internal sealed class FakeGpuDevice :
     }
     void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => Hit(key: "IGpuBindings.WriteCombinedImageSampler");
     void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => Hit(key: "IGpuBindings.WriteBuffer");
+    void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) => Hit(key: "IGpuBindings.WriteConstantBuffer");
+    void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => Hit(key: "IGpuBindings.WriteSampledImage");
+    void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) => Hit(key: "IGpuBindings.WriteSampler");
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => Hit(key: "IGpuBindings.WriteStorageImage");
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() {
         Hit(key: "IGpuQueueSubmitter.CreateSubmissionFence");

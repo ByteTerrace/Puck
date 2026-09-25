@@ -1805,9 +1805,9 @@ Phase 3, the groups, follows phase 2:
       sampled images and samplers apart; on Direct3D 12 a pool holding
       samplers is also a range of the device's sampler heap, admitted
       whole-or-nothing with its view range, and a group's set takes its
-      sampler table from that range. No shipped pipeline moves yet, and the
-      writes a group's set needs (constant buffers, separate images and
-      samplers) and binding a set by its group's ordinal are 14b-3's.
+      sampler table from that range. No shipped pipeline moves yet; the
+      writes a group's set needs and binding a set by its group's ordinal are
+      14b-1b's.
       `UnifiedOverlayNode` checks its pool through `CanAdmit` before it
       creates anything. Laws: `DirectXGroupedLayoutLawTests` (the serialized
       root signature, read back through the runtime's deserializer, holds the
@@ -1828,6 +1828,41 @@ Phase 3, the groups, follows phase 2:
       creation check. Canaries: the 18 the pipeline factories map to,
       `no-device-compile`, the thirteen `pipeline-*`, `sdf-decode-sign-refusal`,
       `source-conversion`, `world-counters` and `world-seat-binding-recompose`.
+    - 14b-1b, done: what the owners need before they move onto groups.
+      `IGpuBindings` writes a group's constant buffers
+      (`WriteConstantBuffer`, a view a non-zero multiple of
+      `IGpuBindings.ConstantBufferAlignment`), separate images
+      (`WriteSampledImage`) and samplers (`WriteSampler`) into its set: on
+      Vulkan as descriptor writes by binding, on Direct3D 12 as views created
+      in the set's range of the pool's view range and sampler descriptors in
+      its range of the pool's sampler range, from the filter the sampler
+      handle names. A Direct3D 12 write of a kind the group does not declare
+      at that binding is refused. `IGpuRecorder.BindDescriptorSet` takes the
+      group: Vulkan's `firstSet`, and on Direct3D 12 the bound pipeline's view
+      table, then its sampler table, for that group from
+      `DirectXRootLayout.Plan`. A set belongs to the group of the layout it
+      was allocated against, group 0 for any other layout; Vulkan records it
+      in the logical device's `VulkanDescriptorSetGroups`, and both backends
+      refuse a set bound at any other group by name. A Direct3D 12 pool frees
+      its sets' handles when destroyed. `GpuDescriptorHeapBudget.ReleaseRevision`
+      moves whenever a pool's ranges are returned, read through
+      `IGpuBindings.HeapReleaseRevision`; a build refused by the heap
+      (`GpuDescriptorHeapRefusalException`) — the SDF engine through
+      `SdfWorldPipelineSource.TryBuild`, and the overlay — retries when it
+      moves, and no other refusal reads it. Laws: `DirectXGroupedBindingLawTests`
+      (on WARP: the film grain pass group's writes, the refused kind and
+      size, binds at groups 0 and 3 and a refused bind, and a thousand
+      allocate and destroy cycles leaving `DirectXGpuBindings.LiveHandles`
+      where they began), `VulkanGroupedBindingLawTests` (on a recording
+      descriptor API and command table: each write's descriptor type, and
+      `firstSet` on both bind points, a refused bind, and a destroyed pool's
+      sets forgotten), `SdfEngineNodeBuildRefusalLawTests` (a heap-refused
+      engine retries exactly once after another owner releases its pool),
+      `UnifiedOverlayWorkLawTests` (the same for the overlay's resources),
+      and the wrapper coverage in `GpuWorkCountingLawTests` and
+      `GpuCreationFaultsLawTests`. `DirectXGroupedLayoutDebugLayerTests`
+      also writes and binds a film grain pass-group set under the debug
+      layer.
     - 14b-2, the Vulkan presenter: `blit.frag.hlsl` and
       `VulkanGraphicsPipelineFactory`, which `SurfaceCompositor` builds from,
       read a separate image and sampler. Canaries: 17, the 14b-1 set without

@@ -59,7 +59,7 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
             )],
             refusal: out var refusal
         )) {
-            throw new InvalidOperationException(message: refusal);
+            throw new GpuDescriptorHeapRefusalException(message: refusal);
         }
 
         m_clearAdmission = clears;
@@ -207,7 +207,7 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
                 pools: [sizes],
                 refusal: out refusal
             )) {
-                throw new InvalidOperationException(message: refusal);
+                throw new GpuDescriptorHeapRefusalException(message: refusal);
             }
         }
 

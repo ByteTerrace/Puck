@@ -133,6 +133,9 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         name: "gpu.overlay"
     );
 
+    // Whether the standing ResourceRefusal is the descriptor heap's, and the heap's release revision when it was made.
+    private bool m_heapRefused;
+    private long m_refusedHeapRevision;
     // This frame's continuous content clock, latched once per ProduceFrame — the Toast writer's channel-writer
     // delegate reads it (Emit needs renderTicks; the other writers don't) so the draw-order table's delegate shape
     // stays the same one param for every channel.
@@ -376,7 +379,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     /// <summary>Gets why the overlay's GPU resources were refused, or <see langword="null"/> when they stand or have not
     /// been tried. While refused, a produced frame presents the inner frame unchanged and forwards any capture to it; the
     /// refusal holds until <see cref="OnDeviceLost"/>, after which the next frame with overlay content creates them
-    /// again.</summary>
+    /// again, or, for a refusal by the device's descriptor heap, until another owner returns heap space
+    /// (<see cref="IGpuBindings.HeapReleaseRevision"/>).</summary>
     public string? ResourceRefusal { get; private set; }
 
     // Reads back this node's own render target (the overlay composited over the world — what the player actually
@@ -416,14 +420,25 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // before it (the one release, ReleaseGpuResources, clears each field it frees) and is refused rather than thrown: the
     // refusal is named once on the error stream and by ResourceRefusal, and holds until a device loss, the one event
     // that changes what the creation depends on (the device, the extent and the shaders are fixed at construction), so
-    // a produced frame never retries it. A device loss is never refused: it reaches the host's recovery.
+    // a produced frame never retries it. A refusal by the device's descriptor heap (GpuDescriptorHeapRefusalException)
+    // depends on heap space too, so it is tried again once the heap's release revision moves, as another owner returns
+    // its pools. A device loss is never refused: it reaches the host's recovery.
     private bool EnsureResources() {
         if (m_resourcesReady) {
             return true;
         }
 
+        var heapRevision = m_bindings.HeapReleaseRevision;
+
         if (ResourceRefusal is not null) {
-            return false;
+            if (
+                !m_heapRefused ||
+                (heapRevision == m_refusedHeapRevision)
+            ) {
+                return false;
+            }
+
+            ResourceRefusal = null;
         }
 
         try {
@@ -432,8 +447,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             return true;
         } catch (Exception refusal) when ((refusal is not DeviceLostException)) {
             ReleaseGpuResources();
+            m_heapRefused = (refusal is GpuDescriptorHeapRefusalException);
+            m_refusedHeapRevision = heapRevision;
             ResourceRefusal = refusal.Message;
-            Console.Error.WriteLine(value: $"[overlay] resources refused, presenting the inner frame until the device is recreated: {refusal.Message}");
+            Console.Error.WriteLine(value: $"[overlay] resources refused, presenting the inner frame until the device is recreated{(m_heapRefused
+                ? " or the descriptor heap returns space"
+                : string.Empty)}: {refusal.Message}");
 
             return false;
         } catch {
@@ -450,7 +469,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             pools: [DescriptorPoolSizes],
             refusal: out var refusal
         )) {
-            throw new InvalidOperationException(message: refusal);
+            throw new GpuDescriptorHeapRefusalException(message: refusal);
         }
 
         // The overlay clears its image each frame and leaves it shader-readable for the presenter and any capture.
@@ -699,6 +718,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBufferHandle,
             descriptorSetHandle: m_descriptorSet,
+            group: 0,
             pipelineLayoutHandle: m_pipeline.LayoutHandle
         );
         m_commandRecorder.Draw(

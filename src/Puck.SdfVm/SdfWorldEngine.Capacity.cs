@@ -49,7 +49,7 @@ public sealed partial class SdfWorldEngine {
             )],
             refusal: out var refusal
         )) {
-            throw new InvalidOperationException(message: refusal);
+            throw new GpuDescriptorHeapRefusalException(message: refusal);
         }
     }
     /// <summary>Returns the one descriptor pool an engine creates, the statement its construction creates the pool from

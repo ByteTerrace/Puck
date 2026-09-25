@@ -488,6 +488,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 bindPoint: GpuBindPoint.Graphics,
                 commandBufferHandle: draw,
                 descriptorSetHandle: m_descriptorSets[slot],
+                group: 0,
                 pipelineLayoutHandle: m_pipeline.LayoutHandle
             );
             graphics.Draw(

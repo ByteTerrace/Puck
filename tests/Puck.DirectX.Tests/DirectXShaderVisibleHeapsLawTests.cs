@@ -119,7 +119,7 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
             expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'over' needs {(free + 1U)} view descriptors in 2 pool(s) and is refused: "
         );
         Assert.StartsWith(
-            actualString: Assert.Throws<InvalidOperationException>(testCode: () => bindings.CreatePool(sizes: Pool(buffers: (free + 1U)))).Message,
+            actualString: Assert.Throws<GpuDescriptorHeapRefusalException>(testCode: () => bindings.CreatePool(sizes: Pool(buffers: (free + 1U)))).Message,
             expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] "
         );
         Assert.Equal(

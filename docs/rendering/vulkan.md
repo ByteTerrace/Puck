@@ -209,6 +209,15 @@ flags, and a pipeline layout over every set layout in set order and the planned 
 `VulkanGpuPipelineFactory` creates it before the pipeline and hands it to the pipeline API,
 which neither creates nor destroys a layout it is handed, and the pipeline owns it.
 
+A `VkDescriptorSet` handle cannot say which group it belongs to, so the logical device's
+`VulkanDescriptorSetGroups` (`VulkanLogicalDevice.SetGroups`) records it. A grouped pipeline
+records its set layouts under their set numbers for as long as it lives, `AllocateSet`
+records a set of one of them under that group and its pool, and `DestroyPool` forgets the
+pool's sets. `BindDescriptorSet` binds a set at its group as `firstSet` on either bind point
+and refuses, by name, a set bound at any other group; a set of any other layout belongs to
+group 0. A group's constant buffer is a uniform buffer descriptor, its separate image a
+sampled image in the shader-read-only layout, and its sampler a sampler descriptor.
+
 ---
 
 ## Marshalling

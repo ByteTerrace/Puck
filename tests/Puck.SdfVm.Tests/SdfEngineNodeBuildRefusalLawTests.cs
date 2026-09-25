@@ -156,6 +156,49 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         );
     }
     [Fact]
+    public void AHeapRefusedEngineRetriesExactlyOnceAfterAnotherOwnerReleasesItsPool() {
+        using var rig = new Rig(reportVersion: SdfIsa.Version);
+        IGpuBindings bindings = rig.Gpu;
+        var demand = SdfWorldEngine.DescriptorPoolSizes(
+            brickPool: false,
+            brickUpload: false
+        ).HeapDescriptors;
+        var heap = Heap(views: demand);
+
+        rig.Gpu.DescriptorHeap = heap;
+
+        // Another owner holds one view descriptor of a heap exactly the engine's size, so the engine's pool does not fit.
+        var other = bindings.CreatePool(sizes: new GpuDescriptorPoolSizes(
+            CombinedImageSamplerCount: 0,
+            MaxSets: 1,
+            StorageBufferCount: 1,
+            StorageImageCount: 0
+        ));
+
+        _ = rig.ProduceUntilRefused();
+        Assert.Contains(
+            expectedSubstring: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view descriptors",
+            actualString: rig.Node.NotReadyReason
+        );
+
+        // Frames that return no heap space ask the heap nothing again.
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.Equal(
+            actual: (rig.Gpu.Admissions, rig.Gpu.PoolsCreated.Count),
+            expected: (1, 1)
+        );
+
+        // The other owner's release is the change a heap refusal waits for: the next frame retries once, and it fits.
+        bindings.DestroyPool(poolHandle: other);
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.True(condition: rig.Node.IsReady);
+        Assert.Null(@object: rig.Node.NotReadyReason);
+        Assert.Equal(
+            actual: (rig.Gpu.Admissions, rig.Gpu.PoolsCreated.Count, heap.FreeViewDescriptors),
+            expected: (2, 2, 0U)
+        );
+    }
+    [Fact]
     public void APersistentRefusalBuildsOnceAndEachChangedInputRetriesOnce() {
         using var rig = new Rig(reportVersion: unchecked((byte)(SdfIsa.Version + 1)));
 

@@ -15,7 +15,8 @@ namespace Puck.World.Tests;
 /// Laws for the GPU work <see cref="UnifiedOverlayNode"/> counts, driven over <see cref="FakeGpuDevice"/>: the exact
 /// counts of a drawn overlay frame, submission identity across a device loss, that the descriptor pool it states is the
 /// one it creates, that a pool the device's heap cannot admit is refused by name before anything is created while the
-/// inner frame passes through, that a steady-state drawn frame allocates nothing, and that every creation of its
+/// inner frame passes through, and created once another owner returns heap space, that a steady-state drawn frame
+/// allocates nothing, and that every creation of its
 /// resources failed in turn through <see cref="GpuCreationFaults"/> releases exactly what was created before it,
 /// presents the inner frame unchanged without throwing, tries nothing again until a device loss, and creates the
 /// resources after one.
@@ -80,19 +81,26 @@ public sealed class UnifiedOverlayWorkLawTests {
             countCalls: true,
             trackObjects: true
         );
+        IGpuBindings bindings = rig.Gpu;
         var demand = UnifiedOverlayNode.DescriptorPoolSizes.HeapDescriptors;
 
-        GpuDescriptorHeapBudget Heap(uint views) => new(capabilities: (GpuDeviceCapabilities.FromDirectX(
+        rig.Gpu.DescriptorHeap = new GpuDescriptorHeapBudget(capabilities: (GpuDeviceCapabilities.FromDirectX(
             resourceBindingTier: 3,
             rootSignatureVersion: "1.1",
             samplerHeapSize: 0,
             shaderModel: "6.6",
             viewHeapSize: 0
         ) with {
-            ViewHeapSize = views,
+            ViewHeapSize = demand,
         }));
 
-        rig.Gpu.DescriptorHeap = Heap(views: (demand - 1U));
+        // Another owner holds one view descriptor of a heap exactly the overlay's size.
+        var other = bindings.CreatePool(sizes: new GpuDescriptorPoolSizes(
+            CombinedImageSamplerCount: 0,
+            MaxSets: 1,
+            StorageBufferCount: 1,
+            StorageImageCount: 0
+        ));
 
         // The refusal is one more refused resource creation: the inner frame passes through and nothing throws.
         var refused = rig.Node.ProduceFrame(context: default);
@@ -105,31 +113,35 @@ public sealed class UnifiedOverlayWorkLawTests {
             actualString: rig.Node.ResourceRefusal,
             expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'unified overlay' needs {demand} view descriptors in 1 pool(s) and is refused: "
         );
-        Assert.Empty(collection: rig.Gpu.PoolsCreated);
-        Assert.Empty(collection: rig.Gpu.Created);
         Assert.Equal(
-            actual: (rig.Gpu.Count(key: "IGpuImageFactory.Create"), rig.Gpu.Count(key: "IGpuPipelineFactory.Create(graphics)")),
-            expected: (0, 0)
+            actual: (rig.Gpu.Created.Count, rig.Gpu.Count(key: "IGpuImageFactory.Create"), rig.Gpu.Count(key: "IGpuPipelineFactory.Create(graphics)")),
+            expected: (1, 0, 0)
         );
 
-        // Room in the heap is not a frame's change: the refusal holds until its retry, and then the next frame creates
-        // the resources and draws.
-        rig.Gpu.DescriptorHeap = Heap(views: demand);
-        Assert.Equal(
-            actual: rig.Node.ProduceFrame(context: default).ImageViewHandle,
-            expected: Rig.InnerImageViewHandle
-        );
-        Assert.Empty(collection: rig.Gpu.PoolsCreated);
+        // Frames that return no heap space try nothing again.
+        for (var frame = 0; (frame < 3); frame++) {
+            Assert.Equal(
+                actual: rig.Node.ProduceFrame(context: default).ImageViewHandle,
+                expected: Rig.InnerImageViewHandle
+            );
+        }
 
-        rig.Node.OnDeviceLost();
+        Assert.Equal(
+            actual: rig.Gpu.Admissions,
+            expected: 1
+        );
+
+        // The other owner's release is the change a heap refusal waits for: the next frame creates the resources and
+        // draws, with no device loss.
+        bindings.DestroyPool(poolHandle: other);
         Assert.NotEqual(
             actual: rig.Node.ProduceFrame(context: default).ImageViewHandle,
             expected: Rig.InnerImageViewHandle
         );
         Assert.Null(@object: rig.Node.ResourceRefusal);
         Assert.Equal(
-            actual: rig.Gpu.PoolsCreated,
-            expected: [UnifiedOverlayNode.DescriptorPoolSizes]
+            actual: (rig.Gpu.Admissions, rig.Gpu.PoolsCreated[^1]),
+            expected: (2, UnifiedOverlayNode.DescriptorPoolSizes)
         );
     }
     [Fact]

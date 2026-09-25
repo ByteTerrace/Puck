@@ -97,7 +97,8 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
                 device: device,
                 groupLayoutHandles: groups.SetLayoutHandles,
                 layoutHandle: groups.PipelineLayoutHandle,
-                pipelineHandle: groupPipeline
+                pipelineHandle: groupPipeline,
+                setGroups: logicalDevice.SetGroups
             );
         }
 

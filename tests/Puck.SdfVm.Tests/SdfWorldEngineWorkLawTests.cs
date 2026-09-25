@@ -88,7 +88,7 @@ public sealed class SdfWorldEngineWorkLawTests {
 
         gpu.DescriptorHeap = Heap(views: (demand - 1U));
 
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => SdfWorldEngine.CheckAdmission(
+        var refusal = Assert.Throws<GpuDescriptorHeapRefusalException>(testCode: () => SdfWorldEngine.CheckAdmission(
             device: gpu,
             options: options,
             pipelines: pipelines
