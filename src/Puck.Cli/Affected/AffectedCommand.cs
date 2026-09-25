@@ -382,7 +382,7 @@ internal static class AffectedCommand {
               one its manifest names, lies in its directory, or is a source the canary executed when
               coverage was last recorded ({CoveragePath}), or is a file the manifest's documents reach:
               the layers, neighbour worlds and graph documents a world names, and the pass shaders a
-              graph document declares. Parity is chosen with any GPU canary. A file no
+              graph document declares with their includes. Parity is chosen with any GPU canary. A file no
               canary can execute is placed through the indexed sources it stands for: a project file,
               restore lock or NativeMethods list through its project's sources, a shader source or
               include through the C# that names each kernel whose include closure reaches it, and a file

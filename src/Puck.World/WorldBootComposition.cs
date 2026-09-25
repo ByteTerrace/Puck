@@ -435,8 +435,8 @@ public static class WorldBootComposition {
                 facts: () => sp.GetRequiredService<WorldOverlayFacts>(),
                 // On the D3D12 host the window/monitor capture feeds publish GPU-side into shared textures the
                 // screens sample directly; the Vulkan host keeps the CPU-pixel transport for THOSE. The shared
-                // camera rides its GPU tier on both hosts (see CaptureCameraGpu). Headless never resolves either
-                // backend, so this bool only matters once presentation composes.
+                // camera rides its GPU tier on both hosts (see WorldScreenBinder.TryProvisionSharedRing). Headless
+                // never resolves either backend, so this bool only matters once presentation composes.
                 hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX,
                 // A session-sourced face's destination/reference lookup and resolver-owned instance — CORE, not
                 // presentation-only, so an observation lease attaches (and a destination instance starts) in every

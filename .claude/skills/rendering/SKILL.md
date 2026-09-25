@@ -205,17 +205,23 @@ These are one-line cautions; the owning pages hold the derivations.
   stress test for handle reuse must render a frame between image swaps
   (`world.wait`); swaps inside one frame never publish the retired handle.
 - **Screens.** `SetScreenSource(i, 0)` unbinds to the procedural test card, not
-  black. Inside view V's own render, any screen wired to V binds 0. An image
-  another producer keeps writing reaches a node as a `Puck.Hosting.GpuImageLease`
-  and stays in a `LeaseRetireList` until the submission that sampled it
-  retires: `SdfEngineNode` keeps one list per frame-ring slot, and a
-  `ShaderPipelineRenderNode` one per frame slot, which the overlay package moves
-  its HUD frames' leases into (`OverlayFrameSlots.MoveTo`). A lease retires only
-  at its slot's next fence wait, so one source can have as many leases
-  outstanding as the node has frames in flight
-  (`RenderGraphRuntime.DefaultInFlightFrames`); a source that counts its
-  outstanding leases (`WorldOverlayFrameSources`) is sized by it. A new
-  sampled-lease path holds its leases in that list rather than its own array.
+  black. Inside view V's own render, any screen wired to V binds 0. A leased
+  image (`Puck.Hosting.GpuImageLease`) stays in a `LeaseRetireList` until the
+  submission that sampled it retires: `SdfEngineNode` keeps one list per
+  frame-ring slot, and a `ShaderPipelineRenderNode` one per frame slot, which
+  the overlay package moves its HUD frames' leases into
+  (`OverlayFrameSlots.MoveTo`). A lease retires only at its slot's next fence
+  wait, so one source can have as many leases outstanding as the node has
+  frames in flight (`RenderGraphRuntime.DefaultInFlightFrames`); a source that
+  counts its outstanding leases (`WorldOverlayFrameSources`) is sized by it. A
+  new sampled-lease path holds its leases in that list rather than its own
+  array. Not every image another producer keeps writing is leased yet: the
+  desktop capture's GPU route (`CaptureFeed.Handle`) and the offscreen views'
+  renders (`ScreenSlot.Handle`) bind a shared slot's bare handle, so nothing
+  stops the producer overwriting a slot a submission still samples. Rendering
+  plan P12b-2 leases them. Nothing orders two devices on the GPU either: a
+  producer's CPU wait before it publishes is the only ordering until P12b-4's
+  shared fence.
 - **Image sources.** An image from outside a pass is described once, by
   `ImageSourceDescriptor`, and a world names its producer by id
   (`WorldScreenSource.Producer`). A new producer registers a
