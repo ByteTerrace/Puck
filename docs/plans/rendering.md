@@ -2014,7 +2014,9 @@ package, whose kernel `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`
 holds the SDF composite's reconstruction: an exact copy at equal extent, bilinear at sharpness
 0, clamped Catmull-Rom at sharpness 1 and a blend between, all through formatted
 loads with no sampler state. The `resample-reconstruction` canary holds it to the
-analytic bilinear and Catmull-Rom values of a known step on both backends. Render
+analytic bilinear and Catmull-Rom values of known steps on both backends,
+including a column where only the neighbourhood clamp and one where only the edge
+clamp decides the value. Render
 scale moving onto it, which deletes the `RenderScaleQ` lanes, is a later P11b
 commit; cropping a source is P13's mapping, not a resample config. The pixelate
 interface fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
