@@ -465,12 +465,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         );
         m_sampler = m_bindings.CreateSampler();
         m_bindings.WriteBuffer(
-            access: GpuBufferAccess.Read,
             binding: m_storageBufferBinding,
             bufferHandle: m_dataBuffer.BufferHandle,
             bufferSize: (((uint)m_builder.WordCount) * sizeof(uint)),
             descriptorSetHandle: m_descriptorSet,
-            elementStride: (4 * sizeof(uint))
+            elementStride: (4 * sizeof(uint)),
+            kind: GpuBindingKind.ReadOnlyBuffer
         );
         // The token slab + glyph atlas are static — upload them ONCE now (the front PanelBaseWords uints); each
         // produced frame rewrites only the dynamic slice after them. A device-loss rebuild re-seeds them here.

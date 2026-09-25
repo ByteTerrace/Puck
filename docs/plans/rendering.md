@@ -1305,7 +1305,7 @@ Phase 2, the services, follows the generated frame block, which has landed:
    context.
 8. Done: `IGpuBindings` creates pools, sets and samplers and writes descriptors,
    with no device parameter; each backend registers one, bound to its device
-   context. One `WriteBuffer` names the binding's `GpuBufferAccess` and element
+   context. One `WriteBuffer` names the binding's `GpuBindingKind` and element
    stride (zero for a raw view), which chooses a Direct3D 12 raw or structured
    view, read-only or read-write; Vulkan writes one storage-buffer descriptor.
 9. Done: every factory and the queue submitter take no device parameter; each
@@ -1336,9 +1336,18 @@ Phase 3, the groups, follows phase 2:
     `GpuRegisterNumbering.PackedByClass`, which only the SDF engine and the
     region copy do; P7b-20 deletes that numbering with the engine's last
     packed register.
-13. The GPU-free group contract: a closed `GpuBindingKind` set, group and
-    pipeline layout descriptions, and the `DirectXRootLayout.Plan` and
-    `VulkanGroupLayouts.Plan` planners, tested against the spike's tables.
+13. The GPU-free group contract. `GpuBindingKind`
+    (`src/Puck.Abstractions/Gpu/Bindings`) is the one closed set of binding
+    kinds. The pass interface's readers and layout use it, and
+    `IGpuBindings.WriteBuffer` takes it as the one statement of buffer
+    access. Push constants are not a kind: a pushed block is a constant buffer
+    marked `ShaderInterfaceBinding.Pushed`. Still open: group and pipeline
+    layout descriptions, the `DirectXRootLayout.Plan` and
+    `VulkanGroupLayouts.Plan` planners tested against the spike's tables, and
+    the deletion of `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`.
+    Their sampled image is a Vulkan combined image sampler read through a
+    Direct3D 12 static sampler, which the closed set's separate sampled image
+    and sampler cannot state, so their users move with 14b's sampler tables.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
     of it (14a). Both backends then realize several groups, with sampler tables
     and one 4-byte push range (14b), the riskiest commit.

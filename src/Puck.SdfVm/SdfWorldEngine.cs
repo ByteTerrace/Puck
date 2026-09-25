@@ -1089,33 +1089,33 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // The program words: a read-only StructuredBuffer<uint4>.
     private void WriteStorageBuffer(nint set, uint binding, IGpuBuffer buffer) =>
         m_bindings.WriteBuffer(
-            access: GpuBufferAccess.Read,
             binding: binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            elementStride: (4 * sizeof(uint))
+            elementStride: (4 * sizeof(uint)),
+            kind: GpuBindingKind.ReadOnlyBuffer
         );
     // A read-only StructuredBuffer of 4-byte elements (the float cull buffer, the uint cull bounds). The program words'
     // 16-byte stride over the 8-byte bounds buffer is a zero-element view on Direct3D 12.
     private void WriteStorageBufferReadOnly(nint set, uint binding, IGpuBuffer buffer) =>
         m_bindings.WriteBuffer(
-            access: GpuBufferAccess.Read,
             binding: binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            elementStride: sizeof(uint)
+            elementStride: sizeof(uint),
+            kind: GpuBindingKind.ReadOnlyBuffer
         );
     // A RWStructuredBuffer of 4-byte elements.
     private void WriteStorageBufferReadWrite(nint set, uint binding, IGpuBuffer buffer) =>
         m_bindings.WriteBuffer(
-            access: GpuBufferAccess.ReadWrite,
             binding: binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            elementStride: sizeof(uint)
+            elementStride: sizeof(uint),
+            kind: GpuBindingKind.ReadWriteBuffer
         );
 
     /// <inheritdoc/>

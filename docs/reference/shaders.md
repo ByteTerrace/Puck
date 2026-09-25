@@ -322,7 +322,8 @@ binding allocator is consulted:
   16 on both backends.
 - Every gap is filled with a `uint` padding member named `_pad<offset>`.
 - An interface may push its frame group's block (`ShaderInterface.PushConstants`):
-  the block is then a `PushConstants` binding at set 0, binding 0, laid out by
+  the block is then a pushed constant-buffer binding
+  (`ShaderInterfaceBinding.Pushed`) at set 0, binding 0, laid out by
   the same rule and declared `[[vk::push_constant]]` with `register(b0, space0)`,
   where both backends' root constants live. A pushed group holds values and
   arrays only.
@@ -339,9 +340,13 @@ land each member on the offset Vulkan is told explicitly. The text is a pure
 function of the interface, with LF line endings.
 
 Two readers return the same `ShaderInterfaceBinding` records, so one
-comparison holds both kinds of bytecode to the same layout (a pushed block
-reflects in DXIL as the constant buffer at `b0`, space 0, which
-`ShaderInterfaceLayout.DxilBindings` states):
+comparison holds both kinds of bytecode to the same layout. A record's kind is
+a `GpuBindingKind` (`src/Puck.Abstractions/Gpu/Bindings`), the one closed set
+of binding kinds: constant buffer, read-only buffer, read-write buffer,
+sampled image, storage image and sampler. Push constants are not a kind. A
+pushed block is a constant buffer marked `Pushed`, which only SPIR-V can tell
+apart; DXIL reflects it as the constant buffer at `b0`, space 0, which
+`ShaderInterfaceLayout.DxilBindings` states:
 
 - `SpirvInterfaceReader` parses a SPIR-V module's `DescriptorSet`, `Binding`
   and `Offset` decorations, its push-constant variable and its debug names. It

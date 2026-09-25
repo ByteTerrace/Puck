@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
@@ -237,7 +238,7 @@ public sealed unsafe class DxilInterfaceReader : IDisposable {
                     bindings.Add(item: new ShaderInterfaceBinding(
                         Binding: bind.BindPoint,
                         Kind: kind,
-                        Members: ((kind == ShaderBindingKind.ConstantBuffer)
+                        Members: ((kind == GpuBindingKind.ConstantBuffer)
                             ? BlockMembers(
                                 name: bind.Name,
                                 reflection: reflection
@@ -361,16 +362,16 @@ public sealed unsafe class DxilInterfaceReader : IDisposable {
 
         return desc;
     }
-    private static ShaderBindingKind Kind(InputBindDesc bind, string name) =>
+    private static GpuBindingKind Kind(InputBindDesc bind, string name) =>
         bind.Type switch {
-            InputConstantBuffer => ShaderBindingKind.ConstantBuffer,
-            InputTexture when (bind.Dimension == DimensionBuffer) => ShaderBindingKind.ReadOnlyBuffer,
-            InputTexture => ShaderBindingKind.SampledImage,
-            InputSampler => ShaderBindingKind.Sampler,
-            InputReadWriteTyped when (bind.Dimension == DimensionBuffer) => ShaderBindingKind.ReadWriteBuffer,
-            InputReadWriteTyped => ShaderBindingKind.StorageImage,
-            InputTextureBuffer or InputStructured or InputByteAddress => ShaderBindingKind.ReadOnlyBuffer,
-            InputReadWriteStructured or InputReadWriteByteAddress or InputAppendStructured or InputConsumeStructured or InputReadWriteStructuredWithCounter => ShaderBindingKind.ReadWriteBuffer,
+            InputConstantBuffer => GpuBindingKind.ConstantBuffer,
+            InputTexture when (bind.Dimension == DimensionBuffer) => GpuBindingKind.ReadOnlyBuffer,
+            InputTexture => GpuBindingKind.SampledImage,
+            InputSampler => GpuBindingKind.Sampler,
+            InputReadWriteTyped when (bind.Dimension == DimensionBuffer) => GpuBindingKind.ReadWriteBuffer,
+            InputReadWriteTyped => GpuBindingKind.StorageImage,
+            InputTextureBuffer or InputStructured or InputByteAddress => GpuBindingKind.ReadOnlyBuffer,
+            InputReadWriteStructured or InputReadWriteByteAddress or InputAppendStructured or InputConsumeStructured or InputReadWriteStructuredWithCounter => GpuBindingKind.ReadWriteBuffer,
             _ => throw new InvalidDataException(message: $"DXIL binding '{name}' has input type {bind.Type}, which is no binding kind."),
         };
     private static ShaderInterfaceBlockMember Member(TypeDesc desc, string name, uint offset) {

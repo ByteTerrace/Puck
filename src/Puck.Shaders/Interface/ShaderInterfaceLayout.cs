@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
@@ -19,7 +20,8 @@ namespace Puck.Shaders;
 /// sequential constant-buffer packing lands each member exactly where the explicit Vulkan offset puts
 /// it.</description></item>
 /// <item><description>A pushed group's block (<see cref="ShaderInterface.PushConstants"/>) is a
-/// <see cref="ShaderBindingKind.PushConstants"/> binding at binding 0 of its set, placed by the same rule.</description></item>
+/// pushed <see cref="GpuBindingKind.ConstantBuffer"/> binding (<see cref="ShaderInterfaceBinding.Pushed"/>) at binding 0 of
+/// its set, placed by the same rule.</description></item>
 /// </list>
 /// </summary>
 public sealed class ShaderInterfaceLayout {
@@ -49,8 +51,8 @@ public sealed class ShaderInterfaceLayout {
         Interface = shaderInterface;
         Groups = new ReadOnlyCollection<ShaderInterfaceGroupLayout>(list: groups);
         Bindings = new ReadOnlyCollection<ShaderInterfaceBinding>(list: groups.SelectMany(selector: static group => group.Bindings).ToArray());
-        DxilBindings = new ReadOnlyCollection<ShaderInterfaceBinding>(list: Bindings.Select(selector: static binding => ((binding.Kind == ShaderBindingKind.PushConstants)
-            ? (binding with { Kind = ShaderBindingKind.ConstantBuffer })
+        DxilBindings = new ReadOnlyCollection<ShaderInterfaceBinding>(list: Bindings.Select(selector: static binding => (binding.Pushed
+            ? (binding with { Pushed = false })
             : binding)).ToArray());
     }
 
@@ -84,7 +86,7 @@ public sealed class ShaderInterfaceLayout {
         }
 
         var block = reflected.FirstOrDefault(predicate: binding => (
-            (binding.Kind is ShaderBindingKind.PushConstants or ShaderBindingKind.ConstantBuffer) &&
+            (binding.Kind == GpuBindingKind.ConstantBuffer) &&
             (binding.Set == group.Set) &&
             (binding.Binding == 0) &&
             string.Equals(
@@ -106,6 +108,7 @@ public sealed class ShaderInterfaceLayout {
             Kind: block.Kind,
             Members: group.BlockMembers,
             Name: block.Name,
+            Pushed: block.Pushed,
             Set: group.Set
         );
 
@@ -114,11 +117,11 @@ public sealed class ShaderInterfaceLayout {
 
     private static uint AlignUp(uint value, uint alignment) =>
         ((((value + alignment) - 1) / alignment) * alignment);
-    private static ShaderBindingKind BindingKind(ShaderInterfaceMemberKind kind) =>
+    private static GpuBindingKind BindingKind(ShaderInterfaceMemberKind kind) =>
         kind switch {
-            ShaderInterfaceMemberKind.SampledImage => ShaderBindingKind.SampledImage,
-            ShaderInterfaceMemberKind.StorageImage => ShaderBindingKind.StorageImage,
-            ShaderInterfaceMemberKind.Sampler => ShaderBindingKind.Sampler,
+            ShaderInterfaceMemberKind.SampledImage => GpuBindingKind.SampledImage,
+            ShaderInterfaceMemberKind.StorageImage => GpuBindingKind.StorageImage,
+            ShaderInterfaceMemberKind.Sampler => GpuBindingKind.Sampler,
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: kind,
                 message: "The member kind is not a binding of its own.",
@@ -186,11 +189,10 @@ public sealed class ShaderInterfaceLayout {
             blockVariableName = ShaderInterface.BlockVariableName(group: group);
             bindings.Add(item: new ShaderInterfaceBinding(
                 Binding: 0,
-                Kind: (pushed
-                    ? ShaderBindingKind.PushConstants
-                    : ShaderBindingKind.ConstantBuffer),
+                Kind: GpuBindingKind.ConstantBuffer,
                 Members: blockMembers.AsReadOnly(),
                 Name: blockVariableName,
+                Pushed: pushed,
                 Set: set
             ));
         }
@@ -241,7 +243,7 @@ public sealed class ShaderInterfaceLayout {
 public sealed record ShaderInterfaceResourceLayout(
     ShaderInterfaceMember Member,
     uint Binding,
-    ShaderBindingKind Kind
+    GpuBindingKind Kind
 );
 /// <summary>One frequency group of a <see cref="ShaderInterfaceLayout"/>.</summary>
 /// <param name="Group">The frequency group.</param>

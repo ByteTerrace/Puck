@@ -92,7 +92,7 @@ internal sealed class FakeGpu :
     void IGpuBindings.DestroyPool(nint poolHandle) => Hit(key: "IGpuBindings.DestroyPool");
     void IGpuBindings.DestroySampler(nint samplerHandle) => Hit(key: "IGpuBindings.DestroySampler");
     void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => Hit(key: "IGpuBindings.WriteCombinedImageSampler");
-    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => Hit(key: "IGpuBindings.WriteBuffer");
+    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => Hit(key: "IGpuBindings.WriteBuffer");
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => Hit(key: "IGpuBindings.WriteStorageImage");
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() {
         Hit(key: "IGpuQueueSubmitter.CreateSubmissionFence");

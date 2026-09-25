@@ -163,7 +163,7 @@ public static class ShaderInterfaceEcho {
                 paramName: nameof(shaderInterface)
             );
         }
-        if (layout.Bindings.Any(predicate: static binding => ((binding.Kind != ShaderBindingKind.PushConstants) && (binding.Set == 0) && (binding.Binding == 0)))) {
+        if (layout.Bindings.Any(predicate: static binding => (!binding.Pushed && (binding.Set == 0) && (binding.Binding == 0)))) {
             throw new ArgumentException(
                 message: $"Shader interface '{shaderInterface.Name}' binds set 0, binding 0, where the echo pass writes its verdicts.",
                 paramName: nameof(shaderInterface)
