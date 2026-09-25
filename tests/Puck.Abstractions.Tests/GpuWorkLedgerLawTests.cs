@@ -1,10 +1,11 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 
 namespace Puck.Abstractions.Tests;
 
 /// <summary>
-/// Laws for <see cref="GpuWorkLedger"/>, driven through the counting wrappers over <see cref="FakeGpu"/> with fences
+/// Laws for <see cref="GpuWorkLedger"/>, driven through the counting wrappers over <see cref="FakeGpuDevice"/> with fences
 /// the test signals by hand, so no GPU is involved. A sample is published only once its submission is known
 /// complete, never older than the one already published, and always under the labels it was recorded with.
 /// </summary>
@@ -355,10 +356,10 @@ public sealed class GpuWorkLedgerLawTests {
         Assert.Equal(actual: torn, expected: 0L);
     }
 
-    private sealed record Fence(IGpuSubmissionFence Counted, FakeGpu.FakeFence Raw);
+    private sealed record Fence(IGpuSubmissionFence Counted, FakeGpuDevice.Fence Raw);
     private sealed class Rig {
         public Rig(int framesInFlight) {
-            Gpu = new FakeGpu();
+            Gpu = new FakeGpuDevice(holdFences: true);
             Ledger = new GpuWorkLedger(
             framesInFlight: framesInFlight,
             name: "gpu.test"
@@ -366,7 +367,7 @@ public sealed class GpuWorkLedgerLawTests {
             Services = GpuWorkCounting.Wrap(ledger: Ledger, services: Gpu.Services);
         }
 
-        public FakeGpu Gpu { get; }
+        public FakeGpuDevice Gpu { get; }
         public GpuWorkLedger Ledger { get; }
         public GpuDeviceServices Services { get; }
 
