@@ -16,6 +16,9 @@ public sealed class GpuPipelineLayoutDescription {
     public const uint GroupCount = 4;
     /// <summary>The size in bytes of the pushed index.</summary>
     public const uint PushIndexBytes = 4;
+    /// <summary>The Direct3D 12 constant-buffer register of the pushed index, <c>b0</c>, in space
+    /// <see cref="PushIndexSpace"/>.</summary>
+    public const uint PushIndexRegister = 0;
     /// <summary>The Direct3D 12 register space of the pushed index, which sits at register <c>b0</c>.</summary>
     public const uint PushIndexSpace = GroupCount;
 

@@ -73,6 +73,20 @@ public sealed class DirectXRootLayoutLawTests {
             actual: (layout.PushIndex!.Index, layout.PushIndex.Space, layout.PushIndex.DescriptorCount),
             expected: (3u, GpuPipelineLayoutDescription.PushIndexSpace, 0u)
         );
+        // One 32-bit root constant at b0 in space 4: the fields D3D12_ROOT_CONSTANTS needs, so 14b builds it from the
+        // plan alone.
+        Assert.Equal(
+            actual: layout.PushIndex.Constants,
+            expected: new DirectXRootConstants(
+                RegisterSpace: 4,
+                ShaderRegister: 0,
+                ValueCount: 1
+            )
+        );
+        Assert.All(
+            collection: layout.Parameters.Where(predicate: static parameter => (parameter.Kind != DirectXRootParameterKind.PushIndex)),
+            action: static table => Assert.Null(@object: table.Constants)
+        );
         Assert.Equal(
             actual: GpuPipelineLayoutDescription.PushIndexSpace,
             expected: 4u

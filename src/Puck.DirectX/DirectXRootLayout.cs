@@ -27,17 +27,28 @@ public readonly record struct DirectXDescriptorRange(
     uint Space,
     uint TableOffset
 );
+/// <summary>The root constants of a root parameter, in the fields of <c>D3D12_ROOT_CONSTANTS</c>.</summary>
+/// <param name="ShaderRegister">The constant-buffer register the constants sit at.</param>
+/// <param name="RegisterSpace">The register space.</param>
+/// <param name="ValueCount">The number of 32-bit values.</param>
+public readonly record struct DirectXRootConstants(
+    uint ShaderRegister,
+    uint RegisterSpace,
+    uint ValueCount
+);
 /// <summary>One root parameter of a <see cref="DirectXRootLayout"/>, visible to every stage.</summary>
 /// <param name="Index">The root parameter index.</param>
 /// <param name="Kind">What the parameter binds.</param>
 /// <param name="Space">The group's ordinal for a table, or <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>
 /// for the pushed index.</param>
 /// <param name="Ranges">A table's ranges in binding order; empty for the pushed index.</param>
+/// <param name="Constants">The pushed index's root constants; <see langword="null"/> for a table.</param>
 public sealed record DirectXRootParameter(
     uint Index,
     DirectXRootParameterKind Kind,
     uint Space,
-    IReadOnlyList<DirectXDescriptorRange> Ranges
+    IReadOnlyList<DirectXDescriptorRange> Ranges,
+    DirectXRootConstants? Constants = null
 ) {
     /// <summary>Gets the number of descriptors a table holds, or zero for the pushed index.</summary>
     public uint DescriptorCount =>
@@ -132,6 +143,11 @@ public sealed class DirectXRootLayout {
 
         if (description.PushesIndex) {
             parameters.Add(item: new DirectXRootParameter(
+                Constants: new DirectXRootConstants(
+                    RegisterSpace: GpuPipelineLayoutDescription.PushIndexSpace,
+                    ShaderRegister: GpuPipelineLayoutDescription.PushIndexRegister,
+                    ValueCount: (GpuPipelineLayoutDescription.PushIndexBytes / sizeof(uint))
+                ),
                 Index: ((uint)parameters.Count),
                 Kind: DirectXRootParameterKind.PushIndex,
                 Ranges: [],
