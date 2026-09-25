@@ -144,7 +144,7 @@ public static class Bc6hCodec {
         for (var mode = 0; (mode < Modes.Length); mode++) {
             var (_, endpointBits, deltaBits) = Modes[mode];
 
-            EndpointFit.BoundingBox(channels: 3, high: high, low: low, stride: 3, texels: values);
+            EndpointFit.BoundingBox(channels: 3, high: high, low: low, members: EndpointFit.AllTexels, stride: 3, texels: values);
 
             for (var pass = 0; (pass < 3); pass++) {
                 for (var channel = 0; (channel < 3); channel++) {
@@ -175,7 +175,7 @@ public static class Bc6hCodec {
                     }
                 }
 
-                if (!EndpointFit.LeastSquares(channels: 3, high: high, indices: indices, low: low, stride: 3, texels: values, weights: Weights)) {
+                if (!EndpointFit.LeastSquares(channels: 3, high: high, indices: indices, low: low, members: EndpointFit.AllTexels, stride: 3, texels: values, weights: Weights)) {
                     break;
                 }
             }

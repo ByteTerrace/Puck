@@ -239,14 +239,152 @@ public sealed class TextureCodecLawTests {
         Bc7Codec.DecodeBlock(block: mode5.Bytes, rgba: decoded);
         Assert.Equal(expected: [16, 0, 129, 255], actual: decoded[..4].ToArray());
 
-        // A zero first byte is not a mode: transparent black. A partitioned mode is refused.
+        // A zero first byte is not a mode: transparent black.
         Bc7Codec.DecodeBlock(block: new byte[16], rgba: decoded);
         Assert.All(collection: decoded.ToArray(), action: value => Assert.Equal(actual: value, expected: 0));
 
-        var partitioned = new byte[16];
+        // Mode 1, partition 13 (the top two rows are subset 0, the bottom two subset 1, whose anchor is texel 15): six-bit
+        // endpoints R, G, B, each ordered s0e0 s0e1 s1e0 s1e1; a shared parity bit per subset below them, bit 6 replicated
+        // into bit 0; three-bit indices, two bits at the anchors 0 and 15.
+        var mode1 = new BitWriter();
 
-        partitioned[0] = 0x02;
-        Assert.Throws<NotSupportedException>(testCode: () => Bc7Codec.DecodeBlock(block: partitioned, rgba: new byte[64]));
+        mode1.Write(count: 2, value: 0x02);
+        mode1.Write(count: 6, value: 13);
+
+        foreach (var value in ((int[])[63, 0, 0, 0, 0, 63, 0, 0, 0, 0, 63, 0])) {
+            mode1.Write(count: 6, value: value);
+        }
+
+        mode1.Write(count: 1, value: 1);
+        mode1.Write(count: 1, value: 0);
+        mode1.Write(count: 2, value: 0);
+        mode1.Write(count: 3, value: 7);
+
+        for (var texel = 2; (texel < 15); texel++) {
+            mode1.Write(count: 3, value: ((texel == 8) ? 7 : 0));
+        }
+
+        mode1.Write(count: 2, value: 3);
+        Bc7Codec.DecodeBlock(block: mode1.Bytes, rgba: decoded);
+        // Subset 0: (127, 1, 1) and (1, 127, 1) with parity 1 expand to (255, 2, 2) and (2, 255, 2); no alpha bits is 255.
+        Assert.Equal(expected: [255, 2, 2, 255], actual: decoded[..4].ToArray());
+        Assert.Equal(expected: [2, 255, 2, 255], actual: decoded[4..8].ToArray());
+        // Subset 1: (0, 0, 126) with parity 0 expands to (0, 0, 253); texel 8 at weight 64 is its second endpoint, black.
+        Assert.Equal(expected: [0, 0, 0, 255], actual: decoded[32..36].ToArray());
+        // Texel 15, the anchor, at index 3 (weight 27): ((64 - 27) 253 + 32) >> 6 = 146.
+        Assert.Equal(expected: [0, 0, 146, 255], actual: decoded[60..64].ToArray());
+    }
+    [Fact]
+    public void Bc7PartitionTablesPutEachAnchorInItsOwnSubset() {
+        foreach (var (subsets, partitions) in ((ReadOnlySpan<(int, int)>)[(2, 64), (3, 64)])) {
+            for (var partition = 0; (partition < partitions); partition++) {
+                Assert.Equal(expected: 0, actual: Bc7Codec.SubsetOf(partition: partition, subsets: subsets, texel: 0));
+
+                for (var subset = 0; (subset < subsets); subset++) {
+                    var anchor = Bc7Codec.AnchorOf(partition: partition, subset: subset, subsets: subsets);
+
+                    Assert.True(condition: (Bc7Codec.SubsetOf(partition: partition, subsets: subsets, texel: anchor) == subset), userMessage: $"{subsets}-subset partition {partition}: subset {subset}'s anchor {anchor}");
+                }
+            }
+        }
+
+        // Partition 0 of each table, as the format draws them: columns 2 and 3 are subset 1; then subsets 0, 1 and 2.
+        Assert.Equal(expected: [0, 0, 1, 1], actual: Enumerable.Range(count: 4, start: 0).Select(selector: texel => Bc7Codec.SubsetOf(partition: 0, subsets: 2, texel: texel)));
+        Assert.Equal(expected: [0, 0, 1, 1, 0, 0, 1, 1, 0, 2, 2, 1, 2, 2, 2, 2], actual: Enumerable.Range(count: 16, start: 0).Select(selector: texel => Bc7Codec.SubsetOf(partition: 0, subsets: 3, texel: texel)));
+    }
+    [Fact]
+    public void Bc7PartitionedModesRoundTripRepresentableBlocksExactly() {
+        // Per mode: subsets, partitions, color bits, alpha bits, parity (0 none, 1 per endpoint, 2 shared), index bits.
+        (int Mode, int Subsets, int Partitions, int ColorBits, int AlphaBits, int Parity, int IndexBits)[] modes = [
+            (0, 3, 16, 4, 0, 1, 3),
+            (1, 2, 64, 6, 0, 2, 3),
+            (2, 3, 64, 5, 0, 0, 2),
+            (3, 2, 64, 7, 0, 1, 2),
+            (7, 2, 64, 5, 5, 1, 2),
+        ];
+        Span<byte> block = stackalloc byte[Bc7Codec.BlockBytes];
+        Span<byte> decoded = stackalloc byte[64];
+        var rgba = new byte[64];
+        var ends = new int[6, 4];
+        Span<int> seen = stackalloc int[3];
+        var random = new Seeded(seed: 31);
+
+        static int Expand(int value, int bits) =>
+            (value << (8 - bits)) | (value >> ((2 * bits) - 8));
+
+        foreach (var mode in modes) {
+            byte[] weights = ((mode.IndexBits == 2) ? [0, 21, 43, 64] : [0, 9, 18, 27, 37, 46, 55, 64]);
+
+            for (var trial = 0; (trial < 400); trial++) {
+                var partition = random.Next(bound: mode.Partitions);
+
+                // Endpoints the mode stores exactly: stored bits, a parity bit below them where it has one, replicated.
+                for (var subset = 0; (subset < mode.Subsets); subset++) {
+                    var shared = random.Next(bound: 2);
+
+                    for (var end = 0; (end < 2); end++) {
+                        var parity = ((mode.Parity == 2) ? shared : random.Next(bound: 2));
+
+                        for (var channel = 0; (channel < 4); channel++) {
+                            var bits = ((channel < 3) ? mode.ColorBits : mode.AlphaBits);
+                            var q = ((bits == 0) ? 0 : random.Next(bound: (1 << bits)));
+
+                            ends[((subset * 2) + end), channel] = ((bits == 0) ? 255 : ((mode.Parity == 0) ? Expand(bits: bits, value: q) : Expand(bits: (bits + 1), value: (q << 1) | parity)));
+                        }
+                    }
+                }
+
+                // Each subset's first member sits on its first endpoint and its second on its other; the rest anywhere.
+                seen.Clear();
+
+                for (var texel = 0; (texel < 16); texel++) {
+                    var subset = Bc7Codec.SubsetOf(partition: partition, subsets: mode.Subsets, texel: texel);
+                    var index = ((seen[subset] == 0) ? 0 : ((seen[subset] == 1) ? (weights.Length - 1) : random.Next(bound: weights.Length)));
+
+                    seen[subset]++;
+
+                    for (var channel = 0; (channel < 4); channel++) {
+                        rgba[((texel * 4) + channel)] = ((byte)(((((64 - weights[index]) * ends[(subset * 2), channel]) + (weights[index] * ends[((subset * 2) + 1), channel])) + 32) >> 6));
+                    }
+                }
+
+                Bc7Codec.EncodePartitionedBlock(block: block, mode: mode.Mode, partition: partition, rgba: rgba);
+                Assert.Equal(expected: mode.Mode, actual: Bc7Codec.ModeOf(block: block));
+                Bc7Codec.DecodeBlock(block: block, rgba: decoded);
+                Assert.True(condition: decoded.SequenceEqual(other: rgba), userMessage: $"mode {mode.Mode} partition {partition} trial {trial}");
+            }
+        }
+    }
+    [Fact]
+    public void Bc7ChoosesAPartitionedModeForTwoRegionBlocksNoOneSubsetHolds() {
+        Span<byte> block = stackalloc byte[Bc7Codec.BlockBytes];
+        Span<byte> again = stackalloc byte[Bc7Codec.BlockBytes];
+        Span<byte> decoded = stackalloc byte[64];
+        var rgba = new byte[64];
+
+        // Two reds in one subset and two blues in the other: four colors on no one line, so no single-subset mode holds
+        // them, while mode 3's eight-bit endpoints hold all four exactly.
+        for (var partition = 0; (partition < 64); partition++) {
+            for (var texel = 0; (texel < 16); texel++) {
+                var strong = (((texel & 1) == 0) ? ((byte)254) : ((byte)200));
+                var blue = (Bc7Codec.SubsetOf(partition: partition, subsets: 2, texel: texel) == 1);
+
+                rgba[(texel * 4)] = (blue ? ((byte)0) : strong);
+                rgba[((texel * 4) + 1)] = 0;
+                rgba[((texel * 4) + 2)] = (blue ? strong : ((byte)0));
+                rgba[((texel * 4) + 3)] = 255;
+            }
+
+            Bc7Codec.EncodeBlock(block: block, rgba: rgba);
+            Bc7Codec.DecodeBlock(block: block, rgba: decoded);
+            Assert.True(condition: decoded.SequenceEqual(other: rgba), userMessage: $"partition {partition}: mode {Bc7Codec.ModeOf(block: block)}");
+            Assert.Equal(expected: 3, actual: Bc7Codec.ModeOf(block: block));
+            Assert.Equal(expected: partition, actual: (block[0] >> 4) | ((block[1] & 0x03) << 4));
+
+            // The same source encodes to the same bytes.
+            Bc7Codec.EncodeBlock(block: again, rgba: rgba);
+            Assert.True(condition: again.SequenceEqual(other: block), userMessage: $"partition {partition}");
+        }
     }
     [Fact]
     public void Bc6hRoundTripsUniformAndTenBitTwoEndpointBlocksExactly() {
@@ -405,7 +543,7 @@ public sealed class TextureCodecLawTests {
 
         var figures = $"BC4: max {bc4.Maximum}, rms {bc4.Rms:F3}; BC5: max {bc5.Maximum}, rms {bc5.Rms:F3}; BC7: max {bc7.Maximum}, rms {bc7.Rms:F3}; BC6H: worst relative {smooth:F4} in smooth blocks, {all:F4} in all";
 
-        // The figures these bounds hold, with margin: BC4 2 and 0.63, BC5 8 and 0.88, BC7 13 and 2.32, BC6H 0.078 and
+        // The figures these bounds hold, with margin: BC4 2 and 0.63, BC5 8 and 0.88, BC7 10 and 2.23, BC6H 0.078 and
         // 0.233. BC6H's larger figure is a block across the disc's edge, two colors off one line that a one-region mode
         // cannot hold both of.
         Assert.True(condition: ((bc4.Maximum <= 3) && (bc4.Rms <= 0.8)), userMessage: figures);
@@ -441,7 +579,7 @@ public sealed class TextureCodecLawTests {
     private const string PinnedBc4 = "57808ae1feae7b5e01d78d2bc225e447b62dbcebca2f5cbd494a60bb688d813f";
     private const string PinnedBc5 = "d1b9dfff4236b5b78d3bb3b6af70151346eafd5a99f578aea6f5f41e64e9e816";
     private const string PinnedBc6h = "2dd7cc2f50cb071801f8474d4065bfb4c38c222ab97c90b2b8cd8d13b3ce245c";
-    private const string PinnedBc7 = "53a5549fe2a35636eb24e4d5110bfbfc59c1a86e2bb3be0e2f45040445a3bdeb";
+    private const string PinnedBc7 = "b4ea56456ed9a9176a745e31d22e244b7fbda22514434699536306b934d73009";
 
     [Fact]
     public void APartialEdgeBlockRepeatsTheEdgeAndDecodesOnlyTheLevel() {

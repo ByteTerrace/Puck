@@ -624,8 +624,9 @@ P17 still owes:
   every level and sampling each probe texel on both backends, which needs a GPU
   image of a block-compressed format with mip levels; `BakeSamplingFixtureLawTests`
   holds the fixture's GPU-free half;
-- the partitioned BC7 modes and two-region BC6H modes, which neither encoder
-  writes nor decoder reads, and an emission texture for the impostor;
+- the two-region BC6H modes, which its encoder does not write and its decoder
+  does not read, and an emission texture for the impostor (BC7 writes and reads
+  every mode, the partitioned ones included);
 - the parity world shipping its bakes, and the check that a missing bake draws
   through its field and then switches.
 
