@@ -278,7 +278,10 @@ These are one-line cautions; the owning pages hold the derivations.
   by `Describe` (the node's `NotReadyReason`), and the holder keeps its lease.
   A refused build is retried only when an input it was made from changes (the
   device, the kernels asked for, the set or its installed kernels, and the
-  holder's inputs: its `SdfWorldEngineOptions`, and for the node a kernel
+  operator's GPU faults (`GpuCreationFaults.Revision`, read through
+  `GpuDeviceServices.Faults` and re-read after a refused attempt, so the fault
+  that refused it is no change), and the holder's inputs: its
+  `SdfWorldEngineOptions`, and for the node a kernel
   reload request), or after `Release` on device loss. A build refused by the
   device's descriptor heap (`GpuDescriptorHeapRefusalException`,
   `GPU_DESCRIPTOR_HEAP`) has one input more, heap space: it is retried when

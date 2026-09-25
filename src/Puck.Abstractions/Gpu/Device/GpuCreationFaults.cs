@@ -114,6 +114,7 @@ public sealed class GpuCreationFaults {
                 faults: faults,
                 inner: Guard(instance: services.CommandPoolFactory)
             ),
+            Faults = faults,
             ImageFactory = new FaultingImageFactory(
                 faults: faults,
                 inner: Guard(instance: services.ImageFactory)
