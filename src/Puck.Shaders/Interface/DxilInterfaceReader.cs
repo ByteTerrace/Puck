@@ -365,10 +365,12 @@ public sealed unsafe class DxilInterfaceReader : IDisposable {
     private static GpuBindingKind Kind(InputBindDesc bind, string name) =>
         bind.Type switch {
             InputConstantBuffer => GpuBindingKind.ConstantBuffer,
-            InputTexture when (bind.Dimension == DimensionBuffer) => GpuBindingKind.ReadOnlyBuffer,
+            (InputTexture or InputReadWriteTyped) when (bind.Dimension == DimensionBuffer) => throw ShaderInterfaceBinding.TypedBuffer(
+                name: name,
+                reader: "DXIL"
+            ),
             InputTexture => GpuBindingKind.SampledImage,
             InputSampler => GpuBindingKind.Sampler,
-            InputReadWriteTyped when (bind.Dimension == DimensionBuffer) => GpuBindingKind.ReadWriteBuffer,
             InputReadWriteTyped => GpuBindingKind.StorageImage,
             InputTextureBuffer or InputStructured or InputByteAddress => GpuBindingKind.ReadOnlyBuffer,
             InputReadWriteStructured or InputReadWriteByteAddress or InputAppendStructured or InputConsumeStructured or InputReadWriteStructuredWithCounter => GpuBindingKind.ReadWriteBuffer,

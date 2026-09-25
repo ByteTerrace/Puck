@@ -64,4 +64,10 @@ public sealed record ShaderInterfaceBinding(
         $"{Name} set {Set} binding {Binding} {(Pushed ? "pushed " : "")}{Kind}{((Members.Count == 0)
             ? ""
             : $" [{string.Join(separator: ", ", values: Members.Select(selector: static member => $"{member.Name}@{member.Offset}:{member.Type.Spelling()}{((member.Length == 0) ? "" : $"[{member.Length}]")}"))}]")}";
+
+    // A typed buffer (Buffer<T> or RWBuffer<T>; a SPIR-V image of Dim Buffer) is a texel buffer, which Vulkan binds as a
+    // uniform or storage texel buffer rather than a storage buffer. No binding kind carries one, so both readers refuse
+    // it by name rather than report it as a buffer kind a layout would plan as a storage buffer.
+    internal static InvalidDataException TypedBuffer(string name, string reader) =>
+        new(message: $"{reader} binding '{name}' is a typed buffer (Buffer<T> or RWBuffer<T>), which no binding kind carries; declare a StructuredBuffer or a ByteAddressBuffer.");
 }

@@ -3,10 +3,12 @@ using System.Collections.ObjectModel;
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
-/// Everything a pipeline binds, graphics and compute alike: the frequency groups it uses and whether it pushes an
-/// index. Each backend plans its own layout from this one description, and no backend numbers a register or a binding
-/// of its own.
-/// <para>A pushed index is one 4-byte value, visible to every stage: Vulkan push constants at offset 0, and Direct3D
+/// Everything a pipeline binds, graphics and compute alike: the frequency groups it uses, whether it pushes an index,
+/// and the shader stages that read them. Each backend plans its own layout from this one description, and no backend
+/// numbers a register or a binding of its own.
+/// <para>Every binding and the pushed index are visible to the pipeline's stages as a whole (<see cref="Stages"/>):
+/// visibility is never narrowed per binding.</para>
+/// <para>A pushed index is one 4-byte value: Vulkan push constants at offset 0, and Direct3D
 /// 12 root constants at register <c>b0</c> in space <see cref="PushIndexSpace"/>, outside every group's space. Nothing
 /// else is pushed.</para>
 /// </summary>
@@ -16,17 +18,35 @@ public sealed class GpuPipelineLayoutDescription {
     public const uint GroupCount = 4;
     /// <summary>The size in bytes of the pushed index.</summary>
     public const uint PushIndexBytes = 4;
+    /// <summary>The Direct3D 12 constant-buffer register of the pushed index, <c>b0</c>, in space
+    /// <see cref="PushIndexSpace"/>.</summary>
+    public const uint PushIndexRegister = 0;
     /// <summary>The Direct3D 12 register space of the pushed index, which sits at register <c>b0</c>.</summary>
     public const uint PushIndexSpace = GroupCount;
 
     /// <summary>Initializes a new instance of the <see cref="GpuPipelineLayoutDescription"/> class.</summary>
     /// <param name="groups">The groups the pipeline binds, in any order; none for a pipeline that binds nothing.</param>
     /// <param name="pushesIndex">Whether the pipeline pushes a 4-byte index.</param>
+    /// <param name="stages">The pipeline's shader stages: <see cref="GpuShaderStage.Compute"/> alone, or graphics
+    /// stages alone (<see cref="GpuShaderStage.Vertex"/>, <see cref="GpuShaderStage.Fragment"/> or both).</param>
     /// <exception cref="ArgumentNullException"><paramref name="groups"/> or one of its groups is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Two groups share an ordinal.</exception>
-    public GpuPipelineLayoutDescription(IReadOnlyList<GpuGroupLayoutDescription> groups, bool pushesIndex) {
+    /// <exception cref="ArgumentException">Two groups share an ordinal, or <paramref name="stages"/> names no stage, a
+    /// stage that is not defined, or compute beside a graphics stage.</exception>
+    public GpuPipelineLayoutDescription(IReadOnlyList<GpuGroupLayoutDescription> groups, bool pushesIndex, GpuShaderStage stages) {
         ArgumentNullException.ThrowIfNull(argument: groups);
+
+        const GpuShaderStage Graphics = GpuShaderStage.Vertex | GpuShaderStage.Fragment;
+
+        if (
+            (stages != GpuShaderStage.Compute) &&
+            ((stages == GpuShaderStage.None) || ((stages & ~Graphics) != GpuShaderStage.None))
+        ) {
+            throw new ArgumentException(
+                message: $"A pipeline's stages are compute alone or graphics stages alone; '{stages}' is neither.",
+                paramName: nameof(stages)
+            );
+        }
 
         var sorted = new GpuGroupLayoutDescription[groups.Count];
 
@@ -53,10 +73,13 @@ public sealed class GpuPipelineLayoutDescription {
 
         Groups = new ReadOnlyCollection<GpuGroupLayoutDescription>(list: sorted);
         PushesIndex = pushesIndex;
+        Stages = stages;
     }
 
     /// <summary>Gets the groups in ordinal order.</summary>
     public IReadOnlyList<GpuGroupLayoutDescription> Groups { get; }
     /// <summary>Gets whether the pipeline pushes a 4-byte index.</summary>
     public bool PushesIndex { get; }
+    /// <summary>Gets the pipeline's shader stages, which every binding and the pushed index are visible to.</summary>
+    public GpuShaderStage Stages { get; }
 }

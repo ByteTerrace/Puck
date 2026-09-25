@@ -71,11 +71,15 @@ public sealed class ShaderInterfaceLayout {
     public ShaderInterface Interface { get; }
 
     /// <summary>Returns the neutral pipeline layout of the interface's groups: each group at its set, each binding at
-    /// its number with its kind and one descriptor.</summary>
+    /// its number with its kind and one descriptor, visible to the pipeline's stages.</summary>
+    /// <param name="stages">The pipeline's shader stages, from its pass kind
+    /// (<see cref="ShaderPipelinePassKinds.Stages"/>).</param>
     /// <param name="pushesIndex">Whether the pipeline pushes a 4-byte index.</param>
     /// <returns>The pipeline layout.</returns>
     /// <exception cref="InvalidOperationException">The interface pushes a block, which is not a group.</exception>
-    public GpuPipelineLayoutDescription PipelineLayout(bool pushesIndex) {
+    /// <exception cref="ArgumentException"><paramref name="stages"/> is not compute alone or graphics stages
+    /// alone.</exception>
+    public GpuPipelineLayoutDescription PipelineLayout(GpuShaderStage stages, bool pushesIndex) {
         if (PushedGroup is { } pushed) {
             throw new InvalidOperationException(message: $"Shader interface '{Interface.Name}' pushes its {pushed.Group} block; a pipeline layout binds groups and pushes only an index.");
         }
@@ -88,7 +92,8 @@ public sealed class ShaderInterfaceLayout {
                 )).ToArray(),
                 ordinal: group.Set
             )).ToArray(),
-            pushesIndex: pushesIndex
+            pushesIndex: pushesIndex,
+            stages: stages
         );
     }
     /// <summary>Returns why a compiled module reads the pushed block somewhere other than this layout puts it, or

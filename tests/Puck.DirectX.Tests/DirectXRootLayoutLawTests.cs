@@ -10,7 +10,9 @@ namespace Puck.DirectX.Tests;
 /// binding's register, root parameter indices are dense, and the pushed index is one root constant at <c>b0</c> in
 /// space 4. A description no backend may plan is refused by name before it reaches the planner.</summary>
 public sealed class DirectXRootLayoutLawTests {
+    private const D3D12_SHADER_VISIBILITY All = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL;
     private const D3D12_DESCRIPTOR_RANGE_TYPE Cbv = D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+    private const D3D12_SHADER_VISIBILITY Pixel = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL;
     private const D3D12_DESCRIPTOR_RANGE_TYPE Sampler = D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
     private const D3D12_DESCRIPTOR_RANGE_TYPE Srv = D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     private const D3D12_DESCRIPTOR_RANGE_TYPE Uav = D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
@@ -20,7 +22,7 @@ public sealed class DirectXRootLayoutLawTests {
     private static string Describe(IEnumerable<DirectXRootParameter> parameters) =>
         string.Join(
             separator: " | ",
-            values: parameters.Select(selector: static parameter => $"{parameter.Index} {parameter.Kind} space {parameter.Space} [{string.Join(separator: ", ", values: parameter.Ranges.Select(selector: static range => $"{range.Type} x{range.Count} r{range.BaseRegister} s{range.Space} @{range.TableOffset}"))}]")
+            values: parameters.Select(selector: static parameter => $"{parameter.Index} {parameter.Kind} space {parameter.Space} {parameter.Visibility} [{string.Join(separator: ", ", values: parameter.Ranges.Select(selector: static range => $"{range.Type} x{range.Count} r{range.BaseRegister} s{range.Space} @{range.TableOffset}"))}]")
         );
     private static string Describe(DirectXRootLayout layout) =>
         Describe(parameters: layout.Parameters);
@@ -32,12 +34,13 @@ public sealed class DirectXRootLayoutLawTests {
             TableOffset: offset,
             Type: type
         );
-    private static string Expected(params (DirectXRootParameterKind Kind, uint Space, DirectXDescriptorRange[] Ranges)[] parameters) =>
-        Describe(parameters: parameters.Select(selector: static (parameter, index) => new DirectXRootParameter(
+    private static string Expected(D3D12_SHADER_VISIBILITY visibility, params (DirectXRootParameterKind Kind, uint Space, DirectXDescriptorRange[] Ranges)[] parameters) =>
+        Describe(parameters: parameters.Select(selector: (parameter, index) => new DirectXRootParameter(
             Index: ((uint)index),
             Kind: parameter.Kind,
             Ranges: parameter.Ranges,
-            Space: parameter.Space
+            Space: parameter.Space,
+            Visibility: visibility
         )));
 
     [Fact]
@@ -45,6 +48,7 @@ public sealed class DirectXRootLayoutLawTests {
         Assert.Equal(
             actual: Describe(layout: DirectXRootLayout.Plan(description: GpuGroupLayoutTables.FilmGrain(pushesIndex: false))),
             expected: Expected(
+                visibility: All,
                 (DirectXRootParameterKind.ViewTable, 0, [Range(offset: 0, register: 0, space: 0, type: Cbv)]),
                 (DirectXRootParameterKind.ViewTable, 3, [Range(offset: 0, register: 0, space: 3, type: Cbv), Range(offset: 1, register: 1, space: 3, type: Srv)]),
                 (DirectXRootParameterKind.SamplerTable, 3, [Range(offset: 0, register: 2, space: 3, type: Sampler)])
@@ -56,6 +60,7 @@ public sealed class DirectXRootLayoutLawTests {
         Assert.Equal(
             actual: Describe(layout: DirectXRootLayout.Plan(description: GpuGroupLayoutTables.Pixelate(pushesIndex: false))),
             expected: Expected(
+                visibility: All,
                 (DirectXRootParameterKind.ViewTable, 0, [Range(offset: 0, register: 0, space: 0, type: Cbv)]),
                 (DirectXRootParameterKind.ViewTable, 3, [Range(offset: 0, register: 0, space: 3, type: Cbv), Range(offset: 1, register: 1, space: 3, type: Uav), Range(offset: 2, register: 2, space: 3, type: Uav)])
             )
@@ -73,6 +78,20 @@ public sealed class DirectXRootLayoutLawTests {
             actual: (layout.PushIndex!.Index, layout.PushIndex.Space, layout.PushIndex.DescriptorCount),
             expected: (3u, GpuPipelineLayoutDescription.PushIndexSpace, 0u)
         );
+        // One 32-bit root constant at b0 in space 4: the fields D3D12_ROOT_CONSTANTS needs, so 14b builds it from the
+        // plan alone.
+        Assert.Equal(
+            actual: layout.PushIndex.Constants,
+            expected: new DirectXRootConstants(
+                RegisterSpace: 4,
+                ShaderRegister: 0,
+                ValueCount: 1
+            )
+        );
+        Assert.All(
+            collection: layout.Parameters.Where(predicate: static parameter => (parameter.Kind != DirectXRootParameterKind.PushIndex)),
+            action: static table => Assert.Null(@object: table.Constants)
+        );
         Assert.Equal(
             actual: GpuPipelineLayoutDescription.PushIndexSpace,
             expected: 4u
@@ -84,6 +103,7 @@ public sealed class DirectXRootLayoutLawTests {
         Assert.Equal(
             actual: Describe(layout: DirectXRootLayout.Plan(description: GpuGroupLayoutTables.Arrays())),
             expected: Expected(
+                visibility: Pixel,
                 (DirectXRootParameterKind.ViewTable, 1, [Range(count: 3, offset: 0, register: 0, space: 1, type: Srv), Range(offset: 3, register: 5, space: 1, type: Uav)]),
                 (DirectXRootParameterKind.SamplerTable, 1, [Range(count: 2, offset: 0, register: 3, space: 1, type: Sampler)]),
                 (DirectXRootParameterKind.SamplerTable, 2, [Range(count: 2, offset: 0, register: 0, space: 2, type: Sampler)]),
@@ -118,6 +138,29 @@ public sealed class DirectXRootLayoutLawTests {
                 }
             }
         }
+    }
+    // A graphics pipeline of one stage narrows every parameter to it; two graphics stages, and compute, which ignores
+    // visibility, take ALL.
+    [InlineData(GpuShaderStage.Vertex, D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_VERTEX)]
+    [InlineData(GpuShaderStage.Fragment, D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL)]
+    [InlineData(GpuShaderStage.Vertex | GpuShaderStage.Fragment, D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL)]
+    [InlineData(GpuShaderStage.Compute, D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL)]
+    [Theory]
+    public void Every_root_parameter_takes_the_visibility_of_the_pipelines_stages(GpuShaderStage stages, D3D12_SHADER_VISIBILITY visibility) {
+        var layout = DirectXRootLayout.Plan(description: new GpuPipelineLayoutDescription(
+            groups: GpuGroupLayoutTables.Arrays().Groups,
+            pushesIndex: true,
+            stages: stages
+        ));
+
+        Assert.Equal(
+            actual: DirectXRootLayout.VisibilityOf(stages: stages),
+            expected: visibility
+        );
+        Assert.All(
+            action: parameter => Assert.Equal(actual: parameter.Visibility, expected: visibility),
+            collection: layout.Parameters
+        );
     }
     [MemberData(memberName: nameof(RefusalNames))]
     [Theory]

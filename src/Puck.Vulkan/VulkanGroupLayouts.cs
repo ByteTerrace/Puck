@@ -6,10 +6,12 @@ namespace Puck.Vulkan;
 /// <param name="Binding">The binding number, equal to the neutral binding's.</param>
 /// <param name="DescriptorType">The <c>VkDescriptorType</c> value (<see cref="VulkanDescriptorType"/>).</param>
 /// <param name="Count">The descriptor count.</param>
+/// <param name="StageFlags">The <c>VkShaderStageFlags</c> that see the binding: the pipeline's stages.</param>
 public readonly record struct VulkanSetLayoutBinding(
     uint Binding,
     uint DescriptorType,
-    uint Count
+    uint Count,
+    uint StageFlags
 );
 /// <summary>One planned descriptor set layout.</summary>
 /// <param name="Set">The set number, equal to the group's ordinal.</param>
@@ -23,13 +25,15 @@ public sealed record VulkanSetLayout(
 /// <see cref="GpuPipelineLayoutDescription"/> with no device call.
 /// <para>Each group is the descriptor set its ordinal names, and each binding keeps its number, kind and count.
 /// Set numbers run from zero through the highest group's ordinal, because a pipeline layout lists its set layouts
-/// by position; a set number no group uses is an empty layout. Every binding and the push range are visible to every
-/// stage. Read-only and read-write buffers are both storage buffers here; only Direct3D 12 views them
-/// differently.</para>
+/// by position; a set number no group uses is an empty layout. Every binding and the push range are visible to the
+/// pipeline's stages (<see cref="GpuPipelineLayoutDescription.Stages"/>), whose flags equal
+/// <c>VkShaderStageFlags</c>. Read-only and read-write buffers are both storage buffers here; only Direct3D 12 views
+/// them differently.</para>
 /// </summary>
 public sealed class VulkanGroupLayouts {
-    private VulkanGroupLayouts(IReadOnlyList<VulkanSetLayout> sets, uint pushRangeBytes) {
+    private VulkanGroupLayouts(IReadOnlyList<VulkanSetLayout> sets, uint pushRangeBytes, uint pushRangeStageFlags) {
         PushRangeBytes = pushRangeBytes;
+        PushRangeStageFlags = pushRangeStageFlags;
         Sets = sets;
     }
 
@@ -37,6 +41,9 @@ public sealed class VulkanGroupLayouts {
     /// <see cref="GpuPipelineLayoutDescription.PushIndexBytes"/> when the pipeline pushes an index, otherwise
     /// zero.</summary>
     public uint PushRangeBytes { get; }
+    /// <summary>Gets the push-constant range's <c>VkShaderStageFlags</c>: the pipeline's stages when it pushes an index,
+    /// otherwise zero.</summary>
+    public uint PushRangeStageFlags { get; }
     /// <summary>Gets the set layouts, where a layout's position is its set number.</summary>
     public IReadOnlyList<VulkanSetLayout> Sets { get; }
 
@@ -65,6 +72,7 @@ public sealed class VulkanGroupLayouts {
             ? 0u
             : (description.Groups[^1].Ordinal + 1));
         var sets = new VulkanSetLayout[setCount];
+        var stageFlags = ((uint)description.Stages);
 
         for (var set = 0u; (set < setCount); set++) {
             sets[set] = new VulkanSetLayout(
@@ -75,10 +83,11 @@ public sealed class VulkanGroupLayouts {
 
         foreach (var group in description.Groups) {
             sets[group.Ordinal] = new VulkanSetLayout(
-                Bindings: group.Bindings.Select(selector: static binding => new VulkanSetLayoutBinding(
+                Bindings: group.Bindings.Select(selector: binding => new VulkanSetLayoutBinding(
                     Binding: binding.Binding,
                     Count: binding.Count,
-                    DescriptorType: DescriptorType(kind: binding.Kind)
+                    DescriptorType: DescriptorType(kind: binding.Kind),
+                    StageFlags: stageFlags
                 )).ToArray().AsReadOnly(),
                 Set: group.Ordinal
             );
@@ -87,6 +96,9 @@ public sealed class VulkanGroupLayouts {
         return new VulkanGroupLayouts(
             pushRangeBytes: (description.PushesIndex
                 ? GpuPipelineLayoutDescription.PushIndexBytes
+                : 0u),
+            pushRangeStageFlags: (description.PushesIndex
+                ? stageFlags
                 : 0u),
             sets: new ReadOnlyCollection<VulkanSetLayout>(list: sets)
         );

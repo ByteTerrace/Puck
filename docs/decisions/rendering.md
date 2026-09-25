@@ -174,6 +174,18 @@ rejected, because each translation is a second statement of the same access
 that can drift from the first. Both older enums are deleted once every combined
 image sampler has moved to a separate image and sampler.
 
+**A binding is visible to the pipeline's stages, never to its own.** A
+pipeline's stages come from its pass kind, compute or vertex and fragment, and
+every binding and the pushed index are visible to all of them. Direct3D 12
+therefore gives each root parameter `ALL`, or the one stage of a single-stage
+graphics pipeline, and Vulkan gives each binding and the push range the
+pipeline's stage flags. Reflecting each stage's bytecode to narrow every
+binding to the stages that read it was rejected: Direct3D 12 sets visibility
+per root parameter, so a table holding a vertex-only and a fragment-only
+binding would need `ALL` anyway or a split into one table per stage, which
+breaks one view table and one sampler table per group and moves the root
+indices. Narrowing returns only if a measured driver cost shows it pays.
+
 **HLSL compiled by the pinned DXC is the one source language, and a generated
 echo pass is what proves the layout.** One language, one compiler, one cache
 key. A second language would need its own front end, a translation back into

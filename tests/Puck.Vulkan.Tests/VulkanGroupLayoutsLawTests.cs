@@ -9,20 +9,23 @@ namespace Puck.Vulkan.Tests;
 /// group uses are empty layouts, and the pushed index is a 4-byte range. A description no backend may plan is refused
 /// by name before it reaches the planner.</summary>
 public sealed class VulkanGroupLayoutsLawTests {
+    private const GpuShaderStage Graphics = GpuShaderStage.Vertex | GpuShaderStage.Fragment;
+
     public static TheoryData<string> RefusalNames => new(values: GpuGroupLayoutTables.Refused.Select(selector: static refusal => refusal.Name).ToArray());
 
     private static string Describe(IEnumerable<(uint Set, VulkanSetLayoutBinding[] Bindings)> sets) =>
         string.Join(
             separator: " | ",
-            values: sets.Select(selector: static set => $"set {set.Set} [{string.Join(separator: ", ", values: set.Bindings.Select(selector: static binding => $"{binding.Binding}:{binding.DescriptorType}x{binding.Count}"))}]")
+            values: sets.Select(selector: static set => $"set {set.Set} [{string.Join(separator: ", ", values: set.Bindings.Select(selector: static binding => $"{binding.Binding}:{binding.DescriptorType}x{binding.Count} s{binding.StageFlags:X}"))}]")
         );
     private static string Describe(VulkanGroupLayouts layouts) =>
         Describe(sets: layouts.Sets.Select(selector: static set => (set.Set, set.Bindings.ToArray())));
-    private static VulkanSetLayoutBinding Binding(uint binding, uint type, uint count = 1) =>
+    private static VulkanSetLayoutBinding Binding(uint binding, uint type, GpuShaderStage stages, uint count = 1) =>
         new(
             Binding: binding,
             Count: count,
-            DescriptorType: type
+            DescriptorType: type,
+            StageFlags: ((uint)stages)
         );
 
     [Fact]
@@ -32,10 +35,10 @@ public sealed class VulkanGroupLayoutsLawTests {
         Assert.Equal(
             actual: Describe(layouts: layouts),
             expected: Describe(sets: [
-                (0, [Binding(binding: 0, type: VulkanDescriptorType.UniformBuffer)]),
+                (0, [Binding(binding: 0, type: VulkanDescriptorType.UniformBuffer, stages: Graphics)]),
                 (1, []),
                 (2, []),
-                (3, [Binding(binding: 0, type: VulkanDescriptorType.UniformBuffer), Binding(binding: 1, type: VulkanDescriptorType.SampledImage), Binding(binding: 2, type: VulkanDescriptorType.Sampler)]),
+                (3, [Binding(binding: 0, type: VulkanDescriptorType.UniformBuffer, stages: Graphics), Binding(binding: 1, type: VulkanDescriptorType.SampledImage, stages: Graphics), Binding(binding: 2, type: VulkanDescriptorType.Sampler, stages: Graphics)]),
             ])
         );
         Assert.Equal(
@@ -48,18 +51,31 @@ public sealed class VulkanGroupLayoutsLawTests {
         Assert.Equal(
             actual: Describe(layouts: VulkanGroupLayouts.Plan(description: GpuGroupLayoutTables.Pixelate(pushesIndex: false))),
             expected: Describe(sets: [
-                (0, [Binding(binding: 0, type: VulkanDescriptorType.UniformBuffer)]),
+                (0, [Binding(binding: 0, type: VulkanDescriptorType.UniformBuffer, stages: GpuShaderStage.Compute)]),
                 (1, []),
                 (2, []),
-                (3, [Binding(binding: 0, type: VulkanDescriptorType.UniformBuffer), Binding(binding: 1, type: VulkanDescriptorType.StorageImage), Binding(binding: 2, type: VulkanDescriptorType.StorageImage)]),
+                (3, [Binding(binding: 0, type: VulkanDescriptorType.UniformBuffer, stages: GpuShaderStage.Compute), Binding(binding: 1, type: VulkanDescriptorType.StorageImage, stages: GpuShaderStage.Compute), Binding(binding: 2, type: VulkanDescriptorType.StorageImage, stages: GpuShaderStage.Compute)]),
             ])
         );
     }
     [Fact]
-    public void The_pushed_index_is_one_4_byte_range() {
+    public void The_pushed_index_is_one_4_byte_range_visible_to_the_pipelines_stages() {
+        var graphics = VulkanGroupLayouts.Plan(description: GpuGroupLayoutTables.FilmGrain(pushesIndex: true));
+        var compute = VulkanGroupLayouts.Plan(description: GpuGroupLayoutTables.Pixelate(pushesIndex: true));
+        var none = VulkanGroupLayouts.Plan(description: GpuGroupLayoutTables.Pixelate(pushesIndex: false));
+
+        // VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, and VK_SHADER_STAGE_COMPUTE_BIT.
         Assert.Equal(
-            actual: VulkanGroupLayouts.Plan(description: GpuGroupLayoutTables.FilmGrain(pushesIndex: true)).PushRangeBytes,
-            expected: 4u
+            actual: (graphics.PushRangeBytes, graphics.PushRangeStageFlags),
+            expected: (4u, 0x11u)
+        );
+        Assert.Equal(
+            actual: (compute.PushRangeBytes, compute.PushRangeStageFlags),
+            expected: (4u, 0x20u)
+        );
+        Assert.Equal(
+            actual: (none.PushRangeBytes, none.PushRangeStageFlags),
+            expected: (0u, 0u)
         );
     }
     [Fact]
@@ -68,8 +84,8 @@ public sealed class VulkanGroupLayoutsLawTests {
             actual: Describe(layouts: VulkanGroupLayouts.Plan(description: GpuGroupLayoutTables.Arrays())),
             expected: Describe(sets: [
                 (0, []),
-                (1, [Binding(binding: 0, count: 3, type: VulkanDescriptorType.StorageBuffer), Binding(binding: 3, count: 2, type: VulkanDescriptorType.Sampler), Binding(binding: 5, type: VulkanDescriptorType.StorageBuffer)]),
-                (2, [Binding(binding: 0, count: 2, type: VulkanDescriptorType.Sampler)]),
+                (1, [Binding(binding: 0, count: 3, stages: GpuShaderStage.Fragment, type: VulkanDescriptorType.StorageBuffer), Binding(binding: 3, count: 2, stages: GpuShaderStage.Fragment, type: VulkanDescriptorType.Sampler), Binding(binding: 5, type: VulkanDescriptorType.StorageBuffer, stages: GpuShaderStage.Fragment)]),
+                (2, [Binding(binding: 0, count: 2, stages: GpuShaderStage.Fragment, type: VulkanDescriptorType.Sampler)]),
             ])
         );
     }
@@ -77,7 +93,8 @@ public sealed class VulkanGroupLayoutsLawTests {
     public void A_pipeline_that_binds_nothing_plans_no_set() {
         var layouts = VulkanGroupLayouts.Plan(description: new GpuPipelineLayoutDescription(
             groups: [],
-            pushesIndex: false
+            pushesIndex: false,
+            stages: GpuShaderStage.Compute
         ));
 
         Assert.Empty(collection: layouts.Sets);
