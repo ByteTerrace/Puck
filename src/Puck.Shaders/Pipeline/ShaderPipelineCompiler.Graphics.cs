@@ -9,7 +9,7 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineCompiler {
     private void ValidateGraphics(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
         if (
-            (pass.Kind == ShaderPipelinePassKind.Fullscreen) &&
+            (pass.Kind == ShaderPipelineDocumentPassKind.Fullscreen) &&
             (pass.Vertex is { } vertex) &&
             !Enum.IsDefined(value: vertex)
         ) {
@@ -20,7 +20,7 @@ public sealed partial class ShaderPipelineCompiler {
                 pass.Name
             );
         } else if (
-            (pass.Kind == ShaderPipelinePassKind.Geometry) &&
+            (pass.Kind == ShaderPipelineDocumentPassKind.Geometry) &&
             (pass.Vertex is not null)
         ) {
             Add(
@@ -84,7 +84,7 @@ public sealed partial class ShaderPipelineCompiler {
                 pass.Name
             );
         }
-        if (pass.Kind == ShaderPipelinePassKind.Fullscreen) {
+        if (pass.Kind == ShaderPipelineDocumentPassKind.Fullscreen) {
             if (
                 (pass.Geometry is not null) ||
                 (pass.DepthCompare is not null)

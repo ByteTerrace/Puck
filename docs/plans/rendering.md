@@ -463,11 +463,12 @@ groups. The frame graph is a document, `puck.render.graph.v1`
 pipeline document's, plus `packages`: engine work named by package id from
 `RenderGraphPackageCatalog`, which offers `sdf.world`, `overlay` and one
 `post.<id>` package per shipped post-process set. `RenderGraphCompiler` plans a
-graph with P3's planner: a package pass enters the plan as its own pass kind,
+graph with P3's planner: a package pass enters the plan only through the
+planner's package entry, and its planned pass carries its own kind,
 `ShaderPipelinePassKind.Package`, whose source is its package id and whose
 references keep no descriptor binding, so one planner orders, versions and
-barriers every pass. A document's `passes` never declare that kind, and the
-planner refuses one there with `SHADERPIPE_PACKAGE_PASS`.
+barriers every pass. A document's pass kind has no `Package` member, so its
+JSON reader refuses that name.
 `RenderGraphDocumentLawTests` holds every
 checked-in pipeline document to planning identically as a graph, and
 `puck schema` generates the document's schema. A world names instances in

@@ -27,7 +27,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             ? ShaderPipelineInitialization.Zero
             : ShaderPipelineInitialization.Undefined)
     );
-    private static ShaderPipelinePass Pass(string name, ShaderPipelinePassKind kind, ResourceReference[] inputs, ResourceReference[] outputs) => new(
+    private static ShaderPipelinePass Pass(string name, ShaderPipelineDocumentPassKind kind, ResourceReference[] inputs, ResourceReference[] outputs) => new(
         EntryPoint: "main",
         Inputs: inputs,
         Kind: kind,
@@ -35,9 +35,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         Outputs: outputs,
         Source: $"{name}.hlsl"
     );
-    private static CompiledShader Shader(string name, ShaderPipelinePassKind kind) {
+    private static CompiledShader Shader(string name, ShaderPipelineDocumentPassKind kind) {
         ReadOnlyMemory<byte> bytecode = new byte[] { 0x03, 0x02, 0x23, 0x07 };
-        var stages = ((kind == ShaderPipelinePassKind.Compute)
+        var stages = ((kind == ShaderPipelineDocumentPassKind.Compute)
             ? new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Compute] = bytecode }
             : new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Vertex] = bytecode, [ShaderStage.Fragment] = bytecode });
 
@@ -64,7 +64,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                         Name: "history",
                         PreviousFrame: true
                     )],
-                    kind: ShaderPipelinePassKind.Compute,
+                    kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "accumulate",
                     outputs: [new ResourceReference(
                         Binding: 0,
@@ -76,7 +76,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                         Binding: 1,
                         Name: "history"
                     )],
-                    kind: ShaderPipelinePassKind.Compute,
+                    kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "convert",
                     outputs: [new ResourceReference(
                         Binding: 0,
@@ -88,7 +88,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                         Binding: 0,
                         Name: "gray"
                     )],
-                    kind: ShaderPipelinePassKind.Fullscreen,
+                    kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     name: "copy",
                     outputs: ["image"]
                 ),
@@ -131,7 +131,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             passes: [
                 Pass(
                     inputs: [],
-                    kind: ShaderPipelinePassKind.Compute,
+                    kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "produce",
                     outputs: [new ResourceReference(
                         Binding: 0,
@@ -143,7 +143,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                         Binding: 1,
                         Name: "data"
                     )],
-                    kind: ShaderPipelinePassKind.Compute,
+                    kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "consume",
                     outputs: [new ResourceReference(
                         Binding: 0,

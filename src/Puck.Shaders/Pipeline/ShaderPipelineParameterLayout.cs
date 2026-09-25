@@ -127,9 +127,25 @@ public sealed class ShaderPipelineParameterLayout {
             schema: Schema,
             description: description
         );
-    /// <summary>Resolves a pass's frame block from its declaration: the interface its source names
-    /// (<see cref="ShaderFrameInterface.NameOf"/>), or a package pass's package id names, over the frame members and
-    /// its config.</summary>
+    /// <summary>Resolves a package's frame block: the frame members alone, under an interface named for the package
+    /// id.</summary>
+    /// <param name="package">The package id.</param>
+    /// <returns>The layout.</returns>
+    /// <exception cref="InvalidDataException">The package id spells no interface name.</exception>
+    public static ShaderPipelineParameterLayout ForPackage(string package) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
+
+        // A package reads no generated declarations; its interface is named for its package id, each character an
+        // interface name cannot hold, such as the period of sdf.world, spelled as a hyphen.
+        return For(
+            config: null,
+            interfaceName: string.Concat(values: package.Select(selector: static character => ((char.IsAsciiLetterLower(c: character) || char.IsAsciiDigit(c: character))
+                ? character
+                : '-')))
+        );
+    }
+    /// <summary>Resolves a document pass's frame block from its declaration: the interface its source names
+    /// (<see cref="ShaderFrameInterface.NameOf"/>) over the frame members and its config.</summary>
     /// <param name="pass">The pass.</param>
     /// <returns>The layout.</returns>
     /// <exception cref="InvalidDataException">The config schema is invalid, the source's file does not name an
@@ -141,15 +157,9 @@ public sealed class ShaderPipelineParameterLayout {
             ownerName: pass.Name
         );
 
-        // A package pass reads no generated declarations; its interface is named for its package id, each character an
-        // interface name cannot hold, such as the period of sdf.world, spelled as a hyphen.
         return For(
             config: pass.Config,
-            interfaceName: ((pass.Kind == ShaderPipelinePassKind.Package)
-                ? string.Concat(values: pass.Source.Select(selector: static character => ((char.IsAsciiLetterLower(c: character) || char.IsAsciiDigit(c: character))
-                    ? character
-                    : '-')))
-                : ShaderFrameInterface.NameOf(sourcePath: pass.Source))
+            interfaceName: ShaderFrameInterface.NameOf(sourcePath: pass.Source)
         );
     }
     /// <summary>Resolves the frame block of a named interface over a config schema.</summary>

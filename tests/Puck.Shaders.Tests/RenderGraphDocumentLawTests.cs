@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Puck.Shaders.Tests;
@@ -59,7 +60,11 @@ public sealed class RenderGraphDocumentLawTests {
         Assert.Equal(expected: ["final"], actual: plan.Outputs);
         Assert.Equal(
             expected: (ShaderPipelinePassKind.Package, RenderGraphPackageCatalog.Overlay),
-            actual: (plan.Pipeline.Passes[2].Declaration.Kind, plan.Pipeline.Passes[2].Declaration.Source)
+            actual: (plan.Pipeline.Passes[2].Kind, plan.Pipeline.Passes[2].Declaration.Source)
+        );
+        Assert.Equal(
+            expected: ShaderPipelinePassKind.Compute,
+            actual: plan.Pipeline.Passes[1].Kind
         );
         Assert.All(
             action: static reference => Assert.Null(@object: reference.Binding),
@@ -108,27 +113,33 @@ public sealed class RenderGraphDocumentLawTests {
             collection: Codes(json: Edit(change: static document => Package(document: document, name: "world")["inputs"] = Refs("scene"))),
             expected: "RENDERGRAPH_PACKAGE_PORTS"
         );
-        Assert.Equal(
-            expected: ["SHADERPIPE_PACKAGE_PASS"],
-            actual: Codes(json: Edit(change: static document => document["passes"]![0]!["kind"] = nameof(ShaderPipelinePassKind.Package)))
-        );
     }
     [Fact]
-    public void APipelinePassOfThePackageKindIsRefused() {
-        var planned = new ShaderPipelineCompiler().TryCompile(
-            definition: ShaderPipelineDefinition.FromShaderSource(
-                kind: ShaderPipelinePassKind.Package,
-                name: "stray",
-                sourcePath: "stray.hlsl"
-            ),
-            diagnostics: out var diagnostics,
-            plan: out _
-        );
+    public void ADocumentCannotNameThePackageKind() {
+        // A document's pass kind has no Package member, so both readers refuse the name at the member that spells it,
+        // before any planner sees the document.
+        var graph = Assert.Throws<JsonException>(testCode: static () => RenderGraphDefinition.Parse(json: Edit(change: static document => document["passes"]![0]!["kind"] = "Package")));
+        var pipeline = Assert.Throws<JsonException>(testCode: static () => ShaderPipelineLoader.ParseDefinition(
+            name: "stray",
+            path: "stray.pipeline.json",
+            text: """
+                {
+                  "$schema": "puck.shader.pipeline.v1",
+                  "name": "stray",
+                  "resources": [],
+                  "passes": [{ "name": "stray", "source": "stray.hlsl", "entryPoint": "main", "kind": "Package" }],
+                  "outputs": []
+                }
+                """
+        ));
 
-        Assert.False(condition: planned);
-        Assert.Equal(
-            expected: ["SHADERPIPE_PACKAGE_PASS"],
-            actual: diagnostics.Select(selector: static diagnostic => diagnostic.Code)
+        Assert.Contains(
+            actualString: graph.Message,
+            expectedSubstring: "$.passes[0].kind"
+        );
+        Assert.Contains(
+            actualString: pipeline.Message,
+            expectedSubstring: "$.passes[0].kind"
         );
     }
     [Fact]

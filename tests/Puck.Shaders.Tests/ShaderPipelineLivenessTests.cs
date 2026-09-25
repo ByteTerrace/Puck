@@ -11,7 +11,7 @@ public sealed class ShaderPipelineLivenessTests {
             name,
             (name + ".hlsl"),
             "main",
-            ShaderPipelinePassKind.Compute,
+            ShaderPipelineDocumentPassKind.Compute,
             inputs,
             outputs
         );

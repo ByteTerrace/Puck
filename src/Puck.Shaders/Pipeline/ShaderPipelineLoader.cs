@@ -308,7 +308,7 @@ public sealed class ShaderPipelineLoader {
     public static IReadOnlyList<ShaderStageSource> StagesOf(ShaderPipelinePass pass, string sourcePath, string source) {
         ArgumentNullException.ThrowIfNull(argument: pass);
 
-        if (pass.Kind == ShaderPipelinePassKind.Compute) {
+        if (pass.Kind == ShaderPipelineDocumentPassKind.Compute) {
             return [new ShaderStageSource(
                 EntryPoint: pass.EntryPoint,
                 Path: sourcePath,
@@ -316,7 +316,7 @@ public sealed class ShaderPipelineLoader {
                 Stage: ShaderStage.Compute
             )];
         }
-        if (pass.Kind == ShaderPipelinePassKind.Geometry) {
+        if (pass.Kind == ShaderPipelineDocumentPassKind.Geometry) {
             return [
                 new ShaderStageSource(
                     EntryPoint: (pass.Geometry?.VertexEntryPoint ?? throw new InvalidDataException(message: $"Geometry pass '{pass.Name}' declares no geometry.")),

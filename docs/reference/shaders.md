@@ -248,9 +248,9 @@ as a pipeline does. The refusals are `RENDERGRAPH_SCHEMA`,
 `RENDERGRAPH_DOCUMENT_SHAPE`, `RENDERGRAPH_PACKAGE_UNKNOWN`,
 `RENDERGRAPH_PACKAGE_PORTS`, `RENDERGRAPH_PACKAGE_BINDING`,
 `RENDERGRAPH_PACKAGE_INPUT` and `RENDERGRAPH_PACKAGE_OUTPUT`. A planner refusal
-keeps its `SHADERPIPE_` code, among them `SHADERPIPE_PACKAGE_PASS` for a pass
-in a pipeline's or a graph's `passes` that declares the `Package` kind, which
-only the `packages` member declares.
+keeps its `SHADERPIPE_` code. A pass `kind` is `Compute`, `Fullscreen` or
+`Geometry`: only the `packages` member declares package work, so the reader
+refuses a pass that names `Package` at its `kind`.
 
 A world names graph instances in `views.graphs`. Each row names a graph
 `source`, relative to the world document as a `views.pipelines` source is, an

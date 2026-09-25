@@ -14,6 +14,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     public const string LoadWorkSourceName = "shaders.fullscreen-pass";
 
     private readonly CaptureRequestSlot m_capture = new();
+
     private readonly IGpuComputeServices? m_compute;
     private readonly NodeDescriptor m_descriptor;
     private readonly uint m_height;
@@ -21,7 +22,9 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     private readonly IRenderNode m_inner;
     private readonly WorkCounterSet m_loadWork;
     private readonly ShaderSetManifest m_manifest;
+
     private readonly List<RetiringExecutor> m_retiring = [];
+
     private readonly IFullscreenPassServices m_services;
     private readonly uint m_width;
 
@@ -141,7 +144,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
                 path2: (m_manifest.Stages.Fragment! + ".hlsl")
             ),
             EntryPoint: "PSMain",
-            Kind: ShaderPipelinePassKind.Fullscreen,
+            Kind: ShaderPipelineDocumentPassKind.Fullscreen,
             Inputs: [new ResourceReference(
                     "input",
                     Binding: m_manifest.Bindings[0].VulkanBinding
@@ -463,6 +466,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             name: LoadWorkSourceName
         );
     }
+
     // Releases every replaced executor whose retiring submission, its successor's, has completed.
     private void RetireCompleted(ShaderPipelineRenderNode successor) {
         for (var index = (m_retiring.Count - 1); (index >= 0); index--) {

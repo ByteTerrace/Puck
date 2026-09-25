@@ -23,7 +23,7 @@ public sealed class WorldPipelineResizedWaitLawTests {
             passes: [new ShaderPipelinePass(
                 EntryPoint: "main",
                 Inputs: [],
-                Kind: ShaderPipelinePassKind.Compute,
+                Kind: ShaderPipelineDocumentPassKind.Compute,
                 Name: "fill",
                 Outputs: [new ResourceReference(
                     Binding: 0,

@@ -14,7 +14,7 @@ public sealed class ShaderPipelineLoaderTests {
             name,
             (name + ".hlsl"),
             "main",
-            ShaderPipelinePassKind.Compute,
+            ShaderPipelineDocumentPassKind.Compute,
             inputs,
             outputs
         );

@@ -136,17 +136,15 @@ public sealed class SdfPassPlanLawTests {
             }
         }
 
-        var packages = passes.Select(selector: static pass => new ShaderPipelinePass(
+        var packages = passes.Select(selector: static pass => new ShaderPipelinePackagePass(
             Dispatch: (pass.Arguments.Count switch {
                 0 => null,
                 _ => ShaderPipelineDispatch.Indirect(arguments: Assert.Single(collection: pass.Arguments)),
             }),
-            EntryPoint: string.Empty,
             Inputs: pass.Inputs,
-            Kind: ShaderPipelinePassKind.Package,
             Name: pass.Label,
             Outputs: pass.Outputs,
-            Source: RenderGraphPackageCatalog.SdfWorld
+            Package: RenderGraphPackageCatalog.SdfWorld
         )).ToArray();
 
         return new ShaderPipelineCompiler().Compile(

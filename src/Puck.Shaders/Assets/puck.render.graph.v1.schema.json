@@ -192,22 +192,21 @@
             "type": "string"
           },
           "source": {
-            "description": "The HLSL source\u0027s path, relative to the pipeline document; a package pass\u0027s package id.",
+            "description": "The HLSL source\u0027s path, relative to the pipeline document. A package\u0027s pass the planner orders carries its package id here.",
             "type": "string"
           },
           "entryPoint": {
-            "description": "The entry point compiled by the shader compiler: a compute pass\u0027s kernel, or a graphics pass\u0027s fragment stage. A package pass compiles nothing and leaves it empty.",
+            "description": "The entry point compiled by the shader compiler: a compute pass\u0027s kernel, or a graphics pass\u0027s fragment stage. A package\u0027s pass compiles nothing and leaves it empty.",
             "type": "string"
           },
           "kind": {
-            "description": "Compute, fullscreen graphics, or indexed geometry; a frame graph\u0027s package passes are Package.",
+            "description": "Compute, fullscreen graphics, or indexed geometry. A document names no package work; the planner orders a package\u0027s pass (ShaderPipelinePackagePass) in the compute shape it reaches resources by, and its planned pass carries Package.",
             "enum": [
               "Compute",
               "Fullscreen",
-              "Geometry",
-              "Package"
+              "Geometry"
             ],
-            "title": "ShaderPipelinePassKind"
+            "title": "ShaderPipelineDocumentPassKind"
           },
           "inputs": {
             "description": "Named resource bindings. Set PreviousFrame explicitly for feedback.",

@@ -27,9 +27,9 @@ public sealed class RenderGraphPlan {
     public IReadOnlyList<string> Inputs { get; }
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs => Pipeline.Outputs;
-    /// <summary>Gets the pipeline planner's plan. A package pass appears in it as a
-    /// <see cref="ShaderPipelinePassKind.Package"/> pass whose source is its package id; it is ordered, given its
-    /// accesses and barriers, and kept live exactly as a shader pass is.</summary>
+    /// <summary>Gets the pipeline planner's plan. A package pass appears in it as a planned pass of kind
+    /// <see cref="ShaderPipelinePassKind.Package"/> whose source is its package id; it is ordered, given its accesses and
+    /// barriers, and kept live exactly as a shader pass is.</summary>
     public ShaderPipelinePlan Pipeline { get; }
     /// <summary>Gets the planned passes in execution order, parallel to the planner's passes.</summary>
     public IReadOnlyList<RenderGraphStep> Steps { get; }
@@ -180,7 +180,7 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
         }
 
         var packageByPass = new Dictionary<string, RenderGraphPackage>(comparer: StringComparer.Ordinal);
-        var packagePasses = new List<ShaderPipelinePass>(capacity: definition.PackagePasses.Count);
+        var packagePasses = new List<ShaderPipelinePackagePass>(capacity: definition.PackagePasses.Count);
 
         foreach (var pass in definition.PackagePasses) {
             m_packages.TryGet(
@@ -191,13 +191,11 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 key: pass.Name,
                 value: package!
             );
-            packagePasses.Add(item: new ShaderPipelinePass(
-                EntryPoint: string.Empty,
+            packagePasses.Add(item: new ShaderPipelinePackagePass(
                 Inputs: pass.InputReferences,
-                Kind: ShaderPipelinePassKind.Package,
                 Name: pass.Name,
                 Outputs: pass.OutputReferences,
-                Source: pass.Package
+                Package: pass.Package
             ));
         }
 

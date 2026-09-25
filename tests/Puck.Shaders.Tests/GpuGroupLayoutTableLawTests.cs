@@ -17,7 +17,7 @@ public sealed class GpuGroupLayoutTableLawTests {
         Assert.Equal(
             actual: Describe(description: ShaderInterfaceSpike.FilmGrain.Layout().PipelineLayout(
                 pushesIndex: true,
-                stages: ShaderPipelinePassKind.Fullscreen.Stages()
+                stages: ShaderPipelineDocumentPassKind.Fullscreen.Stages()
             )),
             expected: Describe(description: GpuGroupLayoutTables.FilmGrain(pushesIndex: true))
         );
@@ -27,7 +27,7 @@ public sealed class GpuGroupLayoutTableLawTests {
         Assert.Equal(
             actual: Describe(description: ShaderInterfaceSpike.Pixelate.Layout().PipelineLayout(
                 pushesIndex: false,
-                stages: ShaderPipelinePassKind.Compute.Stages()
+                stages: ShaderPipelineDocumentPassKind.Compute.Stages()
             )),
             expected: Describe(description: GpuGroupLayoutTables.Pixelate(pushesIndex: false))
         );
@@ -35,12 +35,8 @@ public sealed class GpuGroupLayoutTableLawTests {
     [Fact]
     public void A_pass_kind_names_the_stages_its_pipeline_layout_is_visible_to() {
         Assert.Equal(
-            actual: (ShaderPipelinePassKind.Compute.Stages(), ShaderPipelinePassKind.Fullscreen.Stages(), ShaderPipelinePassKind.Geometry.Stages()),
+            actual: (ShaderPipelineDocumentPassKind.Compute.Stages(), ShaderPipelineDocumentPassKind.Fullscreen.Stages(), ShaderPipelineDocumentPassKind.Geometry.Stages()),
             expected: (GpuShaderStage.Compute, GpuShaderStage.Vertex | GpuShaderStage.Fragment, GpuShaderStage.Vertex | GpuShaderStage.Fragment)
-        );
-        Assert.Contains(
-            actualString: Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => ShaderPipelinePassKind.Package.Stages()).Message,
-            expectedSubstring: "plans its own pipelines"
         );
     }
     [Fact]

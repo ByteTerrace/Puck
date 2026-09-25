@@ -119,7 +119,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private static ulong GeometryBytes(ShaderPipelinePass pass) =>
         ((pass.Geometry is { } geometry)
             ? geometry.SizeBytes
-            : (((pass.Kind == ShaderPipelinePassKind.Fullscreen) && (pass.Vertex == ShaderPipelineVertexInput.Position))
+            : (((pass.Kind == ShaderPipelineDocumentPassKind.Fullscreen) && (pass.Vertex == ShaderPipelineVertexInput.Position))
                 ? FullscreenVertexBytes
                 : 0UL));
     private static ulong BytesPerPixel(string? format) => ParseFormat(format: format) switch {

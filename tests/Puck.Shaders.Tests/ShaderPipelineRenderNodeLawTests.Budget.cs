@@ -36,7 +36,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             passes: [
                 Pass(
                     inputs: [],
-                    kind: ShaderPipelinePassKind.Compute,
+                    kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "fill",
                     outputs: [new ResourceReference(
                         Binding: 0,
@@ -48,7 +48,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                         Binding: 0,
                         Name: "gray"
                     )],
-                    kind: ShaderPipelinePassKind.Fullscreen,
+                    kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     name: "copy",
                     outputs: ["image"]
                 ) with { Vertex = ShaderPipelineVertexInput.Position }),
