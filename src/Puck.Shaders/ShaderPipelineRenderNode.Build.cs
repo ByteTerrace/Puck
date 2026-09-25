@@ -352,7 +352,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public IGpuShaderModule? Secondary;
 
         public void Create(ShaderPipelinePlannedPass planned, CompiledShader compiled, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs) {
-            var declaration = planned.Declaration;
+            var declaration = planned.Declaration!;
             var push = PushConstantBinding(
                 sizeBytes: planned.Parameters.SizeBytes,
                 stages: FrameBlockStages
@@ -479,7 +479,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 return null;
             }
 
-            return (pass.Declaration.DepthCompare ?? ShaderPipelineDepthCompare.Less) switch {
+            return (pass.Declaration!.DepthCompare ?? ShaderPipelineDepthCompare.Less) switch {
                 ShaderPipelineDepthCompare.Less => GpuDepthCompare.Less,
                 ShaderPipelineDepthCompare.LessOrEqual => GpuDepthCompare.LessOrEqual,
                 ShaderPipelineDepthCompare.Greater => GpuDepthCompare.Greater,

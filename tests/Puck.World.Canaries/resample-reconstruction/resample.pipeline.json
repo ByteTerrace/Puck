@@ -1,5 +1,5 @@
 {
-  "$schema": "puck.shader.pipeline.v1",
+  "$schema": "puck.render.graph.v1",
   "name": "resample",
   "resources": [
     {

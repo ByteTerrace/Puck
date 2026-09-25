@@ -66,7 +66,7 @@ public sealed class WorldPresentationCostLawTests {
         Assert.Equal(expected: "graphs none", actual: report.Presentation.Describe());
     }
     [Fact]
-    public void TheGraphSchemaAdmitsAGraphAndEveryPipelineDocumentRetaggedAsOne() {
+    public void TheGraphSchemaAdmitsAGraphAndEveryCheckedInGraphDocument() {
         var schema = GraphSchema();
         var graph = JsonNode.Parse(json: """
             {
@@ -88,7 +88,7 @@ public sealed class WorldPresentationCostLawTests {
 
         var wrongTag = graph.DeepClone();
 
-        wrongTag["$schema"] = "puck.shader.pipeline.v1";
+        wrongTag["$schema"] = "puck.render.graph.v2";
         Assert.False(condition: schema.Admits(instance: wrongTag));
 
         var unknownMember = graph.DeepClone();
@@ -111,7 +111,6 @@ public sealed class WorldPresentationCostLawTests {
         foreach (var path in documents) {
             var document = JsonNode.Parse(json: File.ReadAllText(path: path))!;
 
-            document["$schema"] = "puck.render.graph.v1";
             Assert.True(condition: schema.Admits(instance: document), userMessage: $"{path}: {schema.Explain(instance: document)}");
         }
     }

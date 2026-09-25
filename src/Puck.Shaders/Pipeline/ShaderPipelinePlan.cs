@@ -82,8 +82,11 @@ public sealed record ShaderPipelineAttachment(
     GpuAttachmentLoad Load,
     GpuAttachmentStore Store
 );
-/// <summary>A pass entry in an immutable shader execution plan.</summary>
-/// <param name="Declaration">The pass declaration, with every binding resolved.</param>
+/// <summary>A pass entry in an immutable shader execution plan. A consumer reads <see cref="Kind"/> first: a package's
+/// pass has no shader declaration.</summary>
+/// <param name="Name">The pass name.</param>
+/// <param name="Declaration">A shader pass's declaration, with every binding resolved, or <see langword="null"/> for a
+/// package's pass, whose work its package records.</param>
 /// <param name="Index">The pass's position in execution order.</param>
 /// <param name="Dependencies">The indices of the passes that must run first: the writers of what it reads and forwards,
 /// and every reader of a version it overwrites.</param>
@@ -91,30 +94,28 @@ public sealed record ShaderPipelineAttachment(
 /// <param name="Accesses">Every storage instance the pass touches, in recording order, with the barrier each needs.</param>
 /// <param name="Attachments">A graphics pass's attachments, its color attachment first; empty for a compute pass. The
 /// render pass leaves every attachment in its attachment layout, and a later access's planned barrier moves it on.</param>
-/// <param name="Kind">The planner's kind: the document pass's kind, or <see cref="ShaderPipelinePassKind.Package"/> for a
-/// package's pass, whose <paramref name="Declaration"/> is the compute shape it was ordered as.</param>
+/// <param name="Kind">The planner's kind: the shader pass's kind, or <see cref="ShaderPipelinePassKind.Package"/> for a
+/// package's pass.</param>
 public sealed record ShaderPipelinePlannedPass(
-    ShaderPipelinePass Declaration,
+    string Name,
+    ShaderPipelinePass? Declaration,
     int Index,
     IReadOnlyList<int> Dependencies,
     ShaderPipelineParameterLayout Parameters,
     IReadOnlyList<ShaderPipelineAccess> Accesses,
     IReadOnlyList<ShaderPipelineAttachment> Attachments,
     ShaderPipelinePassKind Kind
-) {
-    /// <summary>Gets the pass name.</summary>
-    public string Name => Declaration.Name;
-}
+);
 /// <summary>The result of pipeline planning, with passes in deterministic execution order.</summary>
 public sealed class ShaderPipelinePlan {
     internal ShaderPipelinePlan(
-        ShaderPipelineDefinition definition,
+        RenderGraphDefinition definition,
         IReadOnlyList<ShaderPipelinePlannedResource> resources,
         IReadOnlyList<ShaderPipelinePlannedStorage> storages,
         IReadOnlyList<ShaderPipelinePlannedPass> passes
     ) {
         Definition = Snapshot(definition: definition);
-        var passesByName = Definition.Passes.ToDictionary(
+        var passesByName = Definition.ShaderPasses.ToDictionary(
             static pass => pass.Name,
             StringComparer.Ordinal
         );
@@ -133,7 +134,7 @@ public sealed class ShaderPipelinePlan {
         Passes = new ReadOnlyCollection<ShaderPipelinePlannedPass>(list: passes.Select(selector: pass => pass with {
             Accesses = new ReadOnlyCollection<ShaderPipelineAccess>(list: pass.Accesses.ToArray()),
             Attachments = new ReadOnlyCollection<ShaderPipelineAttachment>(list: pass.Attachments.ToArray()),
-            Declaration = passesByName[pass.Name],
+            Declaration = passesByName.GetValueOrDefault(key: pass.Name),
             Dependencies = new ReadOnlyCollection<int>(list: pass.Dependencies.ToArray()),
         }).ToList());
         Outputs = new ReadOnlyCollection<string>(list: Definition.Outputs.ToList());
@@ -144,8 +145,10 @@ public sealed class ShaderPipelinePlan {
         ? string.Empty
         : Outputs[0]
     );
-    /// <summary>Gets the source document copied into this plan.</summary>
-    public ShaderPipelineDefinition Definition { get; }
+    /// <summary>Gets the graph's shader passes and versions copied into this plan, every binding resolved. A package's
+    /// pass is not part of it; a graph plan keeps the document it planned
+    /// (<see cref="RenderGraphPlan.Definition"/>).</summary>
+    public RenderGraphDefinition Definition { get; }
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs { get; }
     /// <summary>Gets every pass's parameter block together, in bytes: each pass's frame prefix and config. It is the
@@ -163,13 +166,13 @@ public sealed class ShaderPipelinePlan {
     /// <summary>Gets the physical storages, in the ordinal order of their first versions' names.</summary>
     public IReadOnlyList<ShaderPipelinePlannedStorage> Storages { get; }
 
-    private static ShaderPipelineDefinition Snapshot(ShaderPipelineDefinition definition) {
+    private static RenderGraphDefinition Snapshot(RenderGraphDefinition definition) {
         var resources = definition.Resources.Select(selector: resource => resource with {
             Dimensions = ((resource.Dimensions is null)
             ? null
             : resource.Dimensions with { }),
         }).ToArray();
-        var passes = definition.Passes.Select(selector: pass => pass with {
+        var passes = definition.ShaderPasses.Select(selector: pass => pass with {
             Inputs = new ReadOnlyCollection<ResourceReference>(list: pass.InputReferences.Select(selector: static input => input with { }).ToList()),
             Outputs = new ReadOnlyCollection<ResourceReference>(list: pass.OutputReferences.Select(selector: static output => output with { }).ToList()),
             Config = ((pass.Config is null)
@@ -183,18 +186,13 @@ public sealed class ShaderPipelinePlan {
             }
             : null),
         }).ToArray();
-        var config = ((definition.Config is null)
-            ? null
-            : new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: SnapshotConfig(config: definition.Config))
-        );
 
-        return new ShaderPipelineDefinition(
+        return new RenderGraphDefinition(
             Schema: definition.Schema,
             Name: definition.Name,
             Resources: new ReadOnlyCollection<ShaderPipelineResource>(list: resources),
-            Passes: new ReadOnlyCollection<ShaderPipelinePass>(list: passes),
             Outputs: new ReadOnlyCollection<string>(list: definition.Outputs.ToArray()),
-            Config: config
+            Passes: new ReadOnlyCollection<ShaderPipelinePass>(list: passes)
         );
     }
     private static Dictionary<string, ShaderConfigField> SnapshotConfig(IReadOnlyDictionary<string, ShaderConfigField> config) =>

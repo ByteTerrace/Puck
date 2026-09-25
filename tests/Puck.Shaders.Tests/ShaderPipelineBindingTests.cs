@@ -1,7 +1,7 @@
 namespace Puck.Shaders.Tests;
 
 public sealed class ShaderPipelineBindingTests {
-    private static ShaderPipelineDefinition Definition(ShaderPipelinePass pass) => new(
+    private static RenderGraphDefinition Definition(ShaderPipelinePass pass) => new(
         "bindings",
         [Image(
                 "input",
@@ -40,11 +40,11 @@ public sealed class ShaderPipelineBindingTests {
 
         Assert.Equal(
             1u,
-            plan.Passes[0].Declaration.OutputReferences[0].Binding
+            plan.Passes[0].Declaration!.OutputReferences[0].Binding
         );
         Assert.Equal(
             0u,
-            plan.Passes[0].Declaration.InputReferences[0].Binding
+            plan.Passes[0].Declaration!.InputReferences[0].Binding
         );
     }
     [Fact]
@@ -69,7 +69,7 @@ public sealed class ShaderPipelineBindingTests {
             input: "input",
             output: "output"
         ) with { Kind = ShaderPipelineDocumentPassKind.Fullscreen };
-        var pass = new ShaderPipelineCompiler().Compile(definition: Definition(pass: authored)).Passes[0].Declaration;
+        var pass = new ShaderPipelineCompiler().Compile(definition: Definition(pass: authored)).Passes[0].Declaration!;
 
         Assert.Equal(
             0u,
@@ -84,7 +84,7 @@ public sealed class ShaderPipelineBindingTests {
             output: "output"
         );
         var plan = new ShaderPipelineCompiler().Compile(definition: Definition(pass: authored));
-        var pass = Assert.Single(collection: plan.Passes).Declaration;
+        var pass = Assert.Single(collection: plan.Passes).Declaration!;
 
         Assert.Equal(
             0u,
@@ -117,7 +117,7 @@ public sealed class ShaderPipelineBindingTests {
     }
     [Fact]
     public void Null_document_collections_produce_a_planner_diagnostic() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "null",
             outputs: [],
             passes: [],
@@ -132,7 +132,7 @@ public sealed class ShaderPipelineBindingTests {
     }
     [Fact]
     public void History_still_requires_initialized_first_frame_contents() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             "history",
             [Image("output") with { History = true }],
             [Pass(

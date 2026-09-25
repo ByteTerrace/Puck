@@ -29,8 +29,8 @@ public sealed class RenderGraphPlan {
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs => Pipeline.Outputs;
     /// <summary>Gets the pipeline planner's plan. A package pass appears in it as a planned pass of kind
-    /// <see cref="ShaderPipelinePassKind.Package"/> whose source is its package id; it is ordered, given its accesses and
-    /// barriers, and kept live exactly as a shader pass is.</summary>
+    /// <see cref="ShaderPipelinePassKind.Package"/> with no declaration, whose package its step names; it is ordered,
+    /// given its accesses and barriers, and kept live exactly as a shader pass is.</summary>
     public ShaderPipelinePlan Pipeline { get; }
     /// <summary>Gets the planned passes in execution order, parallel to the planner's passes.</summary>
     public IReadOnlyList<RenderGraphStep> Steps { get; }
@@ -64,6 +64,11 @@ public sealed class RenderGraphPlan {
 public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, ShaderPipelineLimits? limits = null) {
     private readonly ShaderPipelineCompiler m_planner = new(limits: limits);
     private readonly RenderGraphPackageCatalog m_packages = (packages ?? throw new ArgumentNullException(paramName: nameof(packages)));
+
+    /// <summary>Gets the compiler of a host that runs shader passes alone, such as a pipeline instance's node, the
+    /// shader packager and the pipeline verbs: it offers no package, so a graph naming one is refused by
+    /// <c>RENDERGRAPH_PACKAGE_UNKNOWN</c>.</summary>
+    public static RenderGraphCompiler ShaderPasses { get; } = new(packages: RenderGraphPackageCatalog.None);
 
     private static void Add(List<ShaderPipelineDiagnostic> diagnostics, string code, string message, string? name) => diagnostics.Add(item: new ShaderPipelineDiagnostic(
         Code: code,
@@ -233,14 +238,7 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
         }
 
         var pipeline = m_planner.Compile(
-            definition: new ShaderPipelineDefinition(
-                Config: null,
-                Name: definition.Name,
-                Outputs: definition.Outputs,
-                Passes: definition.ShaderPasses,
-                Resources: definition.Resources,
-                Schema: ShaderPipelineSchemas.Pipeline
-            ),
+            definition: definition with { Packages = null },
             packages: packagePasses
         );
         var steps = pipeline.Passes.Select(selector: planned => new RenderGraphStep(

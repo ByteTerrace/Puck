@@ -10942,7 +10942,7 @@ export type WorldViewPipeline = {
    */
   name: string;
   /**
-   * Where the pipeline comes from: a pipeline document, a one-off shader source file, or a puck.shader.package.v1 package directory, which loads with its source tree gone. It resolves beside the document that authors it (WorldDocumentPaths), like every relative path a document authors.
+   * Where the pipeline comes from: a puck.render.graph.v1 graph document of shader passes, a one-off shader source file, which reads as a one-pass graph, or a puck.shader.package.v1 package directory, which loads with its source tree gone. It resolves beside the document that authors it (WorldDocumentPaths), like every relative path a document authors.
    */
   source: string;
   /**

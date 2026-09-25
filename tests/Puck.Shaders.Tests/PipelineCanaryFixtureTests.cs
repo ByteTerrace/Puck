@@ -29,7 +29,7 @@ public sealed class PipelineCanaryFixtureTests {
             expected: ["accumulate", "convert", "copy"],
             actual: plan.Passes.Select(selector: static pass => pass.Name)
         );
-        var input = Assert.Single(collection: plan.Passes[0].Declaration.InputReferences);
+        var input = Assert.Single(collection: plan.Passes[0].Declaration!.InputReferences);
 
         Assert.Equal(
             expected: history,
@@ -114,11 +114,11 @@ public sealed class PipelineCanaryFixtureTests {
         );
         Assert.Equal(
             expected: convertSource,
-            actual: edited.Passes[1].Declaration.Source
+            actual: edited.Passes[1].Declaration!.Source
         );
         Assert.Equal(
             expected: ["../pipeline-feedback/accumulate.hlsl", "../pipeline-feedback/copy.hlsl"],
-            actual: [edited.Passes[0].Declaration.Source, edited.Passes[2].Declaration.Source]
+            actual: [edited.Passes[0].Declaration!.Source, edited.Passes[2].Declaration!.Source]
         );
     }
     [InlineData("pipeline-supersede", "halved.pipeline.json")]
@@ -179,15 +179,15 @@ public sealed class PipelineCanaryFixtureTests {
 
         Assert.Equal(
             expected: [("seed", ShaderPipelineDocumentPassKind.Compute), ("combine", ShaderPipelineDocumentPassKind.Compute), ("present", ShaderPipelineDocumentPassKind.Fullscreen)],
-            actual: plan.Passes.Select(selector: static pass => (pass.Name, pass.Declaration.Kind))
+            actual: plan.Passes.Select(selector: static pass => (pass.Name, pass.Declaration!.Kind))
         );
         Assert.Equal(
             expected: [4u, 9u, 2u, 7u, 5u],
-            actual: [.. plan.Passes[0].Declaration.OutputReferences.Select(selector: static output => output.Binding!.Value), .. plan.Passes[1].Declaration.InputReferences.Select(selector: static input => input.Binding!.Value), .. plan.Passes[1].Declaration.OutputReferences.Select(selector: static output => output.Binding!.Value)]
+            actual: [.. plan.Passes[0].Declaration!.OutputReferences.Select(selector: static output => output.Binding!.Value), .. plan.Passes[1].Declaration!.InputReferences.Select(selector: static input => input.Binding!.Value), .. plan.Passes[1].Declaration!.OutputReferences.Select(selector: static output => output.Binding!.Value)]
         );
         Assert.Equal(
             expected: ShaderPipelineVertexInput.Position,
-            actual: plan.Passes[2].Declaration.Vertex
+            actual: plan.Passes[2].Declaration!.Vertex
         );
         Assert.Equal(
             expected: ShaderPipelineResourceKind.Buffer,

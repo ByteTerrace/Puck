@@ -46,7 +46,7 @@ public sealed class ShaderPipelineDispatchLawTests {
     // arguments by "consume", which also reads the table. The passes are declared in reverse, so the order is the
     // planner's.
     private static ShaderPipelinePlan PlanIndirect() => new ShaderPipelineCompiler().Compile(
-        definition: new ShaderPipelineDefinition(
+        definition: new RenderGraphDefinition(
             name: "indirect",
             outputs: ["result"],
             passes: [],
@@ -86,7 +86,7 @@ public sealed class ShaderPipelineDispatchLawTests {
     );
     private static void AssertRefused(string code, ShaderPipelineResource[] resources, string[] outputs, ShaderPipelinePass[]? passes = null, ShaderPipelinePackagePass[]? packages = null) {
         var exception = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(
-            definition: new ShaderPipelineDefinition(
+            definition: new RenderGraphDefinition(
                 name: "refused",
                 outputs: outputs,
                 passes: (passes ?? []),
@@ -148,11 +148,11 @@ public sealed class ShaderPipelineDispatchLawTests {
     public void TheVocabularyReadsFromADocument() {
         var resource = System.Text.Json.JsonSerializer.Deserialize(
             json: """{ "name": "table", "kind": "Buffer", "strideBytes": 16, "count": [{ "per": ["Viewports", "Tiles"], "elements": 4 }, { "per": ["Instances"], "elements": 2 }] }""",
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineResource
+            jsonTypeInfo: RenderGraphJsonContext.Default.ShaderPipelineResource
         );
         var pass = System.Text.Json.JsonSerializer.Deserialize(
             json: """{ "name": "consume", "source": "p", "entryPoint": "", "kind": "Compute", "dispatch": { "kind": "Indirect", "arguments": "args", "argumentsOffsetBytes": 12 } }""",
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelinePass
+            jsonTypeInfo: RenderGraphJsonContext.Default.ShaderPipelinePass
         );
         var expected = Words(
             count: [
@@ -339,7 +339,7 @@ public sealed class ShaderPipelineDispatchLawTests {
         );
         Assert.Equal(
             actual: new ShaderPipelineCompiler().Compile(
-                definition: new ShaderPipelineDefinition(
+                definition: new RenderGraphDefinition(
                     name: "published",
                     outputs: ["out"],
                     passes: [],

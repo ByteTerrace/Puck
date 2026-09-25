@@ -4,7 +4,7 @@ using Puck.Shaders;
 
 namespace Puck.Cli.Shaders;
 
-/// <summary><c>puck shaders package</c>: compiles a pipeline document or one-off shader and writes its
+/// <summary><c>puck shaders package</c>: compiles a graph document or one-off shader and writes its
 /// <c>puck.shader.package.v1</c> source-closure package, through the same loader and compiler as live pipelines.</summary>
 internal static class PackageCommand {
     /// <summary>The shader cache a package build compiles through when none is named: a directory beneath the temporary
@@ -55,7 +55,7 @@ internal static class PackageCommand {
         }
     }
     public static Command Create() {
-        var source = new Argument<string>(name: "source") { Description = "The pipeline document or one-off shader source to package." };
+        var source = new Argument<string>(name: "source") { Description = "The graph document or one-off shader source to package." };
         var output = CliOptions.Output(
             description: "The package directory; replaced only once the new package is complete, and only when it is absent, empty, or already a package.",
             required: true

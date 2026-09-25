@@ -105,7 +105,7 @@ public sealed partial class ShaderPipelineCompiler {
             Version: resource.Name
         )).ToArray();
     }
-    private static (IReadOnlyList<ShaderPipelinePlannedResource> Resources, IReadOnlyList<ShaderPipelinePlannedStorage> Storages, ShaderPipelineAccess[][] Accesses) PlanVersions(ShaderPipelineDefinition definition, IReadOnlySet<string> liveResources, IReadOnlyList<ShaderPipelinePlannedPass> passes) {
+    private static (IReadOnlyList<ShaderPipelinePlannedResource> Resources, IReadOnlyList<ShaderPipelinePlannedStorage> Storages, ShaderPipelineAccess[][] Accesses) PlanVersions(RenderGraphDefinition definition, IReadOnlySet<string> liveResources, IReadOnlyList<ShaderPipelinePlannedPass> passes, IReadOnlyList<ShaderPipelinePass> shapes) {
         var declarations = definition.Resources.Where(predicate: resource => liveResources.Contains(item: resource.Name)).ToDictionary(
             keySelector: static resource => resource.Name,
             comparer: StringComparer.Ordinal
@@ -159,8 +159,10 @@ public sealed partial class ShaderPipelineCompiler {
             roles[storage, 0] = [];
             roles[storage, 1] = [];
         }
+        // A pass reaches resources as its shape declares: a shader pass's declaration, or the compute shape a package's
+        // pass was ordered as.
         foreach (var pass in passes) {
-            var declaration = pass.Declaration;
+            var declaration = shapes[pass.Index];
             var list = new List<(int Storage, string Version, bool PreviousFrame, ShaderPipelineAccessState Use)>();
 
             foreach (var (reference, write, arguments) in ReferencesOf(pass: declaration)) {

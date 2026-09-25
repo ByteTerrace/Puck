@@ -56,13 +56,13 @@ public sealed class ShaderPipelineLoaderTests {
         File.WriteAllText(
             path,
             JsonSerializer.Serialize(
-                new ShaderPipelineDefinition(
+                new RenderGraphDefinition(
                     name: "graph",
                     outputs: ["three"],
                     passes: passes,
                     resources: resources
                 ),
-                ShaderPipelineJsonContext.Default.ShaderPipelineDefinition
+                RenderGraphJsonContext.Default.RenderGraphDefinition
             )
         );
         var runner = new Runner { FailCall = 3 };

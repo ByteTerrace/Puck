@@ -17,7 +17,7 @@ public sealed class WorldPipelineResizedWaitLawTests {
     private const uint Extent = 8;
 
     private static CompiledShaderPipeline Fill() {
-        var plan = new ShaderPipelineCompiler().Compile(definition: new ShaderPipelineDefinition(
+        var plan = new ShaderPipelineCompiler().Compile(definition: new RenderGraphDefinition(
             name: "fill",
             outputs: ["image"],
             passes: [new ShaderPipelinePass(

@@ -110,7 +110,7 @@ public sealed partial class ShaderPipelineRenderNode {
             ).Bytes));
         }
         foreach (var pass in plan.Passes) {
-            bytes = checked((bytes + GeometryBytes(pass: pass.Declaration)));
+            bytes = checked((bytes + GeometryBytes(pass: pass.Declaration!)));
         }
 
         return bytes;
@@ -222,7 +222,7 @@ public sealed partial class ShaderPipelineRenderNode {
         ((storage.Declaration.Kind == ShaderPipelineResourceKind.Depth)
             ? GpuImageUsage.DepthAttachment
             : GpuImageUsage.Sampled | GpuImageUsage.Storage | (plan.Passes.Any(predicate: pass => (
-                pass.Declaration.IsGraphics &&
+                pass.Declaration!.IsGraphics &&
                 pass.Declaration.OutputReferences.Any(predicate: output => storage.Versions.Contains(value: output.Name))
             ))
                 ? GpuImageUsage.ColorAttachment

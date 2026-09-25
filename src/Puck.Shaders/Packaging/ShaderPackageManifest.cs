@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Puck.Shaders;
 
 /// <summary>
-/// A <c>puck.shader.package.v1</c> manifest: the source closure of one pipeline document or one-off shader, and what
+/// A <c>puck.shader.package.v1</c> manifest: the source closure of one graph document or one-off shader, and what
 /// compiling it requires. A package is a directory holding this manifest as <see cref="FileName"/> beside every file it
 /// lists, each at its logical path. The package carries sources rather than bytecode, so loading one compiles it with
 /// the compiler it pins.
@@ -13,7 +13,7 @@ namespace Puck.Shaders;
 /// </summary>
 /// <param name="Schema">The document's schema, <see cref="SchemaName"/>.</param>
 /// <param name="Name">The pipeline's name.</param>
-/// <param name="Document">The logical path of the pipeline document or one-off shader source that loading starts
+/// <param name="Document">The logical path of the graph document or one-off shader source that loading starts
 /// from.</param>
 /// <param name="Compiler">The compiler the package requires.</param>
 /// <param name="Capabilities">The backend capabilities the pipeline requires.</param>

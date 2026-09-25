@@ -149,7 +149,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             Vertex: ShaderPipelineVertexInput.Position,
             Config: ConfigDefaultingTo(values: m_config)
         );
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             m_manifest.Name,
             [input, output],
             [pass],

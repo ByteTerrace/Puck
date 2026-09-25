@@ -12,14 +12,14 @@ namespace Puck.Shaders.Tests;
 public sealed partial class ShaderPipelineRenderNodeLawTests {
     private const ulong Mebibyte = (1024UL * 1024UL);
 
-    private static CompiledShaderPipeline Compile(ShaderPipelineDefinition definition) {
+    private static CompiledShaderPipeline Compile(RenderGraphDefinition definition) {
         var plan = new ShaderPipelineCompiler().Compile(definition: definition);
 
         return new CompiledShaderPipeline(
             plan: plan,
             shaders: plan.Passes.ToDictionary(
                 elementSelector: static pass => Shader(
-                    kind: pass.Declaration.Kind,
+                    kind: pass.Declaration!.Kind,
                     name: pass.Name
                 ),
                 keySelector: static pass => pass.Name
@@ -30,7 +30,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     /// Position vertex input, which gives the pass a vertex buffer.</summary>
     private static CompiledShaderPipeline PositionCopy() {
 
-        return Compile(definition: new ShaderPipelineDefinition(
+        return Compile(definition: new RenderGraphDefinition(
             name: "fill",
             outputs: ["image"],
             passes: [

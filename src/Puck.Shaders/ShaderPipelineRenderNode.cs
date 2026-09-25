@@ -199,7 +199,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     // allocates what the frame thread owns — the geometry buffer, the framebuffer binding each frame slot's attachments,
     // and the per-slot descriptor and command objects.
     private void InstallPass(ShaderPipelinePlannedPass planned, IReadOnlyDictionary<string, RuntimeResource> map, GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried) {
-        var declaration = planned.Declaration;
+        var declaration = planned.Declaration!;
         var runtime = new RuntimePass(
             declaration,
             m_pipeline!.Shaders[planned.Name],
@@ -402,7 +402,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
         try {
             foreach (var planned in plan.Storages) {
-                var declaration = planned.Declaration;
+                var declaration = planned.Declaration!;
                 var resource = new RuntimeResource(
                     count: ((int)m_inFlight),
                     storage: planned
@@ -1254,8 +1254,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             StringComparer.Ordinal
         );
 
-        foreach (var pass in plan.Passes.Where(predicate: static pass => pass.Declaration.IsGraphics)) {
-            if (pass.Declaration.InputReferences.Any(predicate: input => (resources[input.Name].Declaration.Kind == ShaderPipelineResourceKind.Buffer))) {
+        foreach (var pass in plan.Passes.Where(predicate: static pass => pass.Declaration!.IsGraphics)) {
+            if (pass.Declaration!.InputReferences.Any(predicate: input => (resources[input.Name].Declaration.Kind == ShaderPipelineResourceKind.Buffer))) {
                 throw new InvalidDataException(message: $"Graphics pass '{pass.Name}' cannot consume a storage buffer through the graphics binding contract.");
             }
         }

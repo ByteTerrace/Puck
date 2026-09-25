@@ -4,8 +4,9 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-/// <summary>Validates a shader-pipeline document and compiles its same-frame dependency graph into an immutable plan.
-/// This class does not load source, invoke a compiler, or create GPU objects.</summary>
+/// <summary>The one pass planner: validates a graph's passes and versions and compiles its same-frame dependency graph
+/// into an immutable plan. <see cref="RenderGraphCompiler"/> checks a graph document's schema tag and packages and plans
+/// through it. This class does not load source, invoke a compiler, or create GPU objects.</summary>
 public sealed partial class ShaderPipelineCompiler {
     private readonly ShaderPipelineLimits m_limits;
 
@@ -34,7 +35,7 @@ public sealed partial class ShaderPipelineCompiler {
             (z > (limit / xy))
         );
     }
-    private static IReadOnlyList<string> FindCycle(ShaderPipelineDefinition definition, IReadOnlyList<HashSet<int>> dependencies) {
+    private static IReadOnlyList<string> FindCycle(RenderGraphDefinition definition, IReadOnlyList<HashSet<int>> dependencies) {
         var state = new int[dependencies.Count];
         var stack = new List<int>();
 
@@ -48,11 +49,11 @@ public sealed partial class ShaderPipelineCompiler {
                 return stack.Skip(count: Math.Max(
                     val1: 0,
                     val2: first
-                )).Select(selector: index => definition.Passes[index].Name).ToArray();
+                )).Select(selector: index => definition.ShaderPasses[index].Name).ToArray();
             }
         }
 
-        return definition.Passes.Select(selector: static pass => pass.Name).ToArray();
+        return definition.ShaderPasses.Select(selector: static pass => pass.Name).ToArray();
 
         bool Visit(int pass) {
             state[pass] = 1;
@@ -100,11 +101,11 @@ public sealed partial class ShaderPipelineCompiler {
 
         return pass with { Outputs = outputs, Inputs = pass.InputReferences.Select(selector: Resolve).ToArray() };
     }
-    private static List<int> TopologicalOrder(ShaderPipelineDefinition definition, IReadOnlyList<HashSet<int>> dependencies, List<ShaderPipelineDiagnostic> diagnostics) {
+    private static List<int> TopologicalOrder(RenderGraphDefinition definition, IReadOnlyList<HashSet<int>> dependencies, List<ShaderPipelineDiagnostic> diagnostics) {
         var remaining = dependencies.Select(selector: static set => set.Count).ToArray();
         var dependents = Enumerable.Range(
             start: 0,
-            count: definition.Passes.Count
+            count: definition.ShaderPasses.Count
         ).Select(selector: static _ => new List<int>()).ToArray();
 
         for (var pass = 0; (pass < dependencies.Count); pass++) {
@@ -114,7 +115,7 @@ public sealed partial class ShaderPipelineCompiler {
         }
 
         var ready = new SortedSet<int>(collection: dependencies.Select(selector: (set, index) => (set, index)).Where(predicate: static pair => (pair.set.Count == 0)).Select(selector: static pair => pair.index));
-        var order = new List<int>(capacity: definition.Passes.Count);
+        var order = new List<int>(capacity: definition.ShaderPasses.Count);
 
         while (ready.Count != 0) {
             var pass = ready.Min;
@@ -129,7 +130,7 @@ public sealed partial class ShaderPipelineCompiler {
             }
         }
 
-        if (order.Count == definition.Passes.Count) {
+        if (order.Count == definition.ShaderPasses.Count) {
             return order;
         }
 
@@ -167,13 +168,12 @@ public sealed partial class ShaderPipelineCompiler {
             );
         }
     }
-    private void ValidateDefinition(ShaderPipelineDefinition definition, List<ShaderPipelineDiagnostic> diagnostics, IReadOnlySet<string> packages) {
+    private void ValidateDefinition(RenderGraphDefinition definition, List<ShaderPipelineDiagnostic> diagnostics, IReadOnlySet<string> packages) {
         if (
             (definition.Resources is null) ||
-            (definition.Passes is null) ||
             (definition.Outputs is null) ||
             definition.Resources.Any(predicate: static resource => ((resource is null) || string.IsNullOrWhiteSpace(value: resource.Name))) ||
-            definition.Passes.Any(predicate: static pass => ((pass is null) || string.IsNullOrWhiteSpace(value: pass.Name) ||
+            definition.ShaderPasses.Any(predicate: static pass => ((pass is null) || string.IsNullOrWhiteSpace(value: pass.Name) ||
                 pass.InputReferences.Concat(second: pass.OutputReferences).Any(predicate: static reference => ((reference is null) || string.IsNullOrWhiteSpace(value: reference.Name))))) ||
             definition.Outputs.Any(predicate: static output => string.IsNullOrWhiteSpace(value: output))
         ) {
@@ -185,18 +185,6 @@ public sealed partial class ShaderPipelineCompiler {
             );
             return;
         }
-        if (!string.Equals(
-            a: definition.Schema,
-            b: ShaderPipelineSchemas.Pipeline,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            Add(
-                diagnostics,
-                "SHADERPIPE_SCHEMA",
-                $"Pipeline '{definition.Name}' declares schema '{definition.Schema}'; expected '{ShaderPipelineSchemas.Pipeline}'.",
-                definition.Name
-            );
-        }
         if (string.IsNullOrWhiteSpace(value: definition.Name)) {
             Add(
                 diagnostics,
@@ -205,20 +193,6 @@ public sealed partial class ShaderPipelineCompiler {
                 definition.Name
             );
         }
-        ValidateConfig(
-            config: definition.Config,
-            owner: "pipeline",
-            diagnostics: diagnostics
-        );
-        if (definition.Config is { Count: > 0 }) {
-            Add(
-                diagnostics,
-                "SHADERPIPE_GLOBAL_CONFIG_UNSUPPORTED",
-                "Pipeline-level config is not consumed by per-pass runtime parameter blocks; declare config on each pass.",
-                definition.Name
-            );
-        }
-
         if (definition.Resources.Count > m_limits.MaxResources) {
             Add(
                 diagnostics,
@@ -227,11 +201,11 @@ public sealed partial class ShaderPipelineCompiler {
                 definition.Name
             );
         }
-        if (definition.Passes.Count > m_limits.MaxPasses) {
+        if (definition.ShaderPasses.Count > m_limits.MaxPasses) {
             Add(
                 diagnostics,
                 "SHADERPIPE_LIMIT_PASSES",
-                $"Pipeline declares {definition.Passes.Count} passes; the limit is {m_limits.MaxPasses}.",
+                $"Pipeline declares {definition.ShaderPasses.Count} passes; the limit is {m_limits.MaxPasses}.",
                 definition.Name
             );
         }
@@ -261,7 +235,7 @@ public sealed partial class ShaderPipelineCompiler {
         var passNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var writers = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
-        foreach (var pass in definition.Passes) {
+        foreach (var pass in definition.ShaderPasses) {
             if (!passNames.Add(item: pass.Name)) {
                 Add(
                     diagnostics,
@@ -599,7 +573,7 @@ public sealed partial class ShaderPipelineCompiler {
         // A package's structured or counted storage is published only by the package that writes it, for another
         // instance to read across a buffer edge; the pipeline node publishes raw buffers of fixed size. The writers are
         // the passes whose planned kind is Package: the ones the package entry brought.
-        var packageWritten = definition.Passes
+        var packageWritten = definition.ShaderPasses
             .Where(predicate: pass => packages.Contains(item: pass.Name))
             .SelectMany(selector: static pass => pass.OutputReferences)
             .Select(selector: static reference => reference.Name)
@@ -826,33 +800,48 @@ public sealed partial class ShaderPipelineCompiler {
         }
     }
 
-    /// <summary>Compiles a valid definition into an execution plan.</summary>
-    /// <exception cref="ShaderPipelineCompilationException">The definition has invalid names, bindings,
-    /// initialization, resource declarations, a cycle, or exceeds a plan limit.</exception>
-    public ShaderPipelinePlan Compile(ShaderPipelineDefinition definition) => Compile(
+    /// <summary>Compiles a graph of shader passes into an execution plan. It checks no schema tag and knows no package; a
+    /// graph document plans through <see cref="RenderGraphCompiler"/>, which checks both.</summary>
+    /// <param name="definition">The graph.</param>
+    /// <returns>The plan.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ShaderPipelineCompilationException">The definition names a package pass, has invalid names,
+    /// bindings, initialization or resource declarations, a cycle, or exceeds a plan limit.</exception>
+    public ShaderPipelinePlan Compile(RenderGraphDefinition definition) => Compile(
         definition: definition,
         packages: []
     );
 
-    // A frame graph's package passes join the document's passes after them, in the compute shape they reach resources
-    // by, so one planner orders, versions and barriers both. This is the only way package work enters planning, and the
-    // names it brings are the passes whose planned kind is Package.
-    internal ShaderPipelinePlan Compile(ShaderPipelineDefinition definition, IReadOnlyList<ShaderPipelinePackagePass> packages) {
+    // A frame graph's package passes join its shader passes after them, in the compute shape they reach resources by, so
+    // one planner orders, versions and barriers both. This is the only way package work enters planning: the graph
+    // compiler checks a document's package passes against its host's packages and hands them here, so a definition
+    // reaching the planner with its own is refused. The names they bring are the passes whose planned kind is Package.
+    // Planning works on a copy whose passes are both, and the plan keeps the graph's shader passes.
+    internal ShaderPipelinePlan Compile(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePackagePass> packages) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: packages);
         var diagnostics = new List<ShaderPipelineDiagnostic>();
-        var declared = definition.Passes;
+
+        if (definition.PackagePasses.Count != 0) {
+            Add(
+                diagnostics,
+                "SHADERPIPE_PACKAGE_PASS",
+                $"Graph '{definition.Name}' names package passes, which only a graph compiler over its host's packages plans.",
+                definition.Name
+            );
+
+            throw new ShaderPipelineCompilationException(diagnostics: diagnostics);
+        }
+
+        var graph = definition;
         var packageNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var package in packages) {
             ArgumentNullException.ThrowIfNull(argument: package, paramName: nameof(packages));
             _ = packageNames.Add(item: package.Name);
         }
-        if (
-            (packages.Count != 0) &&
-            (declared is not null)
-        ) {
-            definition = definition with { Passes = [.. declared, .. packages.Select(selector: static package => package.Shape())] };
+        if (packages.Count != 0) {
+            definition = definition with { Passes = [.. definition.ShaderPasses, .. packages.Select(selector: static package => package.Shape())] };
         }
 
         ValidateDefinition(
@@ -866,7 +855,7 @@ public sealed partial class ShaderPipelineCompiler {
         }
 
         definition = definition with {
-            Passes = definition.Passes.Select(selector: pass => (packageNames.Contains(item: pass.Name)
+            Passes = definition.ShaderPasses.Select(selector: pass => (packageNames.Contains(item: pass.Name)
             ? pass
             : ResolveBindings(pass: pass))).ToArray(),
         };
@@ -876,8 +865,8 @@ public sealed partial class ShaderPipelineCompiler {
         );
         var writerByResource = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
-        for (var passIndex = 0; (passIndex < definition.Passes.Count); passIndex++) {
-            foreach (var output in definition.Passes[passIndex].OutputReferences) {
+        for (var passIndex = 0; (passIndex < definition.ShaderPasses.Count); passIndex++) {
+            foreach (var output in definition.ShaderPasses[passIndex].OutputReferences) {
                 writerByResource.Add(
                     key: output.Name,
                     value: passIndex
@@ -885,14 +874,14 @@ public sealed partial class ShaderPipelineCompiler {
             }
         }
 
-        var dependencies = new List<HashSet<int>>(capacity: definition.Passes.Count);
+        var dependencies = new List<HashSet<int>>(capacity: definition.ShaderPasses.Count);
 
-        for (var passIndex = 0; (passIndex < definition.Passes.Count); passIndex++) {
+        for (var passIndex = 0; (passIndex < definition.ShaderPasses.Count); passIndex++) {
             var passDependencies = new HashSet<int>();
 
             dependencies.Add(item: passDependencies);
 
-            foreach (var input in ReadsOf(pass: definition.Passes[passIndex])) {
+            foreach (var input in ReadsOf(pass: definition.ShaderPasses[passIndex])) {
                 if (
                     !input.PreviousFrame &&
                     writerByResource.TryGetValue(
@@ -941,7 +930,7 @@ public sealed partial class ShaderPipelineCompiler {
             ) ||
                 !livePasses.Add(item: writer)
             ) { continue; }
-            var pass = definition.Passes[writer];
+            var pass = definition.ShaderPasses[writer];
 
             foreach (var reference in pass.OutputReferences.Concat(second: ReadsOf(pass: pass))) {
                 if (liveResources.Add(item: reference.Name)) { pendingResources.Push(item: reference.Name); }
@@ -968,7 +957,7 @@ public sealed partial class ShaderPipelineCompiler {
 
         for (var index = 0; (index < order.Count); index++) {
             var passIndex = order[index];
-            var pass = definition.Passes[passIndex];
+            var pass = definition.ShaderPasses[passIndex];
             var package = packageNames.Contains(item: pass.Name);
             ShaderPipelineParameterLayout parameters;
 
@@ -1015,7 +1004,10 @@ public sealed partial class ShaderPipelineCompiler {
                 }
             }
             plannedPasses.Add(item: new ShaderPipelinePlannedPass(
-                Declaration: definition.Passes[passIndex],
+                Name: pass.Name,
+                Declaration: (package
+                    ? null
+                    : pass),
                 Index: index,
                 Dependencies: new ReadOnlyCollection<int>(list: dependencies[passIndex].OrderBy(keySelector: value => ordinal[value]).Select(selector: value => ordinal[value]).ToList()),
                 Parameters: parameters,
@@ -1029,10 +1021,12 @@ public sealed partial class ShaderPipelineCompiler {
         if (diagnostics.Count != 0) {
             throw new ShaderPipelineCompilationException(diagnostics: diagnostics);
         }
+        var shapes = order.Select(selector: passIndex => definition.ShaderPasses[passIndex]).ToArray();
         var versions = PlanVersions(
             definition: definition,
             liveResources: liveResources,
-            passes: plannedPasses
+            passes: plannedPasses,
+            shapes: shapes
         );
         var plannedResources = versions.Resources.ToDictionary(
             keySelector: static resource => resource.Name,
@@ -1040,11 +1034,15 @@ public sealed partial class ShaderPipelineCompiler {
         );
 
         return new ShaderPipelinePlan(
-            definition: definition,
+            definition: graph with {
+                Passes = ((graph.Passes is null)
+                    ? null
+                    : definition.ShaderPasses.Take(count: graph.Passes.Count).ToArray()),
+            },
             passes: plannedPasses.Select(selector: (pass, index) => pass with {
                 Accesses = versions.Accesses[index],
                 Attachments = AttachmentsOf(
-                    pass: pass.Declaration,
+                    pass: shapes[index],
                     resources: plannedResources
                 ),
             }).ToArray(),
@@ -1054,9 +1052,9 @@ public sealed partial class ShaderPipelineCompiler {
     }
 
     /// <summary>Convenience static entry point for callers that do not need custom limits.</summary>
-    public static ShaderPipelinePlan Plan(ShaderPipelineDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);
+    public static ShaderPipelinePlan Plan(RenderGraphDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);
     /// <summary>Attempts to compile a definition without throwing for authored validation errors.</summary>
-    public bool TryCompile(ShaderPipelineDefinition definition, out ShaderPipelinePlan? plan, out IReadOnlyList<ShaderPipelineDiagnostic> diagnostics) {
+    public bool TryCompile(RenderGraphDefinition definition, out ShaderPipelinePlan? plan, out IReadOnlyList<ShaderPipelineDiagnostic> diagnostics) {
         try {
             plan = Compile(definition: definition);
             diagnostics = Array.Empty<ShaderPipelineDiagnostic>();

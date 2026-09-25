@@ -686,9 +686,9 @@ public sealed partial class ShaderPackageLawTests {
 
         foreach (var planned in built.Pipeline!.Plan.Passes) {
             var stages = ShaderPipelineLoader.StagesOf(
-                pass: planned.Declaration,
+                pass: planned.Declaration!,
                 source: string.Empty,
-                sourcePath: fixture.PathOf(logicalPath: planned.Declaration.Source)
+                sourcePath: fixture.PathOf(logicalPath: planned.Declaration!.Source)
             );
 
             Assert.Equal(
@@ -700,7 +700,7 @@ public sealed partial class ShaderPackageLawTests {
         // The fullscreen pass compiles the loader's HLSL vertex stage before its own fragment stage.
         Assert.Equal(
             actual: ShaderPipelineLoader.StagesOf(
-                pass: built.Pipeline.Plan.Passes.Single(predicate: static pass => (pass.Name == "present")).Declaration,
+                pass: built.Pipeline.Plan.Passes.Single(predicate: static pass => (pass.Name == "present")).Declaration!,
                 source: string.Empty,
                 sourcePath: fixture.PathOf(logicalPath: "present.hlsl")
             ).Select(selector: static stage => (stage.Stage, stage.EntryPoint)),

@@ -6,9 +6,9 @@ namespace Puck.Shaders.Tests;
 /// <summary>
 /// Laws for the <c>puck.render.graph.v1</c> document: a graph of shader and package passes validates and plans through
 /// the one pipeline planner, each package refusal is named, a planner refusal passes through with its own code, a view
-/// reading its own output goes through the planner's history resource, a package pass plans as its own kind that only a
-/// graph's packages member declares, and every checked-in pipeline document is a graph document that plans identically
-/// once its tag names the graph schema.
+/// reading its own output goes through the planner's history resource, a package pass plans as its own kind with no
+/// declaration that only a graph's packages member declares, and every checked-in graph document plans alike through a
+/// pipeline host, which offers no package, and through the engine's catalog.
 /// </summary>
 public sealed class RenderGraphDocumentLawTests {
     private const string Graph = """
@@ -59,16 +59,18 @@ public sealed class RenderGraphDocumentLawTests {
         Assert.Equal(expected: ["screen"], actual: plan.Inputs);
         Assert.Equal(expected: ["final"], actual: plan.Outputs);
         Assert.Equal(
-            expected: (ShaderPipelinePassKind.Package, RenderGraphPackageCatalog.Overlay),
-            actual: (plan.Pipeline.Passes[2].Kind, plan.Pipeline.Passes[2].Declaration.Source)
+            expected: ShaderPipelinePassKind.Package,
+            actual: plan.Pipeline.Passes[2].Kind
         );
+        Assert.Null(@object: plan.Pipeline.Passes[2].Declaration);
         Assert.Equal(
             expected: ShaderPipelinePassKind.Compute,
             actual: plan.Pipeline.Passes[1].Kind
         );
-        Assert.All(
-            action: static reference => Assert.Null(@object: reference.Binding),
-            collection: plan.Pipeline.Passes[2].Declaration.InputReferences.Concat(second: plan.Pipeline.Passes[2].Declaration.OutputReferences)
+        Assert.NotNull(@object: plan.Pipeline.Passes[1].Declaration);
+        Assert.Equal(
+            expected: ["grade"],
+            actual: plan.Pipeline.Definition.ShaderPasses.Select(selector: static pass => pass.Name)
         );
         Assert.Equal(expected: [0], actual: plan.Pipeline.Passes[1].Dependencies);
         Assert.Equal(expected: [1], actual: plan.Pipeline.Passes[2].Dependencies);
@@ -93,7 +95,7 @@ public sealed class RenderGraphDocumentLawTests {
         );
         Assert.Equal(
             expected: ["RENDERGRAPH_SCHEMA"],
-            actual: Codes(json: Edit(change: static document => document["$schema"] = "puck.shader.pipeline.v1"))
+            actual: Codes(json: Edit(change: static document => document["$schema"] = "puck.render.graph.v2"))
         );
         Assert.Equal(
             expected: ["RENDERGRAPH_PACKAGE_OUTPUT"],
@@ -116,15 +118,15 @@ public sealed class RenderGraphDocumentLawTests {
     }
     [Fact]
     public void ADocumentCannotNameThePackageKind() {
-        // A document's pass kind has no Package member, so both readers refuse the name at the member that spells it,
-        // before any planner sees the document.
+        // A shader pass's kind has no Package member, so the graph reader and the pipeline loader that reads through it
+        // refuse the name at the member that spells it, before any planner sees the document.
         var graph = Assert.Throws<JsonException>(testCode: static () => RenderGraphDefinition.Parse(json: Edit(change: static document => document["passes"]![0]!["kind"] = "Package")));
         var pipeline = Assert.Throws<JsonException>(testCode: static () => ShaderPipelineLoader.ParseDefinition(
             name: "stray",
-            path: "stray.pipeline.json",
+            path: "stray.graph.json",
             text: """
                 {
-                  "$schema": "puck.shader.pipeline.v1",
+                  "$schema": "puck.render.graph.v1",
                   "name": "stray",
                   "resources": [],
                   "passes": [{ "name": "stray", "source": "stray.hlsl", "entryPoint": "main", "kind": "Package" }],
@@ -165,7 +167,7 @@ public sealed class RenderGraphDocumentLawTests {
         );
     }
     [Fact]
-    public void EveryPipelineDocumentIsAGraphDocumentThatPlansIdentically() {
+    public void EveryCheckedInGraphDocumentPlansAlikeInAPipelineAndInTheEngine() {
         var root = RepositoryPaths.RequireRoot();
         var documents = new[] { "src", "tests" }
             .SelectMany(selector: directory => Directory.EnumerateFiles(
@@ -189,12 +191,8 @@ public sealed class RenderGraphDocumentLawTests {
                 path: path,
                 text: text
             );
-            var node = JsonNode.Parse(json: text)!.AsObject();
-
-            node["$schema"] = RenderGraphSchemas.Graph;
-
-            var graph = RenderGraphDefinition.Parse(json: node.ToJsonString());
-            var pipelinePlanned = new ShaderPipelineCompiler().TryCompile(
+            var graph = RenderGraphDefinition.Parse(json: text);
+            var pipelinePlanned = RenderGraphCompiler.ShaderPasses.TryCompile(
                 definition: pipeline,
                 diagnostics: out var pipelineDiagnostics,
                 plan: out var pipelinePlan
@@ -218,16 +216,18 @@ public sealed class RenderGraphDocumentLawTests {
                 continue;
             }
 
-            Assert.Equal(expected: pipelinePlan!.PassOrder, actual: graphPlan!.Pipeline.PassOrder);
-            Assert.Equal(expected: pipelinePlan.Outputs, actual: graphPlan.Outputs);
+            var planned = pipelinePlan!.Pipeline;
+
+            Assert.Equal(expected: planned.PassOrder, actual: graphPlan!.Pipeline.PassOrder);
+            Assert.Equal(expected: planned.Outputs, actual: graphPlan.Outputs);
             Assert.Equal(
-                expected: pipelinePlan.Storages.Select(selector: static storage => (storage.Name, storage.History, storage.Clear, string.Join(separator: ",", values: storage.Versions))),
+                expected: planned.Storages.Select(selector: static storage => (storage.Name, storage.History, storage.Clear, string.Join(separator: ",", values: storage.Versions))),
                 actual: graphPlan.Pipeline.Storages.Select(selector: static storage => (storage.Name, storage.History, storage.Clear, string.Join(separator: ",", values: storage.Versions)))
             );
 
-            for (var index = 0; (index < pipelinePlan.Passes.Count); index++) {
+            for (var index = 0; (index < planned.Passes.Count); index++) {
                 Assert.Equal(
-                    expected: pipelinePlan.Passes[index].Accesses,
+                    expected: planned.Passes[index].Accesses,
                     actual: graphPlan.Pipeline.Passes[index].Accesses
                 );
                 Assert.Null(@object: graphPlan.Steps[index].Package);

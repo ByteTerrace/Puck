@@ -161,6 +161,8 @@ public sealed class RenderGraphPackageCatalog {
     /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>
     /// and <see cref="Resample"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
+    /// <summary>Gets the catalog of a host that offers no package, whose graphs are shader passes alone.</summary>
+    public static RenderGraphPackageCatalog None { get; } = new(packages: []);
 
     /// <summary>Gets the packages this build offers: the engine's own and one per shipped post-process shader set
     /// (<see cref="ShaderSetCatalog.Shipped"/>).</summary>
