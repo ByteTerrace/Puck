@@ -368,6 +368,24 @@ reader, and a removed padding member fails the DXIL reader. The GPU half of
 the spike has not run: executing the two-group layout on both backends inside
 the parity contract's tolerances.
 
+`ShaderInterfaceLayout.PipelineLayout` turns an interface's groups into a
+`GpuPipelineLayoutDescription`, the backend-neutral statement of what a
+pipeline binds, and each backend plans its own layout from that with no device
+call. The plans are not used to create pipelines yet.
+
+- `DirectXRootLayout.Plan` makes dense root parameters. For each group, in
+  ordinal order, it adds a table of constant buffers, shader resource views
+  and unordered access views. A group that holds a sampler also gets a second
+  table for its samplers. Each binding is one range, at register space equal
+  to the group's ordinal and base register equal to the binding number. A
+  pushed index comes last, as one root constant at `b0` in space 4.
+- `VulkanGroupLayouts.Plan` makes one set layout for every set number up to
+  the highest group. A set number with no group gets an empty layout, and a
+  pushed index is a 4-byte push range.
+
+An interface that pushes its frame block has no pipeline layout, because a
+pipeline pushes only an index.
+
 `ShaderInterfaceLayout.PushedBlockMismatch` names how a compiled module reads a
 pushed block other than as laid out. `ShaderInterfaceEcho.Generate` writes a
 pushed-block interface's echo pass: a compute pass that reads every word of

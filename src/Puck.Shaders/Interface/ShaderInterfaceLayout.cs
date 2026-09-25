@@ -70,6 +70,27 @@ public sealed class ShaderInterfaceLayout {
     /// <summary>Gets the interface this layout places.</summary>
     public ShaderInterface Interface { get; }
 
+    /// <summary>Returns the neutral pipeline layout of the interface's groups: each group at its set, each binding at
+    /// its number with its kind and one descriptor.</summary>
+    /// <param name="pushesIndex">Whether the pipeline pushes a 4-byte index.</param>
+    /// <returns>The pipeline layout.</returns>
+    /// <exception cref="InvalidOperationException">The interface pushes a block, which is not a group.</exception>
+    public GpuPipelineLayoutDescription PipelineLayout(bool pushesIndex) {
+        if (PushedGroup is { } pushed) {
+            throw new InvalidOperationException(message: $"Shader interface '{Interface.Name}' pushes its {pushed.Group} block; a pipeline layout binds groups and pushes only an index.");
+        }
+
+        return new GpuPipelineLayoutDescription(
+            groups: Groups.Select(selector: static group => new GpuGroupLayoutDescription(
+                bindings: group.Bindings.Select(selector: static binding => new GpuGroupBinding(
+                    binding: binding.Binding,
+                    kind: binding.Kind
+                )).ToArray(),
+                ordinal: group.Set
+            )).ToArray(),
+            pushesIndex: pushesIndex
+        );
+    }
     /// <summary>Returns why a compiled module reads the pushed block somewhere other than this layout puts it, or
     /// <see langword="null"/> when it reads the block exactly as laid out or does not read it. The block is the binding
     /// at set 0, binding 0 named for the pushed group, whether a SPIR-V module reflects it as push constants or a DXIL

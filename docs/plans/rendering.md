@@ -1336,21 +1336,35 @@ Phase 3, the groups, follows phase 2:
     `GpuRegisterNumbering.PackedByClass`, which only the SDF engine and the
     region copy do; P7b-20 deletes that numbering with the engine's last
     packed register.
-13. The GPU-free group contract. `GpuBindingKind`
+13. Done: the GPU-free group contract. `GpuBindingKind`
     (`src/Puck.Abstractions/Gpu/Bindings`) is the one closed set of binding
     kinds. The pass interface's readers and layout use it, and
     `IGpuBindings.WriteBuffer` takes it as the one statement of buffer
     access. Push constants are not a kind: a pushed block is a constant buffer
-    marked `ShaderInterfaceBinding.Pushed`. Still open: group and pipeline
-    layout descriptions, the `DirectXRootLayout.Plan` and
-    `VulkanGroupLayouts.Plan` planners tested against the spike's tables, and
-    the deletion of `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`.
-    Their sampled image is a Vulkan combined image sampler read through a
-    Direct3D 12 static sampler, which the closed set's separate sampled image
-    and sampler cannot state, so their users move with 14b's sampler tables.
+    marked `ShaderInterfaceBinding.Pushed`. `GpuPipelineLayoutDescription`
+    holds a pipeline's groups (`GpuGroupLayoutDescription`, each a set of
+    `GpuGroupBinding`s) and whether it pushes an index, and refuses by name a
+    group outside the four ordinals, an empty group, a repeated group or
+    binding, and a binding inside another's array.
+    `ShaderInterfaceLayout.PipelineLayout` derives one from an interface.
+    `DirectXRootLayout.Plan` plans dense root parameters: per group in ordinal
+    order a view table, then a sampler table when the group holds a sampler,
+    each range at the group's space and the binding's register, and the
+    pushed index last at `b0` in space 4. `VulkanGroupLayouts.Plan` plans one
+    set layout per set number up to the highest group, empty where no group
+    sits, and a 4-byte push range. `DirectXRootLayoutLawTests`,
+    `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
+    planners and the spike's interfaces to the same tables. The combined image
+    sampler that `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`
+    still state is not in the closed set, so their users, and the 17 sources
+    declaring `vk::combinedImageSampler`, move to a separate image and sampler
+    with 14b's sampler tables, and both enums are deleted there.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
     of it (14a). Both backends then realize several groups, with sampler tables
-    and one 4-byte push range (14b), the riskiest commit.
+    and one 4-byte push range (14b), the riskiest commit. 14b creates root
+    signatures and pipeline layouts from step 13's plans, moves every combined
+    image sampler to a separate image and sampler, and deletes
+    `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`.
 15. Pipelines move onto groups: `WriteFrame` writes the frame group, set 0, into
     a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
     3; passes include their generated interface; the pipeline document's
