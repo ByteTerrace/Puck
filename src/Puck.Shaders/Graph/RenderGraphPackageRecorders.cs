@@ -29,7 +29,8 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// frame members and the pass's bound config (<see cref="RenderGraphPackageRecorderContext.Parameters"/>).</param>
 /// <param name="Leases">The frame's lease list: a lease held in it retires once this frame's submission has finished, on
 /// device loss or at disposal, and at once when the frame submits nothing.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, ReadOnlySpan<byte> FrameBlock, LeaseRetireList Leases) {
+/// <param name="Context">The host's frame context the instance renders the frame with.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, ReadOnlySpan<byte> FrameBlock, LeaseRetireList Leases, FrameContext Context) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -48,6 +49,8 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public ReadOnlySpan<byte> FrameBlock { get; } = FrameBlock;
     /// <summary>Gets the frame's lease list.</summary>
     public LeaseRetireList Leases { get; } = Leases;
+    /// <summary>Gets the host's frame context.</summary>
+    public FrameContext Context { get; } = Context;
 }
 /// <summary>What a package pass's recording did with its outputs this frame.</summary>
 public enum RenderGraphPackageOutcome : byte {

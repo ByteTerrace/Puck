@@ -42,7 +42,6 @@
         "src/Puck.Networking/Peers/PeerStream.cs": 1,
         "src/Puck.Networking/Peers/QuicPeerTransport.cs": 1,
         "src/Puck.Overlays/OverlayGlyphAtlasSet.cs": 1,
-        "src/Puck.Overlays/UnifiedOverlayNode.cs": 2,
         "src/Puck.Recording/Overlay/BitmapFont.cs": 1,
         "src/Puck.Scripting/AddonHost.cs": 1,
         "src/Puck.SdfVm/SdfCarveBakePlanner.cs": 4,

@@ -854,7 +854,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     internal static GpuPixelFormat PublishedFormat(ShaderPipelineResource output) => (NeedsPreview(spec: output)
         ? GpuPixelFormat.R8G8B8A8Unorm
         : ParseFormat(format: output.Format));
-    internal static GpuPixelFormat ParseFormat(string? format) {
+
+    /// <summary>Parses a resource declaration's format, as every graph image is created and bound by.</summary>
+    /// <param name="format">The declared format's name, such as <c>R8G8B8A8Unorm</c>, in any case.</param>
+    /// <returns>The format.</returns>
+    /// <exception cref="InvalidDataException"><paramref name="format"/> names no <see cref="GpuPixelFormat"/>.</exception>
+    public static GpuPixelFormat ParseFormat(string? format) {
         if (Enum.TryParse<GpuPixelFormat>(
             ignoreCase: true,
             result: out var parsed,

@@ -210,6 +210,7 @@ public sealed partial class ShaderPipelineRenderNode {
         );
         var outcome = pass.Package!.Record(recording: new RenderGraphPackageRecording(
             CommandBuffer: handle,
+            Context: context,
             FrameBlock: frameBlock,
             Height: pass.Height,
             Inputs: inputs,

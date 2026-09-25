@@ -267,6 +267,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public int Disposed;
         public uint Height;
         public nint InputImage;
+        // A lease every recording holds in its frame's list, or none.
+        public GpuImageLease Lease;
         public nint OutputBuffer;
         public nint OutputImage;
         public GpuImageLayout OutputLayout;
@@ -278,6 +280,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public void Dispose() => counter.Disposed++;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             counter.Records++;
+            recording.Leases.Hold(lease: in counter.Lease);
             counter.Width = recording.Width;
             counter.Height = recording.Height;
             counter.OutputBuffer = (recording.Outputs[0].Buffer?.BufferHandle ?? 0);
