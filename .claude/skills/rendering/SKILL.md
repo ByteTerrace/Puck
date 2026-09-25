@@ -771,7 +771,18 @@ inputs in `ShaderReadOnly`, and its render pass leaves the target in
 `RenderTarget` (`ObservedPackageFactory` in `tests/Shared` counts a package's
 own barriers in the post and overlay laws). A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
 and the node publishes the input in the output's place, never a copy
-(`PublishedLayout`). `PostProcessPackage` serves every `post.<id>` and
+(`PublishedLayout`), only when the recording was told it may
+(`RenderGraphPackageRecording.MayStandIn`): never over a host's image bound in
+another layout than the node publishes in, since the node publishes in its
+output layout, the one its consumer's descriptor is written with, and hands a
+host's image back in the host's own. A lease declares the layout its producer's
+own submissions leave the image in (`SdfWorldEngine.OutputLayout`,
+shader-readable), which `SdfEngineNodeLeaseLawTests` holds against the
+engine's recorded transitions; a declared layout the producer does not leave
+it in shows only as Vulkan validation errors, since the Direct3D 12 recorder
+corrects a stated old layout from its tracked resource state. A Direct3D 12
+device created with the debug layer says so on stderr (`[d3d12] debug layer
+live`). `PostProcessPackage` serves every `post.<id>` and
 `OverlayPackage` serves `overlay`, which shares `OverlayFrameComposer` with
 `UnifiedOverlayNode`; a package pass's `config` binds against its package's
 schema in the graph compiler (`RENDERGRAPH_PACKAGE_CONFIG`). A graph naming an

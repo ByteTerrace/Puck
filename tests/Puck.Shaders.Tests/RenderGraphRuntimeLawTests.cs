@@ -269,6 +269,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public uint Height;
         public nint InputImage;
         public GpuImageLayout InputLayout;
+        // Whether the last record was told it may stand in.
+        public bool MayStandIn;
         // A lease every recording holds in its frame's list, or none.
         public GpuImageLease Lease;
         public nint OutputBuffer;
@@ -282,6 +284,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public void Dispose() => counter.Disposed++;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             counter.Records++;
+            counter.MayStandIn = recording.MayStandIn;
             recording.Leases.Hold(lease: in counter.Lease);
             counter.Width = recording.Width;
             counter.Height = recording.Height;

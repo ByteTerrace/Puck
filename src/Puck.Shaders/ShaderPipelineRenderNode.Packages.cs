@@ -115,15 +115,45 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return null;
     }
+    // The position of the first input an output of the pass would stand for that is a host's image bound in another
+    // layout than the node publishes in, or -1 when there is none. The node publishes every image in its output layout,
+    // which is the layout its consumer's descriptor is written with, and hands a host's image back in the host's own
+    // layout, so an output cannot stand for such an input: the recording must draw.
+    private int HostInputInAnotherLayout(RuntimePass pass) {
+        var count = Math.Min(
+            val1: pass.Inputs.Length,
+            val2: pass.Outputs.Length
+        );
+
+        for (var index = 0; (index < count); index++) {
+            if (
+                m_resourceLookup[pass.Inputs[index].Name].Spec.IsExternal &&
+                m_externalImages.TryGetValue(
+                    key: pass.Inputs[index].Name,
+                    value: out var image
+                ) &&
+                (image.Layout != m_outputLayout)
+            ) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
     // Records what a package's recording did with its outputs: each output of a recording that drew nothing stands for
     // the input at its position until the pass records again, and a recording that drew clears that.
     private void ApplyOutcome(RuntimePass pass, int slot, RenderGraphPackageOutcome outcome) {
-        if (
-            (outcome == RenderGraphPackageOutcome.DrewNothing) &&
-            (pass.PackageAliasRefusal is { } refusal)
-        ) {
-            throw new InvalidOperationException(message: refusal);
+        if (outcome == RenderGraphPackageOutcome.DrewNothing) {
+            if (pass.PackageAliasRefusal is { } refusal) {
+                throw new InvalidOperationException(message: refusal);
+            }
+            if (HostInputInAnotherLayout(pass: pass) is var host and >= 0) {
+                var name = pass.Inputs[host].Name;
+
+                throw new InvalidOperationException(message: $"Package pass '{pass.Name}' drew nothing, but its input '{name}' is a host's image in {m_externalImages[name].Layout} layout and the instance publishes in {m_outputLayout}, so its output cannot stand for it.");
+            }
         }
+
 
         for (var index = 0; (index < pass.Outputs.Length); index++) {
             var output = m_resourceLookup[pass.Outputs[index].Name];
@@ -216,6 +246,7 @@ public sealed partial class ShaderPipelineRenderNode {
             Height: pass.Height,
             Inputs: inputs,
             Leases: m_frameLeases,
+            MayStandIn: ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass) < 0)),
             Outputs: outputs,
             Recorder: recorder,
             Slot: slot,

@@ -30,7 +30,12 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// <param name="Leases">The frame's lease list: a lease held in it retires once this frame's submission has finished, on
 /// device loss or at disposal, and at once when the frame submits nothing.</param>
 /// <param name="Context">The host's frame context the instance renders the frame with.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, ReadOnlySpan<byte> FrameBlock, LeaseRetireList Leases, FrameContext Context) {
+/// <param name="MayStandIn">Whether the recording may draw nothing and leave each output standing for its input
+/// (<see cref="RenderGraphPackageOutcome.DrewNothing"/>). It is <see langword="false"/> when the pass's outputs cannot
+/// stand for its inputs, and when an input is a host's image in another layout than the instance publishes in: the
+/// instance publishes every image in its output layout, and a host's image is handed back in the host's own, so the
+/// recording must draw.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, ReadOnlySpan<byte> FrameBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -51,6 +56,8 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public LeaseRetireList Leases { get; } = Leases;
     /// <summary>Gets the host's frame context.</summary>
     public FrameContext Context { get; } = Context;
+    /// <summary>Gets whether the recording may draw nothing and leave each output standing for its input.</summary>
+    public bool MayStandIn { get; } = MayStandIn;
 }
 /// <summary>What a package pass's recording did with its outputs this frame.</summary>
 public enum RenderGraphPackageOutcome : byte {
@@ -58,8 +65,8 @@ public enum RenderGraphPackageOutcome : byte {
     Drew = 0,
     /// <summary>The recording wrote nothing, so each output port stands for the version bound to the input port at its
     /// position: the instance publishes and captures that input's image in place of the output's, with no copy. An
-    /// instance accepts it only from a pass each of whose outputs is an image no other pass of its graph touches, bound
-    /// beside an input image of its format.</summary>
+    /// instance accepts it only from a recording told it may (<see cref="RenderGraphPackageRecording.MayStandIn"/>).</summary>
+
     DrewNothing = 1,
 }
 /// <summary>Records one package pass of one installed graph. The instance creates it when the graph installs and

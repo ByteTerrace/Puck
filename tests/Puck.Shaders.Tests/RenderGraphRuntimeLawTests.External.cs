@@ -240,6 +240,74 @@ public sealed partial class RenderGraphRuntimeLawTests {
             expected: RenderGraphRuntimeRefusalCode.Root
         );
     }
+    // The external producer hands its image out in General, and the root publishes in ShaderReadOnly, the layout the
+    // display's descriptor is written with: a pass over the producer's image may not leave its output standing for it,
+    // since the root would then publish the producer's image in General. It draws instead, and a recording that draws
+    // nothing anyway is refused by name.
+    [Fact]
+    public void APassOverAnExternalImageInAnotherLayoutMayNotStandForItAndPublishesItsOwnOutput() {
+        var gpu = new FakePipelineGpu();
+        var producers = new Producers(gpu: gpu);
+        var recorders = new Recorders(Over);
+
+        producers.Register(registry: recorders.Registry);
+
+        var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                External(name: "world"),
+                Instance(
+                    name: "main",
+                    reads: new RenderGraphRead(Producer: "world")
+                )
+            ),
+            "main",
+            null!,
+            Graph(OverGraph(reader: false), ("world", "world"))
+        );
+        var frames = new Frames(
+            footprints: [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "world", Width: 1.0)],
+            roots: [new RenderGraphRoot(Height: 1.0, Instance: "main", Width: 1.0)],
+            runtime: runtime
+        );
+
+        using (runtime) {
+            frames.Settle();
+
+            var over = recorders.Of(instance: "main");
+            var main = runtime.Node(instance: runtime.Instances.IndexOf(name: "main"));
+            var shown = frames.Next();
+
+            Assert.False(condition: over.MayStandIn);
+            Assert.Equal(
+                actual: (shown.ImageHandle, main.PublishedLayout),
+                expected: (over.OutputImage, GpuImageLayout.ShaderReadOnly)
+            );
+            Assert.NotEqual(
+                actual: shown.ImageHandle,
+                expected: producers.Only.Image
+            );
+
+            over.Outcome = RenderGraphPackageOutcome.DrewNothing;
+
+            Assert.Equal(
+                actual: Assert.Throws<InvalidOperationException>(testCode: () => frames.Next()).Message,
+                expected: "Package pass 'over' drew nothing, but its input 'world' is a host's image in General layout and the instance publishes in ShaderReadOnly, so its output cannot stand for it."
+            );
+        }
+    }
+    [Fact]
+    public void APassOverAnImageInThePublishedLayoutMayStandForIt() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, frames, recorders) = OverScene(gpu: gpu);
+
+        using (runtime) {
+            frames.Settle();
+            Assert.True(condition: recorders.Of(instance: "main").MayStandIn);
+        }
+    }
     [Fact]
     public void AnExternalRootShowsItsLatestOutputAndServesItsCaptures() {
         var gpu = new FakePipelineGpu();
@@ -512,6 +580,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public (uint Width, uint Height) Extent { get; private set; }
         public SurfaceFormat Format => SurfaceFormat.R8G8B8A8Unorm;
         public bool Holding { get; set; }
+        public nint Image => m_image!.ImageHandle;
         public nint ImageView => m_image!.ImageViewHandle;
         public string? NotReadyReason => ((Produced == 0)
             ? "the fake world has not produced"

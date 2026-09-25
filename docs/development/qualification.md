@@ -83,7 +83,12 @@ is valid. Both layers also judge teardown. The Vulkan validation layer reports
 every object still alive when the device is destroyed. On Direct3D 12, the
 device context releases its own objects, asks the debug layer for every
 object the device still holds, and prints each as a `[d3d12-debug] live`
-line, which fails the cell like any other debug message. On a machine where
+line, which fails the cell like any other debug message. A Direct3D 12 device
+created with the layer prints `[d3d12] debug layer live` on standard error, or
+`[d3d12] debug layer requested but not loaded` when it has no info queue, so a
+run with no `[d3d12-debug]` message can be told from one the layer never
+watched. The Direct3D 12 recorder corrects a stated old layout from its tracked
+resource state, so a wrongly declared layout shows only on Vulkan. On a machine where
 the Direct3D 12 debug layer stops the device from being created, the
 Direct3D 12 cells are blocked and name the reason.
 

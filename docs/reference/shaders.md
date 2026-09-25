@@ -364,7 +364,15 @@ publishes that input's image with no copy, in its own layout
 (`ShaderPipelineRenderNode.PublishedLayout`), and a root capture reads it. An
 output another pass reads, that is history, or that is not an RGBA8 image
 beside an input image of its format is refused by name when its pass draws
-nothing. `PostProcessPackage` serves every `post.<id>` and `OverlayPackage`
+nothing. So is an output standing for a host's image bound in another layout
+than the instance publishes in: the instance publishes every image in its output
+layout, the one its consumer's descriptor is written with (the display samples
+the root shader-readable), and hands a host's image back in the host's own. The
+recording is told so beforehand (`RenderGraphPackageRecording.MayStandIn`), and
+draws instead: the overlay draws its empty frame, which reproduces its input.
+An external image is bound in the layout its producer declares for its lease,
+which is the layout the producer's own submissions leave it in, and the planner
+plans its barriers from it. `PostProcessPackage` serves every `post.<id>` and `OverlayPackage`
 serves `overlay`.
 
 An instance can instead be an external producer: a `RenderGraphInstance` whose

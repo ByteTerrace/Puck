@@ -3,7 +3,11 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    private GpuImageLayout OutputRestingLayout => (m_exportMode
+    /// <summary>Gets the layout the output image rests in between frames once the engine has produced one:
+    /// <see cref="GpuImageLayout.ShaderReadOnly"/>, for a same-device consumer to sample, or
+    /// <see cref="GpuImageLayout.External"/> in export mode. A consumer that samples the output declares this layout and
+    /// hands the image back in it.</summary>
+    public GpuImageLayout OutputLayout => (m_exportMode
         ? GpuImageLayout.External
         : GpuImageLayout.ShaderReadOnly
     );
@@ -27,7 +31,8 @@ public sealed partial class SdfWorldEngine {
             format: Format,
             height: m_height,
             sourceImageHandle: m_storageImage.ImageHandle,
-            sourceLayout: OutputRestingLayout,
+            sourceLayout: OutputLayout,
+
             width: m_width
         );
     }

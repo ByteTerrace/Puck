@@ -614,8 +614,9 @@ sub-steps, in this order:
     extent; `SdfEngineNode` is the `sdf.world` producer, and its `Produce`
     submits through the engine's own ring. On every frame a consumer renders,
     scheduled for the producer or not, the consumer binds the producer's latest
-    completed output as a `GpuImageLease` and an external image in `General`
-    layout, or the stand-in before the producer has completed one.
+    completed output as a `GpuImageLease` and an external image in the layout
+    the engine leaves its output in between frames (`SdfWorldEngine.OutputLayout`,
+    shader-readable), or the stand-in before the producer has completed one.
   - `ShaderPipelineRenderNode` keeps one `LeaseRetireList` per frame slot. A
     leased `BindImage` serves the next produced frame only: the frame that
     records holds the lease, its submission moves it into the slot's list, and

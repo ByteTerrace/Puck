@@ -270,7 +270,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: null,
             Green: false,
             Members: [
-                "SdfWorldEngine.OutputImageHandle", "SdfWorldEngine.OutputImageViewHandle", "SdfWorldEngine.ExportSharedHandle",
+                "SdfWorldEngine.OutputImageHandle", "SdfWorldEngine.OutputImageViewHandle", "SdfWorldEngine.OutputLayout", "SdfWorldEngine.ExportSharedHandle",
                 "SdfWorldEngineOptions.CreateOutputImage",
             ]
         ),
