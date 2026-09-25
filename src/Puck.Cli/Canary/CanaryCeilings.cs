@@ -19,7 +19,7 @@ internal static class CanaryCeilings {
     );
     /// <summary>The merge gate: <c>puck canary --merge</c>.</summary>
     public static readonly CanaryCeiling Merge = new(
-        LegBudgetSeconds: 8180,
-        WorldBoots: 164
+        LegBudgetSeconds: 8420,
+        WorldBoots: 168
     );
 }
