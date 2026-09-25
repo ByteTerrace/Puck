@@ -101,17 +101,14 @@ rendered image beyond `puck parity`, so a kernel change is judged by running
 |---|---|---|
 | `Sdf/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | Overworld overlay, the Vulkan surface compositor, and `sdf-film-grain` |
 | `Sdf/sdf-film-grain.frag.hlsl` | Fullscreen integer-hashed film grain over the inner render node's output, declared by `sdf-film-grain.puck.shader.json`. | The `sdf-film-grain` `render.extensions` entry |
-| `Sdf/sdf-child.comp.hlsl` | Deterministic animated storage-image source for a hosted child or test pattern. | None; it compiles but no code loads it |
 
-## Neutral image and viewport kernels
+## Neutral image kernel
 
-These compile, but no code loads them.
+This compiles, but no code loads it.
 
 | Shader | Role |
 |---|---|
 | `Resample/resample.comp.hlsl` | Sampled-image compute resample/crop/pixelation primitive. Source filter is chosen by the host sampler. |
-| `Viewport/pixelate.comp.hlsl` | Same-size storage-image pixelate/posterize effect. |
-| `Viewport/viewport-composite.comp.hlsl` | Source-agnostic compositor for already-sized child/source textures. No SDF tile knowledge. |
 
 ## Validation rule
 

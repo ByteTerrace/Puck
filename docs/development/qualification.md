@@ -28,8 +28,10 @@ profile's publish mode, then installs a clean copy of the package in the run's
 scratch directory and qualifies that copy. It runs in two halves:
 
 1. **The functional canaries** the profile names, run on the copy's World
-   through `puck canary --world-artifact`. These are the pipeline fixtures and
-   the other offscreen GPU proofs, each checked on both backends.
+   through `puck canary --world-artifact`. These are every `pipeline-*`
+   canary, `no-device-compile`, and the other offscreen GPU proofs, each checked
+   on both backends. `ReleaseProfileLawTests` holds the profile to naming every
+   `pipeline-*` canary and only offscreen ones.
 2. **The stability matrix**: every workload at every resolution on every
    backend, offscreen. Each cell boots from a fresh state root, so its
    pipeline cache starts cold. It boots an overlay document written beside the
@@ -65,7 +67,9 @@ writes beside the worlds. Every matrix leg runs with each directory holding
 its cell. `Path` lets the World find the compiler on the search path the run
 inherits, as on a developer machine. The functional canaries always run with
 the caller's search path, because some of them build shader packages in the
-CLI before the World starts.
+CLI before the World starts. The `no-device-compile` canary still proves a
+World with no compiler: it removes every `dxc` directory from its own World's
+search path, whatever the caller's holds.
 
 **Validation layers.** The profile turns on the validation layer for both
 backends under `debugLayers`. Every World the run starts on a listed backend
@@ -89,13 +93,13 @@ Direct3D 12 cells are blocked and name the reason.
 
 | Workload | World | What a cell does |
 |---|---|---|
-| `forcing-world` | `Assets/worlds/puck.world.json` | Warms up 300 ticks, soaks 1800, reloads the world twice with a 300-tick warm-up after each, and soaks 1800 again. |
+| `flagship` | `Assets/worlds/puck.world.json` | Warms up 300 ticks, soaks 1800, reloads the world twice with a 300-tick warm-up after each, and soaks 1800 again. |
 | `ink-pipeline` | `Assets/worlds/pipeline.world.json` | Waits for the `ink` pipeline to install, warms up 120 ticks, soaks 900, then reloads the pipeline three times, resizes its slot to half and back three times, and unloads and loads it three times, settling four counted submissions after each step. |
 
-The forcing world of the [state and language plan](../plans/state-and-language.md#the-forcing-world)
-is not authored yet, so the forcing-world workload is the flagship world the
-package ships. Every length is ticks of the world's simulation clock or frames
-the pipeline submits, never time. A workload's `timeoutSeconds` is only the
+The `flagship` workload boots the flagship world the package ships. The
+[forcing world](../plans/state-and-language.md#the-forcing-world) is not
+authored yet, so no workload boots it. Every length is ticks of the world's
+simulation clock or frames the pipeline submits, never time. A workload's `timeoutSeconds` is only the
 ceiling a hung World is killed at.
 
 ## What a cell checks
@@ -148,7 +152,7 @@ being allocated again, so the peak is 72 + 72 − 3 × 16 = 96 bytes a pixel:
 98,304,000 bytes at 1280×800 and 199,065,600 at 1920×1080. The node counts
 these bytes from its plan rather than asking the driver, so they are the same on
 every device and backend, and the threshold is the planned peak itself: any
-byte over it fails. The forcing-world workload has no pipeline, so its cells
+byte over it fails. The `flagship` workload has no pipeline, so its cells
 carry no threshold.
 
 The profile defers three checks, and a run prints each with its reason:

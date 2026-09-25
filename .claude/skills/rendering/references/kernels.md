@@ -134,9 +134,13 @@ together. `SdfViewsKernelVariantLawTests` pins the host half.
 
 ## Registers and bindings
 
-Bindings are shared across backends; D3D12 registers can differ per consumer.
-`sdfInstanceMasks` is t37 by default and t3 in the beam via
-`SDF_INSTANCE_MASKS_REGISTER` defined before the include. Screen-source bindings
+Bindings are shared across backends; the SDF engine's D3D12 registers still
+differ from their bindings and per consumer. `sdfInstanceMasks` is t37 by
+default and t3 in the beam via `SDF_INSTANCE_MASKS_REGISTER` defined before the
+include. `ShaderRegisterBindingLawTests` holds every register the build compiles
+to its binding number and set, except its named list of today's violations,
+which may only shrink: a new declaration keeps register equal to binding, and
+a change that fixes one deletes its entry. Screen-source bindings
 are derived from `ScreenSourceBindingBase`, never hand-listed, so the descriptor
 pool sizes itself through `GpuDescriptorPoolSizes.ForSets`. The full binding map
 is in [sync-pairs.md](sync-pairs.md#engine-buffers-push-constants-and-bindings).
