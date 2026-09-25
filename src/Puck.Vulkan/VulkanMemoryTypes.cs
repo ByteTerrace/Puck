@@ -46,10 +46,4 @@ public static class VulkanMemoryTypes {
 
         return ((uint)fallbackIndex);
     }
-    /// <summary>Reports whether a memory type is device-local (<c>VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT</c>).</summary>
-    /// <param name="memoryProperties">The physical device's reported memory types.</param>
-    /// <param name="memoryTypeIndex">The memory type's index.</param>
-    /// <returns>Whether the type carries the device-local property.</returns>
-    public static bool IsDeviceLocal(in VkPhysicalDeviceMemoryProperties memoryProperties, uint memoryTypeIndex) =>
-        (0U != (memoryProperties.MemoryTypePropertyFlags(memoryTypeIndex: ((int)memoryTypeIndex)) & 0x1U));
 }

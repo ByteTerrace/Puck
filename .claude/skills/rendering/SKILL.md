@@ -485,7 +485,8 @@ Compiler discovery `None` strips every `dxc` directory from a matrix leg's
 `PATH`. Lengths are ticks and frames; the profile sets no time threshold. A
 cell's `peakDeviceLocalBytes` judges the largest `gpu.memory.device-local.peak`
 of `memory.<backend>` (`GpuDeviceMemoryWork`, counted where each backend
-allocates buffers, images and exported or imported memory, never swapchain
+allocates buffers, images and exported or imported memory, by role through
+`GpuDeviceMemoryWork.IsCounted` and never by memory type, never swapchain
 images); every cell leaves it null until a reference-device reading sets it. With the
 Direct3D 12 debug layer on, `DirectXDeviceContext.Dispose` releases its own
 objects, then asks `ID3D12DebugDevice::ReportLiveDeviceObjects` for the rest and

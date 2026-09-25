@@ -16,15 +16,16 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
     private const uint StructureTypeBufferCreateInfo = 12;
     private const uint StructureTypeMemoryAllocateInfo = 5;
 
-    /// <summary>Returns the <c>VkMemoryPropertyFlagBits</c> a memory type must carry for <paramref name="memory"/>, and
-    /// whether a type without them fails the creation rather than falling back to the first permitted type.</summary>
+    /// <summary>Returns the <c>VkMemoryPropertyFlagBits</c> a memory type must carry for <paramref name="memory"/>,
+    /// whether a type without them fails the creation rather than falling back to the first permitted type, and the
+    /// role the allocation is counted by, which the memory type the driver chooses never changes.</summary>
     /// <param name="memory">The memory a buffer is allocated from.</param>
-    /// <returns>The preferred properties and whether they are required.</returns>
+    /// <returns>The preferred properties, whether they are required, and the allocation's role.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="memory"/> is not a defined value.</exception>
-    public static (uint PreferredProperties, bool RequireProperties) MemoryProperties(VulkanBufferMemory memory) => memory switch {
-        VulkanBufferMemory.HostCoherent => (MemoryPropertyHostVisibleBit | MemoryPropertyHostCoherentBit, true),
-        VulkanBufferMemory.DeviceLocal => (MemoryPropertyDeviceLocalBit, true),
-        VulkanBufferMemory.PreferDeviceLocal => (MemoryPropertyDeviceLocalBit, false),
+    public static (uint PreferredProperties, bool RequireProperties, GpuMemoryRole Role) MemoryProperties(VulkanBufferMemory memory) => memory switch {
+        VulkanBufferMemory.HostCoherent => (MemoryPropertyHostVisibleBit | MemoryPropertyHostCoherentBit, true, GpuMemoryRole.HostVisible),
+        VulkanBufferMemory.DeviceLocal => (MemoryPropertyDeviceLocalBit, true, GpuMemoryRole.DeviceLocal),
+        VulkanBufferMemory.PreferDeviceLocal => (MemoryPropertyDeviceLocalBit, false, GpuMemoryRole.DeviceLocal),
         _ => throw new ArgumentOutOfRangeException(
             actualValue: memory,
             message: "The buffer memory is not a defined value.",
@@ -40,7 +41,7 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentOutOfRangeException.ThrowIfZero(value: sizeBytes);
 
-        var (preferredProperties, requireProperties) = MemoryProperties(memory: memory);
+        var (preferredProperties, requireProperties, role) = MemoryProperties(memory: memory);
         var commands = device.LogicalDevice.Commands;
         var instance = device.Instance.Commands;
         var createInfo = new VkBufferCreateInfo {
@@ -93,9 +94,9 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
                 out memoryHandle
             ).ThrowIfFailed(operation: "vkAllocateMemory");
             commands.CountAllocated(
-                allocateInfo: in allocateInfo,
+                allocationSize: allocateInfo.AllocationSize,
                 memoryHandle: memoryHandle,
-                memoryProperties: in memoryProperties
+                role: role
             );
             commands.BindBufferMemory(
                 commands.Handle,

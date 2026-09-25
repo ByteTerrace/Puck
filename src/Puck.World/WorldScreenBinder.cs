@@ -3,7 +3,6 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Sources;
 using Puck.Commands;
-using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Hosting;
 using Puck.SdfVm;
@@ -101,8 +100,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly INativeImageCaptureService m_windowCapture;
 
     // On the Vulkan host, the camera GPU tier's headless Direct3D 12 device the targets are allocated on — pinned to the render adapter's LUID so the
-    // platform's D3D11 decode device and the Vulkan render device both reach the same physical memory.
-    private DirectXDeviceContext? m_cameraTargetDevice;
+    // platform's D3D11 decode device and the Vulkan render device both reach the same physical memory. Each target set
+    // made on it is a dependent, so retiring it disposes the device only once the last of their images is released.
+    private DisposeAfterDependents<IDisposable>? m_cameraTargetDevice;
 
     // The player roster — resolves a seat to its bound camera device (TryGetSeatDevice) and mints the camera<N>
     // tokens screen.camera/probe.status echo. A camera is an input device seated like a gamepad; this binder never
@@ -160,10 +160,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly Dictionary<int, Func<Vector3>> m_lights = new();
     // One publication per named producer output, even when several screens fan out from it.
     private readonly HashSet<(string Instance, string Output)> m_publishedMachineOutputs = new();
-    // Every producer output this binder has published on the current device. Each holds an upload on that device until
-    // RetireMachineOutputs releases it, and the machines themselves outlive the device, so the binder that put the
-    // uploads there is the one that takes them off.
-    private readonly HashSet<(string Instance, string Output)> m_presentedMachineOutputs = new();
+    // Every producer output this binder has published on the current device; RetireMachineOutputs releases their uploads.
+    private readonly PublishedMachineOutputs m_presentedMachineOutputs = new();
     // SdfEngineNode copies m_sources/m_lights into its own dictionary once, at construction, and never re-reads
     // these dictionaries again — writing a new delegate into m_sources[index] after boot is invisible to the
     // renderer. Each boot index's cell is instead a stable, never-replaced delegate target; only the cell's own
@@ -462,16 +460,17 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     }
     // Releases the upload every producer output this binder published holds on the current device. An instance removed
     // since it was published resolves to nothing, because its host released the upload when the instance went.
-    private void RetireMachineOutputs() {
-        foreach (var (instance, output) in m_presentedMachineOutputs) {
-            m_machines.VideoOutput(
-                instance: instance,
-                output: output
-            )?.NotifyDeviceLost();
-        }
-
-        m_presentedMachineOutputs.Clear();
+    // Retires the Vulkan camera route's headless device after the feeds retired their target sets: it is disposed once
+    // the last image made on it is released, which a submitted frame's lease can defer.
+    private void RetireCameraTargetDevice() {
+        m_cameraTargetDevice?.Retire();
+        m_cameraTargetDevice = null;
     }
+    private void RetireMachineOutputs() =>
+        m_presentedMachineOutputs.Retire(resolve: (instance, output) => m_machines.VideoOutput(
+            instance: instance,
+            output: output
+        ));
 
     /// <summary>Applies a non-machine magazine entry (a producer, a view, a probe, a session, text, or none) as a screen's live
     /// source, through the same dispatch <see cref="ReconcileScreens"/>'s declared-source-change path uses.
@@ -527,30 +526,17 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_fills.Clear();
 
         DisposeCamera();
-        DisposeProbeFeeds();
+        ReleaseProbeFeeds();
         DisposeViewExports();
         DisposeFrameCaptures();
-
-        // After the feeds: the camera's and every probe's shared targets live on this headless device, so it must
-        // outlive them.
-        if (
-            (m_cameraTargetDevice is { } cameraTargetDevice) &&
-            OperatingSystem.IsWindowsVersionAtLeast(
-            major: 10,
-            minor: 0,
-            build: 10240
-        )
-        ) {
-            cameraTargetDevice.Dispose();
-            m_cameraTargetDevice = null;
-        }
-
+        RetireCameraTargetDevice();
         UnregisterAllViewWork();
         m_viewStack?.Dispose();
         m_viewStack = null;
     }
-    /// <summary>Drops every device-owned upload and offscreen view while preserving CPU sessions, machine simulation,
-    /// declarations, and view registrations. The next publish/render recreates resources on the replacement device.</summary>
+    /// <summary>Drops every device-owned upload, shared target ring and offscreen view while preserving CPU sessions,
+    /// machine simulation, declarations, probe requests and view registrations. The next publish/render recreates
+    /// resources on the replacement device.</summary>
     public void NotifyDeviceLost() {
         if (m_disposed) {
             return;
@@ -567,22 +553,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         }
 
         CameraDeviceLost();
+        ReleaseProbeFeeds();
 
-        // The Vulkan camera route's headless D3D12 device and the cached render LUID describe the OLD render adapter.
-        // Release the device only after the feed dropped every target allocated on it, then let the next Publish read
-        // the replacement renderer's LUID (which may identify a different physical adapter after recovery).
-        if (
-            (m_cameraTargetDevice is { } cameraTargetDevice) &&
-            OperatingSystem.IsWindowsVersionAtLeast(
-            major: 10,
-            minor: 0,
-            build: 10240
-        )
-        ) {
-            cameraTargetDevice.Dispose();
-            m_cameraTargetDevice = null;
-        }
-
+        // The Vulkan camera route's headless D3D12 device and the cached render LUID describe the old render adapter; the
+        // next Publish reads the replacement renderer's LUID, which may identify a different physical adapter.
+        RetireCameraTargetDevice();
         m_renderAdapterLuid = null;
 
         foreach (var slot in m_slots.Values) {

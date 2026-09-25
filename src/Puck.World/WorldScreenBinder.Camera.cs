@@ -745,7 +745,8 @@ internal sealed partial class WorldScreenBinder {
                 images: images,
                 importedViews: views,
                 imports: imports,
-                ring: stream
+                ring: stream,
+                targetDevice: m_cameraTargetDevice
             );
 
             try {
@@ -793,11 +794,11 @@ internal sealed partial class WorldScreenBinder {
             // imports each handle (one importer per slot).
             var targetContext = (m_hostsOnDirectX
                 ? deviceContext
-                : (m_cameraTargetDevice ??= new DirectXDeviceContext(
+                : ((DirectXDeviceContext)(m_cameraTargetDevice ??= new DisposeAfterDependents<IDisposable>(resource: new DirectXDeviceContext(
                     adapterLuid: adapterLuid,
                     deviceApi: new DirectXNativeDeviceApi(),
                     minimumFeatureLevel: DirectXFeatureLevel.Level110
-                ))
+                ))).Resource)
             );
             var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)targetContext));
 
@@ -1518,6 +1519,10 @@ internal sealed partial class WorldScreenBinder {
         private readonly Action<int> m_release;
         private readonly nint[] m_sharedHandles;
         private readonly ISharedSlotRing m_stream;
+        // The binder's headless device the images were made on (the Vulkan host's), or null when they were made on the
+        // render device. The set is one of its dependents, so the device outlives the images however late the last
+        // lease releases them.
+        private readonly DisposeAfterDependents<IDisposable>? m_targetDevice;
 
         private bool m_disposed;
         private int m_outstanding;
@@ -1527,17 +1532,20 @@ internal sealed partial class WorldScreenBinder {
         /// the set, so a per-frame reader never re-derives them.</summary>
         public IReadOnlyList<nint> SharedHandles => m_sharedHandles;
 
-        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ISharedSlotRing ring) {
+        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
             m_images = images;
             m_importedViews = importedViews;
             m_imports = imports;
             m_stream = ring;
             m_release = Release;
             m_sharedHandles = new nint[images.Count];
+            m_targetDevice = targetDevice;
 
             for (var index = 0; (index < images.Count); index++) {
                 m_sharedHandles[index] = images[index].SharedHandle;
             }
+
+            targetDevice?.AddDependent();
         }
 
         private void DisposeResources() {
@@ -1556,6 +1564,8 @@ internal sealed partial class WorldScreenBinder {
             foreach (var image in m_images) {
                 image.Dispose();
             }
+
+            m_targetDevice?.RemoveDependent();
         }
         private void Release(int slot) {
             m_stream.Release(slot: slot);

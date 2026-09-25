@@ -1194,7 +1194,13 @@ project still makes on a machine's behalf. The machines outlive the render
 device, so the binder that published an output's upload also retires it: on
 device loss and when the render chain is torn down, it calls
 `IMachineVideoOutput.NotifyDeviceLost` for every output it has published on
-that device. It recreates its own slot for a
+that device (`PublishedMachineOutputs`, which records an output before it
+publishes, so a publish that loses the device still retires its upload).
+Device loss also retires every probe's shared ring, keeping its request so the
+next publish provisions a fresh one, and the Vulkan host's headless camera
+device is disposed only after the last image made on it is released
+(`DisposeAfterDependents`), however late a submitted frame's lease releases
+it. It recreates its own slot for a
 screen index removed and later restored by `world.reset`/`.load` exactly as
 `WorldMachineHost` does (bounded to indices the render engine's boot-frozen
 provider key set already names). A recreate re-points a `ScreenSourceCell`'s

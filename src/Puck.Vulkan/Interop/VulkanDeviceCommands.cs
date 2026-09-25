@@ -201,13 +201,14 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
     public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null) {
         ArgumentNullException.ThrowIfNull(argument: procedures);
 
-        Memory = memory;        VulkanArgument.RequireHandle(
+        VulkanArgument.RequireHandle(
             handle: deviceHandle,
             handleDescription: "logical-device",
             paramName: nameof(deviceHandle)
         );
 
         Handle = deviceHandle;
+        Memory = memory;
         AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkAcquireNextImageKHR"u8
@@ -587,7 +588,10 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
         if (0 != handle) {
             // The same field value this table resolved, so an address comparison identifies vkFreeMemory.
             if (((nint)destroy) == ((nint)FreeMemory)) {
-                _ = Memory?.CountReleased(allocation: handle);
+                _ = Memory?.CountReleased(
+                    allocation: handle,
+                    device: Handle
+                );
             }
 
             destroy(
@@ -597,27 +601,20 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
             );
         }
     }
-    /// <summary>Counts one successful <c>vkAllocateMemory</c> into <see cref="Memory"/> at its allocation size when the
-    /// memory type it chose is device-local; memory of any other type counts nothing. Swapchain images are never
-    /// allocated through this table, so they are never counted.</summary>
+    /// <summary>Counts one successful <c>vkAllocateMemory</c> into <see cref="Memory"/> at its allocation size, keyed by
+    /// this device, when its role counts (<see cref="GpuDeviceMemoryWork.IsCounted"/>); the memory type it chose never
+    /// decides. Swapchain images are never allocated through this table, so they are never counted.</summary>
     /// <param name="memoryHandle">The <c>VkDeviceMemory</c> the allocation returned; freeing it through
     /// <see cref="FreeMemory"/> through <c>Destroy</c> counts its release.</param>
-    /// <param name="allocateInfo">The allocation's <c>VkMemoryAllocateInfo</c>: its size and memory type.</param>
-    /// <param name="memoryProperties">The physical device's memory types, which say whether the type is device-local.</param>
-    public void CountAllocated(nint memoryHandle, in VkMemoryAllocateInfo allocateInfo, in VkPhysicalDeviceMemoryProperties memoryProperties) {
-        if (
-            (Memory is { } memory) &&
-            VulkanMemoryTypes.IsDeviceLocal(
-                memoryProperties: in memoryProperties,
-                memoryTypeIndex: allocateInfo.MemoryTypeIndex
-            )
-        ) {
-            memory.CountAllocated(
-                allocation: memoryHandle,
-                bytes: checked((long)allocateInfo.AllocationSize)
-            );
-        }
-    }
+    /// <param name="allocationSize">The allocation's size, in bytes, as <c>VkMemoryAllocateInfo.allocationSize</c>.</param>
+    /// <param name="role">What the allocation is for.</param>
+    public void CountAllocated(nint memoryHandle, ulong allocationSize, GpuMemoryRole role) =>
+        _ = Memory?.CountAllocated(
+            allocation: memoryHandle,
+            bytes: checked((long)allocationSize),
+            device: Handle,
+            role: role
+        );
     /// <summary>Destroys one buffer or image this device owns and then frees the memory bound to it, skipping either
     /// handle when it is zero.</summary>
     /// <param name="destroy">The object type's entry point from this table: <see cref="DestroyBuffer"/> or <see cref="DestroyImage"/>.</param>
