@@ -40,6 +40,14 @@ public sealed partial class ShaderPipelineRenderNode {
 
         runtime.PackageInputs = new RenderGraphPackageResource[runtime.Inputs.Length];
         runtime.PackageOutputs = new RenderGraphPackageResource[runtime.Outputs.Length];
+        runtime.PackageInputLayouts = LayoutsOf(
+            accesses: runtime.Accesses,
+            ports: runtime.Inputs
+        );
+        runtime.PackageOutputLayouts = LayoutsOf(
+            accesses: runtime.Accesses,
+            ports: runtime.Outputs
+        );
         runtime.Package = m_packages.Create(context: new RenderGraphPackageRecorderContext(
             Device: m_device,
             HostsOnDirectX: m_directX,
@@ -65,6 +73,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     resource: resource,
                     slot: slot
                 ),
+                layout: pass.PackageInputLayouts![index],
                 name: input.Name,
                 resource: resource
             );
@@ -74,6 +83,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
             outputs[index] = Resolve(
                 index: slot,
+                layout: pass.PackageOutputLayouts![index],
                 name: output.Name,
                 resource: m_resourceLookup[output.Name]
             );
@@ -103,7 +113,30 @@ public sealed partial class ShaderPipelineRenderNode {
         recorder.EndCommandBuffer(commandBufferHandle: handle);
         commands.Add(item: handle);
     }
-    private RenderGraphPackageResource Resolve(RuntimeResource resource, string name, int index) => ((resource.Spec.Kind == ShaderPipelineResourceKind.Buffer)
+    // The layout each port's image is in when the recorder records: the one its planned access's barrier left it in.
+    private static GpuImageLayout[] LayoutsOf(ShaderPipelineAccess[] accesses, ResourceReference[] ports) {
+        var layouts = new GpuImageLayout[ports.Length];
+
+        for (var index = 0; (index < ports.Length); index++) {
+            var port = ports[index];
+
+            foreach (var access in accesses) {
+                if (
+                    string.Equals(
+                        a: access.Version,
+                        b: port.Name,
+                        comparisonType: StringComparison.Ordinal
+                    ) &&
+                    (access.PreviousFrame == port.PreviousFrame)
+                ) {
+                    layouts[index] = access.Use.Layout;
+                }
+            }
+        }
+
+        return layouts;
+    }
+    private RenderGraphPackageResource Resolve(RuntimeResource resource, string name, int index, GpuImageLayout layout) => ((resource.Spec.Kind == ShaderPipelineResourceKind.Buffer)
         ? new RenderGraphPackageResource(
             Buffer: ResolveBuffer(
                 index: index,
@@ -120,7 +153,9 @@ public sealed partial class ShaderPipelineRenderNode {
                 index: index,
                 name: name,
                 resource: resource
-            ),
+            ) with {
+                Layout = layout,
+            },
             Kind: resource.Spec.Kind,
             Version: name
         ));

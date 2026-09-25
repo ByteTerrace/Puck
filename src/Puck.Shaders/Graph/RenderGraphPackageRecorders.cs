@@ -8,7 +8,8 @@ namespace Puck.Shaders;
 /// that holds it in the frame slot being recorded.</summary>
 /// <param name="Version">The version name the pass binds to the port.</param>
 /// <param name="Kind">What the version carries.</param>
-/// <param name="Image">The image holding an image version, with its extent and format; default for a buffer.</param>
+/// <param name="Image">The image holding an image version, with its extent, its format, and the layout the pass's planned
+/// barrier left it in for the recording; default for a buffer.</param>
 /// <param name="Buffer">The buffer holding a buffer version, or <see langword="null"/> for an image.</param>
 public readonly record struct RenderGraphPackageResource(string Version, ShaderPipelineResourceKind Kind, ShaderPipelineExternalImage Image, IGpuBuffer? Buffer);
 /// <summary>What a package recorder records into for one frame: the command buffer the pass owns in its instance's
@@ -55,15 +56,50 @@ public interface IRenderGraphPackageRecorder : IDisposable {
 /// <param name="HostsOnDirectX">Whether the device is Direct3D 12.</param>
 /// <param name="InFlightFrames">The instance's frames in flight, the range of <see cref="RenderGraphPackageRecording.Slot"/>.</param>
 public sealed record RenderGraphPackageRecorderContext(string Instance, string Pass, string Package, IGpuDeviceContext Device, bool HostsOnDirectX, int InFlightFrames);
-/// <summary>The recorders a host offers package passes, by package id: the adapters that run engine work inside a
-/// graph instance's submission. A graph whose package pass names an id nothing here serves is refused by name when it is
+/// <summary>What an external producer is created for: one external instance, on one device.</summary>
+/// <param name="Instance">The instance's name.</param>
+/// <param name="Package">The package id the instance names.</param>
+/// <param name="Device">The device the runtime records on.</param>
+/// <param name="HostsOnDirectX">Whether the device is Direct3D 12.</param>
+public sealed record RenderGraphExternalProducerContext(string Instance, string Package, IGpuDeviceContext Device, bool HostsOnDirectX);
+/// <summary>The engine work a host offers render graphs, by package id: the recorders that run a package pass inside a
+/// graph instance's submission, and the external producers that render an external instance
+/// (<see cref="RenderGraphInstanceKind.External"/>) through submissions of their own. A graph whose package pass names an
+/// id no recorder serves, and an external instance whose package no producer serves, are refused by name when they are
 /// installed.</summary>
 public sealed class RenderGraphPackageRecorders {
     private readonly Dictionary<string, Func<RenderGraphPackageRecorderContext, IRenderGraphPackageRecorder>> m_factories = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphExternalProducer>> m_producers = new(comparer: StringComparer.Ordinal);
 
-    /// <summary>Gets the package ids served, in ordinal order.</summary>
+    /// <summary>Gets the package ids a recorder serves, in ordinal order.</summary>
     public IReadOnlyList<string> Ids => [.. m_factories.Keys.Order(comparer: StringComparer.Ordinal)];
+    /// <summary>Gets the package ids an external producer serves, in ordinal order.</summary>
+    public IReadOnlyList<string> ProducerIds => [.. m_producers.Keys.Order(comparer: StringComparer.Ordinal)];
 
+    /// <summary>Registers the external producer factory for a package id.</summary>
+    /// <param name="package">The package id.</param>
+    /// <param name="factory">Creates the producer for one external instance; the runtime that installs the instance
+    /// owns it.</param>
+    /// <exception cref="ArgumentException"><paramref name="package"/> is empty or already has a producer.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="factory"/> is <see langword="null"/>.</exception>
+    public void RegisterProducer(string package, Func<RenderGraphExternalProducerContext, IRenderGraphExternalProducer> factory) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
+        ArgumentNullException.ThrowIfNull(argument: factory);
+
+        if (!m_producers.TryAdd(
+            key: package,
+            value: factory
+        )) {
+            throw new ArgumentException(
+                message: $"Package '{package}' already has an external producer.",
+                paramName: nameof(package)
+            );
+        }
+    }
+    /// <summary>Returns whether an external producer serves a package id.</summary>
+    /// <param name="package">The package id.</param>
+    /// <returns><see langword="true"/> when a producer is registered for it.</returns>
+    public bool ServesProducer(string package) => m_producers.ContainsKey(key: package);
     /// <summary>Registers the recorder factory for a package id.</summary>
     /// <param name="package">The package id.</param>
     /// <param name="factory">Creates the recorder for one pass of one installed graph.</param>
@@ -126,6 +162,7 @@ public sealed class RenderGraphPackageRecorders {
 
         return (factory(arg: context) ?? throw new InvalidOperationException(message: $"The recorder factory for package '{context.Package}' returned null."));
     }
+    internal IRenderGraphExternalProducer CreateProducer(RenderGraphExternalProducerContext context) => (m_producers[context.Package](arg: context) ?? throw new InvalidOperationException(message: $"The external producer factory for package '{context.Package}' returned null."));
     internal static string Unserved(string instance, string pass, string package) =>
         $"Instance '{instance}' pass '{pass}' names package '{package}', which no recorder serves.";
 }

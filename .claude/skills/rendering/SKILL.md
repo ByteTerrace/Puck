@@ -670,7 +670,18 @@ producer's output the schedule names, or to a stand-in while there is none.
 A package pass records inside that node's submission through the recorder
 `RenderGraphPackageRecorders` holds for its package id; a recorder records
 into the command buffer it is handed and never submits, waits or creates a
-pipeline, and a graph naming an unserved package is refused at install. The
+pipeline, and a graph naming an unserved package is refused at install, as
+is an input whose format differs from what its producer publishes or whose
+buffer is larger than the producer's (`InputFormat`). An external instance
+(`RenderGraphInstance.ExternalPackage`) has no graph: the
+`IRenderGraphExternalProducer` registered with `RegisterProducer` renders it
+through its own submissions, and each consumer binds its latest output under
+a `GpuImageLease` that the consumer node's per-slot `LeaseRetireList` holds
+until that slot's fence (the leased `BindImage` serves one frame). The set
+refuses an external instance's reads and any previous-frame read of one.
+`SdfEngineNode` is the `sdf.world` producer; it counts acquisitions
+(`OutputLeases`) and disposes an engine a new extent replaced only once its
+output is released (`RetiringEngines`). The
 root instance is the runtime's output and its capture target, with
 `UnservedCaptureReason` naming the root until it has produced.
 `RenderGraphRuntimeLawTests` pin the P11 checks on the fake, a steady frame

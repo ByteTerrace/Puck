@@ -288,6 +288,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Green: false,
             Members: [
                 "SdfWorldEngine.Dispose", "SdfEngineNode.Dispose", "SdfEngineNode.OnDeviceLost", "SdfWorldRenderSpec.FrameSource",
+                "SdfEngineNode.Produce", "SdfEngineNode.TryAcquireOutput", "SdfEngineNode.OutputLeases", "SdfEngineNode.RetiringEngines",
                 "SdfWorldRenderSpec.Decorate", "SdfWorldRenderSpec.DecorateFrameSource", "SdfWorldRenderSpec.HostsOnDirectX",
             ]
         ),

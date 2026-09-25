@@ -792,6 +792,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         throw new InvalidDataException(message: "The selected output must use an RGBA8 format.");
     }
 
+    // The format of the image a node publishes for an image output: a float or external output through the RGBA8
+    // float preview, any other in its own format (Output).
+    internal static GpuPixelFormat PublishedFormat(ShaderPipelineResource output) => (NeedsPreview(spec: output)
+        ? GpuPixelFormat.R8G8B8A8Unorm
+        : ParseFormat(format: output.Format));
     internal static GpuPixelFormat ParseFormat(string? format) {
         if (Enum.TryParse<GpuPixelFormat>(
             ignoreCase: true,
@@ -805,6 +810,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
     private void PresentSelectedOutput() {
         WaitAll();
+        HoldLeases();
         var slot = ((int)((m_frame - 1) % m_inFlight));
         var selected = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
         var commands = m_commands;
@@ -833,6 +839,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             commands: commands,
             fence: m_slots[slot].Fence!
         );
+        m_frameLeases.MoveTo(destination: m_slots[slot].Leases);
         Publish(surface: Output(slot: slot));
         m_outputRefreshRequested = false;
     }
@@ -1121,6 +1128,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             resources: m_resources
         );
         ReleaseRetired();
+        RetireAllLeases();
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
         m_previousSurface = default;
@@ -1293,6 +1301,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private void WaitAll() {
         foreach (var slot in m_slots) {
             slot.Fence?.Wait();
+            slot.Leases.RetireAll();
         }
     }
 
@@ -1324,6 +1333,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             kind: ShaderPipelineResourceKind.Image,
             name: name
         );
+        ClearLease(name: name);
         m_externalImages[name] = image;
     }
     /// <inheritdoc/>
@@ -1345,7 +1355,16 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         m_capture.RefuseForDeviceLoss();
     }
     /// <inheritdoc/>
+    /// <remarks>A lease bound for this frame that no submission of it samples is retired before this returns.</remarks>
     public Surface ProduceFrame(in FrameContext context) {
+        try {
+            return Produce(context: in context);
+        } finally {
+            ReleaseUnheldLeases();
+        }
+    }
+
+    private Surface Produce(in FrameContext context) {
         if (m_disposed) {
             return default;
         }
@@ -1414,11 +1433,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             m_steps--;
         }
         ValidateExternalResources();
+        ValidateLeases();
         var selectedResource = m_resourceLookup[(m_selectedOutput ?? m_pipeline.Plan.DefaultOutput)];
         var slotIndex = ((int)(m_frame % m_inFlight));
         var slot = m_slots[slotIndex];
 
         slot.Fence!.Wait();
+        slot.Leases.RetireAll();
+        HoldLeases();
         var commands = m_commands;
 
         commands.Clear();
@@ -1453,6 +1475,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             commands: commands,
             fence: slot.Fence!
         );
+        m_frameLeases.MoveTo(destination: slot.Leases);
         Publish(surface: Output(slot: slotIndex));
         m_outputRefreshRequested = false;
         m_installedUnrendered = false;
@@ -1460,6 +1483,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         CaptureIfPending();
         return m_lastSurface;
     }
+
     /// <summary>Requests a capture of the next completed RGBA8 output frame.</summary>
     public void RequestCapture(FrameCaptureRequest request) {
         ObjectDisposedException.ThrowIf(
@@ -1654,6 +1678,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private sealed class FrameSlot {
         public IGpuSubmissionFence? Fence;
         public IGpuCommandPool? Final;
+
+        // The leases this slot's latest submission sampled, retired after its fence.
+        public readonly LeaseRetireList Leases = new();
     }
     // One storage of the plan, which every version of its forwarding chain names, with one instance per frame slot (one
     // instance only for a host-owned storage).
@@ -1754,6 +1781,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         public IRenderGraphPackageRecorder? Package;
         public RenderGraphPackageResource[]? PackageInputs;
         public RenderGraphPackageResource[]? PackageOutputs;
+        public GpuImageLayout[]? PackageInputLayouts;
+        public GpuImageLayout[]? PackageOutputLayouts;
 
         public void Dispose(GpuDeviceServices gpu, IGpuDeviceContext device) {
             Package?.Dispose();
