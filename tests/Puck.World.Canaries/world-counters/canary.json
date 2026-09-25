@@ -48,7 +48,7 @@
         "name": "the-engine-is-ready-before-the-reads",
         "stream": "stderr",
         "match": "contains",
-        "text": "[world.wait: the engine is ready at tick ",
+        "text": "[engine: ready at tick ",
         "present": true
       },
       {
