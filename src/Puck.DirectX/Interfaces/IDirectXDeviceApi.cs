@@ -50,6 +50,14 @@ public interface IDirectXDeviceApi {
     /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero, or no adapter carries the device's
     /// LUID.</exception>
     Puck.Abstractions.Gpu.GpuMemoryProfile GetMemoryProfile(nint deviceHandle);
+    /// <summary>Reads what a device can bind: options' resource binding tier (<c>D3D12_FEATURE_D3D12_OPTIONS</c>), the
+    /// highest root signature version (<c>D3D12_FEATURE_ROOT_SIGNATURE</c>) and shader model
+    /// (<c>D3D12_FEATURE_SHADER_MODEL</c>), and options 19's shader-visible heap sizes
+    /// (<c>D3D12_FEATURE_D3D12_OPTIONS19</c>).</summary>
+    /// <param name="deviceHandle">The native <c>ID3D12Device</c> handle.</param>
+    /// <returns>The device's capabilities, recorded and never branched on.</returns>
+    /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
+    Puck.Abstractions.Gpu.GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle);
     /// <summary>Reads <c>ID3D12Device::GetDeviceRemovedReason</c> — the specific HRESULT explaining a device removal
     /// (e.g. <c>DXGI_ERROR_DEVICE_HUNG</c> 0x887A0006 for a GPU timeout/too-much-work, <c>DXGI_ERROR_DEVICE_RESET</c>
     /// 0x887A0007, <c>DXGI_ERROR_DRIVER_INTERNAL_ERROR</c> 0x887A0020 for invalid GPU work / a page fault). Returns

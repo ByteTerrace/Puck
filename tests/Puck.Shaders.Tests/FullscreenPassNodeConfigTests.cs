@@ -207,6 +207,7 @@ public sealed class FullscreenPassNodeConfigTests {
         long IGpuDeviceContext.AdapterLuid => throw new NotSupportedException();
         nint IGpuDeviceContext.DeviceHandle => throw new NotSupportedException();
         GpuDeviceIdentity? IGpuDeviceContext.Identity => null;
+        GpuDeviceCapabilities? IGpuDeviceContext.Capabilities => null;
         GpuMemoryProfile IGpuDeviceContext.MemoryProfile => default;
 
         public IGpuBindings Bindings => this;

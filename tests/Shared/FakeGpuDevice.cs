@@ -42,6 +42,7 @@ internal sealed class FakeGpuDevice :
     public IGpuCommandPoolFactory CommandPoolFactory => this;
     public nint DeviceHandle => 1;
     public GpuDeviceIdentity? Identity => null;
+    public GpuDeviceCapabilities? Capabilities => null;
     public IGpuImageFactory ImageFactory => this;
     public GpuMemoryProfile MemoryProfile => default;
     public IGpuPipelineFactory PipelineFactory => this;

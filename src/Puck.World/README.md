@@ -1512,7 +1512,12 @@ the device as its backend reported it at creation — `backend`, `adapter`, PCI
 `vendor` and `device`, the driver version as displayed (`driver`) and as
 reported (`driver.raw`), `api`, and on Vulkan `driver.name`, `driver.id`,
 `conformance` and `pipeline-cache.uuid` — or says `device unavailable` before the device is brought up.
-The identity is recorded, never branched on. Then come each render node
+The identity is recorded, never branched on. Once the device is up, a
+`capabilities` line (and a `capabilities` object under `--json`) records what
+it can bind: `descriptor-sets` or `root-signature-words`,
+`push-constant-bytes`, the `stage.*` descriptor limits, and on Direct3D 12
+`binding-tier`, `root-signature`, `shader-model`, `heap.views` and
+`heap.samplers`; it is recorded the same way. Then come each render node
 (`world`, its hosted pipelines, `overlay`, `view:<name>`) with its newest
 completed submission's per-pass counts and its created objects, or
 `work unavailable` until a submission completes. A filter selects whole dotted

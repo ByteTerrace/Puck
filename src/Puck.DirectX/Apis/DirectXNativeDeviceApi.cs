@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.DirectX.Interfaces;
@@ -179,6 +180,45 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             read: &ReadIdentity
         );
     /// <inheritdoc/>
+    public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) {
+        if (0 == deviceHandle) {
+            throw new ArgumentException(
+                message: "Direct3D 12 device handle must be non-zero.",
+                paramName: nameof(deviceHandle)
+            );
+        }
+
+        var device = ((ID3D12Device*)deviceHandle);
+        var options = new D3D12_FEATURE_DATA_D3D12_OPTIONS();
+        var options19 = new D3D12_FEATURE_DATA_D3D12_OPTIONS19();
+
+        device->CheckFeatureSupport(
+            Feature: D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS,
+            FeatureSupportDataSize: ((uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS)),
+            pFeatureSupportData: &options
+        );
+
+        // A runtime that predates options 19 does not answer it; the capabilities then report the heap sizes every
+        // binding tier guarantees.
+        try {
+            device->CheckFeatureSupport(
+                Feature: D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS19,
+                FeatureSupportDataSize: ((uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS19)),
+                pFeatureSupportData: &options19
+            );
+        } catch (COMException) {
+            options19 = default;
+        }
+
+        return GpuDeviceCapabilities.FromDirectX(
+            resourceBindingTier: ((uint)options.ResourceBindingTier),
+            rootSignatureVersion: HighestRootSignatureVersion(device: device),
+            samplerHeapSize: options19.MaxSamplerDescriptorHeapSize,
+            shaderModel: HighestShaderModel(device: device),
+            viewHeapSize: options19.MaxViewDescriptorHeapSize
+        );
+    }
+    /// <inheritdoc/>
     public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) =>
         ReadAdapter(
             deviceHandle: deviceHandle,
@@ -262,6 +302,64 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             DriverVersionRaw: driverVersion,
             VendorId: description.VendorId
         );
+    }
+    // The feature query takes the highest version the caller asks about and lowers it to the highest the device
+    // supports; a runtime that does not know the asked version refuses the query, so each is asked from the top down.
+    private static string HighestRootSignatureVersion(ID3D12Device* device) {
+        ReadOnlySpan<D3D_ROOT_SIGNATURE_VERSION> versions = [
+            D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1_2,
+            D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1_1,
+            D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1_0,
+        ];
+
+        foreach (var version in versions) {
+            var data = new D3D12_FEATURE_DATA_ROOT_SIGNATURE {
+                HighestVersion = version,
+            };
+
+            try {
+                device->CheckFeatureSupport(
+                    Feature: D3D12_FEATURE.D3D12_FEATURE_ROOT_SIGNATURE,
+                    FeatureSupportDataSize: ((uint)sizeof(D3D12_FEATURE_DATA_ROOT_SIGNATURE)),
+                    pFeatureSupportData: &data
+                );
+            } catch (COMException) {
+                continue;
+            }
+
+            // D3D_ROOT_SIGNATURE_VERSION_1_0 is 0x1, 1_1 is 0x2 and 1_2 is 0x3.
+            return string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"1.{(((int)data.HighestVersion) - 1)}"
+            );
+        }
+
+        return string.Empty;
+    }
+    private static string HighestShaderModel(ID3D12Device* device) {
+        for (var model = ((int)D3D_SHADER_MODEL.D3D_SHADER_MODEL_6_9); (model >= ((int)D3D_SHADER_MODEL.D3D_SHADER_MODEL_6_0)); model--) {
+            var data = new D3D12_FEATURE_DATA_SHADER_MODEL {
+                HighestShaderModel = ((D3D_SHADER_MODEL)model),
+            };
+
+            try {
+                device->CheckFeatureSupport(
+                    Feature: D3D12_FEATURE.D3D12_FEATURE_SHADER_MODEL,
+                    FeatureSupportDataSize: ((uint)sizeof(D3D12_FEATURE_DATA_SHADER_MODEL)),
+                    pFeatureSupportData: &data
+                );
+            } catch (COMException) {
+                continue;
+            }
+
+            // D3D_SHADER_MODEL packs the major version in the high nibble and the minor in the low (0x66 is 6.6).
+            return string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{(((int)data.HighestShaderModel) >> 4)}.{(((int)data.HighestShaderModel) & 0xF)}"
+            );
+        }
+
+        return string.Empty;
     }
     // A device that will not answer the architecture query reports nothing, which selects the staged copy; one that
     // will not answer options 16 predates GPU upload heaps.

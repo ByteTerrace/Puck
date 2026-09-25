@@ -225,6 +225,7 @@ public sealed class VulkanBufferLawTests {
         public long AdapterLuid => throw new NotSupportedException();
         public nint DeviceHandle => throw new NotSupportedException();
         public GpuDeviceIdentity? Identity => throw new NotSupportedException();
+        public GpuDeviceCapabilities? Capabilities => throw new NotSupportedException();
         public VulkanInstance Instance => throw new NotSupportedException();
         public VulkanLogicalDevice LogicalDevice => throw new NotSupportedException();
         public GpuMemoryProfile MemoryProfile => throw new NotSupportedException();

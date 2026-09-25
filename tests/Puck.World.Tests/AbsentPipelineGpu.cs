@@ -7,6 +7,7 @@ internal sealed class AbsentPipelineDevice : IGpuDeviceContext {
     public long AdapterLuid => 0L;
     public nint DeviceHandle => 0;
     public GpuDeviceIdentity? Identity => null;
+    public GpuDeviceCapabilities? Capabilities => null;
     public GpuMemoryProfile MemoryProfile => default;
 
     public void WaitIdle() { }

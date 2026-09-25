@@ -74,6 +74,7 @@ internal static class WindowedHostFixture {
         }
         public int DeviceHandleReads { get; private set; }
         public GpuDeviceIdentity? Identity => null;
+        public GpuDeviceCapabilities? Capabilities => null;
         public GpuMemoryProfile MemoryProfile => default;
         public int WaitIdleCalls { get; private set; }
 
@@ -96,6 +97,7 @@ internal static class WindowedHostFixture {
         }
         public int DeviceHandleReads { get; private set; }
         public GpuDeviceIdentity? Identity => null;
+        public GpuDeviceCapabilities? Capabilities => null;
         public GpuMemoryProfile MemoryProfile => default;
 
         public void WaitIdle() { }

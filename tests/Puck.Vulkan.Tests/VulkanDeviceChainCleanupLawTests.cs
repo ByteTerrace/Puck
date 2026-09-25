@@ -313,6 +313,19 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
                 VendorId: 1
             );
         }
+        public GpuDeviceCapabilities GetDeviceCapabilities(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
+            new(
+                Backend: "vulkan",
+                MaxBoundDescriptorSets: 4U,
+                MaxPerStageResources: 0U,
+                MaxPerStageSampledImages: 0U,
+                MaxPerStageSamplers: 0U,
+                MaxPerStageStorageBuffers: 0U,
+                MaxPerStageStorageImages: 0U,
+                MaxPerStageUniformBuffers: 0U,
+                MaxPushConstantBytes: 128U,
+                MaxRootSignatureWords: 0U
+            );
         public long GetDeviceLuid(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
             throw new NotSupportedException();
         public string GetDeviceName(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>

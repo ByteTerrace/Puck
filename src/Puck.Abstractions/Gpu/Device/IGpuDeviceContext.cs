@@ -18,6 +18,12 @@ public interface IGpuDeviceContext {
     /// device was created, or <see langword="null"/> before the device is brought up or when the host has no real
     /// device. Reading it never brings the device up. It is recorded beside counted work and never branched on.</summary>
     GpuDeviceIdentity? Identity { get; }
+    /// <summary>Gets what the device can bind — descriptor sets or root-signature words, push-constant bytes, per-stage
+    /// descriptor limits, and Direct3D 12's binding tier, root signature version, shader model and heap sizes — as its
+    /// backend reported it when the device was created, or <see langword="null"/> before the device is brought up or
+    /// when the host has no real device. Reading it never brings the device up. Like <see cref="Identity"/> it is
+    /// recorded and never branched on.</summary>
+    GpuDeviceCapabilities? Capabilities { get; }
     /// <summary>Gets what the device's memory is — whether it is coherent unified memory, how much is device-local, its
     /// largest device-local heap, and how much of it the host can write directly — as its backend reported it when the
     /// device was created, or the default profile, which reports nothing, before the device is brought up or when the

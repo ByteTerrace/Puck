@@ -1449,6 +1449,7 @@ public static class QueuedHostContractProbe {
         public long AdapterLuid => 0;
         public nint DeviceHandle => 1;
         public GpuDeviceIdentity? Identity => null;
+        public GpuDeviceCapabilities? Capabilities => null;
         public GpuMemoryProfile MemoryProfile => default;
 
         public void WaitIdle() { }

@@ -18,6 +18,9 @@ public sealed class VulkanLogicalDevice : IDisposable {
     /// for diagnostics and naming the device's pipeline-cache file, never branched on. <see langword="null"/> for a
     /// device created without one.</summary>
     public GpuDeviceIdentity? Identity { get; init; }
+    /// <summary>Gets what the device can bind, as its physical device reported it when the device was created;
+    /// recorded, never branched on. <see langword="null"/> for a device created without one.</summary>
+    public GpuDeviceCapabilities? Capabilities { get; init; }
     /// <summary>Gets what the device's memory is, as its physical device reported it when the device was created;
     /// residency selection branches on it. The default profile, which reports nothing, for a device created without
     /// one.</summary>

@@ -81,6 +81,7 @@ public sealed class VulkanRenderer(
     nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Commands.Token;
     // Read from the physical device when the logical device is created; null without a device.
     GpuDeviceIdentity? IGpuDeviceContext.Identity => m_device?.Identity;
+    GpuDeviceCapabilities? IGpuDeviceContext.Capabilities => m_device?.Capabilities;
     // Read with the identity; the default profile, which reports nothing, without a device.
     GpuMemoryProfile IGpuDeviceContext.MemoryProfile => (m_device?.MemoryProfile ?? default);
 

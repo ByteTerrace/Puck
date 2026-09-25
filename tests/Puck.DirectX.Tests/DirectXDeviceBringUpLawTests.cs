@@ -93,6 +93,7 @@ public sealed class DirectXDeviceBringUpLawTests {
         }
         public int GetDeviceRemovedReason(nint deviceHandle) => throw new NotSupportedException();
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
+        public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
         public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) => throw new NotSupportedException();
     }
 }

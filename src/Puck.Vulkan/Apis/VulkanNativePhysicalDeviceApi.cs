@@ -26,6 +26,19 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     private const int PhysicalDeviceNameOffset = (sizeof(uint) * 5);
     private const int PhysicalDevicePropertiesBufferSize = 2048;
     private const int PhysicalDeviceTypeOffset = (sizeof(uint) * 4);
+    // VkPhysicalDeviceLimits starts at offset 296 (after pipelineCacheUUID, aligned for its VkDeviceSize members).
+    // Within it: maxPushConstantsSize(32), maxBoundDescriptorSets(64), then maxPerStageDescriptorSamplers(68),
+    // UniformBuffers(72), StorageBuffers(76), SampledImages(80), StorageImages(84), InputAttachments(88), and
+    // maxPerStageResources(92).
+    private const int PhysicalDeviceLimitsOffset = 296;
+    private const int LimitsMaxBoundDescriptorSetsOffset = (PhysicalDeviceLimitsOffset + 64);
+    private const int LimitsMaxPerStageResourcesOffset = (PhysicalDeviceLimitsOffset + 92);
+    private const int LimitsMaxPerStageSampledImagesOffset = (PhysicalDeviceLimitsOffset + 80);
+    private const int LimitsMaxPerStageSamplersOffset = (PhysicalDeviceLimitsOffset + 68);
+    private const int LimitsMaxPerStageStorageBuffersOffset = (PhysicalDeviceLimitsOffset + 76);
+    private const int LimitsMaxPerStageStorageImagesOffset = (PhysicalDeviceLimitsOffset + 84);
+    private const int LimitsMaxPerStageUniformBuffersOffset = (PhysicalDeviceLimitsOffset + 72);
+    private const int LimitsMaxPushConstantsSizeOffset = (PhysicalDeviceLimitsOffset + 32);
     private const uint StructureTypePhysicalDeviceDriverProperties = 1000196000;
     private const uint StructureTypePhysicalDeviceFeatures2 = 1000059000;
     private const uint StructureTypePhysicalDeviceIdProperties = 1000071004;
@@ -208,6 +221,43 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             )),
             VendorId: *((uint*)(properties + PhysicalDeviceVendorIdOffset))
         );
+    }
+    /// <inheritdoc/>
+    public GpuDeviceCapabilities GetDeviceCapabilities(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
+        ValidatePhysicalDeviceInputs(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
+
+        try {
+            instance.GetPhysicalDeviceProperties(
+                physicalDeviceHandle,
+                propertiesBuffer
+            );
+
+            uint Read(int offset) =>
+                unchecked((uint)Marshal.ReadInt32(
+                    ofs: offset,
+                    ptr: propertiesBuffer
+                ));
+
+            return new GpuDeviceCapabilities(
+                Backend: "vulkan",
+                MaxBoundDescriptorSets: Read(offset: LimitsMaxBoundDescriptorSetsOffset),
+                MaxPerStageResources: Read(offset: LimitsMaxPerStageResourcesOffset),
+                MaxPerStageSampledImages: Read(offset: LimitsMaxPerStageSampledImagesOffset),
+                MaxPerStageSamplers: Read(offset: LimitsMaxPerStageSamplersOffset),
+                MaxPerStageStorageBuffers: Read(offset: LimitsMaxPerStageStorageBuffersOffset),
+                MaxPerStageStorageImages: Read(offset: LimitsMaxPerStageStorageImagesOffset),
+                MaxPerStageUniformBuffers: Read(offset: LimitsMaxPerStageUniformBuffersOffset),
+                MaxPushConstantBytes: Read(offset: LimitsMaxPushConstantsSizeOffset),
+                MaxRootSignatureWords: 0U
+            );
+        } finally {
+            m_allocator.Free(ptr: propertiesBuffer);
+        }
     }
     /// <inheritdoc/>
     public long GetDeviceLuid(VulkanInstanceCommands instance, nint physicalDeviceHandle) {

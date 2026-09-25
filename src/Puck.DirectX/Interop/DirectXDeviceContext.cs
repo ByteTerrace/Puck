@@ -42,6 +42,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private GpuDeviceIdentity? m_identity;
     private ulong m_idleFenceValue;
     private GpuMemoryProfile m_memoryProfile;
+    private GpuDeviceCapabilities? m_capabilities;
 
     /// <summary>Initializes a new instance that creates its device on the default adapter at feature level 11.0.</summary>
     public DirectXDeviceContext()
@@ -146,6 +147,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// creates the device.</remarks>
     public GpuDeviceIdentity? Identity => m_identity;
     /// <inheritdoc />
+    /// <remarks>Read from the device when it is created; <see langword="null"/> before, and reading it never creates
+    /// the device.</remarks>
+    public GpuDeviceCapabilities? Capabilities => m_capabilities;
+    /// <inheritdoc />
     /// <remarks>Read from the device and its adapter when the device is created; the default profile before, and
     /// reading it never creates the device.</remarks>
     public GpuMemoryProfile MemoryProfile => m_memoryProfile;
@@ -231,6 +236,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             EnsureShaderModelFloor(deviceHandle: m_device.Handle);
             m_identity = m_deviceApi.GetDeviceIdentity(deviceHandle: m_device.Handle);
             m_memoryProfile = m_deviceApi.GetMemoryProfile(deviceHandle: m_device.Handle);
+            m_capabilities = m_deviceApi.GetDeviceCapabilities(deviceHandle: m_device.Handle);
         } catch (Exception exception) when ((exception is DirectXException or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)) {
             m_device?.Dispose();
             m_device = null;

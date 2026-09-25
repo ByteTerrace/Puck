@@ -32,6 +32,9 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry {
     /// <inheritdoc/>
     public GpuDeviceIdentity? DeviceIdentity =>
         Device?.Identity;
+    /// <inheritdoc/>
+    public GpuDeviceCapabilities? DeviceCapabilities =>
+        Device?.Capabilities;
     /// <summary>The SDF engine node the render root wraps, or <see langword="null"/> until the render factory has run.</summary>
     public SdfEngineNode? Node { get; set; }
     /// <summary>The unified overlay decorator, or <see langword="null"/> when the overlay was not composed —

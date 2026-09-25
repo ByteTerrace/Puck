@@ -300,7 +300,11 @@ The gate stays open until three legs run:
   `setup-dxc` installs;
 - the two-group layout on Direct3D 12 and Vulkan inside the parity contract,
   with one parity station, once both backends build more than one set;
-- the capability reports on the floor and ceiling devices.
+- the capability report on the floor device. Each backend fills
+  `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
+  and `world.counters gpu` prints it on a `capabilities` line and in its JSON;
+  the ceiling device's reading on both backends is recorded, so only the floor
+  run remains.
 
 P8 has landed, pending its GPU canaries; the frame group's move from push
 constants to a descriptor set waits on P7's grouped binding. HLSL is the one
@@ -1366,7 +1370,7 @@ readers are in flight, and brick staging is a region with an external
 destination. The SDF engine's groups are P14's; its 32 screens bind as 32
 bindings and one sampler until P14 makes them an array. The test fakes
 consolidate as the surface shrinks. Open: the gate's Linux build and the floor
-and ceiling capability reports.
+device's capability report.
 
 ### P8 — The shader package, and one source language
 

@@ -26,6 +26,7 @@ internal sealed class FakeGpu :
     public IGpuSubmissionFence? LastSubmittedFence { get; private set; }
     public long AdapterLuid => 0L;
     public GpuDeviceIdentity? Identity => null;
+    public GpuDeviceCapabilities? Capabilities => null;
     public GpuMemoryProfile MemoryProfile => default;
     public IGpuCommandPoolFactory CommandPoolFactory => this;
     public IGpuPipelineFactory PipelineFactory => this;

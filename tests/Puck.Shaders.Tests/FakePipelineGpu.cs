@@ -100,6 +100,7 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
         }
     }
     public GpuDeviceIdentity? Identity => null;
+    public GpuDeviceCapabilities? Capabilities => null;
     public IGpuPipelineFactory PipelineFactory => this;
     public IGpuRecorder Recorder => this;
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>

@@ -377,7 +377,13 @@ These are one-line cautions; the owning pages hold the derivations.
   device factory reads it (with the pipeline-cache UUID) and hangs it on
   `VulkanLogicalDevice.Identity`. Its one use beyond display is naming the
   device's pipeline-cache file; no selection, fallback or workaround may read a
-  vendor or driver from it.
+  vendor or driver from it. `IGpuDeviceContext.Capabilities`
+  (`GpuDeviceCapabilities`) is filled beside it and is recorded the same way:
+  Vulkan's `maxBoundDescriptorSets`, `maxPushConstantsSize` and per-stage
+  limits from the physical device's limits, Direct3D 12's binding tier, root
+  signature version, shader model and options 19 heap sizes, with the per-stage
+  limits `GpuDeviceCapabilities.FromDirectX` derives from the tier.
+  `world.counters gpu` prints it as a `capabilities` line and JSON object.
 - **The memory profile is what residency and the pipeline budget branch on.** Each backend fills
   `IGpuDeviceContext.MemoryProfile` (`GpuMemoryProfile`) beside the identity —
   Vulkan through `GpuMemoryProfile.FromVulkan` over the device type and
