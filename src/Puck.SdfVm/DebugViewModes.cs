@@ -7,8 +7,6 @@ namespace Puck.SdfVm;
 /// <c>src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.hlsli</c> when adding or reordering modes.
 /// </summary>
 public static class DebugViewModes {
-    private const string CommandPrefix = "debug.view.";
-
     /// <summary>The mode names, indexed by mode value (0 = final image).</summary>
     public static readonly string[] Names = [
         "off",
@@ -27,10 +25,6 @@ public static class DebugViewModes {
     /// <summary>Gets the number of debug view modes.</summary>
     public static int Count => Names.Length;
 
-    /// <summary>Returns the digital command name that directly selects a debug mode.</summary>
-    /// <param name="mode">The mode value.</param>
-    /// <returns>The command name.</returns>
-    public static string Command(int mode) => (CommandPrefix + Name(mode: mode));
     /// <summary>Returns the name of a mode, or <c>"off"</c> when out of range.</summary>
     /// <param name="mode">The mode value.</param>
     /// <returns>The mode name.</returns>

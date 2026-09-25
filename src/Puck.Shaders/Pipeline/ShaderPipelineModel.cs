@@ -161,6 +161,8 @@ public sealed record ShaderPipelineResource(
     /// <param name="counts">The counts a counted buffer scales with.</param>
     /// <returns>The capacity in bytes.</returns>
     /// <exception cref="InvalidOperationException">The resource is not a buffer, or declares neither size.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="counts"/> holds no unit of the buffer's count
+    /// basis, which would size it at zero bytes.</exception>
     /// <exception cref="OverflowException">The capacity does not fit in 64 bits.</exception>
     public ulong ResolveSizeBytes(ShaderPipelineStorageCounts counts) {
         if (Kind != ShaderPipelineResourceKind.Buffer) {
@@ -173,7 +175,17 @@ public sealed record ShaderPipelineResource(
             throw new InvalidOperationException(message: $"Buffer '{Name}' declares neither sizeBytes nor a count.");
         }
 
-        return checked(((((ulong)ElementBytes) * count.Elements) * counts.UnitsOf(basis: count.Basis)));
+        var units = counts.UnitsOf(basis: count.Basis);
+
+        if (units == 0) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: counts,
+                message: $"Buffer '{Name}' counts by {count.Basis}, and the counts hold none of it, so it would hold zero bytes.",
+                paramName: nameof(counts)
+            );
+        }
+
+        return checked(((((ulong)ElementBytes) * count.Elements) * units));
     }
 }
 /// <summary>A counted buffer's size: <see cref="Elements"/> elements per unit of <see cref="Basis"/>, each element
