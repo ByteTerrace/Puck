@@ -87,7 +87,7 @@ public sealed partial class ShaderPackager {
             ),
             WorkgroupInvocations: plan.Passes
                 .Where(predicate: static pass => (pass.Kind == ShaderPipelinePassKind.Compute))
-                .Select(selector: static pass => checked(((pass.Declaration.GroupSizeX * pass.Declaration.GroupSizeY) * pass.Declaration.GroupSizeZ)))
+                .Select(selector: static pass => checked(((pass.Declaration!.GroupSizeX * pass.Declaration.GroupSizeY) * pass.Declaration.GroupSizeZ)))
                 .DefaultIfEmpty()
                 .Max()
         );
@@ -943,7 +943,7 @@ public sealed partial class ShaderPackager {
         var spirv = new Dictionary<ShaderStage, ReadOnlyMemory<byte>>();
         var dxil = new Dictionary<ShaderStage, ReadOnlyMemory<byte>>();
         var stages = ShaderPipelineLoader.StagesOf(
-            pass: planned.Declaration,
+            pass: planned.Declaration!,
             source: string.Empty,
             sourcePath: sourcePath
         );
@@ -1006,7 +1006,7 @@ public sealed partial class ShaderPackager {
         foreach (var pass in plan.Passes) {
             var sourcePath = Path.GetFullPath(
                 basePath: directory,
-                path: pass.Declaration.Source
+                path: pass.Declaration!.Source
             );
             var info = new FileInfo(fileName: sourcePath);
 

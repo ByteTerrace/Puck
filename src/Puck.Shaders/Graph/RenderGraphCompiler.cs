@@ -29,9 +29,9 @@ public sealed class RenderGraphPlan {
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs => Pipeline.Outputs;
     /// <summary>Gets the pipeline planner's plan. A package pass appears in it as a planned pass of kind
-    /// <see cref="ShaderPipelinePassKind.Package"/> whose declaration is the compute shape it reaches resources by, its
-    /// source the package id its step names; it is ordered, given its accesses and barriers, and kept live exactly as a
-    /// shader pass is.</summary>
+    /// <see cref="ShaderPipelinePassKind.Package"/> with no declaration and a <see cref="ShaderPipelinePackageStep"/>
+    /// naming its package, its ports' versions and its extent; it is ordered, given its accesses and barriers, and kept
+    /// live exactly as a shader pass is.</summary>
     public ShaderPipelinePlan Pipeline { get; }
     /// <summary>Gets the planned passes in execution order, parallel to the planner's passes.</summary>
     public IReadOnlyList<RenderGraphStep> Steps { get; }

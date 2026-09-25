@@ -71,7 +71,23 @@ public readonly record struct RenderGraphRead(string Producer, bool PreviousFram
 /// <param name="Reads">The instances whose output it may read.</param>
 /// <param name="Output">What the output its consumers read carries. An instance whose output is a buffer renders at no
 /// extent and costs no pass-pixels.</param>
-public sealed record RenderGraphInstance(string Name, RenderGraphRefresh Refresh, int Passes, IReadOnlyList<RenderGraphRead> Reads, ShaderPipelineResourceKind Output = ShaderPipelineResourceKind.Image);
+/// <param name="ExternalPackage">The package id of the external producer that renders the instance through its own
+/// submissions, or <see langword="null"/> for an instance that renders a graph. An external producer reads no other
+/// instance, and hands its consumers only its latest completed output.</param>
+public sealed record RenderGraphInstance(string Name, RenderGraphRefresh Refresh, int Passes, IReadOnlyList<RenderGraphRead> Reads, ShaderPipelineResourceKind Output = ShaderPipelineResourceKind.Image, string? ExternalPackage = null) {
+    /// <summary>Gets how the instance renders: a graph of its own, or an external producer's submissions.</summary>
+    public RenderGraphInstanceKind Kind => ((ExternalPackage is null)
+        ? RenderGraphInstanceKind.Graph
+        : RenderGraphInstanceKind.External);
+}
+/// <summary>How a render-graph instance renders.</summary>
+public enum RenderGraphInstanceKind : byte {
+    /// <summary>The instance renders a graph through its own node.</summary>
+    Graph = 1,
+    /// <summary>An external producer named by package id renders the instance through its own submissions, and hands
+    /// its consumers its latest completed output.</summary>
+    External = 2,
+}
 /// <summary>Why a set of render-graph instances was refused.</summary>
 public enum RenderGraphInstanceRefusalCode : byte {
     /// <summary>An instance has no name.</summary>
@@ -92,11 +108,17 @@ public enum RenderGraphInstanceRefusalCode : byte {
     /// <summary>A read's kind is not what its producer's output carries: an image read of a buffer output, or a buffer
     /// read of an image output.</summary>
     KindMismatch = 8,
+    /// <summary>An external producer declares a read: it renders through its own submissions, so no graph of its binds
+    /// another instance's output.</summary>
+    ExternalReads = 9,
+    /// <summary>An instance reads an external producer's previous frame: the producer hands out only its latest
+    /// completed output, which its next render overwrites.</summary>
+    ExternalPreviousFrame = 10,
 }
 /// <summary>A refused set of render-graph instances.</summary>
 /// <param name="Code">Why it was refused.</param>
 /// <param name="Message">The refusal, naming what it concerns.</param>
 /// <param name="Instances">The instances concerned; for <see cref="RenderGraphInstanceRefusalCode.SameFrameCycle"/>,
-/// every instance in the cycle in read order; for <see cref="RenderGraphInstanceRefusalCode.KindMismatch"/>, the
-/// consumer, then the producer.</param>
+/// every instance in the cycle in read order; for <see cref="RenderGraphInstanceRefusalCode.KindMismatch"/> and
+/// <see cref="RenderGraphInstanceRefusalCode.ExternalPreviousFrame"/>, the consumer, then the producer.</param>
 public sealed record RenderGraphInstanceRefusal(RenderGraphInstanceRefusalCode Code, string Message, IReadOnlyList<string> Instances);

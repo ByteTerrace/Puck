@@ -7,7 +7,9 @@ namespace Puck.Hosting;
 /// within a frame comes before it. A read of an instance's own output, or a read marked
 /// <see cref="RenderGraphRead.PreviousFrame"/>, takes the producer's previous completed frame, so it orders nothing
 /// and may close a loop; a loop of same-frame reads is refused with every instance in it named. Image and buffer reads
-/// order alike, and a read whose kind is not what its producer's output carries is refused naming both.</summary>
+/// order alike, and a read whose kind is not what its producer's output carries is refused naming both. An external
+/// producer (<see cref="RenderGraphInstanceKind.External"/>) reads nothing and keeps no history, so a declared read of
+/// its own, and another instance's previous-frame read of it, are each refused by name.</summary>
 public sealed class RenderGraphInstanceSet {
     private readonly Dictionary<string, int> m_indexByName;
 
@@ -205,6 +207,18 @@ public sealed class RenderGraphInstanceSet {
 
                 return false;
             }
+            if (
+                (instance.Kind == RenderGraphInstanceKind.External) &&
+                (instance.Reads is { Count: > 0 })
+            ) {
+                refusal = Refuse(
+                    RenderGraphInstanceRefusalCode.ExternalReads,
+                    $"Render-graph instance '{instance.Name}' is the external producer '{instance.ExternalPackage}', which renders through its own submissions and reads no instance, but it declares {instance.Reads.Count} reads.",
+                    instance.Name
+                );
+
+                return false;
+            }
         }
 
         var reads = new IReadOnlyList<RenderGraphEdge>[instances.Count];
@@ -244,6 +258,21 @@ public sealed class RenderGraphInstanceSet {
                     refusal = Refuse(
                         RenderGraphInstanceRefusalCode.KindMismatch,
                         $"Render-graph instance '{instance.Name}' reads '{read.Producer}' as {read.Kind}, but its output is {instances[producer].Output}.",
+                        instance.Name,
+                        read.Producer!
+                    );
+
+                    return false;
+                }
+                // An external producer keeps no history: it hands out its latest completed output, which its next
+                // render overwrites, so a previous-frame read would sample the frame it is producing.
+                if (
+                    read.PreviousFrame &&
+                    (instances[producer].Kind == RenderGraphInstanceKind.External)
+                ) {
+                    refusal = Refuse(
+                        RenderGraphInstanceRefusalCode.ExternalPreviousFrame,
+                        $"Render-graph instance '{instance.Name}' reads the previous frame of '{read.Producer}', the external producer '{instances[producer].ExternalPackage}', which hands out only its latest completed output.",
                         instance.Name,
                         read.Producer!
                     );

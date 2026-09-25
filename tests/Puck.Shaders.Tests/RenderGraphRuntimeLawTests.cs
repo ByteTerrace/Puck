@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -248,12 +249,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
     }
     /// <summary>What one instance's package recorders recorded: creations, disposals, records, and the last record's
-    /// extent and output buffer.</summary>
+    /// extent, output buffer and output image layout.</summary>
     private sealed class Counter {
         public int Created;
         public int Disposed;
         public uint Height;
         public nint OutputBuffer;
+        public GpuImageLayout OutputLayout;
         public long Records;
         public uint Width;
     }
@@ -264,6 +266,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             counter.Width = recording.Width;
             counter.Height = recording.Height;
             counter.OutputBuffer = (recording.Outputs[0].Buffer?.BufferHandle ?? 0);
+            counter.OutputLayout = recording.Outputs[0].Image.Layout;
         }
     }
     /// <summary>Describes each frame to a runtime over the same roots and footprints, counting frame indices.</summary>

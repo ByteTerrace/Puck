@@ -117,7 +117,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             plan: plan,
             shaders: plan.Passes.ToDictionary(
                 elementSelector: static pass => Shader(
-                    kind: pass.Declaration.Kind,
+                    kind: pass.Declaration!.Kind,
                     name: pass.Name
                 ),
                 keySelector: static pass => pass.Name
@@ -170,7 +170,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             plan: plan,
             shaders: plan.Passes.ToDictionary(
                 elementSelector: static pass => Shader(
-                    kind: pass.Declaration.Kind,
+                    kind: pass.Declaration!.Kind,
                     name: pass.Name
                 ),
                 keySelector: static pass => pass.Name

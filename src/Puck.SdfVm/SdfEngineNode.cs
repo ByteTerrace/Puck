@@ -62,7 +62,10 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     private readonly string? m_debugLabel;
     private readonly int m_dynamicTransformCapacity;
     private readonly ISdfFrameSource m_frameSource;
-    private readonly uint m_height;
+
+    // The extent the engine renders at; Produce changes it, replacing the engine.
+    private uint m_height;
+
     private readonly int m_instanceCapacity;
 
     private SdfWorldKernels m_kernels;
@@ -158,7 +161,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     private readonly Dictionary<int, Func<nint>> m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
     private readonly int m_viewportCapacity;
-    private readonly uint m_width;
+
+    private uint m_width;
 
     private readonly CapturePngWriter m_capturePng = new();
 
@@ -263,6 +267,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             options: engineOptions,
             pipelines: pipelines
         );
+        m_engineToken++;
         m_engine = new SdfWorldEngine(
             device: gpuDevice,
             height: m_height,
@@ -501,6 +506,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         m_engine?.Dispose();
         m_engine = null;
         m_engineProduced = false;
+        DisposeRetiringEngines();
         CancelShaderReload(reason: "the node was disposed");
         m_pipelines.Release();
         RetireAllScreenSourceFrames();
@@ -523,6 +529,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         m_engine?.Dispose();
         m_engine = null;
         m_engineProduced = false;
+        // No lost submission will sample a replaced engine's output, so every held engine goes with the device.
+        DisposeRetiringEngines();
         // A pipeline build or kernel reload still in flight is waited out and discarded before the host recreates the
         // device; the rebuilt engine builds its pipelines anew on the recreated one.
         CancelShaderReload(reason: "the device was lost");

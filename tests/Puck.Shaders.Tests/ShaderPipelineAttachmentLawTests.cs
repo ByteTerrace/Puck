@@ -150,7 +150,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
             shaders: plan.Passes.ToDictionary(
                 elementSelector: pass => new CompiledShader(
                     diagnostics: [],
-                    dxil: Stages(kind: pass.Declaration.Kind),
+                    dxil: Stages(kind: pass.Declaration!.Kind),
                     name: pass.Name,
                     sourceHash: pass.Name,
                     sourcePath: $"{pass.Name}.hlsl",
@@ -660,7 +660,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
         var pass = Plan(definition: definition).Passes.Single();
 
         Assert.Equal(
-            actual: (pass.Declaration.Kind, pass.Declaration.DepthCompare, pass.Declaration.Geometry!.VertexEntryPoint, pass.Declaration.Geometry.IndexFormat, pass.Declaration.Geometry.VertexCount, pass.Declaration.Geometry.SizeBytes),
+            actual: (pass.Declaration!.Kind, pass.Declaration!.DepthCompare, pass.Declaration!.Geometry!.VertexEntryPoint, pass.Declaration!.Geometry.IndexFormat, pass.Declaration!.Geometry.VertexCount, pass.Declaration!.Geometry.SizeBytes),
             expected: (ShaderPipelineDocumentPassKind.Geometry, ((ShaderPipelineDepthCompare?)ShaderPipelineDepthCompare.LessOrEqual), "vs", ShaderPipelineIndexFormat.UInt32, 3U, ((9UL * 4UL) + (3UL * 4UL)))
         );
         Assert.Equal(

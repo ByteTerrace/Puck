@@ -477,8 +477,9 @@ named by package id from `RenderGraphPackageCatalog`, which offers
 set. `RenderGraphCompiler` checks the schema tag and plans a graph with P3's
 planner: a package pass enters the plan only through the planner's package
 entry, and its planned pass carries its own kind,
-`ShaderPipelinePassKind.Package`, over the compute shape it reaches
-resources by, so one planner orders, versions and barriers every pass. A
+`ShaderPipelinePassKind.Package`, and a package step naming its package, its
+ports' versions and its extent in place of a declaration, so one planner
+orders, versions and barriers every pass. A
 shader pass's kind has no `Package` member, so the JSON reader refuses that
 name. A pipeline host offers no package, so the packager and the loader see
 shader passes alone, and a node given recorders runs a graph's package passes
@@ -514,11 +515,12 @@ still render every view, no host feeds the scheduler a frame, and
 wires `WorldBootComposition`'s node tree onto graph instances fed by the
 scheduler, puts the live schedule's extents and prices in `world.budget`,
 runs the parity and counted-GPU checks, and makes the rest of the deletions
-P11 lists. Six P11b items have landed: the first-class package pass kind in
+P11 lists. Seven P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
 planner only through its package entry, the fold of the pipeline document
-into the graph document, planned buffer edges, and the graph runtime. The
+into the graph document, planned buffer edges, the graph runtime, and
+`sdf.world` as the runtime's external producer (commit 5a below). The
 fold leaves one document: the pipeline document's tag, its definition type
 and its schema check are gone, a top-level `config` is an unknown member, every
 checked-in document is a `*.graph.json` tagged `puck.render.graph.v1`, and
@@ -563,8 +565,8 @@ a quarter-screen view at a quarter extent, a buffer edge binding the
 producer's buffer, captures served from the root or refused by name, the
 device-loss and disposal releases, and a steady frame allocating nothing over
 64 frames. Nothing drives the runtime yet: `WorldBootComposition` keeps its
-hand-built tree, no host registers a recorder, the `sdf.world`, `post.<id>`
-and `overlay` adapters are the next item, and the node allocates only
+hand-built tree, no host registers a recorder or a producer, the `post.<id>`
+and `overlay` recorders are the next items, and the node allocates only
 fixed-size buffers, so a counted package buffer such as `sdf.bricks`'s brick
 pool cannot be an instance's storage until the host supplies its counts.
 A world may author its own root graph
@@ -586,42 +588,64 @@ the engine's latest completed image, held as a `GpuImageLease` until the
 submission that samples it retires, and never copied. The commit lands as three
 sub-steps, in this order:
 
-- 5a, `sdf.world` as an external-producer instance, GPU-free apart from its
-  gate.
-  - `RenderGraphInstance` gains a kind: a rendered graph, or an external
-    producer that names a package id. `RenderGraphInstanceSet.TryCreate`
-    refuses an external instance that reads another instance, and, until P14-6,
-    a previous-frame read of an `sdf.world` external producer, each by name. The
-    engine writes one output image (`SdfWorldEngine.OutputImageHandle`) that its
-    next render overwrites, so a previous-frame read would sample the current
-    frame, and the output is not double-buffered to allow one.
-    The scheduler is unchanged: demand, divisor, quantized extent, and a price
-    of `SdfWorldEngine.PassLabels.Length` passes.
-  - An `IRenderGraphExternalProducer` is registered per package id beside the
-    package recorders. When its instance is scheduled, the runtime produces it
-    before its consumers: `sdf.world` submits through the engine's own ring
-    (`SdfEngineNode.ProduceFrame` at the scheduled extent). Then, and on frames
-    the schedule skips or defers, the producer hands out its latest completed
-    output as a lease and an external image.
-  - The consuming instance's `ShaderPipelineRenderNode` keeps one
-    `LeaseRetireList` per frame slot, as `SdfEngineNode` does for screen
-    sources. Resolving an input port to a lease holds it for the frame, submit
-    moves it into the slot's list, and the list retires after that slot's fence
-    wait, on device loss and on disposal. `BindImage` stays for host images that
-    need no retirement. The engine's output is a storage image in `General`
-    layout, so the external image states that layout and the planner's first
-    access transitions from it.
-  - `SdfEngineNode` counts acquisitions of each engine's output. A replaced
-    engine, after a resize or rebuild, is disposed once its acquisitions are
-    released. The drain in `SdfWorldEngine.Dispose` stays until P14-6 as the
-    backstop.
-  - The synthesized default composition becomes two instances: `world`, the
-    external `sdf.world` producer, and the root graph, which reads `world`'s
-    output as its input and runs the `post.<id>` passes and then `overlay`.
-  - Laws on `FakeGpuDevice`: the instance-set refusals by name; a lease is
-    released exactly once, after the sampling slot's fence, on device loss or on
-    disposal; a skipped world frame hands out the same image; and a steady frame
-    allocates nothing.
+- 5a has landed: `sdf.world` runs as an external-producer instance, on the
+  fake GPU only, since nothing wires it live yet.
+  - `RenderGraphInstance` has a kind (`RenderGraphInstanceKind`): a graph it
+    renders, or an external producer named by `ExternalPackage`.
+    `RenderGraphInstanceSet.TryCreate` refuses an external instance that
+    declares reads (`ExternalReads`), and a previous-frame read of an external
+    producer (`ExternalPreviousFrame`), each by name. The engine writes one
+    output image (`SdfWorldEngine.OutputImageHandle`) that its next render
+    overwrites, so a previous-frame read would sample the current frame, and
+    the output is not double-buffered to allow one; the refusal covers every
+    external producer, and `sdf.world` is the only one until P14-6. The
+    scheduler is unchanged: demand, divisor, quantized extent, and the price
+    the instance declares, `SdfWorldEngine.PassLabels.Length` passes for
+    `sdf.world`.
+  - `IRenderGraphExternalProducer` (`src/Puck.Hosting/Graph`) is registered
+    per package id beside the package recorders
+    (`RenderGraphPackageRecorders.RegisterProducer`). The runtime creates one
+    per external instance at install, refuses an external instance given a
+    graph, declaring a buffer output or naming an unserved package
+    (`ExternalProducer`), and refuses an external root. When the instance is
+    scheduled, the runtime produces it before its consumers at the scheduled
+    extent; `SdfEngineNode` is the `sdf.world` producer, and its `Produce`
+    submits through the engine's own ring. On every frame a consumer renders,
+    scheduled for the producer or not, the consumer binds the producer's latest
+    completed output as a `GpuImageLease` and an external image in `General`
+    layout, or the stand-in before the producer has completed one.
+  - `ShaderPipelineRenderNode` keeps one `LeaseRetireList` per frame slot. A
+    leased `BindImage` serves the next produced frame only: the frame that
+    records holds the lease, its submission moves it into the slot's list, and
+    the list retires after that slot's next fence wait, on device loss and at
+    disposal. A frame that records nothing retires the lease at once, and a
+    frame recorded without a newer binding is refused. The plain `BindImage`
+    stays for host images that need no retirement.
+  - `SdfEngineNode` counts acquisitions of its engine's output
+    (`OutputLeases`). A new extent replaces the engine, and a replaced engine
+    whose output is still leased is disposed when its last acquisition is
+    released (`RetiringEngines`); the screen-source leases its submissions
+    sampled retire with it. The drain in `SdfWorldEngine.Dispose` stays until
+    P14-6 as the backstop.
+  - The runtime also refuses, at install, a consumer whose external image
+    version declares another format than its producer publishes, or whose
+    buffer version is larger than its producer's buffer (`InputFormat`), and a
+    package recorder's resolved images carry the layout their planned access
+    left them in.
+  - The synthesized default composition of two instances, `world` as the
+    external `sdf.world` producer and the root graph that reads it and runs the
+    `post.<id>` passes and then `overlay`, lands with the live wiring;
+    `WorldBootComposition` keeps its hand-built tree until then.
+  - `RenderGraphRuntimeLawTests.External` holds the runtime to it over a fake
+    producer on `FakePipelineGpu`: the latest output bound on every render, a
+    lease retired only after the sampling slot's fence, a skipped producer frame
+    rebinding the same image, every lease released by device loss and disposal,
+    a steady frame allocating nothing, and the install refusals by name.
+    `SdfEngineNodeLeaseLawTests` holds `SdfEngineNode` on `FakeGpuDevice`: the
+    same output handed out until a frame produces another, an engine replaced
+    while leased disposed only after release, device loss releasing every held
+    engine, and steady acquisition allocating nothing. `RenderGraphSchedulerLawTests`
+    holds the instance-set refusals and the producer's price.
 - 5b, `post.<id>` as a recorder. Today `FullscreenPassNode` wraps a one-pass
   `ShaderPipelineRenderNode`. That executor has its own frame ring, per-slot
   fences and submission, and builds its modules, pipeline and render pass
@@ -682,7 +706,9 @@ Each sub-step's gate:
   pixels unchanged, once the default composition runs through the graph. The
   canaries that `tests/Puck.Affected/canary-coverage.json` maps to
   `SdfEngineNode.cs` and `LeaseRetireList.cs` run too. The mapping is read as
-  text rather than from a `puck affected` run, so it is unverified.
+  text rather than from a `puck affected` run, so it is unverified. Nothing
+  live runs through 5a yet, so these gates run when the default composition
+  moves onto the graph; until then its evidence is the fake-GPU laws above.
 - 5b: a new post canary, which 5b lands behind. It boots one shipped
   `post.<id>` on both backends and pins its pixels, with a discriminating leg
   without the extension. No existing gate covers a post pass: no canary or parity

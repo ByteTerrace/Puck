@@ -66,13 +66,13 @@ public sealed partial class ShaderPipelineRenderNode {
         var sets = new List<IReadOnlyList<GpuComputeBinding>>();
 
         foreach (var planned in plan.Passes) {
-            // A package pass binds its own descriptors: its recorder records it.
-            if (planned.Kind == ShaderPipelinePassKind.Package) {
+            // A package pass has no declaration and binds its own descriptors: its recorder records it.
+            if (planned.Declaration is not { } declaration) {
                 continue;
             }
 
             var bindings = Descriptors(
-                pass: planned.Declaration,
+                pass: declaration,
                 specs: specs
             );
 
@@ -111,14 +111,14 @@ public sealed partial class ShaderPipelineRenderNode {
             if (pass.Bindings.Count != 0) {
                 pass.Sets![slot] = bindings.AllocateSet(
                     descriptorPool,
-                    ((pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute)
+                    ((pass.Kind == ShaderPipelinePassKind.Compute)
                     ? pass.Compute!.DescriptorSetLayoutHandle
                     : pass.Graphics!.DescriptorSetLayoutHandle)
                 );
                 pass.Samplers![slot] = bindings.CreateSampler();
             }
 
-            if (pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute) {
+            if (pass.Kind is ShaderPipelinePassKind.Compute or ShaderPipelinePassKind.Package) {
                 pass.Pools![slot] = m_gpu.CommandPoolFactory.Create();
             } else {
                 pass.Pre![slot] = m_gpu.CommandPoolFactory.Create();

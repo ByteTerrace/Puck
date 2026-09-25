@@ -474,8 +474,8 @@ public sealed record ShaderPipelinePass(
 /// <summary>One pass of engine package work, as a frame graph hands it to the planner: the one way package work enters
 /// planning, since a graph's package passes reach the planner only through the graph compiler. The planner orders,
 /// versions and barriers it by what it reads and writes, which it reaches as a compute pass does, and its planned pass
-/// carries <see cref="ShaderPipelinePassKind.Package"/> with this compute shape as its declaration, whose source is the
-/// package id. The package records its own work and binds its own descriptors.</summary>
+/// carries <see cref="ShaderPipelinePassKind.Package"/> and a <see cref="ShaderPipelinePackageStep"/> in place of a
+/// declaration. The package records its own work and binds its own descriptors.</summary>
 /// <param name="Name">The unique pass name.</param>
 /// <param name="Package">The package id.</param>
 /// <param name="Inputs">The versions it reads.</param>

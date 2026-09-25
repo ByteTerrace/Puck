@@ -816,7 +816,8 @@ public sealed partial class ShaderPipelineCompiler {
     // one planner orders, versions and barriers both. This is the only way package work enters planning: the graph
     // compiler checks a document's package passes against its host's packages and hands them here, so a definition
     // reaching the planner with its own is refused. The names they bring are the passes whose planned kind is Package.
-    // Planning works on a copy whose passes are both, and the plan keeps the graph's shader passes.
+    // Planning works on a copy whose passes are both, and the plan keeps the graph's shader passes: a package's planned
+    // pass carries its step, never its compute shape.
     internal ShaderPipelinePlan Compile(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePackagePass> packages) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: packages);
@@ -953,6 +954,9 @@ public sealed partial class ShaderPipelineCompiler {
         }
 
         var plannedPasses = new List<ShaderPipelinePlannedPass>(capacity: order.Count);
+        // The shape each planned pass reaches resources by, in execution order: a shader pass's declaration, or a
+        // package pass's compute shape, which planning reads and the plan does not keep.
+        var shapes = new List<ShaderPipelinePass>(capacity: order.Count);
         var interfacesBySource = new Dictionary<string, (string Pass, ShaderInterface Interface)>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < order.Count); index++) {
@@ -1003,8 +1007,13 @@ public sealed partial class ShaderPipelineCompiler {
                     interfacesBySource[pass.Source] = (pass.Name, parameters.Interface);
                 }
             }
+            shapes.Add(item: pass);
             plannedPasses.Add(item: new ShaderPipelinePlannedPass(
-                Declaration: pass,
+                Declaration: (package
+                    ? null
+                    : pass),
+                Name: pass.Name,
+                Package: null,
                 Index: index,
                 Dependencies: new ReadOnlyCollection<int>(list: dependencies[passIndex].OrderBy(keySelector: value => ordinal[value]).Select(selector: value => ordinal[value]).ToList()),
                 Parameters: parameters,
@@ -1021,7 +1030,7 @@ public sealed partial class ShaderPipelineCompiler {
         var versions = PlanVersions(
             definition: definition,
             liveResources: liveResources,
-            passes: plannedPasses
+            passes: shapes
         );
         var plannedResources = versions.Resources.ToDictionary(
             keySelector: static resource => resource.Name,
@@ -1037,14 +1046,30 @@ public sealed partial class ShaderPipelineCompiler {
             passes: plannedPasses.Select(selector: (pass, index) => pass with {
                 Accesses = versions.Accesses[index],
                 Attachments = AttachmentsOf(
-                    pass: pass.Declaration,
+                    pass: shapes[index],
                     resources: plannedResources
                 ),
+                Package = ((pass.Kind == ShaderPipelinePassKind.Package)
+                    ? StepOf(
+                        pass: shapes[index],
+                        resources: plannedResources,
+                        storages: versions.Storages
+                    )
+                    : null),
             }).ToArray(),
             resources: versions.Resources,
             storages: versions.Storages
         );
     }
+
+    // A package pass's step: its package, its ports' versions, and the dimensions of the first port whose storage declares
+    // them, outputs before inputs.
+    private static ShaderPipelinePackageStep StepOf(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelinePlannedResource> resources, IReadOnlyList<ShaderPipelinePlannedStorage> storages) => new(
+        Extent: pass.OutputReferences.Concat(second: pass.InputReferences).Select(selector: reference => storages[resources[reference.Name].Storage].Declaration.Dimensions).FirstOrDefault(predicate: static dimensions => (dimensions is not null)),
+        Inputs: new ReadOnlyCollection<ResourceReference>(list: pass.InputReferences.ToArray()),
+        Outputs: new ReadOnlyCollection<ResourceReference>(list: pass.OutputReferences.ToArray()),
+        Package: pass.Source
+    );
 
     /// <summary>Convenience static entry point for callers that do not need custom limits.</summary>
     public static ShaderPipelinePlan Plan(RenderGraphDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);

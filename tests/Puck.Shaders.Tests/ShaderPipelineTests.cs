@@ -307,9 +307,11 @@ public sealed class ShaderPipelineTests {
             expected: ShaderPipelinePassKind.Package,
             actual: planned.Kind
         );
+        // The planned pass carries its step, not a declaration: the package, its ports and its extent.
+        Assert.Null(@object: planned.Declaration);
         Assert.Equal(
-            expected: (ShaderPipelineDocumentPassKind.Compute, RenderGraphPackageCatalog.SdfWorld),
-            actual: (planned.Declaration.Kind, planned.Declaration.Source)
+            expected: (RenderGraphPackageCatalog.SdfWorld, "out", 0, ((uint)64), ((uint)32)),
+            actual: (planned.Package!.Package, planned.Package.Outputs.Single().Name, planned.Package.Inputs.Count, planned.Package.ResolveExtent(frameHeight: 32, frameWidth: 64).Width, planned.Package.ResolveExtent(frameHeight: 32, frameWidth: 64).Height)
         );
     }
     [Fact]
@@ -469,8 +471,8 @@ public sealed class ShaderPipelineTests {
         resources.Clear();
         passes.Clear();
 
-        Assert.Single(collection: plan.Passes[0].Declaration.InputReferences);
-        Assert.Single(collection: plan.Passes[0].Declaration.OutputReferences);
+        Assert.Single(collection: plan.Passes[0].Declaration!.InputReferences);
+        Assert.Single(collection: plan.Passes[0].Declaration!.OutputReferences);
         Assert.Equal(
             expected: 2,
             actual: plan.Resources.Count
@@ -780,7 +782,7 @@ public sealed class ShaderPipelineTests {
                 )],
             ["out"]
         );
-        var display = new ShaderPipelineCompiler().Compile(definition: definition).Passes.Single(predicate: pass => (pass.Name == "display")).Declaration;
+        var display = new ShaderPipelineCompiler().Compile(definition: definition).Passes.Single(predicate: pass => (pass.Name == "display")).Declaration!;
 
         Assert.Equal(
             2,
@@ -817,7 +819,7 @@ public sealed class ShaderPipelineTests {
 
         Assert.Equal(
             expected: 2,
-            actual: plan.Passes[0].Declaration.OutputReferences.Count
+            actual: plan.Passes[0].Declaration!.OutputReferences.Count
         );
         Assert.Equal(
             expected: 64ul,

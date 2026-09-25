@@ -119,13 +119,13 @@ public sealed class ShaderPipelineLoader {
             // plans shader passes alone.
             foreach (var pass in plan.Passes) {
                 Capture(sourcePath: Path.GetFullPath(
-                pass.Declaration.Source,
+                pass.Declaration!.Source,
                 directory
             ));
             }
             foreach (var planned in plan.Passes) {
                 cancellationToken.ThrowIfCancellationRequested();
-                var pass = planned.Declaration;
+                var pass = planned.Declaration!;
                 var sourcePath = Path.GetFullPath(
                     pass.Source,
                     directory

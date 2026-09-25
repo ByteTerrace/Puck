@@ -254,9 +254,11 @@ catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
 planner. Package work enters the planner only through the graph compiler; the
 planner's own document entry refuses a graph naming package passes
 (`SHADERPIPE_PACKAGE_PASS`). The planner sees a package pass as its own kind,
-`Package`, whose planned pass's declaration is the compute shape it reaches its
-versions by, with the package id as its source, and the graph plan's step names
-its package: it binds no descriptors and compiles nothing. A pipeline host
+`Package`, ordered by the versions it reaches as a compute pass would. Its
+planned pass has no declaration; it carries a `ShaderPipelinePackageStep`
+instead, naming the package, the versions bound to its ports and the extent it
+runs at, which is what the render node reads. It binds no descriptors and
+compiles nothing. A pipeline host
 offers no package, so the packager and the loader see shader passes alone; a
 pipeline candidate (`CompiledShaderPipeline`) holds a package pass without a
 compiled shader, and the render node records it through its package's recorder
@@ -325,11 +327,30 @@ for each package id, its package passes, all in the planner's order. A
 `RenderGraphRuntimeGraph` binds each external version to a producer instance;
 the runtime binds it to the frame of that producer's output the schedule
 names, and to a transparent-black stand-in while the producer has none. A
-bound image may have any extent. Captures read the root instance's output,
-and each instance counts its own passes. The live renderer does not use the
-runtime yet: `views.pipelines`, the SDF engine's child composition and
-`ViewStack` still render every view, and no host registers a package
-recorder. Moving them onto graph instances is P11b in
+bound image may have any extent, but its format must be the one its producer
+publishes, and a bound buffer may be no larger than its producer's; the
+runtime refuses a mismatch by name when it installs. A package recorder's
+resolved images carry the layout their planned access left them in.
+
+An instance can instead be an external producer: a `RenderGraphInstance` whose
+`ExternalPackage` names the `IRenderGraphExternalProducer` registered for that
+package (`RenderGraphPackageRecorders.RegisterProducer`). It has no graph. The
+runtime produces it at the scheduled extent before its consumers, through the
+producer's own submissions, and each consumer that renders binds the
+producer's latest completed output, whether or not the producer rendered this
+frame, under a `GpuImageLease`. The consumer's node holds the lease in its
+frame slot's `LeaseRetireList` until that slot's fence proves the sampling
+submission finished, or until a device loss or disposal. An external producer
+reads no instance and keeps no history, so the instance set refuses a read
+declared by one and a previous-frame read of one. `SdfEngineNode` is the
+`sdf.world` producer: it submits through the SDF engine's own frame ring,
+counts every acquisition of its output, and disposes an engine a new extent
+replaced only once that engine's output is released.
+
+Captures read the root instance's output, and each instance counts its own
+passes. The live renderer does not use the runtime yet: `views.pipelines`,
+the SDF engine's child composition and `ViewStack` still render every view,
+and no host registers a package recorder or an external producer. Moving them onto graph instances is P11b in
 [the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
 
 ## Pass interfaces
