@@ -545,6 +545,18 @@ and `ShaderInterfaceSpikeTests` hold both bytecode readers to it; never add a
 register remap. `ShaderRegisterBindingLawTests` holds every shader the build
 compiles to the register rule, with a shrink-only list of the declarations that
 break it today ([kernels](references/kernels.md#registers-and-bindings)).
+A binding's kind is `GpuBindingKind`, the one closed set for graphics and
+compute; push constants are not a kind, and a pushed block is a constant
+buffer marked `ShaderInterfaceBinding.Pushed`. A pipeline's groups are one
+`GpuPipelineLayoutDescription` (`src/Puck.Abstractions/Gpu/Bindings`,
+`ShaderInterfaceLayout.PipelineLayout`), and each backend's layout is planned
+from it with no device call: `DirectXRootLayout.Plan` (a view table per group,
+a second table for a group's samplers, the pushed index last at `b0` in space
+4) and `VulkanGroupLayouts.Plan`. `DirectXRootLayoutLawTests` and
+`VulkanGroupLayoutsLawTests` hold both to the spike's tables in
+`tests/Shared/GpuGroupLayoutTables.cs`. No pipeline is created from a plan
+yet; `GpuComputeBindingKind` and `ShaderSetManifestBindingKind` still carry the
+combined image sampler until the backends bind sampler tables.
 
 The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
 [frame graphs](../../../docs/reference/shaders.md#frame-graphs)): the pipeline

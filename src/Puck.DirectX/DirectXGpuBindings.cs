@@ -139,9 +139,17 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         uint binding,
         nint bufferHandle,
         ulong bufferSize,
-        GpuBufferAccess access,
+        GpuBindingKind kind,
         uint elementStride
     ) {
+        if (kind is not (GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: kind,
+                message: "A buffer write names a read-only or read-write buffer kind.",
+                paramName: nameof(kind)
+            );
+        }
+
         var device = ((ID3D12Device*)deviceContext.DeviceHandle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
@@ -157,7 +165,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             : elementStride
         )));
 
-        if (access == GpuBufferAccess.ReadWrite) {
+        if (kind == GpuBindingKind.ReadWriteBuffer) {
             var uavDesc = new D3D12_UNORDERED_ACCESS_VIEW_DESC {
                 Format = format,
                 ViewDimension = D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_BUFFER,

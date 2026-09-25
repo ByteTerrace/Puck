@@ -576,12 +576,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
                 // Pipeline buffers are raw (ByteAddressBuffer), so the element stride is zero.
                 m_gpu.Bindings.WriteBuffer(
-                    access: GpuBufferAccess.Read,
                     binding: binding.Binding,
                     bufferHandle: buffer.BufferHandle,
                     bufferSize: (resource.Spec.SizeBytes ?? 0),
                     descriptorSetHandle: pass.Sets![slot],
-                    elementStride: 0
+                    elementStride: 0,
+                    kind: GpuBindingKind.ReadOnlyBuffer
                 );
             }
         }
@@ -611,12 +611,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     );
 
                     m_gpu.Bindings.WriteBuffer(
-                        access: GpuBufferAccess.ReadWrite,
                         binding: binding.Binding,
                         bufferHandle: buffer.BufferHandle,
                         bufferSize: (resource.Spec.SizeBytes ?? 0),
                         descriptorSetHandle: pass.Sets![slot],
-                        elementStride: 0
+                        elementStride: 0,
+                        kind: GpuBindingKind.ReadWriteBuffer
                     );
                 }
             }

@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+
 namespace Puck.Shaders;
 
 /// <summary>One member of a constant block as a layout places it: its name, its byte offset from the start of the
@@ -22,12 +24,16 @@ public readonly record struct ShaderInterfaceBlockMember(
 /// <param name="Binding">The Vulkan binding number, which is also the Direct3D 12 register number.</param>
 /// <param name="Kind">The binding kind.</param>
 /// <param name="Members">The constant block's members in offset order; empty for every other kind.</param>
+/// <param name="Pushed">Whether the constant block is delivered as push constants rather than bound: a SPIR-V
+/// <c>PushConstant</c> variable, which carries no set or binding and is placed at set 0, binding 0. A DXIL container
+/// cannot tell root constants from a bound constant buffer, so its reader never sets it.</param>
 public sealed record ShaderInterfaceBinding(
     string Name,
     uint Set,
     uint Binding,
-    ShaderBindingKind Kind,
-    IReadOnlyList<ShaderInterfaceBlockMember> Members
+    GpuBindingKind Kind,
+    IReadOnlyList<ShaderInterfaceBlockMember> Members,
+    bool Pushed = false
 ) {
     /// <inheritdoc/>
     /// <remarks>Compares <see cref="Members"/> element by element rather than by reference.</remarks>
@@ -41,6 +47,7 @@ public sealed record ShaderInterfaceBinding(
         (Set == other.Set) &&
         (Binding == other.Binding) &&
         (Kind == other.Kind) &&
+        (Pushed == other.Pushed) &&
         Members.SequenceEqual(second: other.Members));
     /// <inheritdoc/>
     public override int GetHashCode() =>
@@ -49,11 +56,12 @@ public sealed record ShaderInterfaceBinding(
             value2: Set,
             value3: Binding,
             value4: Kind,
-            value5: Members.Count
+            value5: Pushed,
+            value6: Members.Count
         );
     /// <inheritdoc/>
     public override string ToString() =>
-        $"{Name} set {Set} binding {Binding} {Kind}{((Members.Count == 0)
+        $"{Name} set {Set} binding {Binding} {(Pushed ? "pushed " : "")}{Kind}{((Members.Count == 0)
             ? ""
             : $" [{string.Join(separator: ", ", values: Members.Select(selector: static member => $"{member.Name}@{member.Offset}:{member.Type.Spelling()}{((member.Length == 0) ? "" : $"[{member.Length}]")}"))}]")}";
 }

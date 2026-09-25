@@ -333,7 +333,7 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
         Record(text: "device drain");
     }
     public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) { }
-    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) {
+    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
         if (0 == elementStride) {
             RawBufferWrites++;
         } else {

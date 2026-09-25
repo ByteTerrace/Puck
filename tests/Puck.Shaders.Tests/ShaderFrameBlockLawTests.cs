@@ -149,7 +149,7 @@ public sealed class ShaderFrameBlockLawTests {
 
                     Assert.Null(@object: layout.Layout.PushedBlockMismatch(reflected: reflected));
 
-                    if (reflected.SingleOrDefault(predicate: static binding => (binding.Kind == ShaderBindingKind.PushConstants)) is { } pushed) {
+                    if (reflected.SingleOrDefault(predicate: static binding => binding.Pushed) is { } pushed) {
                         Assert.Equal(
                             actual: AssertHostWords(
                                 block: block,

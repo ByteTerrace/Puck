@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
@@ -19,7 +20,8 @@ namespace Puck.Shaders;
 /// sequential constant-buffer packing lands each member exactly where the explicit Vulkan offset puts
 /// it.</description></item>
 /// <item><description>A pushed group's block (<see cref="ShaderInterface.PushConstants"/>) is a
-/// <see cref="ShaderBindingKind.PushConstants"/> binding at binding 0 of its set, placed by the same rule.</description></item>
+/// pushed <see cref="GpuBindingKind.ConstantBuffer"/> binding (<see cref="ShaderInterfaceBinding.Pushed"/>) at binding 0 of
+/// its set, placed by the same rule.</description></item>
 /// </list>
 /// </summary>
 public sealed class ShaderInterfaceLayout {
@@ -49,8 +51,8 @@ public sealed class ShaderInterfaceLayout {
         Interface = shaderInterface;
         Groups = new ReadOnlyCollection<ShaderInterfaceGroupLayout>(list: groups);
         Bindings = new ReadOnlyCollection<ShaderInterfaceBinding>(list: groups.SelectMany(selector: static group => group.Bindings).ToArray());
-        DxilBindings = new ReadOnlyCollection<ShaderInterfaceBinding>(list: Bindings.Select(selector: static binding => ((binding.Kind == ShaderBindingKind.PushConstants)
-            ? (binding with { Kind = ShaderBindingKind.ConstantBuffer })
+        DxilBindings = new ReadOnlyCollection<ShaderInterfaceBinding>(list: Bindings.Select(selector: static binding => (binding.Pushed
+            ? (binding with { Pushed = false })
             : binding)).ToArray());
     }
 
@@ -68,6 +70,27 @@ public sealed class ShaderInterfaceLayout {
     /// <summary>Gets the interface this layout places.</summary>
     public ShaderInterface Interface { get; }
 
+    /// <summary>Returns the neutral pipeline layout of the interface's groups: each group at its set, each binding at
+    /// its number with its kind and one descriptor.</summary>
+    /// <param name="pushesIndex">Whether the pipeline pushes a 4-byte index.</param>
+    /// <returns>The pipeline layout.</returns>
+    /// <exception cref="InvalidOperationException">The interface pushes a block, which is not a group.</exception>
+    public GpuPipelineLayoutDescription PipelineLayout(bool pushesIndex) {
+        if (PushedGroup is { } pushed) {
+            throw new InvalidOperationException(message: $"Shader interface '{Interface.Name}' pushes its {pushed.Group} block; a pipeline layout binds groups and pushes only an index.");
+        }
+
+        return new GpuPipelineLayoutDescription(
+            groups: Groups.Select(selector: static group => new GpuGroupLayoutDescription(
+                bindings: group.Bindings.Select(selector: static binding => new GpuGroupBinding(
+                    binding: binding.Binding,
+                    kind: binding.Kind
+                )).ToArray(),
+                ordinal: group.Set
+            )).ToArray(),
+            pushesIndex: pushesIndex
+        );
+    }
     /// <summary>Returns why a compiled module reads the pushed block somewhere other than this layout puts it, or
     /// <see langword="null"/> when it reads the block exactly as laid out or does not read it. The block is the binding
     /// at set 0, binding 0 named for the pushed group, whether a SPIR-V module reflects it as push constants or a DXIL
@@ -84,7 +107,7 @@ public sealed class ShaderInterfaceLayout {
         }
 
         var block = reflected.FirstOrDefault(predicate: binding => (
-            (binding.Kind is ShaderBindingKind.PushConstants or ShaderBindingKind.ConstantBuffer) &&
+            (binding.Kind == GpuBindingKind.ConstantBuffer) &&
             (binding.Set == group.Set) &&
             (binding.Binding == 0) &&
             string.Equals(
@@ -106,6 +129,7 @@ public sealed class ShaderInterfaceLayout {
             Kind: block.Kind,
             Members: group.BlockMembers,
             Name: block.Name,
+            Pushed: block.Pushed,
             Set: group.Set
         );
 
@@ -114,11 +138,11 @@ public sealed class ShaderInterfaceLayout {
 
     private static uint AlignUp(uint value, uint alignment) =>
         ((((value + alignment) - 1) / alignment) * alignment);
-    private static ShaderBindingKind BindingKind(ShaderInterfaceMemberKind kind) =>
+    private static GpuBindingKind BindingKind(ShaderInterfaceMemberKind kind) =>
         kind switch {
-            ShaderInterfaceMemberKind.SampledImage => ShaderBindingKind.SampledImage,
-            ShaderInterfaceMemberKind.StorageImage => ShaderBindingKind.StorageImage,
-            ShaderInterfaceMemberKind.Sampler => ShaderBindingKind.Sampler,
+            ShaderInterfaceMemberKind.SampledImage => GpuBindingKind.SampledImage,
+            ShaderInterfaceMemberKind.StorageImage => GpuBindingKind.StorageImage,
+            ShaderInterfaceMemberKind.Sampler => GpuBindingKind.Sampler,
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: kind,
                 message: "The member kind is not a binding of its own.",
@@ -186,11 +210,10 @@ public sealed class ShaderInterfaceLayout {
             blockVariableName = ShaderInterface.BlockVariableName(group: group);
             bindings.Add(item: new ShaderInterfaceBinding(
                 Binding: 0,
-                Kind: (pushed
-                    ? ShaderBindingKind.PushConstants
-                    : ShaderBindingKind.ConstantBuffer),
+                Kind: GpuBindingKind.ConstantBuffer,
                 Members: blockMembers.AsReadOnly(),
                 Name: blockVariableName,
+                Pushed: pushed,
                 Set: set
             ));
         }
@@ -241,7 +264,7 @@ public sealed class ShaderInterfaceLayout {
 public sealed record ShaderInterfaceResourceLayout(
     ShaderInterfaceMember Member,
     uint Binding,
-    ShaderBindingKind Kind
+    GpuBindingKind Kind
 );
 /// <summary>One frequency group of a <see cref="ShaderInterfaceLayout"/>.</summary>
 /// <param name="Group">The frequency group.</param>

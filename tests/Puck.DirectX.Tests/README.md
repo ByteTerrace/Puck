@@ -8,7 +8,11 @@ that was never created neither creates it nor retries the failure. The
 pipeline library's file is named from the device identity, so a driver version
 the adapter will not report still keeps the library on disk. The memory
 profile is filled from fixture architecture, adapter and options 16 structures,
-and each fixture adapter selects the residency policy it should.
+and each fixture adapter selects the residency policy it should. The root
+layout planner turns the gate spike's two-group layouts into dense root
+parameters: a view table per group, a second table for a group's samplers,
+and the pushed index at `b0` in space 4. It refuses a description no backend
+may plan.
 
 The debug-layer liveness tests are the only ones that create a Direct3D 12
 device, with the debug layer on, and skip when the host has no device or no

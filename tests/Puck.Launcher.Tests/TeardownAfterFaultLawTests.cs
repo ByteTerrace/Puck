@@ -306,7 +306,7 @@ public sealed class TeardownAfterFaultLawTests {
         public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
         public bool TryAcquire(int key, out Puck.Hosting.GpuImageLease lease) => throw Reached();
         public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw Reached();
-        public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => throw Reached();
+        public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => throw Reached();
         public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reached();
     }
 }

@@ -385,14 +385,14 @@ file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : C
         inner.DestroyPool(poolHandle: poolHandle);
     public void DestroySampler(nint samplerHandle) =>
         inner.DestroySampler(samplerHandle: samplerHandle);
-    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) {
+    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
         inner.WriteBuffer(
-            access: access,
             binding: binding,
             bufferHandle: bufferHandle,
             bufferSize: bufferSize,
             descriptorSetHandle: descriptorSetHandle,
-            elementStride: elementStride
+            elementStride: elementStride,
+            kind: kind
         );
         Tally(column: GpuWork.DescriptorWritesColumn);
     }

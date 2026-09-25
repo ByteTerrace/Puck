@@ -153,7 +153,7 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuBindings.DestroyPool"] = (rig => rig.Services.Bindings.DestroyPool(poolHandle: 2), none),
             ["IGpuBindings.DestroySampler"] = (rig => rig.Services.Bindings.DestroySampler(samplerHandle: 2), none),
             ["IGpuBindings.WriteCombinedImageSampler"] = (rig => rig.Services.Bindings.WriteCombinedImageSampler(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5, samplerHandle: 6), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuBindings.WriteBuffer"] = (rig => rig.Services.Bindings.WriteBuffer(access: GpuBufferAccess.ReadWrite, binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, elementStride: 0), [(GpuWork.DescriptorWrites, 1L)]),
+            ["IGpuBindings.WriteBuffer"] = (rig => rig.Services.Bindings.WriteBuffer(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, elementStride: 0, kind: GpuBindingKind.ReadWriteBuffer), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuBindings.WriteStorageImage"] = (rig => rig.Services.Bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuPipelineFactory.Create(graphics)"] = (rig => rig.Pipelines.Create(description: null!, fragmentShaderModule: null!, renderPass: null!, vertexShaderModule: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
             ["IGpuQueueSubmitter.CreateSubmissionFence"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(), none),

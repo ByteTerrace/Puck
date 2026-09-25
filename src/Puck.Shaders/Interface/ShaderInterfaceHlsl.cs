@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
@@ -143,9 +144,9 @@ public static class ShaderInterfaceHlsl {
         var member = resource.Member;
 
         var (register, declaration) = resource.Kind switch {
-            ShaderBindingKind.SampledImage => ('t', $"Texture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
-            ShaderBindingKind.StorageImage => ('u', $"[[vk::image_format(\"{ShaderInterface.StorageFormatSpelling(format: member.Format!.Value)}\")]] RWTexture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
-            ShaderBindingKind.Sampler => ('s', $"SamplerState {member.Name}"),
+            GpuBindingKind.SampledImage => ('t', $"Texture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
+            GpuBindingKind.StorageImage => ('u', $"[[vk::image_format(\"{ShaderInterface.StorageFormatSpelling(format: member.Format!.Value)}\")]] RWTexture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
+            GpuBindingKind.Sampler => ('s', $"SamplerState {member.Name}"),
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: resource.Kind,
                 message: "The binding kind is not generated for an interface member.",
