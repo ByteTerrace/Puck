@@ -14,14 +14,17 @@ namespace Puck.SdfVm.Tests;
 /// every object it creates, behind <see cref="GpuCreationFaults"/>. The node builds an engine only when it has none (its
 /// first frame, and the rebuild after a device loss disposed the previous one), so a failed build has no previous engine
 /// to present: the produced frame returns nothing new rather than throwing, <see cref="SdfEngineNode.NotReadyReason"/>
-/// names the refusal, everything the failed construction created is released while the pipeline set's lease is kept, and
-/// the next produced frame builds again.
+/// names the refusal, and everything the failed construction created is released while the pipeline set's lease is
+/// kept. A refused build is tried again only when one of its inputs changes (the program, a kernel reload request, the
+/// device); frames that change none of them attempt nothing. Each engine attempt creates exactly one descriptor pool,
+/// which is how the laws count attempts.
 /// </summary>
 public sealed class SdfEngineNodeBuildRefusalLawTests {
     private const uint Extent = 32;
+    private const int Frames = 5;
 
     [Fact]
-    public void AFaultedFirstBuildIsRefusedByNameAndTheNextFrameBuildsTheEngine() {
+    public void AFaultedFirstBuildIsRefusedByNameAndBuildsOnceTheProgramChanges() {
         using var rig = new Rig(reportVersion: SdfIsa.Version);
 
         // The pipeline set's build creates no command pool, so the second one created is the engine's last: the refused
@@ -40,11 +43,24 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         );
         rig.AssertOnlyThePipelineSetIsHeld();
 
-        _ = rig.Node.ProduceFirstFrame(context: in rig.Context);
+        // The fault fired once, but nothing a frame brings could have fixed the build, so none tries it again.
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.Equal(
+            actual: rig.EngineAttempts,
+            expected: 1
+        );
+
+        rig.ChangeProgram();
+        _ = rig.Node.ProduceFrame(context: in rig.Context);
+        Assert.True(condition: rig.Node.IsReady);
         Assert.Null(@object: rig.Node.NotReadyReason);
+        Assert.Equal(
+            actual: rig.EngineAttempts,
+            expected: 2
+        );
     }
     [Fact]
-    public void AFaultedRebuildAfterADeviceLossIsRefusedByNameAndTheNextFrameRebuilds() {
+    public void AFaultedRebuildAfterADeviceLossIsRefusedByNameAndTheNextDeviceLossRebuilds() {
         using var rig = new Rig(reportVersion: SdfIsa.Version);
 
         _ = rig.Node.ProduceFirstFrame(context: in rig.Context);
@@ -60,24 +76,53 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         );
         rig.AssertOnlyThePipelineSetIsHeld();
 
+        var attempts = rig.EngineAttempts;
+
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.Equal(
+            actual: rig.EngineAttempts,
+            expected: attempts
+        );
+
+        rig.Node.OnDeviceLost();
         _ = rig.Node.ProduceFirstFrame(context: in rig.Context);
         Assert.Null(@object: rig.Node.NotReadyReason);
+        Assert.Equal(
+            actual: rig.EngineAttempts,
+            expected: (attempts + 1)
+        );
     }
     [Fact]
-    public void ARefusalThatRecursIsRetriedEveryFrameAndLeaksNothing() {
+    public void APersistentRefusalBuildsOnceAndEachChangedInputRetriesOnce() {
         using var rig = new Rig(reportVersion: unchecked((byte)(SdfIsa.Version + 1)));
 
         _ = rig.ProduceUntilRefused();
-
-        for (var frame = 0; (frame < 3); frame++) {
-            Assert.True(condition: rig.Node.ProduceFrame(context: in rig.Context).IsEmpty);
-        }
-
-        Assert.False(condition: rig.Node.IsReady);
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.Equal(
+            actual: rig.EngineAttempts,
+            expected: 1
+        );
         Assert.Contains(
             expectedSubstring: "SDF ISA version mismatch",
             actualString: rig.Node.NotReadyReason
         );
+
+        // A new program is a changed input: one attempt, refused the same way, and then none again.
+        rig.ChangeProgram();
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.Equal(
+            actual: rig.EngineAttempts,
+            expected: 2
+        );
+
+        // So is a kernel reload request.
+        Assert.True(condition: rig.Node.RequestShaderReload());
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.Equal(
+            actual: rig.EngineAttempts,
+            expected: 3
+        );
+        Assert.False(condition: rig.Node.IsReady);
         rig.AssertOnlyThePipelineSetIsHeld();
     }
 
@@ -95,11 +140,14 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         public void WaitIdle() => gpu.WaitIdle();
     }
     private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
+        public SdfFrame Frame { get; set; } = frame;
+
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            frame;
+            Frame;
     }
     private sealed class Rig : IDisposable {
         private readonly FrameContext m_context;
+        private readonly FixedFrameSource m_source;
 
         public Rig(byte reportVersion) {
             var builder = new SdfProgramBuilder();
@@ -135,9 +183,10 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
                 trackObjects: true
             );
             Faults = new GpuCreationFaults();
+            m_source = new FixedFrameSource(frame: frame);
             Node = new SdfEngineNode(
                 brickPoolVoxelCapacity: 0,
-                frameSource: new FixedFrameSource(frame: frame),
+                frameSource: m_source,
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
                 pipelines: new SdfWorldPipelineCache(),
@@ -161,6 +210,8 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         }
 
         public ref readonly FrameContext Context => ref m_context;
+        // Each engine construction creates one descriptor pool and the pipeline set none, so the pools are the attempts.
+        public int EngineAttempts => Gpu.Created.Count(predicate: static created => (created.Kind == "descriptor pool"));
         public GpuCreationFaults Faults { get; }
         public FakeGpuDevice Gpu { get; }
         public SdfEngineNode Node { get; }
@@ -193,7 +244,28 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
                 expected: 0L
             );
         }
+        // Replaces the frame's program with an equal one built again: a new program is a changed build input.
+        public void ChangeProgram() {
+            var builder = new SdfProgramBuilder();
+
+            builder.Sphere(
+                material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)),
+                radius: 1f
+            );
+            m_source.Frame = (m_source.Frame with { Program = builder.Build() });
+        }
         public void Dispose() => Node.Dispose();
+        // Produces frames that change no build input, each presenting nothing new unless the node is ready.
+        public void ProduceUnchanged(int frames) {
+            for (var frame = 0; (frame < frames); frame++) {
+                var surface = Node.ProduceFrame(context: in m_context);
+
+                Assert.Equal(
+                    actual: surface.IsEmpty,
+                    expected: !Node.IsReady
+                );
+            }
+        }
         // Produces frames until the node refuses its engine build, and returns that frame's surface. A refusal never
         // throws out of the frame. The bound is liveness for a pipeline build on the thread pool; it decides nothing.
         public Surface ProduceUntilRefused() {

@@ -271,9 +271,16 @@ These are one-line cautions; the owning pages hold the derivations.
   A holder builds its engine through `SdfWorldPipelineSource.TryBuild`, only
   when it has none: a failed build (the set's or the engine's) is refused, never
   thrown, except a `DeviceLostException`. The refusal is printed once and named
-  by `Describe` (the node's `NotReadyReason`), and the next frame retries while
-  the holder keeps its lease. The node has no previous engine then and presents
-  nothing new; a view serves the image it served before. `SdfWorldEngine`'s
+  by `Describe` (the node's `NotReadyReason`), and the holder keeps its lease.
+  A refused build is retried only when an input it was made from changes (the
+  device, the kernels asked for, the set or its installed kernels, and the
+  holder's inputs: its `SdfWorldEngineOptions`, and for the node a kernel
+  reload request), or after `Release` on device loss. It is never retried
+  because a frame arrived and never on a clock; a new input to a build joins
+  its `inputsOf`. The node has no previous engine then and presents nothing
+  new; a view serves the image it served before. `UnifiedOverlayNode` refuses
+  its resources the same way (`ResourceRefusal`), presents the inner frame
+  unchanged, forwards captures to it, and retries only after `OnDeviceLost`. `SdfWorldEngine`'s
   constructor owns its creations through one `GpuCreationScope`, which
   releases them newest first when a later step throws, so a refusal leaks
   nothing (`SdfWorldEngineCreationFaultLawTests`,

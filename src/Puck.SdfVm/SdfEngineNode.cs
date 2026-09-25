@@ -216,7 +216,9 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     // it completes this returns false and the node presents nothing new, so a cold driver cache delays the first frame
     // rather than freezing the pump. The node builds an engine only when it has none (its first frame, and the rebuild
     // after a device loss, which disposed the previous one), so a refused build has no previous engine to fall back
-    // to: it presents nothing new, NotReadyReason names the refusal, and the next frame tries again.
+    // to: it presents nothing new and NotReadyReason names the refusal. It is tried again only when its inputs change
+    // (SdfWorldPipelineSource.TryBuild): the engine options this frame asks for (the program, the capacities), a kernel
+    // reload request, the pipeline set, or the device, which a device loss replaces.
     private bool EnsureEngine(IGpuDeviceContext gpuDevice, SdfFrame frame) {
         if (m_engine is not null) {
             return true;
@@ -224,14 +226,30 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         m_deviceContext = gpuDevice;
         m_engine = m_pipelines.TryBuild(
-            construct: static (pipelines, state) => state.Node.BuildEngine(
-                frame: state.Frame,
-                gpuDevice: state.Device,
-                pipelines: pipelines
-            ),
+            construct: static (pipelines, inputs) => {
+                // The viewport CAPACITY: the first frame's count raised to the declared floor (the split-screen
+                // envelope — the engine itself composites each frame's actual Views.Count, validated against it).
+                if (inputs.Options.ViewportCapacity > SdfWorldEngine.MaxViewports) {
+                    throw new ArgumentException(message: $"The world compositor supports at most {SdfWorldEngine.MaxViewports} viewports; the frame/floor asks for {inputs.Options.ViewportCapacity}.");
+                }
+
+                return new SdfWorldEngine(
+                    device: inputs.Device,
+                    height: inputs.Node.m_height,
+                    options: inputs.Options,
+                    pipelines: pipelines,
+                    width: inputs.Node.m_width
+                );
+            },
             device: gpuDevice,
             hostsOnDirectX: false,
             includeBrickPipelines: (m_brickPoolVoxelCapacity > 0),
+            inputsOf: static state => (
+                state.Node,
+                state.Device,
+                Options: state.Node.EngineOptions(frame: state.Frame),
+                ReloadRequest: state.Node.ShaderReloadStatus.RequestId
+            ),
             kernels: m_kernels,
             label: "sdf-engine",
             state: (Node: this, Frame: frame, Device: gpuDevice)
@@ -239,40 +257,25 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         return (m_engine is not null);
     }
-    private SdfWorldEngine BuildEngine(IGpuDeviceContext gpuDevice, SdfFrame frame, SdfWorldPipelines pipelines) {
-        // The viewport CAPACITY: the first frame's count raised to the declared floor (the split-screen envelope —
-        // the engine itself composites each frame's actual Views.Count, validated against this capacity).
-        var viewportCount = ((uint)Math.Max(
-            val1: frame.Views.Count,
-            val2: m_viewportCapacity
-        ));
-
-        if (viewportCount > SdfWorldEngine.MaxViewports) {
-            throw new ArgumentException(message: $"The world compositor supports at most {SdfWorldEngine.MaxViewports} viewports; the frame/floor asks for {viewportCount}.");
-        }
-
-        return new SdfWorldEngine(
-            device: gpuDevice,
-            height: m_height,
-            options: new SdfWorldEngineOptions(
-                BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
-                DynamicTransformCapacity: Math.Max(
-                    val1: Math.Max(
-                        val1: 1,
-                        val2: m_dynamicTransformCapacity
-                    ),
-                    val2: frame.DynamicTransforms.Count
+    private SdfWorldEngineOptions EngineOptions(SdfFrame frame) =>
+        new(
+            BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
+            DynamicTransformCapacity: Math.Max(
+                val1: Math.Max(
+                    val1: 1,
+                    val2: m_dynamicTransformCapacity
                 ),
-                InstanceCapacity: m_instanceCapacity,
-                Program: frame.Program,
-                ProgramWordCapacity: m_programWordCapacity,
-                ViewportCapacity: viewportCount,
-                WorkLedger: m_work
+                val2: frame.DynamicTransforms.Count
             ),
-            pipelines: pipelines,
-            width: m_width
+            InstanceCapacity: m_instanceCapacity,
+            Program: frame.Program,
+            ProgramWordCapacity: m_programWordCapacity,
+            ViewportCapacity: ((uint)Math.Max(
+                val1: frame.Views.Count,
+                val2: m_viewportCapacity
+            )),
+            WorkLedger: m_work
         );
-    }
     // Which live viewport slots a hosted child backs THIS frame (the beam prepass and Stage 1 skip these; the source
     // for such a slot is the child's surface, not an SDF render): the frame's own SdfViewSnapshot.Child bindings
     // resolved by NAME against m_children. Re-derived every produced frame — a layout switch (view.override) can
@@ -879,7 +882,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     public bool IsReady => m_engineProduced;
     /// <summary>Gets why the node is not <see cref="IsReady"/>, naming its pipeline build and how far it has come (for
     /// example <c>the engine's pipeline set is building (5 of 14 pipelines created)</c>) or the refusal of its engine's
-    /// latest build, which the next produced frame retries, or <see langword="null"/> once
+    /// latest build, which is retried when its inputs change, or <see langword="null"/> once
     /// it is ready. It builds a new string on each read, so a caller polls <see cref="IsReady"/> and reads this only to
     /// report.</summary>
     public string? NotReadyReason => (m_engineProduced

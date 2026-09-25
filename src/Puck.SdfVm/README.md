@@ -234,9 +234,18 @@ a later step throws: a creation, the ISA handshake, or the program upload. A
 holder builds its engine only when it has none, and a build that fails, whether
 the set's or the engine's, is refused rather than thrown, except for a device
 loss, which still reaches the host's recovery. The refusal is printed once and
-named by `NotReadyReason`, and the next frame tries again. Meanwhile the node
-returns an empty surface, and a view returns the image it served before, if
-any. The holder keeps its lease through the refusal.
+named by `NotReadyReason`. It is tried again only when something the build was
+made from changes: the engine options a frame asks for (the program and the
+capacities), the device, the pipeline set or its kernels, a kernel reload
+request, or a device loss. A frame that changes none of these tries nothing,
+so a lasting failure is attempted once per change and never on a clock.
+Meanwhile the node returns an empty surface, and a view returns the image it
+served before, if any. The holder keeps its lease through the refusal.
+
+The unified overlay (`Puck.Overlays`) refuses its own resources the same way:
+a creation that fails releases what was created, `ResourceRefusal` names it,
+and the overlay presents the inner frame unchanged, forwarding any capture to
+it, until a device loss.
 
 Each backend also keeps a persistent pipeline cache per device, so a warm start
 translates nothing. See [Vulkan](../../docs/rendering/vulkan.md#pipeline-cache)

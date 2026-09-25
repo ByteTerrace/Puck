@@ -159,21 +159,31 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     public IWorkCounterSource WorkLifetime => m_work;
 
     // Builds the engine once its pipelines are ready; false while they build on the thread pool, and when the build is
-    // refused, which the next resolve retries while the view serves what it served before.
+    // refused, which is retried only once its inputs change (the program, the export factory, the device or the pipeline
+    // set) while the view serves what it served before.
     private bool EnsureEngine(IGpuDeviceContext device, SdfProgram program) {
         if (m_engine is not null) {
             return true;
         }
 
-        m_currentProgram ??= program;
+        // The program the next engine uploads at construction, and one input a refused build is retried on.
+        m_currentProgram = program;
         m_engine = m_pipelines.TryBuild(
-            construct: static (pipelines, state) => state.View.BuildEngine(
-                device: state.Device,
-                pipelines: pipelines
+            construct: static (pipelines, inputs) => new SdfWorldEngine(
+                device: inputs.Device,
+                height: inputs.View.m_height,
+                options: inputs.Options,
+                pipelines: pipelines,
+                width: inputs.View.m_width
             ),
             device: device,
             hostsOnDirectX: m_hostsOnDirectX,
             includeBrickPipelines: false,
+            inputsOf: static state => (
+                state.View,
+                state.Device,
+                Options: state.View.EngineOptions()
+            ),
             kernels: null,
             label: "camera-view",
             state: (View: this, Device: device)
@@ -181,26 +191,20 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
 
         return (m_engine is not null);
     }
-    private SdfWorldEngine BuildEngine(IGpuDeviceContext device, SdfWorldPipelines pipelines) =>
+    private SdfWorldEngineOptions EngineOptions() =>
         new(
-            device: device,
-            height: m_height,
-            options: new SdfWorldEngineOptions(
-                // A filming view never bakes carves (it renders the host world's program, and RequestBrickBake is never
-                // called on it), so provisioning the default 64 MB brick pool would waste ~64 MB per view — ~4 GB at the
-                // 64-view cap. Capacity 0 gives a 1-float filler; a filmed SampledRegion renders via the shader's
-                // conservative uncarved-hull fallback (never a box-shaped hole).
-                BrickPoolVoxelCapacity: 0,
-                CreateOutputImage: m_exportFactory,
-                DynamicTransformCapacity: m_dynamicTransformCapacity,
-                InstanceCapacity: m_instanceCapacity,
-                Program: m_currentProgram!,
-                ProgramWordCapacity: m_programWordCapacity,
-                ViewportCapacity: 1,
-                WorkLedger: m_work
-            ),
-            pipelines: pipelines,
-            width: m_width
+            // A filming view never bakes carves (it renders the host world's program, and RequestBrickBake is never
+            // called on it), so provisioning the default 64 MB brick pool would waste ~64 MB per view — ~4 GB at the
+            // 64-view cap. Capacity 0 gives a 1-float filler; a filmed SampledRegion renders via the shader's
+            // conservative uncarved-hull fallback (never a box-shaped hole).
+            BrickPoolVoxelCapacity: 0,
+            CreateOutputImage: m_exportFactory,
+            DynamicTransformCapacity: m_dynamicTransformCapacity,
+            InstanceCapacity: m_instanceCapacity,
+            Program: m_currentProgram!,
+            ProgramWordCapacity: m_programWordCapacity,
+            ViewportCapacity: 1,
+            WorkLedger: m_work
         );
     // Re-uploads the shared world program when the host's revision counter has advanced since the last resolve — a
     // no-op otherwise (mirrors CameraFeedPool.Rebuild).
