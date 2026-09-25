@@ -571,7 +571,8 @@ hash, for a caller building its own pipelines.
 pass's whole config, which its frame block carries from the next frame the node
 renders; the World's parameter bindings write one scalar-`float` field of every
 pass composed from one `render.extensions` id through it
-(`WorldPostRenderExtensionPasses`).
+(`WorldPostRenderExtensionPasses`), over each pass's own config, so an id the
+document names twice keeps each entry's other fields.
 
 | Type | Role |
 |------|------|
