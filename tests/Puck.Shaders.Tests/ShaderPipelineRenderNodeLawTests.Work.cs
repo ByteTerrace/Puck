@@ -398,8 +398,8 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                 source: source
             )),
             // Per compute pass a pipeline and a module, two modules and one graphics pipeline for the fullscreen pass, three
-            // slots of the history, gray and drawn images, and a descriptor pool and set per pass and slot.
-            expected: ["work lifetime: created.pipelines=3 created.shader-modules=4 created.images=9 created.buffers=0 created.descriptor-pools=9 created.descriptor-sets=9"]
+            // slots of the history, gray and drawn images, the graph's one descriptor pool, and a set per pass and slot.
+            expected: ["work lifetime: created.pipelines=3 created.shader-modules=4 created.images=9 created.buffers=0 created.descriptor-pools=1 created.descriptor-sets=9"]
         );
         Assert.Equal(
             actual: source.WorkKinds.ToArray(),

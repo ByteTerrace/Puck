@@ -200,8 +200,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     }
     // Puts one pass of a finished build into service: takes its modules, pipeline and render pass from the build, then
     // allocates what the frame thread owns — the geometry buffer, the framebuffer binding each frame slot's attachments,
-    // and the per-slot descriptor and command objects.
-    private void InstallPass(ShaderPipelinePlannedPass planned, IReadOnlyDictionary<string, RuntimeResource> map, GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried) {
+    // and the per-slot descriptor and command objects, its sets from the graph's one descriptor pool.
+    private void InstallPass(ShaderPipelinePlannedPass planned, IReadOnlyDictionary<string, RuntimeResource> map, GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried, GpuDescriptorPoolSizes? graphPool, ref nint descriptorPool) {
         var declaration = planned.Declaration;
         var runtime = new RuntimePass(
             declaration,
@@ -273,9 +273,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             }
         }
         runtime.Sets = new nint[m_inFlight];
-        runtime.PoolsDescriptors = new nint[m_inFlight];
         runtime.Samplers = new nint[m_inFlight];
-        AllocateSlotObjects(pass: runtime);
+        AllocateSlotObjects(
+            descriptorPool: ref descriptorPool,
+            graphPool: graphPool,
+            pass: runtime
+        );
     }
     // A capture armed after a selection reads that selection: while its float preview builds, the published image is still
     // the previous selection's, so the capture waits for the frame that publishes the new one.
@@ -476,10 +479,19 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             m_resources = storages;
             m_passLabels = plan.Passes.Select(selector: static pass => pass.Name).ToArray();
             m_passes = new RuntimePass[plan.Passes.Count];
+
+            var graphPool = GraphDescriptorPool(
+                inFlight: m_inFlight,
+                plan: plan
+            );
+            var descriptorPool = ((nint)0);
+
             for (var i = 0; (i < plan.Passes.Count); i++) {
                 InstallPass(
                     built: built,
                     carried: carried,
+                    descriptorPool: ref descriptorPool,
+                    graphPool: graphPool,
                     map: map,
                     planned: plan.Passes[i]
                 );
@@ -545,7 +557,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         commands.Add(item: command);
     }
     private nint GetDescriptor(RuntimePass pass, int slot) {
-        // The set, its pool and its sampler were allocated with the graph (AllocateSlotObjects).
+        // The set and its sampler were allocated with the graph, the set from the graph's one pool (AllocateSlotObjects).
         var descriptorIndex = 0;
 
         foreach (var input in pass.Inputs) {
@@ -642,6 +654,30 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     // what the candidate created.
     private void Install(GraphBuild built, BuildKey key) {
         var next = key.Pipeline!;
+
+        // A candidate's descriptor pools are admitted into the device's heaps before it allocates anything; one that
+        // does not fit is refused by name, the installed graph keeps presenting, and nothing grows.
+        if (
+            key.Candidate &&
+            !m_gpu.Bindings.CanAdmit(
+                owner: $"shader pipeline {m_descriptor.Name}",
+                pools: DescriptorPools(
+                    inFlight: m_inFlight,
+                    plan: next.Plan,
+                    preview: key.Preview.HasValue
+                ),
+                refusal: out var refusal
+            )
+        ) {
+            built.Dispose();
+            Refuse(
+                candidate: true,
+                error: new InvalidDataException(message: $"{refusal}; the installed graph keeps running.")
+            );
+
+            return;
+        }
+
         var previousPipeline = m_pipeline;
         var previousResources = m_resources;
         var previousLookup = m_resourceLookup;
@@ -1740,7 +1776,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         public IGpuFramebuffer[]? Framebuffers;
         public IGpuPipeline? Graphics;
         public IGpuCommandPool[]? Pools;
-        public nint[]? PoolsDescriptors;
+        // The graph's one descriptor pool, on the pass that created it; zero on every other pass, whose sets it also
+        // holds, so disposing the graph's passes destroys it once.
+        public nint DescriptorPool;
         public IGpuCommandPool[]? Pre;
         public IGpuShaderModule? Primary;
         public IGpuRenderPass? RenderPass;
@@ -1781,13 +1819,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     pool?.Dispose();
                 }
             }
-            if (PoolsDescriptors is not null) {
-                foreach (var pool in PoolsDescriptors) {
-                    gpu.Bindings.DestroyPool(
-                        poolHandle: pool
-                    );
-                }
-            }
+            gpu.Bindings.DestroyPool(poolHandle: DescriptorPool);
+            DescriptorPool = 0;
             if (Samplers is not null) {
                 foreach (var sampler in Samplers) {
                     if (sampler != 0) {

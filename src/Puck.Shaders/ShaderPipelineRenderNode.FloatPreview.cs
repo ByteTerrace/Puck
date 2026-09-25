@@ -14,13 +14,22 @@ public sealed partial class ShaderPipelineRenderNode {
     /// <summary>Gets whether a selection's float preview is being built on the thread pool. The current selection stays
     /// published meanwhile; the new one takes effect at the first frame boundary after the build finishes.</summary>
     public bool IsBuildingPreview => (m_previewBuild.IsPending && !m_previewBuild.IsCompleted);
-    /// <summary>Gets the float preview's descriptor pool for one in-flight frame: one set holding the sampled source.</summary>
-    public static GpuDescriptorPoolSizes PreviewDescriptorPool { get; } = new(
-        CombinedImageSamplerCount: 1,
-        MaxSets: 1,
-        StorageBufferCount: 0,
-        StorageImageCount: 0
-    );
+
+    /// <summary>Returns the float preview's one descriptor pool: a set per in-flight frame, each holding the sampled
+    /// source.</summary>
+    /// <param name="inFlight">The node's frames in flight.</param>
+    /// <returns>The pool's sizes.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlight"/> is zero.</exception>
+    public static GpuDescriptorPoolSizes PreviewDescriptorPool(uint inFlight) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: inFlight);
+
+        return new(
+            CombinedImageSamplerCount: inFlight,
+            MaxSets: inFlight,
+            StorageBufferCount: 0,
+            StorageImageCount: 0
+        );
+    }
 
     // Puts built preview objects into service with the descriptor and command objects the frame thread owns.
     private FloatPreviewPass CreatePreview(PreviewObjects objects) => new(
@@ -39,7 +48,8 @@ public sealed partial class ShaderPipelineRenderNode {
     // (the old preview retires like a replaced graph). Otherwise the new preview's modules, pipelines and targets build on
     // the thread pool, the current selection stays published meanwhile, and the selection takes effect at the frame
     // boundary that takes the finished build. A preview whose targets would take the node past its budget, beside
-    // everything it owns, is refused here, before anything is created.
+    // everything it owns, or whose descriptor pool the device's heaps cannot admit, is refused here, before anything is
+    // created.
     private bool RequestPreview(string name, RuntimeResource selected) {
         m_previewRequest = null;
 
@@ -83,6 +93,13 @@ public sealed partial class ShaderPipelineRenderNode {
                 innerException: refusal,
                 message: $"The float preview for '{selected.Spec.Name}' is refused: {refusal.Message}"
             );
+        }
+        if (!m_gpu.Bindings.CanAdmit(
+            owner: $"float preview for '{selected.Spec.Name}'",
+            pools: [PreviewDescriptorPool(inFlight: m_inFlight)],
+            refusal: out var descriptorRefusal
+        )) {
+            throw new InvalidOperationException(message: $"The float preview for '{selected.Spec.Name}' is refused: {descriptorRefusal}");
         }
 
         m_previewRequest = new PreviewRequest(
@@ -300,7 +317,6 @@ public sealed partial class ShaderPipelineRenderNode {
         private const GpuAccess PriorAccess = GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.TransferWrite | GpuAccess.ColorAttachmentWrite;
         private const GpuStage PriorStages = GpuStage.ComputeShader | GpuStage.FragmentShader | GpuStage.Transfer | GpuStage.ColorAttachmentOutput;
 
-        private readonly nint[] m_descriptorPools;
         private readonly nint[] m_descriptorSets;
         private readonly IGpuDeviceContext m_device;
         private readonly GpuDeviceServices m_gpu;
@@ -314,6 +330,8 @@ public sealed partial class ShaderPipelineRenderNode {
         private readonly bool[] m_targetInitialized;
         private readonly IGpuImage[] m_targets;
 
+        private nint m_descriptorPool;
+
         public FloatPreviewPass(PreviewObjects objects, GpuDeviceServices gpu, IGpuDeviceContext device, uint inFlight, GpuImageLayout outputLayout) {
             m_objects = objects;
             m_gpu = gpu;
@@ -324,17 +342,16 @@ public sealed partial class ShaderPipelineRenderNode {
             m_draw = new IGpuCommandPool[inFlight];
             m_pre = new IGpuCommandPool[inFlight];
             m_post = new IGpuCommandPool[inFlight];
-            m_descriptorPools = new nint[inFlight];
             m_descriptorSets = new nint[inFlight];
             m_samplers = new nint[inFlight];
             m_targetInitialized = new bool[inFlight];
             try {
                 var bindings = gpu.Bindings;
 
+                m_descriptorPool = bindings.CreatePool(sizes: PreviewDescriptorPool(inFlight: inFlight));
                 for (var i = 0; (i < inFlight); i++) {
-                    m_descriptorPools[i] = bindings.CreatePool(sizes: PreviewDescriptorPool);
                     m_descriptorSets[i] = bindings.AllocateSet(
-                        m_descriptorPools[i],
+                        m_descriptorPool,
                         m_pipeline.DescriptorSetLayoutHandle
                     );
                     m_samplers[i] = bindings.CreateSampler();
@@ -360,11 +377,8 @@ public sealed partial class ShaderPipelineRenderNode {
                     );
                 }
             }
-            foreach (var pool in m_descriptorPools) {
-                m_gpu.Bindings.DestroyPool(
-                    poolHandle: pool
-                );
-            }
+            m_gpu.Bindings.DestroyPool(poolHandle: m_descriptorPool);
+            m_descriptorPool = 0;
         }
         public IGpuImage GetTarget(int slot) => m_targets[slot];
         // The bytes of the targets the preview still owns.

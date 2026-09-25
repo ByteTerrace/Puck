@@ -529,10 +529,11 @@ public sealed class ShaderPipelineAttachmentLawTests {
             collection: gpu.GraphicsPipelines
         );
 
-        // A geometry pass with no input binds no descriptor, so only the sampling consumer has a pool in each slot.
+        // A geometry pass with no input binds no descriptor, so the graph's one pool holds only the sampling consumer's
+        // set for each slot.
         Assert.Equal(
-            actual: gpu.CreatedObjects.Count(predicate: static created => (created.Kind == "descriptor pool")),
-            expected: 3
+            actual: (Pools: gpu.CreatedObjects.Count(predicate: static created => (created.Kind == "descriptor pool")), Sets: gpu.DescriptorPools.Single().MaxSets),
+            expected: (Pools: 1, Sets: 3U)
         );
 
         gpu.Recording = true;
