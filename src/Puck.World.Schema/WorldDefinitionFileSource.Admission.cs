@@ -3,20 +3,6 @@ using Puck.Abstractions.Machines;
 namespace Puck.World;
 
 public static partial class WorldDefinitionFileSource {
-    /// <summary>Loads a file through the shared composition and content-pin path, retaining validation's programs.</summary>
-    /// <param name="path">The document file.</param>
-    /// <param name="admission">The admitted document and compilation, or null on refusal.</param>
-    /// <param name="contentHash">The pin over the authored composition bytes.</param>
-    /// <param name="reason">The named refusal, or empty on success.</param>
-    /// <param name="neighbours">The resolver proving cross-document claims.</param>
-    /// <param name="catalogFingerprint">The composition cache's catalog partition.</param>
-    /// <param name="catalog">The selected catalog, or null to defer provider checks.</param>
-    /// <param name="documents">The source used for the root and its composition dependencies.</param>
-    /// <returns>Whether composition and validation succeeded.</returns>
-    public static bool TryLoadForAdmission(string path, out WorldDefinitionAdmission? admission,
-        out string contentHash, out string reason, IWorldNeighbourResolver? neighbours = null,
-        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, IWorldDocumentSource? documents = null) =>
-        TryLoadCore(admission: out admission, catalog: catalog, catalogFingerprint: catalogFingerprint, contentHash: out contentHash, definition: out _, documents: documents, neighbours: neighbours, path: path, reason: out reason, validateAdjacencyClaims: true);
     /// <summary>Parses and validates a composed document, retaining the exact compilation used by validation.</summary>
     /// <param name="json">The composed JSON.</param>
     /// <param name="sourceName">The origin echoed in refusals.</param>
@@ -50,8 +36,8 @@ public static partial class WorldDefinitionFileSource {
     /// its own wording, never the strict parse's: a validation refusal can rest on facts outside this call — an
     /// adjacency claim resolved through <paramref name="neighbours"/> against documents this caller may itself be
     /// about to move — so it is retryable in a way "these bytes are not a puck.world.definition.v1 document" never is, and
-    /// a caller classifying on <paramref name="reason"/> must be able to tell them apart (see <see cref="TryLoad"/>'s
-    /// own remarks for the exact classified prefixes).</summary>
+    /// a caller classifying on <paramref name="reason"/> must be able to tell them apart (see
+    /// <see cref="WorldDefinitionLoader.TryLoadFileForAdmission"/> for the classified prefixes).</summary>
     /// <param name="json">The already-decoded, already-composed document JSON.</param>
     /// <param name="sourceName">The document's source name, echoed in every refusal.</param>
     /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads.</param>

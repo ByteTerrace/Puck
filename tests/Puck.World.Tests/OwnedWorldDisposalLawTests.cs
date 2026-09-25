@@ -158,7 +158,7 @@ public sealed class OwnedWorldDisposalLawTests {
 
         foreach (var path in CatalogFiles(directory: dir.RootPath)) {
             Assert.True(
-                condition: WorldDefinitionFileSource.TryLoad(
+                condition: Fixtures.TryLoadDrawn(
                     contentHash: out _,
                     definition: out _,
                     path: path,

@@ -32,10 +32,18 @@ public static partial class WorldDefinitionLoader {
             overrides: overrides, reason: out reason, resolved: out admission, sourceName: sourceName);
     }
     /// <summary>Loads a file and retains the final, draw-resolved document's validation and programs — the one door
-    /// every document a world runs is read through: the boot, an instance start, a transfer's destination, and
-    /// <c>world.load</c>/<c>world.reload</c> with the replay drive's re-read of what they pinned. It composes the file,
-    /// fills its first-fill draw sites for <paramref name="instanceIdentity"/>, settles its boot values, and admits the
-    /// result, so a document whose references read a drawn cell is never admitted, or carried anywhere, unfilled.</summary>
+    /// every document file is admitted through: the boot, an instance start, a transfer's destination,
+    /// <c>world.load</c>/<c>world.reload</c> with the replay drive's re-read of what they pinned, the owned-world
+    /// catalog and its cloud-sync gate, and the CLI's inspections. It composes the file, fills its first-fill draw
+    /// sites for <paramref name="instanceIdentity"/>, settles its boot values, and admits the result, so a document
+    /// whose references read a drawn cell is never admitted, or carried anywhere, unfilled.
+    /// <para>A refusal never throws; <paramref name="reason"/>'s opening words name its class: <c>no file at</c>,
+    /// <c>cannot read</c>, <c>cannot decode</c>, <c>&lt;path&gt; composition refused</c>, <c>&lt;path&gt; draw
+    /// refused</c>, <c>&lt;path&gt; could not resolve a state reference</c>, <c>&lt;path&gt; document validation
+    /// refused</c>, or <c>&lt;path&gt; is not a valid puck.world.definition.v1 document</c>. Only <c>cannot decode</c>
+    /// and the last are verdicts on the bytes alone; the others rest on the moment (a lock, a vanished file), on files
+    /// beside this one (a composition link or adjacency neighbour not in place yet), or on the drawing identity, so a
+    /// caller acting destructively on a refusal classifies it first.</para></summary>
     /// <param name="path">The document file.</param>
     /// <param name="admission">The final validation result, or null on refusal.</param>
     /// <param name="contentHash">The content-address pin of the document read
@@ -54,7 +62,8 @@ public static partial class WorldDefinitionLoader {
     /// <param name="compiled">The compiled world the drawn document is read from or written to, or null to draw the
     /// document without one.</param>
     /// <param name="documents">The source the root and every basis/import reference read through, or
-    /// <see langword="null"/> to read files directly; see <see cref="WorldDefinitionFileSource.TryLoad"/>.</param>
+    /// <see langword="null"/> for <see cref="WorldDefinitionFileSource.LocalDocuments"/>. A source that lowers
+    /// <c>.puck</c> makes <paramref name="contentHash"/> pin the lowered document.</param>
     /// <returns>Whether the document loaded and validated.</returns>
     public static bool TryLoadFileForAdmission(string path, out WorldDefinitionAdmission? admission, out string contentHash, out string reason,
         string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, bool proveNeighbours = true,
