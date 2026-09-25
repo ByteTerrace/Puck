@@ -698,7 +698,7 @@ as the one-pass graph `RenderGraphDefinition.FromShaderSource` makes. Its
 `RenderGraphCompiler` owns the schema-tag check (`RENDERGRAPH_SCHEMA`) and plans
 with `ShaderPipelineCompiler` and never a second planner: a package pass enters
 the plan only as a `ShaderPipelinePackagePass` through the planner's internal
-package entry, ordered in the compute shape it reaches resources by, and the
+package entry, ordered by the versions it reads and writes, and the
 planner's public entry refuses a graph naming packages
 (`SHADERPIPE_PACKAGE_PASS`). A package's planned pass carries
 `ShaderPipelinePassKind.Package` with no `Declaration`: its `Package` step
@@ -710,14 +710,18 @@ passes alone; a `CompiledShaderPipeline` holds a package pass with no compiled
 shader, which the render node records through its package's recorder (the
 runtime below). A shader pass's kind is `ShaderPipelineDocumentPassKind`, which
 has no `Package` member, so the JSON reader refuses the name at
-`$.passes[n].kind`. A package pass keeps no descriptor binding, has no
-interface-by-source check, and takes a compute pass's accesses in `UseOf`. Every
+`$.passes[n].kind`. A package pass keeps no descriptor binding and has no
+interface-by-source check, and `UseOf` gives each of its references the use its
+port's `RenderGraphPortAccess` names (compute read or write, fragment-sampled
+read, color-attachment write), the same use a shader pass of that stage gets. Every
 checked-in `*.graph.json` plans alike through a pipeline host and the engine's
 catalog (`RenderGraphDocumentLawTests`), and `puck schema` regenerates
 `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 A package's ports are typed (`RenderGraphPackagePort`: an image, or a buffer
-with its stride and count), and a version bound to a port of another kind,
+with its stride and count, and its access), and a version bound to a port of another kind,
 stride or count is refused as `RENDERGRAPH_PACKAGE_INPUT` or `_OUTPUT`.
+`RenderGraphPackageBarrierLawTests` hold a shader, post and overlay chain's
+planned barriers to a hand-derived table.
 `sdf.bricks` publishes the world's brick pool as a buffer output counted by
 `BrickPoolVoxels`; `RenderGraphBufferEdgeLawTests` plans its edges. A buffer
 edge is one mechanism with the image edge: `ShaderPipelineResourceKind` lives
@@ -746,10 +750,12 @@ creates for its package id: the factory's `Build` creates its modules,
 pipelines and render passes in the candidate's `BackgroundBuild`, its `Create`
 takes them at install and allocates per-slot sets from the node's one pool
 (whose statement includes the factory's `SetBindings`), and a recorder records
-into the command buffer it is handed and never submits, waits or creates a
-pipeline. A draw inside a package goes through `RenderGraphPackageDraw`'s
-barriers, since the planner orders a package in a compute pass's shape. A
-recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
+into the command buffer it is handed and never submits, waits, creates a
+pipeline or records a barrier: the node records the pass's planned barriers
+first, so a drawing package's target arrives in `RenderTarget` and its sampled
+inputs in `ShaderReadOnly`, and its render pass leaves the target in
+`RenderTarget` (`ObservedPackageFactory` in `tests/Shared` counts a package's
+own barriers in the post and overlay laws). A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
 and the node publishes the input in the output's place, never a copy
 (`PublishedLayout`). `PostProcessPackage` serves every `post.<id>` and
 `OverlayPackage` serves `overlay`, which shares `OverlayFrameComposer` with

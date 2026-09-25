@@ -281,7 +281,9 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
             );
             packagePasses.Add(item: new ShaderPipelinePackagePass(
                 Config: config,
+                InputAccesses: [.. package!.Inputs.Select(selector: static port => port.Access)],
                 Inputs: pass.InputReferences,
+                OutputAccesses: [.. package.Outputs.Select(selector: static port => port.Access)],
                 Name: pass.Name,
                 Outputs: pass.OutputReferences,
                 Package: pass.Package

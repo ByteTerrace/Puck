@@ -812,8 +812,8 @@ public sealed partial class ShaderPipelineCompiler {
         packages: []
     );
 
-    // A frame graph's package passes join its shader passes after them, in the compute shape they reach resources by, so
-    // one planner orders, versions and barriers both. This is the only way package work enters planning: the graph
+    // A frame graph's package passes join its shader passes after them, each in a compute shape beside its port
+    // accesses, so one planner orders, versions and barriers both. This is the only way package work enters planning: the graph
     // compiler checks a document's package passes against its host's packages and hands them here, so a definition
     // reaching the planner with its own is refused. The names they bring are the passes whose planned kind is Package.
     // Planning works on a copy whose passes are both, and the plan keeps the graph's shader passes: a package's planned
@@ -836,10 +836,23 @@ public sealed partial class ShaderPipelineCompiler {
 
         var graph = definition;
         var packageNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var packageByName = new Dictionary<string, ShaderPipelinePackagePass>(comparer: StringComparer.Ordinal);
 
         foreach (var package in packages) {
             ArgumentNullException.ThrowIfNull(argument: package, paramName: nameof(packages));
+
+            if (!package.HasValidAccesses) {
+                throw new ArgumentException(
+                    message: $"Package pass '{package.Name}' must declare one read access per input and one write access per output.",
+                    paramName: nameof(packages)
+                );
+            }
+
             _ = packageNames.Add(item: package.Name);
+            packageByName.TryAdd(
+                key: package.Name,
+                value: package
+            );
         }
         if (packages.Count != 0) {
             definition = definition with { Passes = [.. definition.ShaderPasses, .. packages.Select(selector: static package => package.Shape())] };
@@ -954,9 +967,11 @@ public sealed partial class ShaderPipelineCompiler {
         }
 
         var plannedPasses = new List<ShaderPipelinePlannedPass>(capacity: order.Count);
-        // The shape each planned pass reaches resources by, in execution order: a shader pass's declaration, or a
-        // package pass's compute shape, which planning reads and the plan does not keep.
+        // The shape each planned pass is ordered and versioned by, in execution order: a shader pass's declaration, or a
+        // package pass's compute shape, which planning reads and the plan does not keep. A package pass's port
+        // accesses stand beside its shape.
         var shapes = new List<ShaderPipelinePass>(capacity: order.Count);
+        var shapePackages = new List<ShaderPipelinePackagePass?>(capacity: order.Count);
         var interfacesBySource = new Dictionary<string, (string Pass, ShaderInterface Interface)>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < order.Count); index++) {
@@ -1011,6 +1026,9 @@ public sealed partial class ShaderPipelineCompiler {
                 }
             }
             shapes.Add(item: pass);
+            shapePackages.Add(item: (package
+                ? packageByName[pass.Name]
+                : null));
             plannedPasses.Add(item: new ShaderPipelinePlannedPass(
                 Declaration: (package
                     ? null
@@ -1033,6 +1051,7 @@ public sealed partial class ShaderPipelineCompiler {
         var versions = PlanVersions(
             definition: definition,
             liveResources: liveResources,
+            packages: shapePackages,
             passes: shapes
         );
         var plannedResources = versions.Resources.ToDictionary(

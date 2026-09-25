@@ -217,17 +217,18 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return carried;
     }
+
     // The usages every instance of an image storage is created with. A depth storage is only a depth attachment. A color
     // storage is sampled and a storage image, which compute writes, zero clears and a publication in General need, and a
-    // color attachment too when a graphics pass writes one of its versions.
-    private static GpuImageUsage UsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
+    // color attachment too when a planned access draws into it: a graphics pass's output or a package's color-attachment
+    // port.
+    internal static GpuImageUsage UsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
         ((storage.Declaration.Kind == ShaderPipelineResourceKind.Depth)
             ? GpuImageUsage.DepthAttachment
-            : GpuImageUsage.Sampled | GpuImageUsage.Storage | (plan.Passes.Any(predicate: pass => (
-                // A package may draw into what it writes (RenderGraphPackageDraw), as a graphics pass does.
-                ((pass.Declaration?.IsGraphics == true) || (pass.Kind == ShaderPipelinePassKind.Package)) &&
-                pass.Outputs.Any(predicate: output => storage.Versions.Contains(value: output.Name))
-            ))
+            : GpuImageUsage.Sampled | GpuImageUsage.Storage | (plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access => (
+                (access.Storage == storage.Index) &&
+                (access.Use.Layout == GpuImageLayout.RenderTarget)
+            )))
                 ? GpuImageUsage.ColorAttachment
                 : GpuImageUsage.None));
 

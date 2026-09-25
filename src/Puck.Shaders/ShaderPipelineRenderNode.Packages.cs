@@ -3,10 +3,11 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-// A graph's package passes, recorded inside the node's own submission. The planner orders a package pass in the compute
-// shape it reaches resources by, so the node allocates the versions it writes like any pass's, records its planned
-// barriers, and hands its recorder the command buffer with the versions bound to its ports resolved for the frame slot,
-// the pass's frame block and the frame's lease list. The package's factory builds its pipelines with the candidate's
+// A graph's package passes, recorded inside the node's own submission. The planner plans a package pass's barriers and
+// layouts from its ports' accesses as it plans a shader pass's, so the node allocates the versions it writes like any
+// pass's, records its planned barriers, and hands its recorder the command buffer with the versions bound to its ports
+// resolved for the frame slot in their planned layouts, the pass's frame block and the frame's lease list. The recorder
+// records no barrier. The package's factory builds its pipelines with the candidate's
 // shader passes on the thread pool; its recorder is created from those objects when the graph installs, records its own
 // work, binds its own descriptors from the graph's pool, and is disposed with the graph's passes, so a replacement, a
 // device loss and disposal each release it with the objects it recorded against. The node ends and submits the command
