@@ -634,9 +634,17 @@ break, and nothing wider:
   names, or is a source file the canary executed when coverage was last
   recorded in [`tests/Puck.Affected`](../../tests/Puck.Affected/README.md).
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
-- A changed `Puck.World` source the coverage index does not know is listed as
-  `unmapped`. It chooses no canary; the list says coverage is due for a fresh
-  recording.
+- A file no canary can execute is placed through the indexed C# sources it
+  stands for. A project file, restore lock or `NativeMethods.txt` stands for
+  its project's sources. A shader source or include stands for the C# that
+  names, by its file name, each kernel whose include closure reaches it: the
+  kernels are the stage sources the projects' shader items declare. A file
+  `puck schema` writes stands for the sources declaring the types it is
+  generated from. A shader no kernel's loader names, such as a graph pipeline
+  source a `.graph.json` document names, has no stand-in.
+- A changed `Puck.World` source that neither the coverage index nor a stand-in
+  places is listed as `unmapped`. It chooses no canary; the list says coverage
+  is due for a fresh recording.
 - Build infrastructure (`build/`, `Directory.Build.*`, `global.json`,
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`
   and `experimental/` choose nothing.
