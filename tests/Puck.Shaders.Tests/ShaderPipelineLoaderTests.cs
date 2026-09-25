@@ -50,19 +50,19 @@ public sealed class ShaderPipelineLoaderTests {
         }
         var path = Path.Combine(
             path1: fixture.Directory,
-            path2: "graph.pipeline.json"
+            path2: "transitive.graph.json"
         );
 
         File.WriteAllText(
             path,
             JsonSerializer.Serialize(
-                new ShaderPipelineDefinition(
+                new RenderGraphDefinition(
                     name: "graph",
                     outputs: ["three"],
                     passes: passes,
                     resources: resources
                 ),
-                ShaderPipelineJsonContext.Default.ShaderPipelineDefinition
+                RenderGraphJsonContext.Default.RenderGraphDefinition
             )
         );
         var runner = new Runner { FailCall = 3 };

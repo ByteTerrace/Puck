@@ -18,7 +18,7 @@ public sealed class ShaderPipelineLivenessTests {
 
     [Fact]
     public void A_previous_frame_dependency_retains_its_writer_without_creating_a_same_frame_edge() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             "history",
             [Image(name: "history") with { History = true, Initialization = ShaderPipelineInitialization.Zero }, Image(name: "image")],
             [Pass(
@@ -62,7 +62,7 @@ public sealed class ShaderPipelineLivenessTests {
     }
     [Fact]
     public void Publishing_an_intermediate_keeps_its_branch_live() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             "inspection",
             [Image(name: "first"), Image(name: "second")],
             [Pass(
@@ -92,7 +92,7 @@ public sealed class ShaderPipelineLivenessTests {
     }
     [Fact]
     public void Unreachable_work_and_its_resources_are_excluded_from_execution() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             "live",
             [Image(name: "unused"), Image(name: "intermediate"), Image(name: "image")],
             [Pass(
@@ -122,7 +122,7 @@ public sealed class ShaderPipelineLivenessTests {
         );
         Assert.Equal(
             3,
-            plan.Definition.Passes.Count
+            plan.Definition.ShaderPasses.Count
         );
         var intermediate = Assert.Single(
             collection: plan.Resources,

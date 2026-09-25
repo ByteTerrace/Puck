@@ -105,7 +105,7 @@ public sealed partial class ShaderPipelineCompiler {
             Version: resource.Name
         )).ToArray();
     }
-    private static (IReadOnlyList<ShaderPipelinePlannedResource> Resources, IReadOnlyList<ShaderPipelinePlannedStorage> Storages, ShaderPipelineAccess[][] Accesses) PlanVersions(ShaderPipelineDefinition definition, IReadOnlySet<string> liveResources, IReadOnlyList<ShaderPipelinePlannedPass> passes) {
+    private static (IReadOnlyList<ShaderPipelinePlannedResource> Resources, IReadOnlyList<ShaderPipelinePlannedStorage> Storages, ShaderPipelineAccess[][] Accesses) PlanVersions(RenderGraphDefinition definition, IReadOnlySet<string> liveResources, IReadOnlyList<ShaderPipelinePlannedPass> passes) {
         var declarations = definition.Resources.Where(predicate: resource => liveResources.Contains(item: resource.Name)).ToDictionary(
             keySelector: static resource => resource.Name,
             comparer: StringComparer.Ordinal

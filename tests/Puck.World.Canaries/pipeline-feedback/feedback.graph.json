@@ -1,5 +1,5 @@
 {
-  "$schema": "puck.shader.pipeline.v1",
+  "$schema": "puck.render.graph.v1",
   "name": "feedback",
   "resources": [
     {
@@ -26,7 +26,7 @@
   "passes": [
     {
       "name": "accumulate",
-      "source": "../pipeline-feedback/accumulate.hlsl",
+      "source": "accumulate.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
       "inputs": [ { "name": "history", "previousFrame": true, "binding": 1 } ],
@@ -34,7 +34,7 @@
     },
     {
       "name": "convert",
-      "source": "convert-halved.hlsl",
+      "source": "convert.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
       "inputs": [ { "name": "history", "binding": 1 } ],
@@ -42,7 +42,7 @@
     },
     {
       "name": "copy",
-      "source": "../pipeline-feedback/copy.hlsl",
+      "source": "copy.hlsl",
       "entryPoint": "main",
       "kind": "Fullscreen",
       "inputs": [ { "name": "gray", "binding": 0 } ],

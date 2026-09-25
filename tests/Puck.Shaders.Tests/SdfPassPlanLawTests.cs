@@ -188,7 +188,7 @@ public sealed class SdfPassPlanLawTests {
         )).ToArray();
 
         return new ShaderPipelineCompiler().Compile(
-            definition: new ShaderPipelineDefinition(
+            definition: new RenderGraphDefinition(
                 name: RenderGraphPackageCatalog.SdfWorld,
                 outputs: ["color"],
                 passes: [],

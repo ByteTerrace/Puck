@@ -8,6 +8,11 @@ namespace Puck.Shaders;
 public sealed class CompiledShaderPipeline {
     /// <summary>Initializes a pipeline candidate. The dictionaries are copied so a background compiler can publish
     /// the candidate without sharing mutable build state with the render thread.</summary>
+    /// <param name="plan">The plan of the graph's passes.</param>
+    /// <param name="shaders">The compiled shader results, keyed by planned shader pass name.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="plan"/> or <paramref name="shaders"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A planned shader pass has no compiled shader result.</exception>
     public CompiledShaderPipeline(ShaderPipelinePlan plan, IReadOnlyDictionary<string, CompiledShader> shaders) {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(shaders);

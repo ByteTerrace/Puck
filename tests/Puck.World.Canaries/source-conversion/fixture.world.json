@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "conversion",
-        "source": "conversion.pipeline.json",
+        "source": "conversion.graph.json",
         "timeScale": 1
       }
     ]

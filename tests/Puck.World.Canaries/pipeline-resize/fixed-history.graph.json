@@ -1,12 +1,12 @@
 {
-  "$schema": "puck.shader.pipeline.v1",
+  "$schema": "puck.render.graph.v1",
   "name": "feedback",
   "resources": [
     {
       "name": "history",
       "kind": "Image",
       "format": "R16G16B16A16Float",
-      "dimensions": { "mode": "Relative", "width": 1, "height": 1 },
+      "dimensions": { "mode": "Absolute", "width": 64, "height": 64 },
       "history": true,
       "initialization": "Zero"
     },

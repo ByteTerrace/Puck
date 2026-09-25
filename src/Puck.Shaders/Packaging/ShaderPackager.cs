@@ -34,7 +34,7 @@ public sealed record ShaderPackageResult(
 /// closure that differs from the files listed or reaches outside the package, a limit exceeded, different backend
 /// capabilities, or a pass whose interface or generated declarations differ from the ones the package's document
 /// now yields. The files are read on every load, so nothing conceals a missing dependency.</para>
-/// <para>A packager given a build's package store (<see cref="Store"/>) loads a pipeline document or one-off shader
+/// <para>A packager given a build's package store (<see cref="Store"/>) loads a graph document or one-off shader
 /// from the store's package keyed by that source (<see cref="KeyOf(string, string)"/>) whenever one exists, so a
 /// shipped source compiles nothing; see <see cref="LoadSource"/>.</para>
 /// </summary>
@@ -86,7 +86,7 @@ public sealed partial class ShaderPackager {
                 Vulkan: ShaderCompiler.VulkanVersion
             ),
             WorkgroupInvocations: plan.Passes
-                .Where(predicate: static pass => (pass.Declaration.Kind == ShaderPipelineDocumentPassKind.Compute))
+                .Where(predicate: static pass => (pass.Kind == ShaderPipelinePassKind.Compute))
                 .Select(selector: static pass => checked(((pass.Declaration.GroupSizeX * pass.Declaration.GroupSizeY) * pass.Declaration.GroupSizeZ)))
                 .DefaultIfEmpty()
                 .Max()
@@ -128,16 +128,16 @@ public sealed partial class ShaderPackager {
             value: manifest
         ), ((byte)'\n')];
     }
-    /// <summary>Compiles a pipeline document or one-off shader and writes its package: the sources, and for each pass its
+    /// <summary>Compiles a graph document or one-off shader and writes its package: the sources, and for each pass its
     /// interface, the declarations generated from it, and its binaries for both backends. Every binary's frame block, and
     /// that of each interface's echo pass, must reflect exactly as the interface lays it out.</summary>
-    /// <param name="source">The pipeline document or one-off shader source.</param>
+    /// <param name="source">The graph document or one-off shader source.</param>
     /// <param name="output">The package directory to write. It is replaced only once the new package is complete, and
     /// only when it is absent, empty, or already a package.</param>
     /// <param name="root">The directory every file of the closure must lie within, and the one logical paths are
     /// relative to; <see langword="null"/> means the directory holding <paramref name="source"/>.</param>
     /// <param name="name">The name a one-off shader's pipeline and its one pass take, as an instance naming it would give
-    /// them; <see langword="null"/> means the source's file name without its extension. A pipeline document names
+    /// them; <see langword="null"/> means the source's file name without its extension. A graph document names
     /// itself.</param>
     /// <param name="cancellationToken">The token that cancels the build.</param>
     /// <returns>The outcome; on success, the manifest written and the candidate compiled.</returns>
@@ -250,7 +250,7 @@ public sealed partial class ShaderPackager {
         }).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <summary>Determines whether a source path names a package: a package is named by its directory, and every other
-    /// path names a pipeline document or a one-off shader.</summary>
+    /// path names a graph document or a one-off shader.</summary>
     /// <param name="path">The source path.</param>
     /// <returns><see langword="true"/> when <paramref name="path"/> is a directory.</returns>
     public static bool IsPackage(string path) => Directory.Exists(path: path);
@@ -301,7 +301,7 @@ public sealed partial class ShaderPackager {
         return manifest;
     }
     /// <summary>Loads what a pipeline instance's source names. A package directory loads through <see cref="LoadAsync"/>,
-    /// which compiles nothing. A pipeline document or one-off shader loads from the <see cref="Store"/>'s package keyed by
+    /// which compiles nothing. A graph document or one-off shader loads from the <see cref="Store"/>'s package keyed by
     /// it (<see cref="KeyOf(string, string)"/>) when the store holds one, which compiles nothing either, and otherwise
     /// through the ordinary <see cref="ShaderPipelineLoader"/>, which compiles it. A source the store holds no package for
     /// and no compiler can compile here is <see cref="ShaderPipelineLoadStatus.Unsupported"/> with a message that starts
@@ -928,10 +928,10 @@ public sealed partial class ShaderPackager {
             );
         }
 
-        return new ShaderPipelineCompiler().Compile(definition: ShaderPipelineLoader.ReadDefinition(
+        return RenderGraphCompiler.ShaderPasses.Compile(definition: ShaderPipelineLoader.ReadDefinition(
             name: name,
             path: documentPath
-        ));
+        )).Pipeline;
     }
     // Reads one pass's default-variant binaries, each verified against its pin by Open.
     private static CompiledShader ReadBinaries(ShaderPipelinePlannedPass planned, ShaderPackagePass recorded, string rootPath, string sourcePath) {

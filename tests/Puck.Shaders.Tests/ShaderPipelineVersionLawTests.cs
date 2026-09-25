@@ -46,7 +46,7 @@ public sealed class ShaderPipelineVersionLawTests {
     // A chain c0 -> c1 -> c2 in one storage: seed writes c0, peek samples it, first and second each continue the
     // preserved contents, and a fullscreen pass samples c2. The passes are declared in reverse, so the order the plan
     // gives them is the planner's, not the author's.
-    private static ShaderPipelineDefinition Chain(Func<ShaderPipelineResource[], ShaderPipelineResource[]>? resources = null, Func<ShaderPipelinePass[], ShaderPipelinePass[]>? passes = null, string[]? outputs = null) {
+    private static RenderGraphDefinition Chain(Func<ShaderPipelineResource[], ShaderPipelineResource[]>? resources = null, Func<ShaderPipelinePass[], ShaderPipelinePass[]>? passes = null, string[]? outputs = null) {
         ShaderPipelineResource[] declared = [
             Image(name: "c0"),
             Image(
@@ -106,15 +106,15 @@ public sealed class ShaderPipelineVersionLawTests {
             ),
         ];
 
-        return new ShaderPipelineDefinition(
+        return new RenderGraphDefinition(
             name: "chain",
             outputs: (outputs ?? ["image", "peeked"]),
             passes: (passes?.Invoke(arg: written) ?? written),
             resources: (resources?.Invoke(arg: declared) ?? declared)
         );
     }
-    private static ShaderPipelinePlan Plan(ShaderPipelineDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);
-    private static IReadOnlyList<ShaderPipelineDiagnostic> Refusal(ShaderPipelineDefinition definition) =>
+    private static ShaderPipelinePlan Plan(RenderGraphDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);
+    private static IReadOnlyList<ShaderPipelineDiagnostic> Refusal(RenderGraphDefinition definition) =>
         Assert.Throws<ShaderPipelineCompilationException>(testCode: () => Plan(definition: definition)).Diagnostics;
     private static ShaderPipelineResource[] Replace(ShaderPipelineResource[] resources, string name, Func<ShaderPipelineResource, ShaderPipelineResource> change) =>
         [.. resources.Select(selector: resource => ((resource.Name == name)

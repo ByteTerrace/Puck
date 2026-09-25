@@ -22,7 +22,7 @@ public enum ShaderPipelineLoadStatus : byte {
 /// <param name="Dependencies">Every file the load read, including those of a failed pass.</param>
 /// <param name="Message">The summary or the refusal reason.</param>
 public sealed record ShaderPipelineLoadResult(ShaderPipelineLoadStatus Status, CompiledShaderPipeline? Pipeline, IReadOnlyList<string> Dependencies, string Message);
-/// <summary>Loads a pipeline document or a one-off shader into the same planned, compiled candidate.
+/// <summary>Loads a graph document or a one-off shader into the same planned, compiled candidate.
 /// No GPU objects are created here; callers may load candidates on a background worker.</summary>
 public sealed class ShaderPipelineLoader {
     // A fullscreen triangle has no vertex buffer. Its UV convention is top-left, matching pipeline images.
@@ -48,7 +48,6 @@ public sealed class ShaderPipelineLoader {
         """;
 
     private readonly ShaderCompiler m_compiler;
-    private readonly ShaderPipelineCompiler m_planner = new();
 
     /// <summary>Creates a source loader over the shared cross-backend compiler.</summary>
     public ShaderPipelineLoader(ShaderCompiler compiler) {
@@ -111,12 +110,13 @@ public sealed class ShaderPipelineLoader {
                 path: path,
                 text: Capture(sourcePath: path)
             );
-            var plan = m_planner.Compile(definition: definition);
+            var plan = RenderGraphCompiler.ShaderPasses.Compile(definition: definition).Pipeline;
             var shaders = new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal);
             var diagnostics = new List<string>();
             var directory = Path.GetDirectoryName(path: path)!;
             // Capture every root stage before invoking tools. A candidate cannot combine different revisions
-            // of a file reused by several passes; includes are snapshotted by the source compiler.
+            // of a file reused by several passes; includes are snapshotted by the source compiler. A graph over no package
+            // plans shader passes alone.
             foreach (var pass in plan.Passes) {
                 Capture(sourcePath: Path.GetFullPath(
                 pass.Declaration.Source,
@@ -229,9 +229,9 @@ public sealed class ShaderPipelineLoader {
     }
     /// <summary>Reads a document using trim-safe metadata, or synthesizes a one-pass definition for a source file.</summary>
     /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
-    /// <param name="path">The path of the pipeline document or one-off shader.</param>
+    /// <param name="path">The path of the graph document or one-off shader.</param>
     /// <returns>The definition.</returns>
-    public static ShaderPipelineDefinition ReadDefinition(string name, string path) {
+    public static RenderGraphDefinition ReadDefinition(string name, string path) {
         path = Path.GetFullPath(path: path);
 
         return ParseDefinition(
@@ -240,19 +240,20 @@ public sealed class ShaderPipelineLoader {
             text: File.ReadAllText(path: path)
         );
     }
-    /// <summary>Parses the definition a source declares: a <c>.json</c> path as a <c>puck.shader.pipeline.v1</c>
-    /// document, an <c>.hlsl</c> path as a one-off shader forming a one-pass pipeline. It is the one rule every reader
-    /// of a pipeline source applies.</summary>
+    /// <summary>Parses the definition a source declares: a <c>.json</c> path as a <c>puck.render.graph.v1</c> document,
+    /// an <c>.hlsl</c> path as a one-off shader forming the one-pass graph
+    /// <see cref="RenderGraphDefinition.FromShaderSource"/> makes. It is the one rule every reader of a pipeline source
+    /// applies.</summary>
     /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
     /// <param name="path">The full path of the source.</param>
     /// <param name="text">The source's text, read by the caller so the definition and any hash of it describe one
     /// read.</param>
     /// <returns>The definition.</returns>
-    /// <exception cref="JsonException">A pipeline document is malformed.</exception>
-    /// <exception cref="InvalidDataException">A pipeline document is <c>null</c>, or <paramref name="path"/> names a
+    /// <exception cref="JsonException">A graph document is malformed.</exception>
+    /// <exception cref="InvalidDataException">A graph document is <c>null</c>, or <paramref name="path"/> names a
     /// package's manifest rather than its directory.</exception>
     /// <exception cref="ArgumentException">A one-off shader's extension names no supported stage.</exception>
-    public static ShaderPipelineDefinition ParseDefinition(string name, string path, string text) {
+    public static RenderGraphDefinition ParseDefinition(string name, string path, string text) {
         ArgumentNullException.ThrowIfNull(argument: text);
 
         if (string.Equals(
@@ -266,16 +267,13 @@ public sealed class ShaderPipelineLoader {
             comparisonType: StringComparison.OrdinalIgnoreCase,
             value: ".json"
         )) {
-            return ShaderPipelineDefinition.FromShaderSource(
+            return RenderGraphDefinition.FromShaderSource(
                 name: name,
                 sourcePath: path
             );
         }
 
-        return (JsonSerializer.Deserialize(
-            json: text,
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineDefinition
-        ) ?? throw new InvalidDataException(message: $"Pipeline '{path}' is null."));
+        return RenderGraphDefinition.Parse(json: text);
     }
     /// <summary>Returns the declarations a pass's source includes to read its frame block: the text
     /// <see cref="ShaderInterfaceHlsl"/> generates from the pass's interface, at the path

@@ -15,7 +15,7 @@ gpu.faults arm image 2
 # The corrected edit carries the installed history and creates the other six images. Its first image is created and
 # its second fails, so the candidate is refused by name, disposes the one image it made, and the paused instance still
 # presents submission 2.
-pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.load feedback ../pipeline-edit/corrected.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 # The fault fired once: nothing is armed, and exactly two images were asked for.

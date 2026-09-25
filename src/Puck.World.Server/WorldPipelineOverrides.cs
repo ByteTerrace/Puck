@@ -40,7 +40,7 @@ public enum WorldPipelineOverrideRefusal : byte {
     [Refusal(door: "pipeline.overrides", condition: "the selected output names no image version of the source", kind: RefusalKind.Verdict)]
     OutputUndeclared,
 }
-/// <summary>Reads the sources <c>views.pipelines</c> rows name, for the server's override gate: a pipeline document, a
+/// <summary>Reads the sources <c>views.pipelines</c> rows name, for the server's override gate: a graph document, a
 /// one-off shader, or a package directory, read by <see cref="ShaderPipelineSource.TryRead"/>. Rows resolve against
 /// one document directory, the same directory the rendering host compiles them against, so the server and the host
 /// read the same file for a row.</summary>

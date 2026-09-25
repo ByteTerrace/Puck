@@ -26,10 +26,10 @@ public enum ShaderPipelinePassKind : byte {
     Fullscreen = 2,
     /// <summary>An indexed geometry pass.</summary>
     Geometry = 3,
-    /// <summary>Engine work a frame graph names under <c>packages</c>, whose source is its package id. The package
-    /// records its own work and binds its own descriptors; the planner orders, versions and barriers it by the versions
-    /// it reads and writes, which it reaches as a compute pass does. It enters the planner only as a
-    /// <see cref="ShaderPipelinePackagePass"/>, never as a document's pass.</summary>
+    /// <summary>Engine work a frame graph names under <c>packages</c> (<see cref="RenderGraphPackagePass"/>), never as a
+    /// shader pass. The package records its own work and binds its own descriptors, so its planned pass has no
+    /// declaration; the planner orders, versions and barriers it by the versions it reads and writes, which it reaches as
+    /// a compute pass does.</summary>
     Package = 4,
 }
 /// <summary>Identifies how a fullscreen pass's vertex stage obtains the triangle's corners.</summary>

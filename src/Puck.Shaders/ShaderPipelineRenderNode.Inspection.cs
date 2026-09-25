@@ -34,7 +34,7 @@ public sealed partial class ShaderPipelineRenderNode {
         ).Length--;
 
         foreach (var pass in plan.Passes) {
-            builder.Append(handler: $"\n  {pass.Name}: {pass.Declaration.Kind}; reads={string.Join(
+            builder.Append(handler: $"\n  {pass.Name}: {pass.Kind}; reads={string.Join(
                 separator: ",",
                 values: pass.Declaration.InputReferences.Select(selector: input => (input.Name + (input.PreviousFrame
                 ? "@previous"

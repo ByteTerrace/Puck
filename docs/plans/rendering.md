@@ -467,18 +467,23 @@ uploaded by `WorldFieldEmitter` one field per produced frame.
 P11's CPU half has landed. Its second half, P11b, runs beside P7b: only the
 overlay as a true package and the per-device pass-pipeline cache wait on P7's
 binding groups. The frame graph is a document, `puck.render.graph.v1`
-(`RenderGraphDefinition` in `src/Puck.Shaders/Graph`). Its members are the
-pipeline document's, plus `packages`: engine work named by package id from
-`RenderGraphPackageCatalog`, which offers `sdf.world`, `overlay` and one
-`post.<id>` package per shipped post-process set. `RenderGraphCompiler` plans a
-graph with P3's planner: a package pass enters the plan only through the
-planner's package entry, and its planned pass carries its own kind,
-`ShaderPipelinePassKind.Package`, whose source is its package id and whose
-references keep no descriptor binding, so one planner orders, versions and
-barriers every pass. A document's pass kind has no `Package` member, so its
-JSON reader refuses that name.
-`RenderGraphDocumentLawTests` holds every
-checked-in pipeline document to planning identically as a graph, and
+(`RenderGraphDefinition` in `src/Puck.Shaders/Graph`), and it is the one
+pass-graph document: a pipeline is a graph of shader passes that a world
+names, and a lone `.hlsl` source reads as a one-pass graph. Its members are
+`name`, `resources`, `passes` and `outputs`, plus `packages`: engine work
+named by package id from `RenderGraphPackageCatalog`, which offers
+`sdf.world`, `overlay` and one `post.<id>` package per shipped post-process
+set. `RenderGraphCompiler` checks the schema tag and plans a graph with P3's
+planner: a package pass enters the plan only through the planner's package
+entry, and its planned pass carries its own kind,
+`ShaderPipelinePassKind.Package`, over the compute shape it reaches
+resources by, so one planner orders, versions and barriers every pass. A
+shader pass's kind has no `Package` member, so the JSON reader refuses that
+name. A pipeline host offers no package, so the packager and the loader see
+shader passes alone, and a node given recorders runs a graph's package passes
+(`RenderGraphRuntime`). Every checked-in graph
+document is named `*.graph.json`, `RenderGraphDocumentLawTests` holds each to
+planning alike through a pipeline host and the engine's catalog, and
 `puck schema` generates the document's schema. A world names instances in
 `views.graphs`: a graph source, a camera, a refresh divisor or rate, and
 inputs bound to other instances' outputs, with `views.graphBudget` as the
@@ -507,17 +512,17 @@ still render every view, no host feeds the scheduler a frame, and
 `views.pipelines` rows and layout slots do not name graph instances yet. P11b
 wires `WorldBootComposition`'s node tree onto graph instances fed by the
 scheduler, puts the live schedule's extents and prices in `world.budget`,
-runs the parity and counted-GPU checks, and makes the deletions P11 lists,
-including the `puck.shader.pipeline.v1` schema. Folding that schema into the
-graph document is more than a tag change: the pipeline document's top-level
-`config`, which the planner already refuses, goes with it; the tests and the
-`puck affected` path filter that glob `*.pipeline.json` move with the
-suffix; and a single `.hlsl` source still reads as a one-pass graph. Five
-P11b items have landed: the first-class package pass kind in
+runs the parity and counted-GPU checks, and makes the rest of the deletions
+P11 lists. Six P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
-planner only through its package entry, planned buffer edges, and the graph
-runtime. Package
+planner only through its package entry, the fold of the pipeline document
+into the graph document, planned buffer edges, and the graph runtime. The
+fold leaves one document: the pipeline document's tag, its definition type
+and its schema check are gone, a top-level `config` is an unknown member, every
+checked-in document is a `*.graph.json` tagged `puck.render.graph.v1`, and
+`views.pipelines` rows name graph documents until P11b retires that section.
+Package
 ports are typed with a buffer's stride and count, `sdf.bricks` publishes the
 brick pool as a buffer output, and an instance read carries the version's
 kind, so the scheduler orders a buffer producer before its readers at no
@@ -874,7 +879,8 @@ wall-clock and GPU timing are deferred with no date.
 Each package's two halves land together, because the second is what makes
 the first observable. Source entry points: planning and loading in
 `src/Puck.Shaders/Pipeline` (`ShaderPipelineCompiler`, `ShaderPipelinePlan`,
-`ShaderPipelineDefinition`, `ShaderPipelineLoader`); execution and replacement in
+`ShaderPipelineLoader`) and `src/Puck.Shaders/Graph` (`RenderGraphDefinition`,
+`RenderGraphCompiler`); execution and replacement in
 `ShaderPipelineRenderNode` (`Ensure`, `InstallPending`, `ProduceFrame`,
 retirement); the fixture runner in `tests/Puck.World.Canaries` and
 `src/Puck.Cli/Canary`; authoring in `WorldPipelineCommandModule`,
@@ -1772,7 +1778,7 @@ Phase 3, the groups, follows phase 2:
       and `GpuRegion` map to.
 15. Pipelines move onto groups: `WriteFrame` writes the frame group, set 0, into
     a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
-    3; passes include their generated interface; the pipeline document's
+    3; passes include their generated interface; the graph document's
     binding fields are deleted; and a load checks `SHADERPIPE_INTERFACE`.
 16. The gate spike's GPU half, a binding station in `tests/Puck.Parity`.
 17. The region-copy kernel leaves the SDF engine for `Puck.Shaders`.
@@ -2015,10 +2021,10 @@ instead of the test card. The planner refuses a same-frame cycle and names the
 instances in it. Every instance appears in the cost report and `world.budget`
 with its extent, rate, and pass cost.
 
-**Deletes:** one graph document remains. `puck.shader.pipeline.v1` folds into
-`puck.render.graph.v1`, a pipeline being a graph a world names, and the
+**Deletes:** one graph document remains. The pipeline document has folded
+into `puck.render.graph.v1`, a pipeline being a graph a world names; the
 `views.pipelines` section, `WorldPipelineRuntime`, and
-`WorldComposedSlot.Pipeline` go with it. The hand-composed `IRenderNode` tree
+`WorldComposedSlot.Pipeline` go next. The hand-composed `IRenderNode` tree
 and its `Children` wiring in `WorldBootComposition` give way to graph
 instances. The SDF composite kernel `sdf-world-composite.comp`, its
 `MaxViewports` limit and push block, `SdfEngineNode`'s child map and
@@ -2491,9 +2497,10 @@ its frame group moves from push constants to a descriptor set when step 15
 puts pipelines on groups. P7 and P8 do not read simulation state, so they do
 not wait on the state rebuild.
 
-**The frame graph and nesting.** P11's CPU half has landed, and so have three
+**The frame graph and nesting.** P11's CPU half has landed, and so have five
 of P11b's items: the first-class package pass kind, a steady-state schedule
-that allocates nothing, and the document pass kind. The rest of P11b runs
+that allocates nothing, the document pass kind, the fold of the pipeline
+document into the graph document, and planned buffer edges. The rest of P11b runs
 beside P7b; only the overlay as a true package waits on its sampler tables and
 the overlay's move onto groups, and only the per-device pass-pipeline cache
 waits on pipelines moving onto groups. P12's

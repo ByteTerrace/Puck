@@ -18,10 +18,10 @@ internal static class InterfaceCommand {
             return [(ShaderSetManifest.ReadFrameInterface(manifestPath: path), Path.GetDirectoryName(path: path)!)];
         }
 
-        var plan = ShaderPipelineCompiler.Plan(definition: ShaderPipelineLoader.ReadDefinition(
+        var plan = RenderGraphCompiler.ShaderPasses.Compile(definition: ShaderPipelineLoader.ReadDefinition(
             name: Path.GetFileNameWithoutExtension(path: path),
             path: path
-        ));
+        )).Pipeline;
         var directory = Path.GetDirectoryName(path: path)!;
         var interfaces = new List<(ShaderInterface Interface, string Directory)>();
 
@@ -44,7 +44,7 @@ internal static class InterfaceCommand {
     }
 
     public static Command Create() {
-        var source = new Argument<string>(name: "source") { Description = "The pipeline document, one-off shader source, or shader-set manifest (*.puck.shader.json)." };
+        var source = new Argument<string>(name: "source") { Description = "The graph document, one-off shader source, or shader-set manifest (*.puck.shader.json)." };
         var write = new Option<bool>(name: "--write") { Description = "Write each interface's declarations beside its source, as <interface>.interface.hlsli, rather than printing them." };
         var echo = new Option<bool>(name: "--echo") { Description = "Also generate each interface's echo pass, as <interface>.echo.hlsl." };
         var command = new Command(

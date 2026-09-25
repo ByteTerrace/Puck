@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "shapes",
-        "source": "misaddressed.pipeline.json",
+        "source": "misaddressed.graph.json",
         "timeScale": 1
       }
     ]

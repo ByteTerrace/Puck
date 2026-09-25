@@ -15,7 +15,7 @@ pipeline.wait feedback captured 10
 # the history to 256x256: 1597440 bytes steady-state, which beside those 53248 peak at 1650688, over the cap, so the
 # candidate is refused before it allocates anything. A reload is not a step, and the
 # paused instance still presents submission 2.
-pipeline.load feedback wide.pipeline.json
+pipeline.load feedback wide.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.capture feedback {run}/after-refusal.png
@@ -28,7 +28,7 @@ pipeline.wait feedback captured 10
 # An in-budget edit, one minus the history, carries the retained history instead of allocating it, so it peaks at
 # 53248 + 49152 - 24576 = 77824 and installs while paused; the next step renders submission 4 through it over the
 # retained history as 1 - 4/16.
-pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.load feedback ../pipeline-edit/corrected.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.step feedback

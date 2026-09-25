@@ -11,7 +11,7 @@ gpu.faults disarm
 gpu.faults arm image 7
 # The edit installs while paused without rendering, so the paused instance still presents submission 2, and the
 # replaced graph's published images are still held beside it.
-pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.load feedback ../pipeline-edit/corrected.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 gpu.faults list

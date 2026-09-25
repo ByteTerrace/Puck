@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "geometry",
-        "source": "always.pipeline.json",
+        "source": "always.graph.json",
         "timeScale": 1
       }
     ]

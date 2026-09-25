@@ -7,9 +7,9 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "fixtures": [
-    "echo.pipeline.json",
+    "echo.graph.json",
     "frame.echo.hlsl",
-    "perturbed.pipeline.json",
+    "perturbed.graph.json",
     "perturbed.echo.hlsl",
     "perturbed-swapped.hlsli"
   ],

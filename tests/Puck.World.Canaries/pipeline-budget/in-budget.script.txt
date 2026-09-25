@@ -10,7 +10,7 @@ pipeline.budget feedback 4194304
 pipeline.capture feedback {run}/before.png
 pipeline.wait feedback captured 10
 # The wide edit installs while paused without rendering, so the paused instance still presents submission 2.
-pipeline.load feedback wide.pipeline.json
+pipeline.load feedback wide.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.capture feedback {run}/after-refusal.png
@@ -21,7 +21,7 @@ pipeline.wait feedback submitted 3 10
 pipeline.capture feedback {run}/refused-step.png
 pipeline.wait feedback captured 10
 # The corrected edit cannot carry the wide history either: submission 4 renders 1 - 1/16.
-pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.load feedback ../pipeline-edit/corrected.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.step feedback

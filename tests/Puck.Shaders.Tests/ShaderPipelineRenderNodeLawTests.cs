@@ -55,7 +55,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     /// be carried over, so every resource of the graph it replaces must retire. <paramref name="historyDimensions"/>
     /// replaces the history's fixed 32x32 extent, for a history whose extent follows the frame or differs.</summary>
     private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null) {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "feedback",
             outputs: ["image"],
             passes: [
@@ -126,7 +126,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     }
     /// <summary>A storage buffer one compute pass writes and the next reads, then an RGBA8 image that pass writes.</summary>
     private static CompiledShaderPipeline BufferHandoff() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "handoff",
             outputs: ["image"],
             passes: [

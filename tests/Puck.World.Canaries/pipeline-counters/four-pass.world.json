@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "feedback",
-        "source": "four-pass.pipeline.json",
+        "source": "four-pass.graph.json",
         "timeScale": 1
       }
     ]

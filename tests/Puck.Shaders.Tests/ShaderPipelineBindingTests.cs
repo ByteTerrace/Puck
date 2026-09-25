@@ -1,7 +1,7 @@
 namespace Puck.Shaders.Tests;
 
 public sealed class ShaderPipelineBindingTests {
-    private static ShaderPipelineDefinition Definition(ShaderPipelinePass pass) => new(
+    private static RenderGraphDefinition Definition(ShaderPipelinePass pass) => new(
         "bindings",
         [Image(
                 "input",
@@ -117,7 +117,7 @@ public sealed class ShaderPipelineBindingTests {
     }
     [Fact]
     public void Null_document_collections_produce_a_planner_diagnostic() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "null",
             outputs: [],
             passes: [],
@@ -132,7 +132,7 @@ public sealed class ShaderPipelineBindingTests {
     }
     [Fact]
     public void History_still_requires_initialized_first_frame_contents() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             "history",
             [Image("output") with { History = true }],
             [Pass(

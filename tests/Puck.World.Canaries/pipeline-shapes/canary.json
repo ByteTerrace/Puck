@@ -7,8 +7,8 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "fixtures": [
-    "shapes.pipeline.json",
-    "misaddressed.pipeline.json",
+    "shapes.graph.json",
+    "misaddressed.graph.json",
     "seed.hlsl",
     "combine.hlsl",
     "combine-misaddressed.hlsl",

@@ -1,6 +1,6 @@
 {
-  "$schema": "puck.shader.pipeline.v1",
-  "name": "echo",
+  "$schema": "puck.render.graph.v1",
+  "name": "perturbed",
   "resources": [
     {
       "name": "echo",
@@ -16,7 +16,7 @@
   "passes": [
     {
       "name": "frame",
-      "source": "frame.echo.hlsl",
+      "source": "perturbed.echo.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
       "outputs": [

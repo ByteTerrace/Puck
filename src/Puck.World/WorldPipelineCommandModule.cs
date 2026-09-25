@@ -165,7 +165,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
         yield return Immediate(
             "pipeline.watch",
-            "pipeline.watch <name> [on|off] — watch the pipeline document, shaders and includes; compile changes after a quiet period.",
+            "pipeline.watch <name> [on|off] — watch the graph document, shaders and includes; compile changes after a quiet period.",
             (_, args) => {
                 if (args.Count is < 1 or > 2) {
                     return CommandResult.Usage(

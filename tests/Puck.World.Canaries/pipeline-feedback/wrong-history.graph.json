@@ -1,12 +1,20 @@
 {
-  "$schema": "puck.shader.pipeline.v1",
+  "$schema": "puck.render.graph.v1",
   "name": "feedback",
   "resources": [
     {
       "name": "history",
       "kind": "Image",
       "format": "R16G16B16A16Float",
-      "dimensions": { "mode": "Absolute", "width": 256, "height": 256 },
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 },
+      "history": true,
+      "initialization": "Zero"
+    },
+    {
+      "name": "stale",
+      "kind": "Image",
+      "format": "R16G16B16A16Float",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 },
       "history": true,
       "initialization": "Zero"
     },
@@ -26,15 +34,15 @@
   "passes": [
     {
       "name": "accumulate",
-      "source": "../pipeline-feedback/accumulate.hlsl",
+      "source": "accumulate.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "inputs": [ { "name": "history", "previousFrame": true, "binding": 1 } ],
+      "inputs": [ { "name": "stale", "previousFrame": true, "binding": 1 } ],
       "outputs": [ { "name": "history", "binding": 0 } ]
     },
     {
       "name": "convert",
-      "source": "../pipeline-feedback/convert.hlsl",
+      "source": "convert.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
       "inputs": [ { "name": "history", "binding": 1 } ],
@@ -42,7 +50,7 @@
     },
     {
       "name": "copy",
-      "source": "../pipeline-feedback/copy.hlsl",
+      "source": "copy.hlsl",
       "entryPoint": "main",
       "kind": "Fullscreen",
       "inputs": [ { "name": "gray", "binding": 0 } ],

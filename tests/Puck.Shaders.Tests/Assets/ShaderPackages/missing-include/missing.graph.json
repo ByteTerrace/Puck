@@ -1,6 +1,6 @@
 {
-  "$schema": "puck.shader.pipeline.v1",
-  "name": "outside",
+  "$schema": "puck.render.graph.v1",
+  "name": "missing",
   "resources": [
     {
       "name": "image",

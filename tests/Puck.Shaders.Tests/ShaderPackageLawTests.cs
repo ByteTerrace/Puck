@@ -151,7 +151,7 @@ public sealed partial class ShaderPackageLawTests {
         var package = await new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: runner)).BuildAsync(
             cancellationToken: Token,
             output: fixture.Output(name: "package"),
-            source: fixture.PathOf(logicalPath: "missing.pipeline.json")
+            source: fixture.PathOf(logicalPath: "missing.graph.json")
         );
 
         AssertRefused(
@@ -193,7 +193,7 @@ public sealed partial class ShaderPackageLawTests {
         var output = fixture.Output(name: "package");
 
         Assert.Equal(
-            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "graph.pipeline.json"))).Status,
+            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "transitive.graph.json"))).Status,
             expected: ShaderPipelineLoadStatus.Compiled
         );
         Assert.Equal(
@@ -237,7 +237,7 @@ public sealed partial class ShaderPackageLawTests {
 
         Assert.True(condition: (await compiler.CompileAsync(cancellationToken: Token, descriptor: request)).IsSuccess);
         Assert.Equal(
-            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "graph.pipeline.json"))).Status,
+            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "transitive.graph.json"))).Status,
             expected: ShaderPipelineLoadStatus.Compiled
         );
         File.Delete(path: Path.Combine(path1: toolchain, path2: "dxc"));
@@ -273,7 +273,7 @@ public sealed partial class ShaderPackageLawTests {
     public async Task An_include_outside_the_closure_is_refused_and_a_wider_root_admits_it() {
         using var fixture = new Fixture(name: "outside");
         var packager = new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: new PackageRunner()));
-        var source = fixture.PathOf(logicalPath: "pipeline/outside.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "pipeline/outside.graph.json");
 
         AssertRefused(
             code: ShaderClosureRefusedException.OutsideClosure,
@@ -293,11 +293,11 @@ public sealed partial class ShaderPackageLawTests {
         );
         Assert.Equal(
             actual: wide.Manifest!.Document,
-            expected: "pipeline/outside.pipeline.json"
+            expected: "pipeline/outside.graph.json"
         );
         Assert.Equal(
             actual: wide.Manifest.Files.Select(selector: static file => file.Path),
-            expected: ["pipeline/fill.hlsl", "pipeline/outside.pipeline.json", "shared/outside.hlsli"]
+            expected: ["pipeline/fill.hlsl", "pipeline/outside.graph.json", "shared/outside.hlsli"]
         );
         Assert.Equal(
             actual: (await packager.LoadAsync(cancellationToken: Token, package: fixture.Output(name: "wide"))).Status,
@@ -316,7 +316,7 @@ public sealed partial class ShaderPackageLawTests {
             MaxIncludeDepth: depth
         );
         var runner = new PackageRunner();
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
 
         AssertRefused(
             code: code,
@@ -355,7 +355,7 @@ public sealed partial class ShaderPackageLawTests {
         var output = fixture.Output(name: "package");
 
         Assert.Equal(
-            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "graph.pipeline.json"))).Status,
+            actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: fixture.PathOf(logicalPath: "transitive.graph.json"))).Status,
             expected: ShaderPipelineLoadStatus.Compiled
         );
         File.Copy(
@@ -397,7 +397,7 @@ public sealed partial class ShaderPackageLawTests {
         using var fixture = new Fixture(name: "transitive");
         var runner = new PackageRunner();
         var packager = new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: runner));
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
         var output = fixture.Output(name: "package");
 
         async Task Rebuild() => Assert.Equal(
@@ -455,7 +455,7 @@ public sealed partial class ShaderPackageLawTests {
         var built = await packager.BuildAsync(
             cancellationToken: Token,
             output: output,
-            source: fixture.PathOf(logicalPath: "graph.pipeline.json")
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
         );
         var manifestPath = Path.Combine(
             path1: output,
@@ -534,7 +534,7 @@ public sealed partial class ShaderPackageLawTests {
         var built = await new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: runner)).BuildAsync(
             cancellationToken: Token,
             output: fixture.Output(name: "package"),
-            source: fixture.PathOf(logicalPath: "graph.pipeline.json")
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
         );
 
         Assert.Equal(
@@ -587,7 +587,7 @@ public sealed partial class ShaderPackageLawTests {
         var built = await packager.BuildAsync(
             cancellationToken: Token,
             output: fixture.Output(name: "package"),
-            source: fixture.PathOf(logicalPath: "graph.pipeline.json")
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
         );
 
         Assert.Equal(
@@ -676,7 +676,7 @@ public sealed partial class ShaderPackageLawTests {
         var built = await new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: new PackageRunner())).BuildAsync(
             cancellationToken: Token,
             output: fixture.Output(name: "package"),
-            source: fixture.PathOf(logicalPath: "graph.pipeline.json")
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
         );
 
         Assert.Equal(
@@ -712,7 +712,7 @@ public sealed partial class ShaderPackageLawTests {
         using var fixture = new Fixture(name: "transitive");
         var runner = new PackageRunner();
         var compiler = fixture.Compiler(runner: runner);
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
         var cold = await new ShaderPackager(compiler: compiler, reflectDxil: false).BuildAsync(cancellationToken: Token, output: fixture.Output(name: "cold"), source: source);
         var runs = runner.CompileRuns;
         var warm = await new ShaderPackager(compiler: compiler, reflectDxil: false).BuildAsync(cancellationToken: Token, output: fixture.Output(name: "warm"), source: source);
@@ -808,7 +808,7 @@ public sealed partial class ShaderPackageLawTests {
         using var fixture = new Fixture(name: "transitive");
         var packager = new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: new PackageRunner()));
         var output = fixture.Output(name: "package");
-        var source = fixture.PathOf(logicalPath: "graph.pipeline.json");
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
 
         Assert.Equal(
             actual: (await packager.BuildAsync(cancellationToken: Token, output: output, source: source)).Status,
@@ -865,7 +865,7 @@ public sealed partial class ShaderPackageLawTests {
         var built = await new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: fixture.Output(name: "cache"))).BuildAsync(
             cancellationToken: Token,
             output: fixture.Output(name: "package"),
-            source: fixture.PathOf(logicalPath: "graph.pipeline.json")
+            source: fixture.PathOf(logicalPath: "transitive.graph.json")
         );
 
         Assert.True(

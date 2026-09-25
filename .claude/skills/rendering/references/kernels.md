@@ -156,7 +156,7 @@ engine's D3D12 registers still differ from their bindings and per consumer:
 `ShaderRegisterBindingLawTests` holds every register the build compiles, and
 every pipeline source the World's package store is built from
 (`PuckWorldPipelineSource` in `build/WorldAssets.targets`, and the sources a
-shipped `*.pipeline.json` names), to its binding number and set, except its
+shipped `*.graph.json` names), to its binding number and set, except its
 named list of today's violations, which may only shrink: a new declaration
 keeps register equal to binding, and a change that fixes one deletes its
 entry. Screen-source bindings
