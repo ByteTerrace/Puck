@@ -1242,7 +1242,8 @@ pin, and each pass's name, interface hash and generated declarations' pin. A
 one-off shader plans under its instance's name, so two rows naming one shader
 under two names store two packages. A missing source, a closure that does not
 fit a package, or a pass that does not compile fails the build, and a package
-no row names any more is removed.
+no row names any more is removed, both from the store and, after the copy,
+from the output's `Assets/worlds/packages`.
 
 The World's packager is given the store, so `LoadSource` computes a source row's
 key the same way, without compiling, and loads the stored package with that
