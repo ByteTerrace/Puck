@@ -532,10 +532,11 @@ sub-steps, in this order:
   gate.
   - `RenderGraphInstance` gains a kind: a rendered graph, or an external
     producer that names a package id. `RenderGraphInstanceSet.TryCreate`
-    refuses an external instance that reads another instance, and a
-    previous-frame read of an external instance, each by name. The engine
-    writes one output image (`SdfWorldEngine.OutputImageHandle`) that its next
-    render overwrites, so a previous-frame read would sample the current frame.
+    refuses an external instance that reads another instance, and, until P14-6,
+    a previous-frame read of an `sdf.world` external producer, each by name. The
+    engine writes one output image (`SdfWorldEngine.OutputImageHandle`) that its
+    next render overwrites, so a previous-frame read would sample the current
+    frame, and the output is not double-buffered to allow one.
     The scheduler is unchanged: demand, divisor, quantized extent, and a price
     of `SdfWorldEngine.PassLabels.Length` passes.
   - An `IRenderGraphExternalProducer` is registered per package id beside the
@@ -607,10 +608,11 @@ sub-steps, in this order:
     flight, because the recorder can no longer wait its own fence. The frame
     slots' leases move from `OverlayFrameSlots`' one-frame-behind retirement to
     the instance's per-slot `LeaseRetireList` from 5a.
-  - The pass-through must survive. A recording that draws nothing has to leave
-    its output port as its input's version, or every capture of a frame with no
-    visible overlay gains a copy pass. That is an addition to the runtime's
-    recording contract, and it is decided before 5c.
+  - The pass-through belongs to the runtime. A recording may declare that it
+    drew nothing this frame, and the runtime then aliases the pass's output port
+    to its input's version, with no copy; a capture served from the root follows
+    the alias. The runtime owns that rule, so no recorder copies its input, and
+    the contract gains it before 5c lands.
   - What waits on P7b-14b and 18: converting `overlay-unified.frag.hlsl`'s
     combined declarations to separate images and a sampler table, moving the
     overlay onto binding groups, and sizing its pool without
@@ -623,11 +625,11 @@ Each sub-step's gate:
   canaries that `tests/Puck.Affected/canary-coverage.json` maps to
   `SdfEngineNode.cs` and `LeaseRetireList.cs` run too. The mapping is read as
   text rather than from a `puck affected` run, so it is unverified.
-- 5b: no gate exists. No canary or parity world authors `render.extensions`. The
-  coverage index maps `FullscreenPassNode.cs` to 21 canaries, but none of them
-  composes a post pass. 5b adds a canary that boots one shipped post id on both
-  backends and pins its pixels, with a discriminating leg without the extension,
-  and lands behind it.
+- 5b: a new post canary, which 5b lands behind. It boots one shipped
+  `post.<id>` on both backends and pins its pixels, with a discriminating leg
+  without the extension. No existing gate covers a post pass: no canary or parity
+  world authors `render.extensions`, and although the coverage index maps
+  `FullscreenPassNode.cs` to 21 canaries, none of them composes a post pass.
 - 5c: parity likely does not cross the overlay: with nothing visible the
   pass-through returns the SDF frame, and the parity world appears to show no
   overlay, which is unverified. The coverage index maps
