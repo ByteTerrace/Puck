@@ -679,9 +679,21 @@ scheduled instance through its own `ShaderPipelineRenderNode` at the
 scheduled extent, and binds each external version to the frame of its
 producer's output the schedule names, or to a stand-in while there is none.
 A package pass records inside that node's submission through the recorder
-`RenderGraphPackageRecorders` holds for its package id; a recorder records
+the `IRenderGraphPackageFactory` registered in `RenderGraphPackageRecorders`
+creates for its package id: the factory's `Build` creates its modules,
+pipelines and render passes in the candidate's `BackgroundBuild`, its `Create`
+takes them at install and allocates per-slot sets from the node's one pool
+(whose statement includes the factory's `SetBindings`), and a recorder records
 into the command buffer it is handed and never submits, waits or creates a
-pipeline, and a graph naming an unserved package is refused at install, as
+pipeline. A draw inside a package goes through `RenderGraphPackageDraw`'s
+barriers, since the planner orders a package in a compute pass's shape. A
+recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
+and the node publishes the input in the output's place, never a copy
+(`PublishedLayout`). `PostProcessPackage` serves every `post.<id>` and
+`OverlayPackage` serves `overlay`, which shares `OverlayFrameComposer` with
+`UnifiedOverlayNode`; a package pass's `config` binds against its package's
+schema in the graph compiler (`RENDERGRAPH_PACKAGE_CONFIG`). A graph naming an
+unserved package is refused at install, as
 is an input whose format differs from what its producer publishes or whose
 buffer is larger than the producer's (`InputFormat`). An external instance
 (`RenderGraphInstance.ExternalPackage`) has no graph: the

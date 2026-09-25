@@ -515,12 +515,13 @@ still render every view, no host feeds the scheduler a frame, and
 wires `WorldBootComposition`'s node tree onto graph instances fed by the
 scheduler, puts the live schedule's extents and prices in `world.budget`,
 runs the parity and counted-GPU checks, and makes the rest of the deletions
-P11 lists. Seven P11b items have landed: the first-class package pass kind in
+P11 lists. Nine P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
 planner only through its package entry, the fold of the pipeline document
-into the graph document, planned buffer edges, the graph runtime, and
-`sdf.world` as the runtime's external producer (commit 5a below). The
+into the graph document, planned buffer edges, the graph runtime,
+`sdf.world` as the runtime's external producer, and the `post.<id>` and
+`overlay` package recorders (commits 5a, 5b and 5c below, none wired). The
 fold leaves one document: the pipeline document's tag, its definition type
 and its schema check are gone, a top-level `config` is an unknown member, every
 checked-in document is a `*.graph.json` tagged `puck.render.graph.v1`, and
@@ -565,9 +566,8 @@ a quarter-screen view at a quarter extent, a buffer edge binding the
 producer's buffer, captures served from the root or refused by name, the
 device-loss and disposal releases, and a steady frame allocating nothing over
 64 frames. Nothing drives the runtime yet: `WorldBootComposition` keeps its
-hand-built tree, no host registers a recorder or a producer, the `post.<id>`
-and `overlay` recorders are the next items, and the node allocates only
-fixed-size buffers, so a counted package buffer such as `sdf.bricks`'s brick
+hand-built tree, no host registers a package factory or a producer, and the
+node allocates only fixed-size buffers, so a counted package buffer such as `sdf.bricks`'s brick
 pool cannot be an instance's storage until the host supplies its counts.
 A world may author its own root graph
 in `views.graphs`; when it does not, composition synthesizes the default one,
@@ -646,55 +646,68 @@ sub-steps, in this order:
     while leased disposed only after release, device loss releasing every held
     engine, and steady acquisition allocating nothing. `RenderGraphSchedulerLawTests`
     holds the instance-set refusals and the producer's price.
-- 5b, `post.<id>` as a recorder. Today `FullscreenPassNode` wraps a one-pass
-  `ShaderPipelineRenderNode`. That executor has its own frame ring, per-slot
-  fences and submission, and builds its modules, pipeline and render pass
-  through `BackgroundBuild`. It allocates a descriptor pool, set and sampler per
-  slot at install, binds the inner `Surface` as the external `input`, and draws
-  an `R8G8B8A8Unorm` `output`. Its extent is fixed when the node is
-  constructed, and it swaps executors when the input's format or extent changes.
-  `WorldBootComposition` wraps one node per `render.extensions` entry and
-  records it in `WorldPostRenderExtensionPasses` for parameter bindings.
-  - One recorder serves every `post.<id>` id. The runtime builds its modules,
-    graphics pipeline and render pass with the same `BackgroundBuild` before the
-    candidate installs. Creating the recorder on the frame thread only takes the
-    built objects and allocates its descriptor objects from the node's pool
-    statement (`ShaderPipelineRenderNode.DescriptorPools`), the one pool per node
-    that P7b-14a-3 gives it.
-  - Each frame the recorder writes the input port's image into the slot's set,
-    pushes the config block, and records the render pass and the draw over a
-    framebuffer on the output port's image. The framebuffer is cached per
-    image.
-  - The recorder deletes `FullscreenPassNode`'s own submission, fences, frame
-    ring, executor swap and retirement lag. The extent comes from the schedule,
-    so a post pass resizes with its instance for the first time. An entry's
-    `config` becomes the package pass's parameters in the synthesized graph, and
-    `WorldPostRenderExtensionPasses` finds the recorder by pass name.
-  - Validation moves out of boot. The id check
-    (`WorldExtensionVocabularyHook.IsRegisteredPostRenderExtension`, read by
-    `WorldDefinitionValidator.ValidateRenderExtensions`) becomes the catalog's
-    `post.<id>` lookup. The config's binding against the manifest's schema,
-    which today throws `InvalidOperationException` in `WorldBootComposition`,
-    becomes a named refusal by the compiler before boot. A probe's `target.id`
-    cross-reference stays in world validation.
-- 5c, `overlay` as a recorder. Today `UnifiedOverlayNode` runs one frame in
-  flight: it creates its render pass, pipeline, modules, buffers, pool and
-  sampler on the frame thread at its first drawn frame, waits its own fence
-  before rewriting descriptors and its storage buffer, and submits. It binds nine
-  combined image samplers (the inner image and eight `OverlayFrameSlots`), one
-  storage buffer and a 48-byte push block. When nothing is visible it returns
-  the inner frame untouched and forwards captures to it.
-  - What lands now, over today's set layout: the pipeline and modules are built
-    with `BackgroundBuild` at install. Descriptor sets and the storage buffer's
-    per-frame regions exist once per frame slot from the context's frames in
-    flight, because the recorder can no longer wait its own fence. The frame
-    slots' leases move from `OverlayFrameSlots`' one-frame-behind retirement to
-    the instance's per-slot `LeaseRetireList` from 5a.
-  - The pass-through belongs to the runtime. A recording may declare that it
-    drew nothing this frame, and the runtime then aliases the pass's output port
-    to its input's version, with no copy; a capture served from the root follows
-    the alias. The runtime owns that rule, so no recorder copies its input, and
-    the contract gains it before 5c lands.
+- 5b has landed: `post.<id>` is a package recorder, on the fake GPU only, since
+  nothing wires it live yet. `FullscreenPassNode` still wraps a one-pass
+  `ShaderPipelineRenderNode` with its own frame ring, fences, submission and
+  executor swap, and `WorldBootComposition` still wraps one per
+  `render.extensions` entry; the wiring commit deletes it.
+  - A package id is served by an `IRenderGraphPackageFactory`. Its `Build` runs
+    in the candidate's `BackgroundBuild` beside the shader passes and creates the
+    pass's modules, pipeline and render pass; its `Create` takes them when the
+    graph installs and allocates one descriptor set per frame slot from the
+    node's one pool, whose statement (`ShaderPipelineRenderNode.DescriptorPools`)
+    includes the factory's `SetBindings`, admitted through the heap budget. A
+    recording carries the pass's frame block and the frame's lease list, and an
+    image a package writes is created usable as a color attachment.
+  - `PostProcessPackage` is the one factory for every `post.<id>`, registered
+    per set under its id. Each frame it writes the input into the slot's set,
+    pushes the frame block, and records the render pass and the draw over a
+    framebuffer cached per output image, bracketed by `RenderGraphPackageDraw`'s
+    barriers because the planner orders a package in a compute pass's shape. The
+    extent comes from the schedule, so a post pass resizes with its instance.
+  - A package pass carries `config` values. The graph compiler binds them
+    against the package's schema, which the catalog reads from each shipped
+    manifest's declaration (`ShaderSetManifest.ReadDeclaration`), and refuses a
+    config that does not bind as `RENDERGRAPH_PACKAGE_CONFIG`; the bound values
+    are the pass's frame block config, which `TrySetConfig` rebinds by pass
+    name. `WorldPostRenderExtensions.IsShipped` is the catalog's `post.<id>`
+    lookup. `WorldBootComposition`'s `InvalidOperationException` on a config
+    that does not bind stays until the wiring commit synthesizes the graph, and
+    a probe's `target.id` cross-reference stays in world validation.
+  - `PostProcessPackageLawTests` hold it on `FakePipelineGpu`: the same render
+    pass, pipeline description, vertex buffer and draw, input write and pushed
+    frame blocks as `FullscreenPassNode` records for the shipped film grain,
+    with bound config and a live config change; the pipeline built off the frame
+    thread and released on replacement, device loss and disposal; the config
+    refusal by name; and a steady frame allocating nothing.
+- 5c has landed: `overlay` is a package recorder, on the fake GPU only.
+  `UnifiedOverlayNode` still draws the live overlay, through the same
+  `OverlayFrameComposer` (every writer, the builder, the frame-slot table and
+  the overflow narration) and `OverlayPassLayout` (today's nine combined image
+  samplers, storage buffer and 48-byte push block).
+  - A recording that draws nothing returns
+    `RenderGraphPackageOutcome.DrewNothing`, and each output stands for the input
+    at its position: the node publishes that input's image with no copy, in its
+    own layout (`ShaderPipelineRenderNode.PublishedLayout`), a root capture reads
+    it, and the runtime binds consumers in the published layout. No recorder
+    copies its input. An output another pass touches, that is history, or that
+    is not an RGBA8 image beside an input image of its format is refused by name
+    when its pass draws nothing.
+  - `OverlayPackage` builds its modules, render pass and pipeline in the
+    candidate's build. Its recorder keeps a descriptor set per frame slot and a
+    storage-buffer region per slot after the shared static prefix (the token
+    slab and glyph pack), whose bases it pushes, because it no longer waits a
+    fence of its own. The `Frame` elements' leases move into the frame's lease
+    list (`OverlayFrameSlots.MoveTo`), which retires them after the slot's
+    fence. With nothing visible it draws nothing.
+  - `RenderGraphRuntimeLawTests.Alias` hold the aliasing on `FakePipelineGpu`
+    (the input published, a root capture reading it in its layout, the output
+    published again once drawn, the refusal by name), and
+    `RenderGraphRuntimeLawTests.Leases` a recording's lease retiring only at its
+    slot's next fence wait. `OverlayPackageLawTests` hold the overlay on
+    `FakeGpuDevice`: nothing visible publishes the input, a drawn cursor
+    publishes the output, bound frame-slot leases move into the frame's list,
+    and a steady drawn frame allocates nothing.
   - What waits on P7b-14b and 18: converting `overlay-unified.frag.hlsl`'s
     combined declarations to separate images and a sampler table, moving the
     overlay onto binding groups, and sizing its pool without
