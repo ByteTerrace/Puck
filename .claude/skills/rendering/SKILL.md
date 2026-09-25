@@ -549,8 +549,10 @@ These are one-line cautions; the owning pages hold the derivations.
   creating member of `GpuDeviceServices` (buffers, images, pipelines,
   descriptor pools and sets, command pools, render passes) takes a
   `GpuObjectName`: owner, part, optional detail and index, such as
-  `sdf.world/viewports/host[1]` (the SDF engine's objects by role through
-  `SdfWorldEngine.NameOf`, its pipelines by kernel pipeline name),
+  `sdf.world/viewports[1]` (the SDF engine's objects by role through
+  `SdfWorldEngine.NameOf`, its pipelines by kernel pipeline name; a
+  `GpuRegion` takes its owner's name and names each slot's buffer and copy set
+  at the slot's index, its own destination and copy pool bare),
   `<instance>/<pass or resource>[slot]` for a shader pipeline or graph package,
   `overlay/pass`, `render-graph/stand-in`, `gpu.region-copy/<pipeline>`.
   `GpuObjectName.ToString` is the one place a name becomes text; a site never
@@ -562,10 +564,12 @@ These are one-line cautions; the owning pages hold the derivations.
   states, allocators and command lists (Direct3D 12 views, pools, sets and
   render passes are not objects there). Off, `Name` returns before formatting,
   so a named creation allocates nothing (`GpuObjectNamingLawTests`, over
-  `FakeGpuDevice` with `RecordingGpuObjectNaming`); the counting and fault
+  `FakeGpuDevice` with `RecordingGpuObjectNaming`, which fails on a member
+  taking a name that it has no row for); the counting and fault
   decorators pass every name through and carry `Naming` over. A new creating
   member takes a name and its backends hand the object to the naming;
-  `SdfWorldEngineObjectNameLawTests` holds the engine's names. To trace a
+  `SdfWorldEngineObjectNameLawTests` holds the engine's names, every region's
+  included. To trace a
   validation message, run with `--debug-layers` (`puck canary --debug-layers`,
   or the World flag) and read the name the message prints beside the handle:
   the validation layer names each object a `[vulkan-debug] validation` line

@@ -1,3 +1,4 @@
+using System.Reflection;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Testing;
@@ -19,6 +20,7 @@ public sealed class GpuObjectNamingLawTests {
         ["IGpuBindings.CreatePool"] = (GpuObjectKind.DescriptorPool, static (services, name) => _ = services.Bindings.CreatePool(name: name, sizes: default)),
         ["IGpuBufferFactory.CreateDeviceLocal"] = (GpuObjectKind.Buffer, static (services, name) => _ = services.BufferFactory.CreateDeviceLocal(name: name, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
         ["IGpuBufferFactory.CreateHostVisible"] = (GpuObjectKind.Buffer, static (services, name) => _ = services.BufferFactory.CreateHostVisible(name: name, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
+        ["IGpuBufferFactory.CreateHostVisibleDeviceLocal"] = (GpuObjectKind.Buffer, static (services, name) => _ = services.BufferFactory.CreateHostVisibleDeviceLocal(name: name, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
         ["IGpuBufferFactory.CreateHostVisible(data)"] = (GpuObjectKind.Buffer, static (services, name) => _ = services.BufferFactory.CreateHostVisible(data: new byte[16], name: name, usage: GpuBufferUsage.Vertex)),
         ["IGpuCommandPoolFactory.Create"] = (GpuObjectKind.CommandPool, static (services, name) => _ = services.CommandPoolFactory.Create(name: name)),
         ["IGpuImageFactory.Create"] = (GpuObjectKind.Image, static (services, name) => _ = services.ImageFactory.Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, name: name, usage: GpuImageUsage.Storage, width: 4)),
@@ -97,6 +99,31 @@ public sealed class GpuObjectNamingLawTests {
         );
 
         Assert.Empty(collection: naming.Applied);
+    }
+    [Fact]
+    public void EveryMemberTakingANameIsACreationHere() {
+        var keys = Creations().Keys.Select(selector: static key => key.Split(separator: '(')[0]).ToHashSet(comparer: StringComparer.Ordinal);
+        var named = 0;
+
+        foreach (var type in ((Type[])[typeof(IGpuBindings), typeof(IGpuBufferFactory), typeof(IGpuCommandPoolFactory), typeof(IGpuImageFactory), typeof(IGpuPipelineFactory), typeof(IGpuRenderPassFactory), typeof(IGpuShaderModuleFactory)])) {
+            foreach (var method in type.GetMethods(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
+                if (!method.GetParameters().Any(predicate: static parameter => ((parameter.ParameterType.GetElementType() ?? parameter.ParameterType) == typeof(GpuObjectName)))) {
+                    continue;
+                }
+
+                named++;
+                Assert.Contains(
+                    collection: keys,
+                    expected: $"{type.Name}.{method.Name}"
+                );
+            }
+        }
+
+        // Overloads share a key's member name, so the count holds each overload to a row of its own.
+        Assert.Equal(
+            actual: Creations().Count,
+            expected: named
+        );
     }
     [Fact]
     public void TheDefaultNameIsNeverApplied() {
