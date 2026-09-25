@@ -130,10 +130,7 @@ public sealed class SdfEngineNodeWorkLawTests {
                 frameSource: new FixedFrameSource(frame: frame),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
-                services: new SdfViewGpuServices(
-                Gpu: gpu,
-                Pipelines: new SdfWorldPipelineCache()
-            ),
+                pipelines: new SdfWorldPipelineCache(),
                 width: Extent
             );
             m_context = new FrameContext(

@@ -71,6 +71,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheStore = pipelineCacheStore;
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
+        Services = CreateServices();
     }
     /// <summary>Initializes a new instance whose adapter LUID is resolved lazily on first use.</summary>
     /// <param name="adapterLuidProvider">Resolves the adapter LUID to create the device on (zero for the default adapter); invoked once, on first use.</param>
@@ -91,6 +92,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheStore = pipelineCacheStore;
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
+        Services = CreateServices();
     }
 
     /// <inheritdoc />
@@ -99,14 +101,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             EnsureCreated();
 
             return m_deviceApi.GetAdapterLuid(deviceHandle: m_device!.Handle);
-        }
-    }
-    /// <inheritdoc />
-    public nint DeviceHandle {
-        get {
-            EnsureCreated();
-
-            return m_device!.Handle;
         }
     }
     /// <summary>Gets the one-argument <c>DISPATCH</c> command signature <c>ExecuteIndirect</c> uses on this context's
@@ -119,7 +113,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
                     return m_dispatchSignature;
                 }
 
-                var device = ((ID3D12Device*)DeviceHandle);
+                var device = ((ID3D12Device*)Device.Handle);
                 var argumentDesc = new D3D12_INDIRECT_ARGUMENT_DESC {
                     Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH,
                 };
@@ -194,7 +188,24 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     public bool IsInitialized => (!m_disposed && (m_device is not null));
     /// <inheritdoc />
     public DirectXPipelineLibrary? PipelineLibrary { get; private set; }
+    /// <inheritdoc />
+    /// <remarks>Created with the context, before its device; each service creates the device on its first call that
+    /// needs it, and a device recreated after a loss is reached through the same services.</remarks>
+    public GpuDeviceServices Services { get; }
 
+    private GpuDeviceServices CreateServices() =>
+        new() {
+            Bindings = new DirectXGpuBindings(deviceContext: this),
+            BufferFactory = new DirectXGpuBufferFactory(deviceContext: this),
+            CommandPoolFactory = new DirectXGpuCommandPoolFactory(deviceContext: this),
+            ImageFactory = new DirectXGpuImageFactory(deviceContext: this),
+            PipelineFactory = new DirectXGpuPipelineFactory(deviceContext: this),
+            QueueSubmitter = new DirectXGpuQueueSubmitter(deviceContext: this),
+            Recorder = new DirectXGpuRecorder(deviceContext: this),
+            RenderPassFactory = new DirectXGpuRenderPassFactory(deviceContext: this),
+            ShaderModuleFactory = new DirectXGpuShaderModuleFactory(),
+            SurfaceTransferFactory = new DirectXGpuSurfaceTransferFactory(deviceContext: this),
+        };
     private void EnsureCreated() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,

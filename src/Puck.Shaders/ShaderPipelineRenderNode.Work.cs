@@ -50,14 +50,6 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
     public bool TryReadCompleted(GpuWorkSample sample) =>
         m_work.TryReadCompleted(sample: sample);
 
-    private IFullscreenPassServices? CountGraphics(IFullscreenPassServices? graphics) =>
-        ((graphics is null)
-        ? null
-        : new CountingFullscreenPassServices(
-            compute: m_gpu,
-            inner: graphics,
-            ledger: m_work
-        ));
     // A successful install, reload or resize: submissions still in flight were completed by the install's drain, so
     // nothing recorded under the old graph remains to publish, and the new passes count under a new revision.
     private void ConfigureWork() {
@@ -104,48 +96,5 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         m_submissions++;
         m_lastSubmissionFence = fence;
         ArmRetirements(fence: fence);
-    }
-
-    // Counts the recorder and graphics pipelines the fullscreen passes and the float preview draw through, and the other
-    // counted members a caller could reach; everything else passes through. ComputeServices answers the node's own
-    // counted bundle.
-    private sealed class CountingFullscreenPassServices(IFullscreenPassServices inner, IGpuComputeServices compute, GpuWorkLedger ledger) : IFullscreenPassServices {
-        public IGpuRecorder Recorder { get; } = GpuWorkCounting.Wrap(
-            ledger: ledger,
-            recorder: inner.Recorder
-        );
-
-        public IGpuComputeServices? ComputeServices =>
-            compute;
-
-        public IGpuBindings Bindings { get; } = GpuWorkCounting.Wrap(
-            bindings: inner.Bindings,
-            ledger: ledger
-        );
-
-        public IGpuBufferFactory BufferFactory =>
-            inner.BufferFactory;
-        public IGpuDeviceContext DeviceContext =>
-            inner.DeviceContext;
-
-        public IGpuPipelineFactory PipelineFactory { get; } = GpuWorkCounting.Wrap(
-            factory: inner.PipelineFactory,
-            ledger: ledger
-        );
-        public IGpuQueueSubmitter QueueSubmitter { get; } = GpuWorkCounting.Wrap(
-            ledger: ledger,
-            submitter: inner.QueueSubmitter
-        );
-
-        public IGpuRenderPassFactory RenderPassFactory =>
-            inner.RenderPassFactory;
-
-        public IGpuShaderModuleFactory ShaderModuleFactory { get; } = GpuWorkCounting.Wrap(
-            factory: inner.ShaderModuleFactory,
-            ledger: ledger
-        );
-
-        public IGpuSurfaceTransferFactory SurfaceTransferFactory =>
-            inner.SurfaceTransferFactory;
     }
 }

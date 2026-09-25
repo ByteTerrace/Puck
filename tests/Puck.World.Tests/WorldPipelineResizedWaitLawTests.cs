@@ -66,7 +66,6 @@ public sealed class WorldPipelineResizedWaitLawTests {
         };
         using var node = new ShaderPipelineRenderNode(
             deviceContext: gpu,
-            gpu: gpu,
             height: Extent,
             hostsOnDirectX: false,
             name: "fill",

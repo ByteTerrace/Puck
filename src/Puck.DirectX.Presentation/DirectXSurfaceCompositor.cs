@@ -49,7 +49,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
     private readonly string m_shaderDirectory;
-    private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
     private readonly DXGI_FORMAT m_swapChainFormat;
     private readonly PresentMode m_presentMode;
     private readonly uint m_syncInterval;
@@ -102,22 +101,18 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <param name="presentationOptions">The neutral present-mode and surface-format preferences.</param>
     /// <param name="shaderDirectory">The directory holding the blit's DXIL, <c>surface-blit.vert.dxil</c> and
     /// <c>surface-blit.frag.dxil</c>, which the build compiles; nothing compiles at run time.</param>
-    /// <param name="surfaceTransferFactory">Creates the shared-texture importer used for cross-device surfaces.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/>, <paramref name="shaderDirectory"/>, or <paramref name="surfaceTransferFactory"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/>, or <paramref name="shaderDirectory"/> is <see langword="null"/>.</exception>
     public DirectXSurfaceCompositor(
         IDirectXCommandListRecorder commandListRecorder,
         PresentationOptions presentationOptions,
-        string shaderDirectory,
-        IGpuSurfaceTransferFactory surfaceTransferFactory
+        string shaderDirectory
     ) {
         ArgumentNullException.ThrowIfNull(commandListRecorder);
         ArgumentNullException.ThrowIfNull(presentationOptions);
         ArgumentNullException.ThrowIfNull(shaderDirectory);
-        ArgumentNullException.ThrowIfNull(surfaceTransferFactory);
 
         m_commandListRecorder = commandListRecorder;
         m_shaderDirectory = shaderDirectory;
-        m_surfaceTransferFactory = surfaceTransferFactory;
         m_presentMode = presentationOptions.PresentMode;
         // Map the neutral surface format to the back-buffer DXGI format (both are valid flip-model formats);
         // Vsync presents with sync interval 1, the other modes with 0.
@@ -166,7 +161,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_width = width;
         m_height = height;
 
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
         CreateSwapChain(
             commandQueue: deviceContext.CommandQueueHandle,
@@ -246,7 +241,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_width = width;
         m_height = height;
 
-        AcquireBackBuffers(device: ((ID3D12Device*)deviceContext.DeviceHandle));
+        AcquireBackBuffers(device: ((ID3D12Device*)deviceContext.Device.Handle));
     }
     /// <summary>
     /// Blits <paramref name="surface"/> fullscreen onto the current back buffer and presents. Handles
@@ -258,7 +253,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             return;
         }
 
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
         nint sourceResource;
         DXGI_FORMAT sourceFormat;
@@ -282,7 +277,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             sourceResource = m_cpuUpload.TextureHandle;
             sourceFormat = m_cpuUpload.TextureFormat;
         } else if (surface.IsSharedHandle) {
-            m_surfaceImport ??= m_surfaceTransferFactory.CreateImport();
+            m_surfaceImport ??= deviceContext.Services.SurfaceTransferFactory.CreateImport();
             var imported = m_surfaceImport.Import(
                 deviceContext: deviceContext,
                 sharedHandle: surface.SharedHandle,

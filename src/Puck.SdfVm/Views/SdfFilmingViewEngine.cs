@@ -9,8 +9,7 @@ namespace Puck.SdfVm.Views;
 internal static class SdfFilmingViewEngine {
     /// <summary>Builds <paramref name="engine"/> once <paramref name="pipelines"/> is ready and does nothing once it
     /// exists. The first call starts the pipeline build off the frame thread.</summary>
-    /// <param name="device">The GPU device context.</param>
-    /// <param name="gpu">The GPU compute services.</param>
+    /// <param name="device">The GPU device context, whose services the engine records through.</param>
     /// <param name="frame">This call's frame, read for its worst-case capacities when <paramref name="frameSource"/>
     /// is not a composition (see the composed-vs-bare capacity fallback below).</param>
     /// <param name="frameSource">The view's frame source; a <c>SdfCompositionFrameSource</c> already knows its own
@@ -24,14 +23,13 @@ internal static class SdfFilmingViewEngine {
     /// <param name="work">The view's work ledger, which the engine counts into.</param>
     /// <returns><see langword="true"/> when <paramref name="engine"/> exists; <see langword="false"/> while the
     /// pipelines build.</returns>
-    public static bool EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfFrame frame, ISdfFrameSource frameSource, bool hostsOnDirectX, uint height, uint width, GpuWorkLedger work, SdfWorldPipelineSource pipelines, ref SdfWorldEngine? engine) {
+    public static bool EnsureEngine(IGpuDeviceContext device, SdfFrame frame, ISdfFrameSource frameSource, bool hostsOnDirectX, uint height, uint width, GpuWorkLedger work, SdfWorldPipelineSource pipelines, ref SdfWorldEngine? engine) {
         if (engine is not null) {
             return true;
         }
 
         if (pipelines.Poll(
             device: device,
-            gpu: gpu,
             hostsOnDirectX: hostsOnDirectX,
             includeBrickPipelines: false,
             kernels: null
@@ -54,7 +52,6 @@ internal static class SdfFilmingViewEngine {
 
         engine = new SdfWorldEngine(
             device: device,
-            gpu: gpu,
             height: height,
             options: new SdfWorldEngineOptions(
                 BrickPoolVoxelCapacity: 0,

@@ -13,25 +13,22 @@ namespace Puck.Vulkan.Presentation;
 public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, IDeviceLostRecoverable {
     private readonly SurfaceCompositor m_compositor;
     private readonly VulkanRenderer m_renderer;
-    private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
 
     private IGpuSurfaceImport? m_captureImport;
     private IGpuSurfaceReadback? m_captureReadback;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanSurfacePresenter"/> class.</summary>
-    /// <param name="renderer">The window and swapchain owner.</param>
+    /// <param name="renderer">The window and swapchain owner, whose device services create the lazily armed capture
+    /// readback and shared-surface importer.</param>
     /// <param name="compositor">The fullscreen surface-blit compositor.</param>
-    /// <param name="surfaceTransferFactory">Creates the lazily armed capture readback and shared-surface importer.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="renderer"/>, <paramref name="compositor"/>, or
-    /// <paramref name="surfaceTransferFactory"/> is <see langword="null"/>.</exception>
-    public VulkanSurfacePresenter(VulkanRenderer renderer, SurfaceCompositor compositor, IGpuSurfaceTransferFactory surfaceTransferFactory) {
+    /// <exception cref="ArgumentNullException"><paramref name="renderer"/> or <paramref name="compositor"/> is
+    /// <see langword="null"/>.</exception>
+    public VulkanSurfacePresenter(VulkanRenderer renderer, SurfaceCompositor compositor) {
         ArgumentNullException.ThrowIfNull(compositor);
         ArgumentNullException.ThrowIfNull(renderer);
-        ArgumentNullException.ThrowIfNull(surfaceTransferFactory);
 
         m_compositor = compositor;
         m_renderer = renderer;
-        m_surfaceTransferFactory = surfaceTransferFactory;
     }
 
     private void ReleaseCaptureResources() {
@@ -99,7 +96,6 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
             captureReadback: ref m_captureReadback,
             deviceContext: m_renderer,
             surface: surface,
-            surfaceTransferFactory: m_surfaceTransferFactory,
             toGpuFormat: GpuPixelFormats.FromSurfaceFormat
         );
     }

@@ -98,18 +98,15 @@ public static class WorldBootComposition {
             };
         }
 
-        var gpu = sp.GetRequiredService<IGpuComputeServices>();
         var deviceContext = sp.GetRequiredService<IGpuDeviceContext>();
 
         // The same node shape for a pipeline loaded after boot (pipeline.load naming a new row) as for a boot-time row.
         runtime.CreateNode = name => new ShaderPipelineRenderNode(
             name: name,
-            gpu: gpu,
             deviceContext: deviceContext,
             hostsOnDirectX: hostsOnDirectX,
             width: width,
-            height: height,
-            graphics: WorldPostRenderExtensionServices.Build(serviceProvider: sp)
+            height: height
         );
 
         runtime.Report = (name, message) => Console.Error.WriteLine(value: $"[pipeline: {name} {message}]");
@@ -420,9 +417,9 @@ public static class WorldBootComposition {
                 cameraCapture: sp.GetRequiredService<ICameraCaptureService>(),
                 windowCapture: sp.GetRequiredService<INativeImageCaptureService>(),
                 // The backend-neutral surface-transfer seam the Vulkan host's camera GPU tier imports its shared
-                // targets through. Registered by whichever presenter composes; a headless boot has none (null) and
-                // never publishes, so nothing reaches for it.
-                surfaceTransfers: sp.GetService<IGpuSurfaceTransferFactory>(),
+                // targets through: the services of whichever presenter's device context composes. A headless boot has
+                // no device context (null) and never publishes, so nothing reaches for it.
+                surfaceTransfers: sp.GetService<IGpuDeviceContext>()?.Services.SurfaceTransferFactory,
                 cameras: definition.Cameras,
                 anchors: sp.GetRequiredService<WorldClient>(),
                 stamps: sp.GetRequiredService<WorldStampPool>(),
@@ -1135,15 +1132,12 @@ public static class WorldBootComposition {
             var width = ((uint)hostSettings.Width);
             var height = ((uint)hostSettings.Height);
             var binder = sp.GetRequiredService<WorldScreenBinder>();
-            var viewGpuServices = new SdfViewGpuServices(
-                Gpu: sp.GetRequiredService<IGpuComputeServices>(),
-                Pipelines: sp.GetRequiredService<SdfWorldPipelineCache>()
-            );
+            var pipelines = sp.GetRequiredService<SdfWorldPipelineCache>();
             var frameSource = sp.GetRequiredService<WorldFramePresenter>();
             // No Decorate: the composed frame is the world render alone (see this method's own remarks) — the
             // outermost node stays SdfEngineNode itself, so world.screenshot's capture reaches it directly.
             var render = SdfWorldRenderBuilder.Build(
-                services: viewGpuServices,
+                pipelines: pipelines,
                 spec: new SdfWorldRenderSpec(
                     FrameSource: frameSource,
                     Height: height,
@@ -1383,7 +1377,7 @@ public static class WorldBootComposition {
         // The unified overlay's IOverlayFrameSources — adapts the binder's WorldFrameSource vocabulary (camera/
         // view/probe/capture) to the opaque key a HUD Frame element's overlay slot addresses its source by.
         // Registered as itself (WorldHudFeed calls KeyFor when building a Frame element) AND as the interface
-        // (OverlayServices.Build resolves it below), so both consumers share the one key table.
+        // (the unified overlay's construction resolves it below), so both consumers share the one key table.
         services.AddSingleton<WorldOverlayFrameSources>(implementationFactory: static sp => new WorldOverlayFrameSources(binder: sp.GetRequiredService<WorldScreenBinder>()));
         services.AddSingleton<IOverlayFrameSources>(implementationFactory: static sp => sp.GetRequiredService<WorldOverlayFrameSources>());
         services.AddSingleton(implementationFactory: static sp => new WorldHudFeed(
@@ -1499,14 +1493,11 @@ public static class WorldBootComposition {
             var height = ((uint)hostSettings.Height);
             var binder = sp.GetRequiredService<WorldScreenBinder>();
 
-            // The view-composition GPU-services bundle: resolved once, eagerly, right here at the composition
-            // root, then forwarded unchanged through ConfigureViews and Build to every late-construction site
-            // (the binder's stashed camera-view factory, and SdfEngineNode itself) — never a retained
-            // IServiceProvider re-resolved from later.
-            var viewGpuServices = new SdfViewGpuServices(
-                Gpu: sp.GetRequiredService<IGpuComputeServices>(),
-                Pipelines: sp.GetRequiredService<SdfWorldPipelineCache>()
-            );
+            // The composition's one pipeline cache: resolved once, eagerly, right here at the composition root, then
+            // forwarded unchanged through ConfigureViews and Build to every late-construction site (the binder's
+            // stashed camera-view factory, and SdfEngineNode itself). Each records through the services of the device
+            // context it renders on.
+            var pipelines = sp.GetRequiredService<SdfWorldPipelineCache>();
 
             var frameSource = sp.GetRequiredService<WorldFramePresenter>();
 
@@ -1514,7 +1505,7 @@ public static class WorldBootComposition {
             // registers a persistent offscreen camera render sized to these worst-case capacities, using the
             // selected host's bytecode. A no-op when the world declares no View screen.
             binder.ConfigureViews(
-                services: viewGpuServices,
+                pipelines: pipelines,
                 hostsOnDirectX: hostSettings.HostsOnDirectX,
                 programWordCapacity: frameSource.ProgramWordCapacity,
                 instanceCapacity: frameSource.InstanceCapacity,
@@ -1524,7 +1515,7 @@ public static class WorldBootComposition {
             // Captured out of the Decorate closure so the probe can expose the overlay's per-pass work (world.counters).
             UnifiedOverlayNode? overlayNode = null;
             var render = SdfWorldRenderBuilder.Build(
-                services: viewGpuServices,
+                pipelines: pipelines,
                 spec: new SdfWorldRenderSpec(
                     FrameSource: frameSource,
                     Height: height,
@@ -1549,11 +1540,10 @@ public static class WorldBootComposition {
                     // glyph atlas is missing.
                     Decorate = producer => {
                         IRenderNode composed = producer;
+                        var deviceContext = sp.GetRequiredService<IGpuDeviceContext>();
                         var renderExtensions = sp.GetRequiredService<WorldDefinition>().Render.Extensions;
 
                         if (renderExtensions is { Count: > 0 }) {
-                            var postRenderServices = WorldPostRenderExtensionServices.Build(serviceProvider: sp);
-
                             foreach (var entry in renderExtensions) {
                                 var manifest = ShaderSetCatalog.Shipped.Load(id: entry.Id);
 
@@ -1571,7 +1561,7 @@ public static class WorldBootComposition {
                                     hostsOnDirectX: hostSettings.HostsOnDirectX,
                                     inner: composed,
                                     manifest: manifest,
-                                    services: postRenderServices,
+                                    deviceContext: deviceContext,
                                     width: width
                                 );
                                 sp.GetRequiredService<WorldPostRenderExtensionPasses>().Add(
@@ -1611,12 +1601,8 @@ public static class WorldBootComposition {
                             glyphs: glyphs,
                             height: height,
                             inner: composed,
-                            services: OverlayServices.Build(
-                                hostsOnDirectX: hostSettings.HostsOnDirectX,
-                                serviceProvider: sp
-                            ) with {
-                                FrameSources = sp.GetRequiredService<IOverlayFrameSources>(),
-                            },
+                            deviceContext: deviceContext,
+                            frameSources: sp.GetRequiredService<IOverlayFrameSources>(),
                             sources: new UnifiedOverlaySources(
                                 BindingBar: sp.GetRequiredService<BindingBarStore>(),
                                 Console: sp.GetRequiredService<ConsoleTapeStore>(),

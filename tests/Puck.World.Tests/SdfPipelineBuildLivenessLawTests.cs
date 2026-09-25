@@ -52,7 +52,6 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             name: "ink",
             node: new ShaderPipelineRenderNode(
                 deviceContext: gpu,
-                gpu: gpu,
                 height: 4,
                 hostsOnDirectX: false,
                 name: "ink",
@@ -70,10 +69,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
-            services: new SdfViewGpuServices(
-                Gpu: gpu,
-                Pipelines: new SdfWorldPipelineCache()
-            ),
+            pipelines: new SdfWorldPipelineCache(),
             width: Extent
         );
         // Disposed before the node, so a failing assertion releases the held build instead of leaving the node's
@@ -170,10 +166,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             frameSource: new FixedFrameSource(frame: Frame(child: "pane")),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
-            services: new SdfViewGpuServices(
-                Gpu: gpu,
-                Pipelines: new SdfWorldPipelineCache()
-            ),
+            pipelines: new SdfWorldPipelineCache(),
             width: Extent
         );
         // Disposed before the node, so a failing assertion releases the held build instead of leaving the node's
@@ -230,10 +223,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
-            services: new SdfViewGpuServices(
-                Gpu: gpu,
-                Pipelines: new SdfWorldPipelineCache()
-            ),
+            pipelines: new SdfWorldPipelineCache(),
             width: Extent
         );
         // Disposed before the node, so a failing assertion releases the held build instead of leaving the node's

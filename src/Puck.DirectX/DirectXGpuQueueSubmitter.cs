@@ -34,7 +34,7 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
     }
     /// <inheritdoc/>
     public IGpuSubmissionFence CreateSubmissionFence() =>
-        new DirectXGpuSubmissionFence(device: ((ID3D12Device*)deviceContext.DeviceHandle));
+        new DirectXGpuSubmissionFence(device: ((ID3D12Device*)deviceContext.Device.Handle));
 
     private void Execute(ReadOnlySpan<nint> commandBufferHandles) {
         var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);

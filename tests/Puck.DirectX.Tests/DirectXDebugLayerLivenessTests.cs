@@ -135,7 +135,7 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
         };
 
         try {
-            _ = context.DeviceHandle;
+            _ = context.Device;
         } catch (GpuDeviceUnavailableException exception) {
             context.Dispose();
             Assert.Skip(reason: $"no Direct3D 12 device with the debug layer on this host: {exception.Message}");

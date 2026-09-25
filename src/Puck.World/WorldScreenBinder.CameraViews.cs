@@ -140,7 +140,7 @@ internal sealed partial class WorldScreenBinder {
             value: out var registration
         )) {
             var view = new SdfCameraView(
-                services: m_viewServices!,
+                pipelines: m_viewPipelines!,
                 hostsOnDirectX: m_viewHostsOnDirectX,
                 programWordCapacity: m_viewProgramWordCapacity,
                 instanceCapacity: m_viewInstanceCapacity,
@@ -475,7 +475,7 @@ internal sealed partial class WorldScreenBinder {
                 !slot.HasLive &&
                 (slot.DeclaredSource is WorldScreenSource.View declared) &&
                 (ResolveCamera(name: declared.CameraName) is not null) &&
-                (m_viewServices is not null)
+                (m_viewPipelines is not null)
             ) {
                 var outcome = TryView(
                     index: slot.Index,
@@ -504,7 +504,7 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (m_viewServices is null) {
+        if (m_viewPipelines is null) {
             return (Ok: false, Message: "the view pool is not configured");
         }
 

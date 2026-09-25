@@ -93,8 +93,8 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
             (type.Name == "WorldOffscreenGpuActivation")
         );
     }
-    // A neutral GPU service the fake stands in for: the device context, the compute bundle, and every device-bound
-    // recorder, binding writer, factory and submitter a backend registers over its own device context.
+    // A neutral GPU service the fake stands in for: the device context, whose services the fake also is, and the
+    // optional surface export a backend registers beside it.
     private static bool IsNeutralGpuService(Type type, FakeGpuDevice fake) => (
         type.IsInterface &&
         string.Equals(a: type.Namespace, b: typeof(IGpuDeviceContext).Namespace, comparisonType: StringComparison.Ordinal) &&

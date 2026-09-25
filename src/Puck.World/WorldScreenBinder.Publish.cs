@@ -14,19 +14,18 @@ internal sealed partial class WorldScreenBinder {
     /// <see cref="FirstPersonRig"/>, and records each view's
     /// self-reference screen set (a screen wired to view V binds 0 inside V's own render — no feedback compounding).
     /// A no-op when the world declares no View screen (no pool is created, so a plain world pays nothing).</summary>
-    /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) every offscreen
-    /// camera view this binder later constructs forwards to its engine — resolved once, eagerly, at the composition
-    /// root and stashed here unchanged (never a retained <see cref="IServiceProvider"/> to re-resolve from later;
-    /// see <see cref="RegisterCameraView"/>, this binder's one construction site).</param>
+    /// <param name="pipelines">The composition's pipeline cache every offscreen camera view this binder later
+    /// constructs leases its engine's pipeline set from — resolved once at the composition root and stashed here
+    /// unchanged (see <see cref="RegisterCameraView"/>, this binder's one construction site).</param>
     /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 (selects the offscreen kernel bytecode).</param>
     /// <param name="programWordCapacity">The main engine's probed program-word floor.</param>
     /// <param name="instanceCapacity">The main engine's probed instance floor.</param>
     /// <param name="dynamicTransformCapacity">The main engine's dynamic-transform slot count.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
-    public void ConfigureViews(SdfViewGpuServices services, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity) {
-        ArgumentNullException.ThrowIfNull(argument: services);
+    /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> is <see langword="null"/>.</exception>
+    public void ConfigureViews(SdfWorldPipelineCache pipelines, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity) {
+        ArgumentNullException.ThrowIfNull(argument: pipelines);
 
-        m_viewServices = services;
+        m_viewPipelines = pipelines;
         m_viewHostsOnDirectX = hostsOnDirectX;
         m_viewProgramWordCapacity = programWordCapacity;
         m_viewInstanceCapacity = instanceCapacity;
@@ -84,9 +83,8 @@ internal sealed partial class WorldScreenBinder {
     /// producer feed on its own cadence. It advances the capture gate first, so every source this frame resolves sees
     /// the same answer, and uploads the fills a filled external source resolves to.</summary>
     /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
-    /// <param name="deviceContext">The live GPU device context to upload on.</param>
-    /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
-    public void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    /// <param name="deviceContext">The live GPU device context to upload on, through its services.</param>
+    public void Publish(ulong tick, IGpuDeviceContext deviceContext) {
         if (m_disposed) {
             return;
         }
@@ -113,19 +111,10 @@ internal sealed partial class WorldScreenBinder {
 
         // The shared webcam owns one producer cadence and skips uploads when its asynchronous frame version has not
         // advanced. Window captures below each own an independent deadline from their declaration.
-        EnsureFills(
-            deviceContext: deviceContext,
-            gpu: gpu
-        );
-        CaptureCamera(
-            deviceContext: deviceContext,
-            gpu: gpu
-        );
+        EnsureFills(deviceContext: deviceContext);
+        CaptureCamera(deviceContext: deviceContext);
         ServiceProbeFeeds(deviceContext: deviceContext);
-        PublishFrameCaptures(
-            deviceContext: deviceContext,
-            gpu: gpu
-        );
+        PublishFrameCaptures(deviceContext: deviceContext);
 
         m_publishedMachineOutputs.Clear();
 
@@ -138,10 +127,7 @@ internal sealed partial class WorldScreenBinder {
                 ) is { } machine) &&
                     m_publishedMachineOutputs.Add(item: (source.Instance, source.Output))
                 ) {
-                    machine.PublishFrame(
-                        deviceContext: deviceContext,
-                        gpu: gpu
-                    );
+                    machine.PublishFrame(deviceContext: deviceContext);
                     _ = m_presentedMachineOutputs.Add(item: (source.Instance, source.Output));
                 }
 
@@ -155,7 +141,6 @@ internal sealed partial class WorldScreenBinder {
             if (slot.LiveFeed is { } live) {
                 live.Publish(
                     deviceContext: deviceContext,
-                    gpu: gpu,
                     tick: tick
                 );
 
@@ -168,7 +153,6 @@ internal sealed partial class WorldScreenBinder {
 
             slot.DeclaredFeed?.Publish(
                 deviceContext: deviceContext,
-                gpu: gpu,
                 tick: tick
             );
         }

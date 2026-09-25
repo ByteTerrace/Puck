@@ -166,6 +166,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
         new(
             commandBufferRecorder: null!,
             commandResourcesFactory: null!,
+            createServices: null!,
             framebufferSetFactory: null!,
             framePresenter: null!,
             frameSynchronizationFactory: null!,
@@ -289,10 +290,8 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
                 Log(entry: "destroy debug messenger");
             }
         }
-        public void DestroyDevice(VulkanDeviceCommands device) {
+        public void DestroyDevice(VulkanDeviceCommands device) =>
             Log(entry: "destroy device");
-            device.Dispose();
-        }
         public void DestroyInstance(VulkanInstanceCommands instance) =>
             Log(entry: "destroy instance");
         public void DestroySurface(VulkanInstanceCommands instance, nint surfaceHandle) =>

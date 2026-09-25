@@ -33,17 +33,15 @@ public sealed class CpuSurfaceSource : IDisposable {
     /// <summary>Pulls one frame from a capture source and publishes it — the convenience seam for driving a
     /// <see cref="IFrameCaptureSource"/> each tick. A source with no frame this call keeps the last handle.</summary>
     /// <param name="source">The capture source to pull.</param>
-    /// <param name="deviceContext">The GPU device context to upload on.</param>
-    /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
+    /// <param name="deviceContext">The GPU device context to upload on, through its services.</param>
     /// <returns>The published image-view handle (the current handle when no frame was captured).</returns>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public nint Capture(IFrameCaptureSource source, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    public nint Capture(IFrameCaptureSource source, IGpuDeviceContext deviceContext) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         return (source.TryCapture(surface: out var surface)
             ? Publish(
                 deviceContext: deviceContext,
-                gpu: gpu,
                 surface: in surface
             )
             : m_handle
@@ -67,12 +65,11 @@ public sealed class CpuSurfaceSource : IDisposable {
     }
     /// <summary>Publishes a CPU-pixel <see cref="Surface"/> (an <see cref="IFrameCaptureSource"/> capture). A surface
     /// that is not the CPU-pixel variant, or has a zero extent, keeps the last handle.</summary>
-    /// <param name="deviceContext">The GPU device context to upload on.</param>
-    /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
+    /// <param name="deviceContext">The GPU device context to upload on, through its services.</param>
     /// <param name="surface">The captured frame; its <see cref="Surface.Pixels"/> are uploaded.</param>
     /// <returns>The published image-view handle (the current handle when nothing was uploaded).</returns>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public nint Publish(IGpuDeviceContext deviceContext, IGpuComputeServices gpu, in Surface surface) {
+    public nint Publish(IGpuDeviceContext deviceContext, in Surface surface) {
         if (
             !surface.IsCpuPixels ||
             (0 == surface.Width) ||
@@ -83,7 +80,6 @@ public sealed class CpuSurfaceSource : IDisposable {
 
         return Publish(
             deviceContext: deviceContext,
-            gpu: gpu,
             pixels: surface.Pixels,
             width: surface.Width,
             height: surface.Height,
@@ -92,17 +88,15 @@ public sealed class CpuSurfaceSource : IDisposable {
     }
     /// <summary>Publishes a raw tightly packed pixel buffer (a fill-a-buffer producer's frame). An empty buffer or a
     /// zero extent keeps the last handle.</summary>
-    /// <param name="deviceContext">The GPU device context to upload on.</param>
-    /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
+    /// <param name="deviceContext">The GPU device context to upload on, through its services.</param>
     /// <param name="pixels">The tightly packed pixels, in <paramref name="format"/> order, rows without padding.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
     /// <param name="format">The presentable pixel format the buffer is laid out in.</param>
     /// <returns>The published image-view handle (the current handle when nothing was uploaded).</returns>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public nint Publish(IGpuDeviceContext deviceContext, IGpuComputeServices gpu, ReadOnlyMemory<byte> pixels, uint width, uint height, SurfaceFormat format) {
+    public nint Publish(IGpuDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, uint width, uint height, SurfaceFormat format) {
         ArgumentNullException.ThrowIfNull(argument: deviceContext);
-        ArgumentNullException.ThrowIfNull(argument: gpu);
 
         if (
             m_disposed ||
@@ -113,7 +107,7 @@ public sealed class CpuSurfaceSource : IDisposable {
             return m_handle;
         }
 
-        m_upload ??= gpu.SurfaceTransferFactory.CreateUpload();
+        m_upload ??= deviceContext.Services.SurfaceTransferFactory.CreateUpload();
         // The upload object owns the returned handle and recreates its image on a dimension/format change, so a
         // varying capture extent needs no manual reallocation here.
         m_handle = m_upload.Upload(

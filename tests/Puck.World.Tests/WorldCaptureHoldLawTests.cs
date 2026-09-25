@@ -106,10 +106,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 frameSource: new FixedFrameSource(frame: Frame()),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
-                services: new SdfViewGpuServices(
-                    Gpu: gpu,
-                    Pipelines: new SdfWorldPipelineCache()
-                ),
+                pipelines: new SdfWorldPipelineCache(),
                 width: Extent
             );
             Target = new RecordingTarget(node: Node);

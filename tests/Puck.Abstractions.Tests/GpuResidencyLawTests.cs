@@ -210,12 +210,12 @@ public sealed class GpuResidencyLawTests {
             var gpu = new UploadModelGpu(reportVersion: 0);
             using var copy = CopyPipeline(gpu: gpu);
             using var region = new GpuRegion(
-                bindings: gpu.Bindings,
-                buffers: gpu.BufferFactory,
+                bindings: gpu.Services.Bindings,
+                buffers: gpu.Services.BufferFactory,
                 byteCount: ByteCount,
                 copyPipeline: copy,
                 policy: policy,
-                recorder: gpu.Recorder,
+                recorder: gpu.Services.Recorder,
                 slotCount: Slots
             );
             var expected = new byte[ByteCount];
@@ -273,12 +273,12 @@ public sealed class GpuResidencyLawTests {
         var gpu = new UploadModelGpu(reportVersion: 0);
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
-            bindings: gpu.Bindings,
-            buffers: gpu.BufferFactory,
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
             byteCount: 64,
             copyPipeline: copy,
             policy: GpuResidencyPolicy.Staged,
-            recorder: gpu.Recorder,
+            recorder: gpu.Services.Recorder,
             slotCount: 2
         );
 
@@ -287,23 +287,23 @@ public sealed class GpuResidencyLawTests {
         _ = region.Write(bytes: [1, 2, 3], offset: 5);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => region.RecordCopy(commandBuffer: 2, slot: 0));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new GpuRegion(
-            bindings: gpu.Bindings,
-            buffers: gpu.BufferFactory,
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
             byteCount: 6,
             copyPipeline: copy,
             policy: GpuResidencyPolicy.Ring,
-            recorder: gpu.Recorder,
+            recorder: gpu.Services.Recorder,
             slotCount: 2
         ));
     }
 
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {
-        using var module = gpu.ShaderModuleFactory.Create(
+        using var module = gpu.Services.ShaderModuleFactory.Create(
             bytecode: new byte[] { UploadModelGpu.FrameUploadBytecode },
             stage: GpuShaderStage.Compute
         );
 
-        return gpu.PipelineFactory.Create(
+        return gpu.Services.PipelineFactory.Create(
             computeShaderModule: module,
             description: new GpuComputePipelineDescription(
                 Bindings: GpuRegion.CopyBindings,

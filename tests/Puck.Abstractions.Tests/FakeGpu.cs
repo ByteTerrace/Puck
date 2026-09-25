@@ -13,14 +13,28 @@ internal sealed class FakeGpu :
     IGpuRecorder,
     IGpuCommandPoolFactory,
     IGpuPipelineFactory,
-    IGpuComputeServices,
     IGpuBindings,
     IGpuDeviceContext,
     IGpuQueueSubmitter,
     IGpuShaderModuleFactory,
     IGpuBufferFactory,
     IGpuImageFactory,
+    IGpuRenderPassFactory,
     IGpuSurfaceTransferFactory {
+    public FakeGpu() =>
+        Services = new GpuDeviceServices {
+            Bindings = this,
+            BufferFactory = this,
+            CommandPoolFactory = this,
+            ImageFactory = this,
+            PipelineFactory = this,
+            QueueSubmitter = this,
+            Recorder = this,
+            RenderPassFactory = this,
+            ShaderModuleFactory = this,
+            SurfaceTransferFactory = this,
+        };
+
     public Dictionary<string, int> Calls { get; } = new(comparer: StringComparer.Ordinal);
     public FakeFence? LastCreatedFence { get; private set; }
     public IGpuSubmissionFence? LastSubmittedFence { get; private set; }
@@ -28,16 +42,7 @@ internal sealed class FakeGpu :
     public GpuDeviceIdentity? Identity => null;
     public GpuDeviceCapabilities? Capabilities => null;
     public GpuMemoryProfile MemoryProfile => default;
-    public IGpuCommandPoolFactory CommandPoolFactory => this;
-    public IGpuPipelineFactory PipelineFactory => this;
-    public IGpuRecorder Recorder => this;
-    public IGpuBindings Bindings => this;
-    public nint DeviceHandle => 1;
-    public IGpuQueueSubmitter QueueSubmitter => this;
-    public IGpuShaderModuleFactory ShaderModuleFactory => this;
-    public IGpuBufferFactory BufferFactory => this;
-    public IGpuImageFactory ImageFactory => this;
-    public IGpuSurfaceTransferFactory SurfaceTransferFactory => this;
+    public GpuDeviceServices Services { get; }
 
     public int Count(string key) => (Calls.TryGetValue(key: key, value: out var count) ? count : 0);
     public void Hit(string key) => CollectionsMarshal.GetValueRefOrAddDefault(dictionary: Calls, key: key, exists: out _)++;
@@ -133,6 +138,8 @@ internal sealed class FakeGpu :
 
         return new FakeImage();
     }
+    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description) => throw new NotSupportedException();
+    IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => throw new NotSupportedException();
     IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport() => throw new NotSupportedException();
     IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => throw new NotSupportedException();
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => throw new NotSupportedException();
