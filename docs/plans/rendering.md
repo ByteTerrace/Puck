@@ -380,7 +380,7 @@ a bindable member needs no new walker; re-installing a document whose manifest
 the mirror already holds registers nothing and allocates nothing. Its per-body
 half is a list of templates — the population scale row, a look's pose
 references and lane operands, a creation driver's state signal and gate tokens,
-an effector's state target — each keeping its `$body` key as authored. The
+an effector's gate tokens and state target — each keeping its `$body` key as authored. The
 consumers still register their own slots on first read and find the manifest's
 slot already there: the HUD resolver, camera rigs, markers, render colors, the
 theme, the binding bar, overlay predicates, the radial wheel and the binding

@@ -2,6 +2,7 @@ using System.Text.Json;
 
 using Puck.Abstractions.Counting;
 using Puck.World.Client;
+using Puck.World.Protocol;
 
 using Xunit;
 
@@ -11,7 +12,8 @@ namespace Puck.World.Tests;
 /// Laws for the presentation manifest (<see cref="WorldPresentationManifest"/>): it is exactly the deduplicated union of
 /// the state bindings a document's presentation sections author, with per-body templates kept apart and their
 /// <c>$body</c> key as authored; a mirror installing a document registers the manifest's slots, and installing it again
-/// — or installing a reloaded copy of it — registers nothing new, keeps every slot index, and allocates nothing; and the
+/// — or installing a reloaded copy of it — registers nothing new, keeps every slot index, and allocates nothing; a
+/// manifest slot on a cell advancing at the install presents its installed value whole before the next tick; and the
 /// walk over the shipped flagship world completes with a plausible count.
 /// </summary>
 public sealed class WorldPresentationManifestLawTests {
@@ -36,6 +38,7 @@ public sealed class WorldPresentationManifestLawTests {
         Number(row: "swayClock"),
         Number(key: StateBinding.BodyKey, row: "armed", target: true),
         Number(row: "aim", key: StateBinding.BodyKey),
+        Number(key: StateBinding.BodyKey, row: "armed2", target: true),
     ];
 
     private static WorldPresentationBinding Number(string row, string? key = null, bool target = false) => new(
@@ -97,7 +100,7 @@ public sealed class WorldPresentationManifestLawTests {
                         """),
                     Effectors = Section<IReadOnlyList<Puck.World.Authoring.CreationEffectorDocument>>(json: """
                         [
-                          { "name": "point", "chain": [ "arm" ], "tip": "hand", "target": { "kind": "state", "reference": "state.aim.$body" } }
+                          { "name": "point", "chain": [ "arm" ], "tip": "hand", "target": { "kind": "state", "reference": "state.aim.$body" }, "when": [ "Grounded", "state.armed2.$body" ] }
                         ]
                         """),
                 },
@@ -206,6 +209,13 @@ public sealed class WorldPresentationManifestLawTests {
             tick: 0UL
         );
 
+        // No consumer has registered anything: every slot is the manifest's.
+        Assert.Equal(
+            actual: mirror.SlotCount,
+            expected: ExpectedBindings.Length
+        );
+
+        // Registering each binding finds its slot rather than allocating one.
         var slots = ExpectedBindings.Select(selector: entry => mirror.Register(
             binding: entry.Binding,
             conversion: entry.Conversion
@@ -233,6 +243,71 @@ public sealed class WorldPresentationManifestLawTests {
                 conversion: entry.Conversion
             )).ToArray(),
             expected: slots
+        );
+    }
+    [Fact]
+    public void AManifestSlotOnAnAdvancingCellPresentsItsInstalledValueWhole() {
+        const long Installed = 7L;
+
+        var definition = (Fixtures.BuildDocument() with {
+            MarkersRaw = Section<IReadOnlyList<WorldMarkerRow>>(json: """
+                [
+                  {
+                    "id": "clockface",
+                    "source": { "$type": "point", "position": [0, 0, 0] },
+                    "icon": "dot",
+                    "style": { "chipAlpha": "state.clock", "size": 8 }
+                  }
+                ]
+                """),
+        }).WithWorldState(rows: [new WorldStateRow(
+            Name: CellName.Parse(candidate: "clock"),
+            Kind: CellKind.Int,
+            Min: 0,
+            Max: 1000,
+            Advance: new StateAdvance(
+                PerSecondDenominator: 1,
+                PerSecondNumerator: 1
+            ),
+            Cells: [new StateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: CellValue.Int(value: Installed)
+            )]
+        )]);
+        var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
+
+        mirror.Install(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+
+        var slot = mirror.Register(
+            binding: new StateBinding(
+                Key: null,
+                Row: "clock",
+                Target: false
+            ),
+            conversion: WorldStateConversion.Number
+        );
+
+        Assert.Equal(
+            actual: mirror.SlotCount,
+            expected: 1
+        );
+        Assert.Equal(
+            actual: mirror.Sample(slot: slot).Motion,
+            expected: WorldStateMotion.Advancing
+        );
+
+        // The frame before the next tick presents the installed value, not a quarter of the way to it from zero.
+        mirror.Apply(fraction: 0.25f);
+        Assert.True(condition: mirror.TryNumber(
+            slot: slot,
+            value: out var presented
+        ));
+        Assert.Equal(
+            actual: presented,
+            expected: Installed
         );
     }
     [Fact]
