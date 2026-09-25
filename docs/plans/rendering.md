@@ -1727,9 +1727,9 @@ Phase 3, the groups, follows phase 2:
       candidate at install and a float preview when it is selected, and every
       SDF engine creation site checks through `SdfWorldEngine.CheckAdmission`.
       A refusal carries `GPU_DESCRIPTOR_HEAP` and names the owner, and the
-      installed graph keeps presenting. `UnifiedOverlayNode` and `GpuRegion`
-      are not admitted beforehand: the overlay creates one pool with the node,
-      and no engine consumer writes through a region yet. The pipeline node
+      installed graph keeps presenting. `UnifiedOverlayNode` checks its one
+      pool before it creates its resources. `GpuRegion` is not admitted
+      beforehand, since no engine consumer writes through a region yet. The pipeline node
       holds one pool for all its passes and in-flight slots and one for its
       float preview, rather than one per pass and slot: a node at
       `ShaderPipelineLimits.MaxPasses` with three frames in flight would
@@ -1759,17 +1759,46 @@ Phase 3, the groups, follows phase 2:
     touches one also runs its canaries on Direct3D 12. Each owner's commit
     also moves its binding lists from `GpuComputeBindingKind` to
     `GpuBindingKind`, so the last one leaves the old enum unused.
-    - 14b-1, layouts from the plans: Direct3D 12 creates a root signature from
-      `DirectXRootLayout.Plan` (each table's ranges at the plan's registers,
-      spaces and offsets, the pushed index as one 32-bit root constant at
-      `b0` in space 4, every parameter at the plan's visibility) and Vulkan a
-      pipeline layout from `VulkanGroupLayouts.Plan` (a set layout per set
-      number with its bindings' stage flags, and the push range). Sampler
-      tables allocate from the sampler heap, replacing static samplers for a
-      pipeline built this way. No shipped pipeline moves yet: laws hold a
-      fake device to the descriptions built from the spike's tables, and a
-      debug-layer run creates the film grain and pixelate layouts on both
-      backends. Canaries: the 18 the pipeline factories map to,
+    - 14b-1, done: layouts from the plans. A pipeline description names its
+      groups through `Layout` (`GpuComputePipelineDescription.Layout`,
+      `GpuGraphicsPipelineDescription.Layout`), and `RequireLayout` refuses by
+      name a layout beside the bindings it replaces or a layout for the other
+      pipeline kind's stages. Direct3D 12 creates the root signature
+      `DirectXRootSignatures.Serialize` writes from `DirectXRootLayout.Plan`
+      (each table's ranges at the plan's registers, spaces and offsets, the
+      pushed index as one 32-bit root constant at `b0` in space 4, every
+      parameter at the plan's visibility, and no static sampler), through
+      `DirectXRootSignatures.CreateLayout`, with one `DirectXGroupLayout` per
+      group. Vulkan creates a set layout per planned set number with its
+      bindings' stage flags, and a pipeline layout over them and the push
+      range (`VulkanPipelineLayouts.Create` over `VulkanGroupLayouts.Plan`),
+      which the pipeline owns. A pipeline's `GroupLayoutHandles` are the
+      handles a set of each group is allocated against. A group's pool sizes
+      are `GpuDescriptorPoolSizes.ForGroups`, which counts constant buffers,
+      sampled images and samplers apart; on Direct3D 12 a pool holding
+      samplers is also a range of the device's sampler heap, admitted
+      whole-or-nothing with its view range, and a group's set takes its
+      sampler table from that range. No shipped pipeline moves yet, and the
+      writes a group's set needs (constant buffers, separate images and
+      samplers) and binding a set by its group's ordinal are 14b-3's.
+      `UnifiedOverlayNode` checks its pool through `CanAdmit` before it
+      creates anything. Laws: `DirectXGroupedLayoutLawTests` (the serialized
+      root signature, read back through the runtime's deserializer, holds the
+      plan's tables for film grain, pixelate and the arrays table, with no
+      static sampler; on a WARP device the film grain and pixelate root
+      signatures create and a pass-group set's sampler table is its pool's
+      range of the sampler heap), `VulkanGroupedPipelineLayoutLawTests` (on a
+      recording command table, the set layouts, their order in the pipeline
+      layout and the push range equal the plan's for the same tables, with
+      film grain at vertex and fragment stage flags and pixelate at compute,
+      and a failed set layout leaves nothing alive),
+      `GpuDescriptorHeapBudgetLawTests` (sampler ranges and a refusal by the
+      sampler heap), `GpuPipelineDescriptionLayoutLawTests` and
+      `UnifiedOverlayWorkLawTests` (an overlay refused before it creates
+      anything). `DirectXGroupedLayoutDebugLayerTests` creates the three root
+      signatures and a film grain set on the default adapter with the debug
+      layer on; it creates no pipeline state, and Vulkan has no device
+      creation check. Canaries: the 18 the pipeline factories map to,
       `no-device-compile`, the thirteen `pipeline-*`, `sdf-decode-sign-refusal`,
       `source-conversion`, `world-counters` and `world-seat-binding-recompose`.
     - 14b-2, the Vulkan presenter: `blit.frag.hlsl` and
