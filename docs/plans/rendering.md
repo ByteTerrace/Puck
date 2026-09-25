@@ -628,10 +628,9 @@ P17 still owes:
 - the parity world shipping its bakes, and the check that a missing bake draws
   through its field and then switches.
 
-The two largest kernel includes are `sdf-vm.hlsli` (4,584 lines) and
-`sdf-world.hlsli` (2,814 lines). The frame data is written by hand in three
-places: an `SdfFrame` field, a numbered row in the packed buffer, and an HLSL
-accessor. `resample.comp.hlsl` compiles but has no consumer.
+The SDF engine's frame data is written by hand in three places: an `SdfFrame`
+field, a numbered row in the packed buffer, and an HLSL accessor.
+`resample.comp.hlsl` compiles but has no consumer.
 
 ## The forcing artifact
 
@@ -945,8 +944,9 @@ from a clean install and a cold pipeline cache, reads its evidence from
 blocked. The debug-layer run answers the buffer-transition question above.
 The peak owned pipeline bytes threshold is set for every pipeline cell. Peak
 device-local bytes is deferred, because no reading of what a World process
-allocates exists. Zero live Direct3D 12 objects after teardown is deferred,
-because the backend never asks its debug layer for them.
+allocates exists. Zero live Direct3D 12 objects after teardown is checked:
+under the debug layers, teardown prints a `[d3d12-debug] live` line for every
+object the device still holds, and a cell fails on any debug-layer line.
 
 The pipeline threshold is the `ink` graph's exact planned peak, 96 bytes a
 pixel, which both backends read on the NVIDIA floor card. The functional
@@ -1225,27 +1225,18 @@ bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuGraphicsPipelineDescription`, and every binding index set by hand, such as
 `OverlayServices.StorageBufferBinding` and the SDF engine's binding constants.
 
-**Gate before P8 starts:** a one-day spike builds one package over two passes,
-`sdf-film-grain.frag.hlsl` and a pixelate compute pass (which has no live
-consumer, so the spike drives its fixture copy from a test pipeline), with
-two frequency groups rather than today's single flat set: the interface as data,
-declarations generated from it as paired Vulkan binding and Direct3D register
-annotations, a C# reader for SPIR-V decorations and one for the DXIL container
-asserting both against the interface, two builds on one host and one on Linux
-compared byte for byte, and one parity station recorded against the current
-contract. It passes when both readers confirm identical group, binding, and
-member offsets for every interface member across both groups, when DXC output is
-byte-identical across two runs on one host, and when the two-group layout runs
-on Direct3D 12 and Vulkan inside `tests/Puck.Parity/parity.contract.json`'s
-tolerances. It fails toward Slang when the DXIL container cannot be read well
-enough to assert group, binding, and offset for every member without parsing
-undocumented structure, when a second group cannot be expressed identically on
-both backends from generated annotations — anything resembling
-a register remap surviving into the new design is
-that failure — or when DXC output is not byte-stable run to run. It also reads
-both backends' capability reports on the floor and ceiling devices to establish
-that neither lacks what the grouped contract assumes, which is a real-hardware
-run rather than a remote session.
+**Gate:** the spike over two passes, `sdf-film-grain.frag.hlsl` and a pixelate
+compute pass, each with two frequency groups, has passed its build-time half,
+as the [implementation status](#implementation-status) records. Three legs
+remain. One build on Linux is compared byte for byte with the two on one host.
+The two-group layout runs on Direct3D 12 and Vulkan inside
+`tests/Puck.Parity/parity.contract.json`'s tolerances, with one parity station.
+Both backends' capability reports are read on the floor and ceiling devices to
+establish that neither lacks what the grouped contract assumes, which is a
+real-hardware run rather than a remote session. The gate still fails toward
+Slang when DXC output is not byte-stable across hosts, or when the second group
+cannot run identically on both backends from generated annotations; anything
+resembling a register remap surviving into the new design is that failure.
 
 **Check:** a law over the selector on synthetic profiles — coherent unified,
 discrete with a small host-visible aperture, discrete with none, and one
@@ -1257,9 +1248,9 @@ member takes a device value; `puck references` finding no consumer of any
 type or member this package deletes; `puck architecture --check` and `puck parity` exit 0.
 
 **P7b, the rest of the package.** The device-bound services and the binding
-groups start from `DeviceHandle` passed about a hundred times by `SdfWorldEngine`
-and fifty by `ShaderPipelineRenderNode`, several test fakes of the whole
-service surface, and a Direct3D 12 backend with positional registers, static
+groups start from the `IGpuDeviceContext.DeviceHandle` property, which step
+10 deletes now that no service takes a device parameter, several test fakes of
+the whole service surface, and a Direct3D 12 backend with positional registers, static
 samplers and one shader-visible heap per descriptor pool, which cannot bind two
 groups from different pools. P7b is 22 commits in four phases, each done when
 its laws pass and `puck parity` holds; the services phase also reads identical
@@ -1637,7 +1628,7 @@ A producer registers with the host under an id, and the graph names a source by
 id and transport. Adding an emulator, a capture API, or a video decoder means
 registering a producer; the graph schema and the planner do not change. The
 producer-named `WorldScreenSource` kinds become producer ids, and
-`TestPatternSource` becomes an ordinary producer rather than a fallback the
+`WorldTestPatternProducer` is an ordinary producer rather than a fallback the
 view stack owns.
 
 Format and color conversion are shipped passes that the planner inserts once
@@ -1844,7 +1835,7 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 12. `render.extensions` retires with `FullscreenPassNode`, its validation and
     the `world.extensions` verb; `comprehensive.synthetic.world.puck` migrates.
 13. The final sweep deletes the matrix law, `SdfWorldEngine` and the types
-    listed above, `SdfViewGpuServices`, `SdfShaderSetVerification`,
+    listed above, `SdfShaderSetVerification`,
     `SdfWorldKernels`, the SDF pipeline set and its cache,
     `sdf-frame-upload.comp`, and corrects the comments and
     guides.
@@ -1873,9 +1864,12 @@ as a reduced extent and a resample pass; and buffer edges.
 
 ### P15 — Temporal reconstruction
 
-**Starts from:** no jitter, motion vectors, or history in the SDF kernels, and
-render scale implemented as an upsample in the composite pass
-(`RenderScaleQ`, `UpscaleSharpnessQ` in `SdfWorldEngine.FramePreparation.cs`).
+**Starts from:** no jitter, motion vectors, or history in the SDF kernels.
+Render scale is a spatial upsample: each view renders at a quantized fraction
+of its region (`SdfViewSnapshot.RenderScale`), and the SDF engine's kernel that
+assembles the views' regions scales it back up, blending from bilinear toward
+clamped Catmull-Rom by `SdfViewSnapshot.UpscaleSharpness`. P11b deletes that
+kernel, and the graph's one resample pass takes the upsample over.
 
 **Owns:** jitter, motion vectors, the temporal upscaler, history management,
 dynamic resolution, and temporal reuse inside the SDF march.
