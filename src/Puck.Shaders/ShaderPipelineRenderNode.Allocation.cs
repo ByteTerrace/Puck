@@ -47,8 +47,12 @@ public sealed partial class ShaderPipelineRenderNode {
         var pools = new List<GpuDescriptorPoolSizes>();
 
         foreach (var planned in plan.Passes) {
+            if (planned.Declaration is not { } declaration) {
+                continue;
+            }
+
             var bindings = Descriptors(
-                pass: planned.Declaration,
+                pass: declaration,
                 specs: specs
             );
 
@@ -89,14 +93,14 @@ public sealed partial class ShaderPipelineRenderNode {
                 pass.PoolsDescriptors![slot] = bindings.CreatePool(sizes: PassDescriptorPool(bindings: pass.Bindings));
                 pass.Sets![slot] = bindings.AllocateSet(
                     pass.PoolsDescriptors[slot],
-                    ((pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute)
+                    ((pass.Kind == ShaderPipelinePassKind.Compute)
                     ? pass.Compute!.DescriptorSetLayoutHandle
                     : pass.Graphics!.DescriptorSetLayoutHandle)
                 );
                 pass.Samplers![slot] = bindings.CreateSampler();
             }
 
-            if (pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute) {
+            if (pass.Kind is ShaderPipelinePassKind.Compute or ShaderPipelinePassKind.Package) {
                 pass.Pools![slot] = m_gpu.CommandPoolFactory.Create();
             } else {
                 pass.Pre![slot] = m_gpu.CommandPoolFactory.Create();

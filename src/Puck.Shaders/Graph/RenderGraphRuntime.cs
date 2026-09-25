@@ -143,12 +143,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 RenderGraphRuntimeRefusalCode.PackageUnserved,
                 RenderGraphPackageRecorders.Unserved(
                     instance: instance.Name,
-                    package: unserved.Declaration.Source,
+                    package: unserved.Package!.Package,
                     pass: unserved.Name
                 ),
                 instance.Name,
                 unserved.Name,
-                unserved.Declaration.Source
+                unserved.Package!.Package
             );
 
             return false;

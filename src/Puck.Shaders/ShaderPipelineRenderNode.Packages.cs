@@ -34,7 +34,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
 
     private void InstallPackage(ShaderPipelinePlannedPass planned, RuntimePass runtime) {
-        if (planned.Kind != ShaderPipelinePassKind.Package) {
+        if (planned.Package is not { } step) {
             return;
         }
 
@@ -45,7 +45,7 @@ public sealed partial class ShaderPipelineRenderNode {
             HostsOnDirectX: m_directX,
             InFlightFrames: ((int)m_inFlight),
             Instance: m_descriptor.Name,
-            Package: planned.Declaration.Source,
+            Package: step.Package,
             Pass: planned.Name
         ));
     }
@@ -132,7 +132,7 @@ public sealed partial class ShaderPipelineRenderNode {
         )) {
             throw new InvalidDataException(message: RenderGraphPackageRecorders.Unserved(
                 instance: m_descriptor.Name,
-                package: unserved.Declaration.Source,
+                package: unserved.Package!.Package,
                 pass: unserved.Name
             ));
         }

@@ -105,7 +105,7 @@ public sealed partial class ShaderPipelineCompiler {
             Version: resource.Name
         )).ToArray();
     }
-    private static (IReadOnlyList<ShaderPipelinePlannedResource> Resources, IReadOnlyList<ShaderPipelinePlannedStorage> Storages, ShaderPipelineAccess[][] Accesses) PlanVersions(RenderGraphDefinition definition, IReadOnlySet<string> liveResources, IReadOnlyList<ShaderPipelinePlannedPass> passes) {
+    private static (IReadOnlyList<ShaderPipelinePlannedResource> Resources, IReadOnlyList<ShaderPipelinePlannedStorage> Storages, ShaderPipelineAccess[][] Accesses) PlanVersions(RenderGraphDefinition definition, IReadOnlySet<string> liveResources, IReadOnlyList<ShaderPipelinePass> passes) {
         var declarations = definition.Resources.Where(predicate: resource => liveResources.Contains(item: resource.Name)).ToDictionary(
             keySelector: static resource => resource.Name,
             comparer: StringComparer.Ordinal
@@ -159,8 +159,8 @@ public sealed partial class ShaderPipelineCompiler {
             roles[storage, 0] = [];
             roles[storage, 1] = [];
         }
-        foreach (var pass in passes) {
-            var declaration = pass.Declaration;
+        for (var index = 0; (index < passes.Count); index++) {
+            var declaration = passes[index];
             var list = new List<(int Storage, string Version, bool PreviousFrame, ShaderPipelineAccessState Use)>();
 
             foreach (var (reference, write, arguments) in ReferencesOf(pass: declaration)) {
@@ -176,20 +176,20 @@ public sealed partial class ShaderPipelineCompiler {
                         write: write
                     ));
 
-                roles[storage, (reference.PreviousFrame ? 1 : 0)].Add(item: (pass.Index, list.Count, use));
+                roles[storage, (reference.PreviousFrame ? 1 : 0)].Add(item: (index, list.Count, use));
                 list.Add(item: (storage, reference.Name, reference.PreviousFrame, use));
                 if (write) {
-                    writers[reference.Name] = pass.Index;
+                    writers[reference.Name] = index;
                 } else {
                     readers.Add(item: reference.Name);
                 }
                 firstUse.TryAdd(
                     key: reference.Name,
-                    value: pass.Index
+                    value: index
                 );
-                lastUse[reference.Name] = pass.Index;
+                lastUse[reference.Name] = index;
             }
-            accesses[pass.Index] = [.. list];
+            accesses[index] = [.. list];
         }
 
         // The steady state: each role's first use starts where the instance's previous role left it. Folding twice

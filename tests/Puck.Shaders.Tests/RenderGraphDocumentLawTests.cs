@@ -62,13 +62,13 @@ public sealed class RenderGraphDocumentLawTests {
             expected: ShaderPipelinePassKind.Package,
             actual: plan.Pipeline.Passes[2].Kind
         );
-        Assert.Equal(expected: RenderGraphPackageCatalog.Overlay, actual: plan.Pipeline.Passes[2].Declaration.Source);
-        Assert.Equal(expected: ShaderPipelineDocumentPassKind.Compute, actual: plan.Pipeline.Passes[2].Declaration.Kind);
+        Assert.Equal(expected: RenderGraphPackageCatalog.Overlay, actual: plan.Pipeline.Passes[2].Package?.Package);
+        Assert.Null(@object: plan.Pipeline.Passes[2].Declaration);
         Assert.Equal(
             expected: ShaderPipelinePassKind.Compute,
             actual: plan.Pipeline.Passes[1].Kind
         );
-        Assert.Equal(expected: "grade", actual: plan.Pipeline.Passes[1].Declaration.Name);
+        Assert.Equal(expected: "grade", actual: plan.Pipeline.Passes[1].Declaration?.Name);
         Assert.Equal(
             expected: ["grade"],
             actual: plan.Pipeline.Definition.ShaderPasses.Select(selector: static pass => pass.Name)

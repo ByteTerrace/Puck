@@ -90,7 +90,7 @@ public sealed class RenderGraphPackageRecorders {
     /// <summary>Finds the first package pass of a plan, in execution order, that no recorder serves.</summary>
     /// <param name="plan">The plan.</param>
     /// <param name="pass">The unserved pass, when this returns <see langword="true"/>; its
-    /// <see cref="ShaderPipelinePass.Source"/> is the package id.</param>
+    /// <see cref="ShaderPipelinePlannedPass.Package"/> step names the package.</param>
     /// <returns><see langword="true"/> when a package pass is unserved.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <see langword="null"/>.</exception>
     public bool TryFindUnserved(ShaderPipelinePlan plan, [NotNullWhen(returnValue: true)] out ShaderPipelinePlannedPass? pass) {
@@ -98,8 +98,8 @@ public sealed class RenderGraphPackageRecorders {
 
         foreach (var planned in plan.Passes) {
             if (
-                (planned.Kind == ShaderPipelinePassKind.Package) &&
-                !Serves(package: planned.Declaration.Source)
+                (planned.Package is { } step) &&
+                !Serves(package: step.Package)
             ) {
                 pass = planned;
 

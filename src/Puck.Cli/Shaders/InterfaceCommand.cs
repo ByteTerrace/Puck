@@ -28,7 +28,7 @@ internal static class InterfaceCommand {
         foreach (var pass in plan.Passes) {
             var sourceDirectory = Path.GetDirectoryName(path: Path.GetFullPath(
                 basePath: directory,
-                path: pass.Declaration.Source
+                path: pass.Declaration!.Source
             ))!;
 
             if (!interfaces.Any(predicate: entry => ((entry.Interface.Hash == pass.Parameters.Interface.Hash) && string.Equals(

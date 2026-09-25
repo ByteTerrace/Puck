@@ -628,8 +628,9 @@ the plan only as a `ShaderPipelinePackagePass` through the planner's internal
 package entry, ordered in the compute shape it reaches resources by, and the
 planner's public entry refuses a graph naming packages
 (`SHADERPIPE_PACKAGE_PASS`). A package's planned pass carries
-`ShaderPipelinePassKind.Package`, and its `Declaration` is that compute shape
-with the package id as its source. Pipeline readers (the loader, the packager,
+`ShaderPipelinePassKind.Package` with no `Declaration`: its `Package` step
+(`ShaderPipelinePackageStep`) names the package, its ports' versions and its
+extent, and the render node reads that step. Pipeline readers (the loader, the packager,
 `ShaderPipelineSource`, the `puck shaders` verbs) plan through
 `RenderGraphCompiler.ShaderPasses`, whose catalog is empty, so they see shader
 passes alone; a `CompiledShaderPipeline` holds a package pass with no compiled

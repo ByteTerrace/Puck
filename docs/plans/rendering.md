@@ -477,8 +477,9 @@ named by package id from `RenderGraphPackageCatalog`, which offers
 set. `RenderGraphCompiler` checks the schema tag and plans a graph with P3's
 planner: a package pass enters the plan only through the planner's package
 entry, and its planned pass carries its own kind,
-`ShaderPipelinePassKind.Package`, over the compute shape it reaches
-resources by, so one planner orders, versions and barriers every pass. A
+`ShaderPipelinePassKind.Package`, and a package step naming its package, its
+ports' versions and its extent in place of a declaration, so one planner
+orders, versions and barriers every pass. A
 shader pass's kind has no `Package` member, so the JSON reader refuses that
 name. A pipeline host offers no package, so the packager and the loader see
 shader passes alone, and a node given recorders runs a graph's package passes

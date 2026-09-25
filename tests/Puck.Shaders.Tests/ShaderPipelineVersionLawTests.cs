@@ -128,7 +128,7 @@ public sealed class ShaderPipelineVersionLawTests {
             shaders: plan.Passes.ToDictionary(
                 elementSelector: pass => new CompiledShader(
                     diagnostics: [],
-                    dxil: ((pass.Declaration.Kind == ShaderPipelineDocumentPassKind.Compute)
+                    dxil: ((pass.Declaration!.Kind == ShaderPipelineDocumentPassKind.Compute)
                         ? new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Compute] = bytecode }
                         : new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Vertex] = bytecode, [ShaderStage.Fragment] = bytecode }),
                     name: pass.Name,
@@ -347,7 +347,7 @@ public sealed class ShaderPipelineVersionLawTests {
                 continue;
             }
             foreach (var pass in plan.Passes) {
-                if (pass.Declaration.InputReferences.Any(predicate: input => ((input.Name == version) && !input.PreviousFrame))) {
+                if (pass.Declaration!.InputReferences.Any(predicate: input => ((input.Name == version) && !input.PreviousFrame))) {
                     Assert.True(
                         condition: (pass.Index < planned.ConsumedAtPassIndex),
                         userMessage: $"{pass.Name} samples {version} at {pass.Index}, after it is overwritten at {planned.ConsumedAtPassIndex}"

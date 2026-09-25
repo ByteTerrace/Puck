@@ -204,12 +204,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private void InstallPass(ShaderPipelinePlannedPass planned, IReadOnlyDictionary<string, RuntimeResource> map, GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried) {
         var declaration = planned.Declaration;
         var runtime = new RuntimePass(
-            declaration,
+            planned,
             m_pipeline!.Shaders.GetValueOrDefault(key: planned.Name),
-            planned.Parameters,
             ((int)m_inFlight),
-            built.Passes[planned.Index]!.Extent,
-            [.. planned.Accesses]
+            built.Passes[planned.Index]!.Extent
         );
 
         m_passes[planned.Index] = runtime;
@@ -227,7 +225,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         runtime.RenderPass = objects.RenderPass;
         runtime.Secondary = objects.Secondary;
 
-        if (declaration.Kind == ShaderPipelineDocumentPassKind.Compute) {
+        if (declaration is null or { Kind: ShaderPipelineDocumentPassKind.Compute }) {
             runtime.Pools = new IGpuCommandPool[m_inFlight];
         } else {
             // Geometry buffers are created through the device's buffer factory, not the node's counted one, so they count
@@ -589,7 +587,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 );
             }
         }
-        if (pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute) {
+        if (pass.Kind == ShaderPipelinePassKind.Compute) {
             foreach (var output in pass.Outputs) {
                 var resource = m_resourceLookup[output.Name];
                 var binding = pass.Bindings[descriptorIndex++];
@@ -877,14 +875,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     }
     private static void PreserveLiveParameters(RuntimePass[] previous, RuntimePass[] next) {
         var oldByName = previous.ToDictionary(
-            pass => pass.Spec.Name,
+            pass => pass.Name,
             StringComparer.Ordinal
         );
 
         foreach (var current in next) {
             if (
                 !oldByName.TryGetValue(
-                key: current.Spec.Name,
+                key: current.Name,
                 value: out var old
             ) ||
                 (old.ParametersLayout.SizeBytes != current.ParametersLayout.SizeBytes) ||
@@ -965,7 +963,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             slot: slot
         );
 
-        if (pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute) {
+        var spec = pass.Spec!;
+
+        if (pass.Kind == ShaderPipelinePassKind.Compute) {
             var handle = pass.Pools![slot].CommandBufferHandle;
             var recorder = m_gpu.Recorder;
 
@@ -1008,9 +1008,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             );
             recorder.Dispatch(
                 commandBufferHandle: handle,
-                groupCountX: (((extent.Width + pass.Spec.GroupSizeX) - 1) / pass.Spec.GroupSizeX),
-                groupCountY: (((extent.Height + pass.Spec.GroupSizeY) - 1) / pass.Spec.GroupSizeY),
-                groupCountZ: (((1u + pass.Spec.GroupSizeZ) - 1) / pass.Spec.GroupSizeZ)
+                groupCountX: (((extent.Width + spec.GroupSizeX) - 1) / spec.GroupSizeX),
+                groupCountY: (((extent.Height + spec.GroupSizeY) - 1) / spec.GroupSizeY),
+                groupCountZ: (((1u + spec.GroupSizeZ) - 1) / spec.GroupSizeZ)
             );
             recorder.EndCommandBuffer(
                 commandBufferHandle: handle
@@ -1042,7 +1042,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             commandBufferHandle: command,
             pipelineHandle: pipeline.Handle
         );
-        var geometry = pass.Spec.Geometry;
+        var geometry = spec.Geometry;
 
         if (pass.GeometryBuffer is { } buffer) {
             recorderGraphics.BindVertexBuffer(
@@ -1284,8 +1284,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             StringComparer.Ordinal
         );
 
-        foreach (var pass in plan.Passes.Where(predicate: static pass => pass.Declaration.IsGraphics)) {
-            if (pass.Declaration.InputReferences.Any(predicate: input => (resources[input.Name].Declaration.Kind == ShaderPipelineResourceKind.Buffer))) {
+        foreach (var pass in plan.Passes.Where(predicate: static pass => (pass.Declaration?.IsGraphics == true))) {
+            if (pass.Declaration!.InputReferences.Any(predicate: input => (resources[input.Name].Declaration.Kind == ShaderPipelineResourceKind.Buffer))) {
                 throw new InvalidDataException(message: $"Graphics pass '{pass.Name}' cannot consume a storage buffer through the graphics binding contract.");
             }
         }
@@ -1615,7 +1615,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     /// <summary>Copies one pass's live packed parameter block for inspection or persistence.</summary>
     public bool TryGetConfigSnapshot(string passName, out byte[] bytes) {
         ArgumentException.ThrowIfNullOrWhiteSpace(passName);
-        var pass = m_passes.FirstOrDefault(predicate: item => (item.Spec.Name == passName));
+        var pass = m_passes.FirstOrDefault(predicate: item => (item.Name == passName));
 
         if (pass is null) {
             bytes = [];
@@ -1634,7 +1634,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             reason = "The shader pipeline has not allocated its GPU resources yet.";
             return false;
         }
-        var pass = m_passes.FirstOrDefault(predicate: item => (item.Spec.Name == passName));
+        var pass = m_passes.FirstOrDefault(predicate: item => (item.Name == passName));
 
         if (pass is null) {
             reason = $"Unknown shader pass '{passName}'.";
@@ -1713,25 +1713,28 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             }
         }
     }
-    // A package pass has no compiled shader; its recorder and its ports' resolved versions stand in for one.
-    private sealed class RuntimePass(ShaderPipelinePass spec, CompiledShader? compiled, ShaderPipelineParameterLayout parameterLayout, int count, (uint Width, uint Height) extent, ShaderPipelineAccess[] accesses) {
-        public readonly ShaderPipelinePass Spec = spec;
+    // A package pass has no declaration and no compiled shader; its step's ports, its recorder and their resolved
+    // versions stand in for them.
+    private sealed class RuntimePass(ShaderPipelinePlannedPass planned, CompiledShader? compiled, int count, (uint Width, uint Height) extent) {
+        public readonly string Name = planned.Name;
+        public readonly ShaderPipelinePassKind Kind = planned.Kind;
+        public readonly ShaderPipelinePass? Spec = planned.Declaration;
         // Arrays, so the per-frame walks over a pass's bindings and accesses enumerate without allocating.
-        public readonly ResourceReference[] Inputs = [.. spec.InputReferences];
-        public readonly ResourceReference[] Outputs = [.. spec.OutputReferences];
-        public readonly ShaderPipelineAccess[] Accesses = accesses;
+        public readonly ResourceReference[] Inputs = [.. planned.Inputs];
+        public readonly ResourceReference[] Outputs = [.. planned.Outputs];
+        public readonly ShaderPipelineAccess[] Accesses = [.. planned.Accesses];
         public readonly CompiledShader? Compiled = compiled;
         public readonly int Count = count;
         public readonly uint Width = extent.Width;
         public readonly uint Height = extent.Height;
-        public readonly ShaderPipelineParameterLayout ParametersLayout = parameterLayout;
-        public ShaderPipelineParameterValues Parameters = (parameterLayout.TryBind(
+        public readonly ShaderPipelineParameterLayout ParametersLayout = planned.Parameters;
+        public ShaderPipelineParameterValues Parameters = (planned.Parameters.TryBind(
             config: null,
             reason: out _,
             values: out var values
         )
             ? values
-            : throw new InvalidDataException(message: $"Invalid parameters for pass {spec.Name}.")
+            : throw new InvalidDataException(message: $"Invalid parameters for pass {planned.Name}.")
         );
         public List<GpuComputeBinding> Bindings = [];
 

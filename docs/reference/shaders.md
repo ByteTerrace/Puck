@@ -254,9 +254,11 @@ catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
 planner. Package work enters the planner only through the graph compiler; the
 planner's own document entry refuses a graph naming package passes
 (`SHADERPIPE_PACKAGE_PASS`). The planner sees a package pass as its own kind,
-`Package`, whose planned pass's declaration is the compute shape it reaches its
-versions by, with the package id as its source, and the graph plan's step names
-its package: it binds no descriptors and compiles nothing. A pipeline host
+`Package`, ordered by the versions it reaches as a compute pass would. Its
+planned pass has no declaration; it carries a `ShaderPipelinePackageStep`
+instead, naming the package, the versions bound to its ports and the extent it
+runs at, which is what the render node reads. It binds no descriptors and
+compiles nothing. A pipeline host
 offers no package, so the packager and the loader see shader passes alone; a
 pipeline candidate (`CompiledShaderPipeline`) holds a package pass without a
 compiled shader, and the render node records it through its package's recorder
