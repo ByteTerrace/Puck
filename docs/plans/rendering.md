@@ -962,28 +962,22 @@ blocked. The debug-layer run answers the buffer-transition question above.
 The peak owned pipeline bytes threshold is set for every pipeline cell. The
 peak device-local bytes threshold is judged from `memory.<backend>`, but every
 cell leaves it null until a reading of the published package on the reference
-devices sets it. Zero live Direct3D 12 objects after teardown is checked:
-under the debug layers, teardown prints a `[d3d12-debug] live` line for every
-object the device still holds, and a cell fails on any debug-layer line.
+devices sets it. A leak at teardown fails a cell on both backends: the Vulkan
+validation layer reports every object alive at `vkDestroyDevice`, and the
+Direct3D 12 device context prints each object its debug layer still holds as a
+`[d3d12-debug] live` line.
 
 The pipeline threshold is the `ink` graph's exact planned peak, 96 bytes a
-pixel, which both backends read on the NVIDIA floor card. The functional
-canaries and the `ink` cells pass there on both backends with the validation
-layers on, and a cell fails when a `world.reload` its script sends does not
-apply.
+pixel. On the NVIDIA floor card the whole profile passes on both backends with
+the validation layers on: every functional canary, the flagship cells with
+both of their world reloads applied, and the `ink` cells at exactly that peak,
+with no validation message and a clean teardown in any cell. The screen binder
+retires every machine output it published before the device goes, and a
+surface upload released after its device throws, with its owner's release on
+the stack, rather than leaking.
 
-Still open:
-
-- The flagship world's cells fail on both backends because the world refuses
-  its own `world.reload`. The wire codec refuses the rebuild's embedded
-  definition because `state.strideCadence`, a `Boot` draw site, holds no value
-  when the definition is decoded, and the refusal produces no `world.reload`
-  answer and no `wire.errors` count. The cells' teardown is clean on both
-  backends: the screen binder retires every machine output it published before
-  the device goes, and a surface upload released after its device throws, with
-  its owner's release on the stack, rather than leaking.
-- The runs on the RTX 4070 and the AMD devices. Direct3D 12 cells are blocked
-  on a machine whose debug layer stops device creation.
+Still open: the runs on the RTX 4070 and the AMD devices. Direct3D 12 cells are
+blocked on a machine whose debug layer stops device creation.
 
 ### P3 — Attachments and indexed geometry
 
