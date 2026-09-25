@@ -260,13 +260,16 @@ block alignment. Each usage filters its own way:
 
 **Compression** is `Puck.Assets.Textures`: a CPU encoder per format whose bytes
 are the same on every machine, and an exact decoder that is its test oracle.
-BC7 writes mode 6, or mode 5 when a block's alpha runs independently of its
-color, and stores a one-color block exactly. BC5 is two BC4 blocks, and BC4 keeps
-the better of its two palettes. BC6H writes the one-region modes 11 to 14 and
-stores a one-value block exactly. Neither encoder writes a partitioned mode yet,
-and each decoder refuses one. On the codec laws' natural test image (gradients,
-noise and a hard-edged disc), BC4 decodes within 2 codes of the source
-(root-mean-square 0.63), BC5 within 8 (0.88), and BC7 within 13 (2.3); BC6H
+BC7 writes whichever of its modes decodes nearest: mode 6, mode 5 when a block's
+alpha runs independently of its color, or a partitioned mode, which splits the
+block into two or three subsets with their own endpoints, when the block holds
+colors no one line does. It stores a one-color block exactly. BC5 is two BC4
+blocks, and BC4 keeps the better of its two palettes. BC6H writes the one-region
+modes 11 to 14 and stores a one-value block exactly; it does not write a
+two-region mode yet, and its decoder refuses one. On the codec laws' natural
+test image (gradients, noise and a hard-edged disc), BC4 decodes within 2 codes
+of the source (root-mean-square 0.63), BC5 within 8 (0.88), and BC7 within 10
+(2.2); BC6H
 stays within 8% of each value in smooth blocks and 23% in a block across a hard
 edge between two colors, which a one-region mode cannot hold both of. From the
 second level down a block holds four
