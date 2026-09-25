@@ -113,6 +113,7 @@ public sealed class QualificationVerdictLawTests {
         const long DeviceLocalLimit = 4096L;
 
         var cell = (Cell with { Threshold = (Cell.Threshold with { PeakDeviceLocalBytes = DeviceLocalLimit }) });
+
         QualificationVerdict JudgeCell(QualificationReadings readings) => QualificationJudge.Judge(
             cell: cell,
             compiler: ReleaseCompilerDiscovery.None,
@@ -222,6 +223,8 @@ public sealed class QualificationVerdictLawTests {
                 Out(line: "[pipeline.inspect: 'ink' has no rendered pipeline instance]", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[vulkan-debug] validation error: an object was not destroyed", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[vulkan-debug] general: loader notice", stream: CliProcessOutputStream.Stderr),
+                Out(line: "[d3d12] debug layer live: the device reports through its info queue", stream: CliProcessOutputStream.Stderr),
+                Out(line: "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[pipeline: ink GPU candidate refused: SHADERPIPE_BUDGET", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[pipeline: ink unsupported: the dxc shader tool is absent", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[world.reload: world.reload applied — base is 'Assets/worlds/pipeline.world.json' (world.reload), journal cleared]"),
@@ -242,7 +245,7 @@ public sealed class QualificationVerdictLawTests {
         Assert.StartsWith(actualString: readings.MemoryProfile, expectedStartString: "memory: unified.coherent=no device-local=8589934592");
         Assert.Equal(actual: readings.Waits, expected: [new QualificationWait(Outcome: "reached", Phase: "counted 4")]);
         Assert.Equal(actual: readings.Releases, expected: 1);
-        Assert.Equal(actual: readings.ValidationMessages, expected: ["[vulkan-debug] validation error: an object was not destroyed"]);
+        Assert.Equal(actual: readings.ValidationMessages, expected: ["[vulkan-debug] validation error: an object was not destroyed", "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated"]);
         Assert.Single(collection: readings.CandidateRefusals);
         Assert.Equal(actual: readings.CompilerAbsent, expected: "[pipeline: ink unsupported: the dxc shader tool is absent");
         Assert.Equal(actual: readings.WorldReloads, expected: 1);
