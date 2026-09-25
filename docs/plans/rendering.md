@@ -505,11 +505,17 @@ including the `puck.shader.pipeline.v1` schema. Folding that schema into the
 graph document is more than a tag change: the pipeline document's top-level
 `config`, which the planner already refuses, goes with it; the tests and the
 `puck affected` path filter that glob `*.pipeline.json` move with the
-suffix; and a single `.hlsl` source still reads as a one-pass graph. Three
+suffix; and a single `.hlsl` source still reads as a one-pass graph. Four
 P11b items have landed: the first-class package pass kind in
-`ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, and
-a document pass kind with no package member, so package work enters the
-planner only through its package entry. A world may author its own root graph
+`ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
+document pass kind with no package member, so package work enters the
+planner only through its package entry, and planned buffer edges. Package
+ports are typed with a buffer's stride and count, `sdf.bricks` publishes the
+brick pool as a buffer output, and an instance read carries the version's
+kind, so the scheduler orders a buffer producer before its readers at no
+extent while the planner records the read's buffer barrier; no world row
+declares a buffer edge and nothing records one until the graph runtime lands.
+A world may author its own root graph
 in `views.graphs`; when it does not, composition synthesizes the default one,
 `sdf.world` then each `render.extensions` pass as `post.<id>` then `overlay`,
 as a graph document that goes through the same compiler, so no render tree is

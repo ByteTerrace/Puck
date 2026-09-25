@@ -15,10 +15,14 @@ namespace Puck.Hosting;
 /// the next frame; the display's own instances always render.</description></item>
 /// <item><description>A read of an instance's own output, and a read declared previous-frame, samples the producer's
 /// latest output completed before this frame, so a mirror facing itself shows the previous frame.</description></item>
+/// <item><description>A buffer read has no footprint: every consumer that renders reads it, so its producer is demanded
+/// whenever one of its consumers is, orders and refreshes as a shown producer does, and renders at no extent for no
+/// pass-pixels.</description></item>
 /// </list>
 /// </summary>
 public static class RenderGraphScheduler {
-    internal readonly record struct Shown(int Producer, double Width, double Height, bool PreviousFrame);
+    // One producer a consumer reads this frame: an image it shows over a footprint, or a buffer (no extent).
+    internal readonly record struct Shown(int Producer, double Width, double Height, bool PreviousFrame, ShaderPipelineResourceKind Kind);
     // The working state of one schedule, sized to its set and cleared at the start of every call, so nothing from an
     // earlier frame reaches a result.
     internal sealed class Scratch {
@@ -27,6 +31,7 @@ public static class RenderGraphScheduler {
             Candidates = new int[count];
             Decided = new bool[count];
             Deferred = new bool[count];
+            Demanded = new bool[count];
             DemandHeight = new double[count];
             DemandWidth = new double[count];
             Divisor = new int[count];
@@ -52,6 +57,7 @@ public static class RenderGraphScheduler {
         public bool[] Deferred { get; }
         public double[] DemandHeight { get; }
         public double[] DemandWidth { get; }
+        public bool[] Demanded { get; }
         public int[] Divisor { get; }
         public bool[] Due { get; }
         public int[] Height { get; }
@@ -68,6 +74,7 @@ public static class RenderGraphScheduler {
             Array.Clear(array: Admitted);
             Array.Clear(array: Decided);
             Array.Clear(array: Deferred);
+            Array.Clear(array: Demanded);
             Array.Clear(array: DemandHeight);
             Array.Clear(array: DemandWidth);
             Array.Clear(array: Height);
@@ -135,6 +142,12 @@ public static class RenderGraphScheduler {
                     paramName: nameof(frame)
                 );
             }
+            if (edge.Kind == ShaderPipelineResourceKind.Buffer) {
+                throw new ArgumentException(
+                    message: $"Instance '{footprint.Consumer}' shows '{footprint.Producer}', which it reads as a buffer; only an image has a footprint.",
+                    paramName: nameof(frame)
+                );
+            }
 
             var width = Fraction(
                 value: footprint.Width,
@@ -166,6 +179,7 @@ public static class RenderGraphScheduler {
             if (existing < 0) {
                 list.Add(item: new Shown(
                     Height: height,
+                    Kind: edge.Kind,
                     PreviousFrame: edge.PreviousFrame,
                     Producer: producer,
                     Width: width
@@ -181,6 +195,23 @@ public static class RenderGraphScheduler {
                         val2: width
                     ),
                 });
+            }
+        }
+        for (var consumer = 0; (consumer < shown.Length); consumer++) {
+            var reads = set.Reads[consumer];
+
+            for (var read = 0; (read < reads.Count); read++) {
+                var edge = reads[read];
+
+                if (edge.Kind == ShaderPipelineResourceKind.Buffer) {
+                    shown[consumer].Add(item: new Shown(
+                        Height: 0,
+                        Kind: edge.Kind,
+                        PreviousFrame: edge.PreviousFrame,
+                        Producer: edge.Producer,
+                        Width: 0
+                    ));
+                }
             }
         }
     }
@@ -204,8 +235,9 @@ public static class RenderGraphScheduler {
     /// <exception cref="ArgumentException"><paramref name="history"/> or <paramref name="schedule"/> covers a
     /// different number of instances, <paramref name="history"/> is <paramref name="schedule"/>'s own
     /// <see cref="RenderGraphSchedule.Next"/>, the frame's roots or footprints are <see langword="null"/>, the frame
-    /// does not follow the history, the display extent is not positive, or a root or footprint names an undeclared
-    /// instance or read.</exception>
+    /// does not follow the history, the display extent is not positive, a root or footprint names an undeclared
+    /// instance or read, a root names an instance whose output is a buffer, or a footprint shows a buffer
+    /// read.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A root or footprint fraction is negative or not finite, or the
     /// budget is negative.</exception>
     public static void Schedule(RenderGraphInstanceSet set, RenderGraphFrame frame, RenderGraphHistory history, RenderGraphSchedule schedule) {
@@ -283,6 +315,12 @@ public static class RenderGraphScheduler {
                     paramName: nameof(frame)
                 );
             }
+            if (set.Instances[index].Output == ShaderPipelineResourceKind.Buffer) {
+                throw new ArgumentException(
+                    message: $"Root '{root.Instance}' names an instance whose output is a buffer; the display shows images.",
+                    paramName: nameof(frame)
+                );
+            }
 
             var rootWidth = Fraction(
                 value: root.Width,
@@ -331,8 +369,10 @@ public static class RenderGraphScheduler {
         }
 
         // Consumers are decided before their same-frame producers, so a producer's demand is complete when it is
-        // reached; a previous-frame read that arrives after its producer was decided adds no extent this frame.
+        // reached; a previous-frame read that arrives after its producer was decided adds no extent this frame. A buffer
+        // read demands its producer without adding extent.
         var decided = work.Decided;
+        var demanded = work.Demanded;
         var scaleWidth = work.ScaleWidth;
         var scaleHeight = work.ScaleHeight;
         var changed = true;
@@ -345,7 +385,7 @@ public static class RenderGraphScheduler {
 
                 if (
                     decided[index] ||
-                    (demandWidth[index] == 0)
+                    ((demandWidth[index] == 0) && !demanded[index])
                 ) {
                     continue;
                 }
@@ -371,6 +411,11 @@ public static class RenderGraphScheduler {
                     if (decided[entry.Producer]) {
                         continue;
                     }
+                    if (entry.Kind == ShaderPipelineResourceKind.Buffer) {
+                        demanded[entry.Producer] = true;
+
+                        continue;
+                    }
 
                     demandWidth[entry.Producer] = Math.Max(
                         val1: demandWidth[entry.Producer],
@@ -389,7 +434,10 @@ public static class RenderGraphScheduler {
         var price = work.Price;
 
         for (var index = 0; (index < count); index++) {
-            if (decided[index]) {
+            if (
+                decided[index] &&
+                (set.Instances[index].Output != ShaderPipelineResourceKind.Buffer)
+            ) {
                 width[index] = RenderGraphExtent.Pixels(
                     display: frame.DisplayWidth,
                     fraction: scaleWidth[index]
@@ -580,6 +628,7 @@ public static class RenderGraphScheduler {
                     Frame: ((!entry.PreviousFrame && admitted[entry.Producer])
                         ? frame.Index
                         : history.LatestFrame(index: entry.Producer)),
+                    Kind: entry.Kind,
                     PreviousFrame: entry.PreviousFrame,
                     Producer: set.Instances[entry.Producer].Name
                 ));

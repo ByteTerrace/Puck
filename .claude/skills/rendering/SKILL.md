@@ -590,14 +590,24 @@ accesses in `UseOf`. A new document member goes on `RenderGraphDefinition` only 
 pipeline document cannot say it, because every checked-in `*.pipeline.json`
 must plan identically as a graph (`RenderGraphDocumentLawTests`), and
 `puck schema` regenerates `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
+A package's ports are typed (`RenderGraphPackagePort`: an image, or a buffer
+with its stride and count), and a version bound to a port of another kind,
+stride or count is refused as `RENDERGRAPH_PACKAGE_INPUT` or `_OUTPUT`.
+`sdf.bricks` publishes the world's brick pool as a buffer output counted by
+`BrickPoolVoxels`; `RenderGraphBufferEdgeLawTests` plans its edges. A buffer
+edge is one mechanism with the image edge: `ShaderPipelineResourceKind` lives
+in `Puck.Hosting` so a `RenderGraphRead`, an instance's `Output` and a
+`RenderGraphReadSchedule` carry the kind a graph version declares, never a
+second enum.
 Views are instances scheduled by `RenderGraphScheduler` (`src/Puck.Hosting/Graph`),
 a pure function of the instance set, the frame's roots and footprints, and the
 previous history. It fills a caller-owned `RenderGraphSchedule`, whose `Next`
 it rewrites, so the next frame goes into another schedule; a refused frame
 leaves the schedule unchanged, and a host alternating two schedules allocates
 nothing in a steady frame. `RenderGraphSchedulerLawTests` pins demand, extent,
-refresh, self-reads, cycles, the pass-pixel budget and that zero-allocation
-steady frame. A world's instances are
+refresh, self-reads, cycles, the pass-pixel budget, buffer reads (demanded by
+every rendering reader, no extent, no pass-pixels), kind mismatches and that
+zero-allocation steady frame with a buffer edge in it. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
 priced by `WorldPresentationCost` in the cost report and `world.budget`. No
 live view renders through a graph yet; the renderer still composes views

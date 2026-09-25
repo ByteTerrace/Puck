@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 
@@ -209,6 +210,7 @@ public sealed class ShaderPipelineDispatchLawTests {
             Height: 4,
             Width: 8
         ) {
+            BrickPoolVoxels = 13,
             DynamicTransforms = 5,
             InstanceGridWords = 11,
             InstanceMaskWords = 2,
@@ -250,7 +252,7 @@ public sealed class ShaderPipelineDispatchLawTests {
                 count: Per(basis: basis),
                 name: basis.ToString()
             ).ResolveSizeBytes(counts: counts) / 4UL)),
-            expected: [32UL, 7UL, 100UL, 3UL, 6UL, 5UL, 2UL, 11UL]
+            expected: [32UL, 7UL, 100UL, 3UL, 6UL, 5UL, 2UL, 11UL, 13UL]
         );
         // A count is the sum of its terms, each the product of its bases' units.
         Assert.Equal(
@@ -329,11 +331,23 @@ public sealed class ShaderPipelineDispatchLawTests {
             passes: [Pass(inputs: [], kind: ShaderPipelineDocumentPassKind.Compute, name: "write", outputs: ["out"])],
             resources: [Words(name: "out", stride: 16)]
         );
+        // Only the package that writes a counted buffer publishes it; a host's counted buffer is not passed through.
         AssertRefused(
             code: "SHADERPIPE_PACKAGE_STORAGE",
             outputs: ["out"],
-            packages: [Package(inputs: [], name: "write", outputs: ["out"])],
-            resources: [Words(count: Per(basis: ShaderPipelineCountBasis.Instances), name: "out")]
+            resources: [Words(count: Per(basis: ShaderPipelineCountBasis.Instances), initialization: ShaderPipelineInitialization.External, name: "out")]
+        );
+        Assert.Equal(
+            actual: new ShaderPipelineCompiler().Compile(
+                definition: new ShaderPipelineDefinition(
+                    name: "published",
+                    outputs: ["out"],
+                    passes: [],
+                    resources: [Words(count: Per(basis: ShaderPipelineCountBasis.Instances), name: "out")]
+                ),
+                packages: [Package(inputs: [], name: "write", outputs: ["out"])]
+            ).Outputs,
+            expected: ["out"]
         );
     }
     [Fact]

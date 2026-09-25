@@ -153,7 +153,8 @@
                       "Tiles",
                       "DynamicTransforms",
                       "InstanceMaskWords",
-                      "InstanceGridWords"
+                      "InstanceGridWords",
+                      "BrickPoolVoxels"
                     ],
                     "title": "ShaderPipelineCountBasis"
                   }
@@ -569,7 +570,7 @@
             "type": "string"
           },
           "inputs": {
-            "description": "The versions the package reads, one per input port in port order. A reference may read a history version\u0027s previous frame. A package binds its own descriptors, so no reference declares a binding.",
+            "description": "The versions the package reads, one per input port in port order, each carrying what its port carries (RenderGraphPackagePort). A reference may read a history version\u0027s previous frame. A package binds its own descriptors, so no reference declares a binding.",
             "type": [
               "array",
               "null"
@@ -580,7 +581,7 @@
             "default": null
           },
           "outputs": {
-            "description": "The image versions the package writes, one per output port in port order.",
+            "description": "The versions the package writes, one per output port in port order, each carrying what its port carries.",
             "type": [
               "array",
               "null"

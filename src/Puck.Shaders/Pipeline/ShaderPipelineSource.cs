@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Puck.Assets;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
