@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Puck.Overlays;
 using Puck.Hosting;
+using Puck.Shaders;
 
 namespace Puck.World;
 
@@ -189,16 +190,17 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             StructuralSource = structuralSource;
         }
     }
-    // OverlayFrameSlots can hold this key once in the current frame and once pending retirement from the previous
-    // frame. Each acquisition adds a binder reference, so a generation ending before the prior overlay fence retires
-    // cannot dispose the capture/view/camera resource that pass still samples.
+    // The overlay pass holds this key once in the frame it records and once per earlier frame still in flight: its
+    // frame's lease list retires only after that frame slot's next fence wait, so as many leases as the render graph
+    // keeps frames in flight can be outstanding. Each acquisition adds a binder reference, so a generation ending before
+    // those fences retire cannot dispose the capture/view/camera resource the pass still samples.
     private sealed class FrameLeaseRelay {
         private readonly WorldScreenBinder m_binder;
         private readonly int m_key;
         private readonly Action<int> m_onIdle;
         private readonly Action<int> m_release;
         private readonly int m_seat;
-        private readonly LeaseSlot[] m_slots = new LeaseSlot[2];
+        private readonly LeaseSlot[] m_slots = new LeaseSlot[RenderGraphRuntime.DefaultInFlightFrames];
         private readonly WorldFrameSource m_source;
 
         public FrameLeaseRelay(WorldScreenBinder binder, int key, Action<int> onIdle, WorldFrameSource source, int seat) {
@@ -259,10 +261,13 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
 
             frame.Release?.Invoke(obj: frame.ReleaseToken);
 
-            throw new InvalidOperationException(message: "A HUD frame source has more than two overlay frames awaiting retirement.");
+            throw new InvalidOperationException(message: $"A HUD frame source has more than {m_slots.Length} overlay frames awaiting retirement.");
         }
 
-        public bool IsIdle => (!m_slots[0].Active && !m_slots[1].Active);
+        public bool IsIdle => !Array.Exists(
+            array: m_slots,
+            match: static slot => slot.Active
+        );
 
         private readonly record struct LeaseSlot(bool Active, Action<int>? Release, int ReleaseToken);
     }

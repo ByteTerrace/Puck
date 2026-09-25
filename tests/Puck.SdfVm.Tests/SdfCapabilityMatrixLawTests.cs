@@ -250,8 +250,8 @@ public sealed class SdfCapabilityMatrixLawTests {
         new(
             Capability: "captures",
             Equivalent: "captures from the graph's root output",
-            Check: "WorldCaptureHoldLawTests; WorldCaptureSchedulerLawTests; puck parity",
-            Green: false,
+            Check: "RenderGraphRuntimeLawTests; WorldCaptureHoldLawTests; WorldCaptureSchedulerLawTests; puck parity",
+            Green: true,
             Members: ["SdfEngineNode.RequestCapture", "SdfEngineNode.PendingCapturePath"]
         ),
         new(
@@ -289,7 +289,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Members: [
                 "SdfWorldEngine.Dispose", "SdfEngineNode.Dispose", "SdfEngineNode.OnDeviceLost", "SdfWorldRenderSpec.FrameSource",
                 "SdfEngineNode.Produce", "SdfEngineNode.TryAcquireOutput", "SdfEngineNode.OutputLeases", "SdfEngineNode.RetiringEngines",
-                "SdfWorldRenderSpec.Decorate", "SdfWorldRenderSpec.DecorateFrameSource", "SdfWorldRenderSpec.HostsOnDirectX",
+                "SdfWorldRenderSpec.DecorateFrameSource", "SdfWorldRenderSpec.HostsOnDirectX",
             ]
         ),
     ];

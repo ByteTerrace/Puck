@@ -123,7 +123,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             Target = new RecordingTarget(node: Node);
             Scheduler = new WorldCaptureScheduler(
                 backend: "vulkan",
-                captureTarget: () => Target,
+                captureTarget: _ => Target,
                 directory: directory,
                 readiness: new NodeReadiness(node: Node),
                 server: m_row.Server,

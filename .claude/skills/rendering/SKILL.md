@@ -208,9 +208,14 @@ These are one-line cautions; the owning pages hold the derivations.
   black. Inside view V's own render, any screen wired to V binds 0. An image
   another producer keeps writing reaches a node as a `Puck.Hosting.GpuImageLease`
   and stays in a `LeaseRetireList` until the submission that sampled it
-  retires: `SdfEngineNode` keeps one list per frame-ring slot, and the overlay's
-  `OverlayFrameSlots` one for HUD frames. A new sampled-lease path holds its
-  leases in that list rather than its own array.
+  retires: `SdfEngineNode` keeps one list per frame-ring slot, and a
+  `ShaderPipelineRenderNode` one per frame slot, which the overlay package moves
+  its HUD frames' leases into (`OverlayFrameSlots.MoveTo`). A lease retires only
+  at its slot's next fence wait, so one source can have as many leases
+  outstanding as the node has frames in flight
+  (`RenderGraphRuntime.DefaultInFlightFrames`); a source that counts its
+  outstanding leases (`WorldOverlayFrameSources`) is sized by it. A new
+  sampled-lease path holds its leases in that list rather than its own array.
 - **Image sources.** An image from outside a pass is described once, by
   `ImageSourceDescriptor`, and a world names its producer by id
   (`WorldScreenSource.Producer`). A new producer registers a
@@ -287,10 +292,11 @@ These are one-line cautions; the owning pages hold the derivations.
   refusal reads it. It is never retried
   because a frame arrived and never on a clock; a new input to a build joins
   its `inputsOf`. The node has no previous engine then and presents nothing
-  new; a view serves the image it served before. `UnifiedOverlayNode` refuses
-  its resources the same way (`ResourceRefusal`), presents the inner frame
-  unchanged, forwards captures to it, and retries after `OnDeviceLost`, or,
-  for a heap refusal, once the release revision moves. `SdfWorldEngine`'s
+  new; a view serves the image it served before. `UnifiedOverlayNode`, which
+  no World composes any longer (the overlay package draws the live overlay),
+  refuses its resources the same way (`ResourceRefusal`), presents the inner
+  frame unchanged, forwards captures to it, and retries after `OnDeviceLost`,
+  or, for a heap refusal, once the release revision moves. `SdfWorldEngine`'s
   constructor owns its creations through one `GpuCreationScope`, which
   releases them newest first when a later step throws, so a refusal leaks
   nothing (`SdfWorldEngineCreationFaultLawTests`,
@@ -372,9 +378,7 @@ These are one-line cautions; the owning pages hold the derivations.
   keeps its last image published (`m_installedUnrendered`) until a step, resume
   or reset renders. Selecting a float output on an installed graph builds
   that preview on the pool too (`IsBuildingPreview`); the old selection stays
-  published until the finished build is taken. A `FullscreenPassNode` retires a
-  replaced executor on its successor's second submission, never with a drain
-  (`DisposeRetired`). The Shaders tests drive the
+  published until the finished build is taken. The Shaders tests drive the
   frames around a build with `ShaderPipelineRenderNodeBuilds`
   (`ProduceUntilInstalled`, and `ProduceBuildStart`, which holds the fake's
   pipeline gate so the starting frame's outcome never depends on pool timing).
@@ -518,8 +522,8 @@ These are one-line cautions; the owning pages hold the derivations.
   (`shaders.compiler`) counts requests, cache hits (`Pacing`) and each tool's
   runs in `RunStepAsync`, the one place `StepsOf`'s steps run; a new tool
   needs its kind in `RunsOf`. The static loaders count into process sets:
-  `SdfWorldKernels.LoadWork`, `FullscreenPassNode.LoadWork`,
-  `ShaderSetManifest.LoadWork` (loads and bytecode bytes). Each loader has an
+  `SdfWorldKernels.LoadWork` and `ShaderSetManifest.LoadWork` (loads and
+  bytecode bytes). Each loader has an
   overload or constructor parameter taking a fresh set, which is what a law
   counts into, since sibling tests load shaders in parallel. `VulkanProcResolver`
   is an instance the command tables take through their constructors; its `Work`
@@ -773,12 +777,29 @@ refuses an external instance's reads and any previous-frame read of one.
 `SdfEngineNode` is the `sdf.world` producer; it counts acquisitions
 (`OutputLeases`) and disposes an engine a new extent replaced only once its
 output is released (`RetiringEngines`). The
-root instance is the runtime's output and its capture target, with
-`UnservedCaptureReason` naming the root until it has produced.
+root instance is the runtime's output and its default capture target; the root
+may be an external producer when nothing is drawn over it.
+`RenderGraphRuntime.CaptureTarget` arms a capture of any instance. A graph
+instance serves one only on a frame it renders with every image input it shows
+bound to a completed output, never a stand-in, and an external producer from
+the next frame it produces; until then `UnservedCaptureReasonOf` names why.
 `RenderGraphRuntimeLawTests` pin the P11 checks on the fake, a steady frame
-at zero allocations included. No live view renders through a graph yet; the
-renderer still composes views through `SdfEngineNode`'s children and
-`ViewStack` until P11b wires the runtime in.
+at zero allocations included.
+The main view runs through the runtime. `WorldRootGraph` synthesizes a world's
+default graph as a document value the graph compiler plans: `world` (the
+`sdf.world` producer), then, when anything is drawn over it, the root `main`
+reading it with one `post.<id>` pass per `render.extensions` entry in order and
+the overlay last in a windowed World. With nothing drawn over it (offscreen, no
+extensions) `world` is the root. A config that does not bind is the compiler's
+`RENDERGRAPH_PACKAGE_CONFIG`, which the boot's pre-flight
+(`WorldPostBuildWiring`) reports as a refused definition. `WorldRenderRoot`
+builds the engine node, the packages and the runtime for both GPU shapes, and
+`RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
+what captures, `world.screenshot` and readiness read. A `captures` row may name
+`world` (`WorldCaptureRow.Instance`) to capture the world beneath the root's
+passes. Panes, screens and `views.graphs` rows still render through
+`SdfEngineNode`'s children, `ViewStack` and `WorldPipelineRuntime` until the
+rest of P11b moves them.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):

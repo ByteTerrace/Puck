@@ -99,7 +99,7 @@ public sealed class WorldCaptureScheduler {
     };
 
     private readonly string m_backend;
-    private readonly Func<ICaptureRequestTarget?>? m_captureTarget;
+    private readonly Func<string?, ICaptureRequestTarget?>? m_captureTarget;
     private readonly string m_directory;
 
     private readonly List<WorldCaptureManifestEntry> m_landed = [];
@@ -130,14 +130,16 @@ public sealed class WorldCaptureScheduler {
     /// <param name="directory">The resolved capture output directory, or the empty string when none resolved.</param>
     /// <param name="backend">The manifest's backend name: <c>vulkan</c> or <c>directx</c>.</param>
     /// <param name="worldFile">The booted world document's file name.</param>
-    /// <param name="captureTarget">Returns the render chain captures are armed on, or <see langword="null"/> while
-    /// none is composed; <see langword="null"/> itself for a boot that composes no renderer.</param>
+    /// <param name="captureTarget">Returns the target a row's capture is armed on, given the render-graph instance the
+    /// row names (<see cref="WorldCaptureRow.Instance"/>, <see langword="null"/> for the root), or
+    /// <see langword="null"/> while no renderer is composed; it throws <see cref="ArgumentException"/> for an instance the
+    /// render graph does not have. <see langword="null"/> itself for a boot that composes no renderer.</param>
     /// <param name="readiness">The engine readiness a hold reads: time held while it is not ready is spent from the
     /// pipeline-build budget, and a capture refused then names its reason. <see langword="null"/> for a boot that
     /// composes no renderer, whose holds all count as ready.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/>, <paramref name="directory"/>,
     /// <paramref name="backend"/>, or <paramref name="worldFile"/> is <see langword="null"/>.</exception>
-    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null) {
+    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: backend);
@@ -303,7 +305,23 @@ public sealed class WorldCaptureScheduler {
             return;
         }
 
-        if (m_captureTarget?.Invoke() is not { } target) {
+        ICaptureRequestTarget? target;
+
+        try {
+            target = m_captureTarget?.Invoke(arg: row.Instance);
+        } catch (ArgumentException exception) {
+            Refuse(
+                detail: $"the render graph cannot capture instance '{row.Instance}' ({exception.Message})",
+                refusal: WorldCaptureRefusal.Failed,
+                stateHash: stateHash,
+                station: row.Station,
+                tick: tick
+            );
+
+            return;
+        }
+
+        if (target is null) {
             Console.Error.WriteLine(value: $"[captures] {row.Station} tick {tick}: no renderer is composed — captures need host.presentation offscreen or windowed.");
 
             return;

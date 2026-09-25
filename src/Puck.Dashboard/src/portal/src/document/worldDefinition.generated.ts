@@ -4253,6 +4253,10 @@ export type WorldCaptureRow = {
    * The per-pixel census's material table — at least one entry, at most MaxPaletteEntriesPerRow, unique Material indices.
    */
   palette: (WorldCapturePaletteEntry | null)[];
+  /**
+   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any render.extensions pass or the overlay is drawn over it.
+   */
+  instance?: string | null;
 };
 
 export type WorldCapturesSection = {

@@ -52,6 +52,14 @@
               "additionalProperties": false,
               "title": "WorldCapturePaletteEntry"
             }
+          },
+          "instance": {
+            "description": "The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any render.extensions pass or the overlay is drawn over it.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [
