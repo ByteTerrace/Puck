@@ -7,7 +7,6 @@ using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Launcher;
-using Puck.Platform.Windows;
 using Puck.World;
 using Puck.World.Machines;
 
@@ -371,115 +370,17 @@ if (hostSettings.BackendUnsatisfiable) {
 if (hostSettings.BackendDowngraded) {
     Console.Error.WriteLine(value: $"[world.host] backend \"{WorldHostTokens.BackendToken(backend: hostSettings.RequestedBackend)}\" is unavailable on this OS; hosting on Vulkan instead.");
 }
-var hostsOnDirectX = hostSettings.HostsOnDirectX;
-var width = ((uint)hostSettings.Width);
-var height = ((uint)hostSettings.Height);
 var builder = Host.CreateApplicationBuilder(args: args);
 // Standard output carries the console's read-back answers, which a script parses; every log line, whatever its level
 // and whichever thread writes it, goes to standard error beside the narration.
 builder.Logging.AddConsole(configure: static options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 var services = builder.Services;
-services.AddPuckExtensions(extensions: extensions);
-services.AddWorldMachineCatalog(machineCatalog: machineCatalog);
-services.AddSingleton(implementationInstance: worldSource);
-services.AddSingleton(implementationInstance: worldSource.Definition);
-if (worldSource.Admission is { } bootAdmission) {
-    services.AddSingleton(implementationInstance: bootAdmission);
-}
-services.AddSingleton<Puck.Networking.IAuthenticator>(implementationInstance: authenticator);
-services.AddSingleton(implementationFactory: _ => new Puck.World.Server.WorldPeerNetwork(identityFile: (parseResult.GetValue(option: federationKeyFileOption) ??
-        Path.Combine(
-    path1: Puck.World.Server.WorldStateRoot.Resolve(),
-    path2: "Network",
-    path3: "peer.pk8"
-))));
-// The resolved host settings — read by the composition modules below and the world.host verb.
-services.AddSingleton(implementationInstance: hostSettings);
-// Read by either backend's registration when it creates the device; a headless boot creates none.
-services.AddSingleton(implementationInstance: new Puck.Abstractions.Gpu.GpuDeviceOptions {
-    DebugLayers = parseResult.GetValue(option: debugLayersOption),
-});
-// Registered before the launcher terminal block (AddLauncherTerminal/AddLauncherHeadlessTerminal, reached through
-// AddWorldPresentation/AddHeadlessHost) so the launcher's TryAddSingleton<LauncherOptions> defers to this one, IN
-// EITHER BOOT SHAPE — --exit-after-seconds applies to the headless tick host exactly like the windowed one. A null target
-// selects automatic display pacing from verified VRR capabilities or active signal timing (windowed only).
-services.AddSingleton(implementationInstance: new LauncherOptions {
-    ExitAfter = ((hostSettings.ExitAfterSeconds > 0)
-    ? TimeSpan.FromSeconds(value: hostSettings.ExitAfterSeconds)
-    : null),
-    TargetRenderRate = hostSettings.TargetRenderRate,
-    Unpaced = unpaced,
-});
-// The storage host-section: the world doc's endpoint + user-id + discovery endpoint, overlaid by the
-// --storage-uri / --user-id / --storage-discovery-uri CLI reflection. The identity resolver maps an explicit
-// user-id to a per-user container Guid, or DECLINES (local-only). Endpoint plus resolved identity wires the
-// owned-world sync engine (storage.push / storage.pull); anything less leaves the catalog local-only, and
-// storage.status names which half declined. The discovery endpoint only matters when the resolved endpoint is
-// edge-shaped — the platform edge cannot serve container LIST at all, so cloud-world discovery refuses by name
-// without one.
-var storageSettings = WorldStorageSettings.Resolve(
-    defaults: worldSource.Definition.Storage,
-    endpointOverride: parseResult.GetValue(option: storageUriOption),
-    userIdOverride: parseResult.GetValue(option: userIdOption),
-    discoveryEndpointOverride: parseResult.GetValue(option: storageDiscoveryUriOption)
-);
-services.AddSingleton(implementationInstance: storageSettings);
-services.AddSingleton(implementationInstance: IPlayerStorageIdentityResolver.Create(settings: storageSettings));
-Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);
-services.AddSingleton(implementationFactory: static provider => WorldStorageSyncHandle.Create(
-    identity: provider.GetRequiredService<IPlayerStorageIdentityResolver>(),
-    settings: provider.GetRequiredService<WorldStorageSettings>(),
-    store: provider.GetRequiredService<Puck.Storage.IObjectBlobStore>(),
-    worlds: provider.GetRequiredService<Puck.World.Server.WorldOwnedWorlds>()
-));
-// The player's controls as DATA: the world's binding overlays (the engine ships none — a world names
-// Assets/worlds/standard.world.json as its basis for the standard movement rows, or authors its
-// own, or has none), composed per seat with the seat's profile bindings and its live session rebinds. One
-// WorldSeatBindings resolves every seat's input, feeding the ONE input consumer there is: the per-seat sim-fold (the
-// IInputBindings handed to AddFixedStepSimulation), whose router stamps each lane's acting principal. Constructed here
-// (before the container builds) with the boot overlays; the roster, the rebind verbs, and the post-step overlay sync
-// push the per-seat and overlay layers in as they change.
-// The per-seat control-feel store is built here too, seeded from the boot document's own authored feel — the
-// resolution every seat sits at until a profile is delivered for it, from wherever that profile arrives.
-var seatBindings = new WorldSeatBindings(definition: worldSource.Definition);
-services.AddSingleton(implementationInstance: seatBindings);
-// Boot shape resolves before registration: the authoritative core registers in every shape; the GPU host, render
-// root, overlays, audio device, screens/machines, gamepads, and editor register only when presentation is
-// composed. See WorldBootComposition for the full split and WorldPostBuildWiring for the shared every-shape wiring.
-services.AddWorldAuthoritativeCore();
-if (connectionSubject is not null) {
-    services.AddSingleton(implementationFactory: sp => ActivatorUtilities.CreateInstance<Puck.World.Server.WorldServer>(
-        sp,
-        connectionSubject
-    ));
-}
-services.AddSingleton(implementationInstance: new WorldServiceExtensionOptions(Configuration: extensionsConfiguration));
-if (hostSettings.Headless) {
-    // No window, GPU device, swapchain, allocator, backend presenter, or audio device — the headless twin of the
-    // block below (command pump + tick host). Nothing under AddWorldPresentation is ever called on this path.
-    services.AddLauncherHeadlessTerminal();
-    // The standalone high-resolution precision waiter for the headless tick host's pacing loop — Windows only,
-    // registered by the composition root so Puck.Launcher stays platform-neutral. A no-op on an unsupported OS
-    // version (the tick host falls back to a coarse sleep).
-    if (OperatingSystem.IsWindows()) {
-        services.AddWindowsPrecisionWaiter();
-    }
-    services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
-} else if (hostSettings.Offscreen) {
-    // A real GPU device and the composed-frame render pipeline, with NO window and NO swap chain — see
-    // WorldBootComposition.AddWorldOffscreenPresentation. The server steps exactly like the headless shape
-    // (HeadlessWorldSimulation); OffscreenTickHostedService additionally produces one composed frame per iteration.
-    services.AddLauncherOffscreenTerminal();
-    if (OperatingSystem.IsWindows()) {
-        services.AddWindowsPrecisionWaiter();
-    }
-    services.AddWorldOffscreenPresentation(hostsOnDirectX: hostsOnDirectX);
-    services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
-} else {
+if (hostSettings.Presentation == WorldHostPresentation.Windowed) {
     // The recording graph (puck.recording.configuration.v1) — native capture for streaming/upload workflows, defined as data.
     // PRESENTATION-ONLY (AddWorldPresentation registers the encoder ladder/capture controller/verb module), but the
     // document resolution itself can fail-and-exit, so it stays here beside World's other --world/--recording
-    // loaders. Skipped headless: a GPU-less CI box has no reason to carry a valid recordings asset.
+    // loaders. Skipped headless and offscreen: neither composes the capture verbs, so neither needs a valid
+    // recordings asset.
     if (!RecordingDocumentLoader.TryResolve(
         explicitPath: parseResult.GetValue(option: recordingOption),
         source: out var recordingSource,
@@ -491,18 +392,25 @@ if (hostSettings.Headless) {
     }
 
     services.AddSingleton(implementationInstance: recordingSource);
-
-    // The trimmed GPU host (windowing, allocator, one complete launch-selected backend), the render root, overlays,
-    // the audio device, screens/machines verbs, and gamepads. Only the selected backend enters this
-    // service provider so its neutral compute services and presenter name the same physical device and shader
-    // format.
-    services.AddWorldPresentation(hostsOnDirectX: hostsOnDirectX);
-
-    // The shared easy path owns the one fixed-step accumulator, turns every physical/console input into a per-tick
-    // snapshot, applies it, and invokes WorldSimulation (client + screens + editor, over the shared server-step
-    // shell). Rendering consumes interpolation state only.
-    services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
 }
+// Everything the boot resolved above becomes the one service collection its shape needs; the composition laws build
+// the same collection through the same method.
+services.AddWorldBoot(inputs: new WorldBootInputs(
+    Authenticator: authenticator,
+    Extensions: extensions,
+    HostSettings: hostSettings,
+    MachineCatalog: machineCatalog,
+    Source: worldSource
+) {
+    ConnectionSubject = connectionSubject,
+    DebugLayers = parseResult.GetValue(option: debugLayersOption),
+    ExtensionsConfiguration = extensionsConfiguration,
+    FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
+    StorageDiscoveryEndpoint = parseResult.GetValue(option: storageDiscoveryUriOption),
+    StorageEndpoint = parseResult.GetValue(option: storageUriOption),
+    StorageUserId = parseResult.GetValue(option: userIdOption),
+    Unpaced = unpaced,
+});
 // Self-update: channel/cacheRoot/checkInterval/keepVersions come from the world document's own update section
 // (WorldUpdateDefaults) — a deployment-facet field carrying no simulation-state weight, matching WorldHostDefaults'
 // own posture. The trust anchor is a build-pinned composition-root constant, never a document field: a synced

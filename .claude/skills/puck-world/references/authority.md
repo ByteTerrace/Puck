@@ -466,7 +466,7 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   an unlisted reason, not that every listed reason has a live call site.
 - `wire.errors [reset]` counts rejections: synchronous text-path errors,
   snapshot re-parse mismatches, and deferred `WorldEditEcho` rejections
-  (via `NoteDeferredRejection` in `Program.cs`). The per-tick drive denial
+  (via `NoteDeferredRejection` in `WorldPostBuildWiring`). The per-tick drive denial
   in `ApplyIntentSubmission` is stderr-only and NOT counted.
 - Read-backs: `world.grants [principal]` (echoes rows with `(x)` exclusive,
   `budget:`, `channels:0x…`, per-ordinal ceilings), `world.why <principal>

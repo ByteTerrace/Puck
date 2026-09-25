@@ -30,7 +30,7 @@ A module implements `Puck.Commands.ICommandModule` — one
 constructor parameters (never `IServiceProvider`), verb logic inline; when a
 module hits the analyzer complexity ceiling, carve by SUBJECT into more
 modules, never into shell+static-logic. Registration is `services.AddSingleton<ICommandModule,
-X>()` in `Program.cs`; `CommandRegistry` aggregates all modules and
+X>()` in `WorldBootComposition`; `CommandRegistry` aggregates all modules and
 observers at construction and throws on any duplicate name/alias (including
 its built-ins `help`, `wire.ack`, `wire.errors`).
 

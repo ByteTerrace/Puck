@@ -922,12 +922,15 @@ render node applies to an image it stops publishing.
 `FullscreenPassNodeRetirementLawTests` and
 `TheFrameThreadCreatesNoPipelineOrShaderModuleOnAnyInstallOrSelection` pin both.
 
-Still open in this part: no law without a GPU shows that both presentation
-shapes register the pipeline-cache store, or that the offscreen shape
-registers every verb the collector's script sends. `WorldBootComposition` is
-internal to the `Puck.World` executable and no test links it; P11b rebuilds
-that composition as the frame graph's node tree, and the two laws land with
-it.
+`WorldBootCompositionLawTests` in `tests/Puck.World.Tests` checks the World's
+composition without a device. It builds each presentation shape's service
+collection through `WorldBootComposition.AddWorldBoot`, the public method the
+World's boot calls, with the neutral GPU services on a fake device and every
+service that brings a device up refusing to resolve. The offscreen shape's
+command registry answers every verb the `puck counters` script sends, read
+from the script itself, and both the windowed and the offscreen shape register
+the pipeline-cache store. Each law has a control that removes the registration
+it depends on and fails.
 
 The qualification of the packaged candidate has its tool and its profile;
 [Qualifying a package](../development/qualification.md) is the owning

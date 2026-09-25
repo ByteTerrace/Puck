@@ -35,12 +35,13 @@ namespace Puck.World;
 /// The boot-shape composition split: <see cref="AddWorldAuthoritativeCore"/> is the whole
 /// server-safe world — everything that works with no window, no GPU device, no swapchain, no audio device.
 /// <see cref="AddWorldPresentation"/> layers the GPU host, render root, overlays, audio, and screens/machines/gamepads
-/// on top. <c>Program.cs</c> calls the core method always and the presentation method only when
-/// <c>WorldHostSettings.Headless</c> is <see langword="false"/> — the boot-shape branch, decided before either method
-/// runs. Both take only <c>this IServiceCollection services</c> (plus the one value <see cref="AddWorldPresentation"/>
-/// needs eagerly, before any factory could resolve it): every other dependency is read from the already-registered
-/// <see cref="WorldDefinitionSource"/>/<see cref="WorldHostSettings"/>/<see cref="WorldSeatBindings"/> singletons
-/// <c>Program.cs</c> registers before calling either method.
+/// on top. <c>Program.cs</c> composes a boot through <see cref="AddWorldBoot"/>, which registers what the boot resolved,
+/// calls the core method always, and then the headless shape, <see cref="AddWorldOffscreenPresentation"/>, or
+/// <see cref="AddWorldPresentation"/> as the resolved <see cref="WorldHostSettings"/> select. Every other dependency
+/// is read from the <see cref="WorldDefinitionSource"/>/<see cref="WorldHostSettings"/>/<see cref="WorldSeatBindings"/>
+/// singletons <see cref="AddWorldBoot"/> registers first. The class is public so the composition laws in
+/// <c>tests/Puck.World.Tests</c> build the same service collection a boot builds and read what each shape registers,
+/// with no device created.
 /// <para><b>The command vocabulary must be identical in every boot shape.</b> The document validators (see
 /// <c>WorldDefinitionValidator.ValidateBindingOverlays</c>, <c>BindingVocabularyHook</c>) check a world's
 /// <c>bindingOverlays</c> — and the engine-default document's own wheels and editor pages, which every world
@@ -51,7 +52,7 @@ namespace Puck.World;
 /// stay core-registered too but resolve their presentation dependency as optional and refuse by name at use — they
 /// genuinely need a live render/pointer, which only <see cref="AddWorldPresentation"/> can supply.</para>
 /// </summary>
-internal static class WorldBootComposition {
+public static class WorldBootComposition {
     // Points world.counters' sdf.transforms forwarder at the presenter's moved set the moment the presenter is built,
     // so the forwarder can be registered, and read, before the presenter exists.
     private static WorldFramePresenter RetargetTransforms(this WorldFramePresenter presenter, WorldRenderProbe probe) {
@@ -814,7 +815,163 @@ internal static class WorldBootComposition {
         }
         return services;
     }
+    /// <summary>Registers the whole service collection a boot composes from what it resolved: the extensions, machine
+    /// catalog and world it validated, the host settings, device, launcher and storage options, the per-seat bindings,
+    /// <see cref="AddWorldAuthoritativeCore"/>, and the boot shape the host settings select. Registers only; nothing
+    /// here creates a device, opens a window, or starts a host. A windowed boot registers its recording document
+    /// beside this, since that document is the one input only the windowed shape reads.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="inputs">What the boot resolved before composing.</param>
+    /// <returns>The same service collection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="inputs"/> is
+    /// <see langword="null"/>.</exception>
+    public static IServiceCollection AddWorldBoot(this IServiceCollection services, WorldBootInputs inputs) {
+        ArgumentNullException.ThrowIfNull(argument: services);
+        ArgumentNullException.ThrowIfNull(argument: inputs);
 
+        var worldSource = inputs.Source;
+        var hostSettings = inputs.HostSettings;
+
+        services.AddPuckExtensions(extensions: inputs.Extensions);
+        services.AddWorldMachineCatalog(machineCatalog: inputs.MachineCatalog);
+        services.AddSingleton(implementationInstance: worldSource);
+        services.AddSingleton(implementationInstance: worldSource.Definition);
+        if (worldSource.Admission is { } bootAdmission) {
+            services.AddSingleton(implementationInstance: bootAdmission);
+        }
+
+        services.AddSingleton(implementationInstance: inputs.Authenticator);
+        services.AddSingleton(implementationFactory: _ => new WorldPeerNetwork(identityFile: (inputs.FederationKeyFile ?? Path.Combine(
+            path1: WorldStateRoot.Resolve(),
+            path2: "Network",
+            path3: "peer.pk8"
+        ))));
+        // The resolved host settings — read by the composition modules below and the world.host verb.
+        services.AddSingleton(implementationInstance: hostSettings);
+        // Read by either backend's registration when it creates the device; a headless boot creates none.
+        services.AddSingleton(implementationInstance: new GpuDeviceOptions {
+            DebugLayers = inputs.DebugLayers,
+        });
+        // Registered before the launcher terminal block (reached through AddWorldBootShape) so the launcher's
+        // TryAddSingleton<LauncherOptions> defers to this one in every boot shape: --exit-after-seconds applies to the
+        // headless tick host exactly like the windowed one. A null target selects automatic display pacing from
+        // verified VRR capabilities or active signal timing (windowed only).
+        services.AddSingleton(implementationInstance: new LauncherOptions {
+            ExitAfter = ((hostSettings.ExitAfterSeconds > 0)
+                ? TimeSpan.FromSeconds(value: hostSettings.ExitAfterSeconds)
+                : null
+            ),
+            TargetRenderRate = hostSettings.TargetRenderRate,
+            Unpaced = inputs.Unpaced,
+        });
+
+        // The storage host-section: the world doc's endpoint + user-id + discovery endpoint, overlaid by the
+        // --storage-uri / --user-id / --storage-discovery-uri CLI reflection. The identity resolver maps an explicit
+        // user-id to a per-user container Guid, or DECLINES (local-only). Endpoint plus resolved identity wires the
+        // owned-world sync engine (storage.push / storage.pull); anything less leaves the catalog local-only, and
+        // storage.status names which half declined. The discovery endpoint only matters when the resolved endpoint is
+        // edge-shaped — the platform edge cannot serve container LIST at all, so cloud-world discovery refuses by name
+        // without one.
+        var storageSettings = WorldStorageSettings.Resolve(
+            defaults: worldSource.Definition.Storage,
+            endpointOverride: inputs.StorageEndpoint,
+            userIdOverride: inputs.StorageUserId,
+            discoveryEndpointOverride: inputs.StorageDiscoveryEndpoint
+        );
+
+        services.AddSingleton(implementationInstance: storageSettings);
+        services.AddSingleton(implementationInstance: IPlayerStorageIdentityResolver.Create(settings: storageSettings));
+        Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);
+        services.AddSingleton(implementationFactory: static provider => WorldStorageSyncHandle.Create(
+            identity: provider.GetRequiredService<IPlayerStorageIdentityResolver>(),
+            settings: provider.GetRequiredService<WorldStorageSettings>(),
+            store: provider.GetRequiredService<Puck.Storage.IObjectBlobStore>(),
+            worlds: provider.GetRequiredService<WorldOwnedWorlds>()
+        ));
+
+        // The player's controls as DATA: the world's binding overlays (the engine ships none — a world names
+        // Assets/worlds/standard.world.json as its basis for the standard movement rows, or authors its own, or has
+        // none), composed per seat with the seat's profile bindings and its live session rebinds. One WorldSeatBindings
+        // resolves every seat's input, feeding the ONE input consumer there is: the per-seat sim-fold (the
+        // IInputBindings handed to AddFixedStepSimulation), whose router stamps each lane's acting principal.
+        // Constructed before the container builds, with the boot overlays; the roster, the rebind verbs, and the
+        // post-step overlay sync push the per-seat and overlay layers in as they change. The per-seat control-feel
+        // store is built here too, seeded from the boot document's own authored feel — the resolution every seat sits
+        // at until a profile is delivered for it, from wherever that profile arrives.
+        var seatBindings = new WorldSeatBindings(definition: worldSource.Definition);
+
+        services.AddSingleton(implementationInstance: seatBindings);
+        // The authoritative core registers in every shape; the GPU host, render root, overlays, audio device,
+        // screens/machines, gamepads, and editor register only when presentation is composed. WorldPostBuildWiring
+        // holds the shared every-shape wiring that runs once the container is built.
+        services.AddWorldAuthoritativeCore();
+        if (inputs.ConnectionSubject is { } connectionSubject) {
+            services.AddSingleton(implementationFactory: sp => ActivatorUtilities.CreateInstance<WorldServer>(
+                sp,
+                connectionSubject
+            ));
+        }
+
+        services.AddSingleton(implementationInstance: new WorldServiceExtensionOptions(Configuration: inputs.ExtensionsConfiguration));
+
+        return AddWorldBootShape(
+            hostSettings: hostSettings,
+            seatBindings: seatBindings,
+            services: services
+        );
+    }
+
+    /// <summary>Registers the boot shape the resolved host settings select over the authoritative core: the headless
+    /// tick host (<see cref="WorldHostPresentation.None"/>), the offscreen GPU composition
+    /// (<see cref="AddWorldOffscreenPresentation"/>), or the windowed presentation (<see cref="AddWorldPresentation"/>),
+    /// each with its launcher terminal and its fixed-step simulation. Registers only; nothing here creates a device.
+    /// </summary>
+    /// <param name="services">The service collection <see cref="AddWorldAuthoritativeCore"/> already composed.</param>
+    /// <param name="hostSettings">The resolved host settings; their presentation selects the shape and their backend the
+    /// GPU host.</param>
+    /// <param name="seatBindings">The per-seat bindings the fixed-step simulation folds each tick's input through.</param>
+    /// <returns>The same service collection.</returns>
+    private static IServiceCollection AddWorldBootShape(IServiceCollection services, WorldHostSettings hostSettings, WorldSeatBindings seatBindings) {
+        ArgumentNullException.ThrowIfNull(argument: services);
+        ArgumentNullException.ThrowIfNull(argument: hostSettings);
+        ArgumentNullException.ThrowIfNull(argument: seatBindings);
+
+        if (hostSettings.Headless) {
+            // No window, GPU device, swapchain, allocator, backend presenter, or audio device (command pump + tick
+            // host). Nothing under AddWorldPresentation is ever called on this path.
+            services.AddLauncherHeadlessTerminal();
+            // The standalone high-resolution precision waiter for the headless tick host's pacing loop — Windows only,
+            // registered by the composition root so Puck.Launcher stays platform-neutral. A no-op on an unsupported
+            // OS version (the tick host falls back to a coarse sleep).
+            if (OperatingSystem.IsWindows()) {
+                services.AddWindowsPrecisionWaiter();
+            }
+
+            services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
+        } else if (hostSettings.Offscreen) {
+            // A real GPU device and the composed-frame render pipeline, with NO window and NO swap chain. The server
+            // steps exactly like the headless shape (HeadlessWorldSimulation); OffscreenTickHostedService additionally
+            // produces one composed frame per iteration.
+            services.AddLauncherOffscreenTerminal();
+            if (OperatingSystem.IsWindows()) {
+                services.AddWindowsPrecisionWaiter();
+            }
+
+            services.AddWorldOffscreenPresentation(hostsOnDirectX: hostSettings.HostsOnDirectX);
+            services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
+        } else {
+            // The trimmed GPU host (windowing, allocator, one complete launch-selected backend), the render root,
+            // overlays, the audio device, screens/machines verbs, and gamepads. Only the selected backend enters this
+            // service provider so its neutral compute services and presenter name the same physical device and shader
+            // format. The shared easy path owns the one fixed-step accumulator, turns every physical/console input
+            // into a per-tick snapshot, applies it, and invokes WorldSimulation (client + screens + editor, over the
+            // shared server-step shell). Rendering consumes interpolation state only.
+            services.AddWorldPresentation(hostsOnDirectX: hostSettings.HostsOnDirectX);
+            services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
+        }
+
+        return services;
+    }
     /// <summary>Registers the persistent GPU pipeline caches every presentation shape's device creation reads: beside
     /// the shader compiler's cache under the state root, keyed by the SDF kernel set this backend ships, so a kernel
     /// change starts a fresh file instead of loading one that could never hit. Every World sharing the root shares the
