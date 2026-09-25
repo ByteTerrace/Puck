@@ -255,6 +255,29 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         );
     }
 
+    /// <summary>Refuses, by name, a device that cannot bind the grouped binding contract: fewer descriptor sets than
+    /// its <see cref="GpuPipelineLayoutDescription.GroupCount"/> groups, or a push-constant range smaller than its
+    /// <see cref="GpuPipelineLayoutDescription.PushIndexBytes"/>-byte pushed index. Every supported device reports far
+    /// more of each.</summary>
+    /// <param name="capabilities">The physical device's capabilities, read before the device is created.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="capabilities"/> is <see langword="null"/>.</exception>
+    /// <exception cref="GpuDeviceUnavailableException">The device reports fewer descriptor sets or push-constant bytes
+    /// than the contract binds; the message names each limit it misses.</exception>
+    public static void RequireGroupedBinding(GpuDeviceCapabilities capabilities) {
+        ArgumentNullException.ThrowIfNull(argument: capabilities);
+
+        var missing = new List<string>(capacity: 2);
+
+        if (capabilities.MaxBoundDescriptorSets < GpuPipelineLayoutDescription.GroupCount) {
+            missing.Add(item: $"maxBoundDescriptorSets is {capabilities.MaxBoundDescriptorSets}, below the {GpuPipelineLayoutDescription.GroupCount} binding groups");
+        }
+        if (capabilities.MaxPushConstantBytes < GpuPipelineLayoutDescription.PushIndexBytes) {
+            missing.Add(item: $"maxPushConstantsSize is {capabilities.MaxPushConstantBytes}, below the {GpuPipelineLayoutDescription.PushIndexBytes}-byte pushed index");
+        }
+        if (missing.Count != 0) {
+            throw VulkanResultExtensions.Unavailable(reason: $"The Vulkan device cannot bind Puck's grouped binding contract: {string.Join(separator: "; ", values: missing)}.");
+        }
+    }
     /// <inheritdoc/>
     public VulkanLogicalDevice Create(
         VulkanInstance instance,
@@ -275,6 +298,8 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
         );
+
+        RequireGroupedBinding(capabilities: capabilities);
 
         var (extensionNames, featureStructureTypes) = ComposeExtensionsAndFeatures(
             instance: instance.Commands,
