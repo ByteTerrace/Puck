@@ -340,7 +340,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         );
 
         throw new InvalidOperationException(message:
-            ((((string)$"Direct3D 12 device reports Shader Model {reported}, below the required 6.6 floor. Puck's DXIL kernels are compiled at Shader Model 6.6 and cannot load on this device. Puck supports exactly four GPUs — RTX 2070 ") +
+            ((((string)$"Direct3D 12 device reports Shader Model {reported}, below the required 6.6 floor. Puck's DXIL kernels are compiled at Shader Model 6.6 and cannot load on this device. Puck supports exactly four GPUs — RTX 2060 ") +
             "(Turing), RTX 4070 (Ada), Steam Machine (AMD RDNA3), and Steam Deck (AMD RDNA2 Van Gogh) — all of which ") +
             "clear Shader Model 6.6 on current drivers; update your GPU driver or run on supported hardware."));
     }
