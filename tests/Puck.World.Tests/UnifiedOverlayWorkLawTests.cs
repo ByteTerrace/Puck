@@ -15,7 +15,8 @@ namespace Puck.World.Tests;
 /// Laws for the GPU work <see cref="UnifiedOverlayNode"/> counts, driven over <see cref="FakeGpuDevice"/>: the exact
 /// counts of a drawn overlay frame, submission identity across a device loss, that the descriptor pool it states is the
 /// one it creates, that a steady-state drawn frame allocates nothing, and that every creation of its resources failed in
-/// turn through <see cref="GpuCreationFaults"/> releases exactly what was created before it.
+/// turn through <see cref="GpuCreationFaults"/> releases exactly what was created before it, presents the inner frame
+/// unchanged without throwing, tries nothing again until a device loss, and creates the resources after one.
 /// </summary>
 public sealed class UnifiedOverlayWorkLawTests {
     // The second drawn cursor frame, published when the third frame polls its fence. The overlay pass is the render
@@ -89,7 +90,7 @@ public sealed class UnifiedOverlayWorkLawTests {
         Assert.True(condition: (sample.Submission > 0L));
     }
     [Fact]
-    public void EveryCreationOfTheOverlaysResourcesFaultedInTurnReleasesExactlyWhatWasCreated() {
+    public void EveryCreationOfTheOverlaysResourcesFaultedInTurnPresentsTheInnerFrameAndReleasesWhatWasCreated() {
         var expected = new Dictionary<GpuCreationKind, long>();
 
         using (var measured = new Rig(trackObjects: true)) {
@@ -111,11 +112,15 @@ public sealed class UnifiedOverlayWorkLawTests {
                     nth: nth
                 );
 
-                var fault = Assert.Throws<GpuCreationFaultException>(testCode: rig.Produce);
+                var refused = rig.Node.ProduceFrame(context: default);
 
                 Assert.Equal(
-                    actual: (fault.Kind, fault.Creation),
-                    expected: (kind, nth)
+                    actual: (refused.ImageHandle, refused.ImageViewHandle),
+                    expected: (Rig.InnerImageHandle, Rig.InnerImageViewHandle)
+                );
+                Assert.StartsWith(
+                    actualString: rig.Node.ResourceRefusal,
+                    expectedStartString: $"[{GpuCreationFaults.RefusalCode}] The {GpuCreationFaults.NameOf(kind: kind)} creation {nth} "
                 );
                 Assert.All(
                     action: static created => Assert.Equal(
@@ -129,8 +134,29 @@ public sealed class UnifiedOverlayWorkLawTests {
                     expected: 0L
                 );
 
-                // The fault fired once: the next frame creates the resources and draws.
-                rig.Produce();
+                // Nothing a frame changes could fix the creation, so later frames present the inner frame and create
+                // nothing.
+                var attempted = rig.Gpu.Created.Count;
+
+                for (var frame = 0; (frame < 3); frame++) {
+                    Assert.Equal(
+                        actual: rig.Node.ProduceFrame(context: default).ImageViewHandle,
+                        expected: Rig.InnerImageViewHandle
+                    );
+                }
+
+                Assert.Equal(
+                    actual: rig.Gpu.Created.Count,
+                    expected: attempted
+                );
+
+                // A device loss is the change it waits for: the next frame creates the resources and draws.
+                rig.Node.OnDeviceLost();
+                Assert.Null(@object: rig.Node.ResourceRefusal);
+                Assert.NotEqual(
+                    actual: rig.Node.ProduceFrame(context: default).ImageViewHandle,
+                    expected: Rig.InnerImageViewHandle
+                );
                 Assert.True(condition: (rig.Gpu.Memory.Held > 0L));
                 faulted++;
             }
@@ -198,8 +224,8 @@ public sealed class UnifiedOverlayWorkLawTests {
                 inner: new FixedRenderNode(surface: Surface.SameDeviceImage(
                     format: SurfaceFormat.R8G8B8A8Unorm,
                     height: 64,
-                    imageHandle: 1,
-                    imageViewHandle: 2,
+                    imageHandle: InnerImageHandle,
+                    imageViewHandle: InnerImageViewHandle,
                     width: 64
                 )),
                 deviceContext: new FaultingDevice(
@@ -225,6 +251,9 @@ public sealed class UnifiedOverlayWorkLawTests {
                 width: 64
             );
         }
+
+        public const nint InnerImageHandle = 1;
+        public const nint InnerImageViewHandle = 2;
 
         public GpuCreationFaults Faults { get; } = new();
 

@@ -373,6 +373,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     public IWorkCounterSource WorkLifetime => m_work;
     /// <inheritdoc/>
     public string? PendingCapturePath => (m_capture.PendingPath ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath);
+    /// <summary>Gets why the overlay's GPU resources were refused, or <see langword="null"/> when they stand or have not
+    /// been tried. While refused, a produced frame presents the inner frame unchanged and forwards any capture to it; the
+    /// refusal holds until <see cref="OnDeviceLost"/>, after which the next frame with overlay content creates them
+    /// again.</summary>
+    public string? ResourceRefusal { get; private set; }
 
     // Reads back this node's own render target (the overlay composited over the world — what the player actually
     // sees) and writes it as a PNG: a new, separately-fenced submit sequenced after the draw above on the same queue.
@@ -407,15 +412,30 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             values: parts
         );
     }
-    // Creates the node's resources once. A creation that throws partway releases what was created before it (the one
-    // release, ReleaseGpuResources, clears each field it frees), so the next attempt starts from nothing.
-    private void EnsureResources() {
+    // Creates the node's resources once, or refuses them. A creation that throws partway releases what was created
+    // before it (the one release, ReleaseGpuResources, clears each field it frees) and is refused rather than thrown: the
+    // refusal is named once on the error stream and by ResourceRefusal, and holds until a device loss, the one event
+    // that changes what the creation depends on (the device, the extent and the shaders are fixed at construction), so
+    // a produced frame never retries it. A device loss is never refused: it reaches the host's recovery.
+    private bool EnsureResources() {
         if (m_resourcesReady) {
-            return;
+            return true;
+        }
+
+        if (ResourceRefusal is not null) {
+            return false;
         }
 
         try {
             CreateResources();
+
+            return true;
+        } catch (Exception refusal) when ((refusal is not DeviceLostException)) {
+            ReleaseGpuResources();
+            ResourceRefusal = refusal.Message;
+            Console.Error.WriteLine(value: $"[overlay] resources refused, presenting the inner frame until the device is recreated: {refusal.Message}");
+
+            return false;
         } catch {
             ReleaseGpuResources();
 
@@ -864,6 +884,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         // neither necessary nor safe.
         RetireForExit(exit: OverlayFrameExit.DeviceLost);
         ReleaseGpuResources();
+        // The recreated device is the change a refused creation waits for.
+        ResourceRefusal = null;
         m_capture.RefuseForDeviceLoss();
         m_inner.OnDeviceLost();
     }
@@ -980,7 +1002,14 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             return inner;
         }
 
-        EnsureResources();
+        if (!EnsureResources()) {
+            // Refused resources present the inner frame unchanged, and a capture reaches it the same way.
+            ForwardPendingCapture();
+            RetireForExit(exit: OverlayFrameExit.ResourcesRefused);
+
+            return inner;
+        }
+
         // The previous frame's pass must have retired before the descriptor/buffer/command-buffer rewrites below —
         // which is also what proves the leases OverlayFrameSlots.BeginFrame moved aside above safe to retire.
         m_frameFence!.Wait();
