@@ -10,9 +10,8 @@ namespace Puck.Maths;
 /// </summary>
 /// <remarks>
 /// <see cref="Pcg3d"/> is the integer mix the renderer's <c>sdfPcg3d</c> uses (Jarzynski &amp; Olano) — KEEP IN
-/// SYNC with <c>sdfPcg3d</c> in <c>Assets/Shaders/Sdf/sdf-vm.hlsli</c> and with
-/// <c>Puck.ShaderVm.ShaderIsa.Pcg3d</c>; that CPU/HLSL/Forge triplet is a hand-kept mirror across language
-/// boundaries, separate from the C#-to-C# duplication this type exists to eliminate.
+/// SYNC with <c>sdfPcg3d</c> in <c>Assets/Shaders/Sdf/sdf-vm.hlsli</c>; that C#/HLSL pair is a hand-kept mirror
+/// across a language boundary, separate from the C#-to-C# duplication this type exists to eliminate.
 /// </remarks>
 public static class Pcg3dLatticeNoise {
     // A corner's [0, 1) value in Q48.16: the hash's top 16 bits ARE the fractional ticks — integer in, integer out.
@@ -59,7 +58,7 @@ public static class Pcg3dLatticeNoise {
         return (t3 * (((t * ((t * FixedQ4816.FromInteger(value: 6)) - FixedQ4816.FromInteger(value: 15)))) + FixedQ4816.FromInteger(value: 10)));
     }
 
-    // Integer PCG3D (Jarzynski & Olano) — see the type remarks for the cross-language KEEP-IN-SYNC triplet.
+    // Integer PCG3D (Jarzynski & Olano) — see the type remarks for the cross-language KEEP-IN-SYNC pair.
     /// <summary>Mixes a 3D integer coordinate into three well-avalanched 32-bit lanes.</summary>
     /// <param name="x">The X lane input.</param>
     /// <param name="y">The Y lane input.</param>
