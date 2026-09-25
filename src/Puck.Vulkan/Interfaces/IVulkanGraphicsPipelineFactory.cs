@@ -17,6 +17,11 @@ public interface IVulkanGraphicsPipelineFactory {
     /// <param name="textureSamplerCount">The number of combined image-sampler descriptors in the texture array binding.</param>
     /// <param name="enableStorageBuffer">Whether to include a storage buffer binding in the descriptor set layout.</param>
     /// <param name="vertexInput">The explicit vertex input layout; an empty layout is used for SV_VertexID shaders.</param>
+    /// <param name="groups">The pipeline layout and set layouts of a pipeline created from a
+    /// <see cref="GpuPipelineLayoutDescription"/>, which the pipeline takes ownership of; <see langword="null"/> for
+    /// any other pipeline. With groups given, <paramref name="textureSamplerCount"/> is zero,
+    /// <paramref name="enableStorageBuffer"/> is <see langword="false"/> and <paramref name="pushConstantBinding"/> is
+    /// <see langword="null"/>.</param>
     /// <returns>A new, owning <see cref="VulkanGraphicsPipeline"/>.</returns>
     VulkanGraphicsPipeline Create(
         VulkanLogicalDevice logicalDevice,
@@ -27,7 +32,8 @@ public interface IVulkanGraphicsPipelineFactory {
         VulkanPushConstantBinding? pushConstantBinding = null,
         uint textureSamplerCount = 64,
         bool enableStorageBuffer = true,
-        GpuVertexInputLayout? vertexInput = null
+        GpuVertexInputLayout? vertexInput = null,
+        VulkanGroupPipelineLayout? groups = null
     );
     /// <summary>Creates a graphics pipeline whose viewport and scissor are dynamic state, set by each command buffer that
     /// draws with it, so it draws into framebuffers of any extent.</summary>

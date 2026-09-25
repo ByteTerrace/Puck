@@ -1750,8 +1750,8 @@ Phase 3, the groups, follows phase 2:
     `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
     planners and the spike's interfaces to the same tables. The combined image
     sampler that `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`
-    still state is not in the closed set, so their users, and the 16 sources
-    declaring `vk::combinedImageSampler` (9 under `src` and 7 canary shaders),
+    still state is not in the closed set, so their users, and the 15 sources
+    declaring `vk::combinedImageSampler` (8 under `src` and 7 canary shaders),
     move to a separate image and sampler with 14b's sampler tables, and both
     enums are deleted there.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
@@ -1932,18 +1932,34 @@ Phase 3, the groups, follows phase 2:
       `GpuCreationFaultsLawTests`. `DirectXGroupedLayoutDebugLayerTests`
       also writes and binds a film grain pass-group set under the debug
       layer.
-    - 14b-2, the Vulkan presenter: `blit.frag.hlsl` and
-      `VulkanGraphicsPipelineFactory`, which `SurfaceCompositor` builds from,
-      read a separate image and sampler. Canaries: 17, the 14b-1 set without
-      `world-seat-binding-recompose`.
-    - 14b-3, the pipeline node and the sources it runs:
+    - 14b-2, done: the Vulkan presenter. `blit.frag.hlsl` reads a separate
+      image and sampler in the pass group, set 3 (the image at binding 0, the
+      sampler at 1, each register equal to its binding). `SurfaceCompositor`
+      plans that one group through `VulkanGroupLayouts.Plan`, creates the
+      layouts with `VulkanPipelineLayouts.Create` and hands them to
+      `VulkanGraphicsPipelineFactory`'s swapchain overload, which now takes
+      groups like its other overload; its ring sets are allocated against the
+      pass group's set layout, each takes the sampler once, a blit writes only
+      the image, and a `VulkanDrawCommand` binds its set at its
+      `DescriptorSetGroup`. Canaries: the 14b-1 set without
+      `world-seat-binding-recompose`, and the windowed `post-pass`,
+      `view-screens`, `hud-frame-slots` and `device-loss-windowed`, which draw
+      through the presenter.
+    - 14b-3, the pipeline node and the sources it runs, lands with step 15,
+      not before it. Every pipeline pass pushes its whole frame block, and a
+      separate sampler is stated only through a pipeline description's
+      `Layout`, which pushes nothing but a 4-byte index
+      (`RequireLayout` refuses a push-constant binding beside it); the
+      legacy binding list has no sampler kind, and adding one would patch
+      `GpuComputeBindingKind`, which 14b-7 deletes. So the node's sources
+      split their samplers when the frame block moves into the frame group:
       `ShaderPipelineRenderNode` and its float preview
       (`pipeline-preview.frag.hlsl`), the shipped ink pipeline
       (`ink-simulation.hlsl`, `ink-visualize.hlsl`), the package library's
-      `resample.hlsl`, and the seven canary sources under `pipeline-edit`,
-      `pipeline-feedback`, `pipeline-shapes` and `pipeline-supersede`.
-      Canaries: `no-device-compile`, the thirteen `pipeline-*`,
-      `source-conversion` and `resample-reconstruction`.
+      `resample.hlsl`, `PostProcessPackage`'s writes, and the seven canary
+      sources under `pipeline-edit`, `pipeline-feedback`, `pipeline-shapes`
+      and `pipeline-supersede`. Canaries: `no-device-compile`, every
+      `pipeline-*`, `source-conversion` and `resample-reconstruction`.
     - 14b-4, the overlay: `overlay-unified.frag.hlsl`'s nineteen combined
       declarations and `UnifiedOverlayNode`'s pool. Canaries:
       `instrument-clock-source`, `music-conditional-layer-and-embellishment`,
@@ -1958,7 +1974,7 @@ Phase 3, the groups, follows phase 2:
       without `sdf-decode-sign-refusal`, plus `sdf-visibility-fresh`, which
       the index has not recorded yet. The package library's `resample.hlsl`,
       which took the SDF-side kernel's place, moves with the pipeline node's
-      sources in 14b-3.
+      sources in 14b-3, with step 15.
     - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
       then states a `GpuBindingKind`, `ShaderSetManifestBindingKind`, and
       `GpuDescriptorPoolSizes.CombinedImageSamplerCount`, with their last
@@ -1969,6 +1985,9 @@ Phase 3, the groups, follows phase 2:
     a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
     3; passes include their generated interface; the graph document's
     binding fields are deleted; and a load checks `SHADERPIPE_INTERFACE`.
+    14b-3 lands here: each of the node's sources declares a separate image and
+    sampler, the sampler at the binding after its image, as the spike's film
+    grain table does.
 16. The gate spike's GPU half, a binding station in `tests/Puck.Parity`.
 17. Done: the region-copy kernel leaves the SDF engine for `Puck.Shaders`
     (`Assets/Shaders/Residency/region-copy.comp.hlsl`), each register at its
