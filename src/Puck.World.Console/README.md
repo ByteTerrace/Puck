@@ -63,6 +63,11 @@ reconstruction every JSON/prose-tailed verb shares) lives in
 [`Puck.World.Server`](../Puck.World.Server/README.md) instead, since modules
 in `Puck.World` need it too.
 
+`gpu.faults` (`GpuFaultsCommandModule`) is the operator's arming of the host's
+`GpuCreationFaults`, which each GPU backend passes its device services through.
+`AddGpuCreationFaults` registers both in the two GPU presentation shapes; the
+verb's forms are in the [World guide](../Puck.World/README.md#shader-pipelines).
+
 `WorldCaptureScheduler` is the second tick-published hook here beside
 `WorldConsoleWaitGate`. It arms the `captures` section's rows at their
 completed ticks. Its only contact with rendering is the
