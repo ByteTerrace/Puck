@@ -46,6 +46,21 @@
     <UsingTask
         AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
         TaskFactory="RoslynCodeTaskFactory"
+        TaskName="PuckRemoveOrphanedShaderBytecode"
+    >
+        <ParameterGroup>
+            <BytecodeFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Sidecars ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Removed ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+        </ParameterGroup>
+        <Task>
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckShaderHashSidecars.cs" Type="Class" />
+        </Task>
+    </UsingTask>
+
+    <UsingTask
+        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        TaskFactory="RoslynCodeTaskFactory"
         TaskName="PuckCompileDirect3D11Kernels"
     >
         <ParameterGroup>
@@ -64,8 +79,19 @@
         <PuckShaderSpirvEnabled Condition="'$(PuckShaderSpirvEnabled)' == ''">true</PuckShaderSpirvEnabled>
     </PropertyGroup>
 
+    <!-- Bytecode with no same-stem .hlsl: the build removes what it wrote (its sidecar records the file's bytes),
+         naming each removal on one line, and refuses anything else, which it leaves in place. Sidecars are found by
+         the Assets\Shaders convention CollectShaderBytecode ships from. -->
     <Target Name="ValidateShaderBytecodeSources" BeforeTargets="PrepareForBuild">
-        <Error Condition="'%(ShaderBytecode.Identity)' != '' and !Exists('%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl')" Text="Shader bytecode '%(ShaderBytecode.Identity)' has no matching HLSL source '%(ShaderBytecode.Filename).hlsl'. Remove stale bytecode or add the source." />
+        <ItemGroup>
+            <_PuckShaderSidecar Include="Assets\Shaders\**\*.spv.hash;Assets\Shaders\**\*.dxil.hash" />
+        </ItemGroup>
+        <PuckRemoveOrphanedShaderBytecode Condition="'@(ShaderBytecode)' != '' or '@(_PuckShaderSidecar)' != ''" BytecodeFiles="@(ShaderBytecode)" Sidecars="@(_PuckShaderSidecar)">
+            <Output ItemName="_PuckRemovedShaderBytecode" TaskParameter="Removed" />
+        </PuckRemoveOrphanedShaderBytecode>
+        <ItemGroup>
+            <ShaderBytecode Remove="@(_PuckRemovedShaderBytecode)" />
+        </ItemGroup>
     </Target>
 
     <!-- Compiles each declared source to SPIR-V (Vulkan; entry renamed to "main") always, and to DXIL (DirectX)
