@@ -1645,17 +1645,18 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 capture of a following composed frame. A tick wait lets rendering progress;
 confirm the capture completion before reading the file. Its stdout echo says `pending <path>`
 precisely because no file exists yet; the resolved path arrives on **stderr**
-when the frame lands, named by whichever node in the render chain served it:
-`[capture] unified overlay -> <path>`, `[capture] <shader-set id> -> <path>`
-from a composed `render.extensions` pass, or `[debug] captured frame N ->
-<path>` from the engine node at the bottom. A node that draws nothing this
-frame forwards the request inward, so the readback always lands on the node
-that actually produced the shown frame. Arming a second capture while one is still
+when the frame lands, named by whichever node served it: `[capture] main ->
+<path>` from the node of the render graph's root, which draws the
+`render.extensions` passes and the overlay over the world, or `[debug] captured
+frame N -> <path>` from the engine node when the world is the root because
+nothing is drawn over it. The root reads the frame the display shows; an
+overlay that draws nothing this frame publishes the world's image in its place,
+and the capture reads that. Arming a second capture while one is still
 pending is REFUSED by name—the earlier path would never be written—and a
 request still outstanding when the run ends prints a `WARNING` naming it. A
 scripted caller can therefore distinguish a reported write from an unserved
 request. In-process callers receive a `FrameCaptureRequest` from
-`SdfWorldRender.RequestCapture` and await its `Completion` for success or
+the render root (`RenderGraphRuntimeNode.RequestCapture`) and await its `Completion` for success or
 failure. See [the render contract](../Puck.SdfVm/README.md#capture-completion).
 
 Committed, re-runnable proofs cover most load-bearing seams as `puck canary`

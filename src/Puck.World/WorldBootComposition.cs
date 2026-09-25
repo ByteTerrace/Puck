@@ -586,7 +586,7 @@ public static class WorldBootComposition {
                 ),
                 captureTarget: ((renderProbe is null)
                     ? null
-                    : () => renderProbe.Render
+                    : renderProbe.CaptureTarget
                 ),
                 directory: ((server.Definition.Captures is { } captures)
                     ? sp.GetRequiredService<WorldCaptureRoot>().Resolve(
@@ -994,9 +994,9 @@ public static class WorldBootComposition {
     }
     /// <summary>Registers the shader compiler every presentation shape's pipelines compile through, under the state
     /// root's <c>pipelines</c> cache with the document's toolchain, and the shader work sources a counters report reads:
-    /// the compiler's <c>shaders.compiler</c> counts, the process's kernel-set, fullscreen-pass and shader-set
-    /// manifest load counts, the SDF pipeline cache every node and view shares with its <c>gpu.sdf-pipelines</c>
-    /// creation counts, and the device's region-copy pipeline with its <c>gpu.region-copy</c> counts.</summary>
+    /// the compiler's <c>shaders.compiler</c> counts, the process's kernel-set and shader-set manifest load counts,
+    /// the SDF pipeline cache every node and view shares with its <c>gpu.sdf-pipelines</c> creation counts, and the
+    /// device's region-copy pipeline with its <c>gpu.region-copy</c> counts.</summary>
     /// <param name="services">The service collection a presentation shape composes.</param>
     private static void AddWorldShaderWork(IServiceCollection services) {
         services.TryAddSingleton(implementationFactory: static sp => new ShaderCompiler(
@@ -1008,7 +1008,6 @@ public static class WorldBootComposition {
         services.TryAddSingleton<SdfWorldPipelineCache>();
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<SdfWorldPipelineCache>().Work);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<GpuRegionCopyPipelineCache>().Work);
-        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: FullscreenPassNode.LoadWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: ShaderSetManifest.LoadWork);
     }
     /// <summary>Registers the presentation's bake schedule over the registered <see cref="WorldCacheRoots"/>' bake
@@ -1020,13 +1019,13 @@ public static class WorldBootComposition {
     }
 
     /// <summary>
-    /// Layers a real GPU device and the composed-frame render pipeline over the authoritative core — the world
-    /// render ALONE (no unified overlay/console-mirror/binding-bar, so no glyph atlas, HUD store, console-session
-    /// bank, wheel, pointer, cursor, or audio-render-device registration), with NO window and NO swap chain: see
-    /// <see cref="WorldOffscreenGpuActivation"/> for the per-backend device bring-up. Registered only when
-    /// <c>WorldHostSettings.Offscreen</c> is <see langword="true"/>; <c>world.screenshot</c> (core-registered) works
-    /// unchanged because it reaches the render node chain's own <c>RequestCapture</c>, never a presenter or swap
-    /// chain. Every presentation-only console module (<see cref="WorldCommandModule"/>, audio, recording, gamepads)
+    /// Layers a real GPU device and the composed-frame render pipeline over the authoritative core — the default render
+    /// graph without the overlay (the world and its <c>render.extensions</c> passes; no console mirror, binding bar,
+    /// glyph atlas, HUD store, console-session bank, wheel, pointer, cursor, or audio-render-device registration), with NO
+    /// window and NO swap chain: see <see cref="WorldOffscreenGpuActivation"/> for the per-backend device bring-up.
+    /// Registered only when <c>WorldHostSettings.Offscreen</c> is <see langword="true"/>; <c>world.screenshot</c>
+    /// (core-registered) works unchanged because it reaches the render graph's own <c>RequestCapture</c>, never a
+    /// presenter or swap chain. Every presentation-only console module (<see cref="WorldCommandModule"/>, audio, recording, gamepads)
     /// stays unregistered and refuses as unknown, exactly like the <c>none</c> shape; diegetic View-type screens
     /// (the jumbotron pool <c>AddWorldPresentation</c>'s render-root factory stands up via
     /// <c>WorldScreenBinder.ConfigureViews</c>) are a known gap this shape does not compose.
@@ -1136,49 +1135,23 @@ public static class WorldBootComposition {
             PinsStateFraction = true,
         }.RetargetTransforms(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
+        // The default render graph, touching no GPU, so the boot's pre-flight (WorldPostBuildWiring) refuses a
+        // render.extensions config that does not bind as a named definition refusal before any hosted service starts.
+        services.AddSingleton(implementationFactory: static sp => WorldRootGraph.Compose(
+            extensions: sp.GetRequiredService<WorldDefinition>().Render.Extensions,
+            overlay: false,
+            packages: RenderGraphPackageCatalog.Shipped
+        ));
+
         services.AddSingleton<IRenderNode>(implementationFactory: sp => {
             // Brings the GPU device up before anything below asks for one.
             _ = sp.GetRequiredService<WorldOffscreenGpuActivation>();
 
-            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
-            var width = ((uint)hostSettings.Width);
-            var height = ((uint)hostSettings.Height);
-            var binder = sp.GetRequiredService<WorldScreenBinder>();
-            var pipelines = sp.GetRequiredService<SdfWorldPipelineCache>();
-            var frameSource = sp.GetRequiredService<WorldFramePresenter>();
-            // No Decorate: the composed frame is the world render alone (see this method's own remarks) — the
-            // outermost node stays SdfEngineNode itself, so world.screenshot's capture reaches it directly.
-            var render = SdfWorldRenderBuilder.Build(
-                pipelines: pipelines,
-                spec: new SdfWorldRenderSpec(
-                    FrameSource: frameSource,
-                    Height: height,
-                    Width: width
-                ) {
-                    Children = sp.GetRequiredService<WorldPipelineRuntime>().Entries.ToDictionary(
-                    keySelector: static entry => entry.Key,
-                    elementSelector: static entry => ((IRenderNode)entry.Value.Node)
-                ),
-                    DynamicTransformCapacity = frameSource.DynamicTransformCapacity,
-                    HostsOnDirectX = hostSettings.HostsOnDirectX,
-                    InstanceCapacity = frameSource.InstanceCapacity,
-                    // The kernel set the pipeline-cache content key already loaded — shared here so this boot reads
-                    // the deployed bytecode once, not twice.
-                    ProgramWordCapacity = frameSource.ProgramWordCapacity,
-                    ScreenLights = binder.ScreenLights,
-                    ScreenSourceFrames = binder.ScreenSources,
-                    ViewportCapacity = PlayerRoster.MaxSlots,
-                }
-            );
-            var probe = sp.GetRequiredService<WorldRenderProbe>();
-
-            probe.Device = sp.GetRequiredService<IGpuDeviceContext>();
-            probe.Node = render.Producer;
-            probe.Render = render;
-
-            return new WorldRenderTeardown(
-                inner: render.Root,
-                binder
+            // The default render graph without the overlay (see this method's own remarks): the world, then its
+            // render.extensions passes, and the world alone as the root when it has none.
+            return WorldRenderRoot.Build(
+                overlay: null,
+                sp: sp
             );
         });
 
@@ -1495,17 +1468,25 @@ public static class WorldBootComposition {
             bakes: sp.GetRequiredService<WorldBakeSchedule>()
         ).RetargetTransforms(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
-        // The render root: the shared SDF world assembly over the grass-and-boulders scene. The built Producer (the
-        // live SdfEngineNode) is stashed on the WorldRenderProbe so world.counters can read its per-pass GPU
-        // work. The frame source emits active avatars only (declared-but-parked instances widen the per-pixel
-        // shadow mask walk), so the hybrid 4,096-body worst case is held by the capacity floors a construction-time
-        // probe measured, plus the viewport floor for the join-later split screen. The affordance install, EchoTap,
-        // MachineLifecycleTap, and lever-sink attachment live in the shared post-build wiring step
-        // (WorldPostBuildWiring) — this factory only builds the render tree.
+        // The overlay's glyph pack, loaded once, and the default render graph, which draws the overlay when the pack
+        // loaded. Neither touches the GPU, so the boot's pre-flight (WorldPostBuildWiring) refuses a render.extensions
+        // config that does not bind as a named definition refusal before any hosted service starts.
+        services.AddSingleton<WorldOverlayGlyphs>();
+        services.AddSingleton(implementationFactory: static sp => WorldRootGraph.Compose(
+            extensions: sp.GetRequiredService<WorldDefinition>().Render.Extensions,
+            overlay: (sp.GetRequiredService<WorldOverlayGlyphs>().Pack is not null),
+            packages: RenderGraphPackageCatalog.Shipped
+        ));
+
+        // The render root: the default render graph over the SDF world (WorldRenderRoot), with the engine node and the
+        // graph's root stashed on the WorldRenderProbe so world.counters can read their per-pass GPU work. The frame
+        // source emits active avatars only (declared-but-parked instances widen the per-pixel shadow mask walk), so the
+        // hybrid 4,096-body worst case is held by the capacity floors a construction-time probe measured, plus the
+        // viewport floor for the join-later split screen. The affordance install, EchoTap, MachineLifecycleTap, and
+        // lever-sink attachment live in the shared post-build wiring step (WorldPostBuildWiring) — this factory only
+        // builds the render tree.
         services.AddSingleton<IRenderNode>(implementationFactory: sp => {
             var hostSettings = sp.GetRequiredService<WorldHostSettings>();
-            var width = ((uint)hostSettings.Width);
-            var height = ((uint)hostSettings.Height);
             var binder = sp.GetRequiredService<WorldScreenBinder>();
 
             // The composition's one pipeline cache: resolved once, eagerly, right here at the composition root, then
@@ -1527,171 +1508,70 @@ public static class WorldBootComposition {
                 dynamicTransformCapacity: frameSource.DynamicTransformCapacity
             );
 
-            // Captured out of the Decorate closure so the probe can expose the overlay's per-pass work (world.counters).
-            UnifiedOverlayNode? overlayNode = null;
-            var render = SdfWorldRenderBuilder.Build(
-                pipelines: pipelines,
-                spec: new SdfWorldRenderSpec(
-                    FrameSource: frameSource,
-                    Height: height,
-                    Width: width
-                ) {
-                    Children = sp.GetRequiredService<WorldPipelineRuntime>().Entries.ToDictionary(
-                    keySelector: static entry => entry.Key,
-                    elementSelector: static entry => ((IRenderNode)entry.Value.Node)
-                ),
-                    // The post-render extension chain composes FIRST, over the bare SDF producer — before the
-                    // unified overlay wraps it and before the glyph-atlas early return below, so a missing atlas
-                    // never silently drops an authored extension (world content gets the extension's effect; HUD/
-                    // console text drawn by the overlay stays on top of it, unaffected). An absent or empty
-                    // render.extensions list composes zero extensions, so `composed` is `producer` unchanged — the
-                    // byte-identical default path. WorldDefinitionValidator already refused an unshipped id at
-                    // document load against the same catalog, so a lookup miss here means the deploy changed
-                    // under the process, not that the document is bad.
-                    //
-                    // The unified overlay (console mirror + per-seat binding bars + toasts) wraps the (possibly
-                    // extension-composed) producer on BOTH backends: neutral services, bytecode selected by the
-                    // resolved host. Degrades loudly to the bare (extension-composed) world when the pre-baked
-                    // glyph atlas is missing.
-                    Decorate = producer => {
-                        IRenderNode composed = producer;
-                        var deviceContext = sp.GetRequiredService<IGpuDeviceContext>();
-                        var renderExtensions = sp.GetRequiredService<WorldDefinition>().Render.Extensions;
+            // The unified overlay (console mirror, per-seat binding bars, HUD, toasts, cursor and wheel) is the default
+            // render graph's last pass, drawn over the world and its render.extensions passes on both backends: neutral
+            // services, bytecode selected by the resolved host. Without a usable glyph atlas the graph draws no overlay
+            // (WorldOverlayGlyphs reported it once), and the world and its extensions still render.
+            OverlayPackage? overlay = null;
 
-                        if (renderExtensions is { Count: > 0 }) {
-                            foreach (var entry in renderExtensions) {
-                                var manifest = ShaderSetCatalog.Shipped.Load(id: entry.Id);
+            if (sp.GetRequiredService<WorldOverlayGlyphs>().Pack is { } glyphs) {
+                var bytecodeExtension = SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostSettings.HostsOnDirectX);
+                var client = sp.GetRequiredService<WorldClient>();
+                var themeResolve = sp.GetRequiredService<WorldThemeResolve>();
 
-                                if (!manifest.TryBindConfig(
-                                    config: entry.Config,
-                                    values: out var config,
-                                    reason: out var reason
-                                )) {
-                                    throw new InvalidOperationException(message: $"render.extensions '{entry.Id}' config is invalid: {reason}");
-                                }
+                overlay = new OverlayPackage(
+                    // The seat count and HUD/marker ceilings cross from Schema to Overlays here, as data.
+                    capacity: WorldOverlayCapacity.FromSchema(),
+                    fragmentBytecode: File.ReadAllBytes(path: PuckPaths.Shipped(relativePath: $"Assets/Shaders/overlay-unified.frag{bytecodeExtension}")),
+                    frameSources: sp.GetRequiredService<IOverlayFrameSources>(),
+                    glyphs: glyphs,
+                    sources: new UnifiedOverlaySources(
+                        BindingBar: sp.GetRequiredService<BindingBarStore>(),
+                        Console: sp.GetRequiredService<ConsoleTapeStore>(),
+                        // WorldHudFeed's Tick joins WorldOverlayFeed's in the same per-produced-frame hook — it only
+                        // reconciles HudStore's STRUCTURE on a definition-revision move (cheap on every other frame); live
+                        // binding VALUES are resolved separately, every frame, by HudWriter through HudBindings.
+                        FeedTick: () => {
+                            sp.GetRequiredService<WorldOverlayFeed>().Tick();
+                            sp.GetRequiredService<WorldHudFeed>().Tick();
+                            // The cursor feed reads the viewports the frame source published THIS frame (the overlay pass
+                            // records after the world has produced), so it runs after the two feeds above only by
+                            // convention.
+                            sp.GetRequiredService<WorldCursorFeed>().Tick();
+                            // The radial menu orders against the cursor feed the same way: its hub anchor and hover
+                            // derive from the status the feed just published.
+                            sp.GetRequiredService<WorldWheelFeed>().Tick();
+                            // Live retheme: the theme resolve is revision-gated (a no-op most frames), and a fresh value
+                            // is republished to every recorder, which refills its token slab on its next frame — the only
+                            // way a state.<row> bind reaches pixels the next produced frame after the write lands.
+                            overlay?.UpdateTheme(theme: themeResolve.Resolve(
+                                definition: client.Definition,
+                                mirror: client.StateMirror,
+                                revision: client.DefinitionRevision
+                            ));
+                        },
+                        Markers: sp.GetRequiredService<MarkerStore>(),
+                        Toast: sp.GetRequiredService<OverlayToastStore>(),
+                        Hud: sp.GetRequiredService<HudStore>(),
+                        HudBindings: sp.GetRequiredService<IHudBindingResolver>(),
+                        Cursor: sp.GetRequiredService<CursorStore>(),
+                        Wheel: sp.GetRequiredService<WheelStore>()
+                    ),
+                    theme: themeResolve.Resolve(
+                        definition: sp.GetRequiredService<WorldDefinition>(),
+                        mirror: client.StateMirror,
+                        revision: client.DefinitionRevision
+                    ),
+                    vertexBytecode: File.ReadAllBytes(path: Path.Combine(
+                        path1: SdfWorldKernels.DefaultDirectory,
+                        path2: $"fullscreen.vert{bytecodeExtension}"
+                    ))
+                );
+            }
 
-                                composed = new FullscreenPassNode(
-                                    config: config,
-                                    height: height,
-                                    hostsOnDirectX: hostSettings.HostsOnDirectX,
-                                    inner: composed,
-                                    manifest: manifest,
-                                    deviceContext: deviceContext,
-                                    width: width
-                                );
-                                sp.GetRequiredService<WorldPostRenderExtensionPasses>().Add(
-                                    id: entry.Id,
-                                    pass: ((FullscreenPassNode)composed)
-                                );
-                            }
-                        }
-
-                        var fontsDirectory = PuckPaths.Shipped(relativePath: "Assets/Fonts");
-                        var icons = sp.GetRequiredService<WorldIconTable>();
-                        // The prepacked-artifact path: a warm start against the SAME icon repertoire reads the
-                        // finished pack beside the atlas; only a cold/rebaked/repertoire-changed start decodes the
-                        // combined PNG (and persists the pack for the next boot) — see WorldIconTable's remarks.
-                        var glyphs = new OverlayGlyphAtlasSet(fontsDirectory: fontsDirectory).LoadOverlayPack(extraCodePoints: icons.ExtraCodePoints);
-
-                        if (glyphs is null) {
-                            Console.Error.WriteLine(value: $"[unified-overlay] skipped: no usable glyph atlas under '{fontsDirectory}' (restore the committed fixed-UI assets).");
-
-                            return composed;
-                        }
-
-                        var bytecodeExtension = SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostSettings.HostsOnDirectX);
-
-                        var themeResolve = sp.GetRequiredService<WorldThemeResolve>();
-                        var bootDefinition = sp.GetRequiredService<WorldDefinition>();
-                        var bootTheme = themeResolve.Resolve(
-                            definition: bootDefinition,
-                            mirror: sp.GetRequiredService<WorldClient>().StateMirror,
-                            revision: sp.GetRequiredService<WorldClient>().DefinitionRevision
-                        );
-
-                        return overlayNode = new UnifiedOverlayNode(
-                            // The seat count and HUD/marker ceilings cross from Schema to Overlays here, as data.
-                            capacity: WorldOverlayCapacity.FromSchema(),
-                            fragmentBytecode: File.ReadAllBytes(path: PuckPaths.Shipped(relativePath: $"Assets/Shaders/overlay-unified.frag{bytecodeExtension}")),
-                            glyphs: glyphs,
-                            height: height,
-                            inner: composed,
-                            deviceContext: deviceContext,
-                            frameSources: sp.GetRequiredService<IOverlayFrameSources>(),
-                            sources: new UnifiedOverlaySources(
-                                BindingBar: sp.GetRequiredService<BindingBarStore>(),
-                                Console: sp.GetRequiredService<ConsoleTapeStore>(),
-                                // WorldHudFeed's Tick joins WorldOverlayFeed's in the same per-produced-frame hook —
-                                // it only reconciles HudStore's STRUCTURE on a definition-revision move (cheap on
-                                // every other frame); live binding VALUES are resolved separately, every frame, by
-                                // HudWriter through HudBindings.
-                                FeedTick: () => {
-                                    sp.GetRequiredService<WorldOverlayFeed>().Tick();
-                                    sp.GetRequiredService<WorldHudFeed>().Tick();
-                                    // The cursor feed reads the viewports the frame source published THIS frame
-                                    // (the node runs FeedTick after the inner producer's frame), so it runs after
-                                    // the two feeds above only by convention — its only ordering need is being
-                                    // after the dress, which the node's call order already guarantees.
-                                    sp.GetRequiredService<WorldCursorFeed>().Tick();
-                                    // The radial menu orders against the cursor feed the same way: its hub anchor
-                                    // and hover derive from the status the feed just published.
-                                    sp.GetRequiredService<WorldWheelFeed>().Tick();
-                                    // Live retheme: the theme resolve is revision-gated (a no-op most frames), but
-                                    // republishing the store + re-filling the GPU token slab happens every frame the
-                                    // resolve produced a fresh value — cheap, and the only way a state.<row> bind
-                                    // reaches pixels the next produced frame after the write lands.
-                                    var client = sp.GetRequiredService<WorldClient>();
-
-                                    overlayNode?.UpdateTheme(theme: sp.GetRequiredService<WorldThemeResolve>().Resolve(
-                                        definition: client.Definition,
-                                        mirror: client.StateMirror,
-                                        revision: client.DefinitionRevision
-                                    ));
-                                },
-                                Markers: sp.GetRequiredService<MarkerStore>(),
-                                Toast: sp.GetRequiredService<OverlayToastStore>(),
-                                Hud: sp.GetRequiredService<HudStore>(),
-                                HudBindings: sp.GetRequiredService<IHudBindingResolver>(),
-                                Cursor: sp.GetRequiredService<CursorStore>(),
-                                Wheel: sp.GetRequiredService<WheelStore>()
-                            ),
-                            theme: bootTheme,
-                            vertexBytecode: File.ReadAllBytes(path: Path.Combine(
-                                path1: SdfWorldKernels.DefaultDirectory,
-                                path2: $"fullscreen.vert{bytecodeExtension}"
-                            )),
-                            width: width
-                        );
-                    },
-                    DynamicTransformCapacity = frameSource.DynamicTransformCapacity,
-                    HostsOnDirectX = hostSettings.HostsOnDirectX,
-                    InstanceCapacity = frameSource.InstanceCapacity,
-                    // The kernel set the pipeline-cache content key already loaded — shared here so this boot reads
-                    // the deployed bytecode once, not twice.
-                    ProgramWordCapacity = frameSource.ProgramWordCapacity,
-                    // The diegetic screens' source + light providers — the test-pattern screen's CPU feed and its
-                    // room glow; an unbound screen has no provider (the engine's procedural fallback lights it).
-                    ScreenLights = binder.ScreenLights,
-                    ScreenSourceFrames = binder.ScreenSources,
-                    ViewportCapacity = PlayerRoster.MaxSlots,
-                }
-            );
-
-            var probe = sp.GetRequiredService<WorldRenderProbe>();
-
-            probe.Device = sp.GetRequiredService<IGpuDeviceContext>();
-            probe.Node = render.Producer;
-            // world.screenshot arms captures through the render host (routes to the outermost decorator).
-            probe.Render = render;
-            probe.Overlay = overlayNode;
-
-            // The teardown tie: the window loop disposes this root (device alive) before the presenter and long
-            // before the container's reverse-creation-order sweep — ride that safe point for the binder's own GPU
-            // holdings (camera feeds, jumbotron view engines), whose container-ordered disposal would otherwise land
-            // after device death.
-            return new WorldRenderTeardown(
-                inner: render.Root,
-                binder
+            return WorldRenderRoot.Build(
+                overlay: overlay,
+                sp: sp
             );
         });
 

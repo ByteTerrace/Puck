@@ -7,7 +7,7 @@ namespace Puck.World;
 internal sealed partial class WorldProbes {
     // Deep-validates and resolves one declared parameter binding row into its reusable template: its (probe,
     // channel) reference, and its target — a composed render.extensions entry (already proven at document load)
-    // whose manifest declares the named field as a scalar float, since FullscreenPassNode.TrySetConfig only accepts
+    // whose manifest declares the named field as a scalar float, since WorldPostRenderExtensionPasses.TrySetConfig only accepts
     // one; or another declared probe whose kind declares the named field as a scalar float. The target probe row is
     // resolved here (m_rowIndexById is complete by the time this runs); the target instance is resolved fresh every
     // ServiceParameters pass — if the target row is seat-relative, against this binding's own instance seat; if
@@ -183,12 +183,9 @@ internal sealed partial class WorldProbes {
                     parameter.LastTarget = targetInstance;
                 } else if (
                     (value == parameter.LastValue) ||
-                    !m_passes.TryGet(
-                    id: parameter.ExtensionId!,
-                    pass: out var pass
-                ) ||
-                    !pass.TrySetConfig(
+                    !m_passes.TrySetConfig(
                     field: parameter.ExtensionField!,
+                    id: parameter.ExtensionId!,
                     value: value
                 )
                 ) {

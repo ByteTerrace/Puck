@@ -130,7 +130,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             runtime.RequestCapture(request: held);
             Assert.Equal(
                 actual: runtime.UnservedCaptureReason,
-                expected: "the root instance 'main' has produced no output"
+                expected: "the instance 'main' has produced no output"
             );
 
             // The requester's hold runs out, and it refuses the capture naming that reason; the runtime drops the
@@ -140,7 +140,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             frames.Settle();
             Assert.Equal(
                 actual: Outcome(request: held).Error?.Message,
-                expected: "unserved: the root instance 'main' has produced no output"
+                expected: "unserved: the instance 'main' has produced no output"
             );
             Assert.DoesNotContain(
                 collection: gpu.CreatedObjects,

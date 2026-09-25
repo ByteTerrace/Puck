@@ -510,21 +510,22 @@ presentation dimension (`WorldPresentationCost`) and in `world.budget` with its
 extent ceiling, rate and planned passes; the server plans each row's source
 for that price.
 
-P11b owes the rest of the package. The live renderer does not run graphs:
-`SdfEngineNode`'s child composition, `ViewStack` and `WorldPipelineRuntime`
-still render every view, no host feeds the scheduler a frame, and
-`views.pipelines` rows and layout slots do not name graph instances yet. P11b
-wires `WorldBootComposition`'s node tree onto graph instances fed by the
+P11b owes the rest of the package. The main view runs through the graph
+runtime (commit 6 below), but `SdfEngineNode`'s child composition, `ViewStack`
+and `WorldPipelineRuntime` still render every pane and screen, and
+`views.pipelines` rows, `views.graphs` rows and layout slots do not name live
+graph instances yet. P11b moves those views onto graph instances fed by the
 scheduler, puts the live schedule's extents and prices in `world.budget`,
 runs the parity and counted-GPU checks, and makes the rest of the deletions
-P11 lists. Ten P11b items have landed: the first-class package pass kind in
+P11 lists. Eleven P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
 planner only through its package entry, the fold of the pipeline document
 into the graph document, planned buffer edges, the graph runtime,
 `sdf.world` as the runtime's external producer, the `post.<id>` and
-`overlay` package recorders, and planned barriers for package ports (commits
-5a, 5b, 5c and 5d below, none wired). The
+`overlay` package recorders, planned barriers for package ports (commits
+5a, 5b, 5c and 5d below), and the main view through the runtime with captures
+from its root (commit 6 below). The
 fold leaves one document: the pipeline document's tag, its definition type
 and its schema check are gone, a top-level `config` is an unknown member, every
 checked-in document is a `*.graph.json` tagged `puck.render.graph.v1`, and
@@ -568,15 +569,15 @@ times, a mirror and a self-bound input sampling the previous frame's image,
 a quarter-screen view at a quarter extent, a buffer edge binding the
 producer's buffer, captures served from the root or refused by name, the
 device-loss and disposal releases, and a steady frame allocating nothing over
-64 frames. Nothing drives the runtime yet: `WorldBootComposition` keeps its
-hand-built tree, no host registers a package factory or a producer, and the
-node allocates only fixed-size buffers, so a counted package buffer such as `sdf.bricks`'s brick
-pool cannot be an instance's storage until the host supplies its counts.
-A world may author its own root graph
-in `views.graphs`; when it does not, composition synthesizes the default one,
-`sdf.world` then each `render.extensions` pass as `post.<id>` then `overlay`,
-as a graph document that goes through the same compiler, so no render tree is
-built in C# alone.
+64 frames. Both GPU presentation shapes drive it (commit 6). The node
+allocates only fixed-size buffers, so a counted package buffer such as
+`sdf.bricks`'s brick pool cannot be an instance's storage until the host
+supplies its counts. A world may author its own root graph in `views.graphs`;
+when it does not, composition synthesizes the default one, `sdf.world` then
+each `render.extensions` pass as `post.<id>` then `overlay`, as a graph
+document that goes through the same compiler, so no render tree is built in C#
+alone. No `views.graphs` row runs live yet, and no row can name the `sdf.world`
+producer or the root, so today every world renders the synthesized graph.
 
 P11b commit 5 puts the three engine packages behind the graph runtime.
 `RenderGraphRuntime` runs an instance's steps inside that instance's
@@ -615,8 +616,9 @@ sub-steps, in this order:
     extent; `SdfEngineNode` is the `sdf.world` producer, and its `Produce`
     submits through the engine's own ring. On every frame a consumer renders,
     scheduled for the producer or not, the consumer binds the producer's latest
-    completed output as a `GpuImageLease` and an external image in `General`
-    layout, or the stand-in before the producer has completed one.
+    completed output as a `GpuImageLease` and an external image in the layout
+    the engine leaves its output in between frames (`SdfWorldEngine.OutputLayout`,
+    shader-readable), or the stand-in before the producer has completed one.
   - `ShaderPipelineRenderNode` keeps one `LeaseRetireList` per frame slot. A
     leased `BindImage` serves the next produced frame only: the frame that
     records holds the lease, its submission moves it into the slot's list, and
@@ -637,8 +639,8 @@ sub-steps, in this order:
     left them in.
   - The synthesized default composition of two instances, `world` as the
     external `sdf.world` producer and the root graph that reads it and runs the
-    `post.<id>` passes and then `overlay`, lands with the live wiring;
-    `WorldBootComposition` keeps its hand-built tree until then.
+    `post.<id>` passes and then `overlay`, landed with the live wiring
+    (commit 6).
   - `RenderGraphRuntimeLawTests.External` holds the runtime to it over a fake
     producer on `FakePipelineGpu`: the latest output bound on every render, a
     lease retired only after the sampling slot's fence, a skipped producer frame
@@ -649,11 +651,10 @@ sub-steps, in this order:
     while leased disposed only after release, device loss releasing every held
     engine, and steady acquisition allocating nothing. `RenderGraphSchedulerLawTests`
     holds the instance-set refusals and the producer's price.
-- 5b has landed: `post.<id>` is a package recorder, on the fake GPU only, since
-  nothing wires it live yet. `FullscreenPassNode` still wraps a one-pass
+- 5b has landed: `post.<id>` is a package recorder. Commit 6 wires it live and
+  deletes `FullscreenPassNode`, the node that wrapped a one-pass
   `ShaderPipelineRenderNode` with its own frame ring, fences, submission and
-  executor swap, and `WorldBootComposition` still wraps one per
-  `render.extensions` entry; the wiring commit deletes it.
+  executor swap per `render.extensions` entry.
   - A package id is served by an `IRenderGraphPackageFactory`. Its `Build` runs
     in the candidate's `BackgroundBuild` beside the shader passes and creates the
     pass's modules, pipeline and render pass; its `Create` takes them when the
@@ -674,20 +675,20 @@ sub-steps, in this order:
     config that does not bind as `RENDERGRAPH_PACKAGE_CONFIG`; the bound values
     are the pass's frame block config, which `TrySetConfig` rebinds by pass
     name. `WorldPostRenderExtensions.IsShipped` is the catalog's `post.<id>`
-    lookup. `WorldBootComposition`'s `InvalidOperationException` on a config
-    that does not bind stays until the wiring commit synthesizes the graph, and
-    a probe's `target.id` cross-reference stays in world validation.
-  - `PostProcessPackageLawTests` hold it on `FakePipelineGpu`: the same render
+    lookup. A probe's `target.id` cross-reference stays in world validation.
+  - `PostProcessPackageLawTests` hold it on `FakePipelineGpu`: the render
     pass, pipeline description, vertex buffer and draw, input write and pushed
-    frame blocks as `FullscreenPassNode` records for the shipped film grain,
-    with bound config and a live config change; the pipeline built off the frame
+    frame blocks `FullscreenPassNode` recorded for the shipped film grain,
+    pinned since that node's deletion, with bound config and a live config
+    change; the pipeline built off the frame
     thread and released on replacement, device loss and disposal; the config
     refusal by name; and a steady frame allocating nothing.
-- 5c has landed: `overlay` is a package recorder, on the fake GPU only.
-  `UnifiedOverlayNode` still draws the live overlay, through the same
-  `OverlayFrameComposer` (every writer, the builder, the frame-slot table and
-  the overflow narration) and `OverlayPassLayout` (today's nine combined image
-  samplers, storage buffer and 48-byte push block).
+- 5c has landed: `overlay` is a package recorder, and commit 6 draws the live
+  overlay through it. It shares `OverlayFrameComposer` (every writer, the
+  builder, the frame-slot table and the overflow narration) and
+  `OverlayPassLayout` (today's nine combined image samplers, storage buffer and
+  48-byte push block) with `UnifiedOverlayNode`, which no World composes any
+  longer.
   - A recording that draws nothing returns
     `RenderGraphPackageOutcome.DrewNothing`, and each output stands for the input
     at its position: the node publishes that input's image with no copy, in its
@@ -744,7 +745,7 @@ sub-steps, in this order:
     records itself: `PostProcessPackageLawTests` and `OverlayPackageLawTests`
     hold both packages to none and to the layouts they are handed.
     `RenderGraphRuntimeLawTests.Alias` add the drawn layouts and an owned input
-    standing for the output. The `FullscreenPassNode` equivalence and the
+    standing for the output. The post pass's pinned recording and the
     steady-frame allocation laws hold unchanged.
 
 Each sub-step's gate:
@@ -775,6 +776,47 @@ Each sub-step's gate:
   clean over a drawn post and overlay frame, since a planned layout the driver
   disagrees with shows only there. Until then its evidence is the fake-GPU laws
   above.
+
+P11b commit 6 has landed: the main view runs through the graph runtime, and
+captures come from the graph's root output.
+
+- `WorldRootGraph` synthesizes a world's default graph from its document, a
+  graph document value `RenderGraphCompiler` plans like any other: `world`, the
+  `sdf.world` producer, and, when anything is drawn over it, the root `main`,
+  which reads `world` over the whole display and runs one `post.<id>` pass per
+  `render.extensions` entry in document order, then `overlay` in a windowed
+  World that loaded its glyph atlas. Both presentation shapes run the post
+  passes, so offscreen captures and parity see them. With nothing drawn over it
+  (offscreen with no extensions) `world` is the root, and the runtime shows and
+  captures the producer's output directly. A config that does not bind is the
+  compiler's `RENDERGRAPH_PACKAGE_CONFIG`, which the boot's pre-flight reports
+  as a refused definition naming the entry.
+- `WorldRenderRoot` builds the engine node, registers it as the `sdf.world`
+  producer beside the post and overlay packages, and installs the runtime
+  behind `RenderGraphRuntimeNode`, the host's render root, in both shapes. The
+  `Decorate` chain, the `SdfWorldRender` probe split, `IDebugViewTarget` and
+  `FullscreenPassNode` are deleted. `UnifiedOverlayNode` stays, composed by no
+  World, until commit 14 makes the overlay a true package.
+- `world.screenshot`, the capture scheduler and readiness read the root:
+  `WorldRenderProbe.IsReady` holds once the engine is ready and the root has
+  rendered over a completed world output, so a hold spends the build budget
+  until then and names the runtime's reason. A capture never reads a frame
+  rendered over a stand-in.
+- A `captures` row may name the instance it captures (`instance`, the root when
+  absent). The validator admits `world`, the SDF world beneath the root's
+  passes, and `RenderGraphRuntime.CaptureTarget` arms a capture of any
+  instance, which lets parity capture a non-root station.
+- `WorldOverlayFrameSources` holds as many leases of one HUD frame source as the
+  root keeps frames in flight (`RenderGraphRuntime.DefaultInFlightFrames`),
+  since a package pass's leases retire at its frame slot's next fence rather
+  than at the overlay's own.
+- Checks: `RenderGraphRuntimeLawTests` (an external root, a named capture
+  target, a root capture waiting out a stand-in), `WorldRootGraphLawTests`,
+  `WorldCaptureSchedulerLawTests` and `WorldPresentationNameLawTests` on the
+  instance row, `puck parity` unmoved, and the `post-pass`, `hud-frame-slots`,
+  `view-screens`, `world-counters`, pipeline and SDF canaries on both backends,
+  with `pipeline-churn` and the pipeline and SDF canaries under the debug
+  layers.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
@@ -2947,7 +2989,8 @@ puts pipelines on groups. P7 and P8 do not read simulation state, so they do
 not wait on the state rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
-nine P11b items its implementation status lists. The rest of P11b runs
+P11b items its implementation status lists, the main view through the graph
+runtime among them. The rest of P11b runs
 beside P7b; only the overlay as a true package waits on its sampler tables and
 the overlay's move onto groups, and only the per-device pass-pipeline cache
 waits on pipelines moving onto groups. P12's

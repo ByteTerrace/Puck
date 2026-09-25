@@ -20,7 +20,7 @@ public sealed record RenderGraphRuntimeGraph(CompiledShaderPipeline Pipeline, IR
 public enum RenderGraphRuntimeRefusalCode : byte {
     /// <summary>The graphs are not one per instance of the set.</summary>
     GraphCount = 1,
-    /// <summary>The root names no instance, or an instance whose output is not an image.</summary>
+    /// <summary>The root names no instance whose output is an image.</summary>
     Root = 2,
     /// <summary>An instance's graph publishes a default output of another kind than the instance declares.</summary>
     OutputKind = 3,
@@ -67,12 +67,17 @@ public sealed record RenderGraphRuntimeRefusal(RenderGraphRuntimeRefusalCode Cod
 /// </para>
 /// <para>
 /// Each instance counts its own work (<see cref="Work"/>). The root instance is what the display shows: the runtime's
-/// output is its latest completed image, and a capture armed on the runtime is served from it by the root's node on a
-/// frame the root renders. A steady frame, one whose schedule and extents repeat an earlier one, allocates nothing.
+/// output is its latest completed image. The root is a graph instance, or an external producer when the display shows
+/// that producer's output with nothing drawn over it. A capture armed on the runtime reads the root, and one armed
+/// through <see cref="CaptureTarget"/> reads the instance it names: a graph instance's node serves it on a frame the
+/// instance renders with every image input bound to a completed output, never a stand-in, and an external producer
+/// serves it on the next frame it produces. A steady frame, one whose schedule and extents repeat an earlier one,
+/// allocates nothing.
 /// </para>
 /// </summary>
 public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposable {
     private readonly CaptureRequestSlot m_capture = new();
+    private readonly InstanceCaptureTarget[] m_captureTargets;
     private readonly Output[] m_current;
     private readonly IGpuDeviceContext m_device;
     private readonly Binding[][] m_inputs;
@@ -83,7 +88,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private readonly int m_root;
     private readonly RenderGraphSchedule[] m_schedules;
     private readonly RenderGraphInstanceSet m_set;
+    // Each graph instance's producer whose stand-in its latest render bound, or null when every image input it bound was a
+    // completed output; a capture of the instance waits until it is null.
+    private readonly string?[] m_standInReads;
 
+    // The instance the capture armed on the runtime reads.
+    private int m_captureInstance;
     private bool m_disposed;
     private RenderGraphHistory m_history;
     private RenderGraphSchedule? m_latest;
@@ -104,6 +114,16 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             new RenderGraphSchedule(set: set),
         ];
         m_set = set;
+        m_standInReads = new string?[nodes.Length];
+        m_captureInstance = root;
+        m_captureTargets = new InstanceCaptureTarget[nodes.Length];
+
+        for (var index = 0; (index < nodes.Length); index++) {
+            m_captureTargets[index] = new InstanceCaptureTarget(
+                index: index,
+                runtime: this
+            );
+        }
 
         Array.Fill(
             array: m_current,
@@ -115,6 +135,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
     }
 
+    /// <summary>The frames in flight each instance's node keeps when <see cref="TryCreate"/> is given none: a lease a
+    /// package pass samples is held until its frame slot's next fence wait, so this many frames' leases of one image
+    /// source can be outstanding at once, the frame recording included.</summary>
+    public const uint DefaultInFlightFrames = 3;
+
     /// <summary>Gets whether every instance the latest frame scheduled produced its output: false before the first
     /// frame, and while any scheduled instance's graph is still building.</summary>
     public bool IsSettled => ((m_latest is not null) && (m_unproduced == 0));
@@ -123,16 +148,29 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <summary>Gets the latest frame's schedule, or <see langword="null"/> before the first frame.</summary>
     public RenderGraphSchedule? Latest => m_latest;
     /// <inheritdoc/>
-    public string? PendingCapturePath => (m_capture.PendingPath ?? m_nodes[m_root]!.PendingCapturePath);
-    /// <summary>Gets the root instance's name: the instance the display shows and captures read.</summary>
+    /// <remarks>The runtime holds one capture at a time, whichever instance it reads: a path armed here, or forwarded to
+    /// an instance's node or external producer and not yet served.</remarks>
+    public string? PendingCapturePath {
+        get {
+            if (m_capture.PendingPath is { } armed) {
+                return armed;
+            }
+
+            for (var index = 0; (index < m_nodes.Length); index++) {
+                if ((((ICaptureRequestTarget?)m_nodes[index]) ?? m_producers[index])?.PendingCapturePath is { } forwarded) {
+                    return forwarded;
+                }
+            }
+
+            return null;
+        }
+    }
+    /// <summary>Gets the root instance's name: the instance the display shows and captures read by default.</summary>
     public string Root => m_set.Instances[m_root].Name;
-    /// <summary>Gets why a capture armed on the runtime would not be served by the frame it produces now, phrased as the
-    /// refusal of a capture that waited on it reads, or <see langword="null"/> once the root instance has a completed
-    /// output.</summary>
-    public string? UnservedCaptureReason => ((m_nodes[m_root]!.IsReady && (m_current[m_root].Frame >= 0))
-        ? null
-        : $"the root instance '{Root}' has produced no output"
-    );
+    /// <summary>Gets why a capture of the root would not be served by the frame the runtime produces now (see
+    /// <see cref="UnservedCaptureReasonOf"/>), or <see langword="null"/> once the root has a completed output rendered
+    /// from completed inputs.</summary>
+    public string? UnservedCaptureReason => ReasonOf(index: m_root);
 
     private static RenderGraphRuntimeRefusal Refuse(RenderGraphRuntimeRefusalCode code, string message, params string[] names) => new(
         Code: code,
@@ -312,7 +350,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlightFrames"/> is less than two.</exception>
     /// <exception cref="InvalidDataException">A graph cannot be installed on a node: its shader compilation failed, or
     /// its plan is not one a node runs.</exception>
-    public static bool TryCreate(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, string root, RenderGraphPackageRecorders packages, IGpuDeviceContext deviceContext, bool hostsOnDirectX, [NotNullWhen(returnValue: true)] out RenderGraphRuntime? runtime, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal, uint inFlightFrames = 3) {
+    public static bool TryCreate(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, string root, RenderGraphPackageRecorders packages, IGpuDeviceContext deviceContext, bool hostsOnDirectX, [NotNullWhen(returnValue: true)] out RenderGraphRuntime? runtime, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal, uint inFlightFrames = DefaultInFlightFrames) {
         ArgumentNullException.ThrowIfNull(argument: set);
         ArgumentNullException.ThrowIfNull(argument: graphs);
         ArgumentNullException.ThrowIfNull(argument: root);
@@ -338,12 +376,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         if (
             (rootIndex < 0) ||
-            (set.Instances[rootIndex].Output != ShaderPipelineResourceKind.Image) ||
-            (set.Instances[rootIndex].Kind != RenderGraphInstanceKind.Graph)
+            (set.Instances[rootIndex].Output != ShaderPipelineResourceKind.Image)
         ) {
             refusal = Refuse(
                 RenderGraphRuntimeRefusalCode.Root,
-                $"The root '{root}' names no instance that renders a graph whose output is an image.",
+                $"The root '{root}' names no instance whose output is an image.",
                 root
             );
 
@@ -539,6 +576,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private bool Bind(int index, RenderGraphSchedule schedule) {
         var bindings = m_inputs[index];
 
+        m_standInReads[index] = null;
+
         if (bindings.Length == 0) {
             return true;
         }
@@ -589,36 +628,63 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                         image: StandInFor(format: binding.Format),
                         name: binding.Version
                     );
+                    NoteStandIn(
+                        frame: FrameOf(
+                            consumer: consumer,
+                            producer: binding.ProducerName,
+                            schedule: schedule
+                        ),
+                        index: index,
+                        producer: binding.ProducerName
+                    );
                 }
 
                 continue;
             }
 
+            var frame = FrameOf(
+                consumer: consumer,
+                producer: binding.ProducerName,
+                schedule: schedule
+            );
             var output = OutputAt(
-                frame: FrameOf(
-                    consumer: consumer,
-                    producer: binding.ProducerName,
-                    schedule: schedule
-                ),
+                frame: frame,
                 producer: binding.Producer
             );
 
-            node.BindImage(
-                image: (output.Image.IsSameDeviceImage
-                    ? new ShaderPipelineExternalImage(
+            if (output.Image.IsSameDeviceImage) {
+                node.BindImage(
+                    image: new ShaderPipelineExternalImage(
                         Format: PixelFormatOf(format: output.Image.Format),
                         Height: output.Image.Height,
                         ImageHandle: output.Image.ImageHandle,
                         ImageViewHandle: output.Image.ImageViewHandle,
                         Layout: output.Layout,
                         Width: output.Image.Width
-                    )
-                    : StandInFor(format: binding.Format)),
-                name: binding.Version
-            );
+                    ),
+                    name: binding.Version
+                );
+            } else {
+                node.BindImage(
+                    image: StandInFor(format: binding.Format),
+                    name: binding.Version
+                );
+                NoteStandIn(
+                    frame: frame,
+                    index: index,
+                    producer: binding.ProducerName
+                );
+            }
         }
 
         return true;
+    }
+    // Records a stand-in bound for a read the schedule shows this frame, which a capture of the consumer waits out. A
+    // read the frame does not show (no footprint, or the producer off view) samples nothing a capture would see.
+    private void NoteStandIn(int index, string producer, long frame) {
+        if (frame >= 0) {
+            m_standInReads[index] = producer;
+        }
     }
     // The frame of a producer's output the schedule has a consumer read, or -1 when it names none.
     private static long FrameOf(RenderGraphSchedule schedule, string consumer, string producer) {
@@ -670,9 +736,42 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             array: m_previous,
             value: Output.None
         );
+        Array.Clear(array: m_standInReads);
         m_history = RenderGraphHistory.Empty(set: m_set);
         m_latest = null;
         m_unproduced = 0;
+    }
+    // Why a capture of an instance would not be served by the frame the runtime produces now, or null when it would.
+    private string? ReasonOf(int index) {
+        var name = m_set.Instances[index].Name;
+
+        if (m_producers[index] is { } producer) {
+            return ((producer.NotReadyReason is { } reason)
+                ? $"the instance '{name}' has produced no output: {reason}"
+                : null);
+        }
+        if (
+            !m_nodes[index]!.IsReady ||
+            (m_current[index].Frame < 0)
+        ) {
+            return $"the instance '{name}' has produced no output";
+        }
+
+        return ((m_standInReads[index] is { } producerName)
+            ? $"the instance '{name}' has rendered only over a stand-in for '{producerName}', which has produced no output"
+            : null);
+    }
+    // Arms a capture of one instance on the runtime's one slot.
+    private void Arm(int index, FrameCaptureRequest request) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+        m_capture.Arm(
+            pendingPath: PendingCapturePath,
+            request: request
+        );
+        m_captureInstance = index;
     }
 
     /// <inheritdoc/>
@@ -747,8 +846,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             var index = renders[position];
             var row = schedule.Instances[index];
 
-            // An external producer submits through its own ring, at the scheduled extent, before its consumers render.
+            // An external producer submits through its own ring, at the scheduled extent, before its consumers render. A
+            // capture of it moves to it first, and it serves the capture from the next frame it produces.
             if (m_producers[index] is { } producer) {
+                if (index == m_captureInstance) {
+                    m_capture.Forward(target: producer);
+                }
                 if (
                     (row.Width <= 0) ||
                     (row.Height <= 0) ||
@@ -783,11 +886,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     width: ((uint)row.Width)
                 );
             }
-            // A capture moves to the root's node only once that node renders a graph, so the frame it produces is the
-            // one the capture reads; until then it stays armed here, where UnservedCaptureReason explains it.
+            // A capture moves to its instance's node only once that node renders a graph over completed inputs, so the
+            // frame it produces is the one the capture reads; until then it stays armed here, where
+            // UnservedCaptureReasonOf explains it.
             if (
-                (index == m_root) &&
-                node.IsReady
+                (index == m_captureInstance) &&
+                node.IsReady &&
+                (m_standInReads[index] is null)
             ) {
                 m_capture.Forward(target: node);
             }
@@ -810,22 +915,62 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             );
         }
 
-        return m_current[m_root].Image;
+        return RootImage();
     }
+
+    // The root's latest completed image: a graph root's output, or an external root's latest output, whose acquisition is
+    // released at once, since the surface is valid only until the next frame, the first time the producer can replace it.
+    private Surface RootImage() {
+        if (m_producers[m_root] is not { } producer) {
+            return m_current[m_root].Image;
+        }
+        if (!producer.TryAcquireOutput(output: out var output)) {
+            return default;
+        }
+
+        output.Lease.Retire();
+
+        return output.Image;
+    }
+
     /// <inheritdoc/>
-    /// <remarks>The capture is served from the root instance's output by the first frame after this call on which the
-    /// root renders an installed graph. A requester that stops waiting withdraws it with
-    /// <see cref="FrameCaptureRequest.TryFail"/>, and the runtime then drops it.</remarks>
-    public void RequestCapture(FrameCaptureRequest request) {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-        m_capture.Arm(
-            pendingPath: PendingCapturePath,
-            request: request
-        );
+    /// <remarks>The capture reads the root instance, as one armed through its <see cref="CaptureTarget"/> does.</remarks>
+    public void RequestCapture(FrameCaptureRequest request) => Arm(
+        index: m_root,
+        request: request
+    );
+    /// <summary>Returns the capture target of one instance. A capture armed on it is served by the first frame after it
+    /// is armed on which a graph instance renders an installed graph with every image input bound to a completed output,
+    /// or on which an external instance produces. The runtime holds one capture at a time across its instances. A
+    /// requester that stops waiting withdraws it with <see cref="FrameCaptureRequest.TryFail"/>, and the runtime then
+    /// drops it.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The instance's target, the same object on every call.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The set has no instance of that name.</exception>
+    public ICaptureRequestTarget CaptureTarget(string instance) => m_captureTargets[IndexOf(instance: instance)];
+    /// <summary>Returns why a capture of one instance would not be served by the frame the runtime produces now, phrased
+    /// as the refusal of a capture that waited on it reads: the instance has no completed output, or its latest render
+    /// bound a stand-in for a producer that has none. It builds a string, so a caller polls it only to report.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The reason, or <see langword="null"/> when a capture of it would be served.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The set has no instance of that name.</exception>
+    public string? UnservedCaptureReasonOf(string instance) => ReasonOf(index: IndexOf(instance: instance));
+
+    private int IndexOf(string instance) {
+        ArgumentNullException.ThrowIfNull(argument: instance);
+
+        var index = m_set.IndexOf(name: instance);
+
+        return ((index >= 0)
+            ? index
+            : throw new ArgumentException(
+                message: $"The render graph has no instance '{instance}'.",
+                paramName: nameof(instance)
+            ));
     }
+
     /// <summary>Returns the node an instance renders its graph through, for inspection.</summary>
     /// <param name="instance">The instance's index in <see cref="Instances"/>.</param>
     /// <returns>The node.</returns>
@@ -844,6 +989,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <returns>The instance's work source.</returns>
     public IGpuWorkSource Work(int instance) => (((IGpuWorkSource?)m_nodes[instance]) ?? m_producers[instance]!.Work);
 
+    // One instance's capture target: a capture armed on it arms the runtime's one slot for that instance.
+    private sealed class InstanceCaptureTarget(RenderGraphRuntime runtime, int index) : ICaptureRequestTarget {
+        public string? PendingCapturePath => runtime.PendingCapturePath;
+
+        public void RequestCapture(FrameCaptureRequest request) => runtime.Arm(
+            index: index,
+            request: request
+        );
+    }
     // What a producer instance publishes: an image's format, or a buffer's size in bytes.
     private readonly record struct Published(GpuPixelFormat Format, ulong SizeBytes);
     // One input resolved at install: the version it binds and the producer whose output it reads.

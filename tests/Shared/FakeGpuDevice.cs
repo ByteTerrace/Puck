@@ -113,6 +113,9 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets every descriptor pool created, in creation order, as its creation sized it.</summary>
     public List<GpuDescriptorPoolSizes> PoolsCreated { get; } = [];
 
+    /// <summary>Gets or sets the list every recorded image transition is appended to, in recording order, or
+    /// <see langword="null"/> (the default) to record none, so a steady-frame allocation law is unaffected.</summary>
+    public List<(nint Image, GpuImageLayout Old, GpuImageLayout New)>? ImageTransitions { get; set; }
     /// <summary>Gets the number of <see cref="IGpuBindings.CanAdmit"/> calls, admitted or refused. Counted whether or not
     /// the device counts calls, and synchronized, so a harness whose pipelines build on the thread pool can read it.</summary>
     public int Admissions => Volatile.Read(location: ref m_admissions);
@@ -203,7 +206,10 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => Hit(key: "IGpuRecorder.DispatchIndirect");
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => Hit(key: "IGpuRecorder.ClearStorageBuffer");
-    void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionImageLayout");
+    void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
+        ImageTransitions?.Add(item: (imageHandle, oldLayout, newLayout));
+        Hit(key: "IGpuRecorder.TransitionImageLayout");
+    }
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionBuffer");
     IGpuCommandPool IGpuCommandPoolFactory.Create() {

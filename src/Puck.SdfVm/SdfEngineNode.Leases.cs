@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -126,8 +125,9 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
 
         return !ProduceFrame(context: in context).IsEmpty;
     }
-    /// <summary>Acquires the engine's latest completed output: its storage image, which the engine leaves in the general
-    /// layout between its submissions. The acquisition is counted until its lease is retired.</summary>
+    /// <summary>Acquires the engine's latest completed output: its storage image, in the layout the engine leaves it in
+    /// between its submissions (<see cref="SdfWorldEngine.OutputLayout"/>), which a consumer's planned barriers start from
+    /// and hand it back in. The acquisition is counted until its lease is retired.</summary>
     /// <param name="output">The output, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="false"/> before the current engine has produced a frame.</returns>
     public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
@@ -149,7 +149,8 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
                 imageViewHandle: engine.OutputImageViewHandle,
                 width: m_width
             ),
-            Layout: GpuImageLayout.General,
+            Layout: engine.OutputLayout,
+
             Lease: new GpuImageLease(
                 ImageViewHandle: engine.OutputImageViewHandle,
                 Release: (m_releaseOutput ??= ReleaseOutput),

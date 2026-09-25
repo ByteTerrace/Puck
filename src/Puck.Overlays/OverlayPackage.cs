@@ -15,7 +15,9 @@ namespace Puck.Overlays;
 /// static prefix (the token slab and the glyph pack), whose bases it pushes. The <c>Frame</c> elements' leases go to the
 /// frame's lease list, which retires them after the slot's fence. A frame with nothing visible records nothing and
 /// reports <see cref="RenderGraphPackageOutcome.DrewNothing"/>, so the instance publishes the input in the output's
-/// place; a capture follows it. Its ports are a fragment-sampled input and a color-attachment output, whose barriers the
+/// place and a capture follows it, when the recording may stand in
+/// (<see cref="RenderGraphPackageRecording.MayStandIn"/>); otherwise it draws the empty frame, which reproduces the
+/// input. Its ports are a fragment-sampled input and a color-attachment output, whose barriers the
 /// instance records from the plan, so the recorder records none.
 /// </para>
 /// </summary>
@@ -245,7 +247,12 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
 
             var visible = m_composer.Compose(renderTicks: recording.Context.RenderTicks);
 
-            if (!visible) {
+            // With nothing visible the world stands for the overlay's output when the instance lets it; otherwise the
+            // empty frame is drawn, which reproduces the world into the output.
+            if (
+                !visible &&
+                recording.MayStandIn
+            ) {
                 m_composer.FrameSlots.MoveTo(destination: recording.Leases);
 
                 return RenderGraphPackageOutcome.DrewNothing;

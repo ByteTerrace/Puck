@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The data an SDF world render host needs — the render boundary between a scene-owning application node (the
 /// overworld, a document-driven world) and the shared assembly in <see cref="SdfWorldRenderBuilder"/>. Everything
-/// backend-specific (kernel bytecode selection, child-node backend flags, overlay availability) derives from
+/// backend-specific (kernel bytecode selection, child-node backend flags) derives from
 /// <see cref="HostsOnDirectX"/> in one place, the builder; a spec never names a bytecode extension.
 /// </summary>
 /// <param name="FrameSource">The per-frame source of the scene, cameras, and viewport regions.</param>
@@ -27,10 +27,6 @@ public sealed record SdfWorldRenderSpec(
     /// per-view bindings resolve against, not a fixed viewport slot — see <see cref="SdfEngineNode"/>'s remarks for the
     /// per-frame slot derivation.</summary>
     public IReadOnlyDictionary<string, IRenderNode>? Children { get; init; }
-    /// <summary>An optional render-node decorator wrapped around the producer (e.g. the unified overlay). Applied on
-    /// every host backend — a decorator resolves neutral services and selects its bytecode from the resolved host
-    /// (the <see cref="SdfWorldRenderBuilder.BytecodeExtension"/> convention), exactly like the kernels.</summary>
-    public Func<SdfEngineNode, IRenderNode>? Decorate { get; init; }
     /// <summary>An optional in-place decorator applied to <see cref="FrameSource"/> before the engine node is built —
     /// the seam a host uses to wrap the scene's frame source (e.g. a diegetic-UI overlay that emits its own SDF
     /// geometry into the program). Returns the frame source to actually render; identity when absent.</summary>

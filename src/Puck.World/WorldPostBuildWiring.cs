@@ -447,7 +447,7 @@ internal static class WorldPostBuildWiring {
 
         if (services.GetService<WorldRenderProbe>() is { } renderProbe) {
             services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: () => {
-                if (renderProbe.Render?.PendingCapturePath is { } pending) {
+                if (renderProbe.Root?.PendingCapturePath is { } pending) {
                     Console.Error.WriteLine(value: $"[world.screenshot] WARNING: a capture of {pending} was still pending when the run ended — no frame composed after it was armed, so NO FILE WAS WRITTEN.");
                 }
             });
@@ -466,7 +466,15 @@ internal static class WorldPostBuildWiring {
                 // rather than inferred from whether it crashed.
                 Console.Error.WriteLine(value: $"[world.render] envelope: {composed.InstanceCapacity} instances, {composed.ProgramWordCapacity} program words, {composed.DynamicTransformCapacity} dynamic slots");
             }
+
+            // The default render graph plans here too, off the GPU, so a render.extensions config its set's schema does
+            // not bind is refused by name before the renderer is built.
+            _ = services.GetService<WorldRootGraph>();
         } catch (WorldRenderCapacityRefusedException refusal) {
+            Console.Error.WriteLine(value: $"[world] definition refused: {refusal.Message}");
+
+            return false;
+        } catch (WorldRootGraphRefusedException refusal) {
             Console.Error.WriteLine(value: $"[world] definition refused: {refusal.Message}");
 
             return false;

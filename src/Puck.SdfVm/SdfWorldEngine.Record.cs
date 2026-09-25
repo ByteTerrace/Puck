@@ -15,10 +15,7 @@ public sealed partial class SdfWorldEngine {
         // The non-export consumer set spans TWO stages — the presenter's fragment blit AND another engine's COMPUTE
         // sampler (a view engine's output bound as a screen source) — so the resting-stage scope names both; under
         // the frame ring the begin-of-frame re-transition below must order after whichever consumer read it last.
-        var restingLayout = (m_exportMode
-            ? GpuImageLayout.External
-            : GpuImageLayout.ShaderReadOnly
-        );
+        var restingLayout = OutputLayout;
         var restingStage = (m_exportMode
             ? GpuStage.ComputeShader
             : GpuStage.FragmentShader | GpuStage.ComputeShader

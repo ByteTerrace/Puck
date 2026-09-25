@@ -339,6 +339,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 )) {
                     throw new NotSupportedException(message: "PNG capture is unavailable.");
                 }
+
+                Console.Error.WriteLine(value: $"[capture] {m_descriptor.Name} -> {path}");
             })
         );
     }

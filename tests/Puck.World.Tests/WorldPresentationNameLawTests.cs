@@ -96,6 +96,35 @@ public sealed class WorldPresentationNameLawTests {
             expectedSubstring: "captures.rows[1].station 'lattice' differs from station 'Lattice' only in case"
         );
     }
+    // A row reads the root when it names no instance, and the world beneath the root's passes when it names it; every
+    // other name, the root's own included, is refused naming the row.
+    [Fact]
+    public void ACaptureRowNamesTheWorldInstanceOrNoneAndAnyOtherNameIsRefused() {
+        var definition = WithCaptureStation(station: "lattice");
+
+        foreach (var instance in new string?[] { null, WorldViewGraphs.WorldInstance }) {
+            Assert.Equal(
+                actual: Refusal(definition: definition with {
+                    Captures = definition.Captures! with {
+                        Rows = [definition.Captures.Rows[0] with { Instance = instance }],
+                    },
+                }),
+                expected: string.Empty
+            );
+        }
+
+        foreach (var instance in new[] { WorldViewGraphs.MainInstance, "elsewhere" }) {
+            Assert.Contains(
+                actualString: Refusal(definition: definition with {
+                    Captures = definition.Captures! with {
+                        Rows = [definition.Captures.Rows[0] with { Instance = instance }],
+                    },
+                }),
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: $"captures.rows[0].instance '{instance}' names no render-graph instance a capture can read"
+            );
+        }
+    }
     // The control: stations that differ in more than case are admitted together.
     [Fact]
     public void CaptureStationsThatDifferInMoreThanCaseAreAdmitted() {
