@@ -137,7 +137,11 @@ where it wrote one.
 **What a boot counts.** The `world.boot` work source counts
 `world.boot.compiled-hits`, one per boot whose drawn definition came from a
 `DEFN` chunk, and `world.boot.chunk-derivations`, one per chunk derived afresh.
-Both depend on what a boot finds on disk, so both are pacing-class.
+Both depend on what a boot finds on disk, so both are pacing-class. Every
+deterministic-class count reads the same whether or not a boot finds a compiled
+world: the `DEFN` load's parse belongs to the hit and is not a
+`world.boot.parses`. `puck counters` relies on that, because its two backend
+legs share one per-user cache and only the first can miss it.
 
 A boot from a compiled world still validates the definition and compiles its
 rules, and still composes, parses and serializes the authored document to

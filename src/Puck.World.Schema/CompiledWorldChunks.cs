@@ -246,7 +246,7 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
             return false;
         }
 
-        if (!WorldDefinitionFileSource.TryParseDocument(
+        if (!WorldDefinitionFileSource.TryParseCompiledDocument(
             definition: out var drawn,
             json: json,
             reason: out reason,

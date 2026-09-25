@@ -1844,9 +1844,26 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="reason">The named parse or schema failure.</param>
     /// <returns>Whether parsing and schema checks succeeded. No adjacency or local-world validation runs here.</returns>
     public static bool TryParseDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) {
-        definition = null;
-
         WorldBootWork.Count(kind: WorldBootWork.Parses);
+
+        return TryParseCompiledDocument(
+            definition: out definition,
+            json: json,
+            reason: out reason,
+            sourceName: sourceName
+        );
+    }
+    /// <summary>Parses a compiled world's drawn definition exactly as <see cref="TryParseDocument"/> parses a composed
+    /// document, without counting a <see cref="WorldBootWork.Parses"/>. The parse is the work of a compiled-world hit,
+    /// which <see cref="WorldBootWork.CompiledHits"/> counts; whether a boot finds a compiled world depends on the
+    /// per-user cache, so counting it as a parse would make a deterministic count depend on that cache.</summary>
+    /// <param name="json">The drawn definition's JSON text.</param>
+    /// <param name="sourceName">The source name echoed in failures.</param>
+    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
+    /// <param name="reason">The named parse or schema failure.</param>
+    /// <returns>Whether parsing and schema checks succeeded.</returns>
+    public static bool TryParseCompiledDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) {
+        definition = null;
 
         // This is the loader's first parse: a reference into a draw site that has not filled yet stays attached and
         // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.
