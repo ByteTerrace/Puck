@@ -89,7 +89,10 @@ Direct3D 12 cells are blocked and name the reason.
 
 **The matrix.** Two backends (Vulkan, then Direct3D 12), two resolutions
 (1280×800, the Steam Deck's panel and the flagship world's authored size, and
-1920×1080), and two workloads:
+1920×1080), and two workloads. Every cell's script first waits, for up to 180
+seconds, for the engine to be ready (`world.wait ready`): a clean install
+builds the engine's pipelines on a cold driver cache, so the warm-up counts
+from readiness rather than from boot.
 
 | Workload | World | What a cell does |
 |---|---|---|

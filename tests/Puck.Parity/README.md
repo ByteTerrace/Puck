@@ -36,7 +36,7 @@ Every armed capture is exactly one manifest entry. Either it carries the
 | `busy` | Another capture still held the render chain when this one was armed. |
 | `stale` | The frame that served it showed a later tick; the detail names both ticks. |
 | `failed` | The readback, PNG write, or PNG decode failed. |
-| `unserved` | No frame served it: the run ended first, or the offscreen host's 60-second capture hold ran out. The detail names why the render chain could not serve it, such as "the engine's pipelines never installed". |
+| `unserved` | No frame served it: the run ended first, or the offscreen host's hold ran out — 180 seconds while the engine's pipeline set builds, 60 seconds once the engine is ready. The detail names why, such as "the engine's pipeline set is building (5 of 14 pipelines created)". |
 
 A landed frame is named `<station>~<tick>.png` (`WorldCaptureRow.CaptureName`,
 a generated file name), so a station may not carry `~`. The comparator writes a

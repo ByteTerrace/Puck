@@ -23,8 +23,9 @@ public enum WorldCaptureRefusal : byte {
     Stale,
     /// <summary>The readback, the PNG write, or the PNG's decode failed.</summary>
     Failed,
-    /// <summary>No frame served the capture: the run ended first, or a host holding its clock for it spent its hold
-    /// budget first, and the detail names why the render chain could not serve it.</summary>
+    /// <summary>No frame served the capture: the run ended first, or a host holding its clock for it spent a hold
+    /// budget first, and the detail names why the render chain could not serve it, naming the engine's pipeline build
+    /// while the engine was not ready.</summary>
     Unserved,
 }
 /// <summary>One scheduled capture's outcome, wire-shaped to the <c>puck.parity.manifest.v1</c> contract: either a
@@ -66,8 +67,11 @@ public sealed record WorldCaptureManifest(string Schema, string Backend, string 
 /// <para>
 /// A host that holds its clock (the offscreen host) goes further: <see cref="HoldsClock"/> withholds every step while
 /// a capture armed at the last published tick is neither served nor refused, whatever keeps the render chain from
-/// serving it, so no tick past the armed one runs before the capture is decided; past <see cref="HoldBudgetSeconds"/>
-/// of holding, the capture is refused by name and the run steps on. <see cref="Drain"/> decides whatever is still
+/// serving it, so no tick past the armed one runs before the capture is decided. The capture hold counts from
+/// readiness: host time held while the engine is not ready (<see cref="IWorldEngineReadiness"/>: its pipeline set not
+/// yet installed, or no frame produced from it) is spent from <see cref="BuildHoldBudgetSeconds"/>, and only time held
+/// while it is ready from <see cref="HoldBudgetSeconds"/>. Past either budget the capture is refused by name, naming
+/// the build when the build spent it, and the run steps on. <see cref="Drain"/> decides whatever is still
 /// owed a frame as the run ends, before the render chain is disposed. The scheduler counts what it sees
 /// under <see cref="WorkSourceName"/>: <see cref="TicksWhileArmed"/>, the ticks published while a capture armed at an
 /// earlier tick was still unserved, which a holding host keeps at zero, and <see cref="HeldTicks"/>, the host time
@@ -101,7 +105,7 @@ public sealed class WorldCaptureScheduler {
     // each armed tick: the value the offscreen presentation's mirror presents at that tick with the fraction pinned.
     private readonly WorldStateMirror m_state;
     private readonly WorldServer m_server;
-    private readonly Func<string?>? m_unservedReason;
+    private readonly IWorldEngineReadiness? m_readiness;
     private readonly string m_worldFile;
 
     private readonly WorkCounterSet m_work = new(
@@ -109,7 +113,9 @@ public sealed class WorldCaptureScheduler {
         name: WorkSourceName
     );
 
-    // The host time a holding host has withheld steps for, over the whole run, against HoldBudgetTicks.
+    // The host time a holding host has withheld steps for over the whole run: while the engine was not ready, against
+    // BuildHoldBudgetTicks, and while it was ready, against HoldBudgetTicks.
+    private ulong m_buildHeldTicks;
     private ulong m_heldTicks;
     private ulong? m_lastPublishedTick;
     private Pending? m_pending;
@@ -122,12 +128,12 @@ public sealed class WorldCaptureScheduler {
     /// <param name="worldFile">The booted world document's file name.</param>
     /// <param name="captureTarget">Returns the render chain captures are armed on, or <see langword="null"/> while
     /// none is composed; <see langword="null"/> itself for a boot that composes no renderer.</param>
-    /// <param name="unservedReason">Returns why the render chain would not serve a capture with the frame it produces
-    /// now, or <see langword="null"/> when it would; a capture refused for outliving the hold budget names it.
-    /// <see langword="null"/> itself when nothing can say.</param>
+    /// <param name="readiness">The engine readiness a hold reads: time held while it is not ready is spent from the
+    /// pipeline-build budget, and a capture refused then names its reason. <see langword="null"/> for a boot that
+    /// composes no renderer, whose holds all count as ready.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/>, <paramref name="directory"/>,
     /// <paramref name="backend"/>, or <paramref name="worldFile"/> is <see langword="null"/>.</exception>
-    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<ICaptureRequestTarget?>? captureTarget, Func<string?>? unservedReason = null) {
+    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: backend);
@@ -138,7 +144,7 @@ public sealed class WorldCaptureScheduler {
         m_backend = backend;
         m_worldFile = worldFile;
         m_captureTarget = captureTarget;
-        m_unservedReason = unservedReason;
+        m_readiness = readiness;
         m_state = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => server.Definition));
 
         if (server.Definition.Captures is not { Rows: { } rows }) {
@@ -182,20 +188,27 @@ public sealed class WorldCaptureScheduler {
 
     /// <summary>The name a counters report heads the scheduler's section with.</summary>
     public const string WorkSourceName = "world.captures";
-    /// <summary>The host time, in seconds, a run may hold its clock for unserved captures, summed over the whole run.
-    /// It outlasts a cold driver cache building the engine's pipelines, and a parity leg's whole hold still fits inside
-    /// that leg's exit backstop with the leg's own run after it.</summary>
+    /// <summary>The host time, in seconds, a run may hold its clock for unserved captures while the engine is ready,
+    /// summed over the whole run.</summary>
     public const int HoldBudgetSeconds = 60;
     /// <summary><see cref="HoldBudgetSeconds"/> in engine ticks, the unit a holding host withholds time in.</summary>
     public const ulong HoldBudgetTicks = (HoldBudgetSeconds * EngineTicks.PerSecond);
+    /// <summary>The host time, in seconds, a run may hold its clock for unserved captures while the engine is not ready,
+    /// summed over the whole run: the engine's pipeline set building on a cold driver cache, or rebuilding after a device
+    /// loss. Both budgets together still fit inside a parity leg's exit backstop with the leg's own run after them.</summary>
+    public const int BuildHoldBudgetSeconds = 180;
+    /// <summary><see cref="BuildHoldBudgetSeconds"/> in engine ticks.</summary>
+    public const ulong BuildHoldBudgetTicks = (BuildHoldBudgetSeconds * EngineTicks.PerSecond);
 
     /// <summary>Answers a host that holds its clock: whether to withhold its next step because a capture armed at the
     /// last published tick is still neither served nor refused. The render chain may not be able to serve it yet for
     /// any reason (the engine's pipelines not yet installed, a device being rebuilt); the answer is the same. The hold is
-    /// bounded: once the run has held its clock for <see cref="HoldBudgetSeconds"/> in all, the capture is refused as
-    /// <see cref="WorldCaptureRefusal.Unserved"/>, naming why the render chain could not serve it, and withdrawn from
-    /// the chain, so the host steps on and a later capture can arm. A capture that cannot be served after the budget is
-    /// spent is refused the same way at once.</summary>
+    /// bounded, and counts from readiness: time withheld while the engine is not ready is spent from
+    /// <see cref="BuildHoldBudgetSeconds"/>, and time withheld while it is ready from <see cref="HoldBudgetSeconds"/>, each
+    /// summed over the run. Once the budget the current hold draws on is spent, the capture is refused as
+    /// <see cref="WorldCaptureRefusal.Unserved"/>, naming the engine's pipeline build when it was the build that held
+    /// it, and withdrawn from the chain, so the host steps on and a later capture can arm. A capture that cannot be
+    /// served after its budget is spent is refused the same way at once.</summary>
     /// <param name="withheldTicks">The host time withheld when the answer is <see langword="true"/>, counted under
     /// <see cref="HeldTicks"/>.</param>
     /// <returns><see langword="true"/> to withhold the step.</returns>
@@ -207,19 +220,38 @@ public sealed class WorldCaptureScheduler {
             return false;
         }
 
-        if (m_heldTicks >= HoldBudgetTicks) {
-            Withdraw(
-                detail: $"{(m_unservedReason?.Invoke() ?? "no frame served it")} (the host held its clock at tick {pending.Tick} until its {HoldBudgetSeconds}-second capture hold budget was spent)",
-                pending: pending
-            );
+        if (m_readiness is { IsReady: false } readiness) {
+            if (m_buildHeldTicks >= BuildHoldBudgetTicks) {
+                Withdraw(
+                    detail: $"{(readiness.NotReadyReason ?? "the engine was not ready")} (the host held its clock at tick {pending.Tick} while the engine's pipeline set built, until its {BuildHoldBudgetSeconds}-second pipeline-build hold budget was spent)",
+                    pending: pending
+                );
 
-            return false;
+                return false;
+            }
+
+            m_buildHeldTicks = Spend(
+                budget: BuildHoldBudgetTicks,
+                held: m_buildHeldTicks,
+                withheld: withheldTicks
+            );
+        } else {
+            if (m_heldTicks >= HoldBudgetTicks) {
+                Withdraw(
+                    detail: $"no frame served it (the host held its clock at tick {pending.Tick} until its {HoldBudgetSeconds}-second capture hold budget was spent)",
+                    pending: pending
+                );
+
+                return false;
+            }
+
+            m_heldTicks = Spend(
+                budget: HoldBudgetTicks,
+                held: m_heldTicks,
+                withheld: withheldTicks
+            );
         }
 
-        m_heldTicks = (((HoldBudgetTicks - m_heldTicks) > withheldTicks)
-            ? (m_heldTicks + withheldTicks)
-            : HoldBudgetTicks
-        );
         m_work.Add(
             amount: ((long)Math.Min(
                 val1: withheldTicks,
@@ -231,6 +263,12 @@ public sealed class WorldCaptureScheduler {
         return true;
     }
 
+    // Adds withheld host time to a hold budget's spent time, saturating at the budget.
+    private static ulong Spend(ulong budget, ulong held, ulong withheld) =>
+        (((budget - held) > withheld)
+            ? (held + withheld)
+            : budget
+        );
     private void Arm(WorldCaptureRow row, ulong tick) {
         if (string.IsNullOrEmpty(value: m_directory)) {
             Console.Error.WriteLine(value: $"[captures] {row.Station} tick {tick}: captures.directory did not resolve — skipping.");
@@ -772,7 +810,7 @@ public sealed class WorldCaptureScheduler {
         }
 
         Withdraw(
-            detail: $"the run ended before any frame served it (last completed tick {(m_lastPublishedTick?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")})",
+            detail: $"the run ended before any frame served it (last completed tick {(m_lastPublishedTick?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}){((m_readiness is { IsReady: false } readiness) ? $"; {readiness.NotReadyReason}" : "")}",
             pending: pending
         );
     }

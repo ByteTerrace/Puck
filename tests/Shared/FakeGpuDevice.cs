@@ -45,9 +45,9 @@ internal sealed class FakeGpuDevice :
     }
 
     public long AdapterLuid => 0L;
-    /// <summary>Gets or sets a hook every compute pipeline creation runs first, on whatever thread creates it — a law
-    /// holds a pipeline build by blocking here.</summary>
-    public Action? BeforeComputePipeline { get; set; }
+    /// <summary>Gets or sets a hook every compute pipeline creation runs first, with the pipeline's description, on
+    /// whatever thread creates it — a law holds a pipeline build by blocking here, and counts or orders creations.</summary>
+    public Action<GpuComputePipelineDescription>? BeforeComputePipeline { get; set; }
     public GpuDeviceCapabilities? Capabilities => null;
     public GpuDeviceIdentity? Identity => null;
     public GpuMemoryProfile MemoryProfile => default;
@@ -81,7 +81,7 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
     IGpuCommandPool IGpuCommandPoolFactory.Create() => new Resource();
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
-        BeforeComputePipeline?.Invoke();
+        BeforeComputePipeline?.Invoke(obj: description);
 
         return new Resource();
     }

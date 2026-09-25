@@ -165,9 +165,12 @@ the leg machinery it shares with `puck parity`, writes a
 backends disagree on. `puck counters compare` holds two reports to each other
 by class. Laws over fixture readings and reports cover the classification and
 the comparison, and a server law covers the forwarders across `world.reload`.
-The workload sets `world.cadence off` so every pass runs; the render levers
-(`WorldRenderLeverCommandModule`) are composed by the offscreen shape as well as
-the windowed one. The pipeline-cache counts in a
+The workload sets `world.cadence off` so every pass runs, then waits for the
+engine to be ready (`world.wait ready 180`: its pipeline set installed and its
+first frame produced) and reads 120 ticks after that, never at a fixed tick, so
+a cold driver cache cannot leave a leg reading a partial pipeline set and every
+world pass as absent. The render levers (`WorldRenderLeverCommandModule`) are
+composed by the offscreen shape as well as the windowed one. The pipeline-cache counts in a
 report are pacing: each leg boots on a fresh state root, so every run starts
 with a cold cache and reports misses only.
 
@@ -915,14 +918,24 @@ through P2's model (`GpuPipelineCacheWork`, source `pipeline-cache.<backend>`). 
 leg, a `puck counters` leg, or any boot with a fresh `--state-dir` starts cold.
 The offscreen harness holds its clock for that cold build: it steps no tick past
 an armed capture's tick until the capture is served or refused, so a cold first
-boot lengthens a `puck parity` leg instead of losing its first capture, and a
-capture still unserved after a 60-second hold is refused as `unserved`, naming
-the reason.
+boot lengthens a `puck parity` leg instead of losing its first capture. The
+hold counts from readiness: while the engine is not ready it spends a
+180-second pipeline-build budget (`WorldCaptureScheduler.BuildHoldBudgetSeconds`),
+and once it is ready the 60-second capture hold, each summed over the run; a
+capture still unserved past either is refused as `unserved`, and a refusal the
+build caused names it and its progress. `world.wait ready <seconds>` is the
+console's wait on the same readiness (`IWorldEngineReadiness`, over
+`SdfEngineNode.IsReady`), and `puck counters`, the `world-counters` canary and
+`puck qualify` wait on it before they read counted work.
 
 **Check** for that part, all holding: `SdfPipelineBuildLivenessLawTests` shows
 the frame thread keeps draining the console and a wait keeps its deadline while
-a pipeline build is held, and that a hosted pane still produces every frame
-meanwhile. On both backends, a second offscreen boot on the same state root
+a pipeline build is held, that a hosted pane still produces every frame
+meanwhile, and that a device loss or the last release during a build waits for
+exactly the creations already in the driver. `WorldCaptureHoldLawTests` shows a
+build held past the capture hold budget still serves its capture, and one held
+past the build budget refuses it naming the build. `WorldWaitReadyLawTests`
+shows `world.wait ready` holds its session until the engine is ready. On both backends, a second offscreen boot on the same state root
 creates every pipeline from a cache hit with no miss, where the first boot
 misses. After a kernel rebuild that changes most kernel binaries, the supersede
 fixture runs six instances in parallel on each backend: every leg installs its
@@ -939,8 +952,11 @@ freed once the node's second submission after the install completes.
 The engine node and its views share their pipeline sets through one
 `SdfWorldPipelineCache` per composition, handed to each of them: one
 set per device, kernel set (`SdfWorldKernels.ContentKey`) and brick-pipeline
-choice, leased by every holder and disposed with its last lease after any build
-in flight returns. The cache reads each backend's deployed kernels once, and it
+choice, leased by every holder and disposed with its last lease. A set builds up
+to `SdfWorldPipelines.BuildConcurrency` pipelines at once on the thread pool,
+the three views variants last, and checks its cancel between pipelines, so the
+last release waits only for the pipelines already in the driver and a shutdown
+never waits out a whole cold build. The cache reads each backend's deployed kernels once, and it
 counts the pipelines and shader modules it creates as its own source,
 `gpu.sdf-pipelines`, so no node's or view's ledger counts them. A node whose
 set another engine on the device also leases refuses a kernel reload, because a
@@ -2031,7 +2047,7 @@ words, screens, decals, the glyph atlas, the brick pool), group 2 the instance
 visibility, shadow, color, and the 32 screen sources as an array with a sampler
 table). `SdfEngineNode` splits into an `SdfWorldResidency` for the world's
 half and the graph runtime for captures, work, readiness and
-`UnservedCaptureReason`; `SdfWorldEngine`'s partials become per-pass recorders
+`NotReadyReason`; `SdfWorldEngine`'s partials become per-pass recorders
 and its frame packers frame-block writers; the views become `sdf.world`
 instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 `sdf-world.hlsli` into a generated `frame/`, `march/`, `surface/`, `shade/` and

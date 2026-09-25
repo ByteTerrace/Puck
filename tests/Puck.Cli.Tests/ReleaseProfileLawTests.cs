@@ -201,6 +201,13 @@ public sealed class ReleaseProfileLawTests {
         Assert.Equal(actual: script.Expectation.WorldReloads, expected: 2);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.counters --json")), expected: 4);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.wait 60")), expected: 2);
+        Assert.Equal(
+            actual: lines.Where(predicate: static line => line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "world."
+            )).Take(count: 2),
+            expected: ["world.cadence off", $"world.wait ready {QualificationPlan.ReadySeconds}"]
+        );
     }
     [Fact]
     public void APipelineCellArmsWhatItsExpectationCounts() {

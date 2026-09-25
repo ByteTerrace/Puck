@@ -28,7 +28,7 @@ public sealed class BackgroundBuild<T> where T : class {
     public bool IsPending => (m_task is not null);
 
     // Faults of a detached build are observed here, so a superseded failure never reaches the unobserved-task handler.
-    private static void Finish(Task<T> task, CancellationTokenSource cancellation, Action<T>? discard) {
+    internal static void Finish(Task<T> task, CancellationTokenSource cancellation, Action<T>? discard) {
         if (task.IsCompletedSuccessfully) {
             discard?.Invoke(obj: task.Result);
         } else {
@@ -75,9 +75,16 @@ public sealed class BackgroundBuild<T> where T : class {
     /// before releasing what the build depends on: a device about to be destroyed must not have an object creation in
     /// flight. Does nothing when no build is pending.</summary>
     /// <param name="discard">Releases a result that completed, or <see langword="null"/> when the result owns nothing.</param>
-    public void CancelAndWait(Action<T>? discard = null) {
+    public void CancelAndWait(Action<T>? discard = null) =>
+        Detach().Wait(discard: discard);
+    /// <summary>Cancels the pending build and hands it to the caller to wait out with
+    /// <see cref="CanceledBuild{T}.Wait"/>. The cancel takes effect before this returns, and the build is no longer
+    /// pending; only the wait is deferred. Use it where the cancel must be visible inside a lock that guards the build
+    /// and the wait must not hold that lock. Returns an empty handle when no build is pending.</summary>
+    /// <returns>The canceled build, which the caller must wait out exactly once.</returns>
+    public CanceledBuild<T> Detach() {
         if (m_task is not { } task) {
-            return;
+            return default;
         }
 
         var cancellation = m_cancellation!;
@@ -85,10 +92,9 @@ public sealed class BackgroundBuild<T> where T : class {
         m_task = null;
         m_cancellation = null;
         cancellation.Cancel();
-        ((IAsyncResult)task).AsyncWaitHandle.WaitOne();
-        Finish(
+
+        return new CanceledBuild<T>(
             cancellation: cancellation,
-            discard: discard,
             task: task
         );
     }
@@ -143,5 +149,37 @@ public sealed class BackgroundBuild<T> where T : class {
         }
 
         return true;
+    }
+}
+/// <summary>
+/// A build <see cref="BackgroundBuild{T}.Detach"/> canceled, still running or already finished, for the caller to wait
+/// out once with <see cref="Wait"/> before releasing what the build depends on. The default value is an empty handle,
+/// whose wait returns at once.
+/// </summary>
+/// <typeparam name="T">The built candidate.</typeparam>
+public readonly struct CanceledBuild<T> where T : class {
+    private readonly CancellationTokenSource? m_cancellation;
+    private readonly Task<T>? m_task;
+
+    internal CanceledBuild(Task<T> task, CancellationTokenSource cancellation) {
+        m_cancellation = cancellation;
+        m_task = task;
+    }
+
+    /// <summary>Blocks until the canceled build returns, then hands a completed result to
+    /// <paramref name="discard"/> on this thread. The wait is bounded by the build's current unit of work.</summary>
+    /// <param name="discard">Releases a result that completed, or <see langword="null"/> when the result owns
+    /// nothing.</param>
+    public void Wait(Action<T>? discard = null) {
+        if (m_task is not { } task) {
+            return;
+        }
+
+        ((IAsyncResult)task).AsyncWaitHandle.WaitOne();
+        BackgroundBuild<T>.Finish(
+            cancellation: m_cancellation!,
+            discard: discard,
+            task: task
+        );
     }
 }

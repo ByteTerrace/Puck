@@ -47,6 +47,15 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
 
         return m_lease.Poll();
     }
+    // Names where the set stands while it is not ready: not yet asked for, its lease still being taken (the deployed
+    // kernels loading), or its build and that build's progress. Builds a string, so it is read only to report.
+    public string Describe() => ((m_lease is { } lease)
+        ? $"the engine's pipeline set is {lease.Progress.Describe()}"
+        : (m_acquire.IsPending
+            ? "the engine's pipeline set is queued behind loading its kernels"
+            : "the engine's pipeline set has not been requested: no frame has been produced"
+        )
+    );
     // Waits out a lease still being taken and gives up the lease, which disposes the set when no other holder leases
     // it. Call after disposing every engine built from the set and before the device goes away.
     public void Release() {
