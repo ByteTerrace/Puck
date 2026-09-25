@@ -255,7 +255,8 @@ internal sealed partial class WorldScreenBinder {
         }
     }
     // One screen's own window or monitor capture: it pulls on the capture's cadence when published and is disposed with
-    // the slot.
+    // the slot. It is an imported source on either route: the CPU tier a Vulkan host takes is the import's staged-copy
+    // fallback, as the camera's CPU tier is, so its descriptor agrees with the producer's registered shape.
     private sealed class CaptureSlotFeed : IWorldImageFeed {
         private readonly WorldScreenBinder m_binder;
 
@@ -269,10 +270,7 @@ internal sealed partial class WorldScreenBinder {
                 Format: ImagePixelFormat.B8G8R8A8Unorm,
                 Height: ((uint)feed.Profile.Height),
                 Producer: WorldImageProducerSettings.CaptureId,
-                Transport: (feed.GpuRoute
-                    ? ImageSourceTransport.Imported
-                    : ImageSourceTransport.Uploaded
-                ),
+                Transport: ImageSourceTransport.Imported,
                 Width: ((uint)feed.Profile.Width)
             );
         }
