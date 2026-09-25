@@ -220,7 +220,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         runtime.RenderPass = objects.RenderPass;
         runtime.Secondary = objects.Secondary;
 
-        if (declaration.Kind == ShaderPipelinePassKind.Compute) {
+        if (declaration.Kind == ShaderPipelineDocumentPassKind.Compute) {
             runtime.Pools = new IGpuCommandPool[m_inFlight];
         } else {
             // Geometry buffers are created through the device's buffer factory, not the node's counted one, so they count
@@ -362,7 +362,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 : GpuComputeBindingKind.StorageBufferRead)
             ));
         }
-        if (pass.Kind == ShaderPipelinePassKind.Compute) {
+        if (pass.Kind == ShaderPipelineDocumentPassKind.Compute) {
             foreach (var output in pass.OutputReferences) {
                 result.Add(item: new GpuComputeBinding(
                     output.Binding!.Value,
@@ -583,7 +583,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 );
             }
         }
-        if (pass.Spec.Kind == ShaderPipelinePassKind.Compute) {
+        if (pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute) {
             foreach (var output in pass.Outputs) {
                 var resource = m_resourceLookup[output.Name];
                 var binding = pass.Bindings[descriptorIndex++];
@@ -945,7 +945,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             slot: slot
         );
 
-        if (pass.Spec.Kind == ShaderPipelinePassKind.Compute) {
+        if (pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute) {
             var handle = pass.Pools![slot].CommandBufferHandle;
             var recorder = m_gpu.Recorder;
 

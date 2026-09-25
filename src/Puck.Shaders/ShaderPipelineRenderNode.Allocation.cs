@@ -44,14 +44,14 @@ public sealed partial class ShaderPipelineRenderNode {
                 pass.PoolsDescriptors![slot] = bindings.CreatePool(sizes: GpuDescriptorPoolSizes.ForSets(pass.Bindings));
                 pass.Sets![slot] = bindings.AllocateSet(
                     pass.PoolsDescriptors[slot],
-                    ((pass.Spec.Kind == ShaderPipelinePassKind.Compute)
+                    ((pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute)
                     ? pass.Compute!.DescriptorSetLayoutHandle
                     : pass.Graphics!.DescriptorSetLayoutHandle)
                 );
                 pass.Samplers![slot] = bindings.CreateSampler();
             }
 
-            if (pass.Spec.Kind == ShaderPipelinePassKind.Compute) {
+            if (pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute) {
                 pass.Pools![slot] = m_gpu.CommandPoolFactory.Create();
             } else {
                 pass.Pre![slot] = m_gpu.CommandPoolFactory.Create();

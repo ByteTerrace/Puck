@@ -6,18 +6,19 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>A resource's Direct3D 12 register number equals its Vulkan binding number, and its register space equals
 /// its descriptor set, so no backend remaps a register. These laws read every HLSL source and include the build
-/// compiles or packages: the shader items each <c>src</c> project declares for <c>build/Shaders.targets</c>, and the
+/// compiles or packages: the shader items each <c>src</c> project declares for <c>build/Shaders.targets</c>, the graph's package-library kernels, and the
 /// pipeline sources <c>build/WorldAssets.targets</c> hands the tree run that fills the shipped package store, with
 /// every source a shipped <c>*.pipeline.json</c> names. They hold every declaration that carries both a
 /// <c>[[vk::binding(N, S)]]</c> and a <c>register(xN, spaceS)</c> to that rule.</summary>
 public sealed partial class ShaderRegisterBindingLawTests {
-    // The item types build/Shaders.targets compiles, or hashes as includes of what it compiles, and the pipeline sources
-    // build/WorldAssets.targets packages into the store beside the shipped worlds.
+    // The item types build/Shaders.targets compiles, or hashes as includes of what it compiles, the pipeline sources
+    // build/WorldAssets.targets packages into the store beside the shipped worlds, and the graph's package-library kernels.
     private static readonly string[] ShaderItemTypes = [
         "ComputeShaderSource",
         "Direct3D11KernelSource",
         "FragmentShaderSource",
         "PuckWorldPipelineSource",
+        "RenderGraphPackageSource",
         "ShaderInclude",
         "VertexShaderSource",
     ];
@@ -119,9 +120,6 @@ public sealed partial class ShaderRegisterBindingLawTests {
         "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.hlsli sdfScreenLights register(t38) binding(11, 0)",
         "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.hlsli sdfVolumes register(t43) binding(48, 0)",
         "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.hlsli viewports register(t1) binding(2, 0)",
-        // The resample kernel: P11b ports it into the graph's package library, and P14 deletes this copy.
-        "src/Puck.SdfVm/Assets/Shaders/Resample/resample.comp.hlsl Source register(t0) binding(1, 0)",
-        "src/Puck.SdfVm/Assets/Shaders/Resample/resample.comp.hlsl SourceSampler register(s0) binding(1, 0)",
     ];
 
     [GeneratedRegex(pattern: @"vk::binding\(\s*(?<binding>\d+)\s*(?:,\s*(?<set>\d+)\s*)?\)")]
@@ -246,9 +244,9 @@ public sealed partial class ShaderRegisterBindingLawTests {
             ));
         }
     }
-    // The build's shader sources and includes, grouped by the project that declares them, in ordinal path order. A
-    // pipeline document among them stands for the sources its passes name.
-    private static IEnumerable<string[]> ShippedShaderProjects(string root) {
+    // Each project's shader items as its csproj and imports declare them: the project, the item type, and every file the
+    // item's includes reach less its excludes, projects in ordinal path order.
+    private static IEnumerable<(string Project, string ItemType, string File)> ShaderItems(string root) {
         foreach (var project in Directory.EnumerateFiles(
             path: Path.Combine(
                 path1: root,
@@ -258,27 +256,37 @@ public sealed partial class ShaderRegisterBindingLawTests {
             searchPattern: "*.csproj"
         ).Order(comparer: StringComparer.Ordinal)) {
             var projectDirectory = Path.GetDirectoryName(path: project)!;
-            var files = ProjectAndImports(project: project)
-                .SelectMany(selector: static document => document.Descendants())
-                .Where(predicate: static element => ShaderItemTypes.Contains(value: element.Name.LocalName))
-                .SelectMany(selector: element => {
-                    var excludes = (((string?)element.Attribute(name: "Exclude")) ?? string.Empty).Split(
-                        options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
-                        separator: ';'
-                    );
 
-                    return (((string?)element.Attribute(name: "Include")) ?? string.Empty).Split(
-                        options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
-                        separator: ';'
-                    ).SelectMany(selector: include => Expand(
-                        include: include,
-                        projectDirectory: projectDirectory
-                    )).Where(predicate: file => !excludes.Any(predicate: exclude => Excludes(
-                        exclude: exclude,
-                        file: file,
-                        projectDirectory: projectDirectory
-                    )));
-                })
+            foreach (var element in ProjectAndImports(project: project)
+                .SelectMany(selector: static document => document.Descendants())
+                .Where(predicate: static element => ShaderItemTypes.Contains(value: element.Name.LocalName))) {
+                var excludes = (((string?)element.Attribute(name: "Exclude")) ?? string.Empty).Split(
+                    options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
+                    separator: ';'
+                );
+
+                foreach (var file in (((string?)element.Attribute(name: "Include")) ?? string.Empty).Split(
+                    options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
+                    separator: ';'
+                ).SelectMany(selector: include => Expand(
+                    include: include,
+                    projectDirectory: projectDirectory
+                )).Where(predicate: file => !excludes.Any(predicate: exclude => Excludes(
+                    exclude: exclude,
+                    file: file,
+                    projectDirectory: projectDirectory
+                )))) {
+                    yield return (project, element.Name.LocalName, file);
+                }
+            }
+        }
+    }
+    // The build's shader sources and includes, grouped by the project that declares them, in ordinal path order. A
+    // pipeline document among them stands for the sources its passes name.
+    private static IEnumerable<string[]> ShippedShaderProjects(string root) {
+        foreach (var project in ShaderItems(root: root).GroupBy(keySelector: static item => item.Project)) {
+            var files = project
+                .Select(selector: static item => item.File)
                 .SelectMany(selector: static file => (file.EndsWith(
                     comparisonType: StringComparison.Ordinal,
                     value: ".pipeline.json"
@@ -451,6 +459,31 @@ public sealed partial class ShaderRegisterBindingLawTests {
         Assert.Equal(
             actual: violations.Order(comparer: StringComparer.Ordinal),
             expected: KnownViolations.Order(comparer: StringComparer.Ordinal)
+        );
+    }
+    // The register law holds only the files the item types reach, so an item type that stops reaching any file, such as a
+    // renamed item or a moved glob, would leave its kernels unchecked while the law still passed.
+    [Fact]
+    public void Every_shader_item_type_reaches_a_source_and_the_package_library_reaches_its_resample_kernel() {
+        var root = RepositoryPaths.RequireRoot();
+        var filesByType = ShaderItems(root: root).ToLookup(
+            elementSelector: item => Path.GetRelativePath(
+                path: item.File,
+                relativeTo: root
+            ).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            ),
+            keySelector: static item => item.ItemType
+        );
+
+        Assert.Equal(
+            actual: ShaderItemTypes.Where(predicate: type => !filesByType[type].Any()),
+            expected: []
+        );
+        Assert.Contains(
+            collection: filesByType["RenderGraphPackageSource"],
+            expected: "src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl"
         );
     }
     [Fact]

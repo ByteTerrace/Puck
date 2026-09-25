@@ -91,13 +91,16 @@ public sealed record ShaderPipelineAttachment(
 /// <param name="Accesses">Every storage instance the pass touches, in recording order, with the barrier each needs.</param>
 /// <param name="Attachments">A graphics pass's attachments, its color attachment first; empty for a compute pass. The
 /// render pass leaves every attachment in its attachment layout, and a later access's planned barrier moves it on.</param>
+/// <param name="Kind">The planner's kind: the document pass's kind, or <see cref="ShaderPipelinePassKind.Package"/> for a
+/// package's pass, whose <paramref name="Declaration"/> is the compute shape it was ordered as.</param>
 public sealed record ShaderPipelinePlannedPass(
     ShaderPipelinePass Declaration,
     int Index,
     IReadOnlyList<int> Dependencies,
     ShaderPipelineParameterLayout Parameters,
     IReadOnlyList<ShaderPipelineAccess> Accesses,
-    IReadOnlyList<ShaderPipelineAttachment> Attachments
+    IReadOnlyList<ShaderPipelineAttachment> Attachments,
+    ShaderPipelinePassKind Kind
 ) {
     /// <summary>Gets the pass name.</summary>
     public string Name => Declaration.Name;

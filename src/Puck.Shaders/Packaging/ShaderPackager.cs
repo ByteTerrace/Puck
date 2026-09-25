@@ -85,7 +85,7 @@ public sealed partial class ShaderPackager {
                 Vulkan: ShaderCompiler.VulkanVersion
             ),
             WorkgroupInvocations: plan.Passes
-                .Where(predicate: static pass => (pass.Declaration.Kind == ShaderPipelinePassKind.Compute))
+                .Where(predicate: static pass => (pass.Declaration.Kind == ShaderPipelineDocumentPassKind.Compute))
                 .Select(selector: static pass => checked(((pass.Declaration.GroupSizeX * pass.Declaration.GroupSizeY) * pass.Declaration.GroupSizeZ)))
                 .DefaultIfEmpty()
                 .Max()

@@ -143,6 +143,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
     /// <summary>Gets the current program-word capacity, or the initial reserve before engine initialization.</summary>
     public int ProgramWordCapacity => (m_engine?.ProgramWordCapacity ?? m_programWordCapacity);
+    /// <summary>Gets the bytes the engine allocates for its visibility records, or zero before engine initialization.</summary>
+    public ulong VisibilityRecordBytes => (m_engine?.VisibilityRecordBytes ?? 0UL);
 
     private readonly int m_programWordCapacity;
     private readonly Dictionary<int, Func<Vector3>> m_screenLights;

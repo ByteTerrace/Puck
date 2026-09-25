@@ -140,7 +140,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
                 path2: (m_manifest.Stages.Fragment! + ".hlsl")
             ),
             EntryPoint: "PSMain",
-            Kind: ShaderPipelinePassKind.Fullscreen,
+            Kind: ShaderPipelineDocumentPassKind.Fullscreen,
             Inputs: [new ResourceReference(
                     "input",
                     Binding: m_manifest.Bindings[0].VulkanBinding

@@ -580,9 +580,11 @@ The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
 document's members plus `packages`, engine passes named by
 `RenderGraphPackageCatalog` id. `RenderGraphCompiler` plans it with
 `ShaderPipelineCompiler` and never a second planner: a package pass enters the
-plan as `ShaderPipelinePassKind.Package`, whose source is its package id, through
-the planner's internal package entry, and a document's `passes` declaring that
-kind are refused with `SHADERPIPE_PACKAGE_PASS`. A package pass keeps no
+plan only as a `ShaderPipelinePackagePass` through the planner's internal
+package entry, ordered in the compute shape it reaches resources by, and its
+planned pass carries `ShaderPipelinePassKind.Package`. A document's pass kind
+is `ShaderPipelineDocumentPassKind`, which has no `Package` member, so the JSON
+reader refuses the name at `$.passes[n].kind`. A package pass keeps no
 descriptor binding, has no interface-by-source check, and takes a compute pass's
 accesses in `UseOf`. A new document member goes on `RenderGraphDefinition` only when a
 pipeline document cannot say it, because every checked-in `*.pipeline.json`

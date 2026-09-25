@@ -414,11 +414,13 @@ public sealed record ShaderPipelineGeometry(
 }
 /// <summary>One executable pass in a shader pipeline.</summary>
 /// <param name="Name">The unique pass name.</param>
-/// <param name="Source">The HLSL source's path, relative to the pipeline document; a package pass's package id.</param>
+/// <param name="Source">The HLSL source's path, relative to the pipeline document. A package's pass the planner
+/// orders carries its package id here.</param>
 /// <param name="EntryPoint">The entry point compiled by the shader compiler: a compute pass's kernel, or a graphics
-/// pass's fragment stage. A package pass compiles nothing and leaves it empty.</param>
-/// <param name="Kind">Compute, fullscreen graphics, or indexed geometry; a frame graph's package passes are
-/// <see cref="ShaderPipelinePassKind.Package"/>.</param>
+/// pass's fragment stage. A package's pass compiles nothing and leaves it empty.</param>
+/// <param name="Kind">Compute, fullscreen graphics, or indexed geometry. A document names no package work; the planner
+/// orders a package's pass (<see cref="ShaderPipelinePackagePass"/>) in the compute shape it reaches resources by, and
+/// its planned pass carries <see cref="ShaderPipelinePassKind.Package"/>.</param>
 /// <param name="Inputs">Named resource bindings. Set <see cref="ResourceReference.PreviousFrame"/> explicitly for feedback.</param>
 /// <param name="Outputs">The versions the pass writes. A graphics pass writes one color image and, for a geometry pass,
 /// at most one depth version.</param>
@@ -443,7 +445,7 @@ public sealed record ShaderPipelinePass(
     string Name,
     string Source,
     string EntryPoint,
-    ShaderPipelinePassKind Kind,
+    ShaderPipelineDocumentPassKind Kind,
     IReadOnlyList<ResourceReference>? Inputs = null,
     IReadOnlyList<ResourceReference>? Outputs = null,
     IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
@@ -464,13 +466,41 @@ public sealed record ShaderPipelinePass(
         : null);
     /// <summary>Gets whether the pass draws through a render pass rather than dispatching.</summary>
     [JsonIgnore]
-    public bool IsGraphics => (Kind is ShaderPipelinePassKind.Fullscreen or ShaderPipelinePassKind.Geometry);
+    public bool IsGraphics => (Kind is ShaderPipelineDocumentPassKind.Fullscreen or ShaderPipelineDocumentPassKind.Geometry);
     /// <summary>Gets an immutable empty input list when no resources are read.</summary>
     [JsonIgnore]
     public IReadOnlyList<ResourceReference> InputReferences => (Inputs ?? Array.Empty<ResourceReference>());
     /// <summary>Gets an immutable empty output list when no resources are written.</summary>
     [JsonIgnore]
     public IReadOnlyList<ResourceReference> OutputReferences => (Outputs ?? Array.Empty<ResourceReference>());
+}
+/// <summary>One pass of engine package work, as a frame graph hands it to the planner: the one way package work enters
+/// planning, since a document names none. The planner orders, versions and barriers it by what it reads and writes,
+/// which it reaches as a compute pass does, and its planned pass carries <see cref="ShaderPipelinePassKind.Package"/>.
+/// The package records its own work and binds its own descriptors.</summary>
+/// <param name="Name">The unique pass name.</param>
+/// <param name="Package">The package id.</param>
+/// <param name="Inputs">The versions it reads.</param>
+/// <param name="Outputs">The versions it writes.</param>
+/// <param name="Dispatch">Its dispatch shape; <see langword="null"/> means
+/// <see cref="ShaderPipelineDispatchKind.Extent"/>.</param>
+public sealed record ShaderPipelinePackagePass(
+    string Name,
+    string Package,
+    IReadOnlyList<ResourceReference> Inputs,
+    IReadOnlyList<ResourceReference> Outputs,
+    ShaderPipelineDispatch? Dispatch = null
+) {
+    // The compute-shaped pass the planner orders it as; nothing compiles its empty entry point.
+    internal ShaderPipelinePass Shape() => new(
+        Dispatch: Dispatch,
+        EntryPoint: string.Empty,
+        Inputs: Inputs,
+        Kind: ShaderPipelineDocumentPassKind.Compute,
+        Name: Name,
+        Outputs: Outputs,
+        Source: Package
+    );
 }
 /// <summary>A complete data-authored, multi-pass shader pipeline.</summary>
 [method: JsonConstructor]
@@ -515,7 +545,7 @@ public sealed record ShaderPipelineDefinition(
     public static ShaderPipelineDefinition FromShaderSource(
         string name,
         string sourcePath,
-        ShaderPipelinePassKind? kind = null,
+        ShaderPipelineDocumentPassKind? kind = null,
         string entryPoint = "main"
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
@@ -541,7 +571,7 @@ public sealed record ShaderPipelineDefinition(
             Name: name,
             Source: Path.GetFullPath(path: sourcePath),
             EntryPoint: entryPoint,
-            Kind: (kind ?? ShaderPipelinePassKind.Compute),
+            Kind: (kind ?? ShaderPipelineDocumentPassKind.Compute),
             Outputs: [new ResourceReference(Name: output.Name)]
         );
 

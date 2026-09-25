@@ -39,7 +39,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                     format: "0.###",
                     provider: CultureInfo.InvariantCulture
                 )} at instruction {binder.InstructionIndex}, unscoped)"
-                : string.Empty)}"
+                : string.Empty)}, visibility records {node.VisibilityRecordBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) at {Puck.SdfVm.SdfWorldEngine.VisibilityRecordByteLength.ToString(provider: CultureInfo.InvariantCulture)} a pixel"
             : "renderer not built yet"
         );
 

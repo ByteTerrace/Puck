@@ -10,13 +10,17 @@ namespace Puck.Shaders;
 public sealed record RenderGraphPackage(string Id, int Inputs, int Outputs, string Summary);
 /// <summary>The engine packages a host offers graphs, by id.</summary>
 public sealed class RenderGraphPackageCatalog {
-    /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion, lighting and
-    /// composition from the instance's camera. The screens it shows are the instance's reads, not ports.</summary>
+    /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
+    /// from the instance's camera. The screens it shows are the instance's reads, not ports.</summary>
     public const string SdfWorld = "sdf.world";
     /// <summary>The id of the unified overlay: the console, HUD, toasts and cursor drawn over its input.</summary>
     public const string Overlay = "overlay";
     /// <summary>The prefix of a shipped post-process shader set's package id: <c>post.&lt;set id&gt;</c>.</summary>
     public const string PostProcessPrefix = "post.";
+    /// <summary>The id of the one resample pass: its input reconstructed at its output's extent, an exact copy at the
+    /// same extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its kernel is
+    /// <c>Assets/Shaders/Graph/resample.hlsl</c>, a compute pass whose config is its sharpness.</summary>
+    public const string Resample = "resample";
 
     private readonly Dictionary<string, RenderGraphPackage> m_packages;
 
@@ -61,7 +65,7 @@ public sealed class RenderGraphPackageCatalog {
         )]);
     }
 
-    /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/> and <see cref="Overlay"/>.</summary>
+    /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="Overlay"/> and <see cref="Resample"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
 
     /// <summary>Gets the packages this build offers: the engine's own and one per shipped post-process shader set
@@ -85,6 +89,12 @@ public sealed class RenderGraphPackageCatalog {
             Inputs: 1,
             Outputs: 1,
             Summary: "The console, HUD, toasts and cursor drawn over the input image."
+        ),
+        new RenderGraphPackage(
+            Id: Resample,
+            Inputs: 1,
+            Outputs: 1,
+            Summary: "The input image reconstructed at the output's extent, bilinear to clamped Catmull-Rom by sharpness."
         ),
     ];
 

@@ -49,7 +49,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
         EntryPoint: "ps",
         Geometry: (geometry ?? Quad()),
         Inputs: [],
-        Kind: ShaderPipelinePassKind.Geometry,
+        Kind: ShaderPipelineDocumentPassKind.Geometry,
         Name: name,
         Outputs: [.. outputs.Select(selector: static output => new ResourceReference(Name: output))],
         Source: $"{name}.hlsl"
@@ -60,7 +60,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
             Binding: 1,
             Name: input
         )],
-        Kind: ShaderPipelinePassKind.Compute,
+        Kind: ShaderPipelineDocumentPassKind.Compute,
         Name: "sample",
         Outputs: [new ResourceReference(
             Binding: 0,
@@ -115,14 +115,14 @@ public sealed class ShaderPipelineAttachmentLawTests {
         passes: [
             new ShaderPipelinePass(
                 EntryPoint: "main",
-                Kind: ShaderPipelinePassKind.Fullscreen,
+                Kind: ShaderPipelineDocumentPassKind.Fullscreen,
                 Name: "tint",
                 Outputs: [new ResourceReference(Name: "tinted")],
                 Source: "tint.hlsl"
             ),
             new ShaderPipelinePass(
                 EntryPoint: "main",
-                Kind: ShaderPipelinePassKind.Compute,
+                Kind: ShaderPipelineDocumentPassKind.Compute,
                 Name: "seed",
                 Outputs: [new ResourceReference(Name: "seeded")],
                 Source: "seed.hlsl"
@@ -140,7 +140,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
     private static CompiledShaderPipeline Compiled(ShaderPipelinePlan plan) {
         ReadOnlyMemory<byte> bytecode = new byte[] { 0x03, 0x02, 0x23, 0x07 };
 
-        Dictionary<ShaderStage, ReadOnlyMemory<byte>> Stages(ShaderPipelinePassKind kind) => ((kind == ShaderPipelinePassKind.Compute)
+        Dictionary<ShaderStage, ReadOnlyMemory<byte>> Stages(ShaderPipelineDocumentPassKind kind) => ((kind == ShaderPipelineDocumentPassKind.Compute)
             ? new() { [ShaderStage.Compute] = bytecode }
             : new() { [ShaderStage.Vertex] = bytecode, [ShaderStage.Fragment] = bytecode });
 
@@ -404,7 +404,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
             "depth-written-by-compute" => Layers(
                 passes: static passes => [.. passes, new ShaderPipelinePass(
                     EntryPoint: "main",
-                    Kind: ShaderPipelinePassKind.Compute,
+                    Kind: ShaderPipelineDocumentPassKind.Compute,
                     Name: "stamp",
                     Outputs: [new ResourceReference(Binding: 0, Name: "stamped")],
                     Source: "stamp.hlsl"
@@ -414,7 +414,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
             "depth-written-by-fullscreen" => Layers(
                 passes: static passes => [.. passes, new ShaderPipelinePass(
                     EntryPoint: "main",
-                    Kind: ShaderPipelinePassKind.Fullscreen,
+                    Kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     Name: "stamp",
                     Outputs: [new ResourceReference(Name: "stamped"), new ResourceReference(Name: "painted")],
                     Source: "stamp.hlsl"
@@ -431,7 +431,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
                 passes: static passes => [.. passes, new ShaderPipelinePass(
                     EntryPoint: "main",
                     Geometry: Quad(),
-                    Kind: ShaderPipelinePassKind.Fullscreen,
+                    Kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     Name: "cover",
                     Outputs: [new ResourceReference(Name: "covered")],
                     Source: "cover.hlsl"
@@ -659,7 +659,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
 
         Assert.Equal(
             actual: (pass.Declaration.Kind, pass.Declaration.DepthCompare, pass.Declaration.Geometry!.VertexEntryPoint, pass.Declaration.Geometry.IndexFormat, pass.Declaration.Geometry.VertexCount, pass.Declaration.Geometry.SizeBytes),
-            expected: (ShaderPipelinePassKind.Geometry, ((ShaderPipelineDepthCompare?)ShaderPipelineDepthCompare.LessOrEqual), "vs", ShaderPipelineIndexFormat.UInt32, 3U, ((9UL * 4UL) + (3UL * 4UL)))
+            expected: (ShaderPipelineDocumentPassKind.Geometry, ((ShaderPipelineDepthCompare?)ShaderPipelineDepthCompare.LessOrEqual), "vs", ShaderPipelineIndexFormat.UInt32, 3U, ((9UL * 4UL) + (3UL * 4UL)))
         );
         Assert.Equal(
             actual: pass.Attachments.Select(selector: static attachment => (attachment.Version, attachment.Depth, attachment.Load, attachment.Store)),

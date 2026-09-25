@@ -374,7 +374,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 specs: specs
             );
 
-            if (declaration.Kind == ShaderPipelinePassKind.Compute) {
+            if (declaration.Kind == ShaderPipelineDocumentPassKind.Compute) {
                 if (
                     !primary.TryGetValue(
                     key: ShaderStage.Compute,

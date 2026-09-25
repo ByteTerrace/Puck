@@ -3,9 +3,11 @@ using Puck.Abstractions.Documents;
 
 namespace Puck.Shaders;
 
-/// <summary>Identifies a compute, fullscreen graphics, indexed geometry, or engine package pass.</summary>
-[JsonConverter(typeof(StrictEnumConverter<ShaderPipelinePassKind>))]
-public enum ShaderPipelinePassKind : byte {
+/// <summary>Identifies what a document's pass is: a compute, fullscreen graphics, or indexed geometry pass. A document
+/// cannot name package work, so a <c>kind</c> of anything else is refused by the JSON reader;
+/// <see cref="ShaderPipelinePassKind"/> is the planner's kind, which adds packages.</summary>
+[JsonConverter(typeof(StrictEnumConverter<ShaderPipelineDocumentPassKind>))]
+public enum ShaderPipelineDocumentPassKind : byte {
     /// <summary>A compute dispatch.</summary>
     Compute = 1,
     /// <summary>A fullscreen graphics pass: one triangle covering its color attachment.</summary>
@@ -13,10 +15,21 @@ public enum ShaderPipelinePassKind : byte {
     /// <summary>A graphics pass that draws its declared vertices as an indexed triangle list into its color attachment,
     /// optionally tested against and writing a depth attachment.</summary>
     Geometry = 3,
+}
+/// <summary>Identifies what the planner orders: a document's compute, fullscreen or geometry pass, or an engine
+/// package's pass. A planned pass carries it (<see cref="ShaderPipelinePlannedPass.Kind"/>); no document names
+/// it.</summary>
+public enum ShaderPipelinePassKind : byte {
+    /// <summary>A compute dispatch.</summary>
+    Compute = 1,
+    /// <summary>A fullscreen graphics pass.</summary>
+    Fullscreen = 2,
+    /// <summary>An indexed geometry pass.</summary>
+    Geometry = 3,
     /// <summary>Engine work a frame graph names under <c>packages</c>, whose source is its package id. The package
     /// records its own work and binds its own descriptors; the planner orders, versions and barriers it by the versions
-    /// it reads and writes, which it reaches as a compute pass does. A document's <c>passes</c> never declare it, and
-    /// the planner refuses one there with <c>SHADERPIPE_PACKAGE_PASS</c>.</summary>
+    /// it reads and writes, which it reaches as a compute pass does. It enters the planner only as a
+    /// <see cref="ShaderPipelinePackagePass"/>, never as a document's pass.</summary>
     Package = 4,
 }
 /// <summary>Identifies a pipeline image, raw buffer, or depth resource.</summary>

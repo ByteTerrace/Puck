@@ -23,7 +23,7 @@ public sealed class ShaderPipelineBindingTests {
             "pass",
             "pass.hlsl",
             "main",
-            ShaderPipelinePassKind.Compute,
+            ShaderPipelineDocumentPassKind.Compute,
             [input],
             [output]
         );
@@ -55,7 +55,7 @@ public sealed class ShaderPipelineBindingTests {
                 "output",
                 Binding: 7
             )
-        ) with { Kind = ShaderPipelinePassKind.Fullscreen };
+        ) with { Kind = ShaderPipelineDocumentPassKind.Fullscreen };
         var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => ShaderPipelineCompiler.Plan(definition: Definition(pass: pass)));
 
         Assert.Contains(
@@ -68,7 +68,7 @@ public sealed class ShaderPipelineBindingTests {
         var authored = Pass(
             input: "input",
             output: "output"
-        ) with { Kind = ShaderPipelinePassKind.Fullscreen };
+        ) with { Kind = ShaderPipelineDocumentPassKind.Fullscreen };
         var pass = new ShaderPipelineCompiler().Compile(definition: Definition(pass: authored)).Passes[0].Declaration;
 
         Assert.Equal(
@@ -159,7 +159,7 @@ public sealed class ShaderPipelineBindingTests {
                 Binding: 3
             ),
             output: "output"
-        ) with { Kind = ShaderPipelinePassKind.Fullscreen };
+        ) with { Kind = ShaderPipelineDocumentPassKind.Fullscreen };
         var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => ShaderPipelineCompiler.Plan(definition: Definition(pass: pass)));
 
         Assert.Contains(

@@ -234,6 +234,7 @@ declares no binding. `RenderGraphPackageCatalog` is what a host offers:
 |---|---|---|
 | `sdf.world` | no input, one output | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
 | `overlay` | one input, one output | The console, HUD, toasts and cursor drawn over the input. |
+| `resample` | one input, one output | The input reconstructed at the output's extent: an exact copy at the same extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its kernel is `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`. |
 | `post.<set id>` | one input, one output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
 
 `RenderGraphCompiler` checks the package passes against the catalog, then plans
@@ -248,9 +249,9 @@ as a pipeline does. The refusals are `RENDERGRAPH_SCHEMA`,
 `RENDERGRAPH_DOCUMENT_SHAPE`, `RENDERGRAPH_PACKAGE_UNKNOWN`,
 `RENDERGRAPH_PACKAGE_PORTS`, `RENDERGRAPH_PACKAGE_BINDING`,
 `RENDERGRAPH_PACKAGE_INPUT` and `RENDERGRAPH_PACKAGE_OUTPUT`. A planner refusal
-keeps its `SHADERPIPE_` code, among them `SHADERPIPE_PACKAGE_PASS` for a pass
-in a pipeline's or a graph's `passes` that declares the `Package` kind, which
-only the `packages` member declares.
+keeps its `SHADERPIPE_` code. A pass `kind` is `Compute`, `Fullscreen` or
+`Geometry`: only the `packages` member declares package work, so the reader
+refuses a pass that names `Package` at its `kind`.
 
 A world names graph instances in `views.graphs`. Each row names a graph
 `source`, relative to the world document as a `views.pipelines` source is, an

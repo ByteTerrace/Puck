@@ -109,7 +109,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const uint VolumeBindingIndex = 48;
     private const uint PrimaryHitBindingIndex = 49; // sdfVisibilityRecords written by primary, surface and ambient: u5, after the five source images
     private const uint PrimaryHitReadBindingIndex = 50; // the same buffer read-only for views: t45, after the cull buffer (sdf-visibility.hlsli)
-    private const int PrimaryHitByteLength = (5 * 16); // the visibility record's V, C, L, N and S rows; paired with sdf-visibility.hlsli's SdfVisibilityWords
+    private const int PrimaryHitByteLength = (15 * sizeof(uint)); // the visibility record's fifteen words in its V, C, L, N and S rows; paired with sdf-visibility.hlsli's SdfVisibilityWords
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.
     private const int VolumeByteLength = ((sizeof(float) * 4) * SdfVolume.VectorsPerEntry);
     private const uint WorkgroupEdge = 8;

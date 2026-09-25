@@ -25,18 +25,21 @@ public sealed class ShaderPipelineDispatchLawTests {
             : null),
         StrideBytes: stride
     );
-    private static ShaderPipelinePass Pass(string name, ShaderPipelinePassKind kind, ResourceReference[] inputs, ResourceReference[] outputs, ShaderPipelineDispatch? dispatch = null) => new(
+    private static ShaderPipelinePass Pass(string name, ShaderPipelineDocumentPassKind kind, ResourceReference[] inputs, ResourceReference[] outputs, ShaderPipelineDispatch? dispatch = null) => new(
         Dispatch: dispatch,
-        EntryPoint: ((kind == ShaderPipelinePassKind.Package)
-            ? string.Empty
-            : "main"),
+        EntryPoint: "main",
         Inputs: inputs,
         Kind: kind,
         Name: name,
         Outputs: outputs,
-        Source: ((kind == ShaderPipelinePassKind.Package)
-            ? "test.package"
-            : $"{name}.hlsl")
+        Source: $"{name}.hlsl"
+    );
+    private static ShaderPipelinePackagePass Package(string name, ResourceReference[] inputs, ResourceReference[] outputs, ShaderPipelineDispatch? dispatch = null) => new(
+        Dispatch: dispatch,
+        Inputs: inputs,
+        Name: name,
+        Outputs: outputs,
+        Package: "test.package"
     );
     // args and a counted table are written by "count"; args is read as shader data by "peek", then as dispatch
     // arguments by "consume", which also reads the table. The passes are declared in reverse, so the order is the
@@ -61,37 +64,34 @@ public sealed class ShaderPipelineDispatchLawTests {
             ]
         ),
         packages: [
-            Pass(
+            Package(
                 dispatch: ShaderPipelineDispatch.Indirect(arguments: "args"),
                 inputs: ["peeked", "table"],
-                kind: ShaderPipelinePassKind.Package,
                 name: "consume",
                 outputs: ["result"]
             ),
-            Pass(
+            Package(
                 dispatch: ShaderPipelineDispatch.Groups(x: 1),
                 inputs: ["args"],
-                kind: ShaderPipelinePassKind.Package,
                 name: "peek",
                 outputs: ["peeked"]
             ),
-            Pass(
+            Package(
                 inputs: [],
-                kind: ShaderPipelinePassKind.Package,
                 name: "count",
                 outputs: ["args", "table"]
             ),
         ]
     );
-    private static void AssertRefused(string code, ShaderPipelineResource[] resources, ShaderPipelinePass[] passes, string[] outputs) {
+    private static void AssertRefused(string code, ShaderPipelineResource[] resources, string[] outputs, ShaderPipelinePass[]? passes = null, ShaderPipelinePackagePass[]? packages = null) {
         var exception = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(
             definition: new ShaderPipelineDefinition(
                 name: "refused",
                 outputs: outputs,
-                passes: passes.Where(predicate: static pass => (pass.Kind != ShaderPipelinePassKind.Package)).ToArray(),
+                passes: (passes ?? []),
                 resources: resources
             ),
-            packages: passes.Where(predicate: static pass => (pass.Kind == ShaderPipelinePassKind.Package)).ToArray()
+            packages: (packages ?? [])
         ));
 
         Assert.Contains(
@@ -311,52 +311,51 @@ public sealed class ShaderPipelineDispatchLawTests {
         AssertRefused(
             code: "SHADERPIPE_DISPATCH_PACKAGE",
             outputs: ["out"],
-            passes: [Pass(dispatch: ShaderPipelineDispatch.Groups(x: 2), inputs: [], kind: ShaderPipelinePassKind.Compute, name: "grid", outputs: ["out"])],
+            passes: [Pass(dispatch: ShaderPipelineDispatch.Groups(x: 2), inputs: [], kind: ShaderPipelineDocumentPassKind.Compute, name: "grid", outputs: ["out"])],
             resources: [Words(name: "out")]
         );
         AssertRefused(
             code: "SHADERPIPE_DISPATCH_PACKAGE",
             outputs: ["out"],
             passes: [
-                Pass(inputs: [], kind: ShaderPipelinePassKind.Compute, name: "write", outputs: ["args"]),
-                Pass(dispatch: ShaderPipelineDispatch.Indirect(arguments: "args"), inputs: [], kind: ShaderPipelinePassKind.Compute, name: "read", outputs: ["out"]),
+                Pass(inputs: [], kind: ShaderPipelineDocumentPassKind.Compute, name: "write", outputs: ["args"]),
+                Pass(dispatch: ShaderPipelineDispatch.Indirect(arguments: "args"), inputs: [], kind: ShaderPipelineDocumentPassKind.Compute, name: "read", outputs: ["out"]),
             ],
             resources: [Words(name: "args"), Words(name: "out")]
         );
         AssertRefused(
             code: "SHADERPIPE_PACKAGE_STORAGE",
             outputs: ["out"],
-            passes: [Pass(inputs: [], kind: ShaderPipelinePassKind.Compute, name: "write", outputs: ["out"])],
+            passes: [Pass(inputs: [], kind: ShaderPipelineDocumentPassKind.Compute, name: "write", outputs: ["out"])],
             resources: [Words(name: "out", stride: 16)]
         );
         AssertRefused(
             code: "SHADERPIPE_PACKAGE_STORAGE",
             outputs: ["out"],
-            passes: [Pass(inputs: [], kind: ShaderPipelinePassKind.Package, name: "write", outputs: ["out"])],
+            packages: [Package(inputs: [], name: "write", outputs: ["out"])],
             resources: [Words(count: Per(basis: ShaderPipelineCountBasis.Instances), name: "out")]
         );
     }
     [Fact]
     public void AMalformedDispatchOrBufferLayoutIsRefusedByName() {
-        ShaderPipelinePass Consume(ShaderPipelineDispatch dispatch, ResourceReference[]? inputs = null) => Pass(
+        ShaderPipelinePackagePass Consume(ShaderPipelineDispatch dispatch, ResourceReference[]? inputs = null) => Package(
             dispatch: dispatch,
             inputs: (inputs ?? []),
-            kind: ShaderPipelinePassKind.Package,
             name: "consume",
             outputs: ["out"]
         );
-        var writer = Pass(inputs: [], kind: ShaderPipelinePassKind.Package, name: "write", outputs: ["args"]);
+        var writer = Package(inputs: [], name: "write", outputs: ["args"]);
         ShaderPipelineResource[] resources = [Words(name: "args"), Words(name: "out")];
 
-        AssertRefused(code: "SHADERPIPE_DISPATCH_ARGUMENTS", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Indirect(arguments: "args", offsetBytes: 6))], resources: resources);
-        AssertRefused(code: "SHADERPIPE_DISPATCH_ARGUMENTS", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Indirect(arguments: "args", offsetBytes: 8))], resources: resources);
-        AssertRefused(code: "SHADERPIPE_DISPATCH_ARGUMENTS", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Indirect(arguments: "args"), inputs: ["args"])], resources: resources);
-        AssertRefused(code: "SHADERPIPE_UNKNOWN_RESOURCE", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Indirect(arguments: "missing"))], resources: resources);
-        AssertRefused(code: "SHADERPIPE_DISPATCH_SHAPE", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 0))], resources: resources);
-        AssertRefused(code: "SHADERPIPE_DISPATCH_SHAPE", outputs: ["out"], passes: [writer, Consume(dispatch: new ShaderPipelineDispatch(Arguments: "args", Kind: ShaderPipelineDispatchKind.Extent))], resources: resources);
-        AssertRefused(code: "SHADERPIPE_BUFFER_STRIDE", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(name: "out", sizeBytes: 24, stride: 16)]);
-        AssertRefused(code: "SHADERPIPE_BUFFER_STRIDE", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(name: "out", stride: 6)]);
-        AssertRefused(code: "SHADERPIPE_BUFFER_SIZE", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(name: "out") with { Count = Per(basis: ShaderPipelineCountBasis.Instances) }]);
+        AssertRefused(code: "SHADERPIPE_DISPATCH_ARGUMENTS", outputs: ["out"], packages: [writer, Consume(dispatch: ShaderPipelineDispatch.Indirect(arguments: "args", offsetBytes: 6))], resources: resources);
+        AssertRefused(code: "SHADERPIPE_DISPATCH_ARGUMENTS", outputs: ["out"], packages: [writer, Consume(dispatch: ShaderPipelineDispatch.Indirect(arguments: "args", offsetBytes: 8))], resources: resources);
+        AssertRefused(code: "SHADERPIPE_DISPATCH_ARGUMENTS", outputs: ["out"], packages: [writer, Consume(dispatch: ShaderPipelineDispatch.Indirect(arguments: "args"), inputs: ["args"])], resources: resources);
+        AssertRefused(code: "SHADERPIPE_UNKNOWN_RESOURCE", outputs: ["out"], packages: [writer, Consume(dispatch: ShaderPipelineDispatch.Indirect(arguments: "missing"))], resources: resources);
+        AssertRefused(code: "SHADERPIPE_DISPATCH_SHAPE", outputs: ["out"], packages: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 0))], resources: resources);
+        AssertRefused(code: "SHADERPIPE_DISPATCH_SHAPE", outputs: ["out"], packages: [writer, Consume(dispatch: new ShaderPipelineDispatch(Arguments: "args", Kind: ShaderPipelineDispatchKind.Extent))], resources: resources);
+        AssertRefused(code: "SHADERPIPE_BUFFER_STRIDE", outputs: ["out"], packages: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(name: "out", sizeBytes: 24, stride: 16)]);
+        AssertRefused(code: "SHADERPIPE_BUFFER_STRIDE", outputs: ["out"], packages: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(name: "out", stride: 6)]);
+        AssertRefused(code: "SHADERPIPE_BUFFER_SIZE", outputs: ["out"], packages: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(name: "out") with { Count = Per(basis: ShaderPipelineCountBasis.Instances) }]);
 
         // A count has one spelling: at least one term, each with elements, one or more declared bases named once, and
         // no two terms over the same bases.
@@ -373,7 +372,7 @@ public sealed class ShaderPipelineDispatchLawTests {
         ];
 
         foreach (var count in malformed) {
-            AssertRefused(code: "SHADERPIPE_BUFFER_COUNT", outputs: ["out"], passes: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(count: count, name: "out")]);
+            AssertRefused(code: "SHADERPIPE_BUFFER_COUNT", outputs: ["out"], packages: [writer, Consume(dispatch: ShaderPipelineDispatch.Groups(x: 1))], resources: [Words(name: "args"), Words(count: count, name: "out")]);
         }
     }
     [Fact]

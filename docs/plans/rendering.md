@@ -457,17 +457,19 @@ frame ring does not. The one state-shaped path that reaches the GPU is the
 physics field lattice, mirrored on the client by `WorldClientFieldLattice` and
 uploaded by `WorldFieldEmitter` one field per produced frame.
 
-P11's CPU half has landed; its second half, P11b, waits on P7's binding
-groups. The frame graph is a document, `puck.render.graph.v1`
+P11's CPU half has landed. Its second half, P11b, runs beside P7b: only the
+overlay as a true package and the per-device pass-pipeline cache wait on P7's
+binding groups. The frame graph is a document, `puck.render.graph.v1`
 (`RenderGraphDefinition` in `src/Puck.Shaders/Graph`). Its members are the
 pipeline document's, plus `packages`: engine work named by package id from
 `RenderGraphPackageCatalog`, which offers `sdf.world`, `overlay` and one
 `post.<id>` package per shipped post-process set. `RenderGraphCompiler` plans a
-graph with P3's planner: a package pass enters the plan as its own pass kind,
+graph with P3's planner: a package pass enters the plan only through the
+planner's package entry, and its planned pass carries its own kind,
 `ShaderPipelinePassKind.Package`, whose source is its package id and whose
 references keep no descriptor binding, so one planner orders, versions and
-barriers every pass. A document's `passes` never declare that kind, and the
-planner refuses one there with `SHADERPIPE_PACKAGE_PASS`.
+barriers every pass. A document's pass kind has no `Package` member, so its
+JSON reader refuses that name.
 `RenderGraphDocumentLawTests` holds every
 checked-in pipeline document to planning identically as a graph, and
 `puck schema` generates the document's schema. A world names instances in
@@ -499,10 +501,19 @@ still render every view, nothing feeds the scheduler a frame, and
 wires `WorldBootComposition`'s node tree onto graph instances fed by the
 scheduler, puts the live schedule's extents and prices in `world.budget`,
 runs the parity and counted-GPU checks, and makes the deletions P11 lists,
-including the `puck.shader.pipeline.v1` schema, whose documents then need only
-their tag changed. Two P11b items have landed: the first-class package pass
-kind in `ShaderPipelineCompiler`, and a steady-state schedule that allocates
-nothing.
+including the `puck.shader.pipeline.v1` schema. Folding that schema into the
+graph document is more than a tag change: the pipeline document's top-level
+`config`, which the planner already refuses, goes with it; the tests and the
+`puck affected` path filter that glob `*.pipeline.json` move with the
+suffix; and a single `.hlsl` source still reads as a one-pass graph. Three
+P11b items have landed: the first-class package pass kind in
+`ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, and
+a document pass kind with no package member, so package work enters the
+planner only through its package entry. A world may author its own root graph
+in `views.graphs`; when it does not, composition synthesizes the default one,
+`sdf.world` then each `render.extensions` pass as `post.<id>` then `overlay`,
+as a graph document that goes through the same compiler, so no render tree is
+built in C# alone.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
@@ -525,7 +536,7 @@ press went, and returns focus to the game on Control, Alt and Escape.
 `RenderGraphHitWalk` in `src/Puck.Hosting/Graph` continues a hit on a rendered
 source through the producer's camera up to a depth limit, normally
 `RenderGraphInstanceSet.NestingDepth`. The pipeline pane's pointer
-(`WorldFramePresenter.ResolvePipelineMouse`) maps through its pane's
+(`WorldFramePresenter.UpdatePipelinePointer`) maps through its pane's
 `SourceMapping`. The laws are `SourceMappingLawTests`,
 `SourcePointerCommandLawTests`, `RenderGraphHitWalkLawTests`,
 `SourceFocusLawTests`, `WorldScreenInputLawTests` and the Maths
@@ -647,7 +658,6 @@ P17 still owes:
 
 The SDF engine's frame data is written by hand in three places: an `SdfFrame`
 field, a numbered row in the packed buffer, and an HLSL accessor.
-`resample.comp.hlsl` compiles but has no consumer.
 
 ## The forcing artifact
 
@@ -1109,10 +1119,19 @@ follow its device-bound services, its one recorder and the SDF engine's groups.
    background records and the block to an SDF record where it went, with a
    no-move leg as the negative control; it proves current-kind reads after a
    move, not a difference between the two tests.
-4. P4-1c, the compact-record trial: a smaller encoding, measured in counted
-   work and bytes against the full record, kept only if it stays within one
-   least-significant bit, the limit below, and costs fewer counted bytes than
-   the full record.
+4. P4-1c, landed, the compact record: fifteen words instead of twenty, 60
+   bytes a pixel of each viewport's full extent instead of 80. V stays exact;
+   the seam weight packs as a 15-bit fraction beside its partner material plus
+   one, the geometric normal is a 16-bit octahedral pair, curvature and ambient
+   occlusion are halves, and the surface flags share a word with the saturated
+   query count. The lanes stay authored floats, because they are anonymous
+   state no station exercises. `world.budget` prints the allocated bytes: the
+   counters workload's 256×144 extent reads 8,847,360 bytes on both backends,
+   against 11,796,480 for the full record, and 1920×1080 saves 41,472,000 bytes
+   per reserved viewport. `puck counters compare` shows no counted-work change
+   beyond the kernels' bytecode. Each backend's parity captures move by at most
+   one code in any tile against the full record's (mean tile delta at most
+   0.012), and every state hash is unchanged.
 5. P4-2a, landed, the GPU-free contracts: `ViewProjection` in
    `Puck.Abstractions/Cameras`, `SdfMesh`, `SdfMeshDraw` and
    `SdfFrame.MeshDraws`, with laws that include the fixed-point raycast bounded
@@ -1149,8 +1168,7 @@ beside analytic triangles. `SDF_MONOLITHIC_VIEWS` is deleted.
 which follows P4-1. `sdf-world.hlsli` changes in P4 first; the views and
 cull-args kernels and `SdfWorldEngine`'s partials change in P7b first. Whichever
 lands second re-records the work laws and counter baselines, and rebuilds
-compiled shaders rather than merging them. Open: whether the compact record
-survives its trial.
+compiled shaders rather than merging them.
 
 ### P5 — Reproducible authoring and packaged dependencies
 
@@ -1390,8 +1408,8 @@ Phase 3, the groups, follows phase 2:
 12. Done: `ShaderRegisterBindingLawTests` holds every shader the build compiles
     to a register number equal to its binding and a space equal to its set. It
     also holds the pipeline sources the World's package store is built from.
-    It names each declaration that breaks the rule: the SDF engine's, which
-    P7b-19 and P7b-20 remove, and the resample kernel's, which P11b ports. The
+    It also holds the graph's package-library kernels. It names each declaration
+    that breaks the rule: the SDF engine's, which P7b-19 and P7b-20 remove. The
     list may only shrink. Direct3D 12 numbers a compute pipeline's registers at
     its binding numbers unless the description declares
     `GpuRegisterNumbering.PackedByClass`, which only the SDF engine and the
@@ -1428,13 +1446,107 @@ Phase 3, the groups, follows phase 2:
     move to a separate image and sampler with 14b's sampler tables, and both
     enums are deleted there.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
-    of it (14a). The heap's sizes come from the capability report:
-    `GpuDeviceCapabilities` records options 19's view and sampler heap sizes
-    on Direct3D 12. Both backends then realize several groups, with sampler
-    tables and one 4-byte push range (14b), the riskiest commit. 14b creates root
-    signatures and pipeline layouts from step 13's plans, moves every combined
-    image sampler to a separate image and sampler, and deletes
-    `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`.
+    of it (14a). Both backends then realize several groups, with sampler
+    tables and one 4-byte push range (14b), the riskiest step, which lands as
+    the commits below rather than one. The floor device, the RTX 2060, reports
+    resource binding tier 3, a shader-visible CBV/SRV/UAV heap of at most
+    1,000,000 descriptors (it refuses 1,000,001), a sampler heap of 2,048,
+    and on Vulkan `maxBoundDescriptorSets` 32 and `maxPushConstantsSize` 256,
+    so four groups and a 4-byte push index fit with room on both backends.
+
+    14a, the device heap, touches Direct3D 12 alone; a Vulkan pool stays a
+    `VkDescriptorPool`.
+    - 14a-1, done: the range allocator, `GpuRangeAllocator` in
+      `Puck.Abstractions/Gpu`, GPU-free: a free list over `[0, size)`
+      that allocates a pool's contiguous range first-fit, returns it on free,
+      and coalesces neighbours. A request no free range can hold is refused
+      by name, stating the request, the largest free range and the heap's
+      size; the heap never grows. Laws on a fake heap: a request of exactly
+      the free size succeeds and one descriptor more is refused
+      (exhaustion); after freeing a middle range, a request larger than it
+      but smaller than the total free count is refused until its neighbours
+      free and coalesce (fragmentation); a freed range is the one the next
+      equal request receives, and a thousand allocate-free cycles leave the
+      free list as it began and allocate nothing (reuse). A double free and a
+      free of a range never allocated are refused by name
+      (`GpuRangeAllocatorLawTests`).
+    - 14a-2, the heap's size, GPU-free: the composition sums the descriptor
+      demand every pool owner declares before it creates a pool, from the
+      same `GpuDescriptorPoolSizes` its pool is created with, times the sets
+      it keeps in flight: the SDF engine per frame-ring slot, each pipeline
+      node pass per in-flight slot and per instance the graph budget admits,
+      the overlay, the float preview's slots and each `GpuRegion`'s copy
+      pool. The heap holds twice that demand, because a reloaded graph keeps
+      its predecessor's pools until the predecessor's last submission
+      retires, so a reload briefly holds both. The size is the smaller of
+      that and `GpuDeviceCapabilities.ViewHeapSize`, and a demand the device
+      cannot hold is refused by name at device creation rather than
+      truncated. The sampler heap is the smaller of 2,048 and
+      `GpuDeviceCapabilities.SamplerHeapSize`. Laws: the demand sum over a
+      fake composition, the doubling, the cap, and the refusal.
+    - 14a-3, the heap in place: `DirectXGpuBindings` creates the two
+      shader-visible heaps once per device and a pool allocates its range
+      from them instead of a heap of its own; each command list binds the
+      device's heaps once. It also reads `ResourceBindingTier`, and on Vulkan
+      the device creation refuses a `MaxBoundDescriptorSets` below four or a
+      `MaxPushConstantBytes` below four by name. Check: `puck parity` and
+      the GPU canaries on Direct3D 12, whose sources the coverage index does
+      not map because it is recorded on Vulkan, so every Direct3D 12 canary
+      runs (unverified against a Direct3D 12 recording).
+
+    14b, the groups. Each commit lands with `puck parity` unchanged, and the
+    canaries named are those `tests/Puck.Affected/canary-coverage.json` maps
+    to the commit's sources, by text rather than a `puck affected` run, so
+    they are unverified; Direct3D 12 files are unmapped, so a commit that
+    touches one also runs its canaries on Direct3D 12. Each owner's commit
+    also moves its binding lists from `GpuComputeBindingKind` to
+    `GpuBindingKind`, so the last one leaves the old enum unused.
+    - 14b-1, layouts from the plans: Direct3D 12 creates a root signature from
+      `DirectXRootLayout.Plan` (each table's ranges at the plan's registers,
+      spaces and offsets, the pushed index as one 32-bit root constant at
+      `b0` in space 4, every parameter at the plan's visibility) and Vulkan a
+      pipeline layout from `VulkanGroupLayouts.Plan` (a set layout per set
+      number with its bindings' stage flags, and the push range). Sampler
+      tables allocate from the sampler heap, replacing static samplers for a
+      pipeline built this way. No shipped pipeline moves yet: laws hold a
+      fake device to the descriptions built from the spike's tables, and a
+      debug-layer run creates the film grain and pixelate layouts on both
+      backends. Canaries: the 18 the pipeline factories map to,
+      `no-device-compile`, the thirteen `pipeline-*`, `sdf-decode-sign-refusal`,
+      `source-conversion`, `world-counters` and `world-seat-binding-recompose`.
+    - 14b-2, the Vulkan presenter: `blit.frag.hlsl` and
+      `VulkanGraphicsPipelineFactory`, which `SurfaceCompositor` builds from,
+      read a separate image and sampler. Canaries: 17, the 14b-1 set without
+      `world-seat-binding-recompose`.
+    - 14b-3, the pipeline node and the sources it runs:
+      `ShaderPipelineRenderNode` and its float preview
+      (`pipeline-preview.frag.hlsl`), the shipped ink pipeline
+      (`ink-simulation.hlsl`, `ink-visualize.hlsl`), the package library's
+      `resample.hlsl`, and the seven canary sources under `pipeline-edit`,
+      `pipeline-feedback`, `pipeline-shapes` and `pipeline-supersede`.
+      Canaries: `no-device-compile`, the thirteen `pipeline-*`,
+      `source-conversion` and `resample-reconstruction`.
+    - 14b-4, the overlay: `overlay-unified.frag.hlsl`'s nineteen combined
+      declarations and `UnifiedOverlayNode`'s pool. Canaries:
+      `instrument-clock-source`, `music-conditional-layer-and-embellishment`,
+      `voice-babble` and `world-seat-binding-recompose`.
+    - 14b-5, film grain and the fullscreen passes: `sdf-film-grain.frag.hlsl`,
+      `FullscreenPassNode`, and `ShaderSetManifest` with its binding record.
+      Canaries: 21, the 14b-1 set with the overlay's three audio canaries.
+    - 14b-6, the SDF engine, last: `sdf-world.hlsli`'s thirty-two screen
+      sources (bindings 12 to 43), the glyph atlas in `sdf-vm.hlsli`
+      (binding 44), and the engine's binding lists in
+      `SdfWorldEngine.Pipelines.cs`. Canaries: 20 mapped, the 14b-5 set
+      without `sdf-decode-sign-refusal`, plus `sdf-visibility-fresh`, which
+      the index has not recorded yet. The package library's `resample.hlsl`,
+      which took the SDF-side kernel's place, moves with the pipeline node's
+      sources in 14b-3.
+    - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
+      then states a `GpuBindingKind`, `ShaderSetManifestBindingKind`, and
+      `GpuDescriptorPoolSizes.CombinedImageSamplerCount`, with their last
+      users in `GpuRegion`, the backends' pipeline factories and the
+      contract and wire-name laws. Canaries: the 19 `GpuDescriptorPoolSizes`
+      and `GpuRegion` map to.
 15. Pipelines move onto groups: `WriteFrame` writes the frame group, set 0, into
     a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
     3; passes include their generated interface; the pipeline document's
@@ -1777,7 +1889,7 @@ schema or planner change.
 
 ### P13 — Hit-to-source mapping and input destinations
 
-**Starts from:** `WorldFramePresenter.ResolvePipelineMouse`, which maps the
+**Starts from:** `WorldFramePresenter.UpdatePipelinePointer`, which maps the
 pointer into a pipeline pane, and `WorldCursorFeed`, which hover-tests HUD
 rectangles only. Nothing maps a hit on a world surface to a source's pixels.
 
@@ -1979,9 +2091,15 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups.
-P11b keeps one resample pass, a port of `resample.comp.hlsl`, in the graph's
-package library; P14 deletes any SDF-side copy, and the pixelate interface
-fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
+P11b keeps one resample pass in the graph's package library: the `resample`
+package, whose kernel `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`
+holds the SDF composite's reconstruction: an exact copy at equal extent, bilinear at sharpness
+0, clamped Catmull-Rom at sharpness 1 and a blend between, all through formatted
+loads with no sampler state. The `resample-reconstruction` canary holds it to the
+analytic bilinear and Catmull-Rom values of a known step on both backends. Render
+scale moving onto it, which deletes the `RenderScaleQ` lanes, is a later P11b
+commit; cropping a source is P13's mapping, not a resample config. The pixelate
+interface fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
 P11b's `sdf.world` adapter submits through `SdfWorldEngine`'s ring as an
 external producer whose output image the graph imports. Before P12, a screen's
 matrix row is green when host leases and instance reads serve it. Without the
@@ -2150,9 +2268,12 @@ its frame group moves from push constants to a descriptor set when step 15
 puts pipelines on groups. P7 and P8 do not read simulation state, so they do
 not wait on the state rebuild.
 
-**The frame graph and nesting.** P11's CPU half has landed, and so have two of
-P11b's items: the first-class package pass kind and a steady-state schedule
-that allocates nothing. The rest of P11b waits on P7b's binding groups. P12's
+**The frame graph and nesting.** P11's CPU half has landed, and so have three
+of P11b's items: the first-class package pass kind, a steady-state schedule
+that allocates nothing, and the document pass kind. The rest of P11b runs
+beside P7b; only the overlay as a true package waits on its sampler tables and
+the overlay's move onto groups, and only the per-device pass-pipeline cache
+waits on pipelines moving onto groups. P12's
 source contract, producers and conversion passes have landed; P12b, the graph
 wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
 P11b and P12b, because the engine's composition and screens need somewhere to
@@ -2173,8 +2294,9 @@ P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
 which have landed. It also follows P11b's graph wiring, because the rows it
 binds are `views.graphs` rows.
 
-The longest remaining chain runs through P7b's groups to P11b and P12b, then
-P14, and ends with P15.
+The longest remaining chain runs through P7b's groups to the two P11b items
+that wait on them, then P14, and ends with P15; the rest of P11b and P12b
+proceed beside P7b.
 
 ## Verification summary
 

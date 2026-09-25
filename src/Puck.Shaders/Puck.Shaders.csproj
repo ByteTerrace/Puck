@@ -29,6 +29,9 @@
         <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
         <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
         <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
+        <!-- The graph's package-library kernels: compute pass sources a graph package runs, compiled with their generated
+             interface when loaded rather than at build. -->
+        <RenderGraphPackageSource Include="Assets\Shaders\Graph\**\*.hlsl" />
     </ItemGroup>
     <ItemGroup>
         <!-- puck.probe.v1 kind manifests and their kernel HLSL sources ship as content; each kernel's entry points compile

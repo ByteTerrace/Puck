@@ -1,0 +1,67 @@
+{
+  "id": "resample-reconstruction",
+  "title": "The graph's resample pass reconstructs a known step at four times its extent exactly as bilinear and clamped Catmull-Rom predict",
+  "binding": "The positive leg boots an offscreen world showing a two-pass pipeline: a seed pass writes a 16-texel step (0 in columns 0..7, 1 in columns 8..15), and the package library's resample pass reconstructs it at 64 texels. Paused, each reset renders one frame. At sharpness 0 the destination columns beside the edge hold the bilinear values 0.125 and 0.875 (codes 32 and 223); at sharpness 1 they hold clamped Catmull-Rom's 0.0840 and 0.9160 (codes 21 and 234), derived from the Catmull-Rom weights at fractions 1/8 and 7/8, and both plateaus stay exactly 0 and 1. The discriminating leg renders the first capture at sharpness 1, so the bilinear observations turn red.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "resample.pipeline.json",
+    "seed.hlsl"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/resample-reconstruction/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.time", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 6, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "bilinear-left-plateau-is-zero", "capture": "bilinear.png", "extent": [64, 64], "region": [0.078125, 0.25, 0.09375, 0.75], "reduce": "every", "minimum": [0, 0, 0, 1], "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "bilinear-column-30-is-an-eighth", "capture": "bilinear.png", "extent": [64, 64], "region": [0.46875, 0.25, 0.484375, 0.75], "reduce": "every", "minimum": [0.12549, 0.12549, 0.12549, 1], "maximum": [0.12549, 0.12549, 0.12549, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "bilinear-column-33-is-seven-eighths", "capture": "bilinear.png", "extent": [64, 64], "region": [0.515625, 0.25, 0.53125, 0.75], "reduce": "every", "minimum": [0.87451, 0.87451, 0.87451, 1], "maximum": [0.87451, 0.87451, 0.87451, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "bilinear-right-plateau-is-one", "capture": "bilinear.png", "extent": [64, 64], "region": [0.90625, 0.25, 0.921875, 0.75], "reduce": "every", "minimum": [1, 1, 1, 1], "maximum": [1, 1, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "catmull-rom-column-30", "capture": "catmull-rom.png", "extent": [64, 64], "region": [0.46875, 0.25, 0.484375, 0.75], "reduce": "every", "minimum": [0.082353, 0.082353, 0.082353, 1], "maximum": [0.082353, 0.082353, 0.082353, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "catmull-rom-column-33", "capture": "catmull-rom.png", "extent": [64, 64], "region": [0.515625, 0.25, 0.53125, 0.75], "reduce": "every", "minimum": [0.917647, 0.917647, 0.917647, 1], "maximum": [0.917647, 0.917647, 0.917647, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "catmull-rom-left-plateau-is-zero", "capture": "catmull-rom.png", "extent": [64, 64], "region": [0.078125, 0.25, 0.09375, 0.75], "reduce": "every", "minimum": [0, 0, 0, 1], "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "catmull-rom-right-plateau-is-one", "capture": "catmull-rom.png", "extent": [64, 64], "region": [0.90625, 0.25, 0.921875, 0.75], "reduce": "every", "minimum": [1, 1, 1, 1], "maximum": [1, 1, 1, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/resample-reconstruction/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.time", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 6, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "sharpened-column-30-is-not-bilinear", "capture": "bilinear.png", "extent": [64, 64], "region": [0.46875, 0.25, 0.484375, 0.75], "reduce": "every", "minimum": [0.12549, 0.12549, 0.12549, 1], "maximum": [0.12549, 0.12549, 0.12549, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "sharpened-column-33-is-not-bilinear", "capture": "bilinear.png", "extent": [64, 64], "region": [0.515625, 0.25, 0.53125, 0.75], "reduce": "every", "minimum": [0.87451, 0.87451, 0.87451, 1], "maximum": [0.87451, 0.87451, 0.87451, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "catmull-rom-column-30", "capture": "catmull-rom.png", "extent": [64, 64], "region": [0.46875, 0.25, 0.484375, 0.75], "reduce": "every", "minimum": [0.082353, 0.082353, 0.082353, 1], "maximum": [0.082353, 0.082353, 0.082353, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "catmull-rom-column-33", "capture": "catmull-rom.png", "extent": [64, 64], "region": [0.515625, 0.25, 0.53125, 0.75], "reduce": "every", "minimum": [0.917647, 0.917647, 0.917647, 1], "maximum": [0.917647, 0.917647, 0.917647, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  }
+}

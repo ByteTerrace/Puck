@@ -23,7 +23,7 @@ public sealed class ShaderPipelineTests {
         string name,
         IReadOnlyList<ResourceReference> inputs,
         IReadOnlyList<ResourceReference> outputs,
-        ShaderPipelinePassKind kind = ShaderPipelinePassKind.Compute
+        ShaderPipelineDocumentPassKind kind = ShaderPipelineDocumentPassKind.Compute
     ) => new(
         name,
         $"{name}.hlsl",
@@ -142,7 +142,7 @@ public sealed class ShaderPipelineTests {
                 )],
             [Pass(
                     inputs: [],
-                    kind: ShaderPipelinePassKind.Fullscreen,
+                    kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     name: "draw",
                     outputs: ["out"]
                 )],
@@ -302,7 +302,7 @@ public sealed class ShaderPipelineTests {
         );
 
         Assert.Equal(
-            ShaderPipelinePassKind.Compute,
+            ShaderPipelineDocumentPassKind.Compute,
             compute.Passes[0].Kind
         );
         Assert.Equal(
@@ -310,9 +310,9 @@ public sealed class ShaderPipelineTests {
             compute.Passes[0].EntryPoint
         );
         Assert.Equal(
-            ShaderPipelinePassKind.Fullscreen,
+            ShaderPipelineDocumentPassKind.Fullscreen,
             ShaderPipelineDefinition.FromShaderSource(
-                kind: ShaderPipelinePassKind.Fullscreen,
+                kind: ShaderPipelineDocumentPassKind.Fullscreen,
                 name: "fragment",
                 sourcePath: "effect.frag.hlsl"
             ).Passes[0].Kind
@@ -530,7 +530,7 @@ public sealed class ShaderPipelineTests {
             resources: [Image("color"), Image("velocity")],
             passes: [Pass(
                     inputs: [],
-                    kind: ShaderPipelinePassKind.Fullscreen,
+                    kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     name: "draw",
                     outputs: ["color", "velocity"]
                 )],
@@ -555,7 +555,7 @@ public sealed class ShaderPipelineTests {
                 Image("out")],
             passes: [Pass(
                     inputs: ["input"],
-                    kind: ShaderPipelinePassKind.Fullscreen,
+                    kind: ShaderPipelineDocumentPassKind.Fullscreen,
                     name: "draw",
                     outputs: ["out"]
                 )],

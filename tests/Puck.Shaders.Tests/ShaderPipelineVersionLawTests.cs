@@ -29,7 +29,7 @@ public sealed class ShaderPipelineVersionLawTests {
     private static ShaderPipelinePass Compute(string name, ResourceReference[] inputs, ResourceReference[] outputs) => new(
         EntryPoint: "main",
         Inputs: inputs,
-        Kind: ShaderPipelinePassKind.Compute,
+        Kind: ShaderPipelineDocumentPassKind.Compute,
         Name: name,
         Outputs: outputs,
         Source: $"{name}.hlsl"
@@ -37,7 +37,7 @@ public sealed class ShaderPipelineVersionLawTests {
     private static ShaderPipelinePass Fullscreen(string name, ResourceReference[] inputs, string output) => new(
         EntryPoint: "main",
         Inputs: inputs,
-        Kind: ShaderPipelinePassKind.Fullscreen,
+        Kind: ShaderPipelineDocumentPassKind.Fullscreen,
         Name: name,
         Outputs: [output],
         Source: $"{name}.hlsl"
@@ -127,13 +127,13 @@ public sealed class ShaderPipelineVersionLawTests {
             shaders: plan.Passes.ToDictionary(
                 elementSelector: pass => new CompiledShader(
                     diagnostics: [],
-                    dxil: ((pass.Declaration.Kind == ShaderPipelinePassKind.Compute)
+                    dxil: ((pass.Declaration.Kind == ShaderPipelineDocumentPassKind.Compute)
                         ? new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Compute] = bytecode }
                         : new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Vertex] = bytecode, [ShaderStage.Fragment] = bytecode }),
                     name: pass.Name,
                     sourceHash: pass.Name,
                     sourcePath: $"{pass.Name}.hlsl",
-                    spirv: ((pass.Declaration.Kind == ShaderPipelinePassKind.Compute)
+                    spirv: ((pass.Declaration.Kind == ShaderPipelineDocumentPassKind.Compute)
                         ? new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Compute] = bytecode }
                         : new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Vertex] = bytecode, [ShaderStage.Fragment] = bytecode })
                 ),

@@ -176,7 +176,7 @@ public sealed class PipelineCanaryFixtureTests {
         ));
 
         Assert.Equal(
-            expected: [("seed", ShaderPipelinePassKind.Compute), ("combine", ShaderPipelinePassKind.Compute), ("present", ShaderPipelinePassKind.Fullscreen)],
+            expected: [("seed", ShaderPipelineDocumentPassKind.Compute), ("combine", ShaderPipelineDocumentPassKind.Compute), ("present", ShaderPipelineDocumentPassKind.Fullscreen)],
             actual: plan.Passes.Select(selector: static pass => (pass.Name, pass.Declaration.Kind))
         );
         Assert.Equal(
