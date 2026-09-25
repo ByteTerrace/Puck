@@ -162,4 +162,10 @@ public static class CreationFrame {
     /// <param name="document">The author-frame document.</param>
     /// <returns>The equivalent engine-frame document.</returns>
     public static CreationDocument ToEngine(CreationDocument document) => Apply(document: document);
+    /// <summary>Converts an author-frame point to the engine frame: the exact negation of X and Z every position in a
+    /// converted document takes, for geometry authored beside a creation rather than in it, such as a prototype's
+    /// mesh. A proper rotation, so a triangle's winding is unchanged.</summary>
+    /// <param name="point">The author-frame point.</param>
+    /// <returns>The engine-frame point.</returns>
+    public static Vector3 PointToEngine(Vector3 point) => Flip(value: point);
 }

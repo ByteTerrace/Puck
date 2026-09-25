@@ -114,6 +114,7 @@ namespace Puck.World;
 // puck.creation.v1 document rides CreationDocumentJsonConverter — its OWN canonical serializer — never this context's
 // member policies (see the converter's remarks).
 [JsonSerializable(typeof(WorldPrototype))]
+[JsonSerializable(typeof(WorldPrototypeMesh))]
 [JsonSerializable(typeof(WorldPlacement))]
 [JsonSerializable(typeof(WorldPlacementSpatialVolume))]
 [JsonSerializable(typeof(WorldPlacementReflowRequest))]

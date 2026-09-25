@@ -1,5 +1,7 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Puck.World.Authoring;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Text;
 
@@ -9,7 +11,8 @@ namespace Puck.World.Client;
 /// Emits the world's STATIC placements into the program under construction — each materialized pattern or reflected
 /// copy is a static <see cref="SdfProgramBuilder.BeginInstance"/> whose shapes replay the referenced creation's shape
 /// list with the full placement transform baked into every shape's own segment. Animated placements (framed creations)
-/// are NOT emitted here — they ride <see cref="WorldStampPool"/>'s reserved dynamic pool.
+/// are NOT emitted here — they ride <see cref="WorldStampPool"/>'s reserved dynamic pool. A prototype's inline mesh
+/// (<see cref="WorldPrototype.Mesh"/>) becomes one <see cref="SdfMeshDraw"/> per static placement instance.
 /// </summary>
 /// <remarks>Text runs share the same instance and transform as their creation and resolve through the world's packed
 /// font catalog. They count against <see cref="CreationDocument.StampShapeCount"/> like every other emitted shape.</remarks>
@@ -20,6 +23,8 @@ public static class WorldPlacementStamper {
     // Probe instances are spaced far apart so the program's segment-merge pass can never collapse consecutive probe
     // segments — a merged probe would under-reserve the segment directory a real scattered world needs (contract).
     private const float ProbeSpread = 100f;
+    // Each inline prototype mesh's engine-frame SdfMesh, keyed by the immutable mesh record (MeshOf).
+    private static readonly ConditionalWeakTable<WorldPrototypeMesh, SdfMesh> Meshes = new();
 
     /// <summary>Registers a creation's palette (16-slot clamp) with an optional tint lerp, returning program-relative
     /// material ids indexed like the creation's own palette slots.</summary>
@@ -135,6 +140,38 @@ public static class WorldPlacementStamper {
             ));
         }
     }
+    // A static instance's mesh draw: the prototype's engine-frame triangles under the instance's scale, its mirror (a
+    // plane through the placement origin in the local frame, as the shapes reflect) and the placement's yaw and
+    // origin, composed in the row-vector convention SdfMeshDraw carries.
+    private static void AppendMeshDraw(SdfMesh? mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal, ICollection<SdfMeshDraw>? meshDraws) {
+        if ((mesh is null) || (meshDraws is null)) {
+            return;
+        }
+
+        var local = Matrix4x4.CreateScale(scale: scale);
+
+        if (reflectionNormal is { } normal) {
+            local *= Matrix4x4.CreateReflection(value: new Plane(
+                d: 0f,
+                normal: Vector3.Normalize(value: normal)
+            ));
+        }
+
+        meshDraws.Add(item: new SdfMeshDraw(
+            Material: material,
+            Mesh: mesh,
+            ObjectToWorld: ((local * Matrix4x4.CreateFromQuaternion(quaternion: rotation)) * Matrix4x4.CreateTranslation(position: origin))
+        ));
+    }
+    // The engine-frame SdfMesh of an inline prototype mesh, converted once: prototype rows are replaced, never mutated,
+    // so every placement and every rebuild of one row shares one mesh.
+    private static SdfMesh MeshOf(WorldPrototypeMesh mesh) => Meshes.GetValue(
+        createValueCallback: static authored => new SdfMesh(
+            indices: authored.Indices.ToArray(),
+            positions: authored.EngineVertices.ToArray()
+        ),
+        key: mesh
+    );
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
     // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.
     // Uniform placement scale commutes with the per-shape rotations (shear-free).
@@ -156,7 +193,7 @@ public static class WorldPlacementStamper {
             )]
         );
     }
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes) {
+    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws) {
         var frame = WorldDefinitionRows.ResolvedFrame(
             definition: definition,
             placement: placement
@@ -219,6 +256,15 @@ public static class WorldPlacementStamper {
                     rotation: rotation,
                     scale: placement.Scale,
                     volumes: volumes
+                );
+                AppendMeshDraw(
+                    material: meshMaterial,
+                    mesh: mesh,
+                    meshDraws: meshDraws,
+                    origin: instance.Origin,
+                    reflectionNormal: instance.ReflectionNormal,
+                    rotation: rotation,
+                    scale: placement.Scale
                 );
 
                 if (perShape) {
@@ -464,7 +510,9 @@ public static class WorldPlacementStamper {
     /// <param name="tintFor">Resolves a placement id's albedo tint (color + blend), or <see langword="null"/> untinted.</param>
     /// <param name="volumes">Receives each static placement instance's bounded volumes (<see cref="CreationDocument.Volumes"/>)
     /// baked into world space with no dynamic slot, or <see langword="null"/> when the caller renders none.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null) {
+    /// <param name="meshDraws">Receives one draw per static placement instance of a prototype that carries a mesh
+    /// (<see cref="WorldPrototype.Mesh"/>), or <see langword="null"/> when the caller draws none.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var paletteById = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
 
@@ -508,7 +556,16 @@ public static class WorldPlacementStamper {
                 placement: placement,
                 textCatalog: textCatalog,
                 worldSeed: worldSeed,
-                volumes: volumes
+                volumes: volumes,
+                mesh: ((meshDraws is not null) && (creation.Mesh is { } mesh)
+                    ? MeshOf(mesh: mesh)
+                    : null),
+                meshMaterial: paletteIds[Math.Clamp(
+                    value: (creation.Mesh?.Material ?? 0),
+                    max: (paletteIds.Length - 1),
+                    min: 0
+                )],
+                meshDraws: meshDraws
             );
         }
     }

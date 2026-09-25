@@ -1135,10 +1135,25 @@ follow its device-bound services, its one recorder and the SDF engine's groups.
    `SdfFrame.MeshDraws`, with laws that include the fixed-point raycast bounded
    at a distance agreeing with the unbounded one whenever its hit is nearer. A
    pipeline `Geometry` pass takes its camera as a `ViewProjection` here.
-6. P4-2b, the mesh source: a prototype carries its mesh as inline indexed
-   triangles (`prototypes.<name>.mesh`), and placements place it, so a mesh
-   has the one placement path P17's bakes also reach. Placed meshes reach
-   `SdfFrame.MeshDraws` through a `GpuRegion`.
+6. P4-2b, landed, the mesh source: a prototype row carries an optional
+   `mesh` of inline indexed triangles (`WorldPrototypeMesh`: `vertices` in the
+   creation's author frame, `indices`, and a palette `material`). The
+   validator refuses an empty mesh, a partial triangle, an index past the
+   vertices, a non-finite vertex, a degenerate triangle (a repeated index or
+   zero area) and a material outside the palette, each by name, and refuses a
+   mesh on an animated creation or under an inhabited or attached placement,
+   because only a static stamp draws one. `WorldPlacementStamper.EmitPlacement`,
+   the static placement path P17's bakes also reach, adds one `SdfMeshDraw` per
+   placement instance (the engine-frame triangles under the instance's scale,
+   mirror, yaw and position), and `WorldFramePresenter` hands them to
+   `SdfFrame.MeshDraws`. `world.budget` prints the bytes the mesh region needs
+   (`SdfMeshRegion`: each distinct mesh's positions and indices once, and a
+   matrix and material a draw) and the draws they cover. `PrototypeMeshLawTests`
+   hold the round trip, the refusals and the placement's draw. Open: the
+   `GpuRegion` those bytes upload through, which rides P7b-17 and P7b-19 with
+   the region-copy kernel; meshes on animated and attached stamps, which follow
+   when a reader needs them (P4-2c's motion canary or P6-3); and meshes in
+   session views and neighbour worlds, whose static emitters pass no draw list.
 7. P4-2c, the raster pass and the bounded primary. Done when parity holds and
    the mesh fixtures of the check above pass.
 8. P4-2d, the canaries: `sdf-mesh-visibility` and `sdf-mesh-motion` on both

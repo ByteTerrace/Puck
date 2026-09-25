@@ -17325,6 +17325,46 @@
               "null"
             ],
             "default": null
+          },
+          "mesh": {
+            "description": "Opaque triangles every static placement of the prototype draws beside its field, or null for none.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "vertices": {
+                "description": "The vertex positions, in the author frame.",
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                }
+              },
+              "indices": {
+                "description": "Three vertex indices per triangle.",
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "material": {
+                "description": "The index of the creation palette entry the triangles shade with.",
+                "type": "integer",
+                "default": 0
+              }
+            },
+            "required": [
+              "vertices",
+              "indices"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldPrototypeMesh"
           }
         },
         "required": [

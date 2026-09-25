@@ -4,7 +4,8 @@ namespace Puck.SdfVm;
 
 /// <summary>An indexed triangle list in object space: opaque geometry a frame draws beside its SDF program.</summary>
 /// <remarks>Triangles wind counter-clockwise seen from their front, in the right-handed convention of
-/// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. Nothing produces or draws a mesh yet.</remarks>
+/// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. A world prototype's inline mesh becomes one, placed by its static
+/// placements; no pass draws it yet.</remarks>
 public sealed record SdfMesh {
     /// <summary>Creates a mesh, refusing a malformed index list or a non-finite position.</summary>
     /// <param name="positions">The object-space vertex positions.</param>
@@ -60,3 +61,36 @@ public sealed record SdfMesh {
 /// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>.</param>
 /// <param name="Material">The material-table index the triangles shade with, as an SDF hit's material does.</param>
 public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material);
+/// <summary>
+/// The layout of the region a frame's mesh draws upload into: each distinct <see cref="SdfMesh"/> once, however many
+/// draws share it, as its positions (three floats a vertex) and indices (one word each), then one record a draw, its
+/// row-vector object-to-world matrix and its material (seventeen words). The engine does not create the region yet;
+/// <see cref="BytesOf"/> is what its allocation will be, and <c>world.budget</c> prints it.
+/// </summary>
+public static class SdfMeshRegion {
+    /// <summary>The bytes of one vertex position.</summary>
+    public const int PositionBytes = (3 * sizeof(float));
+    /// <summary>The bytes of one index.</summary>
+    public const int IndexBytes = sizeof(uint);
+    /// <summary>The bytes of one draw's record: a 4×4 matrix and a material word.</summary>
+    public const int DrawBytes = (17 * sizeof(uint));
+
+    /// <summary>Counts the region a list of draws needs.</summary>
+    /// <param name="draws">The draws.</param>
+    /// <returns>The distinct meshes' positions and indices plus one record a draw.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="draws"/> is <see langword="null"/>.</exception>
+    public static ulong BytesOf(IReadOnlyList<SdfMeshDraw> draws) {
+        ArgumentNullException.ThrowIfNull(draws);
+
+        var meshes = new HashSet<SdfMesh>(comparer: ReferenceEqualityComparer.Instance);
+        var bytes = (((ulong)draws.Count) * DrawBytes);
+
+        foreach (var draw in draws) {
+            if (meshes.Add(item: draw.Mesh)) {
+                bytes += ((((ulong)draw.Mesh.Positions.Length) * PositionBytes) + (((ulong)draw.Mesh.Indices.Length) * IndexBytes));
+            }
+        }
+
+        return bytes;
+    }
+}

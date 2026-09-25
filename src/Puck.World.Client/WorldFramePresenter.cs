@@ -1560,6 +1560,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
             Volumes = m_volumes,
+            // A prototype's inline mesh at each static placement; no pass draws it yet.
+            MeshDraws = m_emitter.StaticMeshDraws,
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
