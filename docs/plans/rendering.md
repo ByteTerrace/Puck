@@ -185,9 +185,8 @@ sources, each a `WorkCounterSet`. `shaders.compiler` counts a compiler's
 requests, its cache hits, and each native tool's runs, where
 `ShaderCompiler.StepsOf`'s steps run. `procedures.vulkan` counts the device-
 and instance-level procedures `VulkanProcResolver` resolves.
-`shaders.sdf-kernels`, `shaders.fullscreen-pass` and `shaders.set-manifest`
-count the shader loads in `SdfWorldKernels`, `FullscreenPassNode` and
-`ShaderSetManifest` and the bytecode bytes each read. Requests, tool runs,
+`shaders.sdf-kernels` and `shaders.set-manifest` count the shader loads in
+`SdfWorldKernels` and `ShaderSetManifest` and the bytecode bytes each read. Requests, tool runs,
 resolutions and loads are per-backend-deterministic; cache hits are pacing,
 because the compile cache under the state root outlives the process. The
 World registers the shader sources in both presentation shapes, and the Vulkan
@@ -229,7 +228,8 @@ framebuffers are separate objects over those images. The
 `pipeline-geometry` canary draws two geometry passes through one color and one
 depth chain on both backends, and GPU-free laws hold the plan, the node's
 recording and each backend's refusal of incompatible attachments. The float
-preview, overlays and `FullscreenPassNode` draw through the same render passes.
+preview, the overlay and the `post.<id>` packages draw through the same render
+passes.
 The vertex stage of a geometry pass receives no parameters; a camera or
 per-instance transform for mesh geometry belongs to P4.
 
@@ -856,18 +856,19 @@ implements `ISourcePicker`. The recorded Windows run, a click reaching a
 captured editor window at the mapped point and the chord returning input to the
 game, belongs to P13b.
 
-Rendering today is a tree of `IRenderNode`s
-(`src/Puck.Hosting`), with no scheduler: each node calls its children's
-`ProduceFrame` from inside its own. `WorldBootComposition` builds the live
-chain:
+Rendering today runs the default render graph `WorldRootGraph` composes,
+through `RenderGraphRuntime` behind `RenderGraphRuntimeNode`, the host's render
+root, in both presentation shapes (see P11b commit 6 above):
 
-1. `SdfEngineNode`, which also hosts each `views.pipelines` pane as a child
-   slot.
-2. One `FullscreenPassNode` per `render.extensions` row. Each one already runs
-   on an internal `ShaderPipelineRenderNode`.
-3. `UnifiedOverlayNode`, which draws the console, HUD, toasts, and cursor.
-4. The launcher, which hands the result to a surface compositor that blits one
-   image to the swapchain.
+1. `world`, the `sdf.world` external producer: `SdfEngineNode`, which still
+   hosts each `views.pipelines` pane as a child slot and calls its
+   `ProduceFrame` from inside its own.
+2. When anything is drawn over it, the root `main`: one `post.<id>` package
+   pass per `render.extensions` entry in document order, then `overlay`, which
+   draws the console, HUD, toasts and cursor in a windowed World. With
+   nothing drawn over it, `world` is the root.
+3. The launcher, which hands the root's image to a surface compositor that
+   blits it to the swapchain.
 
 The SDF engine's second stage composites panes and child views, up to
 `SdfWorldEngine.MaxViewports` (5). Diegetic screens are 32 fixed sampler slots
@@ -1277,12 +1278,8 @@ Selecting an output on the installed graph builds its float preview's modules,
 pipelines and targets on the thread pool as well; the previous selection stays
 published until the frame boundary that takes the finished build, and a
 preview that fails to build leaves it published and reports the failure where
-a refused swap reports its own. A `FullscreenPassNode` whose input changes size
-no longer drains the device: the replaced executor retires once its
-successor's second submission after the replacement completes, the rule the
-render node applies to an image it stops publishing.
-`FullscreenPassNodeRetirementLawTests` and
-`TheFrameThreadCreatesNoPipelineOrShaderModuleOnAnyInstallOrSelection` pin both.
+a refused swap reports its own.
+`TheFrameThreadCreatesNoPipelineOrShaderModuleOnAnyInstallOrSelection` pins it.
 
 `WorldBootCompositionLawTests` in `tests/Puck.World.Tests` checks the World's
 composition without a device. It builds each presentation shape's service
