@@ -590,6 +590,11 @@
               "$ref": "#/properties/passes/items/properties/inputs/items"
             },
             "default": null
+          },
+          "config": {
+            "description": "The values of the package\u0027s config schema (Config), each absent field at its default, or null for every default. They are the pass\u0027s frame block config, which the graph compiler binds against the schema and refuses by name when they do not bind.",
+            "default": null,
+            "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
           }
         },
         "required": [

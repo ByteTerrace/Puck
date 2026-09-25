@@ -19,11 +19,15 @@ public static class RenderGraphSchemas {
 /// binds its own descriptors, so no reference declares a binding.</param>
 /// <param name="Outputs">The versions the package writes, one per output port in port order, each carrying what its
 /// port carries.</param>
+/// <param name="Config">The values of the package's config schema (<see cref="RenderGraphPackage.Config"/>), each
+/// absent field at its default, or <see langword="null"/> for every default. They are the pass's frame block config,
+/// which the graph compiler binds against the schema and refuses by name when they do not bind.</param>
 public sealed record RenderGraphPackagePass(
     string Name,
     string Package,
     IReadOnlyList<ResourceReference>? Inputs = null,
-    IReadOnlyList<ResourceReference>? Outputs = null
+    IReadOnlyList<ResourceReference>? Outputs = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? Config = null
 ) {
     /// <summary>Gets an empty list when the pass reads nothing.</summary>
     [JsonIgnore]

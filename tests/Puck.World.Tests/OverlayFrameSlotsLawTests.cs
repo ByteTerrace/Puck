@@ -54,8 +54,9 @@ public sealed class OverlayFrameSlotsLawTests {
     private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "m_frameFence")]
     private static extern ref IGpuSubmissionFence? FrameFence(UnifiedOverlayNode node);
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "m_frameSlots")]
-    private static extern ref OverlayFrameSlots FrameSlots(UnifiedOverlayNode node);
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "m_composer")]
+    private static extern ref OverlayFrameComposer Composer(UnifiedOverlayNode node);
+    private static OverlayFrameSlots FrameSlots(UnifiedOverlayNode node) => Composer(node: node).FrameSlots;
 
     [Fact]
     public void ADistinctNinthSourceSetsTheCapacitySignalWithoutAcquiringIt() {

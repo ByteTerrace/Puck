@@ -967,7 +967,10 @@ public sealed partial class ShaderPipelineCompiler {
 
             try {
                 parameters = (package
-                    ? ShaderPipelineParameterLayout.ForPackage(package: pass.Source)
+                    ? ShaderPipelineParameterLayout.ForPackage(
+                        config: pass.Config,
+                        package: pass.Source
+                    )
                     : ShaderPipelineParameterLayout.Resolve(pass: pass));
             } catch (InvalidDataException exception) {
                 Add(

@@ -1838,6 +1838,7 @@
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )"
         }
       },

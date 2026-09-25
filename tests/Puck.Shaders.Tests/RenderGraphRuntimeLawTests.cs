@@ -13,6 +13,7 @@ namespace Puck.Shaders.Tests;
 public sealed partial class RenderGraphRuntimeLawTests {
     private const int Display = 64;
     private const string Camera = "test.camera";
+    private const string Over = "test.over";
     private const string Pool = "test.pool";
     private const ulong PoolBytes = 256;
 
@@ -22,6 +23,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Inputs: [],
             Outputs: [RenderGraphPackagePort.Image],
             Summary: "A camera view whose recorder counts its renders."
+        ),
+        new RenderGraphPackage(
+            Id: Over,
+            Inputs: [RenderGraphPackagePort.Image],
+            Outputs: [RenderGraphPackagePort.Image],
+            Summary: "A pass drawn over its input, which may draw nothing."
         ),
         new RenderGraphPackage(
             Id: Pool,
@@ -211,15 +218,20 @@ public sealed partial class RenderGraphRuntimeLawTests {
     );
 
     /// <summary>The fake recorders and what they recorded, per instance.</summary>
-    private sealed class Recorders {
+    private sealed class Recorders : IRenderGraphPackageFactory {
         public Recorders(params string[] serves) {
             foreach (var package in serves) {
                 Registry.Register(
-                    factory: Create,
+                    factory: this,
                     package: package
                 );
             }
         }
+
+        public IReadOnlyList<GpuComputeBinding> SetBindings => [];
+
+        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, nint descriptorPool) => Create(context: context);
 
         public Dictionary<string, Counter> ByInstance { get; } = new(comparer: StringComparer.Ordinal);
         public RenderGraphPackageRecorders Registry { get; } = new();
@@ -254,19 +266,31 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public int Created;
         public int Disposed;
         public uint Height;
+        public nint InputImage;
+        // A lease every recording holds in its frame's list, or none.
+        public GpuImageLease Lease;
         public nint OutputBuffer;
+        public nint OutputImage;
         public GpuImageLayout OutputLayout;
+        public RenderGraphPackageOutcome Outcome;
         public long Records;
         public uint Width;
     }
     private sealed class FakeRecorder(Counter counter) : IRenderGraphPackageRecorder {
         public void Dispose() => counter.Disposed++;
-        public void Record(in RenderGraphPackageRecording recording) {
+        public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             counter.Records++;
+            recording.Leases.Hold(lease: in counter.Lease);
             counter.Width = recording.Width;
             counter.Height = recording.Height;
             counter.OutputBuffer = (recording.Outputs[0].Buffer?.BufferHandle ?? 0);
             counter.OutputLayout = recording.Outputs[0].Image.Layout;
+            counter.InputImage = ((recording.Inputs.Length == 0)
+                ? 0
+                : recording.Inputs[0].Image.ImageHandle);
+            counter.OutputImage = recording.Outputs[0].Image.ImageHandle;
+
+            return counter.Outcome;
         }
     }
     /// <summary>Describes each frame to a runtime over the same roots and footprints, counting frame indices.</summary>

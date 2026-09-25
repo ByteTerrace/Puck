@@ -332,6 +332,29 @@ publishes, and a bound buffer may be no larger than its producer's; the
 runtime refuses a mismatch by name when it installs. A package recorder's
 resolved images carry the layout their planned access left them in.
 
+A package id is served by an `IRenderGraphPackageFactory`. Its `Build` creates
+the pass's shader modules, pipelines and render passes on the thread pool with
+the candidate graph's shader passes, and its `Create` takes them when the graph
+installs and allocates its per-slot descriptor sets from the instance's one
+pool, which states the factory's `SetBindings`. A recorder records into the
+command buffer it is handed and never submits, waits or creates a pipeline.
+Each recording carries the pass's frame block, written as a shader pass's is
+(the frame members, then the package's config), and the frame's lease list,
+which retires a lease after that frame slot's fence. A package pass may carry
+`config` values, which the graph compiler binds against the package's schema
+and refuses by name as `RENDERGRAPH_PACKAGE_CONFIG`. A package that draws
+into an output brackets its render pass with `RenderGraphPackageDraw`, since
+the planner orders it in a compute pass's shape.
+
+A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
+and each output then stands for the input at its position: the instance
+publishes that input's image with no copy, in its own layout
+(`ShaderPipelineRenderNode.PublishedLayout`), and a root capture reads it. An
+output another pass reads, that is history, or that is not an RGBA8 image
+beside an input image of its format is refused by name when its pass draws
+nothing. `PostProcessPackage` serves every `post.<id>` and `OverlayPackage`
+serves `overlay`.
+
 An instance can instead be an external producer: a `RenderGraphInstance` whose
 `ExternalPackage` names the `IRenderGraphExternalProducer` registered for that
 package (`RenderGraphPackageRecorders.RegisterProducer`). It has no graph. The
@@ -350,7 +373,7 @@ replaced only once that engine's output is released.
 Captures read the root instance's output, and each instance counts its own
 passes. The live renderer does not use the runtime yet: `views.pipelines`,
 the SDF engine's child composition and `ViewStack` still render every view,
-and no host registers a package recorder or an external producer. Moving them onto graph instances is P11b in
+and no host registers a package factory or an external producer. Moving them onto graph instances is P11b in
 [the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
 
 ## Pass interfaces

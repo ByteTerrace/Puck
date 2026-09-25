@@ -610,7 +610,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                         Height: output.Image.Height,
                         ImageHandle: output.Image.ImageHandle,
                         ImageViewHandle: output.Image.ImageViewHandle,
-                        Layout: GpuImageLayout.ShaderReadOnly,
+                        Layout: output.Layout,
                         Width: output.Image.Width
                     )
                     : StandInFor(format: binding.Format)),
@@ -805,7 +805,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             m_current[index] = new Output(
                 Buffer: node.LatestOutputBuffer(),
                 Frame: frame.Index,
-                Image: surface
+                Image: surface,
+                Layout: node.PublishedLayout
             );
         }
 
@@ -847,12 +848,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private readonly record struct Published(GpuPixelFormat Format, ulong SizeBytes);
     // One input resolved at install: the version it binds and the producer whose output it reads.
     private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format);
-    // One completed output of an instance: the frame it belongs to, its published image, and its buffer when it is one.
-    private readonly record struct Output(long Frame, Surface Image, IGpuBuffer? Buffer) {
+    // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, and its
+    // buffer when it is one.
+    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer) {
         public static Output None => new(
             Buffer: null,
             Frame: -1,
-            Image: default
+            Image: default,
+            Layout: GpuImageLayout.Undefined
         );
     }
 }

@@ -29,6 +29,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private readonly GpuDeviceServices m_gpu;
     private readonly uint m_inFlight;
     private readonly GpuImageLayout m_outputLayout;
+
+    // The layout the published image is in between submissions: the output layout, or an external input's own when a
+    // package that drew nothing publishes it in its output's place.
+    private GpuImageLayout m_publishedLayout;
+
     private readonly FrameSlot[] m_slots;
 
     private ulong m_allocationBytes;
@@ -100,6 +105,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             );
         }
         m_outputLayout = outputLayout;
+        m_publishedLayout = outputLayout;
         m_packages = (packages ?? new RenderGraphPackageRecorders());
         m_slots = new FrameSlot[inFlightFrames];
         for (var i = 0; (i < m_slots.Length); i++) { m_slots[i] = new FrameSlot(); }
@@ -161,6 +167,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     public string? PendingCapturePath => m_capture.PendingPath;
     /// <summary>Gets the active immutable execution plan.</summary>
     public ShaderPipelinePlan? Plan => m_pipeline?.Plan;
+    /// <summary>Gets the layout the published image is in between the node's submissions: the node's output layout, or
+    /// an external input's own layout while a package pass that drew nothing
+    /// (<see cref="RenderGraphPackageOutcome.DrewNothing"/>) publishes that input in its output's place.</summary>
+    public GpuImageLayout PublishedLayout => m_publishedLayout;
     /// <summary>Gets resource allocation and extent information for the active graph.</summary>
     public IReadOnlyList<ShaderPipelineResourceStatus> ResourceStatus => m_resources.Select(selector: StatusOf).ToArray();
     /// <summary>Gets or sets whether a step is pending.</summary>
@@ -211,10 +221,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
 
         m_passes[planned.Index] = runtime;
-        InstallPackage(
-            planned: planned,
-            runtime: runtime
-        );
 
         var objects = built.TakePass(index: planned.Index);
 
@@ -272,10 +278,17 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
         runtime.Sets = new nint[m_inFlight];
         runtime.Samplers = new nint[m_inFlight];
+        runtime.PackageSetBindings = (objects.PackageFactory?.SetBindings.Count ?? 0);
         AllocateSlotObjects(
             descriptorPool: ref descriptorPool,
             graphPool: graphPool,
             pass: runtime
+        );
+        InstallPackage(
+            descriptorPool: descriptorPool,
+            objects: objects,
+            planned: planned,
+            runtime: runtime
         );
     }
     // A capture armed after a selection reads that selection: while its float preview builds, the published image is still
@@ -302,7 +315,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 };
 
                 m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback();
-                var sourceLayout = m_outputLayout;
+                var sourceLayout = m_publishedLayout;
 
                 // The readback sizes its staging buffer to the surface it reads, replacing one of another size.
                 m_readbackBytes = ReadbackBytes(
@@ -480,6 +493,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
             var graphPool = GraphDescriptorPool(
                 inFlight: m_inFlight,
+                packages: m_packages,
                 plan: plan
             );
             var descriptorPool = ((nint)0);
@@ -661,6 +675,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 owner: $"shader pipeline {m_descriptor.Name}",
                 pools: DescriptorPools(
                     inFlight: m_inFlight,
+                    packages: m_packages,
                     plan: next.Plan,
                     preview: key.Preview.HasValue
                 ),
@@ -784,7 +799,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         if (selectedResource.Spec.Kind == ShaderPipelineResourceKind.Buffer) {
             return default;
         }
-        if (NeedsPreview(spec: selectedResource.Spec)) {
+        if (
+            (selectedResource.Alias.Target is null) &&
+            NeedsPreview(spec: selectedResource.Spec)
+        ) {
             var target = (m_preview?.GetTarget(slot: slot) ?? throw new InvalidOperationException(message: "The float preview target is not ready."));
 
             return Surface.SameDeviceImage(
@@ -795,17 +813,20 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 SurfaceFormat.R8G8B8A8Unorm
             );
         }
-        var resource = PresentationResource(selected: selectedResource);
+        var (published, publishedName, instance) = PublicationOf(
+            selected: PresentationResource(selected: selectedResource),
+            slot: slot
+        );
         var resolved = ResolveImage(
-            resource,
-            resource.Spec.Name,
-            slot
+            index: instance,
+            name: publishedName,
+            resource: published
         );
         var imageHandle = resolved.ImageHandle;
         var imageView = resolved.ImageViewHandle;
         var width = resolved.Width;
         var height = resolved.Height;
-        var format = ParseFormat(format: resource.Spec.Format);
+        var format = resolved.Format;
 
         if (format == GpuPixelFormat.R8G8B8A8Unorm) {
             return Surface.SameDeviceImage(
@@ -833,7 +854,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     internal static GpuPixelFormat PublishedFormat(ShaderPipelineResource output) => (NeedsPreview(spec: output)
         ? GpuPixelFormat.R8G8B8A8Unorm
         : ParseFormat(format: output.Format));
-    internal static GpuPixelFormat ParseFormat(string? format) {
+
+    /// <summary>Parses a resource declaration's format, as every graph image is created and bound by.</summary>
+    /// <param name="format">The declared format's name, such as <c>R8G8B8A8Unorm</c>, in any case.</param>
+    /// <returns>The format.</returns>
+    /// <exception cref="InvalidDataException"><paramref name="format"/> names no <see cref="GpuPixelFormat"/>.</exception>
+    public static GpuPixelFormat ParseFormat(string? format) {
         if (Enum.TryParse<GpuPixelFormat>(
             ignoreCase: true,
             result: out var parsed,
@@ -962,11 +988,28 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             }
         }
     }
-    // Writes the pass's frame block: its bound config, then every frame member through the layout's host writer, or, with
-    // sentinels on, every member's echo sentinel.
     private void PushFrameConstants(RuntimePass pass, in FrameContext context, nint command, nint layout, uint width, uint height, IGpuRecorder recorder, GpuBindPoint bindPoint) {
         Span<byte> bytes = stackalloc byte[((int)pass.ParametersLayout.SizeBytes)];
 
+        WriteFrameBlock(
+            bytes: bytes,
+            context: in context,
+            height: height,
+            pass: pass,
+            width: width
+        );
+        recorder.PushConstants(
+            bindPoint: bindPoint,
+            commandBufferHandle: command,
+            data: bytes,
+            offset: 0,
+            pipelineLayoutHandle: layout,
+            stageFlags: FrameBlockStages
+        );
+    }
+    // Writes the pass's frame block: its bound config, then every frame member through the layout's host writer, or, with
+    // sentinels on, every member's echo sentinel.
+    private void WriteFrameBlock(RuntimePass pass, in FrameContext context, uint width, uint height, Span<byte> bytes) {
         if (Sentinels) {
             ShaderInterfaceEcho.WriteSentinels(
                 block: bytes,
@@ -983,19 +1026,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 width: width
             );
         }
-        recorder.PushConstants(
-            bindPoint: bindPoint,
-            commandBufferHandle: command,
-            data: bytes,
-            offset: 0,
-            pipelineLayoutHandle: layout,
-            stageFlags: FrameBlockStages
-        );
     }
     private void Record(RuntimePass pass, int slot, in FrameContext context, List<nint> commands) {
         if (pass.Package is not null) {
             RecordPackage(
                 commands: commands,
+                context: in context,
                 pass: pass,
                 slot: slot
             );
@@ -1734,6 +1770,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
         public IGpuBuffer[]? Buffers;
         public IGpuImage[]? Images;
+        // The input this output stands for while the package pass writing it draws nothing.
+        public PackageAlias Alias;
 
         public RuntimeResource(ShaderPipelinePlannedStorage storage, int count) {
             Storage = storage;
@@ -1803,6 +1841,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         public List<GpuComputeBinding> Bindings = [];
 
+        // A package pass's per-slot set bindings, which its recorder allocates from the graph's pool.
+        public int PackageSetBindings;
+        // Why a package pass's outputs cannot stand for its inputs when it draws nothing, or null when they can.
+        public string? PackageAliasRefusal;
         public IGpuComputePipeline? Compute;
         public IGpuCommandPool[]? Draw;
         public IGpuFramebuffer[]? Framebuffers;

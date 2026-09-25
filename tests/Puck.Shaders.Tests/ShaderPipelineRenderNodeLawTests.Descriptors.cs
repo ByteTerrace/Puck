@@ -15,6 +15,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     // The view descriptors a plan's pools occupy in a device heap.
     private static uint HeapDemand(CompiledShaderPipeline pipeline) => ((uint)ShaderPipelineRenderNode.DescriptorPools(
         inFlight: InFlight,
+        packages: new RenderGraphPackageRecorders(),
         plan: pipeline.Plan,
         preview: false
     ).Sum(selector: static pool => pool.HeapDescriptors));
@@ -40,6 +41,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         );
         var stated = ShaderPipelineRenderNode.DescriptorPools(
             inFlight: InFlight,
+            packages: new RenderGraphPackageRecorders(),
             plan: node.Plan!,
             preview: floatOutput
         );
