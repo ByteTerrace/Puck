@@ -89,9 +89,12 @@ public sealed class WorldPipelineSources(string? documentDirectory) {
     public (int? Passes, string? Issue) PlanGraph(WorldViewGraph graph) {
         ArgumentNullException.ThrowIfNull(argument: graph);
 
+        if (graph.Package is { } package) {
+            return (null, $"package '{package}' renders through its producer, which the host prices");
+        }
         if (!WorldDocumentPaths.TryResolve(
             documentDirectory: DocumentDirectory,
-            path: graph.Source,
+            path: graph.Source!,
             reason: out var unresolved,
             resolved: out var path
         )) {

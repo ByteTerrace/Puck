@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Puck.Commands;
 using Puck.Maths;
 
@@ -1133,33 +1132,16 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.camera '{pipelineCamera}' names no camera row.");
             }
 
-            if (
-                !float.IsFinite(f: pipeline.TimeScale) ||
-                (pipeline.TimeScale < 0f)
-            ) {
-                errors.Add(item: $"{path}.timeScale {pipeline.TimeScale} must be finite and non-negative.");
-            }
-
-            if (
-                (pipeline.Output is { } output) &&
-                string.IsNullOrWhiteSpace(value: output)
-            ) {
-                errors.Add(item: $"{path}.output must name an image version when present.");
-            }
-
-            // The shape of an override set; the source's config schema binds the values themselves.
-            foreach (var (pass, config) in (pipeline.Overrides ?? new Dictionary<string, JsonElement>())) {
-                if (string.IsNullOrWhiteSpace(value: pass)) {
-                    errors.Add(item: $"{path}.overrides names an empty pass.");
-                } else if (config.ValueKind != JsonValueKind.Object) {
-                    errors.Add(item: $"{path}.overrides.{pass} must be an object of config fields.");
-                } else if (!config.EnumerateObject().Any()) {
-                    errors.Add(item: $"{path}.overrides.{pass} overrides no field; omit the pass instead.");
-                }
-            }
+            ValidateInstanceValues(
+                errors: errors,
+                output: pipeline.Output,
+                overrides: pipeline.Overrides,
+                path: path,
+                timeScale: pipeline.TimeScale
+            );
         }
 
-        ValidateGraphs(
+        var graphNames = ValidateGraphs(
             cameras: cameras,
             errors: errors,
             views: views
@@ -1230,11 +1212,13 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{slotPath} rect must lie within [0, 1] with positive extents.");
                 }
 
-                if (
-                    (slot.Camera is not null) &&
-                    (slot.Pipeline is not null)
+                if (((((slot.Camera is null) ? 0 : 1) + ((slot.Pipeline is null) ? 0 : 1)) + ((slot.Instance is null) ? 0 : 1)) > 1) {
+                    errors.Add(item: $"{slotPath} must author at most one of camera/pipeline/instance.");
+                } else if (
+                    (slot.Instance is { } instance) &&
+                    !graphNames.Contains(item: instance)
                 ) {
-                    errors.Add(item: $"{slotPath} must author at most one of camera/pipeline, never both.");
+                    errors.Add(item: $"{slotPath}.instance '{instance}' names no views.graphs row.");
                 } else if (
                     (slot.Camera is { } camera) &&
                     !cameras.Contains(item: camera)

@@ -77,7 +77,7 @@ internal static class AffectedDocuments {
 
             var directory = WorldDocumentPaths.DirectoryOf(documentPath: file);
 
-            foreach (var source in definition!.Views.Pipelines.Select(selector: static row => row.Source).Concat(second: (definition.Views.Graphs ?? []).Select(selector: static row => row.Source))) {
+            foreach (var source in definition!.Views.Pipelines.Select(selector: static row => row.Source).Concat(second: (definition.Views.Graphs ?? []).Select(selector: static row => row.Source).OfType<string>())) {
                 if (WorldDocumentPaths.TryResolve(
                     documentDirectory: directory,
                     path: source,

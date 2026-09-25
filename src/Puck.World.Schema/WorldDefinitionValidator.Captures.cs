@@ -57,17 +57,22 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.station {stationReason}.");
             }
 
-            // The instances a capture can name are the ones every composed render graph has: the root, by omitting the
-            // name, and the SDF world beneath whatever is drawn over it.
+            // A capture names the root by omitting the name, a views.graphs row by its name, and, in the render graph
+            // composition synthesizes, the SDF world beneath whatever is drawn over it.
             if (
                 (row.Instance is { } instance) &&
-                !string.Equals(
+                !(definition.Views.Graphs ?? []).Any(predicate: graph => string.Equals(
+                    a: graph?.Name,
+                    b: instance,
+                    comparisonType: StringComparison.Ordinal
+                )) &&
+                ((definition.Views.Root is not null) || !string.Equals(
                     a: instance,
                     b: WorldViewGraphs.WorldInstance,
                     comparisonType: StringComparison.Ordinal
-                )
+                ))
             ) {
-                errors.Add(item: $"{path}.instance '{instance}' names no render-graph instance a capture can read: name '{WorldViewGraphs.WorldInstance}' for the SDF world before its post passes and overlay, or omit it for the root.");
+                errors.Add(item: $"{path}.instance '{instance}' names no render-graph instance a capture can read: name a views.graphs row, '{WorldViewGraphs.WorldInstance}' for the SDF world before its post passes and overlay in a world that names no root, or omit it for the root.");
             }
 
             ValidateCaptureTicks(

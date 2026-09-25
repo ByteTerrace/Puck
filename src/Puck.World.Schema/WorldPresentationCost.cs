@@ -94,7 +94,7 @@ public sealed record WorldPresentationCost(IReadOnlyList<WorldGraphInstanceCost>
                 Issue: planned.Issue,
                 Name: graph.Name,
                 Passes: planned.Passes,
-                Source: graph.Source
+                Source: (graph.Source ?? graph.Package!)
             );
         }
 

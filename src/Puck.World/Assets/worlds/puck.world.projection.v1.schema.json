@@ -19512,22 +19512,34 @@
             "null"
           ],
           "items": {
-            "description": "One named instance of a frame graph: a view rendered by a puck.render.graph.v1 document, such as a pane, a game camera shown on a screen, or a nested world. The row carries authored intent; planning, scheduling and resources belong to the renderer.",
+            "description": "One named instance of a frame graph: a view rendered by a puck.render.graph.v1 document, such as a pane, a game camera shown on a screen, or a nested world, or an engine package\u0027s producer such as the SDF world. A Instance shows it in a layout, and the pipeline.* console verbs address it by name. The row carries authored intent; planning, scheduling, compilation and resources belong to the renderer.",
             "type": [
               "object",
               "null"
             ],
             "properties": {
               "name": {
-                "description": "The instance\u0027s stable name (a SafeName, unique within the section), which another row\u0027s input names.",
+                "description": "The instance\u0027s stable name (a SafeName, unique within the section), which another row\u0027s input, a layout slot and a capture name.",
                 "type": "string"
               },
               "source": {
-                "description": "The graph document, resolved relative to the world document\u0027s own directory as a Source is.",
-                "type": "string"
+                "description": "Where the instance\u0027s graph comes from, or null for a row that names a Package: a puck.render.graph.v1 graph document, a one-off shader source file, which reads as a one-pass graph, or a puck.shader.package.v1 package directory, which loads with its source tree gone. It resolves beside the document that authors it (WorldDocumentPaths), like every relative path a document authors.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "package": {
+                "description": "The engine package whose producer renders the instance, such as sdf.world, or null for a row that names a Source. A package instance reads no input and takes no time scale, output or override.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
               },
               "camera": {
-                "description": "The authored camera the instance renders from, or null for a graph that reads no camera.",
+                "description": "The authored camera the instance renders from, feeding the frame block\u0027s cameraPosition, cameraTarget, cameraUp and cameraFov, or null, which leaves cameraFov zero so a graph keeps its own pointer orbit.",
                 "type": [
                   "string",
                   "null"
@@ -19597,11 +19609,34 @@
                   "title": "WorldViewGraphInput"
                 },
                 "default": null
+              },
+              "timeScale": {
+                "description": "The instance clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
+                "type": "number",
+                "default": 1
+              },
+              "output": {
+                "description": "The image version the instance shows, or null for the source\u0027s first declared output.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "overrides": {
+                "description": "This instance\u0027s parameter overrides, keyed by pass name; each value is that pass\u0027s config object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one source differ only in what they override. The source\u0027s config schema binds them when a boot, a world.load or world.reload, a commit, or an upsert names them (the server reads the source, and refuses a value by name), and again when a graph installs (the host binds them into its passes). null overrides nothing.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "default": null,
+                "additionalProperties": {
+                  "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+                }
               }
             },
             "required": [
-              "name",
-              "source"
+              "name"
             ],
             "additionalProperties": false,
             "title": "WorldViewGraph"
@@ -19624,6 +19659,14 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldViewGraphBudget"
+        },
+        "root": {
+          "description": "The views.graphs row the display shows and captures read, or null for the render graph composition synthesizes from the document around WorldViewGraphs.WorldInstance and WorldViewGraphs.MainInstance. A world that names its root authors its whole render graph, the sdf.world package row included.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "layouts": {
           "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
@@ -19661,7 +19704,7 @@
                 "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
                 "type": "array",
                 "items": {
-                  "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Pipeline are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named pipeline (a WorldViewPipeline row) renders its selected image output into the rect \u2014 a slot names at most one of the two (the validator refuses both authored together).",
+                  "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera, Pipeline and Instance are all null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named pipeline (a WorldViewPipeline row) or graph instance (a WorldViewGraph row) shows its selected image output in the rect \u2014 a slot names at most one of the three (the validator refuses more authored together).",
                   "type": "object",
                   "properties": {
                     "x": {
@@ -19694,6 +19737,14 @@
                     },
                     "pipeline": {
                       "description": "The authored views.pipelines row name filling this slot with a compiled shader pipeline, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "instance": {
+                      "description": "The views.graphs row name whose output fills this slot, or null for a seat, camera or pipeline slot.",
                       "type": [
                         "string",
                         "null"
