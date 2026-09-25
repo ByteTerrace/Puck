@@ -1238,8 +1238,10 @@ The run boots `tests/Puck.Counters/counters.world.json` once per backend
 shown. It uses the same World build and leg machinery as `puck parity` (see
 [where the World artifact is built](#where-the-world-artifact-is-built)). Each
 leg runs `tests/Puck.Counters/counters.script.txt` on the World's console. The
-script turns off the cadence gate so every frame renders every pass, waits a
-pinned number of ticks, and asks for one `world.counters --json` reading. The
+script turns off the cadence gate so every frame renders every pass, pauses the
+simulation until the engine is ready, resumes it, waits a pinned number of
+ticks, and asks for one `world.counters --json` reading, so both backends read
+at the same tick however long their engines took to build. The
 runner closes the script with `wire.errors` and `quit` and requires every
 command accepted.
 

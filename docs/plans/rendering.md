@@ -165,11 +165,12 @@ the leg machinery it shares with `puck parity`, writes a
 backends disagree on. `puck counters compare` holds two reports to each other
 by class. Laws over fixture readings and reports cover the classification and
 the comparison, and a server law covers the forwarders across `world.reload`.
-The workload sets `world.cadence off` so every pass runs, then waits for the
-engine to be ready (`world.wait ready 180`: its pipeline set installed and its
-first frame produced) and reads 120 ticks after that, never at a fixed tick, so
-a cold driver cache cannot leave a leg reading a partial pipeline set and every
-world pass as absent. The render levers (`WorldRenderLeverCommandModule`) are
+The workload sets `world.cadence off` so every pass runs, pauses the
+simulation, waits for the engine to be ready (`world.wait ready 180`: its
+pipeline set installed and its first frame produced), resumes, and reads 120
+ticks after that. A cold driver cache cannot leave a leg reading a partial
+pipeline set and every world pass as absent, and because the simulation holds
+while the engine builds, both backends read the state counts at the same tick. The render levers (`WorldRenderLeverCommandModule`) are
 composed by the offscreen shape as well as the windowed one. The pipeline-cache counts in a
 report are pacing: each leg boots on a fresh state root, so every run starts
 with a cold cache and reports misses only.

@@ -4,8 +4,11 @@
 world.cadence off
 # The engine's pipeline set builds on the thread pool, and a cold driver cache can hold the first frame back for many
 # ticks, so the read waits on the engine being ready rather than on a tick count. The deadline names the build if it
-# never finishes.
+# never finishes. The simulation is paused meanwhile, so the ready tick, which differs by backend and cache, never
+# reaches the state counts: both backends read them at the same completed tick.
+world.rate pause
 world.wait ready 180
+world.rate resume
 # Then a fixed number of ticks, so frames of the ready engine have completed before the read.
 world.wait 120
 world.counters --json
