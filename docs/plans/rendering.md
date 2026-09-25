@@ -1392,19 +1392,26 @@ Phase 3, the groups, follows phase 2:
     `GpuGroupBinding`s) and whether it pushes an index, and refuses by name a
     group outside the four ordinals, an empty group, a repeated group or
     binding, and a binding inside another's array.
-    `ShaderInterfaceLayout.PipelineLayout` derives one from an interface.
-    `DirectXRootLayout.Plan` plans dense root parameters: per group in ordinal
-    order a view table, then a sampler table when the group holds a sampler,
-    each range at the group's space and the binding's register, and the
-    pushed index last at `b0` in space 4. `VulkanGroupLayouts.Plan` plans one
-    set layout per set number up to the highest group, empty where no group
-    sits, and a 4-byte push range. `DirectXRootLayoutLawTests`,
+    `ShaderInterfaceLayout.PipelineLayout` derives one from an interface and
+    the pipeline's stages, which `ShaderPipelinePassKinds.Stages` reads from
+    the pass kind: compute, or vertex and fragment for a fullscreen or
+    geometry pass. `DirectXRootLayout.Plan` plans dense root parameters: per
+    group in ordinal order a view table, then a sampler table when the group
+    holds a sampler, each range at the group's space and the binding's
+    register, and the pushed index last as one 32-bit root constant at `b0` in
+    space 4. Every root parameter's visibility is `ALL`, except a graphics
+    pipeline of one stage, whose parameters see that stage. `VulkanGroupLayouts.Plan`
+    plans one set layout per set number up to the highest group, empty where
+    no group sits, and a 4-byte push range, with every binding and the range
+    visible to the pipeline's stages. The plans carry everything 14b needs to
+    create root signatures and pipeline layouts. `DirectXRootLayoutLawTests`,
     `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
     planners and the spike's interfaces to the same tables. The combined image
     sampler that `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`
-    still state is not in the closed set, so their users, and the 17 sources
-    declaring `vk::combinedImageSampler`, move to a separate image and sampler
-    with 14b's sampler tables, and both enums are deleted there.
+    still state is not in the closed set, so their users, and the 16 sources
+    declaring `vk::combinedImageSampler` (9 under `src` and 7 canary shaders),
+    move to a separate image and sampler with 14b's sampler tables, and both
+    enums are deleted there.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
     of it (14a). The heap's sizes come from the capability report:
     `GpuDeviceCapabilities` records options 19's view and sampler heap sizes
