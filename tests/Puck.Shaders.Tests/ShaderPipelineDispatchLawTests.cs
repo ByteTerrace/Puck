@@ -234,6 +234,30 @@ public sealed class ShaderPipelineDispatchLawTests {
             expected: 224UL
         );
     }
+    [InlineData(ShaderPipelineCountBasis.Extent, 0U, 4U, 7UL, 100UL)]
+    [InlineData(ShaderPipelineCountBasis.Extent, 8U, 0U, 7UL, 100UL)]
+    [InlineData(ShaderPipelineCountBasis.Instances, 8U, 4U, 0UL, 100UL)]
+    [InlineData(ShaderPipelineCountBasis.ProgramWords, 8U, 4U, 7UL, 0UL)]
+    [Theory]
+    public void ACountedBufferIsRefusedCountsHoldingNoneOfItsBasis(ShaderPipelineCountBasis basis, uint width, uint height, ulong instances, ulong programWords) {
+        var buffer = Words(
+            count: new ShaderPipelineBufferCount(Basis: basis),
+            name: "empty"
+        );
+        var counts = new ShaderPipelineStorageCounts(
+            Height: height,
+            Instances: instances,
+            ProgramWords: programWords,
+            Width: width
+        );
+
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => buffer.ResolveSizeBytes(counts: counts));
+
+        Assert.Contains(
+            expectedSubstring: $"Buffer 'empty' counts by {basis}",
+            actualString: refusal.Message
+        );
+    }
     [Fact]
     public void AShaderPassIsRefusedEveryShapeAndStorageThePipelineNodeCannotRecord() {
         AssertRefused(
