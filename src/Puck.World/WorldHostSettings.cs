@@ -36,7 +36,7 @@ namespace Puck.World;
 /// <param name="Icon">The authored window-icon path AS WRITTEN in the document (document-relative unless rooted), or
 /// <see langword="null"/> for the host executable's own icon. Resolved to an absolute path at the composition root,
 /// where the document's location is known — the platform backend never learns what a world document is.</param>
-internal sealed record WorldHostSettings(
+public sealed record WorldHostSettings(
     WorldHostPresentation Presentation,
     bool HostsOnDirectX,
     WorldBackendPreference RequestedBackend,

@@ -309,7 +309,11 @@ These are one-line cautions; the owning pages hold the derivations.
   `DirectXDeviceContext.PipelineLibrary` sit under every compute and graphics
   creation; a new pipeline creation site on either backend passes through them.
   The files live under the state root's `pipeline-cache/`, keyed by
-  `GpuDeviceIdentity.CacheKey` and `SdfWorldKernels.ContentKey`.
+  `GpuDeviceIdentity.CacheKey` and `SdfWorldKernels.ContentKey`. Both
+  presentation shapes register the store (`GpuPipelineCacheStore`) in
+  `WorldBootComposition`; a backend reads it with `GetService`, so a shape
+  that drops it silently caches in memory only, and
+  `WorldBootCompositionLawTests` pins it for both shapes without a device.
   `GpuPipelineCacheFile` is the one policy for both backends (name, prune,
   read, write, replace); a backend keeps only its native serialize, create and
   validate. Pruning is an LRU cap, not a sweep of the device directory: open
