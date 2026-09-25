@@ -28,7 +28,7 @@
         "src/Puck.World.Server/WorldDocument.Compose.cs": 2133,
         "src/Puck.World.Server/WorldGrants.cs": 2215,
         "src/Puck.World.Server/WorldInstanceHost.Transfers.cs": 2357,
-        "src/Puck.World.Silo/WorldSiloHost.cs": 2078,
+        "src/Puck.World.Silo/WorldSiloHost.cs": 2077,
         "src/Puck.World.Transpiler/Lowering/WorldDocumentEmitter.Sql.cs": 2276,
         "src/Puck.World/Client/WorldAudioDirector.cs": 2125,
         "tests/Puck.Maths.Tests/Oracles.Vectors.cs": 2035,
