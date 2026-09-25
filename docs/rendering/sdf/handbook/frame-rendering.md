@@ -170,6 +170,18 @@ writes only what changed since the frame before it:
   comes.
 - **The program** is rewritten only by a program upload, and then only from the
   first word that differs to the last.
+- **Mesh draws** (`SdfFrame.MeshDraws`) are packed into the mesh region
+  (`SdfMeshRegion`: one 80-byte record a draw, then each distinct mesh's
+  positions and indices once) only when the frame hands a different draw list,
+  and the region owes only the words that changed. It is a `GpuRegion` under the
+  residency policy the device selects for its size, a per-slot ring where that
+  policy is in place, since the frame ring keeps a reader in flight. It is created by the first frame
+  that draws a mesh and grown by half again when a list outgrows it. No pass
+  reads it yet.
+
+The table upload and a staged region both copy with `region-copy.comp`, the
+one region-copy pipeline each device has, which `Puck.Shaders` ships and every
+owner leases (`GpuRegionCopyPipelineCache`).
 
 A still frame therefore writes only its viewport rows (96 bytes per view),
 because each row carries the frame's presentation time. When a sky's clouds

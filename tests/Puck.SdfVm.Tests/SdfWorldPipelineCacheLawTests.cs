@@ -20,12 +20,12 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfWorldPipelineCacheLawTests {
     private const uint Extent = 32;
     // Every engine kernel but the two brick kernels, which the fake kernel set leaves empty.
-    private const long PipelinesPerSet = 12L;
+    private const long PipelinesPerSet = 11L;
 
     [Fact]
     public void LeasesOnOneDeviceAndKernelSetShareOneSetCreatedOnce() {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
-        var cache = new SdfWorldPipelineCache();
+        var cache = SdfTestPipelines.Cache();
         var first = cache.Acquire(
             device: gpu,
             includeBrickPipelines: false,
@@ -64,7 +64,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
     public void ADifferentDeviceKernelSetOrBrickChoiceIsADifferentSet() {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
         var other = new FakeGpuDevice(reportVersion: SdfIsa.Version);
-        var cache = new SdfWorldPipelineCache();
+        var cache = SdfTestPipelines.Cache();
         SdfWorldPipelineLease[] leases = [
             cache.Acquire(device: gpu, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels()),
             cache.Acquire(device: other, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels()),
@@ -85,7 +85,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
     [Fact]
     public void TwoNodesOverOneCacheRenderWithOneSetTheCacheCounts() {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
-        var pipelines = new SdfWorldPipelineCache();
+        var pipelines = SdfTestPipelines.Cache();
         var context = Context(gpu: gpu);
 
         using var first = Node(pipelines: pipelines);
@@ -99,18 +99,23 @@ public sealed class SdfWorldPipelineCacheLawTests {
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.PipelinesCreated, source: first.WorkLifetime));
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.PipelinesCreated, source: second.WorkLifetime));
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.ShaderModulesCreated, source: first.WorkLifetime));
+        // Both engines record their table uploads with the device's one region-copy pipeline.
+        Assert.Equal(expected: 1, actual: pipelines.RegionCopy.LeasedDevices);
+        Assert.Equal(expected: 1L, actual: Read(kind: GpuWork.PipelinesCreated, source: pipelines.RegionCopy.Work));
 
         first.Dispose();
         Assert.Equal(expected: 1, actual: pipelines.SharedSets);
+        Assert.Equal(expected: 1, actual: pipelines.RegionCopy.LeasedDevices);
         Assert.False(condition: second.ProduceFrame(context: in context).IsEmpty);
 
         second.Dispose();
         Assert.Equal(expected: 0, actual: pipelines.SharedSets);
+        Assert.Equal(expected: 0, actual: pipelines.RegionCopy.LeasedDevices);
     }
     [Fact]
     public void ANodeWhoseSetAnotherEngineSharesRefusesAKernelReload() {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
-        var pipelines = new SdfWorldPipelineCache();
+        var pipelines = SdfTestPipelines.Cache();
         var context = Context(gpu: gpu);
 
         using var first = Node(pipelines: pipelines);

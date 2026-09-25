@@ -32,7 +32,7 @@ public sealed class SdfWorldPipelinesLawTests {
             ledger: ledger
         );
 
-        Assert.Equal(expected: 12L, actual: Created(ledger: ledger));
+        Assert.Equal(expected: 11L, actual: Created(ledger: ledger));
         Assert.Equal(expected: 1, actual: device.Persisted);
 
         using (var unchanged = pipelines.PrepareReload(
@@ -49,7 +49,7 @@ public sealed class SdfWorldPipelinesLawTests {
             Assert.Equal(expected: 1, actual: changed.ChangedPipelines);
         }
 
-        Assert.Equal(expected: 13L, actual: Created(ledger: ledger));
+        Assert.Equal(expected: 12L, actual: Created(ledger: ledger));
         Assert.Equal(expected: 3, actual: device.Persisted);
     }
     [Fact]
@@ -69,7 +69,7 @@ public sealed class SdfWorldPipelinesLawTests {
         );
 
         Assert.True(condition: pipelines.IncludesBrickPipelines);
-        Assert.Equal(expected: 14L, actual: Created(ledger: ledger));
+        Assert.Equal(expected: 13L, actual: Created(ledger: ledger));
     }
     [Fact]
     public void ACanceledBuildThrowsBeforeCreatingAnything() {
@@ -116,7 +116,7 @@ public sealed class SdfWorldPipelinesLawTests {
             started.Add(item: driver.Next());
         }
 
-        while (started.Count < 12) {
+        while (started.Count < 11) {
             driver.Step();
             started.Add(item: driver.Next());
         }
@@ -127,13 +127,13 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(
             actual: (driver.MostInDriver, started.Distinct().Count()),
-            expected: (SdfWorldPipelines.BuildConcurrency, 12)
+            expected: (SdfWorldPipelines.BuildConcurrency, 11)
         );
         Assert.Equal(
             actual: started.TakeLast(count: 3),
             expected: ["sdf-world-views-core", "sdf-world-views-folds", "sdf-world-views"]
         );
-        Assert.Equal(expected: 12L, actual: Created(ledger: ledger));
+        Assert.Equal(expected: 11L, actual: Created(ledger: ledger));
     }
     [Fact]
     public async Task ABuildCanceledWhilePipelinesAreInTheDriverWaitsOnlyForThoseAndCreatesNoMore() {

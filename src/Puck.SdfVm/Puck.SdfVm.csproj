@@ -23,6 +23,8 @@
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <!-- The region-copy kernel and the device-wide pipeline cache the table upload and the mesh region record with. -->
+        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
         <!-- The instruction ISA, the packed-word program representation, and the fluent authoring builder — every
              SdfProgram/SdfProgramBuilder/SdfMaterial reference in this project resolves here. -->
         <ProjectReference Include="..\Puck.SignedDistance\Puck.SignedDistance.csproj" />

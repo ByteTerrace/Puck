@@ -63,7 +63,7 @@ never a Vulkan or DirectX type by name.
 
 ## The render pipeline
 
-Ten kernels run per frame: `sdf-frame-upload.comp` (the frame data that
+Ten kernels run per frame: `region-copy.comp` (from `Puck.Shaders`: the frame data that
 changed, copied into persistent device-local tables; see
 [what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads)) → `sdf-sky.comp` (a direct, un-culled pass that
 fills every source pixel with the authored sky, before any tile is culled)

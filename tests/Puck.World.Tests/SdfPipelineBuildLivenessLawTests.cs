@@ -71,7 +71,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
-            pipelines: new SdfWorldPipelineCache(),
+            pipelines: SdfTestPipelines.Cache(),
             width: Extent
         );
         // Disposed before the node, so a failing assertion releases the held build instead of leaving the node's
@@ -168,7 +168,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             frameSource: new FixedFrameSource(frame: Frame(child: "pane")),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
-            pipelines: new SdfWorldPipelineCache(),
+            pipelines: SdfTestPipelines.Cache(),
             width: Extent
         );
         // Disposed before the node, so a failing assertion releases the held build instead of leaving the node's
@@ -211,7 +211,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
     [Fact]
     public void ADeviceLossWaitsOnlyForThePipelinesInTheDriverAndTheNextFrameStartsAnother() {
         using var driver = new HeldDriver();
-        var cache = new SdfWorldPipelineCache();
+        var cache = SdfTestPipelines.Cache();
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
             BeforeComputePipeline = driver.Enter,
         };
@@ -272,7 +272,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
     [Fact]
     public void OnlyTheLastReleaseCancelsAndItWaitsOnlyForThePipelinesInTheDriver() {
         using var driver = new HeldDriver();
-        var cache = new SdfWorldPipelineCache();
+        var cache = SdfTestPipelines.Cache();
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
             BeforeComputePipeline = driver.Enter,
         };

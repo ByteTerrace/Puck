@@ -572,6 +572,18 @@ dispatches them yet; the frame graph's source nodes will. The
 offscreen pipeline on both backends and holds their output to the CPU
 reference.
 
+## The region copy
+
+`Assets/Shaders/Residency/region-copy.comp.hlsl` is the staged residency
+policy's copy: one dispatch moves the owed word ranges of a host-written block
+from its staging buffer (binding 0) into the device-local buffer its readers
+bind (binding 1), one thread a word, with each register at its binding number.
+`GpuRegion` (`Puck.Abstractions`) owns its ABI and pipeline description
+(`GpuRegion.CopyPipeline`). `GpuRegionCopyPipelineCache` creates one pipeline
+a device from it, on the thread pool, and every owner leases that pipeline
+rather than creating its own: the SDF engine records its table upload and its
+mesh region with it. The cache counts what it creates under `gpu.region-copy`.
+
 ## Probe kinds (`puck.probe.manifest.v1`)
 
 An probe kind is data the same way a shader set is: one `<id>.puck.probe.json`

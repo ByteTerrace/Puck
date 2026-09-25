@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The compute pipelines an <see cref="SdfWorldEngine"/> records with, for one compiled kernel set on one device:
-/// about fourteen of them, the two brick pipelines included. Creating a pipeline is where a driver translates the
+/// about thirteen of them, the two brick pipelines included. Creating a pipeline is where a driver translates the
 /// kernel to native code, which can take seconds per pipeline with its cache cold, so <see cref="SdfWorldPipelineCache"/>
 /// builds this set on the thread pool (<see cref="Puck.Hosting.BackgroundBuild{T}"/>) for every node and view that leases
 /// it, and each constructs its engine only once the set is ready; the frame thread never waits on the driver's compiler.
@@ -127,7 +127,6 @@ public sealed class SdfWorldPipelines : IDisposable {
         "sdf-world-composite" => kernels.Composite,
         "sdf-brick-bake" => kernels.BrickBake,
         "sdf-brick-upload" => kernels.BrickUpload,
-        "sdf-frame-upload" => kernels.FrameUpload,
         _ => throw new ArgumentException(
             message: $"Unknown SDF kernel '{name}'.",
             paramName: nameof(name)

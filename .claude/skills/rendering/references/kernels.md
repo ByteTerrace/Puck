@@ -58,7 +58,7 @@ work is pending, and count outside every pass. A cadence-skipped frame marks
 
 | Label | Kernel | Does |
 |---|---|---|
-| `upload` | `sdf-frame-upload.comp` | Copies each changed range of the viewport rows, dynamic transforms, and frame grid from the ring slot's host-visible buffer into the persistent device-local tables, one dispatch per table that owes any; two or more runs also stage a run table the kernel binary-searches (`SdfWorldEngine.Uploads.cs`). March kernels bind only the device-local tables. A still frame copies only the rows its time moved. |
+| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies each changed range of the viewport rows, dynamic transforms, and frame grid from the ring slot's host-visible buffer into the persistent device-local tables, one dispatch per table that owes any; two or more runs also stage a run table the kernel binary-searches (`SdfWorldEngine.Uploads.cs`). March kernels bind only the device-local tables. A still frame copies only the rows its time moved. |
 | `sky` | `sdf-sky.comp` | Fills every non-child viewport pixel with sky before any tile is culled. Shares the views bindings. |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
@@ -148,7 +148,7 @@ Bindings are shared across backends. A Direct3D 12 compute root signature
 numbers each register as `GpuComputePipelineDescription.Registers` says:
 `GpuRegisterNumbering.Binding`, the default and every pipeline pass's, puts it
 at the binding number (a sampled image's sampler at the same `s` number), and
-`PackedByClass`, which only the SDF engine's pipeline specs and the region copy
+`PackedByClass`, which only the SDF engine's pipeline specs
 declare, numbers each class from zero in binding-list order. So the SDF
 engine's D3D12 registers still differ from their bindings and per consumer:
 `sdfInstanceMasks` is t37 by default and t3 in the beam via

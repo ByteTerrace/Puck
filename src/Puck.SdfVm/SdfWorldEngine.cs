@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The device-explicit core of the compute SDF world pipeline — the one truth for its buffer/push/binding layouts.
 /// One instance owns a scene program (uploaded to the GPU once, at construction) plus every pipeline/buffer/image the
-/// ten kernels need, and runs the full chain per frame: <c>sdf-frame-upload.comp</c> (copies frame tables to
+/// ten kernels need, and runs the full chain per frame: <c>region-copy.comp</c> (copies frame tables to
 /// device-local buffers) → <c>sdf-sky.comp</c> (fills every source pixel with the
 /// authored sky, direct — a beam-culled tile's pixel is otherwise never touched by any later pass) →
 /// <c>sdf-instance-cull.comp</c> (per-tile instance mask) → <c>sdf-beam.comp</c> (tile-cull cone-march prepass) →
@@ -32,11 +32,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const uint BrickBakeRequestBindingIndex = 0; // sdf-brick-bake.comp: bakeRequest (register t0)
     private const int BrickBakeRequestHeaderFloat4Count = 3; // (boxMin+cellSize), (dims+carveCount), (destWordOffset+invLambda) — KEEP IN SYNC with sdf-brick-bake.comp
     private const uint BrickBakeWorkgroupSize = 64; // sdf-brick-bake.comp's [numthreads(64, 1, 1)]
-    private const uint FrameUploadDestinationBindingIndex = 1; // sdf-frame-upload.comp: uploadDestination RW (register u0)
-    private const int FrameUploadPushByteLength = (sizeof(uint) * 4); // FrameUploadPush { uint count, 3x pad }
-    private const uint FrameUploadSourceBindingIndex = 0;      // sdf-frame-upload.comp: uploadSource (register t0)
     private const int FrameUploadTableCount = 3; // the per-frame tables with a device-local twin: viewports, dynamic transforms, the frame instance grid
-    private const uint FrameUploadWorkgroupSize = 64; // sdf-frame-upload.comp's [numthreads(64, 1, 1)]
     // The sdfBrickPool binding number (sdf-vm.hlsli's [[vk::binding(46, 0)]]); the per-consumer Direct3D 12 register is
     // POSITIONAL (views append it LAST -> t41, the beam after its instance mask -> t4). KEEP IN SYNC with sdf-vm.hlsli.
     private const uint BrickPoolBindingIndex = 46;
@@ -168,11 +164,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // The table uploader: viewport rows, dynamic transforms, and the frame instance grid live in persistent
     // DEVICE-LOCAL tables every march kernel binds. A frame copies only the word ranges that changed since the last
     // recorded frame (SdfWorldEngine.Uploads.cs), staged at their own offsets in this ring slot's host-visible buffer,
-    // one copy dispatch per coalesced range. One set per (slot, table), FrameUploadTableCount per slot, in table order.
+    // one copy dispatch per coalesced range, through the device's region-copy pipeline (GpuRegionCopyPipelineCache), which
+    // the engine records with and never owns. One set per (slot, table), FrameUploadTableCount per slot, in table order.
     private readonly IGpuComputePipeline m_frameUploadPipeline;
 
     private readonly nint[] m_frameUploadSets = new nint[(FrameRingSize * FrameUploadTableCount)];
-    private readonly byte[] m_frameUploadPush = new byte[FrameUploadPushByteLength];
+    private readonly byte[] m_frameUploadPush = new byte[GpuRegion.CopyPushByteLength];
 
     private readonly IGpuBuffer m_viewportDeviceBuffer;
     private readonly IGpuBuffer m_dynamicTransformDeviceBuffer;
@@ -399,6 +396,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// (<see cref="SdfWorldPipelines.Build"/>). The caller keeps ownership and disposes them after the engine; one set
     /// may outlive several engines built from it, but serves one live engine at a time, since a kernel reload swaps
     /// them in place.</param>
+    /// <param name="regionCopy">The device's region-copy pipeline, created from
+    /// <see cref="GpuRegion.CopyPipeline"/> on <paramref name="device"/>, which the table upload and the mesh region
+    /// record with. The caller keeps ownership and disposes it after the engine.</param>
     /// <param name="width">The composited output width in pixels.</param>
     /// <param name="height">The composited output height in pixels.</param>
     /// <param name="options">The construction options (scene program, capacities, child mask, export seam).</param>
@@ -409,9 +409,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the engine's pool
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated), or the loaded shader bytecode does not report
     /// the host's <see cref="Puck.SignedDistance.SdfIsa.Version"/>.</exception>
-    public SdfWorldEngine(IGpuDeviceContext device, SdfWorldPipelines pipelines, uint width, uint height, SdfWorldEngineOptions options) {
+    public SdfWorldEngine(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, uint width, uint height, SdfWorldEngineOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pipelines);
+        ArgumentNullException.ThrowIfNull(regionCopy);
         ObjectDisposedException.ThrowIf(
             condition: pipelines.IsDisposed,
             instance: pipelines
@@ -505,7 +506,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_viewsFoldsPipeline = pipelines.Pipeline(index: ViewsFoldsPipelineIndex);
         m_skyPipeline = pipelines.Pipeline(index: SkyPipelineIndex);
         m_compositePipeline = pipelines.Pipeline(index: CompositePipelineIndex);
-        m_frameUploadPipeline = pipelines.Pipeline(index: FrameUploadPipelineIndex);
+        m_frameUploadPipeline = regionCopy;
 
         // One FULL-SIZE source texture per viewport slot — Stage 1 renders the viewport's region-extent into it,
         // Stage 2 copies that into the screen region. Sized to the FULL frame extent (the largest any region can
@@ -1031,12 +1032,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
                 m_frameUploadSets[((slot * FrameUploadTableCount) + table)] = uploadSet;
                 WriteStorageBufferReadOnly(
-                    binding: FrameUploadSourceBindingIndex,
+                    binding: GpuRegion.CopySourceBinding,
                     buffer: uploadSources[table],
                     set: uploadSet
                 );
                 WriteStorageBufferReadWrite(
-                    binding: FrameUploadDestinationBindingIndex,
+                    binding: GpuRegion.CopyDestinationBinding,
                     buffer: uploadDestinations[table],
                     set: uploadSet
                 );
@@ -1185,6 +1186,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         }
 
         m_screenSourceFiller.Dispose();
+        m_meshRegion?.Dispose();
         m_glyphAtlasUpload?.Dispose();
         m_storageImage.Dispose();
     }

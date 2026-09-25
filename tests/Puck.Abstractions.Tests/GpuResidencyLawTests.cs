@@ -323,22 +323,13 @@ public sealed class GpuResidencyLawTests {
 
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {
         using var module = gpu.Services.ShaderModuleFactory.Create(
-            bytecode: new byte[] { UploadModelGpu.FrameUploadBytecode },
+            bytecode: new byte[] { UploadModelGpu.RegionCopyBytecode },
             stage: GpuShaderStage.Compute
         );
 
         return gpu.Services.PipelineFactory.Create(
             computeShaderModule: module,
-            description: new GpuComputePipelineDescription(
-                Bindings: GpuRegion.CopyBindings,
-                Name: "region-copy",
-                PushConstantBinding: new GpuPushConstantBinding(
-                    data: new byte[GpuRegion.CopyPushByteLength],
-                    offset: 0,
-                    stageFlags: GpuShaderStage.Compute
-                ),
-                Registers: GpuRegisterNumbering.PackedByClass
-            )
+            description: GpuRegion.CopyPipeline
         );
     }
     // A frame's writes: none on the first frame, one straddling words, more separate ranges than a host buffer keeps
