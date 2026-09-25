@@ -358,9 +358,25 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         // Serializing a removed device's library can fail; that is reported, and the file already on disk stays.
         PipelineLibrary?.Dispose();
         PipelineLibrary = null;
-        m_device?.Dispose();
-        m_device = null;
         m_idleFenceValue = 1;
+        ReleaseDevice();
+    }
+    // Ends the device's memory entries, then releases the device even when an entry was still held, so a leak refuses
+    // the teardown by name without keeping the device alive.
+    private void ReleaseDevice() {
+        var device = m_device;
+
+        m_device = null;
+
+        if (device is null) {
+            return;
+        }
+
+        try {
+            Memory?.EndDevice(device: device.Handle);
+        } finally {
+            device.Dispose();
+        }
     }
     // The Shader Model 6.6 device floor — the DXIL peer of the Vulkan SPIR-V 1.6 floor enforced in
     // VulkanPhysicalDeviceSelector. Puck's DXIL kernels are compiled at -T *_6_6, so a device below SM 6.6 would reject
@@ -558,6 +574,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// device is removed, so a Signal/wait would never complete; a COM Release on a removed device's objects is safe). The
     /// debug layer is NOT re-enabled here (it cannot be toggled per-process and can poison creation on some configs);
     /// <see cref="EnsureCreated"/> applies the same opt-in gate it always does.</summary>
+    /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
+    /// the old device; the message names each one, the old device is released, and no new device is created.</exception>
     public void Recreate() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -572,6 +590,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// <summary>Releases the command queue and the owned device. With the debug layer on, every object the device still
     /// holds once the context has released its own is written as a <c>[d3d12-debug] live</c> line before the device is
     /// released. Safe to call more than once.</summary>
+    /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
+    /// the device; the message names each one, and the device is released regardless.</exception>
     public void Dispose() {
         if (m_disposed) {
             return;
@@ -611,7 +631,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             m_infoQueue = 0;
         }
 
-        m_device?.Dispose();
-        m_device = null;
+        ReleaseDevice();
     }
 }

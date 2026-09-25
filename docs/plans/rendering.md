@@ -1329,9 +1329,10 @@ Phase 1 follows P3, which has landed, and all of it has landed:
    the one statement of the rule: images, device-local buffers, exportable
    images and imports count; host-visible, staging, upload and readback buffers
    never do, even on a unified-memory device where every Vulkan memory type is
-   device-local. Entries are keyed per device, and a Vulkan device's teardown
-   refuses by name any allocation still held on it; the Direct3D 12 context's
-   teardown does not end its entries yet. `QualificationJudge` judges a cell's
+   device-local. Entries are keyed per device, and each backend's device
+   teardown refuses by name any allocation still held on it: a Vulkan logical
+   device's disposal, and a Direct3D 12 context's `Dispose` and `Recreate`, each
+   of which still releases the device. `QualificationJudge` judges a cell's
    `peakDeviceLocalBytes`, which every cell leaves null until a
    reference-device reading sets it.
 

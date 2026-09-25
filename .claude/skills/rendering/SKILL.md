@@ -496,7 +496,11 @@ Direct3D 12 debug layer on, `DirectXDeviceContext.Dispose` releases its own
 objects, then asks `ID3D12DebugDevice::ReportLiveDeviceObjects` for the rest and
 prints each (the device's own entry left out) as a `[d3d12-debug] live` line, so
 a leak fails a debug-layer run; `Recreate` never reports, because the nodes
-still hold their old objects while a removed device is replaced. A new counted object kind or inspection field that
+still hold their old objects while a removed device is replaced. Every device
+teardown ends its `GpuDeviceMemoryWork` entries (`EndDevice`): a Vulkan logical
+device's disposal and a Direct3D 12 context's `Dispose` and `Recreate` refuse by
+name any counted allocation still held on the device, and release the device
+regardless, so fix a late release's order, never the refusal. A new counted object kind or inspection field that
 qualification should judge joins `QualificationJudge`, and its laws are
 `ReleaseProfileLawTests` and `QualificationVerdictLawTests`. The owning
 explanation is [Qualifying a package](../../../docs/development/qualification.md).
