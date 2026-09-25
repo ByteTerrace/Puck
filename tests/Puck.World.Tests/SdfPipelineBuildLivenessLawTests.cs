@@ -294,7 +294,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         first.Release();
         Assert.Equal(
             actual: (cache.SharedSets, last.Progress.Describe()),
-            expected: (1, "building (0 of 12 pipelines created)")
+            expected: (1, "building (0 of 11 pipelines created)")
         );
 
         var release = new Thread(start: last.Release);
@@ -377,7 +377,14 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             m_open.Dispose();
         }
         public void Enter(GpuComputePipelineDescription description) {
-            if (m_open.IsSet) {
+            // The device's region-copy pipeline builds beside the set, from another cache, so the driver lets it pass.
+            if (
+                m_open.IsSet ||
+                ReferenceEquals(
+                    objA: description,
+                    objB: GpuRegion.CopyPipeline
+                )
+            ) {
                 return;
             }
 
