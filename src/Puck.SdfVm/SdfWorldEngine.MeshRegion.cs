@@ -67,8 +67,8 @@ public sealed partial class SdfWorldEngine {
     }
     // Creates the region at the size the draws need, or replaces it with one grown by half again (or to the need, if
     // larger), after every frame-ring fence retires. The replacement starts owing every word, so the next write sends
-    // the whole packed list. The old region's copy pool is returned before the new one is created, so a grown region
-    // reuses its range of the descriptor heap.
+    // the whole packed list, and writes its buffers into the reserved copy sets the old one wrote, so growing takes no
+    // descriptor range.
     private void EnsureMeshRegionCapacity(ulong bytes) {
         var current = ((ulong)(m_meshRegion?.ByteCount ?? 0));
 
@@ -95,7 +95,7 @@ public sealed partial class SdfWorldEngine {
 
         m_meshRegion = CreateRegion(
             byteCount: checked((int)grown),
-            name: NameOf(part: "mesh-region")
+            region: MeshRegionIndex
         );
         Volatile.Write(
             location: ref m_meshRegionBytes,

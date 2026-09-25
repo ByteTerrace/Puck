@@ -11,11 +11,24 @@ namespace Puck.SdfVm;
 // slot's share (its fence has retired), records each staged region's copy, then one transition per copied buffer so
 // every later pass reads what it wrote. What the pass records follows the device's policy, so its counts are
 // per-backend-deterministic. The top-of-frame barrier orders the copies after the previous frame's reads. Nothing
-// writes a region's buffer directly.
+// writes a region's buffer directly. Construction reserves every region's copy sets (the brick staging's included)
+// beside the engine's own pool, whatever policy the device selects, so a region created or grown at a later frame takes
+// no descriptor range then.
 public sealed partial class SdfWorldEngine {
     private const int DynamicTransformWordCount = (DynamicTransformByteLength / sizeof(uint));
+    // The brick staging's index among the reserved copy sets, past the per-frame regions.
+    private const int BrickStagingRegionIndex = RegionCount;
+    private const int DecalRegionIndex = 7;
+    private const int DynamicTransformRegionIndex = 2;
+    private const int InstanceGridRegionIndex = 3;
+    private const int MeshRegionIndex = 8;
+    private const int ProgramRegionIndex = 0;
     // The per-frame regions RegionAt names, the mesh region last.
     private const int RegionCount = 9;
+    private const int ScreenLightRegionIndex = 5;
+    private const int ScreenSurfaceRegionIndex = 4;
+    private const int ViewportRegionIndex = 1;
+    private const int VolumeRegionIndex = 6;
     private const int ViewportWordCount = (ViewportByteLength / sizeof(uint));
 
     private readonly GpuRegion m_viewportRegion;
@@ -26,6 +39,8 @@ public sealed partial class SdfWorldEngine {
     // The glyph decal table (Stage 1 only): the leading per-screen descriptor band, then the shared cell region. All
     // zero (every descriptor's gridCols 0) is inert, so a program that declares no decal renders byte-identically.
     private readonly GpuRegion m_decalRegion;
+    // Each region's copy sets, by its index: RegionAt's, then the brick staging's with a brick pool.
+    private readonly GpuRegionCopySets[] m_regionCopySets;
 
     // The buffers the upload pass copied into, which it transitions for reading once every copy is recorded.
     private readonly IGpuBuffer?[] m_copiedRegions = new IGpuBuffer?[RegionCount];
@@ -49,8 +64,8 @@ public sealed partial class SdfWorldEngine {
     // A per-frame grid rebuild owed whether or not a transform moved: set by UploadProgram for a moving-instance program.
     private bool m_instanceGridRebuildOwed;
 
-    // The copy pools the engine's regions create under the staged policy, which its admission covers whatever policy
-    // the device selects: one per per-frame region, and the brick staging's with a brick pool.
+    // The pools of the copy sets the engine reserves for its regions (ReserveRegionCopySets): one per per-frame region,
+    // and the brick staging's with a brick pool.
     private static GpuDescriptorPoolSizes[] RegionPoolSizes(bool brickPool) {
         var pools = new GpuDescriptorPoolSizes[(RegionCount + (brickPool ? 1 : 0))];
 
@@ -82,9 +97,9 @@ public sealed partial class SdfWorldEngine {
         WriteStorageBuffer(binding: DecalCellsBindingIndex, buffer: m_decalRegion.Buffer(slot: slot), set: views);
         WriteStorageBuffer(binding: VolumeBindingIndex, buffer: m_volumeRegion.Buffer(slot: slot), set: views);
     }
-    // A region of byteCount bytes under the policy the device's profile selects, its ring in the memory the profile
-    // selects, named by its table's role.
-    private GpuRegion CreateRegion(int byteCount, in GpuObjectName name) {
+    // Region index's region of byteCount bytes under the policy the device's profile selects, its ring in the memory the
+    // profile selects, named by its table's role and writing the copy sets reserved for it.
+    private GpuRegion CreateRegion(int region, int byteCount) {
         var profile = m_deviceContext.MemoryProfile;
 
         return new GpuRegion(
@@ -92,8 +107,9 @@ public sealed partial class SdfWorldEngine {
             buffers: m_gpu.BufferFactory,
             byteCount: byteCount,
             copyPipeline: m_regionCopyPipeline,
+            copySets: m_regionCopySets[region],
             memory: GpuResidency.RingMemory(profile: profile),
-            name: in name,
+            name: RegionName(region: region),
             policy: GpuResidency.Select(
                 byteCount: ((ulong)byteCount),
                 profile: profile,
@@ -103,9 +119,16 @@ public sealed partial class SdfWorldEngine {
             slotCount: FrameRingSize
         );
     }
+    // Disposes every region, then the copy sets reserved for them.
     private void DisposeRegions() {
         for (var index = 0; (index < RegionCount); index++) {
             RegionAt(index: index)?.Dispose();
+        }
+
+        m_brickRegion?.Dispose();
+
+        foreach (var sets in m_regionCopySets) {
+            sets.Dispose();
         }
     }
     // The upload pass: sends this ring slot, whose fence has retired, what it owes of every region, records every staged
@@ -157,16 +180,45 @@ public sealed partial class SdfWorldEngine {
         }
     }
     private GpuRegion? RegionAt(int index) => index switch {
-        0 => m_programRegion,
-        1 => m_viewportRegion,
-        2 => m_dynamicTransformRegion,
-        3 => m_instanceGridRegion,
-        4 => m_screenSurfaceRegion,
-        5 => m_screenLightRegion,
-        6 => m_volumeRegion,
-        7 => m_decalRegion,
+        ProgramRegionIndex => m_programRegion,
+        ViewportRegionIndex => m_viewportRegion,
+        DynamicTransformRegionIndex => m_dynamicTransformRegion,
+        InstanceGridRegionIndex => m_instanceGridRegion,
+        ScreenSurfaceRegionIndex => m_screenSurfaceRegion,
+        ScreenLightRegionIndex => m_screenLightRegion,
+        VolumeRegionIndex => m_volumeRegion,
+        DecalRegionIndex => m_decalRegion,
         _ => m_meshRegion,
     };
+    // The debug name of region index's objects, its reserved copy sets included: its table's role.
+    private static GpuObjectName RegionName(int region) => NameOf(part: region switch {
+        ProgramRegionIndex => "program",
+        ViewportRegionIndex => "viewports",
+        DynamicTransformRegionIndex => "dynamic-transforms",
+        InstanceGridRegionIndex => "instance-grid",
+        ScreenSurfaceRegionIndex => "screen-surfaces",
+        ScreenLightRegionIndex => "screen-lights",
+        VolumeRegionIndex => "volumes",
+        DecalRegionIndex => "decals",
+        MeshRegionIndex => "mesh-region",
+        _ => "brick-staging",
+    });
+    // Creates the copy sets of every region the engine may create, the brick staging's with a brick pool, each named as
+    // its region: the pools its admission states after its own (RegionPoolSizes).
+    private GpuRegionCopySets[] ReserveRegionCopySets(GpuCreationScope scope) {
+        var reserved = new GpuRegionCopySets[(RegionCount + (m_brickPoolEnabled ? 1 : 0))];
+
+        for (var region = 0; (region < reserved.Length); region++) {
+            reserved[region] = scope.Own(created: new GpuRegionCopySets(
+                bindings: m_gpu.Bindings,
+                copyPipeline: m_regionCopyPipeline,
+                name: RegionName(region: region),
+                slotCount: FrameRingSize
+            ));
+        }
+
+        return reserved;
+    }
     // Writes a freshly built instance grid into its region, which owes only the words that differ.
     private void StageInstanceGrid(ReadOnlySpan<uint> words) =>
         _ = m_instanceGridRegion.Write(

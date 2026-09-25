@@ -86,12 +86,17 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Why a pass that draws nothing cannot leave its outputs standing for its inputs, or null when it can: output i
     // stands for input i, so each output must be an owned RGBA8 image no other pass of the graph touches, bound beside
-    // an input image of its format, so publishing the input in its place changes nothing any pass reads.
+    // an input image of its format, so publishing the input in its place changes nothing any pass reads. The input must
+    // be this frame's: a previous frame's instance rests in the layout its own role left it in, which this frame's plan
+    // does not state, so presenting it would start from a layout it is not in. And no later pass may write the input's
+    // storage, as a version forwarding it does, or the published input would hold that pass's contents.
     private string? AliasRefusalOf(RuntimePass pass, ShaderPipelinePlannedPass planned) {
         for (var index = 0; (index < pass.Outputs.Length); index++) {
             var output = m_resourceLookup[pass.Outputs[index].Name];
             var why = ((index >= pass.Inputs.Length)
                 ? "has no input at its position"
+                : (pass.Inputs[index].PreviousFrame
+                ? $"would stand for the previous frame of '{pass.Inputs[index].Name}', which rests in the layout that frame's role left it in"
                 : (((output.Spec.Kind != ShaderPipelineResourceKind.Image) ||
                    (m_resourceLookup[pass.Inputs[index].Name].Spec.Kind != ShaderPipelineResourceKind.Image) ||
                    !string.Equals(
@@ -106,7 +111,9 @@ public sealed partial class ShaderPipelineRenderNode {
                         other.Accesses.Any(predicate: access => (access.Storage == output.Storage.Index))
                     )))
                         ? "is read by another pass or as history"
-                        : null)));
+                        : ((LaterWriterOf(planned: planned, storage: m_resourceLookup[pass.Inputs[index].Name].Storage.Index) is { } writer)
+                            ? $"would stand for '{pass.Inputs[index].Name}', which pass '{writer}' overwrites later in the frame"
+                            : null)))));
 
             if (why is not null) {
                 return $"Package pass '{pass.Name}' drew nothing, but its output '{pass.Outputs[index].Name}' {why}, so it cannot stand for its input.";
@@ -115,6 +122,16 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return null;
     }
+    // Names the pass that writes this frame's instance of a storage at a later position in execution order than the
+    // planned pass, or returns null.
+    private string? LaterWriterOf(ShaderPipelinePlannedPass planned, int storage) => m_pipeline!.Plan.Passes.FirstOrDefault(predicate: other => (
+        (other.Index > planned.Index) &&
+        other.Accesses.Any(predicate: access => (
+            !access.PreviousFrame &&
+            (access.Storage == storage) &&
+            access.Use.Writes
+        ))
+    ))?.Name;
     // The position of the first input an output of the pass would stand for that is a host's image bound in another
     // layout than the node publishes in, or -1 when there is none. The node publishes every image in its output layout,
     // which is the layout its consumer's descriptor is written with, and hands a host's image back in the host's own

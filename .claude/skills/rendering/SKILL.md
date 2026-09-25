@@ -445,7 +445,11 @@ These are one-line cautions; the owning pages hold the derivations.
   draws) is a `GpuRegion` (`SdfWorldEngine.Regions.cs`, created by
   `CreateRegion` under `GpuResidency.Select` with the frame ring's reader in
   flight), and brick staging is a staged region whose destination is the brick
-  pool (`Target` names the brick's slot). Change a table only through its
+  pool (`Target` names the brick's slot). Each region, brick staging included,
+  writes copy sets the engine reserved for it at construction
+  (`GpuRegionCopySets`, whatever policy the device selects), so the admitted
+  pools are exactly the created ones and no region the frame thread creates or
+  grows takes a descriptor range; a new region takes a reserved set too. Change a table only through its
   region's `Write`, which owes each run of words that differs; a direct buffer
   write is lost or overwritten. The upload pass flushes the slot's share, records
   each staged copy, then one buffer transition per copied buffer; the region
@@ -552,7 +556,8 @@ These are one-line cautions; the owning pages hold the derivations.
   `sdf.world/viewports[1]` (the SDF engine's objects by role through
   `SdfWorldEngine.NameOf`, its pipelines by kernel pipeline name; a
   `GpuRegion` takes its owner's name and names each slot's buffer and copy set
-  at the slot's index, its own destination and copy pool bare),
+  at the slot's index, its own destination and copy pool bare, and copy sets
+  an owner reserves (`GpuRegionCopySets`) take the region's name the same way),
   `<instance>/<pass or resource>[slot]` for a shader pipeline or graph package,
   `overlay/pass`, `render-graph/stand-in`, `gpu.region-copy/<pipeline>`.
   `GpuObjectName.ToString` is the one place a name becomes text; a site never
@@ -836,7 +841,7 @@ inputs in `ShaderReadOnly`, and its render pass leaves the target in
 own barriers in the post and overlay laws). A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
 and the node publishes the input in the output's place, never a copy
 (`PublishedLayout`), only when the recording was told it may
-(`RenderGraphPackageRecording.MayStandIn`): never over a host's image bound in
+(`RenderGraphPackageRecording.MayStandIn`): never for a previous frame's input, whose instance rests in the layout its own role left, never for an input a later pass overwrites, and never over a host's image bound in
 another layout than the node publishes in, since the node publishes in its
 output layout, the one its consumer's descriptor is written with, and hands a
 host's image back in the host's own. A lease declares the layout its producer's

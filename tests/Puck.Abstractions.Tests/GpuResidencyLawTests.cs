@@ -352,6 +352,62 @@ public sealed class GpuResidencyLawTests {
                 : [])
         );
     }
+    /// <summary>Regions created with reserved copy sets create no pool, and a region whose set another region wrote since
+    /// (a replacement its owner abandoned) rewrites it before it records that slot's copy, so the copy lands in its own
+    /// destination.</summary>
+    [Fact]
+    public void RegionsOnReservedCopySetsCreateNoPoolAndACopyRewritesASetAnotherRegionWrote() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        using var copy = CopyPipeline(gpu: gpu);
+        using var sets = new GpuRegionCopySets(
+            bindings: gpu.Services.Bindings,
+            copyPipeline: copy,
+            name: default,
+            slotCount: 2
+        );
+
+        GpuRegion Region(int byteCount) => new(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: byteCount,
+            copyPipeline: copy,
+            copySets: sets,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        using var kept = Region(byteCount: 64);
+
+        Region(byteCount: 128).Dispose();
+        Assert.Equal(
+            actual: gpu.PoolsCreated,
+            expected: [GpuRegion.CopyPoolSizes(slotCount: 2)]
+        );
+
+        _ = kept.Write(bytes: [1, 2, 3, 4, 5, 6, 7, 8], offset: 12);
+
+        for (var slot = 0; (slot < 2); slot++) {
+            kept.Flush(slot: slot);
+            kept.RecordCopy(commandBuffer: 2, slot: slot);
+            Assert.Equal(expected: kept.Contents.ToArray(), actual: gpu.Memory(bufferHandle: kept.Buffer(slot: slot).BufferHandle));
+        }
+
+        _ = Assert.Throws<ArgumentException>(testCode: () => new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            copySets: sets,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 3
+        ));
+    }
     [Fact]
     public void AStagedCopyStatesItselfInTheStagingBufferAndOwesOnlyTheWordsThatDiffer() {
         const int RunEntryBytes = 8;

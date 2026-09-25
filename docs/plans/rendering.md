@@ -185,9 +185,8 @@ sources, each a `WorkCounterSet`. `shaders.compiler` counts a compiler's
 requests, its cache hits, and each native tool's runs, where
 `ShaderCompiler.StepsOf`'s steps run. `procedures.vulkan` counts the device-
 and instance-level procedures `VulkanProcResolver` resolves.
-`shaders.sdf-kernels`, `shaders.fullscreen-pass` and `shaders.set-manifest`
-count the shader loads in `SdfWorldKernels`, `FullscreenPassNode` and
-`ShaderSetManifest` and the bytecode bytes each read. Requests, tool runs,
+`shaders.sdf-kernels` and `shaders.set-manifest` count the shader loads in
+`SdfWorldKernels` and `ShaderSetManifest` and the bytecode bytes each read. Requests, tool runs,
 resolutions and loads are per-backend-deterministic; cache hits are pacing,
 because the compile cache under the state root outlives the process. The
 World registers the shader sources in both presentation shapes, and the Vulkan
@@ -229,7 +228,8 @@ framebuffers are separate objects over those images. The
 `pipeline-geometry` canary draws two geometry passes through one color and one
 depth chain on both backends, and GPU-free laws hold the plan, the node's
 recording and each backend's refusal of incompatible attachments. The float
-preview, overlays and `FullscreenPassNode` draw through the same render passes.
+preview, the overlay and the `post.<id>` packages draw through the same render
+passes.
 The vertex stage of a geometry pass receives no parameters; a camera or
 per-instance transform for mesh geometry belongs to P4.
 
@@ -695,9 +695,11 @@ sub-steps, in this order:
     at its position: the node publishes that input's image with no copy, in its
     own layout (`ShaderPipelineRenderNode.PublishedLayout`), a root capture reads
     it, and the runtime binds consumers in the published layout. No recorder
-    copies its input. An output another pass touches, that is history, or that
-    is not an RGBA8 image beside an input image of its format is refused by name
-    when its pass draws nothing.
+    copies its input. An output another pass touches, that is history, that
+    would stand for a previous frame's input or for an input a later pass
+    overwrites, or that is not an RGBA8 image
+    beside an input image of its format is refused by name when its pass draws
+    nothing.
   - `OverlayPackage` builds its modules, render pass and pipeline in the
     candidate's build. Its recorder keeps a descriptor set per frame slot and a
     storage-buffer region per slot after the shared static prefix (the token
@@ -840,10 +842,16 @@ keys and text to a focused passthrough source, sends each release where its
 press went, and returns focus to the game on Control, Alt and Escape.
 `RenderGraphHitWalk` in `src/Puck.Hosting/Graph` continues a hit on a rendered
 source through the producer's camera up to a depth limit, normally
-`RenderGraphInstanceSet.NestingDepth`. The pipeline pane's pointer
+`RenderGraphInstanceSet.NestingDepth`, entering at the topmost pane under a
+display point by the one rule `SourcePanes.Topmost` states: the last pane in
+drawing order whose face holds the point, a letterbox bar or bezel covering what
+is beneath. `SourcePanePicker` is the CPU `ISourcePicker` over that rule: it picks
+from the pane mappings last published to it, and a point its topmost pane holds
+off the source picks nothing. The pipeline pane's pointer
 (`WorldFramePresenter.UpdatePipelinePointer`) maps through its pane's
 `SourceMapping`. The laws are `SourceMappingLawTests`,
-`SourcePointerCommandLawTests`, `RenderGraphHitWalkLawTests`,
+`SourcePointerCommandLawTests`, `SourcePanePickerLawTests`,
+`RenderGraphHitWalkLawTests`,
 `SourceFocusLawTests`, `WorldScreenInputLawTests` and the Maths
 `vector.ray-plane-*` laws.
 
@@ -853,22 +861,23 @@ mirrors, and the GPU does not yet draw from the mapping. `SourceHandle` stands
 in for P12's producer id until P12b names sources in the graph. No host feeds
 `SourceFocus` or delivers a focused source's input to its window, no module
 registers the pointer commands or reads them into a machine, and no host
-implements `ISourcePicker`. The recorded Windows run, a click reaching a
+publishes its panes to `SourcePanePicker` yet. The recorded Windows run, a click reaching a
 captured editor window at the mapped point and the chord returning input to the
 game, belongs to P13b.
 
-Rendering today is a tree of `IRenderNode`s
-(`src/Puck.Hosting`), with no scheduler: each node calls its children's
-`ProduceFrame` from inside its own. `WorldBootComposition` builds the live
-chain:
+Rendering today runs the default render graph `WorldRootGraph` composes,
+through `RenderGraphRuntime` behind `RenderGraphRuntimeNode`, the host's render
+root, in both presentation shapes (see P11b commit 6 above):
 
-1. `SdfEngineNode`, which also hosts each `views.pipelines` pane as a child
-   slot.
-2. One `FullscreenPassNode` per `render.extensions` row. Each one already runs
-   on an internal `ShaderPipelineRenderNode`.
-3. `UnifiedOverlayNode`, which draws the console, HUD, toasts, and cursor.
-4. The launcher, which hands the result to a surface compositor that blits one
-   image to the swapchain.
+1. `world`, the `sdf.world` external producer: `SdfEngineNode`, which still
+   hosts each `views.pipelines` pane as a child slot and calls its
+   `ProduceFrame` from inside its own.
+2. When anything is drawn over it, the root `main`: one `post.<id>` package
+   pass per `render.extensions` entry in document order, then `overlay`, which
+   draws the console, HUD, toasts and cursor in a windowed World. With
+   nothing drawn over it, `world` is the root.
+3. The launcher, which hands the root's image to a surface compositor that
+   blits it to the swapchain.
 
 The SDF engine's second stage composites panes and child views, up to
 `SdfWorldEngine.MaxViewports` (5). Diegetic screens are 32 fixed sampler slots
@@ -1278,12 +1287,8 @@ Selecting an output on the installed graph builds its float preview's modules,
 pipelines and targets on the thread pool as well; the previous selection stays
 published until the frame boundary that takes the finished build, and a
 preview that fails to build leaves it published and reports the failure where
-a refused swap reports its own. A `FullscreenPassNode` whose input changes size
-no longer drains the device: the replaced executor retires once its
-successor's second submission after the replacement completes, the rule the
-render node applies to an image it stops publishing.
-`FullscreenPassNodeRetirementLawTests` and
-`TheFrameThreadCreatesNoPipelineOrShaderModuleOnAnyInstallOrSelection` pin both.
+a refused swap reports its own.
+`TheFrameThreadCreatesNoPipelineOrShaderModuleOnAnyInstallOrSelection` pins it.
 
 `WorldBootCompositionLawTests` in `tests/Puck.World.Tests` checks the World's
 composition without a device. It builds each presentation shape's service
@@ -1880,7 +1885,8 @@ Phase 3, the groups, follows phase 2:
       A refusal carries `GPU_DESCRIPTOR_HEAP` and names the owner, and the
       installed graph keeps presenting. `UnifiedOverlayNode` checks its one
       pool before it creates its resources. A standalone `GpuRegion` is not admitted
-      beforehand; the SDF engine's admission covers its mesh region's copy pool. The pipeline node
+      beforehand; the SDF engine admits every region's copy pool with its own and
+      reserves them at construction (`GpuRegionCopySets`). The pipeline node
       holds one pool for all its passes and in-flight slots and one for its
       float preview, rather than one per pass and slot: a node at
       `ShaderPipelineLimits.MaxPasses` with three frames in flight would
@@ -2061,7 +2067,10 @@ Phase 3, the groups, follows phase 2:
     indices once), created by the first frame that draws a mesh, repacked only
     when the draw list changes, owing only the words that differ, grown by half
     again after the frame ring retires, and read by nothing until P4-2c. The
-    engine's admission covers the region's copy pool. `world.budget`'s mesh
+    engine admits every region's copy pool with its own and reserves each at
+    construction as `GpuRegionCopySets`, whatever policy the device selects,
+    whose sets the region and every replacement of it write, so no frame takes a
+    descriptor range. `world.budget`'s mesh
     line reads the region's allocated bytes. Laws:
     `GpuRegionCopyPipelineCacheLawTests` (one pipeline a device, created and
     counted once, shared by two leases and a new one after the last release;
@@ -2646,9 +2655,9 @@ on P7b's groups.
    over standard input at a light-gun screen and observes the pixel the
    machine reports, with identical state hashes on every run and backend. It
    needs a machine that reads a pointer, which none does yet.
-3. The presentation destination. The CPU half can land now; GPU picking
-   follows P4. A host `ISourcePicker` answers hover and highlight from the
-   published mappings, and later from P4's visibility record.
+3. The presentation destination. The CPU picker has landed
+   (`SourcePanePicker`); a host publishing its panes to it moves with the views
+   the graph root now owns, and GPU picking follows P4's visibility record.
 4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
    `SourceFocus`, a focused capture source's window receives pointer and key
    events at `SourcePassthrough.ToClient`'s client coordinates, and the chord

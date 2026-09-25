@@ -35,16 +35,16 @@ public sealed class SdfWorldEngineWorkLawTests {
     [InlineData(0)]
     [InlineData(SdfWorldEngine.DefaultBrickPoolVoxelCapacity)]
     [Theory]
-    public void TheDescriptorPoolAnEngineStatesIsThePoolItCreates(int brickPoolVoxelCapacity) {
+    public void TheDescriptorPoolsAnEngineStatesAreThePoolsItCreates(int brickPoolVoxelCapacity) {
         using var rig = new Rig(
             brickPoolVoxelCapacity: brickPoolVoxelCapacity,
             cadence: false
         );
 
-        // Every region creates its copy pool first, the brick staging with a brick pool, then the engine its own; the mesh
-        // region, which the admission also covers, waits for a frame that draws a mesh.
+        // The engine reserves every region's copy sets first, the mesh region's and, with a brick pool, the brick
+        // staging's included, then creates its own pool; no region creates one.
         var brickPool = (brickPoolVoxelCapacity > 0);
-        var copyPools = (brickPool ? 9 : 8);
+        var copyPools = (brickPool ? 10 : 9);
 
         Assert.Equal(
             expected: [
@@ -57,7 +57,7 @@ public sealed class SdfWorldEngineWorkLawTests {
             actual: rig.Gpu.PoolsCreated
         );
         Assert.Equal(
-            expected: (copyPools + 2),
+            expected: (copyPools + 1),
             actual: SdfWorldEngine.DescriptorPools(brickPool: brickPool).Length
         );
     }
