@@ -69,6 +69,25 @@ world**, the same candidate every other programme's release evidence names;
 its thresholds are measured against it, never inferred from one run. The
 foundation releases independently of hybrid work when its gates pass.
 
+**A qualification workload is named for the world it boots, and every pipeline
+canary is a functional check.** Until the forcing world is authored, the
+stability matrix boots the flagship world, so its workload is `flagship`.
+Keeping the forcing world's name on it was rejected, because a reader would
+take a cell's verdict as evidence about a world the cell never ran. The
+functional set holds every `pipeline-*` canary, `pipeline-geometry` and
+`pipeline-echo` included, plus `no-device-compile`, and a law fails when a
+`pipeline-*` canary is missing from it, so a canary that lands cannot sit
+outside qualification unnoticed.
+
+**Device-local memory is counted by role, not by memory type.** Images,
+device-local buffers and imports count on both backends; host-visible,
+staging, upload and readback memory never count. On a unified-memory device
+every memory type can be device-local, so a memory-type test would count
+staging and readback buffers there and not on a discrete card, and a
+`peakDeviceLocalBytes` threshold would mean something different on a handheld
+than on a desktop. Counting by memory type is therefore rejected, on
+unified-memory devices included.
+
 **Representations are chosen by measured cost**, never by replacing
 "everything is an SDF" with "all environments are SDFs"; meshes, continuous
 fields, and baked distant content may each fit a scene, and no broad shadow or
@@ -145,6 +164,15 @@ a layout that differs per adapter forks the interface and takes the
 cross-backend pixel verdict with it. A pass's resource needs come from its
 declared interface, so the frame graph's planner and the binding contract read
 one statement.
+
+**The closed set of binding kinds is one type, `GpuBindingKind`.** The pass
+interface, both backends' layout planners, and `IGpuBindings.WriteBuffer` all
+read it, and whether a buffer is read or written is part of its kind, so it is
+the one statement of buffer access. Keeping `GpuComputeBindingKind` and
+`ShaderSetManifestBindingKind` beside it with translations between them is
+rejected, because each translation is a second statement of the same access
+that can drift from the first. Both older enums are deleted once every combined
+image sampler has moved to a separate image and sampler.
 
 **HLSL compiled by the pinned DXC is the one source language, and a generated
 echo pass is what proves the layout.** One language, one compiler, one cache
@@ -238,7 +266,11 @@ pass reads, what an array holds, or anything the simulation does, so the
 manifest and the mirror are functions of the document alone, and two documents
 differing only in tier compile identical manifests, identical mirrors, and
 identical state hashes. A tier is named from the authored quality vocabulary
-`WorldQualityPreset` already carries rather than from a second one.
+`WorldQualityPreset` already carries rather than from a second one. The package
+format closes with the `default` variant alone, and tiers arrive with bound
+rows in P10, which owns the tier a pipeline names. Building tier variants into
+the package format first was rejected, because nothing would select them and no
+check could tell a correct variant from a wrong one.
 
 **Bound rows are priced, and a capture reports the tick it shows.** A world's
 bindings appear in the cost report as bytes per tick and bytes per frame, beside
@@ -333,6 +365,16 @@ generated HLSL with a check that it is current was rejected because it adds
 churn to every interface change and duplicates what the build and the echo pass
 already prove. Generated files go under `obj/`, so nobody edits one by mistake.
 Every build host already needs DXC.
+
+**A kernel nothing dispatches is deleted rather than kept for the sweep.**
+`sdf-child`, `pixelate` and `viewport-composite` compiled into shipped
+bytecode that no code loaded, so each build paid for them and each reader had
+to discover that they did nothing. Keeping them until P14's final sweep was
+rejected: dead source is not a reference anyone needs, and history keeps it.
+`resample.comp.hlsl` stays, although nothing dispatches it either, because
+P11b ports it into the graph's package library as the one resample pass. The
+pixelate interface fixture under `tests/Puck.Shaders.Tests` is its own copy
+and stays with the spike.
 
 **`SdfEnvironment` folds into the generated frame block.** A separate
 environment packing is a second hand-kept layout beside the frame data, and
