@@ -294,17 +294,26 @@ through DXC:
 
 The same build showed that a group holding a sampler needs a second table on
 Direct3D 12, because a descriptor table cannot mix samplers with other views.
-The gate stays open until three legs run:
+The gate stays open until two legs run:
 
 - one build on Linux compared byte for byte, which needs the pinned DXC that
   `setup-dxc` installs;
 - the two-group layout on Direct3D 12 and Vulkan inside the parity contract,
-  with one parity station, once both backends build more than one set;
-- the capability report on the floor device. Each backend fills
-  `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
-  and `world.counters gpu` prints it on a `capabilities` line and in its JSON;
-  the ceiling device's reading on both backends is recorded, so only the floor
-  run remains.
+  with one parity station, once both backends build more than one set.
+
+The capability leg is closed. Each backend fills `IGpuDeviceContext.Capabilities`
+(`GpuDeviceCapabilities`) at device creation, and `world.counters gpu` prints it
+on a `capabilities` line and in its JSON. The ceiling device's reading and the
+floor's both satisfy everything the grouped contract assumes. On the floor, the
+RTX 2060, Vulkan reports 32 descriptor sets, 256 push-constant bytes and
+1,048,576 descriptors of each kind per stage; Direct3D 12 reports binding tier
+3, root signature 1.2, shader model 6.8, a 64-word root signature, a
+1,000,000-descriptor view heap and a 4,080-descriptor sampler heap, the two heap
+sizes being exactly the largest shader-visible heaps the device creates. Four
+groups, their sampler tables and a four-byte push range fit both, and both
+backends dispatch indirectly and record debug groups. Vulkan's per-set totals
+(`maxDescriptorSet*`) are not in the report; the floor's are 1,048,576 of each
+kind, 15 dynamic uniform and 16 dynamic storage buffers.
 
 P8 has landed, pending its GPU canaries; the frame group's move from push
 constants to a descriptor set waits on P7's grouped binding. HLSL is the one
@@ -1278,13 +1287,12 @@ engine's binding constants.
 
 **Gate:** the spike over two passes, `sdf-film-grain.frag.hlsl` and a pixelate
 compute pass, each with two frequency groups, has passed its build-time half,
-as the [implementation status](#implementation-status) records. Three legs
+as the [implementation status](#implementation-status) records. Two legs
 remain. One build on Linux is compared byte for byte with the two on one host.
 The two-group layout runs on Direct3D 12 and Vulkan inside
 `tests/Puck.Parity/parity.contract.json`'s tolerances, with one parity station.
-Both backends' capability reports are read on the floor and ceiling devices to
-establish that neither lacks what the grouped contract assumes, which is a
-real-hardware run rather than a remote session. The gate still fails toward
+Both backends' capability reports, read on the floor and ceiling devices, show that
+neither lacks what the grouped contract assumes. The gate still fails toward
 Slang when DXC output is not byte-stable across hosts, or when the second group
 cannot run identically on both backends from generated annotations; anything
 resembling a register remap surviving into the new design is that failure.
@@ -1437,7 +1445,7 @@ Phase 3, the groups, follows phase 2:
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
     of it (14a). The heap's sizes come from the capability report:
     `GpuDeviceCapabilities` records options 19's view and sampler heap sizes
-    on Direct3D 12. Both backends then realize several groups, with sampler
+    on Direct3D 12, 1,000,000 and 4,080 on the floor device. Both backends then realize several groups, with sampler
     tables and one 4-byte push range (14b), the riskiest commit. 14b creates root
     signatures and pipeline layouts from step 13's plans, moves every combined
     image sampler to a separate image and sampler, and deletes
@@ -1465,8 +1473,8 @@ takes the nearest free spelling. `GpuResidency.Select` also takes whether
 readers are in flight, and brick staging is a region with an external
 destination. The SDF engine's groups are P14's; its 32 screens bind as 32
 bindings and one sampler until P14 makes them an array. The test fakes
-consolidate as the surface shrinks. Open: the gate's Linux build and the floor
-device's capability report.
+consolidate as the surface shrinks. Open: the gate's Linux build and its two-group
+parity station.
 
 ### P8 — The shader package, and one source language
 
