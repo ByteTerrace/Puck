@@ -117,7 +117,11 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionImageLayout");
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionBuffer");
-    IGpuCommandPool IGpuCommandPoolFactory.Create() => new Resource(gpu: this);
+    IGpuCommandPool IGpuCommandPoolFactory.Create() {
+        Hit(key: "IGpuCommandPoolFactory.Create");
+
+        return new Resource(gpu: this);
+    }
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         BeforeComputePipeline?.Invoke(obj: description);
         Hit(key: "IGpuPipelineFactory.Create(compute)");
@@ -171,12 +175,23 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuQueueSubmitter.SubmitAndWait");
         Submissions++;
     }
-    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description) => new Resource(gpu: this);
-    IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => new Resource(
-        gpu: this,
-        height: colors[0].Height,
-        width: colors[0].Width
-    );
+    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description) {
+        Hit(key: "IGpuRenderPassFactory.Create");
+
+        return new Resource(gpu: this);
+    }
+    IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) {
+        Hit(key: "IGpuRenderPassFactory.CreateFramebuffer");
+
+        // A depth-only framebuffer takes its extent from the depth attachment.
+        var extent = ((colors.Count > 0) ? colors[0] : depth);
+
+        return new Resource(
+            gpu: this,
+            height: (extent?.Height ?? 1U),
+            width: (extent?.Width ?? 1U)
+        );
+    }
     IGpuShaderModule IGpuShaderModuleFactory.Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
         Hit(key: "IGpuShaderModuleFactory.Create");
 

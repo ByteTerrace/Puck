@@ -22,9 +22,7 @@ public sealed class GpuCreationFaultsLawTests {
     ];
 
     // Every creating member of the wrapped interfaces, keyed Interface.Member, with the kind it counts as and a call
-    // through the wrapped services. The fake reads no description or module. It has no render pass, framebuffer or
-    // command pool, so reaching it there throws NotSupportedException, which is how those calls show they were
-    // forwarded.
+    // through the wrapped services. The fake reads no description or module.
     private static Dictionary<string, (GpuCreationKind Kind, Action<GpuDeviceServices> Create)> Creations() => new(comparer: StringComparer.Ordinal) {
         ["IGpuBindings.CreatePool"] = (GpuCreationKind.BindingsPool, static services => _ = services.Bindings.CreatePool(sizes: default)),
         ["IGpuBufferFactory.CreateDeviceLocal"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateDeviceLocal(sizeBytes: 16, usage: GpuBufferUsage.Storage)),
@@ -65,16 +63,11 @@ public sealed class GpuCreationFaultsLawTests {
         return data;
     }
 
-    // Calls one creation, and returns whether it reached the fake: a call the fake counts, or one it refuses as having
-    // no such object.
+    // Calls one creation, and returns whether it reached the fake, which counts every call.
     private static bool Reaches(FakeGpuDevice gpu, GpuDeviceServices services, Action<GpuDeviceServices> create) {
         var before = gpu.Calls.Values.Sum();
 
-        try {
-            create(obj: services);
-        } catch (NotSupportedException) {
-            return true;
-        }
+        create(obj: services);
 
         return (gpu.Calls.Values.Sum() > before);
     }
