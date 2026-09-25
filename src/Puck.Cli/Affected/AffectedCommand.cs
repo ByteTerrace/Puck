@@ -106,6 +106,43 @@ internal static class AffectedCommand {
         return closure;
     }
 
+    /// <summary>Reads every canary as selection sees it: its directory, and the worlds, scripts and fixtures its legs
+    /// name.</summary>
+    /// <param name="repositoryRoot">The repository root.</param>
+    /// <param name="canaries">The canaries, on success.</param>
+    /// <param name="error">Why the manifests could not be read, or empty.</param>
+    /// <returns>Whether the manifests were read.</returns>
+    internal static bool TryCanaries(string repositoryRoot, out AffectedCanary[] canaries, out string error) {
+        canaries = [];
+
+        if (!CanaryManifestLoader.TryLoadAll(
+            error: out error,
+            manifests: out var manifests,
+            refused: out _,
+            repositoryRoot: repositoryRoot,
+            strict: false
+        )) {
+            return false;
+        }
+
+        canaries = [.. manifests.Select(selector: manifest => new AffectedCanary(
+            Directory: Relative(path: manifest.DirectoryPath, repositoryRoot: repositoryRoot),
+            Files: [.. new[] { manifest.Positive, manifest.Discriminating }
+                .SelectMany(selector: static leg => new[] { leg.WorldPath, leg.ScriptPath, leg.AuthorityWorldPath })
+                .Concat(second: manifest.Fixtures)
+                .OfType<string>()
+                .Select(selector: path => Relative(path: path, repositoryRoot: repositoryRoot))],
+            Id: manifest.Id,
+            RequiresGpu: manifest.Requirements.Contains(value: "gpu", comparer: StringComparer.Ordinal)
+        ))];
+
+        return true;
+    }
+
+    // The kinds of file a canary's documents can reach: worlds, graph documents and other JSON fixtures, .puck
+    // sources, and shader sources.
+    private static readonly string[] ReachableExtensions = [".json", ".puck", ".hlsl", ".hlsli"];
+
     /// <summary>Returns every project in the repository's graph as selection sees it.</summary>
     /// <param name="model">The repository's project graph.</param>
     /// <param name="repositoryRoot">The repository root.</param>
@@ -141,30 +178,20 @@ internal static class AffectedCommand {
         var model = ArchitectureModel.Load(repositoryRoot: repositoryRoot);
         var projects = Projects(model: model, repositoryRoot: repositoryRoot);
 
-        if (!CanaryManifestLoader.TryLoadAll(
-            error: out error,
-            manifests: out var manifests,
-            refused: out _,
-            repositoryRoot: repositoryRoot,
-            strict: false
-        )) {
+        if (!TryCanaries(canaries: out var canaries, error: out error, repositoryRoot: repositoryRoot)) {
             return false;
         }
 
-        var canaries = manifests.Select(selector: manifest => new AffectedCanary(
-            Directory: Relative(path: manifest.DirectoryPath, repositoryRoot: repositoryRoot),
-            Files: [.. new[] { manifest.Positive, manifest.Discriminating }
-                .SelectMany(selector: static leg => new[] { leg.WorldPath, leg.ScriptPath, leg.AuthorityWorldPath })
-                .Concat(second: manifest.Fixtures)
-                .OfType<string>()
-                .Select(selector: path => Relative(path: path, repositoryRoot: repositoryRoot))],
-            Id: manifest.Id,
-            RequiresGpu: manifest.Requirements.Contains(value: "gpu", comparer: StringComparer.Ordinal)
-        )).ToArray();
         var closure = Closure(model: model, seeds: ["Puck.World"]);
         var catalogProjects = Closure(model: model, seeds: CatalogSeeds);
 
         var coverage = AffectedCoverage.Read(repositoryRoot: repositoryRoot);
+        // Reading every canary world is the cost of this map, so it is built only for a change a document can reach.
+        var reachedBy = new Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>>(valueFactory: () => AffectedDocuments.ReachedBy(
+            canaries: canaries,
+            repositoryRoot: repositoryRoot
+        ));
+        IReadOnlySet<string> none = new HashSet<string>();
 
         plan = AffectedSelection.Select(
             canaries: canaries,
@@ -177,6 +204,9 @@ internal static class AffectedCommand {
                 ((owner is not null) && catalogProjects.Contains(item: owner))),
             declaresTests: path => File.ReadLines(path: Path.Combine(path1: repositoryRoot, path2: path)).Any(predicate: static line => line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "test \"")),
             projects: projects,
+            canariesReaching: path => ((ReachableExtensions.Any(predicate: extension => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: extension)) && reachedBy.Value.TryGetValue(key: path, value: out var reaching))
+                ? reaching
+                : none),
             standInsFor: AffectedStandIns.Create(
                 indexed: [.. coverage.Keys],
                 projects: projects,
@@ -350,7 +380,9 @@ internal static class AffectedCommand {
               references included), owns a changed file; a file in a directory no project owns chooses
               the projects whose sources name that directory. A canary is chosen when a changed file is
               one its manifest names, lies in its directory, or is a source the canary executed when
-              coverage was last recorded ({CoveragePath}); parity is chosen with any GPU canary. A file no
+              coverage was last recorded ({CoveragePath}), or is a file the manifest's documents reach:
+              the layers, neighbour worlds and graph documents a world names, and the pass shaders a
+              graph document declares. Parity is chosen with any GPU canary. A file no
               canary can execute is placed through the indexed sources it stands for: a project file,
               restore lock or NativeMethods list through its project's sources, a shader source or
               include through the C# that names each kernel whose include closure reaches it, and a file

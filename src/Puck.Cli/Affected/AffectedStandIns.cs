@@ -22,7 +22,7 @@ internal sealed record AffectedKernel(string Path, IReadOnlyList<string> Closure
 /// </summary>
 internal static partial class AffectedStandIns {
     private static readonly string[] ProjectInputNames = ["packages.lock.json", "NativeMethods.txt", "NativeMethods.json"];
-    private static readonly string[] StageItems = ["VertexShaderSource", "FragmentShaderSource", "ComputeShaderSource"];
+    private static readonly string[] StageItems = ["VertexShaderSource", "FragmentShaderSource", "ComputeShaderSource", "Direct3D11KernelSource"];
     private static readonly string[] StageSuffixes = [".vert", ".frag", ".comp"];
 
     [GeneratedRegex(pattern: @"\b(?:class|struct|record|interface|enum)\s+(?:class\s+|struct\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\b")]
