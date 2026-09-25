@@ -162,6 +162,65 @@ public sealed class UnifiedOverlayWorkLawTests {
         Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: Frame));
         Assert.True(condition: (sample.Submission > 0L));
     }
+    /// <summary>The operator's GPU faults are an input of the overlay's creation
+    /// (<see cref="GpuCreationFaults.Revision"/>): a refusal a fault caused holds over unchanged frames, arming another
+    /// fault retries the creation exactly once (refused again by the fault just armed, whose firing is no further
+    /// change), and disarming retries it exactly once more, which creates the resources and draws.</summary>
+    [Fact]
+    public void ArmingAFaultRetriesARefusedCreationOnceAndDisarmingCreatesItOnce() {
+        using var rig = new Rig(trackObjects: true);
+
+        rig.Faults.Arm(kind: GpuCreationKind.Image);
+        rig.Produce();
+        Assert.NotNull(@object: rig.Node.ResourceRefusal);
+
+        var imagesAsked = rig.Faults.SeenOf(kind: GpuCreationKind.Image);
+
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Produce();
+        }
+
+        Assert.Equal(
+            actual: rig.Faults.SeenOf(kind: GpuCreationKind.Image),
+            expected: imagesAsked
+        );
+
+        rig.Faults.Arm(kind: GpuCreationKind.Image);
+
+        for (var frame = 0; (frame < 3); frame++) {
+            Assert.Equal(
+                actual: rig.Node.ProduceFrame(context: default).ImageViewHandle,
+                expected: Rig.InnerImageViewHandle
+            );
+        }
+
+        Assert.Equal(
+            actual: rig.Faults.SeenOf(kind: GpuCreationKind.Image),
+            expected: (imagesAsked + 1L)
+        );
+        Assert.StartsWith(
+            actualString: rig.Node.ResourceRefusal,
+            expectedStartString: $"[{GpuCreationFaults.RefusalCode}] "
+        );
+
+        rig.Faults.Disarm();
+        Assert.NotEqual(
+            actual: rig.Node.ProduceFrame(context: default).ImageViewHandle,
+            expected: Rig.InnerImageViewHandle
+        );
+        Assert.Null(@object: rig.Node.ResourceRefusal);
+
+        var created = rig.Gpu.Created.Count;
+
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Produce();
+        }
+
+        Assert.Equal(
+            actual: rig.Gpu.Created.Count,
+            expected: created
+        );
+    }
     [Fact]
     public void EveryCreationOfTheOverlaysResourcesFaultedInTurnPresentsTheInnerFrameAndReleasesWhatWasCreated() {
         var expected = new Dictionary<GpuCreationKind, long>();

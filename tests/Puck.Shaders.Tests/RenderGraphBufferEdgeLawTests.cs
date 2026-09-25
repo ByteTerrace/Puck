@@ -18,8 +18,8 @@ public sealed class RenderGraphBufferEdgeLawTests {
         .. RenderGraphPackageCatalog.Engine.Packages,
         new RenderGraphPackage(
             Id: Reader,
-            Inputs: [RenderGraphPackageCatalog.BrickPool],
-            Outputs: [RenderGraphPackagePort.Image],
+            Inputs: [RenderGraphPackageCatalog.BrickPool with { Access = RenderGraphPortAccess.ComputeRead }],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Summary: "A view reading the brick pool."
         ),
     ]);
@@ -201,8 +201,8 @@ public sealed class RenderGraphBufferEdgeLawTests {
         Assert.Throws<ArgumentException>(testCode: static () => new RenderGraphPackageCatalog(packages: [
             new RenderGraphPackage(
                 Id: "odd",
-                Inputs: [new RenderGraphPackagePort(Kind: ShaderPipelineResourceKind.Image, StrideBytes: 4)],
-                Outputs: [RenderGraphPackagePort.Image],
+                Inputs: [new RenderGraphPackagePort(Access: RenderGraphPortAccess.ComputeRead, Kind: ShaderPipelineResourceKind.Image, StrideBytes: 4)],
+                Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
                 Summary: "An image port with a stride."
             ),
         ]));
@@ -210,8 +210,24 @@ public sealed class RenderGraphBufferEdgeLawTests {
             new RenderGraphPackage(
                 Id: "odd",
                 Inputs: [],
-                Outputs: [RenderGraphPackagePort.Buffer(count: null, strideBytes: 6)],
+                Outputs: [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: 6)],
                 Summary: "A buffer port whose stride is not a multiple of four."
+            ),
+        ]));
+        Assert.Throws<ArgumentException>(testCode: static () => new RenderGraphPackageCatalog(packages: [
+            new RenderGraphPackage(
+                Id: "odd",
+                Inputs: [],
+                Outputs: [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ColorAttachmentWrite, count: null, strideBytes: 4)],
+                Summary: "A buffer port drawn into as a color attachment."
+            ),
+        ]));
+        Assert.Throws<ArgumentException>(testCode: static () => new RenderGraphPackageCatalog(packages: [
+            new RenderGraphPackage(
+                Id: "odd",
+                Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
+                Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
+                Summary: "An input port that writes and an output port that reads."
             ),
         ]));
     }

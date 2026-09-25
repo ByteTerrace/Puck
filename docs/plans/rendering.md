@@ -515,13 +515,14 @@ still render every view, no host feeds the scheduler a frame, and
 wires `WorldBootComposition`'s node tree onto graph instances fed by the
 scheduler, puts the live schedule's extents and prices in `world.budget`,
 runs the parity and counted-GPU checks, and makes the rest of the deletions
-P11 lists. Nine P11b items have landed: the first-class package pass kind in
+P11 lists. Ten P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
 planner only through its package entry, the fold of the pipeline document
 into the graph document, planned buffer edges, the graph runtime,
-`sdf.world` as the runtime's external producer, and the `post.<id>` and
-`overlay` package recorders (commits 5a, 5b and 5c below, none wired). The
+`sdf.world` as the runtime's external producer, the `post.<id>` and
+`overlay` package recorders, and planned barriers for package ports (commits
+5a, 5b, 5c and 5d below, none wired). The
 fold leaves one document: the pipeline document's tag, its definition type
 and its schema check are gone, a top-level `config` is an unknown member, every
 checked-in document is a `*.graph.json` tagged `puck.render.graph.v1`, and
@@ -585,7 +586,7 @@ into the begun command buffer it is handed, and it never submits, waits or
 creates a pipeline on the frame thread. `post.<id>` and `overlay` become
 recorders. `sdf.world` stays an external producer until P14-6: its output is
 the engine's latest completed image, held as a `GpuImageLease` until the
-submission that samples it retires, and never copied. The commit lands as three
+submission that samples it retires, and never copied. The commit lands as four
 sub-steps, in this order:
 
 - 5a has landed: `sdf.world` runs as an external-producer instance, on the
@@ -658,13 +659,13 @@ sub-steps, in this order:
     node's one pool, whose statement (`ShaderPipelineRenderNode.DescriptorPools`)
     includes the factory's `SetBindings`, admitted through the heap budget. A
     recording carries the pass's frame block and the frame's lease list, and an
-    image a package writes is created usable as a color attachment.
+    image a package draws into is created usable as a color attachment.
   - `PostProcessPackage` is the one factory for every `post.<id>`, registered
     per set under its id. Each frame it writes the input into the slot's set,
     pushes the frame block, and records the render pass and the draw over a
-    framebuffer cached per output image, bracketed by `RenderGraphPackageDraw`'s
-    barriers because the planner orders a package in a compute pass's shape. The
-    extent comes from the schedule, so a post pass resizes with its instance.
+    framebuffer cached per output image, between the barriers the node plans
+    for its ports (5d). The extent comes from the schedule, so a post pass
+    resizes with its instance.
   - A package pass carries `config` values. The graph compiler binds them
     against the package's schema, which the catalog reads from each shipped
     manifest's declaration (`ShaderSetManifest.ReadDeclaration`), and refuses a
@@ -712,6 +713,37 @@ sub-steps, in this order:
     combined declarations to separate images and a sampler table, moving the
     overlay onto binding groups, and sizing its pool without
     `CombinedImageSamplerCount`.
+- 5d has landed: the one planner plans a package pass's barriers and layouts,
+  on the fake GPU only.
+  - A package port declares the stage and access its package reaches it by
+    (`RenderGraphPortAccess`): a compute read or a fragment-sampled read for an
+    input, a compute write or a color-attachment write for an output, which only
+    an image port takes. The catalog refuses an input port that writes, an
+    output port that reads and a color-attachment buffer port. `post.<id>` and
+    `overlay` sample their input and draw their output; `sdf.world`,
+    `sdf.bricks` and `resample` read and write by compute.
+  - The graph compiler hands each package pass's port accesses to the planner
+    (`ShaderPipelinePackagePass.InputAccesses` and `OutputAccesses`), and
+    `UseOf` gives a fragment-sampled read and a color-attachment write the uses
+    a graphics pass's input and output get. The node records those planned
+    barriers before the recording, so a drawing package receives its target in
+    `RenderTarget` and its inputs in `ShaderReadOnly`, its render pass leaves
+    the target in `RenderTarget`, and the next planned access moves it on.
+    `RenderGraphPackageDraw` and its hand-written barriers are gone, and no
+    package records a barrier. An image storage is a color attachment exactly
+    when a planned access draws into it.
+  - A drew-nothing output's published layout is still its input's: a host
+    image's own, and an owned input's planned frame-end layout, which a root
+    capture reads.
+  - `RenderGraphPackageBarrierLawTests` hold a compute shader pass, a
+    `post.<id>` pass and the overlay to the hand-derived barrier table, layouts
+    included, and a drawn target alone to the color-attachment usage.
+    `ObservedPackageFactory` (`tests/Shared`) counts the barriers a package
+    records itself: `PostProcessPackageLawTests` and `OverlayPackageLawTests`
+    hold both packages to none and to the layouts they are handed.
+    `RenderGraphRuntimeLawTests.Alias` add the drawn layouts and an owned input
+    standing for the output. The `FullscreenPassNode` equivalence and the
+    steady-frame allocation laws hold unchanged.
 
 Each sub-step's gate:
 
@@ -736,6 +768,11 @@ Each sub-step's gate:
   is unverified, so 5c also runs `UnifiedOverlayWorkLawTests` and
   `OverlayFrameSlotsLawTests` and states which of those canaries observes an
   overlay.
+- 5d: the 5b post canary and the 5c overlay canaries once the wiring commit
+  records a package pass live, with the Vulkan and Direct3D 12 debug layers
+  clean over a drawn post and overlay frame, since a planned layout the driver
+  disagrees with shows only there. Until then its evidence is the fake-GPU laws
+  above.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
@@ -2470,8 +2507,8 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
    less the composite, with exactly `SdfFrameBufferPlan`'s edges between
    passes, and at several viewport, tile and instance capacities sizes every
    SDF buffer exactly as `SdfWorldEngine.FrameBufferBytes`, the one statement
-   of the engine's allocations. The engine records no graphics pass, so a
-   package pass stays compute-shaped. A program with no instances still sizes
+   of the engine's allocations. The engine records no graphics pass, so every
+   SDF package port is a compute read or write. A program with no instances still sizes
    the cull buffer by its tile-plane term, so the cutover resolves its real
    instance count.
 5. The SDF pass interfaces over the four groups, with generated declarations;

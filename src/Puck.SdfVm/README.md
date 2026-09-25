@@ -239,7 +239,8 @@ the set's or the engine's, is refused rather than thrown, except for a device
 loss, which still reaches the host's recovery. The refusal is printed once and
 named by `NotReadyReason`. It is tried again only when something the build was
 made from changes: the engine options a frame asks for (the program and the
-capacities), the node's extent, the device, the pipeline set or its kernels, a
+capacities), the node's extent, the device, the pipeline set or its kernels, the
+operator's GPU faults (an arm or disarm through `gpu.faults`), a
 kernel reload request, or a device loss. A frame that changes none of these tries nothing,
 so a lasting failure is attempted once per change and never on a clock.
 Meanwhile the node returns an empty surface, and a view returns the image it
@@ -248,7 +249,8 @@ served before, if any. The holder keeps its lease through the refusal.
 The unified overlay (`Puck.Overlays`) refuses its own resources the same way:
 a creation that fails releases what was created, `ResourceRefusal` names it,
 and the overlay presents the inner frame unchanged, forwarding any capture to
-it, until a device loss.
+it, until a device loss or a change to the operator's GPU faults, each of which
+tries the creation once more.
 
 Each backend also keeps a persistent pipeline cache per device, so a warm start
 translates nothing. See [Vulkan](../../docs/rendering/vulkan.md#pipeline-cache)

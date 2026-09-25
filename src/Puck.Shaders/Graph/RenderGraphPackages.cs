@@ -4,36 +4,71 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-/// <summary>One port of an engine package: what the version a pass binds to it carries, and a buffer's storage. A pass
-/// binds a version of the port's kind, and to a buffer port a buffer of the port's stride and count, or the graph
-/// compiler refuses it by name.</summary>
+/// <summary>How a package pass reaches the version bound to one of its ports: the stage and access the planner plans the
+/// port's barrier and layout for, exactly as it plans a shader pass's. An input port reads and an output port
+/// writes.</summary>
+public enum RenderGraphPortAccess : byte {
+    /// <summary>Read by a compute dispatch, as a compute pass reads its inputs: an image shader-readable for the compute
+    /// stage.</summary>
+    ComputeRead = 0,
+    /// <summary>Written by a compute dispatch, as a compute pass writes its outputs: an image in
+    /// <see cref="Puck.Abstractions.Gpu.GpuImageLayout.General"/> for the compute stage.</summary>
+    ComputeWrite = 1,
+    /// <summary>Sampled by a fragment shader, as a graphics pass reads its inputs: an image shader-readable for the
+    /// fragment stage.</summary>
+    FragmentSampled = 2,
+    /// <summary>Drawn into as a render pass's color attachment, as a graphics pass writes its outputs: an image in
+    /// <see cref="Puck.Abstractions.Gpu.GpuImageLayout.RenderTarget"/> for color-attachment output. Only an image port
+    /// takes it.</summary>
+    ColorAttachmentWrite = 3,
+}
+/// <summary>One port of an engine package: what the version a pass binds to it carries, a buffer's storage, and how the
+/// package reaches it. A pass binds a version of the port's kind, and to a buffer port a buffer of the port's stride and
+/// count, or the graph compiler refuses it by name. The planner plans the port's barrier and layout from its
+/// <see cref="Access"/>, and the package records none of its own.</summary>
 /// <param name="Kind">What the port carries: an <see cref="ShaderPipelineResourceKind.Image"/> or a
 /// <see cref="ShaderPipelineResourceKind.Buffer"/>.</param>
+/// <param name="Access">The stage and access the package reaches the port's version by.</param>
 /// <param name="StrideBytes">A buffer port's element stride in bytes, or <see langword="null"/> for a raw buffer or an
 /// image.</param>
 /// <param name="Count">A buffer port's size in elements as a sum of terms, or <see langword="null"/> for an image or a
 /// buffer whose fixed <c>sizeBytes</c> the graph states.</param>
 public sealed record RenderGraphPackagePort(
     ShaderPipelineResourceKind Kind,
+    RenderGraphPortAccess Access,
     uint? StrideBytes = null,
     IReadOnlyList<ShaderPipelineCountTerm>? Count = null
 ) {
-    /// <summary>Gets the port that carries an image.</summary>
-    public static RenderGraphPackagePort Image { get; } = new(Kind: ShaderPipelineResourceKind.Image);
-    /// <summary>Gets whether the port is well formed: an image port declares no storage, and a buffer port's stride,
-    /// when it has one, is a positive multiple of four.</summary>
-    public bool IsValid => (Kind switch {
+    /// <summary>Gets whether the port reads its version: <see cref="RenderGraphPortAccess.ComputeRead"/> or
+    /// <see cref="RenderGraphPortAccess.FragmentSampled"/>.</summary>
+    public bool Reads => (Access is RenderGraphPortAccess.ComputeRead or RenderGraphPortAccess.FragmentSampled);
+    /// <summary>Gets whether the port is well formed: its access is declared, an image port declares no storage, a buffer
+    /// port's stride, when it has one, is a positive multiple of four, and only an image port is a color
+    /// attachment.</summary>
+    public bool IsValid => (Enum.IsDefined(value: Access) && (Kind switch {
         ShaderPipelineResourceKind.Image => ((StrideBytes is null) && (Count is null)),
-        ShaderPipelineResourceKind.Buffer => ((StrideBytes is not { } stride) || ((stride != 0) && ((stride % 4) == 0))),
+        ShaderPipelineResourceKind.Buffer => (
+            (Access != RenderGraphPortAccess.ColorAttachmentWrite) &&
+            ((StrideBytes is not { } stride) || ((stride != 0) && ((stride % 4) == 0)))
+        ),
         _ => false,
-    });
+    }));
 
+    /// <summary>Creates an image port.</summary>
+    /// <param name="access">How the package reaches the image.</param>
+    /// <returns>The port.</returns>
+    public static RenderGraphPackagePort Image(RenderGraphPortAccess access) => new(
+        Access: access,
+        Kind: ShaderPipelineResourceKind.Image
+    );
     /// <summary>Creates a buffer port.</summary>
+    /// <param name="access">How the package reaches the buffer.</param>
     /// <param name="strideBytes">The element stride in bytes, or <see langword="null"/> for a raw buffer.</param>
     /// <param name="count">The size in elements as a sum of terms, or <see langword="null"/> for a fixed size the graph
     /// states.</param>
     /// <returns>The port.</returns>
-    public static RenderGraphPackagePort Buffer(uint? strideBytes, IReadOnlyList<ShaderPipelineCountTerm>? count) => new(
+    public static RenderGraphPackagePort Buffer(RenderGraphPortAccess access, uint? strideBytes, IReadOnlyList<ShaderPipelineCountTerm>? count) => new(
+        Access: access,
         Count: count,
         Kind: ShaderPipelineResourceKind.Buffer,
         StrideBytes: strideBytes
@@ -84,9 +119,10 @@ public sealed record RenderGraphPackagePort(
 }
 /// <summary>One engine package a graph can name: an id and its typed ports.</summary>
 /// <param name="Id">The id a <see cref="RenderGraphPackagePass"/> names.</param>
-/// <param name="Inputs">The input ports, in port order: what each version a pass of it reads carries.</param>
-/// <param name="Outputs">The output ports, in port order: what each version a pass of it writes carries, at least
-/// one.</param>
+/// <param name="Inputs">The input ports, in port order: what each version a pass of it reads carries, and the stage that
+/// reads it.</param>
+/// <param name="Outputs">The output ports, in port order: what each version a pass of it writes carries, and the stage
+/// that writes it, at least one.</param>
 /// <param name="Summary">What the package renders.</param>
 /// <param name="Config">The config schema a pass of it binds its <see cref="RenderGraphPackagePass.Config"/> against,
 /// name to field, or <see langword="null"/> when it takes no config.</param>
@@ -116,7 +152,8 @@ public sealed class RenderGraphPackageCatalog {
     /// <exception cref="ArgumentNullException"><paramref name="packages"/> or one of its entries is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A package has no id, null port lists, a null or malformed port
-    /// (<see cref="RenderGraphPackagePort.IsValid"/>) or no output, or two share an id.</exception>
+    /// (<see cref="RenderGraphPackagePort.IsValid"/>), an input port that writes or an output port that reads, or no
+    /// output, or two share an id.</exception>
     public RenderGraphPackageCatalog(IEnumerable<RenderGraphPackage> packages) {
         ArgumentNullException.ThrowIfNull(argument: packages);
 
@@ -130,10 +167,12 @@ public sealed class RenderGraphPackageCatalog {
                 (package.Inputs is null) ||
                 (package.Outputs is null) ||
                 (package.Outputs.Count < 1) ||
-                package.Inputs.Concat(second: package.Outputs).Any(predicate: static port => ((port is null) || !port.IsValid))
+                package.Inputs.Concat(second: package.Outputs).Any(predicate: static port => ((port is null) || !port.IsValid)) ||
+                package.Inputs.Any(predicate: static port => !port.Reads) ||
+                package.Outputs.Any(predicate: static port => port.Reads)
             ) {
                 throw new ArgumentException(
-                    message: $"Package '{package.Id}' needs an id, well-formed input and output ports, and at least one output.",
+                    message: $"Package '{package.Id}' needs an id, well-formed input ports that read and output ports that write, and at least one output.",
                     paramName: nameof(packages)
                 );
             }
@@ -157,6 +196,7 @@ public sealed class RenderGraphPackageCatalog {
     /// <summary>Gets the port <see cref="SdfBricks"/> writes: the brick pool, one 32-bit float distance per voxel,
     /// counted by <see cref="ShaderPipelineCountBasis.BrickPoolVoxels"/>.</summary>
     public static RenderGraphPackagePort BrickPool { get; } = RenderGraphPackagePort.Buffer(
+        access: RenderGraphPortAccess.ComputeWrite,
         count: [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.BrickPoolVoxels])],
         strideBytes: sizeof(float)
     );
@@ -179,7 +219,7 @@ public sealed class RenderGraphPackageCatalog {
         new RenderGraphPackage(
             Id: SdfWorld,
             Inputs: [],
-            Outputs: [RenderGraphPackagePort.Image],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Summary: "The SDF world as the instance's camera sees it."
         ),
         new RenderGraphPackage(
@@ -190,14 +230,14 @@ public sealed class RenderGraphPackageCatalog {
         ),
         new RenderGraphPackage(
             Id: Overlay,
-            Inputs: [RenderGraphPackagePort.Image],
-            Outputs: [RenderGraphPackagePort.Image],
+            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
             Summary: "The console, HUD, toasts and cursor drawn over the input image."
         ),
         new RenderGraphPackage(
             Id: Resample,
-            Inputs: [RenderGraphPackagePort.Image],
-            Outputs: [RenderGraphPackagePort.Image],
+            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead)],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Summary: "The input image reconstructed at the output's extent, bilinear to clamped Catmull-Rom by sharpness."
         ),
     ];
@@ -220,8 +260,8 @@ public sealed class RenderGraphPackageCatalog {
                 ? ShaderSetManifest.ReadDeclaration(manifestPath: path).Config
                 : null),
             Id: (PostProcessPrefix + id),
-            Inputs: [RenderGraphPackagePort.Image],
-            Outputs: [RenderGraphPackagePort.Image],
+            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
             Summary: $"The shipped post-process shader set '{id}' over the input image."
         ))));
     }

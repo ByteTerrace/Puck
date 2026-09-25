@@ -9,7 +9,7 @@ namespace Puck.Shaders;
 /// <param name="Version">The version name the pass binds to the port.</param>
 /// <param name="Kind">What the version carries.</param>
 /// <param name="Image">The image holding an image version, with its extent, its format, and the layout the pass's planned
-/// barrier left it in for the recording; default for a buffer.</param>
+/// barrier left it in for the recording, the one its port's access needs; default for a buffer.</param>
 /// <param name="Buffer">The buffer holding a buffer version, or <see langword="null"/> for an image.</param>
 /// <param name="Owned">The instance's own image holding an image version, which a recorder may bind as an attachment, or
 /// <see langword="null"/> for a buffer or an external image another producer binds.</param>
@@ -66,10 +66,13 @@ public enum RenderGraphPackageOutcome : byte {
 /// disposes it with that graph: when a replacement retires it, on device loss and at disposal, always after the
 /// submissions that recorded it are done with and before the device it recorded on is released.</summary>
 public interface IRenderGraphPackageRecorder : IDisposable {
-    /// <summary>Records the pass's work for one frame. It must not submit, wait or create a pipeline: the instance
-    /// submits the command buffer with the rest of its frame, and the pipelines were built off the frame thread
-    /// (<see cref="IRenderGraphPackageFactory.Build"/>). A recording that draws nothing records nothing and says so,
-    /// and never copies an input into an output to stand for it.</summary>
+    /// <summary>Records the pass's work for one frame. It must not submit, wait, create a pipeline or record a barrier:
+    /// the instance submits the command buffer with the rest of its frame, the pipelines were built off the frame thread
+    /// (<see cref="IRenderGraphPackageFactory.Build"/>), and the planned barriers the instance recorded before it left
+    /// each bound version in the layout its port's access needs (<see cref="RenderGraphPortAccess"/>): a sampled input
+    /// shader-readable and a color-attachment output in <see cref="GpuImageLayout.RenderTarget"/>, which a render pass
+    /// the package draws through must leave it in. A recording that draws nothing records nothing and says so, and never
+    /// copies an input into an output to stand for it.</summary>
     /// <param name="recording">The frame's command buffer and bound versions.</param>
     /// <returns>Whether the recording wrote its outputs, or left each to stand for its input.</returns>
     RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording);

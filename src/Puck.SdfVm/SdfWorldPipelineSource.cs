@@ -102,7 +102,8 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     // the error stream under the holder's label; the holder presents what it already presented.
     //
     // A refused build is tried again only when something it was built from changes: the device, the kernels asked for,
-    // the pipeline set or the kernels installed in it, or the holder's own inputs (its engine options, and anything else
+    // the pipeline set or the kernels installed in it, the operator's GPU faults (GpuCreationFaults.Revision: an arm, a
+    // disarm, or a fault firing elsewhere, never the one that refused this build), or the holder's own inputs (its engine options, and anything else
     // it names, such as a kernel reload request). A frame that changes none of them tries nothing, so a persistent
     // failure is attempted once per change, never once per frame, and never on a clock. A build the device's descriptor
     // heap refused (GpuDescriptorHeapRefusalException) has one input more, heap space: it is tried again when the heap's
@@ -112,6 +113,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     public SdfWorldEngine? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, IGpuComputePipeline, TInputs, SdfWorldEngine> construct) where TInputs : IEquatable<TInputs> {
         var key = new BuildKey(
             Device: device,
+            FaultsRevision: (device.Services.Faults?.Revision ?? 0L),
             HostsOnDirectX: hostsOnDirectX,
             IncludeBrickPipelines: includeBrickPipelines,
             Kernels: kernels,
@@ -174,10 +176,12 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
                 Console.Error.WriteLine(value: $"[{label}] engine build refused, retried when its inputs change: {refusal.Message}");
             }
 
-            // The key is read again: the attempt may have taken the lease or installed the set it failed with.
+            // The key is read again: the attempt may have taken the lease or installed the set it failed with, and a
+            // creation fault that fired inside it moved the faults' revision, which is no change the build could retry on.
             m_refusal = refusal;
             m_refusedHeapRevision = heapRevision;
             m_refusedKey = (key with {
+                FaultsRevision = (device.Services.Faults?.Revision ?? 0L),
                 RegionCopy = RegionCopy,
                 Set = Current,
                 SetKernels = Current?.Kernels,
@@ -195,7 +199,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
         (m_lease?.TryMakePrivate() ?? false);
 
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
-    private readonly record struct BuildKey(IGpuDeviceContext? Device, SdfWorldKernels? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuRegionCopyPipeline? RegionCopy, SdfWorldPipelines? Set, SdfWorldKernels? SetKernels);
+    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfWorldKernels? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuRegionCopyPipeline? RegionCopy, SdfWorldPipelines? Set, SdfWorldKernels? SetKernels);
 
     // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. A region-copy
     // acquire that throws releases the set's lease it took first.

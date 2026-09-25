@@ -19,24 +19,34 @@ public sealed partial class ShaderPipelineCompiler {
         Stage: GpuStage.DrawIndirect
     );
 
-    // A pass's references in recording order, each with whether it writes: an indirect dispatch's arguments (read in
-    // the indirect-argument state), then the inputs, then the outputs.
-    private static IEnumerable<(ResourceReference Reference, bool Write, bool Arguments)> ReferencesOf(ShaderPipelinePass pass) {
+    // A pass's references in recording order, each with whether it writes and whether a graphics stage reaches it: an
+    // indirect dispatch's arguments (read in the indirect-argument state), then the inputs, then the outputs. A shader
+    // pass reaches every reference in its own kind's stage; a package pass reaches each in the stage its port declares.
+    private static IEnumerable<(ResourceReference Reference, bool Write, bool Arguments, bool Graphics)> ReferencesOf(ShaderPipelinePass pass, ShaderPipelinePackagePass? package) {
         if (pass.DispatchArguments is { } arguments) {
-            yield return (new ResourceReference(Name: arguments), false, true);
+            yield return (new ResourceReference(Name: arguments), false, true, false);
         }
-        foreach (var input in pass.InputReferences) {
-            yield return (input, false, false);
+
+        var inputs = pass.InputReferences;
+        var outputs = pass.OutputReferences;
+
+        for (var index = 0; (index < inputs.Count); index++) {
+            yield return (inputs[index], false, false, ((package is null)
+                ? pass.IsGraphics
+                : (package.InputAccess(index: index) == RenderGraphPortAccess.FragmentSampled)));
         }
-        foreach (var output in pass.OutputReferences) {
-            yield return (output, true, false);
+        for (var index = 0; (index < outputs.Count); index++) {
+            yield return (outputs[index], true, false, ((package is null)
+                ? pass.IsGraphics
+                : (package.OutputAccess(index: index) == RenderGraphPortAccess.ColorAttachmentWrite)));
         }
     }
-    // The state a pass's reference needs from the instance it reaches, which is also the state the reference leaves it in.
-    // A graphics pass's render pass keeps each attachment in its attachment layout, so a later sampling reader's planned
-    // barrier is the transition to shader-readable. A preserving write also reads what its predecessor left: a compute
-    // pass through the shader, a render pass through the attachment load. A depth test always reads.
-    private static ShaderPipelineAccessState UseOf(ShaderPipelinePass pass, ShaderPipelineResource resource, bool write, bool preserve) {
+    // The state a reference needs from the instance it reaches, which is also the state the reference leaves it in. A
+    // graphics read samples in the fragment stage, and a graphics write is a render pass's attachment, which it keeps in
+    // its attachment layout, so a later sampling reader's planned barrier is the transition to shader-readable. A
+    // preserving write also reads what its predecessor left: a compute pass through the shader, a render pass through
+    // the attachment load. A depth test always reads.
+    private static ShaderPipelineAccessState UseOf(bool graphics, ShaderPipelineResource resource, bool write, bool preserve) {
         var buffer = (resource.Kind == ShaderPipelineResourceKind.Buffer);
 
         if (!write) {
@@ -45,7 +55,7 @@ public sealed partial class ShaderPipelineCompiler {
                 Layout: (buffer
                     ? GpuImageLayout.Undefined
                     : GpuImageLayout.ShaderReadOnly),
-                Stage: (pass.IsGraphics
+                Stage: (graphics
                     ? GpuStage.FragmentShader
                     : GpuStage.ComputeShader)
             );
@@ -57,7 +67,7 @@ public sealed partial class ShaderPipelineCompiler {
                 Stage: GpuStage.FragmentTests
             );
         }
-        if (pass.IsGraphics) {
+        if (graphics) {
             return new ShaderPipelineAccessState(
                 Access: (preserve
                     ? GpuAccess.ColorAttachmentRead | GpuAccess.ColorAttachmentWrite
@@ -105,7 +115,7 @@ public sealed partial class ShaderPipelineCompiler {
             Version: resource.Name
         )).ToArray();
     }
-    private static (IReadOnlyList<ShaderPipelinePlannedResource> Resources, IReadOnlyList<ShaderPipelinePlannedStorage> Storages, ShaderPipelineAccess[][] Accesses) PlanVersions(RenderGraphDefinition definition, IReadOnlySet<string> liveResources, IReadOnlyList<ShaderPipelinePass> passes) {
+    private static (IReadOnlyList<ShaderPipelinePlannedResource> Resources, IReadOnlyList<ShaderPipelinePlannedStorage> Storages, ShaderPipelineAccess[][] Accesses) PlanVersions(RenderGraphDefinition definition, IReadOnlySet<string> liveResources, IReadOnlyList<ShaderPipelinePass> passes, IReadOnlyList<ShaderPipelinePackagePass?> packages) {
         var declarations = definition.Resources.Where(predicate: resource => liveResources.Contains(item: resource.Name)).ToDictionary(
             keySelector: static resource => resource.Name,
             comparer: StringComparer.Ordinal
@@ -163,14 +173,17 @@ public sealed partial class ShaderPipelineCompiler {
             var declaration = passes[index];
             var list = new List<(int Storage, string Version, bool PreviousFrame, ShaderPipelineAccessState Use)>();
 
-            foreach (var (reference, write, arguments) in ReferencesOf(pass: declaration)) {
+            foreach (var (reference, write, arguments, graphics) in ReferencesOf(
+                package: packages[index],
+                pass: declaration
+            )) {
                 var resource = declarations[reference.Name];
                 var storage = storageOf[reference.Name];
 
                 var use = (arguments
                     ? ArgumentsUse
                     : UseOf(
-                        pass: declaration,
+                        graphics: graphics,
                         preserve: (resource.From is not null),
                         resource: resource,
                         write: write

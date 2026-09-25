@@ -237,25 +237,31 @@ package's ports, inputs then outputs, in port order. A port
 (`RenderGraphPackagePort`) carries an image or a buffer, and a buffer port
 states its `strideBytes` and `count` as a buffer resource does. The version a
 pass binds must carry what its port carries: its kind, and for a buffer port
-the same stride and count. A package binds its own descriptors, so a package
-reference declares no binding. `RenderGraphPackageCatalog` is what a host
-offers:
+the same stride and count. A port also declares the stage and access its
+package reaches it by (`RenderGraphPortAccess`): an input is a compute read or
+a fragment-sampled read, and an output a compute write or a color-attachment
+write, which only an image port takes. A package binds its own descriptors, so
+a package reference declares no binding. `RenderGraphPackageCatalog` is what a
+host offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one image output | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
-| `sdf.bricks` | no input, one buffer output | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
-| `overlay` | one image input, one image output | The console, HUD, toasts and cursor drawn over the input. |
-| `resample` | one image input, one image output | The input reconstructed at the output's extent: an exact copy at the same extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its kernel is `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`. |
-| `post.<set id>` | one image input, one image output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
+| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
+| `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
+| `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
+| `resample` | one image input read by compute, one image output written by compute | The input reconstructed at the output's extent: an exact copy at the same extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its kernel is `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`. |
+| `post.<set id>` | one fragment-sampled image input, one color-attachment image output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
 
 `RenderGraphCompiler` checks the schema tag and the package passes against the
 catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
 planner. Package work enters the planner only through the graph compiler; the
 planner's own document entry refuses a graph naming package passes
 (`SHADERPIPE_PACKAGE_PASS`). The planner sees a package pass as its own kind,
-`Package`, ordered by the versions it reaches as a compute pass would. Its
-planned pass has no declaration; it carries a `ShaderPipelinePackageStep`
+`Package`, ordered by the versions it reads and writes, and plans each port's
+barrier and layout from the port's access exactly as it plans a shader
+pass's: a fragment-sampled input as a graphics pass's input and a
+color-attachment output as a graphics pass's output. Its planned pass has no
+declaration; it carries a `ShaderPipelinePackageStep`
 instead, naming the package, the versions bound to its ports and the extent it
 runs at, which is what the render node reads. It binds no descriptors and
 compiles nothing. A pipeline host
@@ -342,9 +348,11 @@ Each recording carries the pass's frame block, written as a shader pass's is
 (the frame members, then the package's config), and the frame's lease list,
 which retires a lease after that frame slot's fence. A package pass may carry
 `config` values, which the graph compiler binds against the package's schema
-and refuses by name as `RENDERGRAPH_PACKAGE_CONFIG`. A package that draws
-into an output brackets its render pass with `RenderGraphPackageDraw`, since
-the planner orders it in a compute pass's shape.
+and refuses by name as `RENDERGRAPH_PACKAGE_CONFIG`. A recorder records no
+barrier: the instance records the pass's planned barriers first, so a
+fragment-sampled input arrives shader-readable and a color-attachment output in
+render-target layout, which the package's render pass leaves it in for the
+next planned barrier to move on.
 
 A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
 and each output then stands for the input at its position: the instance

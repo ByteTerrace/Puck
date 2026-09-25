@@ -3,6 +3,7 @@ using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -11,9 +12,10 @@ namespace Puck.Shaders.Tests;
 /// shipped film-grain set run as a package pass of a graph records what <see cref="FullscreenPassNode"/> records for the
 /// same set over the same input (the render pass and graphics pipeline it is created for, the vertex buffer and the
 /// draw, the input written at the set's binding, and the frame block pushed byte for byte, bound config and live changes
-/// included); its pipeline is built off the frame thread and released with its graph on replacement, device loss and
-/// disposal; a config that does not bind is refused by the graph compiler by name; and a steady frame allocates
-/// nothing.
+/// included); it is handed its input shader-readable and its target in render-target layout by the node's planned
+/// barriers and records none of its own; its pipeline is built off the frame thread and released with its graph on
+/// replacement, device loss and disposal; a config that does not bind is refused by the graph compiler by name; and a
+/// steady frame allocates nothing.
 /// </summary>
 public sealed class PostProcessPackageLawTests {
     private const uint Extent = 64;
@@ -66,14 +68,15 @@ public sealed class PostProcessPackageLawTests {
         Schema: RenderGraphSchemas.Graph
     );
     private static JsonElement Json(string text) => JsonDocument.Parse(json: text).RootElement.Clone();
-    // A node running the film-grain set as the graph's one package pass over the bound input.
-    private static ShaderPipelineRenderNode PackageNode(FakePipelineGpu gpu, JsonElement? config) {
+    // A node running the film-grain set as the graph's one package pass over the bound input, through the factory a law
+    // wraps it in, if any.
+    private static ShaderPipelineRenderNode PackageNode(FakePipelineGpu gpu, JsonElement? config, Func<PostProcessPackage, IRenderGraphPackageFactory>? wrap = null) {
         var manifest = FilmGrain();
         var package = new PostProcessPackage(manifest: manifest);
         var packages = new RenderGraphPackageRecorders();
 
         packages.Register(
-            factory: package,
+            factory: (wrap?.Invoke(arg: package) ?? package),
             package: package.Id
         );
 
@@ -236,6 +239,37 @@ public sealed class PostProcessPackageLawTests {
                 node: package
             )
         );
+    }
+    [Fact]
+    public void APostPassDrawsIntoItsPlannedLayoutsAndRecordsNoBarrierOfItsOwn() {
+        var gpu = new FakePipelineGpu();
+        ObservedPackageFactory? observed = null;
+        using var node = PackageNode(
+            config: null,
+            gpu: gpu,
+            wrap: package => (observed = new ObservedPackageFactory(
+                barriers: () => gpu.Barriers.Count,
+                inner: package
+            ))
+        );
+
+        ProduceUntilPublished(node: node);
+        gpu.Recording = true;
+
+        for (var frame = 0; (frame < 4); frame++) {
+            _ = node.ProduceFrame(context: default);
+        }
+
+        gpu.Recording = false;
+
+        // The node records the barriers around the draw: every frame the target moves into render-target layout before
+        // it and on to publication after it.
+        Assert.NotEmpty(collection: gpu.Barriers);
+        Assert.Equal(
+            expected: (0, (GpuImageLayout.ShaderReadOnly, GpuImageLayout.RenderTarget), RenderGraphPackageOutcome.Drew),
+            actual: (observed!.PackageBarriers, observed.Layouts, observed.Outcome)
+        );
+        Assert.True(condition: (observed.Records >= 4));
     }
     [Fact]
     public void AConfigThatDoesNotBindIsRefusedByTheGraphCompilerNamingThePass() {

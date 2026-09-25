@@ -74,6 +74,7 @@
         <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
         <Compile Include="..\Shared\RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
         <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
+        <Compile Include="..\Shared\ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
     </ItemGroup>
     <ItemGroup>
         <!-- A world's music, tune, and patch rows resolve their source against the executable's own directory, where

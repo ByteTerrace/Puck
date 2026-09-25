@@ -16,9 +16,9 @@ namespace Puck.SdfVm.Tests;
 /// to present: the produced frame returns nothing new rather than throwing, <see cref="SdfEngineNode.NotReadyReason"/>
 /// names the refusal, and everything the failed construction created is released while the pipeline set's lease is
 /// kept. A refused build is tried again only when one of its inputs changes (the program, the extent, a kernel reload
-/// request, the device); frames that change none of them attempt nothing. Each engine attempt that passes admission
-/// creates exactly one descriptor pool, which is how the laws count attempts; an attempt the device's descriptor heap
-/// refuses creates nothing, and the fake counts its admissions instead.
+/// request, the operator's GPU faults, the device); frames that change none of them attempt nothing. Each engine attempt
+/// that passes admission creates exactly one descriptor pool, which is how the laws count attempts; an attempt the
+/// device's descriptor heap refuses creates nothing, and the fake counts its admissions instead.
 /// </summary>
 public sealed class SdfEngineNodeBuildRefusalLawTests {
     private const uint Extent = 32;
@@ -231,6 +231,51 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         );
         Assert.False(condition: rig.Node.IsReady);
         rig.AssertOnlyThePipelineSetIsHeld();
+    }
+
+    /// <summary>The operator's GPU faults are a recorded input (<see cref="GpuCreationFaults.Revision"/>): a build a fault
+    /// refused is not tried again on unchanged frames, arming another fault is a change that retries it exactly once
+    /// (refused again by the fault just armed, whose firing is no further change), and disarming is a change that
+    /// rebuilds it exactly once.</summary>
+    [Fact]
+    public void ArmingAFaultRetriesARefusedBuildOnceAndDisarmingRebuildsItOnce() {
+        using var rig = new Rig(reportVersion: SdfIsa.Version);
+
+        rig.Faults.Arm(
+            kind: GpuCreationKind.CommandPool,
+            nth: 2
+        );
+        _ = rig.ProduceUntilRefused();
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.Equal(
+            actual: rig.EngineAttempts,
+            expected: 1
+        );
+
+        rig.Faults.Arm(
+            kind: GpuCreationKind.CommandPool,
+            nth: 2
+        );
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.Equal(
+            actual: rig.EngineAttempts,
+            expected: 2
+        );
+        Assert.False(condition: rig.Node.IsReady);
+        Assert.Contains(
+            expectedSubstring: GpuCreationFaults.RefusalCode,
+            actualString: rig.Node.NotReadyReason
+        );
+        rig.AssertOnlyThePipelineSetIsHeld();
+
+        rig.Faults.Disarm();
+        rig.ProduceUnchanged(frames: Frames);
+        Assert.True(condition: rig.Node.IsReady);
+        Assert.Null(@object: rig.Node.NotReadyReason);
+        Assert.Equal(
+            actual: rig.EngineAttempts,
+            expected: 3
+        );
     }
 
     // A Direct3D 12 heap of the given view descriptors, the only kind an engine's pool takes.

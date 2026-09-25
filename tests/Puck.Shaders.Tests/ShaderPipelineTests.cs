@@ -307,11 +307,11 @@ public sealed class ShaderPipelineTests {
             expected: ShaderPipelinePassKind.Package,
             actual: planned.Kind
         );
-        // The planned pass carries its step, not a declaration: the package, its ports and its extent.
+        // The planned pass carries its step, not a declaration: the package and its ports; its extent is the pass's own.
         Assert.Null(@object: planned.Declaration);
         Assert.Equal(
             expected: (RenderGraphPackageCatalog.SdfWorld, "out", 0, ((uint)64), ((uint)32)),
-            actual: (planned.Package!.Package, planned.Package.Outputs.Single().Name, planned.Package.Inputs.Count, planned.Package.ResolveExtent(frameHeight: 32, frameWidth: 64).Width, planned.Package.ResolveExtent(frameHeight: 32, frameWidth: 64).Height)
+            actual: (planned.Package!.Package, planned.Package.Outputs.Single().Name, planned.Package.Inputs.Count, planned.ResolveExtent(frameHeight: 32, frameWidth: 64).Width, planned.ResolveExtent(frameHeight: 32, frameWidth: 64).Height)
         );
     }
     [Fact]
