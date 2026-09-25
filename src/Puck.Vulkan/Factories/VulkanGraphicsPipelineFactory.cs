@@ -138,7 +138,8 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
         VulkanPushConstantBinding? pushConstantBinding = null,
         uint textureSamplerCount = 64,
         bool enableStorageBuffer = true,
-        GpuVertexInputLayout? vertexInput = null
+        GpuVertexInputLayout? vertexInput = null,
+        VulkanGroupPipelineLayout? groups = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: swapchain);
 
@@ -149,7 +150,7 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
                 width: swapchain.ImageExtentWidth
             ),
             fragmentShaderModule: fragmentShaderModule,
-            groups: null,
+            groups: groups,
             logicalDevice: logicalDevice,
             outputs: null,
             pushConstantBinding: pushConstantBinding,
