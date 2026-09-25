@@ -115,22 +115,29 @@
 #define SDF_WPG_PLANE_XY 1u
 #define SDF_WPG_PLANE_YZ 2u
 
-// Shape-lane flags on a ShapeBlend instruction's header.
+// Shape-lane flags and the type mask on a ShapeBlend instruction's header.
 #define SDF_SHAPE_DETAIL_FLAG       0x80000000u
 #define SDF_SHAPE_NO_SECONDARY_FLAG 0x40000000u
+#define SDF_SHAPE_TYPE_MASK         0x3FFFFFFFu
 
-// Bound modes, and the flags packed beside them in bound, segment and instance records.
+// Bound modes, and the flags and masks packed beside them in bound, segment and instance records.
 #define SDF_BOUND_NONE                      0u
 #define SDF_BOUND_STATIC                    1u
 #define SDF_BOUND_DYNAMIC                   2u
 #define SDF_SEGMENT_RIGID_PLAN              0x80000000u
+#define SDF_SEGMENT_BOUND_MASK              0x000000FFu
 #define SDF_INSTANCE_SHADOW_TRANSPARENT_BIT 0x80000000u
 #define SDF_INSTANCE_SEGMENT_END_MASK       0x7FFFFFFFu
+#define SDF_NO_DETAIL_SHAPES_FLAG           0x00000001u
 
 // The rigid-leaf plan.
 #define SDF_RIGID_LEAF_IDENTITY_ROTATION 0x80000000u
 #define SDF_RIGID_LEAF_FOLDED            0x40000000u
+#define SDF_RIGID_LEAF_SHAPE_MASK        0x3FFFFFFFu
 #define SDF_RIGID_LEAF_MAX_FOLD_RUN      8u
+
+// The sampled-region shape's packed dims.
+#define SDF_SAMPLED_REGION_DIM_MASK 0x000003FFu
 
 // Program capacities, strides and floors.
 #define SDF_MAX_INSTANCES              65536u

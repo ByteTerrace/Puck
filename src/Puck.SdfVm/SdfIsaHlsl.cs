@@ -43,7 +43,7 @@ public static class SdfIsaHlsl {
         declarations.Members<SdfPolarAxis>(prefix: "SDF_POLAR_AXIS");
         declarations.Members<SdfWallpaperGroup>(prefix: "SDF_WPG");
         declarations.Members<SdfWallpaperPlane>(prefix: "SDF_WPG_PLANE");
-        declarations.Section(title: "Shape-lane flags on a ShapeBlend instruction's header.");
+        declarations.Section(title: "Shape-lane flags and the type mask on a ShapeBlend instruction's header.");
         declarations.Bits(
             name: "SDF_SHAPE_DETAIL_FLAG",
             value: SdfProgram.ShapeDetailFlag
@@ -52,7 +52,11 @@ public static class SdfIsaHlsl {
             name: "SDF_SHAPE_NO_SECONDARY_FLAG",
             value: SdfProgram.ShapeNoSecondaryFlag
         );
-        declarations.Section(title: "Bound modes, and the flags packed beside them in bound, segment and instance records.");
+        declarations.Bits(
+            name: "SDF_SHAPE_TYPE_MASK",
+            value: SdfProgram.ShapeTypeMask
+        );
+        declarations.Section(title: "Bound modes, and the flags and masks packed beside them in bound, segment and instance records.");
         declarations.Count(
             name: "SDF_BOUND_NONE",
             value: SdfProgram.BoundModeNone
@@ -70,12 +74,20 @@ public static class SdfIsaHlsl {
             value: SdfProgram.SegmentRigidPlanFlag
         );
         declarations.Bits(
+            name: "SDF_SEGMENT_BOUND_MASK",
+            value: SdfProgram.SegmentBoundModeMask
+        );
+        declarations.Bits(
             name: "SDF_INSTANCE_SHADOW_TRANSPARENT_BIT",
             value: SdfProgram.ShadowTransparentInstanceFlag
         );
         declarations.Bits(
             name: "SDF_INSTANCE_SEGMENT_END_MASK",
             value: SdfProgram.SegmentEndMask
+        );
+        declarations.Bits(
+            name: "SDF_NO_DETAIL_SHAPES_FLAG",
+            value: SdfProgram.NoDetailShapesFlag
         );
         declarations.Section(title: "The rigid-leaf plan.");
         declarations.Bits(
@@ -86,9 +98,18 @@ public static class SdfIsaHlsl {
             name: "SDF_RIGID_LEAF_FOLDED",
             value: SdfProgram.RigidLeafFoldedFlag
         );
+        declarations.Bits(
+            name: "SDF_RIGID_LEAF_SHAPE_MASK",
+            value: SdfProgram.RigidLeafShapeMask
+        );
         declarations.Count(
             name: "SDF_RIGID_LEAF_MAX_FOLD_RUN",
             value: SdfProgram.RigidLeafMaxFoldRun
+        );
+        declarations.Section(title: "The sampled-region shape's packed dims.");
+        declarations.Bits(
+            name: "SDF_SAMPLED_REGION_DIM_MASK",
+            value: SdfProgramBuilder.SampledRegionDimMask
         );
         declarations.Section(title: "Program capacities, strides and floors.");
         declarations.Count(
@@ -126,6 +147,7 @@ public static class SdfIsaHlsl {
 
         return declarations.Text();
     }
+
     // A C# member name's HLSL spelling: upper snake case, with a word break before an upper-case letter that follows a
     // lower-case one or that starts a new word after an upper-case run (P4M stays P4M, LogSphere becomes LOG_SPHERE).
     private static string UpperSnake(string name) {
@@ -137,10 +159,10 @@ public static class SdfIsaHlsl {
             if (
                 (index > 0) &&
                 char.IsUpper(c: character) &&
-                (char.IsLower(c: name[index - 1]) || (
-                    char.IsUpper(c: name[index - 1]) &&
+                (char.IsLower(c: name[(index - 1)]) || (
+                    char.IsUpper(c: name[(index - 1)]) &&
                     ((index + 1) < name.Length) &&
-                    char.IsLower(c: name[index + 1])
+                    char.IsLower(c: name[(index + 1)])
                 ))
             ) {
                 text.Append(value: '_');
@@ -235,9 +257,9 @@ public static class SdfIsaHlsl {
 
             Define(
                 name: name,
-                value: (spelling.AsSpan().IndexOfAny(values: ".E") < 0)
+                value: ((spelling.AsSpan().IndexOfAny(values: ".E") < 0)
                     ? (spelling + ".0")
-                    : spelling
+                    : spelling)
             );
         }
         public void Section(string title) {

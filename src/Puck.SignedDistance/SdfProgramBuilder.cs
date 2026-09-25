@@ -58,9 +58,12 @@ public sealed partial class SdfProgramBuilder {
     /// not a per-GPU one) with ~15 KiB to spare. The kernels read it as <c>SDF_MAX_INSTANCES</c>.</summary>
     public const int MaxInstances = 65536;
     /// <summary>The maximum voxel count per brick axis: the <see cref="SampledRegion"/> shape packs each dim in 10 bits
-    /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so 1023 is the hard ceiling. KEEP IN SYNC with the
-    /// 0x3FFu unpack mask in sdfSampledRegion (Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>
-    public const int MaxSampledRegionDim = 1023;
+    /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so <see cref="SampledRegionDimMask"/> is the
+    /// hard ceiling.</summary>
+    public const int MaxSampledRegionDim = ((int)SampledRegionDimMask);
+    /// <summary>The mask that unpacks one 10-bit dim from a <see cref="SampledRegion"/> shape's packed Data1.y dims
+    /// (<c>SDF_SAMPLED_REGION_DIM_MASK</c>).</summary>
+    public const uint SampledRegionDimMask = 0x3FFu;
     /// <summary>The shortest slant vector <c>(topHalfWidth − bottomHalfWidth, 2·halfHeight)</c> a
     /// <see cref="Trapezoid"/> profile may carry: shorter than this the deterministic fixed-point evaluator divides by
     /// its own squared length and the shader returns NaN, so the shape is refused rather than evaluated.</summary>

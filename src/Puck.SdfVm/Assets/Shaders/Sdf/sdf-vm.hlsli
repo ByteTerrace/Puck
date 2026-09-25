@@ -354,7 +354,6 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // re-evaluations like any ordinary shape, and drops out ONLY under sdfSecondaryMarchActive, the soft-shadow and
 // ambient-occlusion field walks in sdf-world.hlsli (eyelids and other small parts still shade and collide, they just
 // cast no shadow and cost no AO tap).
-#define SDF_SHAPE_TYPE_MASK   0x3FFFFFFFu
 // SDF_OP_SYMMETRY_PLANE reproduces the axis-aligned folds with an axis normal.
 // Scoped field accumulator (SdfOp.PushField/PopField). PUSH saves the running accumulator into a one-deep slot and
 // reseeds a fresh scope; POP composes the scope's field back into the saved parent as a candidate (reusing SHAPE's
@@ -449,7 +448,7 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // (smooth [ISA-wide], halfWidth, halfHeight, _). Only the world-views kernel binds the atlas (SDF_GLYPH_ATLAS); every
 // other kernel evaluates the conservative extruded-quad fallback (the glyph is strictly inside its cell). See sdfGlyph.
 // A SAMPLED distance-field brick (SdfShapeType.SampledRegion). data0 = (boxMin.xyz, cellSize); data1 =
-// (smooth [ISA-wide], packedDims [3x10-bit dims, unpacked with 0x3FFu], brickWordOffset [pool base word], boundaryFloor
+// (smooth [ISA-wide], packedDims [3x10-bit dims, unpacked with SDF_SAMPLED_REGION_DIM_MASK], brickWordOffset [pool base word], boundaryFloor
 // [outside-box lower-bound offset = margin/lambda]). Evaluated by manual trilinear ONLY where the pool is bound
 // (SDF_SAMPLED_REGIONS); every other kernel returns the conservative union-hull fallback (SDF_FAR_DISTANCE, so a
 // Subtraction compose never bites). See sdfSampledRegion.
@@ -474,11 +473,9 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // --- bound records (Puck.SignedDistance.SdfProgram's PackBounds) ---
 // Segment metadata overlays SDF_SEGMENT_RIGID_PLAN on the high bit of its bound mode. The low byte remains
 // SDF_BOUND_*; shape and instance bound records never carry this flag.
-#define SDF_SEGMENT_BOUND_MASK 0x000000FFu
 // A leaf flagged SDF_RIGID_LEAF_FOLDED rides a fold run of at most SDF_RIGID_LEAF_MAX_FOLD_RUN instructions; the slot
 // after it holds (pose before the run.xyz, first fold | identity bit), that pose's quaternion, and (run length in
 // instructions, 0, 0, 0).
-#define SDF_RIGID_LEAF_SHAPE_MASK        0x3FFFFFFFu
 
 // --- blend operators ---
 // THE ACCUMULATOR RULE (Puck.SignedDistance.SdfBlendOp's summary). mapCore carries ONE running nearest-surface
@@ -1455,7 +1452,7 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 
     float cellSize = data0.w;
     uint packedDims = asuint(data1.y);
-    uint3 dims = uint3((packedDims & 0x3FFu), ((packedDims >> 10) & 0x3FFu), ((packedDims >> 20) & 0x3FFu));
+    uint3 dims = uint3((packedDims & SDF_SAMPLED_REGION_DIM_MASK), ((packedDims >> 10) & SDF_SAMPLED_REGION_DIM_MASK), ((packedDims >> 20) & SDF_SAMPLED_REGION_DIM_MASK));
     uint baseWord = asuint(data1.z);
     float3 boxMin = data0.xyz;
     float3 extent = (float3(dims) * cellSize);
@@ -2262,7 +2259,7 @@ SdfProgramLayout sdfLoadProgramLayout() {
     layout.segmentCount = segmentCount;
     layout.rigidPlanOffset = segmentHeader.z;
     layout.partProgramOffset = sdfWords[instanceOffset].y;
-    layout.noDetailShapes = (sdfWords[instanceOffset].z & 1u) != 0u; // SdfProgram.NoDetailShapesFlag
+    layout.noDetailShapes = (sdfWords[instanceOffset].z & SDF_NO_DETAIL_SHAPES_FLAG) != 0u;
     layout.stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
     layout.instanceOffset = instanceOffset;
     layout.instanceCount = instanceCount;

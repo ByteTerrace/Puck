@@ -77,8 +77,6 @@ public sealed partial class SdfProgram {
     /// branch — no sphere-vs-cone math, mask bit left 0 — while the slot still occupies its reserved capacity. Chosen
     /// well below any legitimate rounding of a real radius toward 0 so the branch never misfires on a genuine bound.</summary>
     private const float ParkedBoundRadius = -1f;
-    // Instance-header .z admission bit; KEEP IN SYNC with sdfLoadProgramLayout's noDetailShapes.
-    private const uint NoDetailShapesFlag = 1u;
     /// <summary>Each packed screen-surface entry's uvec4 (16-byte) stride: right.xyz+halfWidth, up.xyz+halfHeight,
     /// origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli's ScreenSurfaceData).</summary>
     private const int ScreenSurfaceVectorsPerEntry = 3;
@@ -2038,13 +2036,13 @@ public sealed partial class SdfProgram {
                     // brick's zero set (strictly interior by the bake margin), so a Subtraction-blend brick instance masks
                     // exactly as any analytic carve does — and outside the box the shape's own candidate (dist(p, box) +
                     // boundaryFloor) is a sound lower bound (see sdfSampledRegion). The dims live
-                    // in Data1.y as a 3x10-bit uint pack (KEEP IN SYNC with the 0x3FFu unpack in sdfSampledRegion); cellSize
+                    // in Data1.y as a 3x10-bit uint pack, unpacked with SdfProgramBuilder.SampledRegionDimMask; cellSize
                     // is Data0.w. TryGetLocalBound feeding ShapeReachRadius/AnalyzeLipschitz gives it factor 1 (no warp).
                     var packedDims = BitConverter.SingleToUInt32Bits(value: instruction.Data1.Y);
                     var extent = (new Vector3(
-                        x: packedDims & 0x3FFu,
-                        y: (packedDims >> 10) & 0x3FFu,
-                        z: (packedDims >> 20) & 0x3FFu
+                        x: packedDims & SdfProgramBuilder.SampledRegionDimMask,
+                        y: (packedDims >> 10) & SdfProgramBuilder.SampledRegionDimMask,
+                        z: (packedDims >> 20) & SdfProgramBuilder.SampledRegionDimMask
                     ) * data0.W);
 
                     center = (new Vector3(
