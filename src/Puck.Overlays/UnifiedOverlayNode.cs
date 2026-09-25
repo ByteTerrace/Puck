@@ -412,6 +412,16 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             return;
         }
 
+        // The pool is admitted before anything is created, so an overlay that does not fit the device's heap is refused
+        // by name with nothing to release.
+        if (!m_bindings.CanAdmit(
+            owner: "unified overlay",
+            pools: [DescriptorPoolSizes],
+            refusal: out var refusal
+        )) {
+            throw new InvalidOperationException(message: refusal);
+        }
+
         // The overlay clears its image each frame and leaves it shader-readable for the presenter and any capture.
         m_renderTarget = m_imageFactory.Create(
             format: GpuPixelFormat.R8G8B8A8Unorm,

@@ -14,7 +14,8 @@ namespace Puck.World.Tests;
 /// <summary>
 /// Laws for the GPU work <see cref="UnifiedOverlayNode"/> counts, driven over <see cref="FakeGpuDevice"/>: the exact
 /// counts of a drawn overlay frame, submission identity across a device loss, that the descriptor pool it states is the
-/// one it creates, and that a steady-state drawn frame allocates nothing.
+/// one it creates, that a pool the device's heap cannot admit is refused by name before anything is created, and that a
+/// steady-state drawn frame allocates nothing.
 /// </summary>
 public sealed class UnifiedOverlayWorkLawTests {
     // The second drawn cursor frame, published when the third frame polls its fence. The overlay pass is the render
@@ -71,6 +72,43 @@ public sealed class UnifiedOverlayWorkLawTests {
         );
     }
     [Fact]
+    public void AnOverlayWhosePoolDoesNotFitTheHeapIsRefusedByNameBeforeItCreatesAnything() {
+        using var rig = new Rig(countCalls: true);
+        var demand = UnifiedOverlayNode.DescriptorPoolSizes.HeapDescriptors;
+
+        GpuDescriptorHeapBudget Heap(uint views) => new(capabilities: (GpuDeviceCapabilities.FromDirectX(
+            resourceBindingTier: 3,
+            rootSignatureVersion: "1.1",
+            samplerHeapSize: 0,
+            shaderModel: "6.6",
+            viewHeapSize: 0
+        ) with {
+            ViewHeapSize = views,
+        }));
+
+        rig.Gpu.DescriptorHeap = Heap(views: (demand - 1U));
+
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: rig.Produce);
+
+        Assert.StartsWith(
+            actualString: refusal.Message,
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'unified overlay' needs {demand} view descriptors in 1 pool(s) and is refused: "
+        );
+        Assert.Empty(collection: rig.Gpu.PoolsCreated);
+        Assert.Equal(
+            actual: (rig.Gpu.Count(key: "IGpuImageFactory.Create"), rig.Gpu.Count(key: "IGpuPipelineFactory.Create(graphics)")),
+            expected: (0, 0)
+        );
+
+        rig.Gpu.DescriptorHeap = Heap(views: demand);
+        rig.Produce();
+
+        Assert.Equal(
+            actual: rig.Gpu.PoolsCreated,
+            expected: [UnifiedOverlayNode.DescriptorPoolSizes]
+        );
+    }
+    [Fact]
     public void ASteadyStateDrawnFrameAllocatesNothing() {
         using var rig = new Rig();
         var sample = new GpuWorkSample();
@@ -94,8 +132,11 @@ public sealed class UnifiedOverlayWorkLawTests {
     private sealed class Rig : IDisposable {
         private readonly CursorStore m_cursor = new();
 
-        public Rig() {
-            var gpu = new FakeGpuDevice(reportVersion: 0);
+        public Rig(bool countCalls = false) {
+            var gpu = new FakeGpuDevice(
+                countCalls: countCalls,
+                reportVersion: 0
+            );
 
             Gpu = gpu;
             m_cursor.Publish(frame: new OverlayCursorFrame(Seats: new[] {
