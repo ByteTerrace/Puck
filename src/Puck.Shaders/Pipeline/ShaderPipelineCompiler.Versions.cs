@@ -100,12 +100,14 @@ public sealed partial class ShaderPipelineCompiler {
             }
             if (
                 (predecessor.Dimensions != successor.Dimensions) ||
-                (predecessor.SizeBytes != successor.SizeBytes)
+                (predecessor.SizeBytes != successor.SizeBytes) ||
+                (predecessor.Count != successor.Count) ||
+                (predecessor.StrideBytes != successor.StrideBytes)
             ) {
                 Add(
                     diagnostics,
                     "SHADERPIPE_FORWARD_EXTENT",
-                    $"Version '{successor.Name}' declares a different extent from '{name}', which it forwards; a forward continues one storage.",
+                    $"Version '{successor.Name}' declares a different extent, size or stride from '{name}', which it forwards; a forward continues one storage.",
                     successor.Name
                 );
             }
@@ -193,7 +195,7 @@ public sealed partial class ShaderPipelineCompiler {
 
         // A pass that samples a version while writing its successor reads contents its own writes destroy.
         foreach (var pass in definition.Passes) {
-            foreach (var input in pass.InputReferences) {
+            foreach (var input in ReadsOf(pass: pass)) {
                 if (
                     !input.PreviousFrame &&
                     successors.TryGetValue(
@@ -238,7 +240,7 @@ public sealed partial class ShaderPipelineCompiler {
             for (var passIndex = 0; (passIndex < definition.Passes.Count); passIndex++) {
                 if (
                     (passIndex != overwriter) &&
-                    definition.Passes[passIndex].InputReferences.Any(predicate: input => (!input.PreviousFrame && string.Equals(
+                    ReadsOf(pass: definition.Passes[passIndex]).Any(predicate: input => (!input.PreviousFrame && string.Equals(
                         a: input.Name,
                         b: predecessor,
                         comparisonType: StringComparison.Ordinal

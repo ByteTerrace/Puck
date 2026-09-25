@@ -11,6 +11,26 @@ namespace Puck.Shaders;
 // once, at compile time, and gives every access its exact prior state and barrier; the render node records exactly
 // those and keeps no layout state of its own.
 public sealed partial class ShaderPipelineCompiler {
+    // An indirect dispatch reads its group counts in the indirect-argument state, before any shader stage runs.
+    private static ShaderPipelineAccessState ArgumentsUse { get; } = new(
+        Access: GpuComputeAccess.IndirectCommandRead,
+        Layout: GpuImageLayout.Undefined,
+        Stage: GpuComputeStage.DrawIndirect
+    );
+
+    // A pass's references in recording order, each with whether it writes: an indirect dispatch's arguments (read in
+    // the indirect-argument state), then the inputs, then the outputs.
+    private static IEnumerable<(ResourceReference Reference, bool Write, bool Arguments)> ReferencesOf(ShaderPipelinePass pass) {
+        if (pass.DispatchArguments is { } arguments) {
+            yield return (new ResourceReference(Name: arguments), false, true);
+        }
+        foreach (var input in pass.InputReferences) {
+            yield return (input, false, false);
+        }
+        foreach (var output in pass.OutputReferences) {
+            yield return (output, true, false);
+        }
+    }
     // The state a pass's reference needs from the instance it reaches, which is also the state the reference leaves it in.
     // A graphics pass's render pass keeps each attachment in its attachment layout, so a later sampling reader's planned
     // barrier is the transition to shader-readable. A preserving write also reads what its predecessor left: a compute
@@ -142,16 +162,18 @@ public sealed partial class ShaderPipelineCompiler {
             var declaration = pass.Declaration;
             var list = new List<(int Storage, string Version, bool PreviousFrame, ShaderPipelineAccessState Use)>();
 
-            foreach (var (reference, write) in declaration.InputReferences.Select(selector: static input => (input, false)).Concat(second: declaration.OutputReferences.Select(selector: static output => (output, true)))) {
+            foreach (var (reference, write, arguments) in ReferencesOf(pass: declaration)) {
                 var resource = declarations[reference.Name];
                 var storage = storageOf[reference.Name];
 
-                var use = UseOf(
-                    pass: declaration,
-                    preserve: (resource.From is not null),
-                    resource: resource,
-                    write: write
-                );
+                var use = (arguments
+                    ? ArgumentsUse
+                    : UseOf(
+                        pass: declaration,
+                        preserve: (resource.From is not null),
+                        resource: resource,
+                        write: write
+                    ));
 
                 roles[storage, (reference.PreviousFrame ? 1 : 0)].Add(item: (pass.Index, list.Count, use));
                 list.Add(item: (storage, reference.Name, reference.PreviousFrame, use));

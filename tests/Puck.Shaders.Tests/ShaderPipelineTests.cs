@@ -212,7 +212,7 @@ public sealed class ShaderPipelineTests {
         );
     }
     [InlineData("elementType", "\"Float4\"")]
-    [InlineData("strideBytes", "16")]
+    [InlineData("elementFormat", "\"R32Uint\"")]
     [Theory]
     public void A_buffer_carrying_a_typed_layout_member_fails_as_an_unknown_member(string member, string value) {
         var json = $$"""{ "name": "buffer", "kind": "Buffer", "sizeBytes": 64, "{{member}}": {{value}} }""";

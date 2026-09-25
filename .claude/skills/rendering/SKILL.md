@@ -513,7 +513,16 @@ first use of a frame. `ShaderPipelineRenderNode` records exactly those; its only
 per-instance state is the override a host event leaves (new or reset storage,
 a zero clear, a presentation, carried history), and the access after an
 override always records a barrier. A new kind of access changes `UseOf` there,
-never the node, and moves the `pipeline-counters` lines with it.
+never the node, and moves the `pipeline-counters` lines with it. An indirect
+dispatch's arguments are an access of their own (`ArgumentsUse`, listed first),
+and a read of another kind than the prior reads is a read-state change that
+records a barrier (`ShaderPipelineAccessState.ChangesReadState`). Non-extent
+dispatches and structured or counted buffers are package-pass vocabulary: the
+planner refuses them on a shader pass, because the node records extent
+dispatches over raw fixed buffers. `SdfPassPlanLawTests` plans the SDF engine's
+passes from `SdfFrameBufferPlan`'s uses and holds the order to `PassLabels` and
+the between-pass buffer barriers to its edges, so a change to either side moves
+the law.
 The grouped binding contract is the pass interface in `src/Puck.Shaders/Interface`
 ([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)); every
 pipeline pass and shader set reads its frame block through one, and no shipped

@@ -49,12 +49,21 @@ public readonly record struct ShaderPipelineAccessState(GpuImageLayout Layout, G
         Layout: layout,
         Stage: GpuStage.ComputeShader | GpuStage.FragmentShader | GpuStage.Transfer | GpuStage.ColorAttachmentOutput | GpuStage.FragmentTests
     );
+    /// <summary>Returns whether <paramref name="use"/> reads in a way this state's reads do not include, such as an
+    /// indirect-argument read after shader reads. The two are different read states: Direct3D 12 transitions between
+    /// them, so the planner records a barrier. A fresh instance, having no reads, moves into any read state
+    /// freely.</summary>
+    /// <param name="use">The state the next use needs.</param>
+    /// <returns><see langword="true"/> when the use adds an access this state lacks.</returns>
+    public bool ChangesReadState(ShaderPipelineAccessState use) =>
+        ((Access != GpuComputeAccess.None) && ((use.Access & ~Access) != 0));
     /// <summary>Returns the state after <paramref name="use"/> follows this one: the use alone when a barrier separates
-    /// them, or the union of reads when a read follows reads in the same layout with no barrier.</summary>
+    /// them, or the union of reads when a read follows reads of the same kind in the same layout with no
+    /// barrier.</summary>
     /// <param name="use">The state the next use leaves.</param>
     /// <returns>The resulting state.</returns>
     public ShaderPipelineAccessState Then(ShaderPipelineAccessState use) =>
-        ((Writes || use.Writes || (Layout != use.Layout))
+        ((Writes || use.Writes || (Layout != use.Layout) || ChangesReadState(use: use))
             ? use
             : new ShaderPipelineAccessState(
                 Access: Access | use.Access,
@@ -112,14 +121,15 @@ public readonly record struct ShaderPipelineBarrier(
         );
 
     /// <summary>Returns the barrier a use needs after a prior state: a transition when the image layout changes, a
-    /// memory or buffer barrier when either side writes, and nothing when a read follows reads in the same
-    /// layout.</summary>
+    /// memory or buffer barrier when either side writes or the use changes the read state
+    /// (<see cref="ShaderPipelineAccessState.ChangesReadState"/>), and nothing when a read follows reads of the same
+    /// kind in the same layout.</summary>
     /// <param name="prior">The state the instance is in.</param>
     /// <param name="use">The state the use needs.</param>
     /// <param name="kind">The resource kind; a buffer has no layout.</param>
     /// <returns>The barrier.</returns>
     public static ShaderPipelineBarrier Between(ShaderPipelineAccessState prior, ShaderPipelineAccessState use, ShaderPipelineResourceKind kind) {
-        var hazard = (prior.Writes || use.Writes);
+        var hazard = (prior.Writes || use.Writes || prior.ChangesReadState(use: use));
 
         if (kind == ShaderPipelineResourceKind.Buffer) {
             return Record(
@@ -175,7 +185,8 @@ public enum ShaderPipelinePriorKind : byte {
     Host = 3,
 }
 /// <summary>One access a pass makes to a storage instance, with the state it starts from and the barrier between
-/// them. A pass's accesses are listed in recording order: its inputs, then its outputs.</summary>
+/// them. A pass's accesses are listed in recording order: an indirect dispatch's arguments, then its inputs, then its
+/// outputs.</summary>
 /// <param name="Storage">The index of the storage in <see cref="ShaderPipelinePlan.Storages"/>.</param>
 /// <param name="Version">The version the pass names.</param>
 /// <param name="PreviousFrame">Whether the access reaches the instance the previous frame wrote.</param>
