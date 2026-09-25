@@ -1328,7 +1328,12 @@ Phase 2, the services, follows the generated frame block, which has landed:
 
 Phase 3, the groups, follows phase 2:
 
-12. A law holds every shipped shader's register number equal to its binding.
+12. Done: `ShaderRegisterBindingLawTests` holds every shader the build compiles
+    to a register number equal to its binding and a space equal to its set. It
+    names each declaration that breaks the rule: the SDF engine's, which
+    P7b-19 and P7b-20 remove, the resample kernel's, which P11b ports, and the
+    image-source conversion kernels' storage image at `u0` for binding 1. The
+    list may only shrink.
 13. The GPU-free group contract: a closed `GpuBindingKind` set, group and
     pipeline layout descriptions, and the `DirectXRootLayout.Plan` and
     `VulkanGroupLayouts.Plan` planners, tested against the spike's tables.

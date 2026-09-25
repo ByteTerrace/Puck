@@ -524,7 +524,9 @@ padding that Direct3D 12 needs to land on them; a pushed group
 (`ShaderInterface.PushConstants`, the frame group only) keeps those offsets as
 push constants at `register(b0, space0)`. Change a rule in `ShaderInterfaceLayout`
 and `ShaderInterfaceSpikeTests` hold both bytecode readers to it; never add a
-register remap.
+register remap. `ShaderRegisterBindingLawTests` holds every shader the build
+compiles to the register rule, with a shrink-only list of the declarations that
+break it today ([kernels](references/kernels.md#registers-and-bindings)).
 
 The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
 [frame graphs](../../../docs/reference/shaders.md#frame-graphs)): the pipeline
