@@ -277,7 +277,10 @@ ordered domain headless exactly as windowed, and `screen.source <index> camera|c
 attempts a real device open (or, for `qr`, a real encode) and reports the
 honest failure rather than refusing as unknown.
 `WorldBootComposition.cs` is the split: `AddWorldAuthoritativeCore` registers
-in EVERY shape, `AddWorldPresentation` only when a window is composed.
+in EVERY shape, `AddWorldOffscreenPresentation` only offscreen, and
+`AddWorldPresentation` only when a window is composed. `AddWorldBoot` selects
+among them, and `WorldBootCompositionLawTests` resolves what it registers
+without a device.
 
 **Offscreen.** The document's `host.presentation: offscreen` boots a real GPU
 device and the composed-frame render pipeline (the world render alone—no post-render extension chain,
@@ -613,9 +616,10 @@ Facts a script needs:
 
 ## What lives here
 
-- `Program.cs`—the composition root: resolves the boot shape BEFORE any
-  registration, then calls `WorldBootComposition.AddWorldAuthoritativeCore`
-  always and `AddWorldPresentation` only when windowed;
+- `Program.cs`—the composition root: resolves the world, the host settings
+  and the command-line options BEFORE any registration, then hands them to
+  `WorldBootComposition.AddWorldBoot` as a `WorldBootInputs`, which registers
+  them, calls `AddWorldAuthoritativeCore` always, and adds the shape's host;
   `WorldPostBuildWiring.Install` wires the affordance vocabulary, RE-VALIDATES
   the boot document's binding vocabulary now that the registry is real (the
   FIRST validation, at `WorldDefinitionLoader.TryResolve` above, ran before
@@ -624,7 +628,7 @@ Facts a script needs:
   sink, and the server's echo/cue taps once, after the container builds, in
   EITHER shape. A refused re-validation prints its reason and fails the boot
   (`Install` returns `false`) before `Program.cs` ever calls `IHost.RunAsync`.
-- `WorldBootComposition.cs`—the two composition methods (above): everything
+- `WorldBootComposition.cs`—the boot's composition (above): everything
   server-safe (profiles, roster, server, grants, addons, replay tape, the
   console's tick barrier, `WorldMachineHost` and `WorldScreenBinder`—the
   machine host is core state that boots and steps in every shape, and the
@@ -643,7 +647,7 @@ Facts a script needs:
   `Puck.Launcher.Windows.AddWindowsHostedPresentation`/
   `Puck.Launcher.Linux.AddLinuxHostedPresentation` (windowing, allocator, the
   selected backend) around its own `AddLauncherTerminal`/`AddBackendSwitcher`
-  calls; `Program.cs`'s headless branch calls
+  calls; `AddWorldBoot`'s headless branch calls
   `Puck.Launcher.AddLauncherHeadlessTerminal` plus, on Windows, a standalone
   `Puck.Platform.Windows.AddWindowsPrecisionWaiter`. The two boot shapes are
   never composed together.

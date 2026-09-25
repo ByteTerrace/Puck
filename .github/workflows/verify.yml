@@ -8,11 +8,12 @@ run-name: Runtime verification — ${{ github.event_name == 'schedule' && 'front
 # as failing or inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded
 # so a ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries
 # are pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check`,
-# `puck registry --check`, `puck architecture --check`, and `puck branding --check` from the installed producer CLI artifact on every change, so
-# a document field added without regenerating the checked-in schema, the dashboard portal's generated world types
-# (which `puck schema` writes and checks with the schema), or the name registry, or a project declaration
-# changed without regenerating the layering block in docs/project-map.md, fails the build here rather than only in a
-# manual verb run. The branding check also catches drift in distributed assets and their source wiring.
+# `puck registry --check`, `puck shaders generate --check`, `puck architecture --check`, and `puck branding --check`
+# from the installed producer CLI artifact on every change, so a document field added without regenerating the
+# checked-in schema, the dashboard portal's generated world types (which `puck schema` writes and checks with the
+# schema), or the name registry, an SDF instruction-set change without regenerating the kernels' sdf-isa.hlsli, or a
+# project declaration changed without regenerating the layering block in docs/project-map.md, fails the build here
+# rather than only in a manual verb run. The branding check also catches drift in distributed assets and their source wiring.
 
 on:
   schedule:
@@ -214,6 +215,8 @@ jobs:
         run: puck schema --check
       - name: puck registry --check
         run: puck registry --check
+      - name: puck shaders generate --check
+        run: puck shaders generate --check
       - name: puck architecture --check
         run: puck architecture --check
       - name: puck branding --check

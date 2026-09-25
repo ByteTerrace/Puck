@@ -369,7 +369,7 @@ their inputs on the command line.
 
 ## GPU support and shader builds
 
-The supported GPU floor covers RTX 2070, RTX 4070, the RDNA3 Steam Machine,
+The supported GPU floor covers RTX 2060, RTX 4070, the RDNA3 Steam Machine,
 and the RDNA2 Steam Deck. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader
 Model 6.6. Do not raise that floor without evidence for every supported GPU.
 
@@ -408,10 +408,9 @@ framed as unverified when no device run exists.
   infrastructure is built ahead for re-hosting and has no live check.
 - RADV may select wave32 or wave64. New wave-intrinsic kernels must be
   subgroup-size-independent or explicitly request a supported size.
-- Incremental builds can retain stale committed shader bytecode or corrupted
-  reference assemblies. Confirm suspicious behavior in a fresh worktree
-  before attributing it to source changes, then clean only the affected
-  `bin`/`obj` directories.
+- Incremental builds can retain corrupted reference assemblies. Confirm
+  suspicious behavior in a fresh worktree before attributing it to source
+  changes, then clean only the affected `bin`/`obj` directories.
 - GBA co-simulation compares instruction deltas because mGBA rebases cumulative
   cycle counters each frame. Puck's exposed PC is four bytes ahead of mGBA's
   pipeline representation.

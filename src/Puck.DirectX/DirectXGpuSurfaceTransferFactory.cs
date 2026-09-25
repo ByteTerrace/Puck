@@ -15,16 +15,16 @@ namespace Puck.DirectX;
 /// <see cref="GpuPixelFormat"/> constants to <c>DXGI_FORMAT</c> values.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXGpuSurfaceTransferFactory : IGpuSurfaceTransferFactory {
+public sealed class DirectXGpuSurfaceTransferFactory(DirectXDeviceContext deviceContext) : IGpuSurfaceTransferFactory {
     /// <inheritdoc/>
-    public IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext) =>
-        new DirectXGpuSurfaceReadback(deviceContext: ((IDirectXDeviceContext)deviceContext));
+    public IGpuSurfaceReadback CreateReadback() =>
+        new DirectXGpuSurfaceReadback(deviceContext: deviceContext);
     /// <inheritdoc/>
-    public IGpuSurfaceUpload CreateUpload(IGpuDeviceContext deviceContext) =>
-        new DirectXGpuSurfaceUpload(upload: new DirectXSurfaceUpload(deviceContext: ((IDirectXDeviceContext)deviceContext)));
+    public IGpuSurfaceUpload CreateUpload() =>
+        new DirectXGpuSurfaceUpload(upload: new DirectXSurfaceUpload(deviceContext: deviceContext));
     /// <inheritdoc/>
-    public IGpuSurfaceImport CreateImport(IGpuDeviceContext deviceContext) =>
-        new DirectXGpuSurfaceImport(deviceContext: ((IDirectXDeviceContext)deviceContext));
+    public IGpuSurfaceImport CreateImport() =>
+        new DirectXGpuSurfaceImport(deviceContext: deviceContext);
 }
 
 [SupportedOSPlatform("windows10.0.10240")]
@@ -424,7 +424,7 @@ file sealed class DirectXGpuSurfaceUpload(DirectXSurfaceUpload upload) : IGpuSur
     private GCHandle m_currentToken;
 
     public nint Upload(
-        IGpuDeviceContext deviceContext,
+        IGpuDeviceContext deviceContextArg,
         ReadOnlyMemory<byte> pixels,
         GpuPixelFormat format,
         uint width,

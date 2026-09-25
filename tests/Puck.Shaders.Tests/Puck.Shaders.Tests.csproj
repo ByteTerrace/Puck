@@ -15,8 +15,9 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\..\src\Puck.Shaders\Puck.Shaders.csproj" />
-        <!-- Generate the shipped SDF shader fixtures before copying them. -->
-        <ProjectReference Include="..\..\src\Puck.SdfVm\Puck.SdfVm.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <!-- Generate the shipped SDF shader fixtures before copying them, and read the SDF engine's declared buffer uses
+             in the pass-plan law. -->
+        <ProjectReference Include="..\..\src\Puck.SdfVm\Puck.SdfVm.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- The constant-packing fixture compiles through the shared shader recipe like any shipped shader, so the law

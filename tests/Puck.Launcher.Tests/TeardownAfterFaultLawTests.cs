@@ -87,20 +87,19 @@ public sealed class TeardownAfterFaultLawTests {
             height: 32U,
             inner: new WindowedHostFixture.FakeRenderNode(),
             services: new OverlayServices {
+                Bindings = unused,
+                BufferFactory = unused,
                 BytecodeExtension = ".spv",
                 CommandPoolFactory = unused,
-                CommandRecorder = unused,
-                DescriptorAllocator = unused,
                 DeviceContext = device,
                 FrameSources = unused,
-                GeometryBufferFactory = unused,
                 ImageFactory = unused,
                 PipelineFactory = unused,
                 QueueSubmitter = unused,
+                Recorder = unused,
                 RenderPassFactory = unused,
                 ShaderModuleFactory = unused,
                 StorageBufferBinding = 1U,
-                StorageBufferFactory = unused,
                 SurfaceTransferFactory = unused,
             },
             sources: new UnifiedOverlaySources(
@@ -253,54 +252,61 @@ public sealed class TeardownAfterFaultLawTests {
         protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
     }
     // Every GPU seam the overlay holds; reaching any of them from a node that never produced a frame is a failure.
-    private sealed class UnusedGpu : IGpuCommandRecorder, IGpuDescriptorAllocator, IOverlayFrameSources, IGpuPipelineFactory,
-        IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuStorageBufferFactory, IGpuSurfaceTransferFactory, IGpuGeometryBufferFactory, IGpuImageFactory,
-        IGpuRenderPassFactory, IGpuComputeCommandPoolFactory {
+    private sealed class UnusedGpu : IGpuRecorder, IGpuBindings, IOverlayFrameSources, IGpuPipelineFactory,
+        IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuBufferFactory, IGpuSurfaceTransferFactory, IGpuImageFactory,
+        IGpuRenderPassFactory, IGpuCommandPoolFactory {
         private static InvalidOperationException Reached() => new(message: "A GPU seam was reached during teardown.");
 
-        public nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) => throw Reached();
-        public void BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) => throw Reached();
-        public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) => throw Reached();
-        public void BeginRenderPass(nint deviceHandle, nint commandBufferHandle, IGpuFramebuffer framebuffer) => throw Reached();
-        public void BindDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) => throw Reached();
-        public void BindGraphicsPipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) => throw Reached();
-        public void BindVertexBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => throw Reached();
-        public IGpuPipeline Create(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, uint width, uint height) => throw Reached();
-        public IGpuShaderModule Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => throw Reached();
-        public IGpuStorageBuffer Create(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw Reached();
-        public IGpuBuffer Create(IGpuDeviceContext deviceContext, ReadOnlySpan<byte> data, GpuBufferUsage usage) => throw Reached();
-        public IGpuImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => throw Reached();
-        public IGpuRenderPass Create(IGpuDeviceContext deviceContext, GpuRenderPassDescription description) => throw Reached();
-        public IGpuComputeCommandPool Create(IGpuDeviceContext deviceContext) => throw Reached();
-        public IGpuFramebuffer CreateFramebuffer(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => throw Reached();
-        public IGpuBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw Reached();
-        public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw Reached();
-        public IGpuSurfaceImport CreateImport(IGpuDeviceContext deviceContext) => throw Reached();
-        public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw Reached();
-        public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) => throw Reached();
-        public IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext) => throw Reached();
-        public nint CreateSampler(nint deviceHandle, GpuSamplerFilter filter = GpuSamplerFilter.Linear) => throw Reached();
-        public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) => throw Reached();
-        public IGpuSurfaceUpload CreateUpload(IGpuDeviceContext deviceContext) => throw Reached();
-        public void DestroyPool(nint deviceHandle, nint poolHandle) => throw Reached();
-        public void DestroySampler(nint deviceHandle, nint samplerHandle) => throw Reached();
-        public void BindIndexBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) => throw Reached();
-        public void Draw(nint deviceHandle, nint commandBufferHandle, in GpuDrawParameters parameters) => throw Reached();
-        public void DrawIndexed(nint deviceHandle, nint commandBufferHandle, uint indexCount) => throw Reached();
-        public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) => throw Reached();
-        public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) => throw Reached();
-        public void EndRenderPass(nint deviceHandle, nint commandBufferHandle) => throw Reached();
-        public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) => throw Reached();
-        public void SetScissor(nint deviceHandle, nint commandBufferHandle, int x, int y, uint width, uint height) => throw Reached();
-        public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
-        public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw Reached();
-        public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
+        public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw Reached();
+        public void BeginCommandBuffer(nint commandBufferHandle) => throw Reached();
+        public void EndCommandBuffer(nint commandBufferHandle) => throw Reached();
+        public void BeginDebugGroup(nint commandBufferHandle, string label) => throw Reached();
+        public void EndDebugGroup(nint commandBufferHandle) => throw Reached();
+        public void BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area = null) => throw Reached();
+        public void EndRenderPass(nint commandBufferHandle) => throw Reached();
+        public void BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => throw Reached();
+        public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) => throw Reached();
+        public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) => throw Reached();
+        public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => throw Reached();
+        public void BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) => throw Reached();
+        public void SetScissor(nint commandBufferHandle, GpuPixelRect rect) => throw Reached();
+        public void Draw(nint commandBufferHandle, in GpuDrawParameters parameters) => throw Reached();
+        public void DrawIndexed(nint commandBufferHandle, uint indexCount) => throw Reached();
+        public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) => throw Reached();
+        public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => throw Reached();
+        public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => throw Reached();
+        public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => throw Reached();
+        public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reached();
+        public void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reached();
+        public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reached();
+        public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => throw Reached();
+        public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => throw Reached();
+        public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => throw Reached();
+        public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => throw Reached();
+        public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) => throw Reached();
+        public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => throw Reached();
+        public IGpuRenderPass Create(GpuRenderPassDescription description) => throw Reached();
+        public IGpuCommandPool Create() => throw Reached();
+        public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => throw Reached();
+        public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => throw Reached();
+        public IGpuSurfaceImport CreateImport() => throw Reached();
+        public nint CreatePool(in GpuDescriptorPoolSizes sizes) => throw Reached();
+        public IGpuSurfaceReadback CreateReadback() => throw Reached();
+        public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) => throw Reached();
+        public IGpuSubmissionFence CreateSubmissionFence() => throw Reached();
+        public IGpuSurfaceUpload CreateUpload() => throw Reached();
+        public void DestroyPool(nint poolHandle) {
+            if (0 != poolHandle) {
+                throw Reached();
+            }
+        }
+        public void DestroySampler(nint samplerHandle) => throw Reached();
+        public void Submit(ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
+        public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw Reached();
+        public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
         public bool TryAcquire(int key, out Puck.Hosting.GpuImageLease lease) => throw Reached();
-        public void WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw Reached();
-        public void WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable) => throw Reached();
-        public void WriteStorageBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => throw Reached();
-        public void WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => throw Reached();
-        public void WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => throw Reached();
-        public void WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reached();
+        public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw Reached();
+        public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => throw Reached();
+        public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reached();
     }
 }

@@ -168,7 +168,7 @@ public sealed partial class SdfWorldEngine {
         // screenSurfaces t4, screenSources t5..t36, instanceMasks t37, screenLights t38, glyph atlas t39, decals t40,
         // brick pool t41, frame instance grid t42, volumes t43, cull buffer t44, visibility records t45; the UAVs
         // resolve sources u0..u4, visibility records u5 (matching the HLSL) — Direct3D 12 assigns t#/u#/s# registers
-        // from THIS array's order (DirectXGpuComputePipelineFactory), so the HLSL's explicit register annotations must mirror
+        // from THIS array's order (DirectXGpuPipelineFactory), so the HLSL's explicit register annotations must mirror
         // this exact sequence; a reorder here without the matching HLSL edit desyncs the root signature. Every buffer
         // a hit pass only reads binds read-only, so SdfFrameBufferPlan declares plain reads for it. The 32
         // screen-source bindings are SPREAD from a MaxScreenSurfaces-derived list — never a hand-listed run.
@@ -334,6 +334,7 @@ public sealed partial class SdfWorldEngine {
                     Bindings: bindings,
                     Name: name,
                     PushConstantBinding: push,
+                    Registers: GpuRegisterNumbering.PackedByClass,
                     SamplerFilter: filter
                 )
             );

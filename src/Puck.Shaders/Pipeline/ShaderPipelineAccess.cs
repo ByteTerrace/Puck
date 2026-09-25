@@ -11,20 +11,20 @@ namespace Puck.Shaders;
 /// contents are discarded.</param>
 /// <param name="Access">The accesses made since the last barrier.</param>
 /// <param name="Stage">The stages those accesses ran in.</param>
-public readonly record struct ShaderPipelineAccessState(GpuImageLayout Layout, GpuComputeAccess Access, GpuComputeStage Stage) {
-    private const GpuComputeAccess WriteAccesses = GpuComputeAccess.ShaderWrite | GpuComputeAccess.TransferWrite | GpuComputeAccess.ColorAttachmentWrite | GpuComputeAccess.DepthAttachmentWrite;
+public readonly record struct ShaderPipelineAccessState(GpuImageLayout Layout, GpuAccess Access, GpuStage Stage) {
+    private const GpuAccess WriteAccesses = GpuAccess.ShaderWrite | GpuAccess.TransferWrite | GpuAccess.ColorAttachmentWrite | GpuAccess.DepthAttachmentWrite;
 
     /// <summary>Gets the state of an instance nothing has touched, whose contents are undefined.</summary>
     public static ShaderPipelineAccessState Fresh { get; } = new(
-        Access: GpuComputeAccess.None,
+        Access: GpuAccess.None,
         Layout: GpuImageLayout.Undefined,
-        Stage: GpuComputeStage.TopOfPipe
+        Stage: GpuStage.TopOfPipe
     );
     /// <summary>Gets the state a zero clear leaves an instance in.</summary>
     public static ShaderPipelineAccessState Cleared { get; } = new(
-        Access: GpuComputeAccess.TransferWrite,
+        Access: GpuAccess.TransferWrite,
         Layout: GpuImageLayout.General,
-        Stage: GpuComputeStage.Transfer
+        Stage: GpuStage.Transfer
     );
 
     /// <summary>Gets whether the state includes a write, so any later use must wait on it.</summary>
@@ -35,9 +35,9 @@ public readonly record struct ShaderPipelineAccessState(GpuImageLayout Layout, G
     /// <param name="layout">The layout the host binds the image in.</param>
     /// <returns>The handover state.</returns>
     public static ShaderPipelineAccessState Handover(GpuImageLayout layout) => new(
-        Access: GpuComputeAccess.ShaderRead,
+        Access: GpuAccess.ShaderRead,
         Layout: layout,
-        Stage: GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader
+        Stage: GpuStage.ComputeShader | GpuStage.FragmentShader
     );
     /// <summary>Returns the state the host may use an instance in between frames: its own layout, with any access in any
     /// stage. It is where a host-owned image is handed back at the end of a frame, and where a host-owned buffer starts
@@ -45,16 +45,25 @@ public readonly record struct ShaderPipelineAccessState(GpuImageLayout Layout, G
     /// <param name="layout">The host's layout; <see cref="GpuImageLayout.Undefined"/> for a buffer.</param>
     /// <returns>The host state.</returns>
     public static ShaderPipelineAccessState Host(GpuImageLayout layout) => new(
-        Access: GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite | GpuComputeAccess.TransferWrite | GpuComputeAccess.ColorAttachmentWrite | GpuComputeAccess.DepthAttachmentWrite,
+        Access: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.TransferWrite | GpuAccess.ColorAttachmentWrite | GpuAccess.DepthAttachmentWrite,
         Layout: layout,
-        Stage: GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader | GpuComputeStage.Transfer | GpuComputeStage.ColorAttachmentOutput | GpuComputeStage.FragmentTests
+        Stage: GpuStage.ComputeShader | GpuStage.FragmentShader | GpuStage.Transfer | GpuStage.ColorAttachmentOutput | GpuStage.FragmentTests
     );
+    /// <summary>Returns whether <paramref name="use"/> reads in a way this state's reads do not include, such as an
+    /// indirect-argument read after shader reads. The two are different read states: Direct3D 12 transitions between
+    /// them, so the planner records a barrier. A fresh instance, having no reads, moves into any read state
+    /// freely.</summary>
+    /// <param name="use">The state the next use needs.</param>
+    /// <returns><see langword="true"/> when the use adds an access this state lacks.</returns>
+    public bool ChangesReadState(ShaderPipelineAccessState use) =>
+        ((Access != GpuAccess.None) && ((use.Access & ~Access) != 0));
     /// <summary>Returns the state after <paramref name="use"/> follows this one: the use alone when a barrier separates
-    /// them, or the union of reads when a read follows reads in the same layout with no barrier.</summary>
+    /// them, or the union of reads when a read follows reads of the same kind in the same layout with no
+    /// barrier.</summary>
     /// <param name="use">The state the next use leaves.</param>
     /// <returns>The resulting state.</returns>
     public ShaderPipelineAccessState Then(ShaderPipelineAccessState use) =>
-        ((Writes || use.Writes || (Layout != use.Layout))
+        ((Writes || use.Writes || (Layout != use.Layout) || ChangesReadState(use: use))
             ? use
             : new ShaderPipelineAccessState(
                 Access: Access | use.Access,
@@ -87,16 +96,16 @@ public readonly record struct ShaderPipelineBarrier(
     ShaderPipelineBarrierKind Kind,
     GpuImageLayout OldLayout,
     GpuImageLayout NewLayout,
-    GpuComputeAccess SourceAccess,
-    GpuComputeAccess DestinationAccess,
-    GpuComputeStage SourceStage,
-    GpuComputeStage DestinationStage
+    GpuAccess SourceAccess,
+    GpuAccess DestinationAccess,
+    GpuStage SourceStage,
+    GpuStage DestinationStage
 ) {
     // A sampled read makes the prior write visible to every shader stage, so later readers of the same contents in the
     // same layout need no barrier of their own.
-    private static GpuComputeStage DestinationStages(ShaderPipelineAccessState use) =>
-        (((use.Layout == GpuImageLayout.ShaderReadOnly) && (use.Access == GpuComputeAccess.ShaderRead))
-            ? GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader
+    private static GpuStage DestinationStages(ShaderPipelineAccessState use) =>
+        (((use.Layout == GpuImageLayout.ShaderReadOnly) && (use.Access == GpuAccess.ShaderRead))
+            ? GpuStage.ComputeShader | GpuStage.FragmentShader
             : use.Stage);
     private static ShaderPipelineBarrier Record(ShaderPipelineBarrierKind kind, ShaderPipelineAccessState prior, ShaderPipelineAccessState use) =>
         new(
@@ -106,20 +115,21 @@ public readonly record struct ShaderPipelineBarrier(
             NewLayout: use.Layout,
             OldLayout: prior.Layout,
             SourceAccess: prior.Access,
-            SourceStage: ((prior.Stage == GpuComputeStage.None)
-                ? GpuComputeStage.TopOfPipe
+            SourceStage: ((prior.Stage == GpuStage.None)
+                ? GpuStage.TopOfPipe
                 : prior.Stage)
         );
 
     /// <summary>Returns the barrier a use needs after a prior state: a transition when the image layout changes, a
-    /// memory or buffer barrier when either side writes, and nothing when a read follows reads in the same
-    /// layout.</summary>
+    /// memory or buffer barrier when either side writes or the use changes the read state
+    /// (<see cref="ShaderPipelineAccessState.ChangesReadState"/>), and nothing when a read follows reads of the same
+    /// kind in the same layout.</summary>
     /// <param name="prior">The state the instance is in.</param>
     /// <param name="use">The state the use needs.</param>
     /// <param name="kind">The resource kind; a buffer has no layout.</param>
     /// <returns>The barrier.</returns>
     public static ShaderPipelineBarrier Between(ShaderPipelineAccessState prior, ShaderPipelineAccessState use, ShaderPipelineResourceKind kind) {
-        var hazard = (prior.Writes || use.Writes);
+        var hazard = (prior.Writes || use.Writes || prior.ChangesReadState(use: use));
 
         if (kind == ShaderPipelineResourceKind.Buffer) {
             return Record(
@@ -175,7 +185,8 @@ public enum ShaderPipelinePriorKind : byte {
     Host = 3,
 }
 /// <summary>One access a pass makes to a storage instance, with the state it starts from and the barrier between
-/// them. A pass's accesses are listed in recording order: its inputs, then its outputs.</summary>
+/// them. A pass's accesses are listed in recording order: an indirect dispatch's arguments, then its inputs, then its
+/// outputs.</summary>
 /// <param name="Storage">The index of the storage in <see cref="ShaderPipelinePlan.Storages"/>.</param>
 /// <param name="Version">The version the pass names.</param>
 /// <param name="PreviousFrame">Whether the access reaches the instance the previous frame wrote.</param>

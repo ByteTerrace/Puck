@@ -85,7 +85,7 @@ public sealed class SdfSecondaryShapeLawTests {
             expected: 0x40000000u
         );
         Assert.Equal(
-            actual: packedShape & 0x3FFFFFFFu,
+            actual: packedShape & SdfProgram.ShapeTypeMask,
             expected: ((uint)SdfShapeType.Box)
         );
     }
@@ -214,7 +214,7 @@ public sealed class SdfSecondaryShapeLawTests {
             expected: 0u
         );
         Assert.Equal(
-            actual: packedShape & 0x3FFFFFFFu,
+            actual: packedShape & SdfProgram.ShapeTypeMask,
             expected: ((uint)SdfShapeType.Box)
         );
 

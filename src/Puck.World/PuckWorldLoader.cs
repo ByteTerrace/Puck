@@ -119,6 +119,7 @@ internal static class PuckWorldLoader {
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(
             admission: out var loaded,
             catalog: catalog,
+            contentHash: out _,
             catalogFingerprint: catalogFingerprint,
             compiled: compiled,
             neighbours: neighbours,

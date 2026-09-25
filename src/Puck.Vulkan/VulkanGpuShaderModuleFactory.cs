@@ -7,7 +7,7 @@ namespace Puck.Vulkan;
 /// Implements <see cref="IGpuShaderModuleFactory"/> by forwarding to <see cref="IVulkanShaderModuleFactory"/>,
 /// converting <see cref="GpuShaderStage"/> flags to the <see cref="ShaderStage"/> enum.
 /// </summary>
-public sealed class VulkanGpuShaderModuleFactory(IVulkanShaderModuleFactory shaderModuleFactory) : IGpuShaderModuleFactory {
+public sealed class VulkanGpuShaderModuleFactory(IVulkanDeviceContext deviceContext, IVulkanShaderModuleFactory shaderModuleFactory) : IGpuShaderModuleFactory {
     private static ShaderStage ToShaderStage(GpuShaderStage stageFlags) => stageFlags switch {
         GpuShaderStage.Vertex => ShaderStage.Vertex,
         GpuShaderStage.Fragment => ShaderStage.Fragment,
@@ -20,10 +20,10 @@ public sealed class VulkanGpuShaderModuleFactory(IVulkanShaderModuleFactory shad
     };
 
     /// <inheritdoc/>
-    public IGpuShaderModule Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
+    public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
         ShaderBytecode.ValidateFormat(bytecode: bytecode.Span);
 
-        var logicalDevice = ((IVulkanDeviceContext)deviceContext).LogicalDevice;
+        var logicalDevice = deviceContext.LogicalDevice;
         var stageInfo = new ShaderStageInfo(
             ByteLength: bytecode.Length,
             Content: bytecode,

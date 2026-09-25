@@ -11,10 +11,11 @@ using Puck.Assets;
 namespace Puck.World;
 
 /// <summary>Loads and validates a world document from a file, always alongside the canonical content-address pin of
-/// the exact bytes read — the one implementation both the console's <c>world.load</c>/<c>world.reload</c> handlers
-/// (<c>Puck.World.WorldMutationCommandModule</c>, via <c>WorldDefinitionLoader.TryLoadFile</c>) and the replay
-/// tape's offline re-drive (<c>Puck.World.WorldReplaySnapshot.Drive</c>, through <c>WorldServer.ApplyRebuild</c>)
-/// share, so a live read and a re-drive's later re-read of the same path compute the hash the same way.
+/// the exact bytes read — the composition and pin every file read shares: <see cref="WorldDefinitionLoader.TryLoadFileForAdmission"/> (the
+/// boot, instance starts, <c>world.load</c>/<c>world.reload</c> and the replay drive's re-read of what they pinned)
+/// draws and admits what it composes, so a live read and a re-drive's later re-read of the same path compute the
+/// hash the same way. <see cref="TryLoad"/> and <see cref="TryLoadLocally"/> admit a document without drawing it,
+/// for a caller that inspects or gates a file rather than running it.
 /// Puck.World.Server depends on Puck.World.Schema already, so this is the lowest layer both can reach without a new
 /// project reference.</summary>
 public static partial class WorldDefinitionFileSource {
@@ -1843,9 +1844,26 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="reason">The named parse or schema failure.</param>
     /// <returns>Whether parsing and schema checks succeeded. No adjacency or local-world validation runs here.</returns>
     public static bool TryParseDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) {
-        definition = null;
-
         WorldBootWork.Count(kind: WorldBootWork.Parses);
+
+        return TryParseCompiledDocument(
+            definition: out definition,
+            json: json,
+            reason: out reason,
+            sourceName: sourceName
+        );
+    }
+    /// <summary>Parses a compiled world's drawn definition exactly as <see cref="TryParseDocument"/> parses a composed
+    /// document, without counting a <see cref="WorldBootWork.Parses"/>. The parse is the work of a compiled-world hit,
+    /// which <see cref="WorldBootWork.CompiledHits"/> counts; whether a boot finds a compiled world depends on the
+    /// per-user cache, so counting it as a parse would make a deterministic count depend on that cache.</summary>
+    /// <param name="json">The drawn definition's JSON text.</param>
+    /// <param name="sourceName">The source name echoed in failures.</param>
+    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
+    /// <param name="reason">The named parse or schema failure.</param>
+    /// <returns>Whether parsing and schema checks succeeded.</returns>
+    public static bool TryParseCompiledDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) {
+        definition = null;
 
         // This is the loader's first parse: a reference into a draw site that has not filled yet stays attached and
         // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.

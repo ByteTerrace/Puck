@@ -18,15 +18,15 @@ public sealed partial class SdfProgramBuilder {
     /// that exists today — creator groups cannot nest and a chamfer wedge is depth 1 — enforced by a validator rule and
     /// not part of the packed word layout, so raising it never re-gates the stream. But it is not a one-line bump: the
     /// interpreter holds the parent accumulator in one non-indexed <c>(savedFieldDistance, savedFieldMaterial)</c> scalar
-    /// pair in <c>mapCore</c> (Assets/Shaders/Sdf/sdf-vm.hlsli), and the <c>SDF_MAX_FIELD_SCOPE_DEPTH</c> there is
+    /// pair in <c>mapCore</c> (Assets/Shaders/Sdf/sdf-vm.hlsli), and the generated <c>SDF_MAX_FIELD_SCOPE_DEPTH</c> is
     /// documentation only — no shader expression reads it. Raising this depth means converting that save pair into an
-    /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then bumping the
-    /// <c>#define</c> and this constant. KEEP IN SYNC with SDF_MAX_FIELD_SCOPE_DEPTH in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then raising this
+    /// constant and regenerating the kernels' declarations.</summary>
     public const int MaxFieldScopeDepth = 1;
     /// <summary>The floor <see cref="AxialProfile"/>'s scale profile s(t) clamps against at evaluation time — an admitted
     /// amount/bulge combination can still drive the algebraic s(t) non-positive (e.g. a large negative amount paired
-    /// with a large negative bulge), and this keeps the warp finite rather than dividing by zero or flipping sign.
-    /// KEEP IN SYNC with SDF_FLARE_MIN_SCALE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// with a large negative bulge), and this keeps the warp finite rather than dividing by zero or flipping sign. The
+    /// kernels read it as <c>SDF_FLARE_MIN_SCALE</c>.</summary>
     public const float FlareMinScale = 0.05f;
     /// <summary>The floor <see cref="GaussianPush"/> clamps each <c>radii</c> component against, so the Gaussian
     /// exponent's divisor is never zero.</summary>
@@ -39,7 +39,7 @@ public sealed partial class SdfProgramBuilder {
     /// lane fraction before it scales the target shape's reach. Also the amplitude term
     /// <see cref="SdfProgram.NoiseDisplaceStepFactor"/> uses to bound a lane-erode candidate's Lipschitz factor
     /// (single-octave, unit gain/lacunarity) — the spatially-constant base fraction contributes no gradient, only
-    /// this noise swing does. KEEP IN SYNC with SDF_LANE_ERODE_RAGGED_AMOUNT in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// this noise swing does. The kernels read it as <c>SDF_LANE_ERODE_RAGGED_AMOUNT</c>.</summary>
     public const float LaneErodeRaggedAmount = 0.35f;
 
     // The largest |dot(unitRight, unitUp)| RequireOrthogonalBasis accepts: a cosine, so it reads as ~0.057 degrees.
@@ -55,13 +55,15 @@ public sealed partial class SdfProgramBuilder {
     /// gather masks) the two groupshared <c>SDF_SHADOW_MASK_WORDS</c> arrays in sdf-vm.hlsli: 2048 words x 4 bytes x 2
     /// arrays = 16 KiB, plus ~1 KiB for the gather's other groupshared state (sdfShadowGatherPoints/Cone/LitCount) — about
     /// 17 KiB per workgroup, comfortably under the 32 KiB Direct3D 12 thread-group-shared-memory limit (a hard API cap,
-    /// not a per-GPU one) with ~15 KiB to spare. KEEP IN SYNC with SDF_MAX_INSTANCES in
-    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// not a per-GPU one) with ~15 KiB to spare. The kernels read it as <c>SDF_MAX_INSTANCES</c>.</summary>
     public const int MaxInstances = 65536;
     /// <summary>The maximum voxel count per brick axis: the <see cref="SampledRegion"/> shape packs each dim in 10 bits
-    /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so 1023 is the hard ceiling. KEEP IN SYNC with the
-    /// 0x3FFu unpack mask in sdfSampledRegion (Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>
-    public const int MaxSampledRegionDim = 1023;
+    /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so <see cref="SampledRegionDimMask"/> is the
+    /// hard ceiling.</summary>
+    public const int MaxSampledRegionDim = ((int)SampledRegionDimMask);
+    /// <summary>The mask that unpacks one 10-bit dim from a <see cref="SampledRegion"/> shape's packed Data1.y dims
+    /// (<c>SDF_SAMPLED_REGION_DIM_MASK</c>).</summary>
+    public const uint SampledRegionDimMask = 0x3FFu;
     /// <summary>The shortest slant vector <c>(topHalfWidth − bottomHalfWidth, 2·halfHeight)</c> a
     /// <see cref="Trapezoid"/> profile may carry: shorter than this the deterministic fixed-point evaluator divides by
     /// its own squared length and the shader returns NaN, so the shape is refused rather than evaluated.</summary>
@@ -89,8 +91,8 @@ public sealed partial class SdfProgramBuilder {
     /// viewport capacity <c>Puck.SdfVm.SdfWorldEngine.MaxViewports</c>). Capped at 32 by the single-<c>uint</c>
     /// <c>screenMask</c> the engine pushes per frame.</summary>
     public const int MaxScreenSurfaces = 32;
-    // KEEP IN SYNC with SDF_SCREEN_MATERIAL in Assets/Shaders/Sdf/sdf-vm.hlsli.
-    /// <summary>The reserved material identifier used by the plain procedural screen material.</summary>
+    /// <summary>The reserved material identifier used by the plain procedural screen material, which the kernels read
+    /// as <c>SDF_SCREEN_MATERIAL</c>.</summary>
     public const int ScreenMaterialId = 65535;
     /// <summary>The most bounded emissive volumes (<see cref="SdfVolume"/>) one rendered frame may carry — matches
     /// <c>Puck.SdfVm.SdfWorldEngine.MaxVolumes</c>, which reads this rather than hand-syncing a second literal. Sized
@@ -170,7 +172,7 @@ public sealed partial class SdfProgramBuilder {
     // AND CellJitter, whose hashed variant is not a stride and has no clamped form. Carries the writing instruction's
     // index and the largest delta ONE unit of its raw Material lane can produce (see MaxRecolorDelta, which reads the
     // raw lane back out of m_instructions so it sees any value the clamp already narrowed). Cleared by ResetPoint on
-    // both sides (SDF_OP_RESET zeroes parityMaterialDelta).
+    // both sides (SDF_OP_RESET_POINT zeroes parityMaterialDelta).
     private (int InstructionIndex, int ReachPerUnit, SdfOp Op)? m_materialRecolor;
     private bool m_openInstanceActive;
     private Vector3 m_openInstanceCenter;
@@ -183,7 +185,7 @@ public sealed partial class SdfProgramBuilder {
     // for the shape(s) that follow in the CURRENT ResetPoint..ResetPoint chain segment — its index in m_instructions,
     // the raw stride value packed into that instruction's Material lane, and the largest additional material offset
     // ONE unit of that raw stride can produce (2 for a hex wallpaper group's 3-coloring, 1 for every other wallpaper
-    // group, sectorCount-1 for RepeatPolar). SDF_OP_RESET clears parityMaterialDelta on the GPU, so ResetPoint()
+    // group, sectorCount-1 for RepeatPolar). SDF_OP_RESET_POINT clears parityMaterialDelta on the GPU, so ResetPoint()
     // clears this mirror the same way; a zero-stride fold leaves it untouched on BOTH sides (the shader's own
     // `!= 0u` guard — see WallpaperFold/RepeatPolar below). Consumed (and, inside an open material scope, clamped) by
     // Shape() before a positional shape's material lands in the packed program — the clamp early-returns whenever
@@ -362,7 +364,7 @@ public sealed partial class SdfProgramBuilder {
     // palette span this shape's contributor owns; null when the builder has no scope open at all. A shape carrying a
     // screen sentinel records nothing: the
     // shader applies the delta only under `material < SDF_SCREEN_MATERIAL`, so a screen face is never recolored (KEEP IN
-    // SYNC with the SDF_OP_SHAPE parityMaterialDelta apply in Assets/Shaders/Sdf/sdf-vm.hlsli). A zero delta records
+    // SYNC with the SDF_OP_SHAPE_BLEND parityMaterialDelta apply in Assets/Shaders/Sdf/sdf-vm.hlsli). A zero delta records
     // nothing either — the shape reaches only its own declared material, which this gate does not own.
     private void RecordPositionalMaterialWindow(int material) {
         if (

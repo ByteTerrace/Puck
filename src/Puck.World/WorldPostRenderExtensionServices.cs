@@ -8,15 +8,15 @@ namespace Puck.World;
 /// registers exactly one backend and both draw a fullscreen graphics pass.</summary>
 internal sealed record WorldPostRenderExtensionServices : IFullscreenPassServices {
     /// <inheritdoc/>
-    public required IGpuCommandRecorder CommandRecorder { get; init; }
+    public required IGpuRecorder Recorder { get; init; }
     /// <inheritdoc/>
     public required IGpuComputeServices ComputeServices { get; init; }
     /// <inheritdoc/>
-    public required IGpuDescriptorAllocator DescriptorAllocator { get; init; }
+    public required IGpuBindings Bindings { get; init; }
     /// <inheritdoc/>
     public required IGpuDeviceContext DeviceContext { get; init; }
     /// <inheritdoc/>
-    public required IGpuGeometryBufferFactory GeometryBufferFactory { get; init; }
+    public required IGpuBufferFactory BufferFactory { get; init; }
     /// <inheritdoc/>
     public required IGpuPipelineFactory PipelineFactory { get; init; }
     /// <inheritdoc/>
@@ -38,10 +38,10 @@ internal sealed record WorldPostRenderExtensionServices : IFullscreenPassService
 
         return new WorldPostRenderExtensionServices {
             ComputeServices = Resolve<IGpuComputeServices>(),
-            CommandRecorder = Resolve<IGpuCommandRecorder>(),
-            DescriptorAllocator = Resolve<IGpuDescriptorAllocator>(),
+            Recorder = Resolve<IGpuRecorder>(),
+            Bindings = Resolve<IGpuBindings>(),
             DeviceContext = Resolve<IGpuDeviceContext>(),
-            GeometryBufferFactory = Resolve<IGpuGeometryBufferFactory>(),
+            BufferFactory = Resolve<IGpuBufferFactory>(),
             PipelineFactory = Resolve<IGpuPipelineFactory>(),
             QueueSubmitter = Resolve<IGpuQueueSubmitter>(),
             RenderPassFactory = Resolve<IGpuRenderPassFactory>(),

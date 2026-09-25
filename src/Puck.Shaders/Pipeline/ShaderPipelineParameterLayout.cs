@@ -128,7 +128,8 @@ public sealed class ShaderPipelineParameterLayout {
             description: description
         );
     /// <summary>Resolves a pass's frame block from its declaration: the interface its source names
-    /// (<see cref="ShaderFrameInterface.NameOf"/>) over the frame members and its config.</summary>
+    /// (<see cref="ShaderFrameInterface.NameOf"/>), or a package pass's package id names, over the frame members and
+    /// its config.</summary>
     /// <param name="pass">The pass.</param>
     /// <returns>The layout.</returns>
     /// <exception cref="InvalidDataException">The config schema is invalid, the source's file does not name an
@@ -140,15 +141,12 @@ public sealed class ShaderPipelineParameterLayout {
             ownerName: pass.Name
         );
 
-        // An engine package pass reads no generated declarations; its interface is named for the package, each
-        // character an interface name cannot hold, such as the period of sdf.world, spelled as a hyphen.
+        // A package pass reads no generated declarations; its interface is named for its package id, each character an
+        // interface name cannot hold, such as the period of sdf.world, spelled as a hyphen.
         return For(
             config: pass.Config,
-            interfaceName: (pass.Source.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: RenderGraphCompiler.PackageSourcePrefix
-            )
-                ? string.Concat(values: pass.Source[RenderGraphCompiler.PackageSourcePrefix.Length..].Select(selector: static character => ((char.IsAsciiLetterLower(c: character) || char.IsAsciiDigit(c: character))
+            interfaceName: ((pass.Kind == ShaderPipelinePassKind.Package)
+                ? string.Concat(values: pass.Source.Select(selector: static character => ((char.IsAsciiLetterLower(c: character) || char.IsAsciiDigit(c: character))
                     ? character
                     : '-')))
                 : ShaderFrameInterface.NameOf(sourcePath: pass.Source))

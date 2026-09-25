@@ -121,7 +121,7 @@ public sealed class RigidLeafModeLawTests {
         );
         Assert.Equal(
             expected: 7u,
-            actual: words[(leaf + 3)] & 0x3FFFFFFFu
+            actual: words[(leaf + 3)] & SdfProgram.RigidLeafShapeMask
         );
         // The pose after the folds starts at identity; the pose before them is the extension's.
         Assert.Equal(

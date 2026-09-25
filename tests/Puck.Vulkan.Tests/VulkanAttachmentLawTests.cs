@@ -100,7 +100,7 @@ public sealed class VulkanAttachmentLawTests {
     public void APipelineWhoseDepthTestDisagreesWithItsRenderPassIsRefused() {
         using var withDepth = RenderPass(description: ColorAndDepth);
         using var withoutDepth = RenderPass(description: ColorAndDepth with { Depth = null });
-        var factory = new VulkanGpuPipelineFactory(pipelineFactory: null!);
+        var factory = new VulkanGpuPipelineFactory(computePipelineApi: null!, deviceContext: null!, pipelineFactory: null!);
         var untested = new GpuGraphicsPipelineDescription(
             EnableStorageBuffer: false,
             Name: "geometry",
@@ -115,12 +115,9 @@ public sealed class VulkanAttachmentLawTests {
         foreach (var (pass, description) in (((IGpuRenderPass, GpuGraphicsPipelineDescription)[])[(withDepth, untested), (withoutDepth, untested with { DepthCompare = GpuDepthCompare.Less })])) {
             _ = Assert.Throws<ArgumentException>(testCode: () => factory.Create(
                 description: description,
-                deviceContext: null!,
                 fragmentShaderModule: null!,
-                height: 8,
                 renderPass: pass,
-                vertexShaderModule: null!,
-                width: 8
+                vertexShaderModule: null!
             ));
         }
     }

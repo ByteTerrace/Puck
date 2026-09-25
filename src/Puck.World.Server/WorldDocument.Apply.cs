@@ -365,9 +365,8 @@ public sealed partial class WorldDocument {
     // → solids rebuild → swap → journal RESET → re-mint every admitted peer connection's admission grant
     // (the document swap re-syncs group/ownership grant state but never re-mints the admitted peers' admission grants
     // on its own, and a rebuild is exactly the kind of whole-state swap a future authority change might reasonably
-    // reset around — this closes that loudly, by construction, rather than by omission). The console handler already
-    // validated a Load/Reload file (WorldDefinitionLoader.TryLoadFile); this
-    // re-check is the defensive apply-time gate every install passes through, same as the prior world.load-only path.
+    // reset around — this closes that loudly, by construction, rather than by omission). A Load/Reload candidate was
+    // drawn and admitted by WorldDefinitionLoader.TryLoadFileForAdmission; this is the apply-time gate every install passes.
     internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
         var verb = request.Kind switch {
             WorldRebuildKind.Reset => "world.reset",
@@ -401,17 +400,12 @@ public sealed partial class WorldDocument {
             contentHash = (request.ContentHash ?? throw new InvalidOperationException(message: $"{verb}: a Load/Reload request carrying a document must also carry its content hash."));
         } else if (request.PathHint is not { } path) {
             throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: a Load/Reload request with no embedded document must carry a path hint to re-read for replay.");
-        } else if (!WorldDefinitionFileSource.TryLoadLocally(
-            contentHash: out var rereadHash,
-            definition: out var reread,
-            path: path,
-            reason: out var rereadReason,
-            documents: Host.RebuildDocuments
-        )) {
-            throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {rereadReason}");
         } else {
-            candidate = reread!;
-            contentHash = rereadHash;
+            candidate = RereadForReplay(
+                contentHash: out contentHash,
+                path: path,
+                verb: verb
+            );
         }
 
         if (

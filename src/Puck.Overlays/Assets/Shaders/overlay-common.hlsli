@@ -1,9 +1,8 @@
 // The shared overlay decode toolkit: the word loader over the uint4-strided storage buffer, the design-token-block
 // accessors, and the SDF glyph-reconstruction trio every overlay surface shades text with.
 //
-// BUFFER SHAPE — StructuredBuffer<uint4>, not <uint>: the Direct3D 12 descriptor allocator's storage-buffer SRV is
-// stride-16 (one uint4 per element, see DirectXGpuDescriptorAllocator.WriteStorageBuffer), so a <uint>-declared
-// buffer would read every fourth word on that backend. Vulkan is stride-agnostic either way. All OFFSETS stay in
+// BUFFER SHAPE — StructuredBuffer<uint4>, not <uint>: UnifiedOverlayNode binds the buffer with a 16-byte element
+// stride (IGpuBindings.WriteBuffer), so on Direct3D 12 a <uint>-declared buffer would read every fourth word. Vulkan is stride-agnostic either way. All OFFSETS stay in
 // 32-bit words (the C# packers' unit); OverlayWord() folds a word index into the element/lane pair.
 //
 // TOKEN BLOCK — the slab Puck.Overlays.OverlayTokenBlock uploads at buffer word 0: one RGBA float4 per color role

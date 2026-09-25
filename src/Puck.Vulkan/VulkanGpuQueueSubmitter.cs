@@ -10,10 +10,10 @@ namespace Puck.Vulkan;
 /// graphics queue from the device context by downcasting to <see cref="IVulkanDeviceContext"/>. Submission fences
 /// are plain <c>VkFence</c>s created through the frame-synchronization API.
 /// </summary>
-public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter, IVulkanFrameSynchronizationApi frameSynchronizationApi) : IGpuQueueSubmitter {
+public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, VulkanQueueSubmitter queueSubmitter, IVulkanFrameSynchronizationApi frameSynchronizationApi) : IGpuQueueSubmitter {
     /// <inheritdoc/>
-    public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) {
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
+    public IGpuSubmissionFence CreateSubmissionFence() {
+        var vkContext = deviceContext;
 
         return new VulkanGpuSubmissionFence(
             device: vkContext.LogicalDevice.Commands,
@@ -21,8 +21,8 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
         );
     }
     /// <inheritdoc/>
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles) {
+        var vkContext = deviceContext;
 
         queueSubmitter.Submit(
             commandBufferHandles: commandBufferHandles,
@@ -31,8 +31,8 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
         );
     }
     /// <inheritdoc/>
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+        var vkContext = deviceContext;
         var vkFence = ((VulkanGpuSubmissionFence)fence);
 
         queueSubmitter.Submit(
@@ -43,8 +43,8 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
         );
     }
     /// <inheritdoc/>
-    public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
+    public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
+        var vkContext = deviceContext;
 
         queueSubmitter.SubmitAndWait(
             commandBufferHandles: commandBufferHandles,

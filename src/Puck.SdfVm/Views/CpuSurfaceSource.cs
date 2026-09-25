@@ -113,7 +113,7 @@ public sealed class CpuSurfaceSource : IDisposable {
             return m_handle;
         }
 
-        m_upload ??= gpu.SurfaceTransferFactory.CreateUpload(deviceContext: deviceContext);
+        m_upload ??= gpu.SurfaceTransferFactory.CreateUpload();
         // The upload object owns the returned handle and recreates its image on a dimension/format change, so a
         // varying capture extent needs no manual reallocation here.
         m_handle = m_upload.Upload(

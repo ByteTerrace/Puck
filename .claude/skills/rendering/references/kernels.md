@@ -16,8 +16,10 @@ The recipe is `build/Shaders.targets`, imported into every project by
 SPIR-V and DXIL. Editing any `.hlsl`, `.hlsli`, the project file, or the targets
 file recompiles the whole set. The `.spv`, `.dxil`, and `.hash` outputs are
 gitignored build products; never commit them.
-`ValidateShaderBytecodeSources` fails the build on bytecode without a same-stem
-`.hlsl`; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
+`ValidateShaderBytecodeSources` removes bytecode without a same-stem `.hlsl`
+when its sidecar records its bytes (the build wrote it), printing one line per
+file, and fails the build on any other sourceless bytecode, which it leaves in
+place; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
 source or sidecar. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader Model 6.6;
 do not raise that floor without evidence from every supported GPU.
 
@@ -132,9 +134,22 @@ together. `SdfViewsKernelVariantLawTests` pins the host half.
 
 ## Registers and bindings
 
-Bindings are shared across backends; D3D12 registers can differ per consumer.
+Bindings are shared across backends. A Direct3D 12 compute root signature
+numbers each register as `GpuComputePipelineDescription.Registers` says:
+`GpuRegisterNumbering.Binding`, the default and every pipeline pass's, puts it
+at the binding number (a sampled image's sampler at the same `s` number), and
+`PackedByClass`, which only the SDF engine's pipeline specs and the region copy
+declare, numbers each class from zero in binding-list order. So the SDF
+engine's D3D12 registers still differ from their bindings and per consumer:
 `sdfInstanceMasks` is t37 by default and t3 in the beam via
-`SDF_INSTANCE_MASKS_REGISTER` defined before the include. Screen-source bindings
+`SDF_INSTANCE_MASKS_REGISTER` defined before the include.
+`ShaderRegisterBindingLawTests` holds every register the build compiles, and
+every pipeline source the World's package store is built from
+(`PuckWorldPipelineSource` in `build/WorldAssets.targets`, and the sources a
+shipped `*.pipeline.json` names), to its binding number and set, except its
+named list of today's violations, which may only shrink: a new declaration
+keeps register equal to binding, and a change that fixes one deletes its
+entry. Screen-source bindings
 are derived from `ScreenSourceBindingBase`, never hand-listed, so the descriptor
 pool sizes itself through `GpuDescriptorPoolSizes.ForSets`. The full binding map
 is in [sync-pairs.md](sync-pairs.md#engine-buffers-push-constants-and-bindings).

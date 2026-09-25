@@ -87,12 +87,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // rides m_currentFrameRenderTicks (set once per ProduceFrame) rather than widening this delegate's shape for one
     // caller. OverlayChannel.Hud is NOT in this table — see FirstPartyChannelCount's remarks.
     private readonly Action<OverlayFrameBuilder>?[] m_channelWriters;
-    private readonly IGpuCommandRecorder m_commandRecorder;
-    private readonly IGpuComputeCommandPoolFactory m_commandPoolFactory;
+    private readonly IGpuRecorder m_commandRecorder;
+    private readonly IGpuCommandPoolFactory m_commandPoolFactory;
     private readonly ConsolePanelWriter? m_consoleWriter;
     private readonly CursorWriter? m_cursorWriter;
     private readonly NodeDescriptor m_descriptor;
-    private readonly IGpuDescriptorAllocator m_descriptorAllocator;
+    private readonly IGpuBindings m_bindings;
     private readonly IGpuDeviceContext m_deviceContext;
     private readonly ReadOnlyMemory<byte> m_fragmentBytecode;
     // The node-owned per-frame frame-slot table (see FrameSlotFirstBinding's remarks) — always constructed, even
@@ -112,11 +112,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private readonly IGpuShaderModuleFactory m_shaderModuleFactory;
     private readonly UnifiedOverlaySources m_sources;
     private readonly uint m_storageBufferBinding;
-    private readonly IGpuStorageBufferFactory m_storageBufferFactory;
+    private readonly IGpuBufferFactory m_storageBufferFactory;
     private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
     private readonly OverlayThemeStore m_theme;
     private readonly ToastWriter? m_toastWriter;
-    private readonly IGpuGeometryBufferFactory m_geometryBufferFactory;
+    private readonly IGpuBufferFactory m_geometryBufferFactory;
     private readonly ReadOnlyMemory<byte> m_vertexBytecode;
     private readonly WheelWriter? m_wheelWriter;
     private readonly uint m_width;
@@ -132,7 +132,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // delegate reads it (Emit needs renderTicks; the other writers don't) so the draw-order table's delegate shape
     // stays the same one param for every channel.
     private ulong m_currentFrameRenderTicks;
-    private IGpuComputeCommandPool? m_commandPool;
+    private IGpuCommandPool? m_commandPool;
     private IGpuStorageBuffer? m_dataBuffer;
     private nint m_descriptorPool;
     private nint m_descriptorSet;
@@ -224,7 +224,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         );
         m_commandRecorder = GpuWorkCounting.Wrap(
             ledger: m_work,
-            recorder: services.CommandRecorder
+            recorder: services.Recorder
         );
         m_consoleWriter = ((sources.Console is { } console)
             ? new ConsolePanelWriter(
@@ -252,8 +252,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             Name: "unified-overlay",
             SurfaceId: SurfaceId.New()
         );
-        m_descriptorAllocator = GpuWorkCounting.Wrap(
-            allocator: services.DescriptorAllocator,
+        m_bindings = GpuWorkCounting.Wrap(
+            bindings: services.Bindings,
             ledger: m_work
         );
         m_deviceContext = services.DeviceContext;
@@ -294,7 +294,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         m_sources = sources;
         m_storageBufferBinding = services.StorageBufferBinding;
         m_storageBufferFactory = GpuWorkCounting.Wrap(
-            factory: services.StorageBufferFactory,
+            factory: services.BufferFactory,
             ledger: m_work
         );
         m_surfaceTransferFactory = services.SurfaceTransferFactory;
@@ -305,7 +305,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             )
             : null
         );
-        m_geometryBufferFactory = services.GeometryBufferFactory;
+        m_geometryBufferFactory = services.BufferFactory;
         m_vertexBytecode = vertexBytecode;
         m_width = width;
         m_writeCapture = WriteCapture;
@@ -391,14 +391,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         // The overlay clears its image each frame and leaves it shader-readable for the presenter and any capture.
         m_renderTarget = m_imageFactory.Create(
-            deviceContext: m_deviceContext,
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: m_height,
             usage: GpuImageUsage.ColorAttachment | GpuImageUsage.Sampled,
             width: m_width
         );
         m_renderPass = m_renderPassFactory.Create(
-            deviceContext: m_deviceContext,
             description: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
                 FinalLayout: GpuImageLayout.ShaderReadOnly,
                 Format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -409,32 +407,27 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         m_framebuffer = m_renderPassFactory.CreateFramebuffer(
             colors: [m_renderTarget],
             depth: null,
-            deviceContext: m_deviceContext,
             renderPass: m_renderPass
         );
-        m_commandPool = m_commandPoolFactory.Create(deviceContext: m_deviceContext);
-        m_frameFence = m_queueSubmitter.CreateSubmissionFence(deviceContext: m_deviceContext);
+        m_commandPool = m_commandPoolFactory.Create();
+        m_frameFence = m_queueSubmitter.CreateSubmissionFence();
         m_vertexShader = m_shaderModuleFactory.Create(
             bytecode: m_vertexBytecode,
-            deviceContext: m_deviceContext,
             stage: GpuShaderStage.Vertex
         );
         m_fragmentShader = m_shaderModuleFactory.Create(
             bytecode: m_fragmentBytecode,
-            deviceContext: m_deviceContext,
             stage: GpuShaderStage.Fragment
         );
-        m_vertexBuffer = m_geometryBufferFactory.Create(
+        m_vertexBuffer = m_geometryBufferFactory.CreateHostVisible(
             data: FullscreenTriangleVertexData,
-            deviceContext: m_deviceContext,
             usage: GpuBufferUsage.Vertex
         );
-        m_dataBuffer = m_storageBufferFactory.Create(
-            deviceContext: m_deviceContext,
-            sizeBytes: (((uint)m_builder.WordCount) * sizeof(uint))
+        m_dataBuffer = m_storageBufferFactory.CreateHostVisible(
+            sizeBytes: (((uint)m_builder.WordCount) * sizeof(uint)),
+            usage: GpuBufferUsage.Storage
         );
         m_pipeline = m_pipelineFactory.Create(
-            deviceContext: m_deviceContext,
             description: new GpuGraphicsPipelineDescription(
                 Name: "overlay-unified",
                 VertexInput: new GpuVertexInputLayout(
@@ -454,16 +447,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
                 )
             ),
             fragmentShaderModule: m_fragmentShader,
-            height: m_height,
             renderPass: m_renderPass,
-            vertexShaderModule: m_vertexShader,
-            width: m_width
+            vertexShaderModule: m_vertexShader
         );
 
-        var deviceHandle = m_deviceContext.DeviceHandle;
-
-        m_descriptorPool = m_descriptorAllocator.CreatePool(
-            deviceHandle: deviceHandle,
+        m_descriptorPool = m_bindings.CreatePool(
             sizes: new GpuDescriptorPoolSizes(
                 CombinedImageSamplerCount: TextureSamplerCount,
                 MaxSets: 1,
@@ -471,18 +459,18 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
                 StorageImageCount: 0
             )
         );
-        m_descriptorSet = m_descriptorAllocator.AllocateSet(
+        m_descriptorSet = m_bindings.AllocateSet(
             descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle,
-            deviceHandle: deviceHandle,
             poolHandle: m_descriptorPool
         );
-        m_sampler = m_descriptorAllocator.CreateSampler(deviceHandle: deviceHandle);
-        m_descriptorAllocator.WriteStorageBuffer(
+        m_sampler = m_bindings.CreateSampler();
+        m_bindings.WriteBuffer(
+            access: GpuBufferAccess.Read,
             binding: m_storageBufferBinding,
             bufferHandle: m_dataBuffer.BufferHandle,
             bufferSize: (((uint)m_builder.WordCount) * sizeof(uint)),
             descriptorSetHandle: m_descriptorSet,
-            deviceHandle: deviceHandle
+            elementStride: (4 * sizeof(uint))
         );
         // The token slab + glyph atlas are static — upload them ONCE now (the front PanelBaseWords uints); each
         // produced frame rewrites only the dynamic slice after them. A device-loss rebuild re-seeds them here.
@@ -614,105 +602,85 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // Records the node's single fullscreen pass into its command buffer. Returns the recorded command buffer handle,
     // ready to submit.
     private nint RecordOverlayPass() {
-        var deviceHandle = m_deviceContext.DeviceHandle;
         var commandBufferHandle = m_commandPool!.CommandBufferHandle;
 
         m_commandRecorder.BeginCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            commandBufferHandle: commandBufferHandle
         );
 
         // The counted pass spans the debug group, the render pass, and its draw.
         m_work.EnterPass(pass: 0);
         m_commandRecorder.BeginDebugGroup(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             label: "unified-overlay"
         );
         m_commandRecorder.BeginRenderPass(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             framebuffer: m_framebuffer!
         );
-        m_commandRecorder.SetScissor(
+
+        m_commandRecorder.BindPipeline(
+            bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            height: m_height,
-            width: m_width,
-            x: 0,
-            y: 0
-        );
-        m_commandRecorder.BindGraphicsPipeline(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             pipelineHandle: m_pipeline!.Handle
         );
         m_commandRecorder.BindVertexBuffer(
             bufferHandle: m_vertexBuffer!.BufferHandle,
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             sizeBytes: m_vertexBuffer.SizeBytes,
             strideBytes: VertexStrideBytes
         );
         m_commandRecorder.PushConstants(
+            bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBufferHandle,
             data: m_pushConstantData,
-            deviceHandle: deviceHandle,
             offset: 0,
             pipelineLayoutHandle: m_pipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Fragment
         );
         m_commandRecorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBufferHandle,
             descriptorSetHandle: m_descriptorSet,
-            deviceHandle: deviceHandle,
             pipelineLayoutHandle: m_pipeline.LayoutHandle
         );
         m_commandRecorder.Draw(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             parameters: new GpuDrawParameters(
                 vertexCount: VertexCount,
                 instanceCount: 1
             )
         );
         m_commandRecorder.EndRenderPass(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            commandBufferHandle: commandBufferHandle
         );
         m_commandRecorder.EndDebugGroup(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            commandBufferHandle: commandBufferHandle
         );
         m_work.LeavePass();
 
         m_commandRecorder.EndCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            commandBufferHandle: commandBufferHandle
         );
 
         return commandBufferHandle;
     }
-    // Releases only what this node acquired: the device handle is read solely to destroy a native handle the node
-    // holds, so a node that never produced a frame touches no device context — including one whose device never came
-    // up, where reading the handle would throw or retry the failed bring-up.
+    // Releases only what this node acquired: the device is reached solely to destroy a native handle the node holds,
+    // so a node that never produced a frame touches no device context — including one whose device never came up,
+    // where reaching it would throw or retry the failed bring-up.
     private void ReleaseGpuResources() {
         if (0 != m_sampler) {
-            m_descriptorAllocator.DestroySampler(
-                deviceHandle: m_deviceContext.DeviceHandle,
+            m_bindings.DestroySampler(
                 samplerHandle: m_sampler
             );
             m_sampler = 0;
         }
 
-        if (0 != m_descriptorPool) {
-            m_descriptorAllocator.DestroyPool(
-                deviceHandle: m_deviceContext.DeviceHandle,
-                poolHandle: m_descriptorPool
-            );
-            m_descriptorPool = 0;
-            m_descriptorSet = 0;
-        }
+        m_bindings.DestroyPool(
+            poolHandle: m_descriptorPool
+        );
+        m_descriptorPool = 0;
+        m_descriptorSet = 0;
 
         m_pipeline?.Dispose();
         m_pipeline = null;
@@ -799,7 +767,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private void WriteCapture(string path) {
         m_capturePng.ThrowIfUnavailable(path: path);
 
-        m_readback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
+        m_readback ??= m_surfaceTransferFactory.CreateReadback();
 
         var pixels = m_readback.Read(
             bytesPerPixel: 4,
@@ -829,7 +797,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // binding the shader's slot-selecting switch can reach is always a valid, sampleable image.
     private void WriteFrameSlotDescriptors(nint fallbackImageViewHandle) {
         var boundCount = m_frameSlots.BoundCount;
-        var deviceHandle = m_deviceContext.DeviceHandle;
 
         for (var slot = 0; (slot < OverlayFrameSlots.SlotCount); slot++) {
             var imageViewHandle = ((slot < boundCount)
@@ -837,11 +804,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
                 : fallbackImageViewHandle
             );
 
-            m_descriptorAllocator.WriteCombinedImageSampler(
+            m_bindings.WriteCombinedImageSampler(
                 arrayElement: 0,
                 binding: (FrameSlotFirstBinding + ((uint)slot)),
                 descriptorSetHandle: m_descriptorSet,
-                deviceHandle: deviceHandle,
                 imageViewHandle: imageViewHandle,
                 samplerHandle: m_sampler
             );
@@ -994,11 +960,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         m_frameSlots.RetirePending();
 
         if (inner.ImageViewHandle != m_lastImageViewHandle) {
-            m_descriptorAllocator.WriteCombinedImageSampler(
+            m_bindings.WriteCombinedImageSampler(
                 arrayElement: 0,
                 binding: SamplerBinding,
                 descriptorSetHandle: m_descriptorSet,
-                deviceHandle: m_deviceContext.DeviceHandle,
                 imageViewHandle: inner.ImageViewHandle,
                 samplerHandle: m_sampler
             );
@@ -1016,7 +981,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         m_queueSubmitter.Submit(
             commandBufferHandles: commandBuffers,
-            deviceContext: m_deviceContext,
             fence: m_frameFence!
         );
 

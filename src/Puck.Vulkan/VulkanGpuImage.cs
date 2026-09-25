@@ -135,12 +135,11 @@ public sealed class VulkanGpuImage : IGpuImage {
 /// <summary>
 /// Implements <see cref="IGpuImageFactory"/> for Vulkan through <see cref="VulkanGpuImage.Create"/>.
 /// </summary>
-public sealed class VulkanGpuImageFactory(IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuImageFactory {
+public sealed class VulkanGpuImageFactory(IVulkanDeviceContext deviceContext, IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuImageFactory {
     /// <inheritdoc/>
-    public IGpuImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
-        ArgumentNullException.ThrowIfNull(deviceContext);
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
 
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
+        var vkContext = deviceContext;
         var logicalDevice = vkContext.LogicalDevice;
 
         return VulkanGpuImage.Create(

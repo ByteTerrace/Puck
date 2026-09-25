@@ -875,6 +875,25 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
+    public void SetViewport(VulkanDeviceCommands device, nint commandBufferHandle, in VkViewport viewport) {
+        ArgumentNullException.ThrowIfNull(argument: device);
+
+        VulkanArgument.RequireHandle(
+            handle: commandBufferHandle,
+            handleDescription: "command-buffer",
+            paramName: nameof(commandBufferHandle)
+        );
+
+        var copy = viewport;
+
+        device.CmdSetViewport(
+            commandBufferHandle,
+            0,
+            1,
+            ((nint)(&copy))
+        );
+    }
+    /// <inheritdoc/>
     public void StartRenderPass(VulkanCommandBufferRecordRequest request) {
         ValidateRequest(request: request);
 
@@ -892,8 +911,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                     width: request.Width
                 ),
                 offset: new VkOffset2D(
-                    x: 0,
-                    y: 0
+                    x: request.X,
+                    y: request.Y
                 )
             );
             var beginInfo = new VkRenderPassBeginInfo {

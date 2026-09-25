@@ -81,15 +81,15 @@ public static class SdfInstanceGrid {
     private const float MaxBinnedRadiusRatio = 8.0f;
     /// <summary>The per-axis cell-count cap. Bounds the beam's slab-march length (the ray∩grid interval spans at most
     /// ~√3·MaxDimension cells), so a degenerate near-1-D instance layout cannot make the beam walk thousands of slabs.
-    /// Coarsening enforces it alongside <see cref="CellCapacityFactor"/>. KEEP IN SYNC with the slab-budget reasoning at
-    /// <c>SDF_GRID_MAX_SLABS</c> in sdf-vm.hlsli.</summary>
-    private const int MaxDimension = 64;
+    /// Coarsening enforces it alongside <see cref="CellCapacityFactor"/>. The kernels read it as <c>SDF_GRID_MAX_DIM</c>,
+    /// and the slab budget <c>SDF_GRID_MAX_SLABS</c> in sdf-vm.hlsli is sized from it.</summary>
+    public const int MaxDimension = 64;
     /// <summary>The smallest cell edge the derivation admits, so an all-coincident binnable set (zero extent) cannot
     /// produce a zero or denormal cell size.</summary>
     private const float MinCellSize = 1.0e-4f;
 
-    /// <summary>The header length in uints (4 <c>uint4</c> rows). KEEP IN SYNC with <c>SDF_GRID_HEADER_WORDS</c> in
-    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <summary>The header length in uints (4 <c>uint4</c> rows), which the kernels read as
+    /// <c>SDF_GRID_HEADER_WORDS</c>.</summary>
     public const int HeaderWords = 16;
 
     /// <summary>Builds the packed grid block for a program's instances. Deterministic: pure integer/float host math in

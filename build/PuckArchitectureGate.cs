@@ -52,6 +52,13 @@ public sealed class PuckArchitectureGate : Task {
     /// <summary>This project's name.</summary>
     public string ProjectName { get; set; } = "";
     /// <summary>
+    /// The project references the SDK appends to <c>@(ProjectReference)</c> from the assets file
+    /// (<c>@(_TransitiveProjectReferences)</c>) because a referenced project holds them. This project inherits
+    /// them; it does not name them. Empty when the SDK stops producing the item, which leaves every evaluated
+    /// reference counted as named here.
+    /// </summary>
+    public ITaskItem[] TransitiveReferences { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>
     /// The WHOLE resolved reference set, unfiltered. Project-produced items carry
     /// <c>MSBuildSourceProjectFile</c> — the csproj that produced the assembly, which is what makes the
     /// referenced project's own declaration readable from here — and items without it are reached by some
@@ -266,13 +273,30 @@ public sealed class PuckArchitectureGate : Task {
     }
     /// <summary>
     /// The names this project references directly, from MSBuild's evaluated <c>@(ProjectReference)</c> rather
-    /// than the csproj text, so an edge contributed by an <c>&lt;Import&gt;</c> counts.
+    /// than the csproj text, so an edge contributed by an <c>&lt;Import&gt;</c> counts. An item the SDK appended
+    /// from <see cref="TransitiveReferences"/> is inherited, not named, unless the csproj declares it too.
     /// </summary>
     private HashSet<string> EvaluatedReferenceNames() {
+        var inherited = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var own = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         var names = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
+        foreach (var reference in TransitiveReferences) {
+            _ = inherited.Add(item: Path.GetFileNameWithoutExtension(path: reference.ItemSpec));
+        }
+
+        foreach (var edge in DeclaredEdges(projectFile: ProjectFile)) {
+            _ = own.Add(item: edge.Name);
+        }
+
         foreach (var reference in DeclaredReferences) {
-            _ = names.Add(item: Path.GetFileNameWithoutExtension(path: reference.ItemSpec));
+            var name = Path.GetFileNameWithoutExtension(path: reference.ItemSpec);
+
+            if (inherited.Contains(item: name) && !own.Contains(item: name)) {
+                continue;
+            }
+
+            _ = names.Add(item: name);
         }
 
         return names;

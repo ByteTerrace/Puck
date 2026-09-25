@@ -4,22 +4,30 @@ namespace Puck.Assets.Textures;
 /// The BC7 block: four unsigned-normalized 8-bit channels of a 4x4 block in sixteen bytes. The block's lowest set bit
 /// names its mode; the fields follow least significant bit first (Direct3D 11's BC7 format). A block with no mode bit in
 /// its first byte decodes to transparent black.
-/// <para>The decoder reads the three single-subset modes, 4, 5 and 6, exactly as the format defines them: endpoints
-/// expanded by bit replication or a parity bit, interpolated as <c>((64 - w) e0 + w e1 + 32) &gt;&gt; 6</c>, and channel
-/// rotation applied last. It refuses a partitioned mode (0, 1, 2, 3 and 7), which the encoder never writes.</para>
-/// <para>The encoder writes mode 6 (one RGBA endpoint pair with parity bits, sixteen weights) or mode 5 (a color pair
-/// with four weights and an independent alpha pair with four), whichever decodes nearer the source by squared error. It
-/// fits endpoints to the block's bounding box, oriented by the sign of each channel's covariance with the widest one,
-/// then refits them twice by least squares over the chosen weights, and tries every parity-bit pair. A block of one
-/// color takes an exact mode-5 encoding. The fit's only floating point is scalar double addition, multiplication and
-/// division in a written order, so the bytes are the same on every machine.</para>
+/// <para>The decoder reads every mode exactly as the format defines it: endpoints expanded by bit replication below a
+/// parity bit where the mode has one, interpolated as <c>((64 - w) e0 + w e1 + 32) &gt;&gt; 6</c>, and channel rotation
+/// applied last. A partitioned mode (0, 1, 2, 3 and 7) maps each texel to one of two or three subsets through the format's
+/// partition tables, and each subset's anchor texel stores its index one bit short; a mode with no alpha bits decodes
+/// alpha as 255.</para>
+/// <para>The encoder writes modes 6, 5, 7, 3, 1, 2 and 0 and keeps whichever candidate decodes nearest the source by
+/// squared error, the earlier in that order winning a tie. Mode 6 is one RGBA endpoint pair with parity bits and sixteen
+/// weights; mode 5 a color pair with four weights and an independent alpha pair with four. The partitioned modes try the
+/// partitions whose subsets vary least (<see cref="PartitionCandidates"/>): mode 7 over RGBA, and modes 0 to 3, which
+/// hold no alpha, only when every texel's alpha is 255. Every candidate fits each subset's endpoints to its bounding box,
+/// oriented by the sign of each channel's covariance with the widest one, then refits them twice by least squares over the
+/// chosen weights, and tries every parity-bit choice. A block of one color takes an exact mode-5 encoding. The fit's only
+/// floating point is scalar double addition, multiplication and division in a written order, so the bytes are the same on
+/// every machine.</para>
 /// </summary>
-public static class Bc7Codec {
+public static partial class Bc7Codec {
     /// <summary>The bytes of one block.</summary>
     public const int BlockBytes = 16;
 
     private static readonly byte[] Weights2 = [0, 21, 43, 64];
-    private static readonly byte[] Weights3 = [0, 9, 18, 27, 37, 46, 55, 64];
+
+    // The three-bit index weights, which BC6H's two-region modes share.
+    internal static readonly byte[] Weights3 = [0, 9, 18, 27, 37, 46, 55, 64];
+
     private static readonly byte[] Weights4 = [0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64];
 
     /// <summary>Returns the mode of a block: the index of the lowest set bit of its first byte, or 8 when that byte is
@@ -32,9 +40,14 @@ public static class Bc7Codec {
     /// <param name="block">The block's sixteen bytes.</param>
     /// <param name="rgba">The destination: sixteen texels of four channels, texel <c>(x, y)</c> at
     /// <c>4 (4 y + x)</c>.</param>
-    /// <exception cref="NotSupportedException">The block is in a partitioned mode (0, 1, 2, 3 or 7).</exception>
     public static void DecodeBlock(ReadOnlySpan<byte> block, Span<byte> rgba) {
         var mode = ModeOf(block: block);
+
+        if (PartitionedModeOf(mode: mode) is { } partitioned) {
+            DecodePartitioned(block: block, mode: partitioned, rgba: rgba);
+            return;
+        }
+
         var bits = new BlockBits(block: block);
         Span<int> e0 = stackalloc int[4];
         Span<int> e1 = stackalloc int[4];
@@ -103,11 +116,9 @@ public static class Bc7Codec {
                     (colorWeights, alphaWeights) = (Weights4, Weights4);
                     break;
                 }
-            case 8:
+            default:
                 rgba[..64].Clear();
                 return;
-            default:
-                throw new NotSupportedException(message: $"BC7 mode {mode} is partitioned; this decoder reads modes 4, 5 and 6.");
         }
 
         for (var texel = 0; (texel < 16); texel++) {
@@ -148,8 +159,10 @@ public static class Bc7Codec {
 
         var sixError = Error(block: six, rgba: rgba);
         var fiveError = Error(block: five, rgba: rgba);
+        var bestError = Math.Min(val1: sixError, val2: fiveError);
 
         ((sixError <= fiveError) ? six : five).CopyTo(destination: block);
+        EncodePartitioned(best: block, bestError: bestError, rgba: rgba, values: values);
     }
 
     private static bool IsUniform(ReadOnlySpan<byte> rgba) {
@@ -273,7 +286,7 @@ public static class Bc7Codec {
         var bestP0 = 0;
         var bestP1 = 0;
 
-        EndpointFit.BoundingBox(channels: 4, high: high, low: low, stride: 4, texels: values);
+        EndpointFit.BoundingBox(channels: 4, high: high, low: low, members: EndpointFit.AllTexels, stride: 4, texels: values);
 
         for (var pass = 0; (pass < 3); pass++) {
             for (var p = 0; (p < 4); p++) {
@@ -306,7 +319,7 @@ public static class Bc7Codec {
                 }
             }
 
-            if (!EndpointFit.LeastSquares(channels: 4, high: high, indices: bestIndices, low: low, stride: 4, texels: values, weights: Weights4)) {
+            if (!EndpointFit.LeastSquares(channels: 4, high: high, indices: bestIndices, low: low, members: EndpointFit.AllTexels, stride: 4, texels: values, weights: Weights4)) {
                 break;
             }
         }
@@ -341,7 +354,7 @@ public static class Bc7Codec {
         Span<int> bestQ1 = stackalloc int[4];
         var bestError = long.MaxValue;
 
-        EndpointFit.BoundingBox(channels: 3, high: high, low: low, stride: 4, texels: values);
+        EndpointFit.BoundingBox(channels: 3, high: high, low: low, members: EndpointFit.AllTexels, stride: 4, texels: values);
 
         for (var pass = 0; (pass < 3); pass++) {
             for (var channel = 0; (channel < 3); channel++) {
@@ -367,7 +380,7 @@ public static class Bc7Codec {
                 indices.CopyTo(destination: bestIndices);
             }
 
-            if (!EndpointFit.LeastSquares(channels: 3, high: high, indices: bestIndices, low: low, stride: 4, texels: values, weights: Weights2)) {
+            if (!EndpointFit.LeastSquares(channels: 3, high: high, indices: bestIndices, low: low, members: EndpointFit.AllTexels, stride: 4, texels: values, weights: Weights2)) {
                 break;
             }
         }

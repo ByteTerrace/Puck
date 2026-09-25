@@ -13,11 +13,11 @@ public sealed record OverlayServices {
     /// the services so a caller never re-derives it from the backend flag a second time.</summary>
     public required string BytecodeExtension { get; init; }
     /// <summary>The factory for the command buffer the overlay records its pass into.</summary>
-    public required IGpuComputeCommandPoolFactory CommandPoolFactory { get; init; }
+    public required IGpuCommandPoolFactory CommandPoolFactory { get; init; }
     /// <summary>The command recorder the compositor drives.</summary>
-    public required IGpuCommandRecorder CommandRecorder { get; init; }
+    public required IGpuRecorder Recorder { get; init; }
     /// <summary>The descriptor pool/set allocator.</summary>
-    public required IGpuDescriptorAllocator DescriptorAllocator { get; init; }
+    public required IGpuBindings Bindings { get; init; }
     /// <summary>The device context to render on.</summary>
     public required IGpuDeviceContext DeviceContext { get; init; }
     /// <summary>The host's <see cref="OverlayHudElementKind.Frame"/> content seam — every produced frame's
@@ -25,7 +25,7 @@ public sealed record OverlayServices {
     /// with no live frame content wires a null object that always answers <see langword="false"/>.</summary>
     public required IOverlayFrameSources FrameSources { get; init; }
     /// <summary>The factory for the fullscreen triangle's vertex buffer.</summary>
-    public required IGpuGeometryBufferFactory GeometryBufferFactory { get; init; }
+    public required IGpuBufferFactory BufferFactory { get; init; }
     /// <summary>The factory for the image the overlay draws into, created at the caller's chosen size on the first frame,
     /// once the backend's device exists.</summary>
     public required IGpuImageFactory ImageFactory { get; init; }
@@ -45,8 +45,6 @@ public sealed record OverlayServices {
     /// at t-textureSamplerCount] with an IDENTITY binding→slot map (see <c>DirectXGpuPipelineFactory.BuildLayout</c>),
     /// so both backends agree on the number.</summary>
     public required uint StorageBufferBinding { get; init; }
-    /// <summary>The storage buffer factory.</summary>
-    public required IGpuStorageBufferFactory StorageBufferFactory { get; init; }
     /// <summary>The surface transfer factory, used to create the readback for capture.</summary>
     public required IGpuSurfaceTransferFactory SurfaceTransferFactory { get; init; }
 
@@ -65,19 +63,18 @@ public sealed record OverlayServices {
 
         return new OverlayServices {
             BytecodeExtension = ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX),
-            CommandPoolFactory = Resolve<IGpuComputeCommandPoolFactory>(),
-            CommandRecorder = Resolve<IGpuCommandRecorder>(),
-            DescriptorAllocator = Resolve<IGpuDescriptorAllocator>(),
+            CommandPoolFactory = Resolve<IGpuCommandPoolFactory>(),
+            Recorder = Resolve<IGpuRecorder>(),
+            Bindings = Resolve<IGpuBindings>(),
             DeviceContext = Resolve<IGpuDeviceContext>(),
             FrameSources = Resolve<IOverlayFrameSources>(),
-            GeometryBufferFactory = Resolve<IGpuGeometryBufferFactory>(),
+            BufferFactory = Resolve<IGpuBufferFactory>(),
             ImageFactory = Resolve<IGpuImageFactory>(),
             PipelineFactory = Resolve<IGpuPipelineFactory>(),
             QueueSubmitter = Resolve<IGpuQueueSubmitter>(),
             RenderPassFactory = Resolve<IGpuRenderPassFactory>(),
             ShaderModuleFactory = Resolve<IGpuShaderModuleFactory>(),
             StorageBufferBinding = ((uint)(1 + OverlayFrameSlots.SlotCount)),
-            StorageBufferFactory = Resolve<IGpuStorageBufferFactory>(),
             SurfaceTransferFactory = Resolve<IGpuSurfaceTransferFactory>(),
         };
     }

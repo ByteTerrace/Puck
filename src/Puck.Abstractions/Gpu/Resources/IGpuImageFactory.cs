@@ -5,7 +5,6 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public interface IGpuImageFactory {
     /// <summary>Creates an image.</summary>
-    /// <param name="deviceContext">The device to create the image on.</param>
     /// <param name="format">The pixel format.</param>
     /// <param name="width">The width in pixels.</param>
     /// <param name="height">The height in pixels.</param>
@@ -14,5 +13,5 @@ public interface IGpuImageFactory {
     /// <returns>The created image, owned by the caller.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The extent is zero, or the format or usage is undefined.</exception>
     /// <exception cref="ArgumentException">The usage does not fit the format.</exception>
-    IGpuImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage);
+    IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage);
 }

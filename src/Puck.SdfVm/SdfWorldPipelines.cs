@@ -42,16 +42,14 @@ public sealed class SdfWorldPipelines : IDisposable {
     private static PipelineVersion CreateVersion(IGpuComputeServices gpu, IGpuDeviceContext device, GpuComputePipelineDescription description, ReadOnlyMemory<byte> bytecode) {
         var shader = gpu.ShaderModuleFactory.Create(
             bytecode: bytecode,
-            deviceContext: device,
             stage: GpuShaderStage.Compute
         );
 
         try {
             return new PipelineVersion(
-                native: gpu.ComputePipelineFactory.Create(
+                native: gpu.PipelineFactory.Create(
                     computeShaderModule: shader,
-                    description: description,
-                    deviceContext: device
+                    description: description
                 ),
                 shader: shader
             );

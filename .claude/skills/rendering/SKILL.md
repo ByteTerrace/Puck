@@ -28,7 +28,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, `SdfBandedFieldEvaluator`, `BakedWorldQuery`); seams `IWorldQuery`/`IFieldEvaluator` in `src/Puck.Maths/FixedPoint` | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
 | Prototype bakes (mesh, textures, impostor) | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakeTier`, `SdfBakedTexture`); `src/Puck.Assets/Textures` (BC4/BC5/BC6H/BC7 codecs, `TextureMipChain`, `OctahedralNormal`); `CreationBaker`, `CreationBakeKey`, `CreationBakeCodec` in `src/Puck.World.Authoring/Authoring`; `WorldBakeStore`, `WorldBakeChunk` in `src/Puck.World.Schema`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes), [creation bakes](../../../docs/architecture/worlds.md#creation-bakes) |
 | GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldEngine.*.cs`, `SdfEngineNode`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
-| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `sdf-vm.hlsli` is the interpreter (`mapCore`, `mapGradCore`), `sdf-world.hlsli` the view logic, one `*.comp.hlsl` wrapper per dispatch | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
+| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), `sdf-vm.hlsli` the interpreter (`mapCore`, `mapGradCore`), `sdf-world.hlsli` the view logic, one `*.comp.hlsl` wrapper per dispatch | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
 | Cameras and offscreen views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewStack`, `ViewTransition`) | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldPipelineRuntime`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
 | Shader manifests, pipelines, builds | `src/Puck.Shaders`, `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
@@ -56,23 +56,29 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    `MaxSmoothBlendRadius` (compose halo), `MaxScopedFieldReach` (a scoped field
    op's outward growth), or `HasUnmaskableInfluence` (no finite bound can
    contain it). Every soft-blend family needs its own halo derivation.
-3. **Every GPU call site** — `mapCore` and its hit-only twin `mapGradCore` in
+3. **Kernel declarations** — run `puck shaders generate` to rewrite
+   `sdf-isa.hlsli` from the C# model; the new member appears as its enum's
+   prefix plus its name in upper snake case (`SdfOp.CellDisplace` is
+   `SDF_OP_CELL_DISPLACE`). Never hand-write a `#define` for an ISA value: a new
+   ISA-owned constant the kernels read joins `SdfIsaHlsl.Generate`. CI's
+   `puck shaders generate --check` fails on a stale file.
+4. **Every GPU call site** — `mapCore` and its hit-only twin `mapGradCore` in
    `sdf-vm.hlsli`, including the rigid-leaf fast paths in each, and the compiled
    part walk in `sdf-parts.hlsli`. A blend needs `blendShape` and
    `blendShapeDual` (subtraction negates the candidate gradient) and a place in
    the material-winner rules of `sdfComposeCandidate` and its dual twin.
-4. **Kernel tiers** — if the case is stripped under `SDF_STRIP_HEAVY` or
+5. **Kernel tiers** — if the case is stripped under `SDF_STRIP_HEAVY` or
    `SDF_STRIP_ALL_EXOTIC`, `SdfViewsKernelVariants.FirstHeavyTouch` /
    `FirstExoticTouch` must send a program using it to a fuller variant. Read the
    current sets from `SdfViewsKernelVariant.cs` and the `#if` gates rather than
    from any list.
-5. **CPU interpreter** — `SdfFieldEvaluator` either interprets the instruction
+6. **CPU interpreter** — `SdfFieldEvaluator` either interprets the instruction
    (its blend switch and `ResolveWinner` included) or refuses it by name. Its
    blend switch falls through to union for an unknown value, so a missing arm
    silently turns the new blend into a union in contact and queries.
-6. **ISA version** — bump `SdfIsa.Version` and `sdf-isa.hlsli` together when
-   existing bytecode would misread the new encoding.
-7. **Document surface** — enum values are nameable in creation documents and
+7. **ISA version** — raise `SdfIsa.Version` and regenerate when existing
+   bytecode would misread the new encoding.
+8. **Document surface** — enum values are nameable in creation documents and
    `.puck` as soon as they exist, and their XML docs feed the generated world
    schemas. Either carry the new parameters through `CreationCanonicalizer` and
    the stamp emitters or refuse the value there, then regenerate with
@@ -82,8 +88,9 @@ Large additions to `SdfProgram.cs` belong in a partial file: the file-length
 ledger (`puck lengths`) only lets a recorded file shrink.
 
 [references/sync-pairs.md](references/sync-pairs.md) lists every C#↔HLSL
-coupling with its exact layout. Read it before editing an enum value, a packed
-word, a byte length, a binding, or a register.
+coupling with its exact layout and marks which side is generated. Read it
+before editing an enum value, a packed word, a byte length, a binding, or a
+register.
 
 ## Editing kernels
 
@@ -134,7 +141,7 @@ word, a byte length, a binding, or a register.
 These are one-line cautions; the owning pages hold the derivations.
 
 - **One accumulator.** `mapCore` carries one running distance for the whole
-  program and `SDF_OP_RESET` resets only the point. Union and subtraction are
+  program and `SDF_OP_RESET_POINT` resets only the point. Union and subtraction are
   local; an intersection-family blend annihilates every earlier shape it does
   not overlap, so author an intersection pair first against the empty
   accumulator. Field ops (`Onion`, `Dilate`, `Displace`) silently grow every
@@ -284,11 +291,24 @@ These are one-line cautions; the owning pages hold the derivations.
   clears and stores are the plan's `ShaderPipelineAttachment`s, it leaves every
   attachment in its attachment layout, and the next planned access's barrier
   moves it on. Every neutral graphics pipeline (`IGpuPipelineFactory`) is opaque
-  with clip-space +y at the top on both backends (Vulkan's `ClipSpaceYUp` viewport);
+  with clip-space +y at the top on both backends (Vulkan's recorder sets a
+  negative-height viewport at `BeginRenderPass`, since neutral pipelines take a
+  dynamic viewport and scissor);
   a depth test goes in `GpuGraphicsPipelineDescription.DepthCompare` exactly
   when the render pass has a depth attachment (`ValidateAgainst`). A new
   graphics state field must be honored by both factories, and the Direct3D 12
   pipeline-library identity words must cover it.
+  One `IGpuRecorder` records compute and graphics; its `BindPipeline`,
+  `BindDescriptorSet` and `PushConstants` name a `GpuBindPoint`, `Compute` for a
+  dispatch and `Graphics` for a draw. Direct3D 12 keeps the two roots apart, so
+  a wrong bind point writes a root the bound pipeline never set. A depth clear
+  value is `GpuDepthAttachment.ClearDepth` on the render pass, never a recorder
+  argument.
+  The recorder, `IGpuBindings`, every `IGpu*Factory` and the queue submitter are
+  bound to their backend's device context when they are registered and take no
+  device argument; a new service follows them. `IGpuBufferFactory` creates by
+  `GpuBufferUsage` and placement (`CreateHostVisible`, `CreateDeviceLocal`), and a
+  geometry buffer is a host-visible one created with its data.
   A candidate (never the device-loss rebuild) is refused in `EnsureBuild` with
   `SHADERPIPE_BUDGET` when `OwnedBytes` plus its steady state exceeds
   `BudgetBytes`, `ShaderPipelineMemoryBudget.For(profile)` lowered to the
@@ -309,7 +329,11 @@ These are one-line cautions; the owning pages hold the derivations.
   `DirectXDeviceContext.PipelineLibrary` sit under every compute and graphics
   creation; a new pipeline creation site on either backend passes through them.
   The files live under the state root's `pipeline-cache/`, keyed by
-  `GpuDeviceIdentity.CacheKey` and `SdfWorldKernels.ContentKey`.
+  `GpuDeviceIdentity.CacheKey` and `SdfWorldKernels.ContentKey`. Both
+  presentation shapes register the store (`GpuPipelineCacheStore`) in
+  `WorldBootComposition`; a backend reads it with `GetService`, so a shape
+  that drops it silently caches in memory only, and
+  `WorldBootCompositionLawTests` pins it for both shapes without a device.
   `GpuPipelineCacheFile` is the one policy for both backends (name, prune,
   read, write, replace); a backend keeps only its native serialize, create and
   validate. Pruning is an LRU cap, not a sweep of the device directory: open
@@ -489,7 +513,16 @@ first use of a frame. `ShaderPipelineRenderNode` records exactly those; its only
 per-instance state is the override a host event leaves (new or reset storage,
 a zero clear, a presentation, carried history), and the access after an
 override always records a barrier. A new kind of access changes `UseOf` there,
-never the node, and moves the `pipeline-counters` lines with it.
+never the node, and moves the `pipeline-counters` lines with it. An indirect
+dispatch's arguments are an access of their own (`ArgumentsUse`, listed first),
+and a read of another kind than the prior reads is a read-state change that
+records a barrier (`ShaderPipelineAccessState.ChangesReadState`). Non-extent
+dispatches and structured or counted buffers are package-pass vocabulary: the
+planner refuses them on a shader pass, because the node records extent
+dispatches over raw fixed buffers. `SdfPassPlanLawTests` plans the SDF engine's
+passes from `SdfFrameBufferPlan`'s uses and holds the order to `PassLabels` and
+the between-pass buffer barriers to its edges, so a change to either side moves
+the law.
 The grouped binding contract is the pass interface in `src/Puck.Shaders/Interface`
 ([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)); every
 pipeline pass and shader set reads its frame block through one, and no shipped
@@ -500,23 +533,31 @@ padding that Direct3D 12 needs to land on them; a pushed group
 (`ShaderInterface.PushConstants`, the frame group only) keeps those offsets as
 push constants at `register(b0, space0)`. Change a rule in `ShaderInterfaceLayout`
 and `ShaderInterfaceSpikeTests` hold both bytecode readers to it; never add a
-register remap.
+register remap. `ShaderRegisterBindingLawTests` holds every shader the build
+compiles to the register rule, with a shrink-only list of the declarations that
+break it today ([kernels](references/kernels.md#registers-and-bindings)).
 
 The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
 [frame graphs](../../../docs/reference/shaders.md#frame-graphs)): the pipeline
 document's members plus `packages`, engine passes named by
 `RenderGraphPackageCatalog` id. `RenderGraphCompiler` plans it with
 `ShaderPipelineCompiler` and never a second planner: a package pass enters the
-plan as a compute pass whose source is `package:<id>`
-(`RenderGraphCompiler.PackageSourcePrefix`), and a shader pass may not use that
-prefix. A new document member goes on `RenderGraphDefinition` only when a
+plan as `ShaderPipelinePassKind.Package`, whose source is its package id, through
+the planner's internal package entry, and a document's `passes` declaring that
+kind are refused with `SHADERPIPE_PACKAGE_PASS`. A package pass keeps no
+descriptor binding, has no interface-by-source check, and takes a compute pass's
+accesses in `UseOf`. A new document member goes on `RenderGraphDefinition` only when a
 pipeline document cannot say it, because every checked-in `*.pipeline.json`
 must plan identically as a graph (`RenderGraphDocumentLawTests`), and
 `puck schema` regenerates `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 Views are instances scheduled by `RenderGraphScheduler` (`src/Puck.Hosting/Graph`),
 a pure function of the instance set, the frame's roots and footprints, and the
-previous history; `RenderGraphSchedulerLawTests` pins demand, extent, refresh,
-self-reads, cycles and the pass-pixel budget. A world's instances are
+previous history. It fills a caller-owned `RenderGraphSchedule`, whose `Next`
+it rewrites, so the next frame goes into another schedule; a refused frame
+leaves the schedule unchanged, and a host alternating two schedules allocates
+nothing in a steady frame. `RenderGraphSchedulerLawTests` pins demand, extent,
+refresh, self-reads, cycles, the pass-pixel budget and that zero-allocation
+steady frame. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
 priced by `WorldPresentationCost` in the cost report and `world.budget`. No
 live view renders through a graph yet; the renderer still composes views
@@ -623,11 +664,11 @@ puck canary world-counters                                  # world.counters gpu
 puck canary source-conversion                               # the shipped palette and NV12 conversion kernels against their CPU reference, offscreen on both backends
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
-puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-echo no-device-compile    # shader pipelines offscreen on both backends
+puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-geometry pipeline-echo no-device-compile    # shader pipelines offscreen on both backends
 dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
 ```
 
-The thirteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
+The fourteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
 an arithmetic feedback oracle, the shipped ink pipeline's exposure regions, a
 broken middle-pass edit followed by a corrected one, two valid edits back to
 back (only the latest renders), compute-compute-fullscreen
@@ -639,6 +680,8 @@ override that renders after a relaunch on the saved document, a relocated packag
 a candidate refused by `SHADERPIPE_BUDGET` under a `pipeline.budget` cap with
 exact counts while the installed graph keeps running, a running instance
 whose graph is replaced and whose row is removed and reloaded three times over,
+two indexed, depth-tested geometry passes continuing one color and one depth
+attachment, with a fullscreen pass sampling by UV the right way up,
 a generated echo pass reading back every frame-block sentinel (a hand-perturbed
 offset turns its pixels red), and, in a World with `dxc` hidden from its path,
 the shipped ink pipeline rendering from its stored package and a relocated
@@ -679,7 +722,7 @@ the sample until a newer submission completes, and checks the
 `pipeline-counters` canary's expected lines against its own fixtures, so a
 change that moves a count updates the law and the canary together.
 Pipeline buffers are raw (`ByteAddressBuffer`), bound through
-`IGpuDescriptorAllocator.WriteRawBuffer`.
+`IGpuBindings.WriteBuffer` with a zero element stride.
 `puck parity` checks a content gate, the exact `stateHash`, and per-tile pixels
 under `tests/Puck.Parity/parity.contract.json`; a station's thresholds are
 recalibrated by hand in the change that moves them, never tightened unasked.

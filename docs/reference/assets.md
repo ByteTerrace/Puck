@@ -327,14 +327,25 @@ partial block; the codecs work one block at a time:
 |---|---|---|---|
 | `Bc4Codec` | One 8-bit channel: the better of the eight-value and six-value palettes over the block's extremes | Both palettes | One or two distinct values |
 | `Bc5Codec` | Two 8-bit channels, each a BC4 block | Both palettes | One or two values a channel |
-| `Bc6hCodec` | Three unsigned halves in the one-region modes 11 to 14 | Modes 11 to 14; reserved modes as zero | One value |
-| `Bc7Codec` | RGBA8 in mode 6, or mode 5 when alpha runs apart from color | Modes 4, 5 and 6 | One color |
+| `Bc6hCodec` | Three unsigned halves in the one-region modes 11 to 14 or the two-region modes 1 to 10, whichever decodes nearest | Every mode; reserved modes as zero | One value |
+| `Bc7Codec` | RGBA8 in the one-subset modes 6 and 5 or the partitioned modes 7, 3, 1, 2 and 0, whichever decodes nearest | Every mode | One color |
 
 Each encoder is integer arithmetic plus, for its least-squares endpoint refit,
 scalar double arithmetic in a written order, so its bytes are the same on every
 machine. Each decoder is exact to its format, so it is the encoder's test
-oracle, and it refuses the modes it does not read: BC7's partitioned modes and
-BC6H's two-region modes, which the encoders never write.
+oracle. BC7's partitioned modes fit the `Bc7Codec.PartitionCandidates`
+partitions whose subsets vary least, ranked by exact integer variance with the
+lower partition number first among equals; modes 0 to 3, which hold no alpha,
+are tried only for a block whose alpha is 255 throughout. A tie in decoded
+error keeps the earlier mode in the order 6, 5, 7, 3, 1, 2, 0. BC6H's
+two-region modes split a block by the first 32 of the same two-subset
+partitions, ranked the same way, and fit the `Bc6hCodec.PartitionCandidates`
+best after the one-region modes, in the order 1 to 10, an earlier candidate
+keeping a tie. Modes 1 to 9 store three endpoints as signed deltas from the
+first: the encoder orders each region's endpoints for its anchor, clamps a delta
+the mode cannot hold toward the first endpoint, and picks every index against
+the stored endpoints. The unsigned format is the only one: no texture declares
+signed BC6H.
 
 `TextureMipChain` builds a mip chain over an atlas of square power-of-two tiles:
 each level halves with a 2x2 box inside one tile, and the chain ends where a

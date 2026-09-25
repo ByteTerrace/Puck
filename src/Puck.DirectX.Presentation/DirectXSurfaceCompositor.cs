@@ -282,7 +282,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             sourceResource = m_cpuUpload.TextureHandle;
             sourceFormat = m_cpuUpload.TextureFormat;
         } else if (surface.IsSharedHandle) {
-            m_surfaceImport ??= m_surfaceTransferFactory.CreateImport(deviceContext: deviceContext);
+            m_surfaceImport ??= m_surfaceTransferFactory.CreateImport();
             var imported = m_surfaceImport.Import(
                 deviceContext: deviceContext,
                 sharedHandle: surface.SharedHandle,

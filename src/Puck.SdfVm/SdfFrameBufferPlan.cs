@@ -79,13 +79,13 @@ public readonly record struct SdfBufferUse(SdfFrameBuffer Buffer, SdfBufferAcces
 /// <param name="After">How the consumer reaches it.</param>
 public readonly record struct SdfBufferEdge(SdfFrameBuffer Buffer, SdfFramePass Producer, SdfFramePass Consumer, SdfBufferAccess Before, SdfBufferAccess After) {
     /// <summary>The access scope the transition makes available.</summary>
-    public GpuComputeAccess SourceAccess => SdfFrameBufferPlan.Declared(access: Before);
+    public GpuAccess SourceAccess => SdfFrameBufferPlan.Declared(access: Before);
     /// <summary>The access scope the transition makes visible.</summary>
-    public GpuComputeAccess DestinationAccess => SdfFrameBufferPlan.Declared(access: After);
+    public GpuAccess DestinationAccess => SdfFrameBufferPlan.Declared(access: After);
     /// <summary>The stages the transition waits on.</summary>
-    public GpuComputeStage SourceStage => SdfFrameBufferPlan.Stage(access: Before);
+    public GpuStage SourceStage => SdfFrameBufferPlan.Stage(access: Before);
     /// <summary>The stages that wait on the transition.</summary>
-    public GpuComputeStage DestinationStage => SdfFrameBufferPlan.Stage(access: After);
+    public GpuStage DestinationStage => SdfFrameBufferPlan.Stage(access: After);
 }
 /// <summary>
 /// Declares every buffer each SDF-engine dispatch touches and derives the buffer transitions a command list needs from
@@ -165,18 +165,18 @@ public static class SdfFrameBufferPlan {
     /// <summary>The neutral access an <see cref="SdfBufferAccess"/> declares to the recorder.</summary>
     /// <param name="access">The access.</param>
     /// <returns>The declared access.</returns>
-    public static GpuComputeAccess Declared(SdfBufferAccess access) => access switch {
-        SdfBufferAccess.Read => GpuComputeAccess.ShaderRead,
-        SdfBufferAccess.Write => GpuComputeAccess.ShaderWrite,
-        SdfBufferAccess.IndirectRead => GpuComputeAccess.IndirectCommandRead,
-        _ => (GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite),
+    public static GpuAccess Declared(SdfBufferAccess access) => access switch {
+        SdfBufferAccess.Read => GpuAccess.ShaderRead,
+        SdfBufferAccess.Write => GpuAccess.ShaderWrite,
+        SdfBufferAccess.IndirectRead => GpuAccess.IndirectCommandRead,
+        _ => (GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
     };
     /// <summary>The stage an <see cref="SdfBufferAccess"/> happens in.</summary>
     /// <param name="access">The access.</param>
     /// <returns>The indirect-argument stage for <see cref="SdfBufferAccess.IndirectRead"/>, otherwise the compute shader stage.</returns>
-    public static GpuComputeStage Stage(SdfBufferAccess access) => ((access == SdfBufferAccess.IndirectRead)
-        ? GpuComputeStage.DrawIndirect
-        : GpuComputeStage.ComputeShader
+    public static GpuStage Stage(SdfBufferAccess access) => ((access == SdfBufferAccess.IndirectRead)
+        ? GpuStage.DrawIndirect
+        : GpuStage.ComputeShader
     );
     /// <summary>The transitions one command list recording <paramref name="passes"/> in order owes.</summary>
     /// <param name="passes">The recorded dispatches, in order.</param>

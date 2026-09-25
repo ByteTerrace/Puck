@@ -13,7 +13,7 @@ public sealed partial class SdfWorldEngine {
     // Records the buffer transitions SdfFrameBufferPlan says the pass owes before its dispatch. Image hazards (the
     // per-view sources, the output) keep their own barriers in Record.
     private void RecordBufferBarriers(nint commandBuffer, SdfFramePass pass) {
-        var recorder = m_gpu.ComputeRecorder;
+        var recorder = m_gpu.Recorder;
         var count = m_bufferHazards.Enter(
             edges: m_bufferEdges,
             pass: pass
@@ -27,7 +27,6 @@ public sealed partial class SdfWorldEngine {
                 commandBufferHandle: commandBuffer,
                 destinationAccessMask: edge.DestinationAccess,
                 destinationStageMask: edge.DestinationStage,
-                deviceHandle: m_deviceHandle,
                 sourceAccessMask: edge.SourceAccess,
                 sourceStageMask: edge.SourceStage
             );

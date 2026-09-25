@@ -311,11 +311,11 @@ public sealed class ShaderPipelineVersionLawTests {
         Assert.Equal(
             actual: accesses,
             expected: [
-                ("seed", "c0", GpuComputeAccess.ShaderWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.General),
-                ("peek", "c0", GpuComputeAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.General, GpuImageLayout.ShaderReadOnly),
-                ("first", "c1", GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.General),
-                ("second", "c2", GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.General, GpuImageLayout.General),
-                ("sample", "c2", GpuComputeAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.General, GpuImageLayout.ShaderReadOnly),
+                ("seed", "c0", GpuAccess.ShaderWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.General),
+                ("peek", "c0", GpuAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.General, GpuImageLayout.ShaderReadOnly),
+                ("first", "c1", GpuAccess.ShaderRead | GpuAccess.ShaderWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.General),
+                ("second", "c2", GpuAccess.ShaderRead | GpuAccess.ShaderWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.General, GpuImageLayout.General),
+                ("sample", "c2", GpuAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.General, GpuImageLayout.ShaderReadOnly),
             ]
         );
     }
@@ -371,9 +371,9 @@ public sealed class ShaderPipelineVersionLawTests {
         );
         var imageStorage = plan.FindResource(name: "image")!.Storage;
         var published = new ShaderPipelineAccessState(
-            Access: GpuComputeAccess.ShaderRead,
+            Access: GpuAccess.ShaderRead,
             Layout: GpuImageLayout.General,
-            Stage: GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader
+            Stage: GpuStage.ComputeShader | GpuStage.FragmentShader
         );
         var chainStorage = plan.FindResource(name: "c0")!.Storage;
         var expected = new List<ShaderPipelineBarrier>();

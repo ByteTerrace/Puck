@@ -18,7 +18,70 @@ namespace Puck.Hosting;
 /// </list>
 /// </summary>
 public static class RenderGraphScheduler {
-    private readonly record struct Shown(int Producer, double Width, double Height, bool PreviousFrame);
+    internal readonly record struct Shown(int Producer, double Width, double Height, bool PreviousFrame);
+    // The working state of one schedule, sized to its set and cleared at the start of every call, so nothing from an
+    // earlier frame reaches a result.
+    internal sealed class Scratch {
+        public Scratch(int count) {
+            Admitted = new bool[count];
+            Candidates = new int[count];
+            Decided = new bool[count];
+            Deferred = new bool[count];
+            DemandHeight = new double[count];
+            DemandWidth = new double[count];
+            Divisor = new int[count];
+            Due = new bool[count];
+            Height = new int[count];
+            IsRoot = new bool[count];
+            PositionOf = new int[count];
+            Price = new long[count];
+            ScaleHeight = new double[count];
+            ScaleWidth = new double[count];
+            Shows = new List<Shown>[count];
+            Staleness = new long[count];
+            Width = new int[count];
+
+            for (var index = 0; (index < count); index++) {
+                Shows[index] = [];
+            }
+        }
+
+        public bool[] Admitted { get; }
+        public int[] Candidates { get; }
+        public bool[] Decided { get; }
+        public bool[] Deferred { get; }
+        public double[] DemandHeight { get; }
+        public double[] DemandWidth { get; }
+        public int[] Divisor { get; }
+        public bool[] Due { get; }
+        public int[] Height { get; }
+        public bool[] IsRoot { get; }
+        public int[] PositionOf { get; }
+        public long[] Price { get; }
+        public double[] ScaleHeight { get; }
+        public double[] ScaleWidth { get; }
+        public List<Shown>[] Shows { get; }
+        public long[] Staleness { get; }
+        public int[] Width { get; }
+
+        public void Clear() {
+            Array.Clear(array: Admitted);
+            Array.Clear(array: Decided);
+            Array.Clear(array: Deferred);
+            Array.Clear(array: DemandHeight);
+            Array.Clear(array: DemandWidth);
+            Array.Clear(array: Height);
+            Array.Clear(array: IsRoot);
+            Array.Clear(array: Price);
+            Array.Clear(array: ScaleHeight);
+            Array.Clear(array: ScaleWidth);
+            Array.Clear(array: Width);
+
+            foreach (var list in Shows) {
+                list.Clear();
+            }
+        }
+    }
 
     private static double Fraction(double value, string what) {
         if (
@@ -37,13 +100,11 @@ public static class RenderGraphScheduler {
             val2: 1.0
         );
     }
-    private static List<Shown>[] Footprints(RenderGraphInstanceSet set, RenderGraphFrame frame) {
-        var shown = new List<Shown>[set.Instances.Count];
+    private static void Footprints(RenderGraphInstanceSet set, RenderGraphFrame frame, List<Shown>[] shown) {
+        var footprints = frame.Footprints;
 
-        for (var index = 0; (index < shown.Length); index++) {
-            shown[index] = [];
-        }
-        foreach (var footprint in frame.Footprints) {
+        for (var position = 0; (position < footprints.Count); position++) {
+            var footprint = footprints[position];
             var consumer = set.IndexOf(name: footprint.Consumer);
             var producer = set.IndexOf(name: footprint.Producer);
 
@@ -57,11 +118,12 @@ public static class RenderGraphScheduler {
                 );
             }
 
+            var reads = set.Reads[consumer];
             RenderGraphEdge? declared = null;
 
-            foreach (var candidate in set.Reads[consumer]) {
-                if (candidate.Producer == producer) {
-                    declared = candidate;
+            for (var read = 0; (read < reads.Count); read++) {
+                if (reads[read].Producer == producer) {
+                    declared = reads[read];
 
                     break;
                 }
@@ -91,7 +153,15 @@ public static class RenderGraphScheduler {
             }
 
             var list = shown[consumer];
-            var existing = list.FindIndex(match: entry => (entry.Producer == producer));
+            var existing = -1;
+
+            for (var entry = 0; (entry < list.Count); entry++) {
+                if (list[entry].Producer == producer) {
+                    existing = entry;
+
+                    break;
+                }
+            }
 
             if (existing < 0) {
                 list.Add(item: new Shown(
@@ -113,26 +183,35 @@ public static class RenderGraphScheduler {
                 });
             }
         }
-
-        return shown;
     }
+    // The stalest instance first, ties in render order: a total order, so the sort's result never depends on its
+    // algorithm.
+    private static bool Precedes(int left, int right, long[] staleness, int[] positionOf) => ((staleness[left] != staleness[right])
+        ? (staleness[left] > staleness[right])
+        : (positionOf[left] < positionOf[right])
+    );
 
-    /// <summary>Schedules one frame.</summary>
+    /// <summary>Schedules one frame into a schedule the caller owns.</summary>
     /// <param name="set">The instances.</param>
     /// <param name="frame">What the frame shows.</param>
-    /// <param name="history">The previous frame's history: <see cref="RenderGraphHistory.Empty"/> for the first frame,
-    /// otherwise the previous schedule's <see cref="RenderGraphSchedule.Next"/>.</param>
-    /// <returns>The schedule, carrying the history the next frame is scheduled against.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="history"/> covers a different number of instances, the frame
-    /// does not follow it, the display extent is not positive, or a root or footprint names an undeclared instance or
-    /// read.</exception>
+    /// <param name="history">The previous frame's history: <see cref="RenderGraphHistory.Empty"/> or a fresh schedule's
+    /// <see cref="RenderGraphSchedule.Next"/> for the first frame, otherwise the previous schedule's
+    /// <see cref="RenderGraphSchedule.Next"/>.</param>
+    /// <param name="schedule">The schedule to fill, created for a set of the same size. Every member it held is
+    /// replaced, so the result depends on the other arguments alone; when this throws, it is left unchanged.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="set"/>, <paramref name="history"/> or
+    /// <paramref name="schedule"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="history"/> or <paramref name="schedule"/> covers a
+    /// different number of instances, <paramref name="history"/> is <paramref name="schedule"/>'s own
+    /// <see cref="RenderGraphSchedule.Next"/>, the frame's roots or footprints are <see langword="null"/>, the frame
+    /// does not follow the history, the display extent is not positive, or a root or footprint names an undeclared
+    /// instance or read.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A root or footprint fraction is negative or not finite, or the
     /// budget is negative.</exception>
-    public static RenderGraphSchedule Schedule(RenderGraphInstanceSet set, RenderGraphFrame frame, RenderGraphHistory history) {
+    public static void Schedule(RenderGraphInstanceSet set, RenderGraphFrame frame, RenderGraphHistory history, RenderGraphSchedule schedule) {
         ArgumentNullException.ThrowIfNull(argument: set);
-        ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: history);
+        ArgumentNullException.ThrowIfNull(argument: schedule);
         ArgumentOutOfRangeException.ThrowIfNegative(value: frame.PassPixelBudget);
 
         var count = set.Instances.Count;
@@ -141,6 +220,30 @@ public static class RenderGraphScheduler {
             throw new ArgumentException(
                 message: $"The history covers {history.Count} instances; the set declares {count}.",
                 paramName: nameof(history)
+            );
+        }
+        if (schedule.Count != count) {
+            throw new ArgumentException(
+                message: $"The schedule covers {schedule.Count} instances; the set declares {count}.",
+                paramName: nameof(schedule)
+            );
+        }
+        if (ReferenceEquals(
+            objA: history,
+            objB: schedule.Next
+        )) {
+            throw new ArgumentException(
+                message: "The history is the schedule's own next history; schedule the next frame into another schedule.",
+                paramName: nameof(schedule)
+            );
+        }
+        if (
+            (frame.Roots is null) ||
+            (frame.Footprints is null)
+        ) {
+            throw new ArgumentException(
+                message: "The frame's roots and footprints must not be null.",
+                paramName: nameof(frame)
             );
         }
         if (frame.Index <= history.Frame) {
@@ -159,11 +262,19 @@ public static class RenderGraphScheduler {
             );
         }
 
-        var isRoot = new bool[count];
-        var demandWidth = new double[count];
-        var demandHeight = new double[count];
+        // Every refusal is raised while only the scratch is written, so a refused call leaves the schedule's members
+        // as they were.
+        var work = schedule.Work;
 
-        foreach (var root in frame.Roots) {
+        work.Clear();
+
+        var isRoot = work.IsRoot;
+        var demandWidth = work.DemandWidth;
+        var demandHeight = work.DemandHeight;
+        var roots = frame.Roots;
+
+        for (var position = 0; (position < roots.Count); position++) {
+            var root = roots[position];
             var index = set.IndexOf(name: root.Instance);
 
             if (index < 0) {
@@ -198,12 +309,16 @@ public static class RenderGraphScheduler {
             }
         }
 
-        var shown = Footprints(
+        var shown = work.Shows;
+
+        Footprints(
             frame: frame,
-            set: set
+            set: set,
+            shown: shown
         );
-        var divisor = new int[count];
-        var due = new bool[count];
+
+        var divisor = work.Divisor;
+        var due = work.Due;
 
         for (var index = 0; (index < count); index++) {
             var rendered = history.LatestFrame(index: index);
@@ -217,9 +332,9 @@ public static class RenderGraphScheduler {
 
         // Consumers are decided before their same-frame producers, so a producer's demand is complete when it is
         // reached; a previous-frame read that arrives after its producer was decided adds no extent this frame.
-        var decided = new bool[count];
-        var scaleWidth = new double[count];
-        var scaleHeight = new double[count];
+        var decided = work.Decided;
+        var scaleWidth = work.ScaleWidth;
+        var scaleHeight = work.ScaleHeight;
         var changed = true;
 
         while (changed) {
@@ -269,9 +384,9 @@ public static class RenderGraphScheduler {
             }
         }
 
-        var width = new int[count];
-        var height = new int[count];
-        var price = new long[count];
+        var width = work.Width;
+        var height = work.Height;
+        var price = work.Price;
 
         for (var index = 0; (index < count); index++) {
             if (decided[index]) {
@@ -287,15 +402,17 @@ public static class RenderGraphScheduler {
             }
         }
 
-        var positionOf = new int[count];
+        var positionOf = work.PositionOf;
+        var staleness = work.Staleness;
 
         for (var position = 0; (position < count); position++) {
             positionOf[set.Order[position]] = position;
         }
 
-        var admitted = new bool[count];
-        var deferred = new bool[count];
-        var candidates = new List<int>();
+        var admitted = work.Admitted;
+        var deferred = work.Deferred;
+        var candidates = work.Candidates;
+        var candidateCount = 0;
 
         for (var index = 0; (index < count); index++) {
             if (
@@ -307,22 +424,41 @@ public static class RenderGraphScheduler {
             if (isRoot[index]) {
                 admitted[index] = true;
             } else {
-                candidates.Add(item: index);
+                var last = history.LatestFrame(index: index);
+
+                staleness[index] = ((last < 0)
+                    ? long.MaxValue
+                    : (frame.Index - last)
+                );
+                candidates[candidateCount++] = index;
             }
         }
 
-        candidates.Sort(comparison: (left, right) => {
-            var staleness = Staleness(index: right).CompareTo(value: Staleness(index: left));
+        for (var sorted = 1; (sorted < candidateCount); sorted++) {
+            var candidate = candidates[sorted];
+            var slot = sorted;
 
-            return ((staleness != 0)
-                ? staleness
-                : positionOf[left].CompareTo(value: positionOf[right])
-            );
-        });
+            while (
+                (slot > 0) &&
+                Precedes(
+                    left: candidate,
+                    positionOf: positionOf,
+                    right: candidates[(slot - 1)],
+                    staleness: staleness
+                )
+            ) {
+                candidates[slot] = candidates[(slot - 1)];
+                slot--;
+            }
+
+            candidates[slot] = candidate;
+        }
 
         var spent = 0L;
 
-        foreach (var index in candidates) {
+        for (var position = 0; (position < candidateCount); position++) {
+            var index = candidates[position];
+
             if (
                 (frame.PassPixelBudget == 0) ||
                 ((spent + price[index]) <= frame.PassPixelBudget)
@@ -364,12 +500,14 @@ public static class RenderGraphScheduler {
             admitted[index] = read;
         }
 
-        var rows = new RenderGraphInstanceSchedule[count];
-        var renders = new List<int>();
-        var latest = new long[count];
-        var allocatedWidths = new double[count];
-        var allocatedHeights = new double[count];
+        var rows = schedule.InstanceRows;
+        var renders = schedule.RenderRows;
+        var reads = schedule.ReadRows;
+        var following = schedule.Next;
         var total = 0L;
+
+        renders.Clear();
+        reads.Clear();
 
         for (var position = 0; (position < count); position++) {
             var index = set.Order[position];
@@ -389,15 +527,15 @@ public static class RenderGraphScheduler {
                         : RenderGraphInstanceStatus.Unread)))
             ;
 
-            latest[index] = (admitted[index]
+            following.Latest[index] = (admitted[index]
                 ? frame.Index
                 : history.LatestFrame(index: index)
             );
-            allocatedWidths[index] = (admitted[index]
+            following.Width[index] = (admitted[index]
                 ? scaleWidth[index]
                 : allocatedWidth
             );
-            allocatedHeights[index] = (admitted[index]
+            following.Height[index] = (admitted[index]
                 ? scaleHeight[index]
                 : allocatedHeight
             );
@@ -420,7 +558,7 @@ public static class RenderGraphScheduler {
                         ))),
                 Instance: set.Instances[index].Name,
                 IsRoot: isRoot[index],
-                LatestFrame: latest[index],
+                LatestFrame: following.Latest[index],
                 Passes: set.Instances[index].Passes,
                 PassPixels: spentHere,
                 Status: status,
@@ -435,8 +573,6 @@ public static class RenderGraphScheduler {
             );
         }
 
-        var reads = new List<RenderGraphReadSchedule>();
-
         foreach (var consumer in renders) {
             foreach (var entry in shown[consumer]) {
                 reads.Add(item: new RenderGraphReadSchedule(
@@ -450,27 +586,9 @@ public static class RenderGraphScheduler {
             }
         }
 
-        return RenderGraphSchedule.Create(
+        schedule.Publish(
             frame: frame.Index,
-            instances: rows,
-            next: RenderGraphHistory.Create(
-                frame: frame.Index,
-                height: allocatedHeights,
-                latest: latest,
-                width: allocatedWidths
-            ),
-            passPixels: total,
-            reads: reads,
-            renders: renders
+            passPixels: total
         );
-
-        long Staleness(int index) {
-            var last = history.LatestFrame(index: index);
-
-            return ((last < 0)
-                ? long.MaxValue
-                : (frame.Index - last)
-            );
-        }
     }
 }

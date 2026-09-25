@@ -2,6 +2,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
+using Puck.DirectX;
+using Puck.DirectX.Interop;
 using Puck.Abstractions.Presentation;
 using Puck.Platform;
 using Puck.Platform.Probes;
@@ -278,8 +280,7 @@ internal sealed partial class WorldScreenBinder {
         var width = camera.RenderWidth;
         var height = camera.RenderHeight;
 
-        view.ExportFactory = device => m_surfaceExport!.CreateSharedComputeImage(
-            deviceContext: device,
+        view.ExportFactory = device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: height,
             width: width

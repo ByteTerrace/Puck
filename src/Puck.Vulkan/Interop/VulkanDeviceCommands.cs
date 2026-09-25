@@ -73,6 +73,8 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
     public readonly delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, nint, void> CmdPushConstants;
     /// <summary>The <c>vkCmdSetScissor</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void> CmdSetScissor;
+    /// <summary>The <c>vkCmdSetViewport</c> entry point.</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void> CmdSetViewport;
     /// <summary>The <c>vkCreateBuffer</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult> CreateBuffer;
     /// <summary>The <c>vkCreateCommandPool</c> entry point.</summary>
@@ -348,6 +350,11 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
         CmdSetScissor = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkCmdSetScissor"u8,
+            getDeviceProcAddr: getDeviceProcAddr
+        ));
+        CmdSetViewport = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+            deviceHandle: deviceHandle,
+            functionName: "vkCmdSetViewport"u8,
             getDeviceProcAddr: getDeviceProcAddr
         ));
         CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(

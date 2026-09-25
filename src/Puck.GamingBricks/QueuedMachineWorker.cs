@@ -991,7 +991,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
 
             try {
-                m_upload ??= gpu.SurfaceTransferFactory.CreateUpload(deviceContext: deviceContext);
+                m_upload ??= gpu.SurfaceTransferFactory.CreateUpload();
                 m_boundSourceView = m_upload.Upload(
                     deviceContext: deviceContext,
                     format: GpuPixelFormat.R8G8B8A8Unorm,

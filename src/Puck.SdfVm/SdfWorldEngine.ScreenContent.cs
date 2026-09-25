@@ -112,7 +112,7 @@ public sealed partial class SdfWorldEngine {
         // in-flight frame may still sample) first drains the ring — a rare host event, typically once per engine.
         WaitForFrameRing();
 
-        m_glyphAtlasUpload ??= m_gpu.SurfaceTransferFactory.CreateUpload(deviceContext: m_deviceContext);
+        m_glyphAtlasUpload ??= m_gpu.SurfaceTransferFactory.CreateUpload();
         m_glyphAtlasView = m_glyphAtlasUpload.Upload(
             deviceContext: m_deviceContext,
             format: Format,

@@ -99,7 +99,6 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
     private void SubmitCounted(List<nint> commands, IGpuSubmissionFence fence) {
         m_gpu.QueueSubmitter.Submit(
             commandBufferHandles: CollectionsMarshal.AsSpan(list: commands),
-            deviceContext: m_device,
             fence: fence
         );
         m_submissions++;
@@ -107,27 +106,27 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         ArmRetirements(fence: fence);
     }
 
-    // Counts the graphics recorder and pipelines the fullscreen passes and the float preview draw through, and the other
+    // Counts the recorder and graphics pipelines the fullscreen passes and the float preview draw through, and the other
     // counted members a caller could reach; everything else passes through. ComputeServices answers the node's own
     // counted bundle.
     private sealed class CountingFullscreenPassServices(IFullscreenPassServices inner, IGpuComputeServices compute, GpuWorkLedger ledger) : IFullscreenPassServices {
-        public IGpuCommandRecorder CommandRecorder { get; } = GpuWorkCounting.Wrap(
+        public IGpuRecorder Recorder { get; } = GpuWorkCounting.Wrap(
             ledger: ledger,
-            recorder: inner.CommandRecorder
+            recorder: inner.Recorder
         );
 
         public IGpuComputeServices? ComputeServices =>
             compute;
 
-        public IGpuDescriptorAllocator DescriptorAllocator { get; } = GpuWorkCounting.Wrap(
-            allocator: inner.DescriptorAllocator,
+        public IGpuBindings Bindings { get; } = GpuWorkCounting.Wrap(
+            bindings: inner.Bindings,
             ledger: ledger
         );
 
+        public IGpuBufferFactory BufferFactory =>
+            inner.BufferFactory;
         public IGpuDeviceContext DeviceContext =>
             inner.DeviceContext;
-        public IGpuGeometryBufferFactory GeometryBufferFactory =>
-            inner.GeometryBufferFactory;
 
         public IGpuPipelineFactory PipelineFactory { get; } = GpuWorkCounting.Wrap(
             factory: inner.PipelineFactory,

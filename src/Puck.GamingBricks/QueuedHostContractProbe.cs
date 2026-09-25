@@ -1435,14 +1435,14 @@ public static class QueuedHostContractProbe {
         public bool WaitUntilEntered(TimeSpan timeout) => m_entered.Wait(timeout: timeout);
     }
     private sealed class TestGpuComputeServices(IGpuSurfaceTransferFactory factory) : IGpuComputeServices {
-        public IGpuComputeCommandPoolFactory CommandPoolFactory => null!;
-        public IGpuComputePipelineFactory ComputePipelineFactory => null!;
-        public IGpuComputeRecorder ComputeRecorder => null!;
-        public IGpuDescriptorAllocator DescriptorAllocator => null!;
+        public IGpuBindings Bindings => null!;
+        public IGpuBufferFactory BufferFactory => null!;
+        public IGpuCommandPoolFactory CommandPoolFactory => null!;
         public IGpuImageFactory ImageFactory => null!;
+        public IGpuPipelineFactory PipelineFactory => null!;
         public IGpuQueueSubmitter QueueSubmitter => null!;
+        public IGpuRecorder Recorder => null!;
         public IGpuShaderModuleFactory ShaderModuleFactory => null!;
-        public IGpuStorageBufferFactory StorageBufferFactory => null!;
         public IGpuSurfaceTransferFactory SurfaceTransferFactory { get; } = factory;
     }
     private sealed class TestGpuDeviceContext : IGpuDeviceContext {
@@ -1456,11 +1456,11 @@ public static class QueuedHostContractProbe {
     private sealed class TestSurfaceTransferFactory(params IGpuSurfaceUpload[] uploads) : IGpuSurfaceTransferFactory {
         private readonly Queue<IGpuSurfaceUpload> m_uploads = new(collection: uploads);
 
-        public IGpuSurfaceImport CreateImport(IGpuDeviceContext deviceContext) =>
+        public IGpuSurfaceImport CreateImport() =>
             throw new NotSupportedException();
-        public IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext) =>
+        public IGpuSurfaceReadback CreateReadback() =>
             throw new NotSupportedException();
-        public IGpuSurfaceUpload CreateUpload(IGpuDeviceContext deviceContext) {
+        public IGpuSurfaceUpload CreateUpload() {
             lock (m_uploads) {
                 return m_uploads.Dequeue();
             }

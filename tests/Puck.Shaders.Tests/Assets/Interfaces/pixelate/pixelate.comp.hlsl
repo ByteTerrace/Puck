@@ -1,9 +1,8 @@
-// The pixelate pass (src/Puck.SdfVm/Assets/Shaders/Viewport/pixelate.comp.hlsl) read through its generated pass
-// interface instead of a push constant and hand-numbered bindings. pixelate.interface.hlsli is generated from the
-// interface ShaderInterfaceSpikeTests declares and written beside this file at test time; it is never checked in.
-// The frame group carries the extent, the pass group the cell size, a per-channel level count read through the
-// generated array accessor, and the two storage images. Equal levels on every channel quantize exactly as the shipped
-// pass's single level count does.
+// A pixelate/posterize pass read through its generated pass interface instead of a push constant and hand-numbered
+// bindings. pixelate.interface.hlsli is generated from the interface ShaderInterfaceSpikeTests declares and written
+// beside this file at test time; it is never checked in. The frame group carries the extent, the pass group the cell
+// size, a per-channel level count read through the generated array accessor, and the two storage images. Equal levels
+// on every channel quantize exactly as a single level count would.
 #include "pixelate.interface.hlsli"
 
 [numthreads(8, 8, 1)]

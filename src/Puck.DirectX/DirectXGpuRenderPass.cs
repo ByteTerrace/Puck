@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using Puck.DirectX.Interfaces;
+using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using static Puck.DirectX.DirectXConstants;
@@ -9,7 +10,7 @@ namespace Puck.DirectX;
 /// <summary>
 /// A Direct3D 12 <see cref="IGpuRenderPass"/>. Direct3D 12 has no render-pass object, so this is the description with its
 /// formats translated: what a pipeline state object is created for (<see cref="ColorFormats"/>,
-/// <see cref="DepthFormat"/>) and what <see cref="DirectXGpuCommandRecorder.BeginRenderPass"/> begins and ends.
+/// <see cref="DepthFormat"/>) and what <see cref="DirectXGpuRecorder.BeginRenderPass"/> begins and ends.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuRenderPass : IGpuRenderPass {
@@ -61,7 +62,6 @@ public sealed unsafe class DirectXGpuFramebuffer : IGpuFramebuffer {
             depth: depth,
             description: renderPass.Description
         );
-        ArgumentNullException.ThrowIfNull(deviceContext);
         Pass = renderPass;
         ColorResources = colors.Select(selector: static image => image.ImageHandle).ToArray();
         DepthResource = (depth?.ImageHandle ?? 0);
@@ -156,16 +156,16 @@ public sealed unsafe class DirectXGpuFramebuffer : IGpuFramebuffer {
 /// <see cref="DirectXGpuFramebuffer"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXGpuRenderPassFactory : IGpuRenderPassFactory {
+public sealed class DirectXGpuRenderPassFactory(DirectXDeviceContext deviceContext) : IGpuRenderPassFactory {
     /// <inheritdoc/>
-    public IGpuRenderPass Create(IGpuDeviceContext deviceContext, GpuRenderPassDescription description) =>
+    public IGpuRenderPass Create(GpuRenderPassDescription description) =>
         new DirectXGpuRenderPass(description: description);
     /// <inheritdoc/>
-    public IGpuFramebuffer CreateFramebuffer(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) =>
+    public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) =>
         new DirectXGpuFramebuffer(
             colors: colors,
             depth: depth,
-            deviceContext: ((IDirectXDeviceContext)deviceContext),
+            deviceContext: deviceContext,
             renderPass: ((DirectXGpuRenderPass)renderPass)
         );
 }

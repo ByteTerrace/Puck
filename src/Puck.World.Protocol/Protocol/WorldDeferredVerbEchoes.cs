@@ -43,7 +43,9 @@ public sealed class WorldDeferredVerbEchoes {
     /// correlation) settles with an unknown-outcome error.</summary>
     /// <param name="correlationId">The correlation id the submission's envelope minted.</param>
     /// <param name="verb">The submitting verb, exactly as its response line spells it (e.g. <c>world.reset</c>).</param>
-    /// <returns>The result the verb's handler returns: no output of its own, settling with the verdict.</returns>
+    /// <returns>The result the verb's handler returns: the verdict itself when <paramref name="settlement"/> is
+    /// already settled (a synchronous ingress refusal, correlation <c>0</c>, a duplicate correlation), so the line's
+    /// own result reports and counts it; otherwise no output of its own, settling with the tick-boundary verdict.</returns>
     /// <param name="settlement">The submission's settlement, including any synchronous ingress refusal.</param>
     public CommandResult Register(long correlationId, string verb, CommandSettlement? settlement = null) {
         settlement ??= new CommandSettlement();

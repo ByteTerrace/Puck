@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
+using Puck.DirectX;
+using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.SdfVm.Views;
 using Puck.World.Client;
@@ -133,7 +135,7 @@ internal sealed partial class WorldScreenBinder {
 
         if (
             feed.GpuRoute &&
-            (m_surfaceExport is not null) &&
+            m_exportsSurfaces &&
             OperatingSystem.IsWindowsVersionAtLeast(
             major: 10,
             minor: 0,
@@ -210,8 +212,7 @@ internal sealed partial class WorldScreenBinder {
         var handles = new nint[images.Length];
 
         for (var i = 0; (i < images.Length); ++i) {
-            images[i] = m_surfaceExport!.CreateSimultaneousAccessImage(
-                deviceContext: deviceContext,
+            images[i] = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)deviceContext)).CreateSimultaneousAccessImage(
                 format: GpuPixelFormat.B8G8R8A8Unorm,
                 height: ((uint)height),
                 width: ((uint)width)

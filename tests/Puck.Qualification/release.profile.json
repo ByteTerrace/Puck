@@ -25,6 +25,9 @@
     "pipeline-package",
     "pipeline-budget",
     "pipeline-churn",
+    "pipeline-geometry",
+    "pipeline-echo",
+    "no-device-compile",
     "world-counters",
     "source-conversion",
     "sdf-decode-sign-refusal"
@@ -41,7 +44,7 @@
   ],
   "workloads": [
     {
-      "name": "forcing-world",
+      "name": "flagship",
       "world": "Assets/worlds/puck.world.json",
       "warmupTicks": 300,
       "soakTicks": 1800,
@@ -68,28 +71,28 @@
   ],
   "thresholds": [
     {
-      "workload": "forcing-world",
+      "workload": "flagship",
       "backend": "vulkan",
       "width": 1280,
       "height": 800,
       "peakOwnedPipelineBytes": null
     },
     {
-      "workload": "forcing-world",
+      "workload": "flagship",
       "backend": "vulkan",
       "width": 1920,
       "height": 1080,
       "peakOwnedPipelineBytes": null
     },
     {
-      "workload": "forcing-world",
+      "workload": "flagship",
       "backend": "directx",
       "width": 1280,
       "height": 800,
       "peakOwnedPipelineBytes": null
     },
     {
-      "workload": "forcing-world",
+      "workload": "flagship",
       "backend": "directx",
       "width": 1920,
       "height": 1080,

@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
@@ -9,32 +8,30 @@ using Windows.Win32.Graphics.Dxgi.Common;
 namespace Puck.DirectX;
 
 /// <summary>
-/// Implements <see cref="IGpuPipelineFactory"/> for Direct3D 12, creating a root signature and an opaque PSO:
+/// Implements <see cref="IGpuPipelineFactory"/> for Direct3D 12 on its device context. A graphics pipeline is a root
+/// signature and an opaque PSO:
 /// <c>POSITIONn</c> vertex attributes, the render pass's formats and depth test, a descriptor table with N SRV slots and
 /// an optional UAV slot, root constants for push data, and one static linear-clamp sampler PER texture SRV
 /// (<c>s0..sN-1</c>, matching <c>t0..tN-1</c> one-for-one) — every one of those static samplers carries the SAME
 /// fixed filter/address description, so in effect the whole table shares one sampler configuration.
 /// </summary>
 /// <remarks>
-/// Root signature layout (always the same slot ordering):
+/// Graphics root signature layout (always the same slot ordering):
 /// <list type="bullet">
 /// <item>Parameter 0: descriptor table (SRVs t0..tN-1, optional UAV u0) — omitted when both counts are zero</item>
 /// <item>Parameter 0 or 1: root constants (b0) — omitted when no push-constant binding is supplied</item>
 /// </list>
 /// </remarks>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
+public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContext deviceContext) : IGpuPipelineFactory {
     private const byte ColorWriteEnableAll = 15;
 
     /// <inheritdoc/>
     public IGpuPipeline Create(
-        IGpuDeviceContext deviceContext,
         IGpuRenderPass renderPass,
         IGpuShaderModule vertexShaderModule,
         IGpuShaderModule fragmentShaderModule,
-        GpuGraphicsPipelineDescription description,
-        uint width,
-        uint height
+        GpuGraphicsPipelineDescription description
     ) {
         ArgumentNullException.ThrowIfNull(description);
         description.ValidateAgainst(renderPass: renderPass);
@@ -74,7 +71,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             layout.PsoHandle = BuildPso(
                 depthCompare: description.DepthCompare,
                 device: device,
-                library: ((IDirectXDeviceContext)deviceContext).PipelineLibrary,
+                library: deviceContext.PipelineLibrary,
                 rootSignature: layout.RootSignatureHandle,
                 rootSignatureBlob: layout.RootSignatureBlob,
                 renderPass: pass,
@@ -220,8 +217,8 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
 
         // One static sampler PER texture register (s0..s{textureSamplerCount-1}, matching t0..t{textureSamplerCount-1}
         // one-for-one): a Texture2D.Sample call is free to name any register, so a shader with several textures needs
-        // a register bound at each one it uses (mirrors DirectXGpuComputePipelineFactory's per-SampledImage-binding
-        // static sampler). Every entry carries the SAME fixed linear-clamp description, so this is one sampler
+        // a register bound at each one it uses (mirrors the compute pipeline's per-SampledImage-binding
+        // static sampler). Every entry carries the same fixed linear-clamp description, so this is one sampler
         // configuration replicated across registers, not several distinct ones.
         var staticSamplerCount = ((textureSamplerCount > 0)
             ? textureSamplerCount

@@ -260,15 +260,19 @@ block alignment. Each usage filters its own way:
 
 **Compression** is `Puck.Assets.Textures`: a CPU encoder per format whose bytes
 are the same on every machine, and an exact decoder that is its test oracle.
-BC7 writes mode 6, or mode 5 when a block's alpha runs independently of its
-color, and stores a one-color block exactly. BC5 is two BC4 blocks, and BC4 keeps
-the better of its two palettes. BC6H writes the one-region modes 11 to 14 and
-stores a one-value block exactly. Neither encoder writes a partitioned mode yet,
-and each decoder refuses one. On the codec laws' natural test image (gradients,
-noise and a hard-edged disc), BC4 decodes within 2 codes of the source
-(root-mean-square 0.63), BC5 within 8 (0.88), and BC7 within 13 (2.3); BC6H
-stays within 8% of each value in smooth blocks and 23% in a block across a hard
-edge between two colors, which a one-region mode cannot hold both of. From the
+BC7 writes whichever of its modes decodes nearest: mode 6, mode 5 when a block's
+alpha runs independently of its color, or a partitioned mode, which splits the
+block into two or three subsets with their own endpoints, when the block holds
+colors no one line does. It stores a one-color block exactly. BC5 is two BC4
+blocks, and BC4 keeps the better of its two palettes. BC6H writes whichever of
+its one-region modes 11 to 14 or two-region modes 1 to 10 decodes nearest, the
+two-region modes splitting the block by one of the first 32 of BC7's two-subset
+partitions, and stores a one-value block exactly. On the codec laws' natural
+test image (gradients, noise and a hard-edged disc), BC4 decodes within 2 codes
+of the source (root-mean-square 0.63), BC5 within 8 (0.88), and BC7 within 10
+(2.2); BC6H stays within 8% of each value in smooth blocks and 23% in a corner
+block that ramps from about 0.001 to 1.24, a thousandfold range whose half bits
+bend away from any line two endpoints interpolate. From the
 second level down a block holds four
 or sixteen tiles; the filter never mixes them, but they share the block's
 endpoints, so compression error there is shared within those bounds.
@@ -277,11 +281,13 @@ endpoints, so compression error there is shared within those bounds.
 ray per texel through the evaluator's own march, covering every direction with +Y
 as the octahedron's pole, so a camera below a flying body is covered as well as
 one above a prop. It stores albedo with coverage in alpha (BC7), the normal as an
-octahedral pair (BC5; a miss holds the direction toward the view's camera), and
-the hit's depth across the bounding sphere (BC4; a miss is the far side). Each
-view is a tile of its chains, and the normal and depth mips are weighted by the
-albedo's coverage, so empty texels never bend a silhouette's normals or pull its
-depth. A single billboard is right from one direction only, which no orbiting or
+octahedral pair (BC5; a miss holds the direction toward the view's camera), the
+hit's depth across the bounding sphere (BC4; a miss is the far side), and the
+light the hit's material emits, in the surface textures' linear half-precision
+form (BC6H; a miss emits none), so a placement drawn as its impostor keeps its
+glow. Each view is a tile of its chains, and the normal, depth and emission mips
+are weighted by the albedo's coverage, so empty texels never bend a silhouette's
+normals, pull its depth or dim its glow. A single billboard is right from one direction only, which no orbiting or
 overhead camera satisfies.
 | Tier | Cells a side | Impostor |
 |---|---|---|

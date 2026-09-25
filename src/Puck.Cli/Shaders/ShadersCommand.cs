@@ -12,6 +12,7 @@ internal static class ShadersCommand {
         );
 
         command.Subcommands.Add(item: CompileShaderCommand.Create());
+        command.Subcommands.Add(item: GenerateCommand.Create());
         command.Subcommands.Add(item: InterfaceCommand.Create());
         command.Subcommands.Add(item: PackageCommand.Create());
         command.Subcommands.Add(item: PipelineCommand.Create());

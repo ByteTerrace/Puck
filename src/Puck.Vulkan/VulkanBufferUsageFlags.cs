@@ -18,6 +18,8 @@ public static class VulkanBufferUsageFlags {
     public const uint TransferDestination = 0x00000002;
     /// <summary>The <c>VK_BUFFER_USAGE_TRANSFER_SRC_BIT</c> value.</summary>
     public const uint TransferSource = 0x00000001;
+    /// <summary>The <c>VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT</c> value.</summary>
+    public const uint UniformBuffer = 0x00000010;
     /// <summary>The <c>VK_BUFFER_USAGE_VERTEX_BUFFER_BIT</c> value.</summary>
     public const uint VertexBuffer = 0x00000080;
 }

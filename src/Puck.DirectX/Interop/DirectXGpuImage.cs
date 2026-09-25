@@ -9,7 +9,7 @@ namespace Puck.DirectX.Interop;
 /// A Direct3D 12 <see cref="IGpuImage"/>: a default-heap texture created by <see cref="DirectXTextures"/> with the
 /// resource flags, initial state and optimized clear value its declared usages need. <see cref="ImageHandle"/> is the raw
 /// resource (barriers, copies and readbacks name it); <see cref="ImageViewHandle"/> is a <see cref="DirectXImageView"/>
-/// token the descriptor allocator turns into a UAV or SRV, and a framebuffer into a render-target or depth-stencil view.
+/// token <see cref="DirectXGpuBindings"/> turns into a UAV or SRV, and a framebuffer into a render-target or depth-stencil view.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuImage : IGpuImage {

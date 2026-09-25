@@ -9,13 +9,13 @@ namespace Puck.Hosting;
 /// whose granular services are registered, and the dependency-injection container fills the constructor.
 /// </summary>
 public sealed record GpuComputeServices(
-    IGpuComputeCommandPoolFactory CommandPoolFactory,
-    IGpuComputePipelineFactory ComputePipelineFactory,
-    IGpuComputeRecorder ComputeRecorder,
-    IGpuDescriptorAllocator DescriptorAllocator,
+    IGpuCommandPoolFactory CommandPoolFactory,
+    IGpuPipelineFactory PipelineFactory,
+    IGpuRecorder Recorder,
+    IGpuBindings Bindings,
     IGpuQueueSubmitter QueueSubmitter,
     IGpuShaderModuleFactory ShaderModuleFactory,
-    IGpuStorageBufferFactory StorageBufferFactory,
+    IGpuBufferFactory BufferFactory,
     IGpuImageFactory ImageFactory,
     IGpuSurfaceTransferFactory SurfaceTransferFactory
 ) : IGpuComputeServices;

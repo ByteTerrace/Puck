@@ -99,7 +99,7 @@
             "title": "ShaderPipelineInitialization"
           },
           "sizeBytes": {
-            "description": "Buffer capacity in bytes, a multiple of four, or null for images. A buffer is a raw buffer of 32-bit words, read and written by byte address.",
+            "description": "A fixed buffer\u0027s capacity in bytes, a multiple of four and of StrideBytes, or null for an image or a counted buffer. A buffer without a stride is a raw buffer of 32-bit words, read and written by byte address.",
             "type": [
               "integer",
               "null"
@@ -118,6 +118,43 @@
             "description": "The sample count of an image. Only single-sampled images are executable, so any other count is refused by name.",
             "type": "integer",
             "default": 1
+          },
+          "strideBytes": {
+            "description": "A structured buffer\u0027s element stride in bytes, a positive multiple of four, or null for a raw buffer. Only a package pass reaches a structured buffer.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "count": {
+            "description": "A counted buffer\u0027s size, which scales with a count the host resolves, in place of SizeBytes. Only a package pass reaches a counted buffer.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "basis": {
+                "description": "What the count scales with.",
+                "enum": [
+                  "Extent",
+                  "Instances",
+                  "ProgramWords"
+                ],
+                "title": "ShaderPipelineCountBasis"
+              },
+              "elements": {
+                "description": "The elements per unit, at least one.",
+                "type": "integer",
+                "default": 1
+              }
+            },
+            "required": [
+              "basis"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "ShaderPipelineBufferCount"
           }
         },
         "required": [
@@ -155,19 +192,20 @@
             "type": "string"
           },
           "source": {
-            "description": "The HLSL source\u0027s path, relative to the pipeline document.",
+            "description": "The HLSL source\u0027s path, relative to the pipeline document; a package pass\u0027s package id.",
             "type": "string"
           },
           "entryPoint": {
-            "description": "The entry point compiled by the shader compiler: a compute pass\u0027s kernel, or a graphics pass\u0027s fragment stage.",
+            "description": "The entry point compiled by the shader compiler: a compute pass\u0027s kernel, or a graphics pass\u0027s fragment stage. A package pass compiles nothing and leaves it empty.",
             "type": "string"
           },
           "kind": {
-            "description": "Compute, fullscreen graphics, or indexed geometry.",
+            "description": "Compute, fullscreen graphics, or indexed geometry; a frame graph\u0027s package passes are Package.",
             "enum": [
               "Compute",
               "Fullscreen",
-              "Geometry"
+              "Geometry",
+              "Package"
             ],
             "title": "ShaderPipelinePassKind"
           },
@@ -429,6 +467,58 @@
               "null"
             ],
             "default": null
+          },
+          "dispatch": {
+            "description": "A compute or package pass\u0027s dispatch shape; null means Extent. A graphics pass declares none.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "kind": {
+                "description": "The dispatch shape.",
+                "enum": [
+                  "Extent",
+                  "Groups",
+                  "Indirect"
+                ],
+                "title": "ShaderPipelineDispatchKind"
+              },
+              "groupCountX": {
+                "description": "A Groups dispatch\u0027s group count in x, otherwise one.",
+                "type": "integer",
+                "default": 1
+              },
+              "groupCountY": {
+                "description": "A Groups dispatch\u0027s group count in y, otherwise one.",
+                "type": "integer",
+                "default": 1
+              },
+              "groupCountZ": {
+                "description": "A Groups dispatch\u0027s group count in z, otherwise one.",
+                "type": "integer",
+                "default": 1
+              },
+              "arguments": {
+                "description": "An Indirect dispatch\u0027s buffer version, which the pass reaches in the indirect-argument state and names in neither its inputs nor its outputs; otherwise null.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "argumentsOffsetBytes": {
+                "description": "The byte offset of the three group-count words in Arguments, a multiple of four.",
+                "type": "integer",
+                "default": 0
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "ShaderPipelineDispatch"
           }
         },
         "required": [

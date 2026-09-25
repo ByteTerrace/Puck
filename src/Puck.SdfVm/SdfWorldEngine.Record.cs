@@ -8,7 +8,7 @@ public sealed partial class SdfWorldEngine {
     // upload → sky → mask → beam → cull-args → primary → surface → ambient → views → composite.
     // The hit passes share the indirect bbox and have barriers between consumers; output uses its consumer layout.
     private void Record(uint viewportCount) {
-        var recorder = m_gpu.ComputeRecorder;
+        var recorder = m_gpu.Recorder;
         var commandBuffer = m_commandPools[m_currentSlot].CommandBufferHandle;
         // After the first frame the OUTPUT rests in its handoff layout: shader-readable when a same-device consumer
         // sampled it, or the cross-backend External layout when it was exported. The first frame starts undefined.
@@ -20,32 +20,30 @@ public sealed partial class SdfWorldEngine {
             : GpuImageLayout.ShaderReadOnly
         );
         var restingStage = (m_exportMode
-            ? GpuComputeStage.ComputeShader
-            : GpuComputeStage.FragmentShader | GpuComputeStage.ComputeShader
+            ? GpuStage.ComputeShader
+            : GpuStage.FragmentShader | GpuStage.ComputeShader
         );
         var outputOldLayout = (m_imageInitialized
             ? restingLayout
             : GpuImageLayout.Undefined
         );
         var outputSourceAccess = (m_imageInitialized
-            ? GpuComputeAccess.ShaderRead
-            : GpuComputeAccess.None
+            ? GpuAccess.ShaderRead
+            : GpuAccess.None
         );
         var outputSourceStage = (m_imageInitialized
             ? restingStage
-            : GpuComputeStage.TopOfPipe
+            : GpuStage.TopOfPipe
         );
 
         recorder.BeginCommandBuffer(
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
         m_bufferHazards.Reset();
         // The outer debug-marker group scoping this engine's whole recorded frame (see DebugLabel) — a GPU capture
         // shows the per-pass groups below nested inside it. No-op on a backend without debug labels; pixel-neutral.
         recorder.BeginDebugGroup(
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             label: DebugLabel
         );
 
@@ -59,27 +57,25 @@ public sealed partial class SdfWorldEngine {
 
                 recorder.TransitionImageLayout(
                     commandBufferHandle: commandBuffer,
-                    destinationAccessMask: GpuComputeAccess.ShaderWrite,
-                    destinationStageMask: GpuComputeStage.ComputeShader,
-                    deviceHandle: m_deviceHandle,
+                    destinationAccessMask: GpuAccess.ShaderWrite,
+                    destinationStageMask: GpuStage.ComputeShader,
                     imageHandle: source.ImageHandle,
                     newLayout: GpuImageLayout.General,
                     oldLayout: GpuImageLayout.Undefined,
-                    sourceAccessMask: GpuComputeAccess.None,
-                    sourceStageMask: GpuComputeStage.TopOfPipe
+                    sourceAccessMask: GpuAccess.None,
+                    sourceStageMask: GpuStage.TopOfPipe
                 );
             }
 
             recorder.TransitionImageLayout(
                 commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuComputeAccess.ShaderRead,
-                destinationStageMask: GpuComputeStage.ComputeShader,
-                deviceHandle: m_deviceHandle,
+                destinationAccessMask: GpuAccess.ShaderRead,
+                destinationStageMask: GpuStage.ComputeShader,
                 imageHandle: m_screenSourceFiller.ImageHandle,
                 newLayout: GpuImageLayout.ShaderReadOnly,
                 oldLayout: GpuImageLayout.Undefined,
-                sourceAccessMask: GpuComputeAccess.None,
-                sourceStageMask: GpuComputeStage.TopOfPipe
+                sourceAccessMask: GpuAccess.None,
+                sourceStageMask: GpuStage.TopOfPipe
             );
         }
 
@@ -91,11 +87,10 @@ public sealed partial class SdfWorldEngine {
         // production with GPU execution, not GPU frames); it replaces the host's per-frame whole-device drain.
         recorder.MemoryBarrier(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite,
-            destinationStageMask: GpuComputeStage.ComputeShader,
-            deviceHandle: m_deviceHandle,
-            sourceAccessMask: GpuComputeAccess.ShaderWrite | GpuComputeAccess.IndirectCommandRead,
-            sourceStageMask: GpuComputeStage.ComputeShader | GpuComputeStage.DrawIndirect
+            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
+            destinationStageMask: GpuStage.ComputeShader,
+            sourceAccessMask: GpuAccess.ShaderWrite | GpuAccess.IndirectCommandRead,
+            sourceStageMask: GpuStage.ComputeShader | GpuStage.DrawIndirect
         );
 
         // CARVE-BAKE: prepend this frame's background bake slices before the render passes below. Each baking slot
@@ -133,38 +128,35 @@ public sealed partial class SdfWorldEngine {
             );
             recorder.BeginDebugGroup(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 label: "sky"
             );
-            recorder.BindComputePipeline(
+            recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 pipelineHandle: m_skyPipeline.Handle
             );
-            recorder.BindComputeDescriptorSet(
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_viewsSets[m_currentSlot],
-                deviceHandle: m_deviceHandle,
                 pipelineLayoutHandle: m_skyPipeline.LayoutHandle
             );
             recorder.PushConstants(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 data: m_pushConstant,
-                deviceHandle: m_deviceHandle,
                 offset: 0,
                 pipelineLayoutHandle: m_skyPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
             );
             recorder.Dispatch(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 groupCountX: ((m_width + (WorkgroupEdge - 1)) / WorkgroupEdge),
                 groupCountY: ((m_height + (WorkgroupEdge - 1)) / WorkgroupEdge),
                 groupCountZ: viewportCount
             );
             recorder.EndDebugGroup(
-                commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle
+                commandBufferHandle: commandBuffer
             );
 
             m_work.LeavePass();
@@ -173,11 +165,10 @@ public sealed partial class SdfWorldEngine {
             // Order the sky pass's source-texture writes before the views pass overwrites the same images.
             recorder.MemoryBarrier(
                 commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite,
-                destinationStageMask: GpuComputeStage.ComputeShader,
-                deviceHandle: m_deviceHandle,
-                sourceAccessMask: GpuComputeAccess.ShaderWrite,
-                sourceStageMask: GpuComputeStage.ComputeShader
+                destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
+                destinationStageMask: GpuStage.ComputeShader,
+                sourceAccessMask: GpuAccess.ShaderWrite,
+                sourceStageMask: GpuStage.ComputeShader
             );
 
             // Instance-cull pass (mask-first): one invocation per (tile, viewport) — bins the program's instances
@@ -189,38 +180,35 @@ public sealed partial class SdfWorldEngine {
             );
             recorder.BeginDebugGroup(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 label: "mask"
             );
-            recorder.BindComputePipeline(
+            recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 pipelineHandle: m_instanceCullPipeline.Handle
             );
-            recorder.BindComputeDescriptorSet(
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_instanceCullSets[m_currentSlot],
-                deviceHandle: m_deviceHandle,
                 pipelineLayoutHandle: m_instanceCullPipeline.LayoutHandle
             );
             recorder.PushConstants(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 data: m_pushConstant,
-                deviceHandle: m_deviceHandle,
                 offset: 0,
                 pipelineLayoutHandle: m_instanceCullPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
             );
             recorder.Dispatch(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 groupCountX: ((m_tileGridX + (WorkgroupEdge - 1)) / WorkgroupEdge),
                 groupCountY: ((m_tileGridY + (WorkgroupEdge - 1)) / WorkgroupEdge),
                 groupCountZ: viewportCount
             );
             recorder.EndDebugGroup(
-                commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle
+                commandBufferHandle: commandBuffer
             );
 
             m_work.LeavePass();
@@ -233,38 +221,35 @@ public sealed partial class SdfWorldEngine {
             );
             recorder.BeginDebugGroup(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 label: "beam"
             );
-            recorder.BindComputePipeline(
+            recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 pipelineHandle: m_beamPipeline.Handle
             );
-            recorder.BindComputeDescriptorSet(
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_beamSets[m_currentSlot],
-                deviceHandle: m_deviceHandle,
                 pipelineLayoutHandle: m_beamPipeline.LayoutHandle
             );
             recorder.PushConstants(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 data: m_pushConstant,
-                deviceHandle: m_deviceHandle,
                 offset: 0,
                 pipelineLayoutHandle: m_beamPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
             );
             recorder.Dispatch(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 groupCountX: m_tileGridX,
                 groupCountY: m_tileGridY,
                 groupCountZ: viewportCount
             );
             recorder.EndDebugGroup(
-                commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle
+                commandBufferHandle: commandBuffer
             );
 
             m_work.LeavePass();
@@ -278,38 +263,35 @@ public sealed partial class SdfWorldEngine {
             );
             recorder.BeginDebugGroup(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 label: "cull-args"
             );
-            recorder.BindComputePipeline(
+            recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 pipelineHandle: m_cullArgsPipeline.Handle
             );
-            recorder.BindComputeDescriptorSet(
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_cullArgsSet,
-                deviceHandle: m_deviceHandle,
                 pipelineLayoutHandle: m_cullArgsPipeline.LayoutHandle
             );
             recorder.PushConstants(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 data: m_pushConstant,
-                deviceHandle: m_deviceHandle,
                 offset: 0,
                 pipelineLayoutHandle: m_cullArgsPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
             );
             recorder.Dispatch(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 groupCountX: 1,
                 groupCountY: 1,
                 groupCountZ: 1
             );
             recorder.EndDebugGroup(
-                commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle
+                commandBufferHandle: commandBuffer
             );
 
             m_work.LeavePass();
@@ -359,24 +341,23 @@ public sealed partial class SdfWorldEngine {
             );
             recorder.BeginDebugGroup(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 label: "views"
             );
-            recorder.BindComputePipeline(
+            recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 pipelineHandle: viewsPipeline.Handle
             );
-            recorder.BindComputeDescriptorSet(
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_viewsSets[m_currentSlot],
-                deviceHandle: m_deviceHandle,
                 pipelineLayoutHandle: viewsPipeline.LayoutHandle
             );
             recorder.PushConstants(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 data: m_pushConstant,
-                deviceHandle: m_deviceHandle,
                 offset: 0,
                 pipelineLayoutHandle: viewsPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
@@ -384,12 +365,10 @@ public sealed partial class SdfWorldEngine {
             recorder.DispatchIndirect(
                 argumentBufferHandle: m_viewsArgsBuffer.BufferHandle,
                 argumentBufferOffset: 0,
-                commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle
+                commandBufferHandle: commandBuffer
             );
             recorder.EndDebugGroup(
-                commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle
+                commandBufferHandle: commandBuffer
             );
 
             m_work.LeavePass();
@@ -398,11 +377,10 @@ public sealed partial class SdfWorldEngine {
             // Make Stage 1's source-texture writes visible to Stage 2's reads.
             recorder.MemoryBarrier(
                 commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuComputeAccess.ShaderRead,
-                destinationStageMask: GpuComputeStage.ComputeShader,
-                deviceHandle: m_deviceHandle,
-                sourceAccessMask: GpuComputeAccess.ShaderWrite,
-                sourceStageMask: GpuComputeStage.ComputeShader
+                destinationAccessMask: GpuAccess.ShaderRead,
+                destinationStageMask: GpuStage.ComputeShader,
+                sourceAccessMask: GpuAccess.ShaderWrite,
+                sourceStageMask: GpuStage.ComputeShader
             );
         } else {
             // SKIPPED FRAME: no render passes ran; fall through to the composite. The retained tile buffer + source
@@ -419,9 +397,8 @@ public sealed partial class SdfWorldEngine {
 
         recorder.TransitionImageLayout(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderWrite,
-            destinationStageMask: GpuComputeStage.ComputeShader,
-            deviceHandle: m_deviceHandle,
+            destinationAccessMask: GpuAccess.ShaderWrite,
+            destinationStageMask: GpuStage.ComputeShader,
             imageHandle: m_storageImage.ImageHandle,
             newLayout: GpuImageLayout.General,
             oldLayout: outputOldLayout,
@@ -436,24 +413,23 @@ public sealed partial class SdfWorldEngine {
         );
         recorder.BeginDebugGroup(
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             label: "composite"
         );
-        recorder.BindComputePipeline(
+        recorder.BindPipeline(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             pipelineHandle: m_compositePipeline.Handle
         );
-        recorder.BindComputeDescriptorSet(
+        recorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_compositeSets[m_currentSlot],
-            deviceHandle: m_deviceHandle,
             pipelineLayoutHandle: m_compositePipeline.LayoutHandle
         );
         recorder.PushConstants(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             data: m_compositePush,
-            deviceHandle: m_deviceHandle,
             offset: 0,
             pipelineLayoutHandle: m_compositePipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
@@ -461,12 +437,10 @@ public sealed partial class SdfWorldEngine {
         recorder.DispatchIndirect(
             argumentBufferHandle: m_compositeArgsBuffer.BufferHandle,
             argumentBufferOffset: 0,
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
         recorder.EndDebugGroup(
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
 
         m_work.LeavePass();
@@ -476,23 +450,20 @@ public sealed partial class SdfWorldEngine {
         // per-resource state tracking the single source of truth.
         recorder.TransitionImageLayout(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderRead,
+            destinationAccessMask: GpuAccess.ShaderRead,
             destinationStageMask: restingStage,
-            deviceHandle: m_deviceHandle,
             imageHandle: m_storageImage.ImageHandle,
             newLayout: restingLayout,
             oldLayout: GpuImageLayout.General,
-            sourceAccessMask: GpuComputeAccess.ShaderWrite,
-            sourceStageMask: GpuComputeStage.ComputeShader
+            sourceAccessMask: GpuAccess.ShaderWrite,
+            sourceStageMask: GpuStage.ComputeShader
         );
 
         recorder.EndDebugGroup(
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         ); // close the outer per-engine group
         recorder.EndCommandBuffer(
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
 
         m_imageInitialized = true;
@@ -503,7 +474,7 @@ public sealed partial class SdfWorldEngine {
     // nothing, and a frame with nothing owed binds no pipeline. The push constant array is reused across the dispatches
     // because both backends copy push data at record time.
     private void RecordFrameUpload(nint commandBuffer) {
-        var recorder = m_gpu.ComputeRecorder;
+        var recorder = m_gpu.Recorder;
         var push = MemoryMarshal.Cast<byte, uint>(span: m_frameUploadPush.AsSpan());
         var bound = false;
 
@@ -517,12 +488,11 @@ public sealed partial class SdfWorldEngine {
             if (!bound) {
                 recorder.BeginDebugGroup(
                     commandBufferHandle: commandBuffer,
-                    deviceHandle: m_deviceHandle,
                     label: "upload"
                 );
-                recorder.BindComputePipeline(
+                recorder.BindPipeline(
+                    bindPoint: GpuBindPoint.Compute,
                     commandBufferHandle: commandBuffer,
-                    deviceHandle: m_deviceHandle,
                     pipelineHandle: m_frameUploadPipeline.Handle
                 );
                 bound = true;
@@ -532,10 +502,10 @@ public sealed partial class SdfWorldEngine {
                 commandBuffer: commandBuffer,
                 pass: FrameUploadPasses[table]
             );
-            recorder.BindComputeDescriptorSet(
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_frameUploadSets[((m_currentSlot * FrameUploadTableCount) + table)],
-                deviceHandle: m_deviceHandle,
                 pipelineLayoutHandle: m_frameUploadPipeline.LayoutHandle
             );
 
@@ -548,16 +518,15 @@ public sealed partial class SdfWorldEngine {
             // FrameUploadPush { count, runCount, offset, tableBase } — KEEP IN SYNC with sdf-frame-upload.comp.hlsl.
             push[0] = count; push[1] = ((uint)owed.Count); push[2] = ((uint)owed.Start(index: 0)); push[3] = FrameUploadRunTableWords;
             recorder.PushConstants(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 data: m_frameUploadPush,
-                deviceHandle: m_deviceHandle,
                 offset: 0,
                 pipelineLayoutHandle: m_frameUploadPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
             );
             recorder.Dispatch(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 groupCountX: ((count + (FrameUploadWorkgroupSize - 1)) / FrameUploadWorkgroupSize),
                 groupCountY: 1,
                 groupCountZ: 1
@@ -567,8 +536,7 @@ public sealed partial class SdfWorldEngine {
 
         if (bound) {
             recorder.EndDebugGroup(
-                commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle
+                commandBufferHandle: commandBuffer
             );
         }
     }
@@ -584,7 +552,7 @@ public sealed partial class SdfWorldEngine {
         }
 
         var (slot, count, voxels) = m_brickUploads.Dequeue();
-        var recorder = m_gpu.ComputeRecorder;
+        var recorder = m_gpu.Recorder;
         var push = MemoryMarshal.Cast<byte, uint>(span: m_brickUploadPush.AsSpan());
 
         staging.Write<float>(data: voxels.AsSpan(
@@ -599,38 +567,35 @@ public sealed partial class SdfWorldEngine {
         );
         recorder.BeginDebugGroup(
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             label: "brick-upload"
         );
-        recorder.BindComputePipeline(
+        recorder.BindPipeline(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             pipelineHandle: m_brickUploadPipeline.Handle
         );
-        recorder.BindComputeDescriptorSet(
+        recorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_brickUploadSets[m_currentSlot],
-            deviceHandle: m_deviceHandle,
             pipelineLayoutHandle: m_brickUploadPipeline.LayoutHandle
         );
         recorder.PushConstants(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             data: m_brickUploadPush,
-            deviceHandle: m_deviceHandle,
             offset: 0,
             pipelineLayoutHandle: m_brickUploadPipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
         );
         recorder.Dispatch(
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             groupCountX: ((((uint)count) + (BrickBakeWorkgroupSize - 1)) / BrickBakeWorkgroupSize),
             groupCountY: 1,
             groupCountZ: 1
         );
         recorder.EndDebugGroup(
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
 
         m_brickStates[slot] = BrickBakeState.Ready;
@@ -645,7 +610,7 @@ public sealed partial class SdfWorldEngine {
             return;
         }
 
-        var recorder = m_gpu.ComputeRecorder;
+        var recorder = m_gpu.Recorder;
         var push = MemoryMarshal.Cast<byte, uint>(span: m_brickBakePush.AsSpan());
         var recorded = false;
 
@@ -674,35 +639,33 @@ public sealed partial class SdfWorldEngine {
                 );
                 recorder.BeginDebugGroup(
                     commandBufferHandle: commandBuffer,
-                    deviceHandle: m_deviceHandle,
                     label: "brick-bake"
                 );
             }
 
             push[0] = ((uint)m_brickVoxelCursor[slot]); push[1] = ((uint)sliceCount); push[2] = 0u; push[3] = 0u;
 
-            recorder.BindComputePipeline(
+            recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 pipelineHandle: m_brickBakePipeline.Handle
             );
-            recorder.BindComputeDescriptorSet(
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_brickBakeSets[slot],
-                deviceHandle: m_deviceHandle,
                 pipelineLayoutHandle: m_brickBakePipeline.LayoutHandle
             );
             recorder.PushConstants(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 data: m_brickBakePush,
-                deviceHandle: m_deviceHandle,
                 offset: 0,
                 pipelineLayoutHandle: m_brickBakePipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
             );
             recorder.Dispatch(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 groupCountX: ((((uint)sliceCount) + (BrickBakeWorkgroupSize - 1)) / BrickBakeWorkgroupSize),
                 groupCountY: 1,
                 groupCountZ: 1
@@ -719,8 +682,7 @@ public sealed partial class SdfWorldEngine {
 
         if (recorded) {
             recorder.EndDebugGroup(
-                commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle
+                commandBufferHandle: commandBuffer
             );
         }
     }

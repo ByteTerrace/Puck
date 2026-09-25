@@ -34,9 +34,9 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
     public void ALeakedObjectIsReportedLiveWhenTheDeviceIsTornDown() {
         var output = new StringWriter();
         var context = DebugContext(output: output);
-        var leaked = new DirectXGpuStorageBufferFactory().Create(
-            deviceContext: context,
-            sizeBytes: 256
+        var leaked = new DirectXGpuBufferFactory(deviceContext: context).CreateHostVisible(
+            sizeBytes: 256,
+            usage: GpuBufferUsage.Storage
         );
 
         try {
@@ -70,9 +70,9 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
         var output = new StringWriter();
         var context = DebugContext(output: output);
 
-        new DirectXGpuStorageBufferFactory().Create(
-            deviceContext: context,
-            sizeBytes: 256
+        new DirectXGpuBufferFactory(deviceContext: context).CreateHostVisible(
+            sizeBytes: 256,
+            usage: GpuBufferUsage.Storage
         ).Dispose();
         context.Dispose();
 

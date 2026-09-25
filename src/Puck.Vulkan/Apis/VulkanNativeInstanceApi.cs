@@ -21,7 +21,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     // Request Vulkan 1.3 as the hard floor: SPIR-V 1.6 is core in 1.3, and every Puck kernel now
     // compiles at -fspv-target-env=vulkan1.3, so a lower instance would refuse those modules at
     // vkCreateShaderModule. 1.3 also makes core vkGetPhysicalDeviceFeatures2, buffer-device-address,
-    // and subgroup-size-control available. All four supported GPUs (RTX 2070, RTX 4070, Steam Machine
+    // and subgroup-size-control available. All four supported GPUs (RTX 2060, RTX 4070, Steam Machine
     // [RDNA3], Steam Deck [RDNA2]) expose 1.3 on current drivers; pre-1.1 loaders that would reject a
     // higher requested version are effectively extinct. The device-side floor is enforced separately in
     // VulkanPhysicalDeviceSelector (a device may report a lower ApiVersion than the loader).

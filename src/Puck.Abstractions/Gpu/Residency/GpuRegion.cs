@@ -54,8 +54,7 @@ public sealed class GpuRegion : IDisposable {
     private readonly byte[] m_contents;
     private readonly IGpuComputePipeline m_copyPipeline;
     private readonly nint[] m_copySets;
-    private readonly IGpuDescriptorAllocator m_descriptors;
-    private readonly nint m_deviceHandle;
+    private readonly IGpuBindings m_bindings;
     private readonly IGpuBuffer? m_deviceLocal;
 
     private readonly List<IGpuBuffer> m_ownedBuffers = [];
@@ -65,7 +64,7 @@ public sealed class GpuRegion : IDisposable {
 
     private readonly byte[] m_push = new byte[CopyPushByteLength];
 
-    private readonly IGpuComputeRecorder m_recorder;
+    private readonly IGpuRecorder m_recorder;
     private readonly uint[] m_runTable;
     private readonly IGpuStorageBuffer[] m_hostBuffers;
 
@@ -81,22 +80,20 @@ public sealed class GpuRegion : IDisposable {
     /// <param name="policy">The residency policy, normally <see cref="GpuResidency.Select"/>'s choice.</param>
     /// <param name="byteCount">The region's size in bytes; positive and a whole number of uints.</param>
     /// <param name="slotCount">The caller's frame slots; at least one.</param>
-    /// <param name="device">The device the buffers live on.</param>
     /// <param name="buffers">The factory that creates the host-visible and device-local buffers.</param>
-    /// <param name="descriptors">The allocator the staged policy's copy sets come from.</param>
+    /// <param name="bindings">The bindings service the staged policy's copy sets come from.</param>
     /// <param name="recorder">The recorder the staged policy's copy is recorded through.</param>
     /// <param name="copyPipeline">The copy kernel's pipeline, built from <see cref="CopyBindings"/> and a
     /// <see cref="CopyPushByteLength"/>-byte push range; read only under the staged policy. The caller owns it.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="device"/>, <paramref name="buffers"/>,
-    /// <paramref name="descriptors"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
+    /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
+    /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> is not a defined policy,
     /// <paramref name="byteCount"/> is not positive or not a whole number of uints, <paramref name="slotCount"/> is not
     /// positive, or a staged region holds more than <see cref="MaxStagedWords"/> words.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuDeviceContext device, IGpuStorageBufferFactory buffers, IGpuDescriptorAllocator descriptors, IGpuComputeRecorder recorder, IGpuComputePipeline copyPipeline) {
-        ArgumentNullException.ThrowIfNull(device);
+    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) {
         ArgumentNullException.ThrowIfNull(buffers);
-        ArgumentNullException.ThrowIfNull(descriptors);
+        ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
         ArgumentNullException.ThrowIfNull(copyPipeline);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: byteCount);
@@ -140,8 +137,7 @@ public sealed class GpuRegion : IDisposable {
             ? slotCount
             : 0
         )];
-        m_descriptors = descriptors;
-        m_deviceHandle = device.DeviceHandle;
+        m_bindings = bindings;
         m_recorder = recorder;
         m_runTable = new uint[((policy == GpuResidencyPolicy.Staged)
             ? CopyRunTableWords
@@ -178,17 +174,17 @@ public sealed class GpuRegion : IDisposable {
             );
 
             for (var index = 0; (index < m_hostBuffers.Length); index++) {
-                m_hostBuffers[index] = buffers.Create(
-                    deviceContext: device,
-                    sizeBytes: hostBytes
+                m_hostBuffers[index] = buffers.CreateHostVisible(
+                    sizeBytes: hostBytes,
+                    usage: GpuBufferUsage.Storage
                 );
                 m_ownedBuffers.Add(item: m_hostBuffers[index]);
             }
 
             if (policy == GpuResidencyPolicy.Staged) {
                 m_deviceLocal = buffers.CreateDeviceLocal(
-                    deviceContext: device,
-                    sizeBytes: ((ulong)byteCount)
+                    sizeBytes: ((ulong)byteCount),
+                    usage: GpuBufferUsage.Storage
                 );
                 m_ownedBuffers.Add(item: m_deviceLocal);
                 CreateCopySets();
@@ -248,13 +244,10 @@ public sealed class GpuRegion : IDisposable {
 
         m_disposed = true;
 
-        if (m_copyPool != 0) {
-            m_descriptors.DestroyPool(
-                deviceHandle: m_deviceHandle,
-                poolHandle: m_copyPool
-            );
-            m_copyPool = 0;
-        }
+        m_bindings.DestroyPool(
+            poolHandle: m_copyPool
+        );
+        m_copyPool = 0;
 
         foreach (var buffer in m_ownedBuffers) {
             buffer.Dispose();
@@ -336,28 +329,27 @@ public sealed class GpuRegion : IDisposable {
         push[1] = ((uint)owed.Count);
         push[2] = ((uint)owed.Start(index: 0));
         push[3] = CopyRunTableWords;
-        m_recorder.BindComputePipeline(
+        m_recorder.BindPipeline(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             pipelineHandle: m_copyPipeline.Handle
         );
-        m_recorder.BindComputeDescriptorSet(
+        m_recorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_copySets[slot],
-            deviceHandle: m_deviceHandle,
             pipelineLayoutHandle: m_copyPipeline.LayoutHandle
         );
         m_recorder.PushConstants(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             data: m_push,
-            deviceHandle: m_deviceHandle,
             offset: 0,
             pipelineLayoutHandle: m_copyPipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
         );
         m_recorder.Dispatch(
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             groupCountX: ((count + (CopyWorkgroupSize - 1U)) / CopyWorkgroupSize),
             groupCountY: 1,
             groupCountZ: 1
@@ -426,31 +418,31 @@ public sealed class GpuRegion : IDisposable {
             array: sets,
             value: CopyBindings
         );
-        m_copyPool = m_descriptors.CreatePool(
-            deviceHandle: m_deviceHandle,
+        m_copyPool = m_bindings.CreatePool(
             sizes: GpuDescriptorPoolSizes.ForSets(sets: sets)
         );
 
         for (var slot = 0; (slot < SlotCount); slot++) {
-            var set = m_descriptors.AllocateSet(
+            var set = m_bindings.AllocateSet(
                 descriptorSetLayoutHandle: m_copyPipeline.DescriptorSetLayoutHandle,
-                deviceHandle: m_deviceHandle,
                 poolHandle: m_copyPool
             );
 
-            m_descriptors.WriteStorageBufferReadOnly(
+            m_bindings.WriteBuffer(
+                access: GpuBufferAccess.Read,
                 binding: CopySourceBinding,
                 bufferHandle: m_hostBuffers[slot].BufferHandle,
                 bufferSize: m_hostBuffers[slot].SizeBytes,
                 descriptorSetHandle: set,
-                deviceHandle: m_deviceHandle
+                elementStride: sizeof(uint)
             );
-            m_descriptors.WriteStorageBufferReadWrite(
+            m_bindings.WriteBuffer(
+                access: GpuBufferAccess.ReadWrite,
                 binding: CopyDestinationBinding,
                 bufferHandle: m_deviceLocal!.BufferHandle,
                 bufferSize: m_deviceLocal.SizeBytes,
                 descriptorSetHandle: set,
-                deviceHandle: m_deviceHandle
+                elementStride: sizeof(uint)
             );
             m_copySets[slot] = set;
         }

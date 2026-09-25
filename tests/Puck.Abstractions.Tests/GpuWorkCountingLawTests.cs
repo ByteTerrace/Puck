@@ -6,22 +6,17 @@ namespace Puck.Abstractions.Tests;
 
 /// <summary>
 /// Laws for <see cref="GpuWorkCounting"/>: every member of every wrapped interface is passed through exactly once and
-/// counted exactly once, into the kind it names and no other; the wrapped fence never reaches the backend; and a
-/// wrapper keeps exactly the optional capabilities of what it wraps.
+/// counted exactly once, into the kind it names and no other; and the wrapped fence never reaches the backend.
 /// </summary>
 public sealed class GpuWorkCountingLawTests {
     private static readonly Type[] WrappedInterfaces = [
-        typeof(IGpuBufferInitializationRecorder),
-        typeof(IGpuCommandRecorder),
-        typeof(IGpuComputePipelineFactory),
-        typeof(IGpuComputeRecorder),
-        typeof(IGpuDescriptorAllocator),
-        typeof(IGpuImageInitializationRecorder),
+        typeof(IGpuRecorder),
         typeof(IGpuPipelineFactory),
+        typeof(IGpuBindings),
         typeof(IGpuQueueSubmitter),
         typeof(IGpuShaderModuleFactory),
         typeof(IGpuStorageBuffer),
-        typeof(IGpuStorageBufferFactory),
+        typeof(IGpuBufferFactory),
         typeof(IGpuImageFactory),
         typeof(IGpuSubmissionFence),
     ];
@@ -43,8 +38,7 @@ public sealed class GpuWorkCountingLawTests {
 
         act(obj: rig);
         rig.Services.QueueSubmitter.SubmitAndWait(
-            commandBufferHandles: [],
-            deviceContext: rig.Gpu
+            commandBufferHandles: []
         );
 
         Assert.Equal(
@@ -92,12 +86,11 @@ public sealed class GpuWorkCountingLawTests {
     [Fact]
     public void FenceIsUnwrappedBeforeItReachesTheBackend() {
         var rig = Rig.Create();
-        var fence = rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu);
+        var fence = rig.Services.QueueSubmitter.CreateSubmissionFence();
 
         Assert.IsNotType<FakeGpu.FakeFence>(@object: fence);
         rig.Services.QueueSubmitter.Submit(
             commandBufferHandles: [],
-            deviceContext: rig.Gpu,
             fence: fence
         );
         Assert.IsType<FakeGpu.FakeFence>(@object: rig.Gpu.LastSubmittedFence);
@@ -121,98 +114,62 @@ public sealed class GpuWorkCountingLawTests {
         var rig = Rig.Create();
 
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(ledger: rig.Ledger, services: rig.Services));
-        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(ledger: rig.Ledger, recorder: rig.Services.ComputeRecorder));
-        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(ledger: rig.Ledger, recorder: rig.Graphics));
-        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(allocator: rig.Services.DescriptorAllocator, ledger: rig.Ledger));
+        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(ledger: rig.Ledger, recorder: rig.Services.Recorder));
+        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(bindings: rig.Services.Bindings, ledger: rig.Ledger));
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(ledger: rig.Ledger, submitter: rig.Services.QueueSubmitter));
-        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(factory: rig.Services.StorageBufferFactory, ledger: rig.Ledger));
+        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(factory: rig.Services.BufferFactory, ledger: rig.Ledger));
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(factory: rig.Pipelines, ledger: rig.Ledger));
-    }
-    [Fact]
-    public void ComputeRecorderWrapperKeepsExactlyTheClearCapabilitiesOfItsInner() {
-        var ledger = new GpuWorkLedger(
-            framesInFlight: 1,
-            name: "gpu.test"
-        );
-        IGpuComputeRecorder[] inners = [new BareRecorder(), new ImageClearRecorder(), new BufferClearRecorder(), new BothClearRecorder()];
-
-        foreach (var inner in inners) {
-            var wrapped = GpuWorkCounting.Wrap(
-                ledger: ledger,
-                recorder: inner
-            );
-
-            Assert.Equal(
-                actual: (wrapped is IGpuImageInitializationRecorder),
-                expected: (inner is IGpuImageInitializationRecorder)
-            );
-            Assert.Equal(
-                actual: (wrapped is IGpuBufferInitializationRecorder),
-                expected: (inner is IGpuBufferInitializationRecorder)
-            );
-        }
     }
 
     private static Dictionary<string, (Action<Rig> Act, (WorkKind Kind, long Amount)[] Expected)> Cases() {
         (WorkKind, long)[] none = [];
 
         return new(comparer: StringComparer.Ordinal) {
-            ["IGpuBufferInitializationRecorder.ClearStorageBuffer"] = (rig => ((IGpuBufferInitializationRecorder)rig.Services.ComputeRecorder).ClearStorageBuffer(bufferHandle: 3, commandBufferHandle: 2, deviceHandle: 1, sizeBytes: 16UL), [(GpuWork.Clears, 1L)]),
-            ["IGpuCommandRecorder.BeginCommandBuffer"] = (rig => rig.Graphics.BeginCommandBuffer(commandBufferHandle: 2, deviceHandle: 1), [(GpuWork.CommandBuffers, 1L)]),
-            ["IGpuCommandRecorder.BeginDebugGroup"] = (rig => rig.Graphics.BeginDebugGroup(commandBufferHandle: 2, deviceHandle: 1, label: "pass"), none),
-            ["IGpuCommandRecorder.BeginRenderPass"] = (rig => rig.Graphics.BeginRenderPass(commandBufferHandle: 2, deviceHandle: 1, framebuffer: null!), [(GpuWork.RenderPasses, 1L)]),
-            ["IGpuCommandRecorder.BindDescriptorSet"] = (rig => rig.Graphics.BindDescriptorSet(commandBufferHandle: 2, descriptorSetHandle: 4, deviceHandle: 1, pipelineLayoutHandle: 3), [(GpuWork.DescriptorSetBinds, 1L)]),
-            ["IGpuCommandRecorder.BindGraphicsPipeline"] = (rig => rig.Graphics.BindGraphicsPipeline(commandBufferHandle: 2, deviceHandle: 1, pipelineHandle: 3), [(GpuWork.PipelineBinds, 1L)]),
-            ["IGpuCommandRecorder.BindIndexBuffer"] = (rig => rig.Graphics.BindIndexBuffer(bufferHandle: 3, commandBufferHandle: 2, deviceHandle: 1, format: GpuIndexFormat.UInt16, offsetBytes: 24, sizeBytes: 12), none),
-            ["IGpuCommandRecorder.BindVertexBuffer"] = (rig => rig.Graphics.BindVertexBuffer(bufferHandle: 3, commandBufferHandle: 2, deviceHandle: 1, sizeBytes: 24, strideBytes: 8), none),
-            ["IGpuCommandRecorder.Draw"] = (rig => rig.Graphics.Draw(commandBufferHandle: 2, deviceHandle: 1, parameters: new GpuDrawParameters(instanceCount: 1, vertexCount: 3)), [(GpuWork.Draws, 1L)]),
-            ["IGpuCommandRecorder.DrawIndexed"] = (rig => rig.Graphics.DrawIndexed(commandBufferHandle: 2, deviceHandle: 1, indexCount: 6), [(GpuWork.Draws, 1L)]),
-            ["IGpuCommandRecorder.EndCommandBuffer"] = (rig => rig.Graphics.EndCommandBuffer(commandBufferHandle: 2, deviceHandle: 1), none),
-            ["IGpuCommandRecorder.EndDebugGroup"] = (rig => rig.Graphics.EndDebugGroup(commandBufferHandle: 2, deviceHandle: 1), none),
-            ["IGpuCommandRecorder.EndRenderPass"] = (rig => rig.Graphics.EndRenderPass(commandBufferHandle: 2, deviceHandle: 1), none),
-            ["IGpuCommandRecorder.PushConstants"] = (rig => rig.Graphics.PushConstants(commandBufferHandle: 2, data: new byte[12], deviceHandle: 1, offset: 0, pipelineLayoutHandle: 3, stageFlags: GpuShaderStage.Fragment), [(GpuWork.PushConstantBytes, 12L)]),
-            ["IGpuCommandRecorder.SetScissor"] = (rig => rig.Graphics.SetScissor(commandBufferHandle: 2, deviceHandle: 1, height: 4, width: 4, x: 0, y: 0), none),
-            ["IGpuComputePipelineFactory.Create"] = (rig => rig.Services.ComputePipelineFactory.Create(computeShaderModule: null!, description: null!, deviceContext: rig.Gpu).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
-            ["IGpuComputeRecorder.BeginCommandBuffer"] = (rig => rig.Services.ComputeRecorder.BeginCommandBuffer(commandBufferHandle: 2, deviceHandle: 1), [(GpuWork.CommandBuffers, 1L)]),
-            ["IGpuComputeRecorder.BeginDebugGroup"] = (rig => rig.Services.ComputeRecorder.BeginDebugGroup(commandBufferHandle: 2, deviceHandle: 1, label: "pass"), none),
-            ["IGpuComputeRecorder.BindComputeDescriptorSet"] = (rig => rig.Services.ComputeRecorder.BindComputeDescriptorSet(commandBufferHandle: 2, descriptorSetHandle: 4, deviceHandle: 1, pipelineLayoutHandle: 3), [(GpuWork.DescriptorSetBinds, 1L)]),
-            ["IGpuComputeRecorder.BindComputePipeline"] = (rig => rig.Services.ComputeRecorder.BindComputePipeline(commandBufferHandle: 2, deviceHandle: 1, pipelineHandle: 3), [(GpuWork.PipelineBinds, 1L)]),
-            ["IGpuComputeRecorder.Dispatch"] = (rig => rig.Services.ComputeRecorder.Dispatch(commandBufferHandle: 2, deviceHandle: 1, groupCountX: 8, groupCountY: 8, groupCountZ: 1), [(GpuWork.Dispatches, 1L)]),
-            ["IGpuComputeRecorder.DispatchIndirect"] = (rig => rig.Services.ComputeRecorder.DispatchIndirect(argumentBufferHandle: 3, argumentBufferOffset: 0UL, commandBufferHandle: 2, deviceHandle: 1), [(GpuWork.IndirectDispatches, 1L)]),
-            ["IGpuComputeRecorder.EndCommandBuffer"] = (rig => rig.Services.ComputeRecorder.EndCommandBuffer(commandBufferHandle: 2, deviceHandle: 1), none),
-            ["IGpuComputeRecorder.EndDebugGroup"] = (rig => rig.Services.ComputeRecorder.EndDebugGroup(commandBufferHandle: 2, deviceHandle: 1), none),
-            ["IGpuComputeRecorder.MemoryBarrier"] = (rig => rig.Services.ComputeRecorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, deviceHandle: 1, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader), [(GpuWork.MemoryBarriers, 1L)]),
-            ["IGpuComputeRecorder.PushConstants"] = (rig => rig.Services.ComputeRecorder.PushConstants(commandBufferHandle: 2, data: new byte[8], deviceHandle: 1, offset: 0, pipelineLayoutHandle: 3, stageFlags: GpuShaderStage.Compute), [(GpuWork.PushConstantBytes, 8L)]),
-            ["IGpuComputeRecorder.TransitionBuffer"] = (rig => rig.Services.ComputeRecorder.TransitionBuffer(bufferHandle: 3, commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, deviceHandle: 1, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader), [(GpuWork.BufferBarriers, 1L)]),
-            ["IGpuComputeRecorder.TransitionImageLayout"] = (rig => rig.Services.ComputeRecorder.TransitionImageLayout(commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, deviceHandle: 1, imageHandle: 3, newLayout: GpuImageLayout.General, oldLayout: GpuImageLayout.Undefined, sourceAccessMask: GpuComputeAccess.None, sourceStageMask: GpuComputeStage.TopOfPipe), [(GpuWork.ImageBarriers, 1L)]),
-            ["IGpuDescriptorAllocator.AllocateSet"] = (rig => rig.Services.DescriptorAllocator.AllocateSet(descriptorSetLayoutHandle: 3, deviceHandle: 1, poolHandle: 2), [(GpuWork.DescriptorSetsCreated, 1L)]),
-            ["IGpuDescriptorAllocator.CreatePool"] = (rig => rig.Services.DescriptorAllocator.CreatePool(deviceHandle: 1, sizes: new GpuDescriptorPoolSizes(CombinedImageSamplerCount: 0, MaxSets: 1, StorageBufferCount: 1, StorageImageCount: 0)), [(GpuWork.DescriptorPoolsCreated, 1L)]),
-            ["IGpuDescriptorAllocator.CreateSampler"] = (rig => rig.Services.DescriptorAllocator.CreateSampler(deviceHandle: 1, filter: GpuSamplerFilter.Nearest), none),
-            ["IGpuDescriptorAllocator.DestroyPool"] = (rig => rig.Services.DescriptorAllocator.DestroyPool(deviceHandle: 1, poolHandle: 2), none),
-            ["IGpuDescriptorAllocator.DestroySampler"] = (rig => rig.Services.DescriptorAllocator.DestroySampler(deviceHandle: 1, samplerHandle: 2), none),
-            ["IGpuDescriptorAllocator.WriteCombinedImageSampler"] = (rig => rig.Services.DescriptorAllocator.WriteCombinedImageSampler(arrayElement: 0, binding: 0, descriptorSetHandle: 4, deviceHandle: 1, imageViewHandle: 5, samplerHandle: 6), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuDescriptorAllocator.WriteRawBuffer"] = (rig => rig.Services.DescriptorAllocator.WriteRawBuffer(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, deviceHandle: 1, writable: true), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuDescriptorAllocator.WriteStorageBuffer"] = (rig => rig.Services.DescriptorAllocator.WriteStorageBuffer(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, deviceHandle: 1), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuDescriptorAllocator.WriteStorageBufferReadOnly"] = (rig => rig.Services.DescriptorAllocator.WriteStorageBufferReadOnly(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, deviceHandle: 1), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuDescriptorAllocator.WriteStorageBufferReadWrite"] = (rig => rig.Services.DescriptorAllocator.WriteStorageBufferReadWrite(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, deviceHandle: 1), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuDescriptorAllocator.WriteStorageImage"] = (rig => rig.Services.DescriptorAllocator.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, deviceHandle: 1, imageViewHandle: 5), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuImageInitializationRecorder.ClearStorageImage"] = (rig => ((IGpuImageInitializationRecorder)rig.Services.ComputeRecorder).ClearStorageImage(commandBufferHandle: 2, deviceHandle: 1, format: GpuPixelFormat.R8G8B8A8Unorm, imageHandle: 3), [(GpuWork.Clears, 1L)]),
-            ["IGpuPipelineFactory.Create"] = (rig => rig.Pipelines.Create(description: null!, deviceContext: rig.Gpu, fragmentShaderModule: null!, height: 4, renderPass: null!, vertexShaderModule: null!, width: 4).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
-            ["IGpuQueueSubmitter.CreateSubmissionFence"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu), none),
-            ["IGpuQueueSubmitter.Submit"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: [], deviceContext: rig.Gpu), none),
-            ["IGpuQueueSubmitter.Submit(fence)"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: [], deviceContext: rig.Gpu, fence: rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu)), none),
+            ["IGpuRecorder.BeginCommandBuffer"] = (rig => rig.Services.Recorder.BeginCommandBuffer(commandBufferHandle: 2), [(GpuWork.CommandBuffers, 1L)]),
+            ["IGpuRecorder.EndCommandBuffer"] = (rig => rig.Services.Recorder.EndCommandBuffer(commandBufferHandle: 2), none),
+            ["IGpuRecorder.BeginDebugGroup"] = (rig => rig.Services.Recorder.BeginDebugGroup(commandBufferHandle: 2, label: "pass"), none),
+            ["IGpuRecorder.EndDebugGroup"] = (rig => rig.Services.Recorder.EndDebugGroup(commandBufferHandle: 2), none),
+            ["IGpuRecorder.BeginRenderPass"] = (rig => rig.Services.Recorder.BeginRenderPass(commandBufferHandle: 2, framebuffer: null!), [(GpuWork.RenderPasses, 1L)]),
+            ["IGpuRecorder.EndRenderPass"] = (rig => rig.Services.Recorder.EndRenderPass(commandBufferHandle: 2), none),
+            ["IGpuRecorder.BindPipeline"] = (rig => rig.Services.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: 2, pipelineHandle: 3), [(GpuWork.PipelineBinds, 1L)]),
+            ["IGpuRecorder.BindDescriptorSet"] = (rig => rig.Services.Recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Graphics, commandBufferHandle: 2, descriptorSetHandle: 4, pipelineLayoutHandle: 3), [(GpuWork.DescriptorSetBinds, 1L)]),
+            ["IGpuRecorder.PushConstants"] = (rig => rig.Services.Recorder.PushConstants(bindPoint: GpuBindPoint.Graphics, commandBufferHandle: 2, data: new byte[12], offset: 0, pipelineLayoutHandle: 3, stageFlags: GpuShaderStage.Fragment), [(GpuWork.PushConstantBytes, 12L)]),
+            ["IGpuRecorder.BindVertexBuffer"] = (rig => rig.Services.Recorder.BindVertexBuffer(bufferHandle: 3, commandBufferHandle: 2, sizeBytes: 24, strideBytes: 8), none),
+            ["IGpuRecorder.BindIndexBuffer"] = (rig => rig.Services.Recorder.BindIndexBuffer(bufferHandle: 3, commandBufferHandle: 2, format: GpuIndexFormat.UInt16, offsetBytes: 24, sizeBytes: 12), none),
+            ["IGpuRecorder.SetScissor"] = (rig => rig.Services.Recorder.SetScissor(commandBufferHandle: 2, rect: GpuPixelRect.Covering(height: 4, width: 4)), none),
+            ["IGpuRecorder.Draw"] = (rig => rig.Services.Recorder.Draw(commandBufferHandle: 2, parameters: new GpuDrawParameters(instanceCount: 1, vertexCount: 3)), [(GpuWork.Draws, 1L)]),
+            ["IGpuRecorder.DrawIndexed"] = (rig => rig.Services.Recorder.DrawIndexed(commandBufferHandle: 2, indexCount: 6), [(GpuWork.Draws, 1L)]),
+            ["IGpuRecorder.Dispatch"] = (rig => rig.Services.Recorder.Dispatch(commandBufferHandle: 2, groupCountX: 8, groupCountY: 8, groupCountZ: 1), [(GpuWork.Dispatches, 1L)]),
+            ["IGpuRecorder.DispatchIndirect"] = (rig => rig.Services.Recorder.DispatchIndirect(argumentBufferHandle: 3, argumentBufferOffset: 0UL, commandBufferHandle: 2), [(GpuWork.IndirectDispatches, 1L)]),
+            ["IGpuRecorder.ClearStorageImage"] = (rig => rig.Services.Recorder.ClearStorageImage(commandBufferHandle: 2, format: GpuPixelFormat.R8G8B8A8Unorm, imageHandle: 3), [(GpuWork.Clears, 1L)]),
+            ["IGpuRecorder.ClearStorageBuffer"] = (rig => rig.Services.Recorder.ClearStorageBuffer(bufferHandle: 3, commandBufferHandle: 2, sizeBytes: 16UL), [(GpuWork.Clears, 1L)]),
+            ["IGpuRecorder.TransitionImageLayout"] = (rig => rig.Services.Recorder.TransitionImageLayout(commandBufferHandle: 2, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader, imageHandle: 3, newLayout: GpuImageLayout.General, oldLayout: GpuImageLayout.Undefined, sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe), [(GpuWork.ImageBarriers, 1L)]),
+            ["IGpuRecorder.MemoryBarrier"] = (rig => rig.Services.Recorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader, sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader), [(GpuWork.MemoryBarriers, 1L)]),
+            ["IGpuRecorder.TransitionBuffer"] = (rig => rig.Services.Recorder.TransitionBuffer(bufferHandle: 3, commandBufferHandle: 2, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader, sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader), [(GpuWork.BufferBarriers, 1L)]),
+            ["IGpuPipelineFactory.Create(compute)"] = (rig => rig.Services.PipelineFactory.Create(computeShaderModule: null!, description: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
+            ["IGpuBindings.AllocateSet"] = (rig => rig.Services.Bindings.AllocateSet(descriptorSetLayoutHandle: 3, poolHandle: 2), [(GpuWork.DescriptorSetsCreated, 1L)]),
+            ["IGpuBindings.CreatePool"] = (rig => rig.Services.Bindings.CreatePool(sizes: new GpuDescriptorPoolSizes(CombinedImageSamplerCount: 0, MaxSets: 1, StorageBufferCount: 1, StorageImageCount: 0)), [(GpuWork.DescriptorPoolsCreated, 1L)]),
+            ["IGpuBindings.CreateSampler"] = (rig => rig.Services.Bindings.CreateSampler(filter: GpuSamplerFilter.Nearest), none),
+            ["IGpuBindings.DestroyPool"] = (rig => rig.Services.Bindings.DestroyPool(poolHandle: 2), none),
+            ["IGpuBindings.DestroySampler"] = (rig => rig.Services.Bindings.DestroySampler(samplerHandle: 2), none),
+            ["IGpuBindings.WriteCombinedImageSampler"] = (rig => rig.Services.Bindings.WriteCombinedImageSampler(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5, samplerHandle: 6), [(GpuWork.DescriptorWrites, 1L)]),
+            ["IGpuBindings.WriteBuffer"] = (rig => rig.Services.Bindings.WriteBuffer(access: GpuBufferAccess.ReadWrite, binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, elementStride: 0), [(GpuWork.DescriptorWrites, 1L)]),
+            ["IGpuBindings.WriteStorageImage"] = (rig => rig.Services.Bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5), [(GpuWork.DescriptorWrites, 1L)]),
+            ["IGpuPipelineFactory.Create(graphics)"] = (rig => rig.Pipelines.Create(description: null!, fragmentShaderModule: null!, renderPass: null!, vertexShaderModule: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
+            ["IGpuQueueSubmitter.CreateSubmissionFence"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(), none),
+            ["IGpuQueueSubmitter.Submit"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: []), none),
+            ["IGpuQueueSubmitter.Submit(fence)"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: [], fence: rig.Services.QueueSubmitter.CreateSubmissionFence()), none),
             ["IGpuQueueSubmitter.SubmitAndWait"] = (_ => { }, none),
-            ["IGpuShaderModuleFactory.Create"] = (rig => rig.Services.ShaderModuleFactory.Create(bytecode: ReadOnlyMemory<byte>.Empty, deviceContext: rig.Gpu, stage: GpuShaderStage.Compute).Dispose(), [(GpuWork.ShaderModulesCreated, 1L)]),
-            ["IGpuStorageBuffer.Write"] = (rig => rig.Services.StorageBufferFactory.Create(deviceContext: rig.Gpu, sizeBytes: 64UL).Write<float>(data: [1f, 2f, 3f]), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 12L)]),
-            ["IGpuStorageBuffer.Write(offset)"] = (rig => rig.Services.StorageBufferFactory.CreateIndirectArgs(deviceContext: rig.Gpu, sizeBytes: 64UL).Write<uint>(data: [1u, 2u], destinationOffsetBytes: 8UL), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 8L)]),
-            ["IGpuStorageBufferFactory.Create"] = (rig => rig.Services.StorageBufferFactory.Create(deviceContext: rig.Gpu, sizeBytes: 64UL), [(GpuWork.BuffersCreated, 1L)]),
-            ["IGpuStorageBufferFactory.CreateDeviceLocal"] = (rig => rig.Services.StorageBufferFactory.CreateDeviceLocal(deviceContext: rig.Gpu, sizeBytes: 64UL), [(GpuWork.BuffersCreated, 1L)]),
-            ["IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs"] = (rig => rig.Services.StorageBufferFactory.CreateDeviceLocalIndirectArgs(deviceContext: rig.Gpu, sizeBytes: 64UL), [(GpuWork.BuffersCreated, 1L)]),
-            ["IGpuStorageBufferFactory.CreateIndirectArgs"] = (rig => rig.Services.StorageBufferFactory.CreateIndirectArgs(deviceContext: rig.Gpu, sizeBytes: 64UL), [(GpuWork.BuffersCreated, 1L)]),
-            ["IGpuImageFactory.Create"] = (rig => rig.Services.ImageFactory.Create(deviceContext: rig.Gpu, format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, usage: GpuImageUsage.Storage, width: 4), [(GpuWork.ImagesCreated, 1L)]),
-            ["IGpuSubmissionFence.Dispose"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu).Dispose(), none),
-            ["IGpuSubmissionFence.IsSignaled"] = (rig => _ = rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu).IsSignaled, none),
-            ["IGpuSubmissionFence.Wait"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu).Wait(), none),
+            ["IGpuShaderModuleFactory.Create"] = (rig => rig.Services.ShaderModuleFactory.Create(bytecode: ReadOnlyMemory<byte>.Empty, stage: GpuShaderStage.Compute).Dispose(), [(GpuWork.ShaderModulesCreated, 1L)]),
+            ["IGpuStorageBuffer.Write"] = (rig => rig.Services.BufferFactory.CreateHostVisible(sizeBytes: 64UL, usage: GpuBufferUsage.Storage).Write<float>(data: [1f, 2f, 3f]), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 12L)]),
+            ["IGpuStorageBuffer.Write(offset)"] = (rig => rig.Services.BufferFactory.CreateHostVisible(sizeBytes: 64UL, usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect).Write<uint>(data: [1u, 2u], destinationOffsetBytes: 8UL), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 8L)]),
+            ["IGpuBufferFactory.CreateHostVisible"] = (rig => rig.Services.BufferFactory.CreateHostVisible(sizeBytes: 64UL, usage: GpuBufferUsage.Storage), [(GpuWork.BuffersCreated, 1L)]),
+            ["IGpuBufferFactory.CreateHostVisible(data)"] = (rig => rig.Services.BufferFactory.CreateHostVisible(data: [1, 2, 3, 4], usage: GpuBufferUsage.Vertex), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 4L)]),
+            ["IGpuBufferFactory.CreateDeviceLocal"] = (rig => rig.Services.BufferFactory.CreateDeviceLocal(sizeBytes: 64UL, usage: GpuBufferUsage.Storage), [(GpuWork.BuffersCreated, 1L)]),
+            ["IGpuImageFactory.Create"] = (rig => rig.Services.ImageFactory.Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, usage: GpuImageUsage.Storage, width: 4), [(GpuWork.ImagesCreated, 1L)]),
+            ["IGpuSubmissionFence.Dispose"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Dispose(), none),
+            ["IGpuSubmissionFence.IsSignaled"] = (rig => _ = rig.Services.QueueSubmitter.CreateSubmissionFence().IsSignaled, none),
+            ["IGpuSubmissionFence.Wait"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Wait(), none),
         };
     }
     private static long Expected((WorkKind Kind, long Amount)[] expected, WorkKind kind) {
@@ -230,7 +187,7 @@ public sealed class GpuWorkCountingLawTests {
             ? method.Name[4..]
             : method.Name);
 
-    private sealed record Rig(FakeGpu Gpu, GpuWorkLedger Ledger, IGpuComputeServices Services, IGpuCommandRecorder Graphics, IGpuPipelineFactory Pipelines) {
+    private sealed record Rig(FakeGpu Gpu, GpuWorkLedger Ledger, IGpuComputeServices Services, IGpuPipelineFactory Pipelines) {
         public static Rig Create() {
             var gpu = new FakeGpu();
             var ledger = new GpuWorkLedger(
@@ -240,35 +197,10 @@ public sealed class GpuWorkCountingLawTests {
 
             return new Rig(
                 Gpu: gpu,
-                Graphics: GpuWorkCounting.Wrap(ledger: ledger, recorder: ((IGpuCommandRecorder)gpu)),
                 Ledger: ledger,
                 Pipelines: GpuWorkCounting.Wrap(factory: ((IGpuPipelineFactory)gpu), ledger: ledger),
                 Services: GpuWorkCounting.Wrap(ledger: ledger, services: ((IGpuComputeServices)gpu))
             );
         }
-    }
-    private class BareRecorder : IGpuComputeRecorder {
-        public void BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) { }
-        public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) { }
-        public void BindComputeDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) { }
-        public void BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) { }
-        public void Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) { }
-        public void DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
-        public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) { }
-        public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) { }
-        public void MemoryBarrier(nint deviceHandle, nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
-        public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) { }
-        public void TransitionBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
-        public void TransitionImageLayout(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
-    }
-    private sealed class BothClearRecorder : BareRecorder, IGpuBufferInitializationRecorder, IGpuImageInitializationRecorder {
-        public void ClearStorageBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
-        public void ClearStorageImage(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
-    }
-    private sealed class BufferClearRecorder : BareRecorder, IGpuBufferInitializationRecorder {
-        public void ClearStorageBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
-    }
-    private sealed class ImageClearRecorder : BareRecorder, IGpuImageInitializationRecorder {
-        public void ClearStorageImage(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
     }
 }

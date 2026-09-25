@@ -102,7 +102,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck shaders`](#puck-shadersshader-compilation) | `shaders compile` compiles a source stage; `shaders interface` prints or writes the frame-block declarations a pipeline or shader set reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
+| [`puck shaders`](#puck-shadersshader-compilation) | `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model; `shaders interface` prints or writes the frame-block declarations a pipeline or shader set reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
@@ -560,6 +560,7 @@ generated atlases preserve source glyph IDs for it.
 
 ```sh
 puck shaders compile <source> --out <directory> [--name <name>] [--toolchain <directory>] [--stage compute|vertex|fragment] [--entry <name>]
+puck shaders generate [--check]
 puck shaders interface <source> [--write] [--echo]
 puck shaders package <source> --output <directory> [--root <directory>] [--toolchain <directory>] [--cache <directory>] [--json]
 puck shaders pipeline <source> [--inspect] [--toolchain <directory>] [--cache <directory>]
@@ -575,6 +576,14 @@ plan returns exit code 1, and compilation errors identify the source location.
 A missing source, an unknown `--stage`, an unreadable file, a
 missing shader tool, or a source edited while it was read is a refusal: exit 2,
 reported as `puck shaders <verb>: <path>: <why>`.
+
+`generate` writes the HLSL includes the C# model owns: today
+`src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-isa.hlsli`, the SDF instruction set's
+version, enums and packed-layout constants, generated from
+`Puck.SignedDistance` by `Puck.SdfVm.SdfIsaHlsl`. `--check` writes nothing,
+regenerates each include in memory and exits 1 naming each file that differs
+from the model and its first differing line; CI runs it beside
+`puck schema --check`.
 
 `interface` prints the [frame-block](shaders.md#the-frame-block) declarations
 each pass of a pipeline document or one-off shader reads, or those a shader-set

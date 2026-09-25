@@ -338,7 +338,8 @@ can open a fourth. All four charge the one Hud reservation.
   `PositionNormalizerHalfRange = 50f`; seat n (1-based) maps to body index
   n−1.
 - Both `UnifiedOverlaySources.Hud` and `.HudBindings` must be wired or the
-  HUD silently draws nothing (no throw) — the wiring is in `Program.cs`.
+  HUD silently draws nothing (no throw) — the wiring is in
+  `WorldBootComposition.AddWorldPresentation`.
 
 ## Verbs
 

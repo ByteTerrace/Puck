@@ -29,14 +29,15 @@ public sealed class VulkanGpuRenderPass : IGpuRenderPass {
             red: 0f
         )).ToList();
 
-        if (description.Depth is not null) {
-            clearValues.Add(item: VkClearValue.OfDepth(depth: 1f));
+        if (description.Depth is { } depth) {
+            clearValues.Add(item: VkClearValue.OfDepth(depth: depth.ClearDepth));
         }
 
         ClearValues = clearValues;
     }
 
-    /// <summary>Gets one clear value per attachment, in attachment order: opaque black for a color, 1 for the depth.</summary>
+    /// <summary>Gets one clear value per attachment, in attachment order: opaque black for a color, the declared
+    /// <see cref="GpuDepthAttachment.ClearDepth"/> for the depth.</summary>
     public IReadOnlyList<VkClearValue> ClearValues { get; }
     /// <inheritdoc/>
     public GpuRenderPassDescription Description { get; }
@@ -236,16 +237,16 @@ public sealed class VulkanGpuFramebuffer : IGpuFramebuffer {
 /// Implements <see cref="IGpuRenderPassFactory"/> for Vulkan through <see cref="VulkanGpuRenderPass"/> and
 /// <see cref="VulkanGpuFramebuffer"/>.
 /// </summary>
-public sealed class VulkanGpuRenderPassFactory(IVulkanRenderPassApi renderPassApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuRenderPassFactory {
+public sealed class VulkanGpuRenderPassFactory(IVulkanDeviceContext deviceContext, IVulkanRenderPassApi renderPassApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuRenderPassFactory {
     /// <inheritdoc/>
-    public IGpuRenderPass Create(IGpuDeviceContext deviceContext, GpuRenderPassDescription description) =>
+    public IGpuRenderPass Create(GpuRenderPassDescription description) =>
         VulkanGpuRenderPass.Create(
             description: description,
-            device: ((IVulkanDeviceContext)deviceContext).LogicalDevice.Commands,
+            device: deviceContext.LogicalDevice.Commands,
             renderPassApi: renderPassApi
         );
     /// <inheritdoc/>
-    public IGpuFramebuffer CreateFramebuffer(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) =>
+    public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) =>
         VulkanGpuFramebuffer.Create(
             colors: colors,
             depth: depth,

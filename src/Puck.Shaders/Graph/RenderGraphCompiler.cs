@@ -27,8 +27,8 @@ public sealed class RenderGraphPlan {
     public IReadOnlyList<string> Inputs { get; }
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs => Pipeline.Outputs;
-    /// <summary>Gets the pipeline planner's plan. A package pass appears in it as a compute pass whose source is
-    /// <see cref="RenderGraphCompiler.PackageSourcePrefix"/> followed by its package id; it is ordered, given its
+    /// <summary>Gets the pipeline planner's plan. A package pass appears in it as a
+    /// <see cref="ShaderPipelinePassKind.Package"/> pass whose source is its package id; it is ordered, given its
     /// accesses and barriers, and kept live exactly as a shader pass is.</summary>
     public ShaderPipelinePlan Pipeline { get; }
     /// <summary>Gets the planned passes in execution order, parallel to the planner's passes.</summary>
@@ -40,9 +40,6 @@ public sealed class RenderGraphPlan {
 /// <param name="packages">The packages the host offers.</param>
 /// <param name="limits">The planner's limits, or <see langword="null"/> for its defaults.</param>
 public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, ShaderPipelineLimits? limits = null) {
-    /// <summary>The source a package pass carries in the planner's plan, followed by its package id.</summary>
-    public const string PackageSourcePrefix = "package:";
-
     private readonly ShaderPipelineCompiler m_planner = new(limits: limits);
     private readonly RenderGraphPackageCatalog m_packages = (packages ?? throw new ArgumentNullException(paramName: nameof(packages)));
 
@@ -81,20 +78,6 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 message: $"Graph '{definition.Name}' declares schema '{definition.Schema}'; expected '{RenderGraphSchemas.Graph}'.",
                 name: definition.Name
             );
-        }
-
-        foreach (var pass in definition.ShaderPasses) {
-            if (pass?.Source?.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: PackageSourcePrefix
-            ) == true) {
-                Add(
-                    code: "RENDERGRAPH_SOURCE_RESERVED",
-                    diagnostics: diagnostics,
-                    message: $"Shader pass '{pass.Name}' names source '{pass.Source}'; the '{PackageSourcePrefix}' prefix marks a package pass in the plan, so a shader pass names a file.",
-                    name: pass.Name
-                );
-            }
         }
 
         var resources = new Dictionary<string, ShaderPipelineResource>(comparer: StringComparer.Ordinal);
@@ -197,7 +180,7 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
         }
 
         var packageByPass = new Dictionary<string, RenderGraphPackage>(comparer: StringComparer.Ordinal);
-        var lowered = new List<ShaderPipelinePass>(collection: definition.ShaderPasses);
+        var packagePasses = new List<ShaderPipelinePass>(capacity: definition.PackagePasses.Count);
 
         foreach (var pass in definition.PackagePasses) {
             m_packages.TryGet(
@@ -208,24 +191,27 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 key: pass.Name,
                 value: package!
             );
-            lowered.Add(item: new ShaderPipelinePass(
-                EntryPoint: pass.Package,
+            packagePasses.Add(item: new ShaderPipelinePass(
+                EntryPoint: string.Empty,
                 Inputs: pass.InputReferences,
-                Kind: ShaderPipelinePassKind.Compute,
+                Kind: ShaderPipelinePassKind.Package,
                 Name: pass.Name,
                 Outputs: pass.OutputReferences,
-                Source: (PackageSourcePrefix + pass.Package)
+                Source: pass.Package
             ));
         }
 
-        var pipeline = m_planner.Compile(definition: new ShaderPipelineDefinition(
-            Config: null,
-            Name: definition.Name,
-            Outputs: definition.Outputs,
-            Passes: lowered,
-            Resources: definition.Resources,
-            Schema: ShaderPipelineSchemas.Pipeline
-        ));
+        var pipeline = m_planner.Compile(
+            definition: new ShaderPipelineDefinition(
+                Config: null,
+                Name: definition.Name,
+                Outputs: definition.Outputs,
+                Passes: definition.ShaderPasses,
+                Resources: definition.Resources,
+                Schema: ShaderPipelineSchemas.Pipeline
+            ),
+            packages: packagePasses
+        );
         var steps = pipeline.Passes.Select(selector: planned => new RenderGraphStep(
             Package: (packageByPass.TryGetValue(
                 key: planned.Name,

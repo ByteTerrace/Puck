@@ -5,44 +5,41 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldEngine {
     private ReadOnlyMemory<byte> DispatchIsaReport(IGpuComputePipeline viewsPipeline, IGpuImage reportImage, IGpuImage sampledImage, IGpuSurfaceReadback readback, bool initializeImages) {
         var commandBuffer = m_commandPools[0].CommandBufferHandle;
-        var recorder = m_gpu.ComputeRecorder;
+        var recorder = m_gpu.Recorder;
 
         recorder.BeginCommandBuffer(
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
         m_bufferHazards.Reset();
 
         if (initializeImages) {
             recorder.TransitionImageLayout(
                 commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuComputeAccess.ShaderRead,
-                destinationStageMask: GpuComputeStage.ComputeShader,
-                deviceHandle: m_deviceHandle,
+                destinationAccessMask: GpuAccess.ShaderRead,
+                destinationStageMask: GpuStage.ComputeShader,
                 imageHandle: sampledImage.ImageHandle,
                 newLayout: GpuImageLayout.ShaderReadOnly,
                 oldLayout: GpuImageLayout.Undefined,
-                sourceAccessMask: GpuComputeAccess.None,
-                sourceStageMask: GpuComputeStage.TopOfPipe
+                sourceAccessMask: GpuAccess.None,
+                sourceStageMask: GpuStage.TopOfPipe
             );
         }
 
         recorder.TransitionImageLayout(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderWrite,
-            destinationStageMask: GpuComputeStage.ComputeShader,
-            deviceHandle: m_deviceHandle,
+            destinationAccessMask: GpuAccess.ShaderWrite,
+            destinationStageMask: GpuStage.ComputeShader,
             imageHandle: reportImage.ImageHandle,
             newLayout: GpuImageLayout.General,
             oldLayout: (initializeImages
             ? GpuImageLayout.Undefined
             : GpuImageLayout.ShaderReadOnly),
             sourceAccessMask: (initializeImages
-            ? GpuComputeAccess.None
-            : GpuComputeAccess.ShaderRead),
+            ? GpuAccess.None
+            : GpuAccess.ShaderRead),
             sourceStageMask: (initializeImages
-            ? GpuComputeStage.TopOfPipe
-            : GpuComputeStage.ComputeShader)
+            ? GpuStage.TopOfPipe
+            : GpuStage.ComputeShader)
         );
 
         if (initializeImages) {
@@ -50,28 +47,27 @@ public sealed partial class SdfWorldEngine {
                 commandBuffer: commandBuffer,
                 pass: SdfFramePass.Beam
             );
-            recorder.BindComputePipeline(
+            recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 pipelineHandle: m_beamPipeline.Handle
             );
-            recorder.BindComputeDescriptorSet(
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_beamSets[0],
-                deviceHandle: m_deviceHandle,
                 pipelineLayoutHandle: m_beamPipeline.LayoutHandle
             );
             recorder.PushConstants(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 data: m_pushConstant,
-                deviceHandle: m_deviceHandle,
                 offset: 0,
                 pipelineLayoutHandle: m_beamPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
             );
             recorder.Dispatch(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 groupCountX: 1,
                 groupCountY: 1,
                 groupCountZ: 1
@@ -84,50 +80,46 @@ public sealed partial class SdfWorldEngine {
             commandBuffer: commandBuffer,
             pass: SdfFramePass.Views
         );
-        recorder.BindComputePipeline(
+        recorder.BindPipeline(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             pipelineHandle: viewsPipeline.Handle
         );
-        recorder.BindComputeDescriptorSet(
+        recorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_viewsSets[0],
-            deviceHandle: m_deviceHandle,
             pipelineLayoutHandle: viewsPipeline.LayoutHandle
         );
         recorder.PushConstants(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             data: m_pushConstant,
-            deviceHandle: m_deviceHandle,
             offset: 0,
             pipelineLayoutHandle: viewsPipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
         );
         recorder.Dispatch(
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             groupCountX: 1,
             groupCountY: 1,
             groupCountZ: 1
         );
         recorder.TransitionImageLayout(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderRead,
-            destinationStageMask: GpuComputeStage.ComputeShader,
-            deviceHandle: m_deviceHandle,
+            destinationAccessMask: GpuAccess.ShaderRead,
+            destinationStageMask: GpuStage.ComputeShader,
             imageHandle: reportImage.ImageHandle,
             newLayout: GpuImageLayout.ShaderReadOnly,
             oldLayout: GpuImageLayout.General,
-            sourceAccessMask: GpuComputeAccess.ShaderWrite,
-            sourceStageMask: GpuComputeStage.ComputeShader
+            sourceAccessMask: GpuAccess.ShaderWrite,
+            sourceStageMask: GpuStage.ComputeShader
         );
         recorder.EndCommandBuffer(
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
         m_gpu.QueueSubmitter.SubmitAndWait(
-            commandBufferHandles: [commandBuffer],
-            deviceContext: m_deviceContext
+            commandBufferHandles: [commandBuffer]
         );
 
         return readback.Read(
@@ -142,48 +134,43 @@ public sealed partial class SdfWorldEngine {
     }
     private void VerifyIsaVersion() {
         using var reportImage = m_gpu.ImageFactory.Create(
-            deviceContext: m_deviceContext,
             format: Format,
             height: 1,
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: 1
         );
         using var sampledImage = m_gpu.ImageFactory.Create(
-            deviceContext: m_deviceContext,
             format: Format,
             height: 1,
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: 1
         );
-        using var readback = m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
+        using var readback = m_gpu.SurfaceTransferFactory.CreateReadback();
         var viewsSet = m_viewsSets[0];
 
         for (var element = 0u; (element < MaxViewports); element++) {
-            m_descriptorAllocator.WriteStorageImage(
+            m_bindings.WriteStorageImage(
                 arrayElement: element,
                 binding: ViewSourceBindingIndex,
                 descriptorSetHandle: viewsSet,
-                deviceHandle: m_deviceHandle,
                 imageViewHandle: reportImage.ImageViewHandle
             );
         }
 
         for (var element = 0; (element < ScreenSourceBindingIndices.Length); element++) {
-            m_descriptorAllocator.WriteCombinedImageSampler(
+            m_bindings.WriteCombinedImageSampler(
                 arrayElement: 0,
                 binding: ScreenSourceBindingIndices[element],
                 descriptorSetHandle: viewsSet,
-                deviceHandle: m_deviceHandle,
                 imageViewHandle: sampledImage.ImageViewHandle,
                 samplerHandle: m_screenSampler
             );
         }
 
-        m_descriptorAllocator.WriteCombinedImageSampler(
+        m_bindings.WriteCombinedImageSampler(
             arrayElement: 0,
             binding: GlyphAtlasBindingIndex,
             descriptorSetHandle: viewsSet,
-            deviceHandle: m_deviceHandle,
             imageViewHandle: sampledImage.ImageViewHandle,
             samplerHandle: m_screenSampler
         );

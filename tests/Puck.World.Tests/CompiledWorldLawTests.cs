@@ -1,5 +1,6 @@
 using System.Text;
 using Puck.Abstractions;
+using Puck.Abstractions.Counting;
 using Puck.Assets;
 using Puck.Testing;
 using Puck.World.Machines;
@@ -116,7 +117,7 @@ public sealed class CompiledWorldLawTests {
             name: "law.world.json"
         );
     }
-    internal static (WorldDefinitionAdmission Admission, CompiledWorldResolution Resolution, long Hits, long Derivations) Boot(string path, CompiledWorldCache cache) {
+    internal static (WorldDefinitionAdmission Admission, CompiledWorldResolution Resolution, long Hits, long Derivations, WorldBootWork Work) Boot(string path, CompiledWorldCache cache) {
         var work = new WorldBootWork();
         var request = cache.For(
             catalogFingerprint: Catalog.CompositionFingerprint,
@@ -127,6 +128,7 @@ public sealed class CompiledWorldLawTests {
             Assert.True(
                 condition: WorldDefinitionLoader.TryLoadFileForAdmission(
                     admission: out var admission,
+                    contentHash: out _,
                     catalog: Catalog,
                     catalogFingerprint: Catalog.CompositionFingerprint,
                     compiled: request,
@@ -141,7 +143,7 @@ public sealed class CompiledWorldLawTests {
                 userMessage: reason
             );
 
-            return (admission!, request.Resolution!, work.Read(kind: WorldBootWork.CompiledHits), work.Read(kind: WorldBootWork.ChunkDerivations));
+            return (admission!, request.Resolution!, work.Read(kind: WorldBootWork.CompiledHits), work.Read(kind: WorldBootWork.ChunkDerivations), work);
         }
     }
     internal static byte[] Compile(string path, string? instanceIdentity = null, string? catalogFingerprint = null, CompiledWorldChunks? chunks = null) {
@@ -189,6 +191,11 @@ public sealed class CompiledWorldLawTests {
     }
 
     private static string[] Codes(IEnumerable<ChunkCode> codes) => [.. codes.Select(selector: static code => code.ToString())];
+    private static string[] DeterministicCounts(WorldBootWork work) => [
+        .. WorldBootWork.Kinds.ToArray()
+            .Where(predicate: static kind => (kind.Class == WorkClass.Deterministic))
+            .Select(selector: kind => $"{kind.Name}={work.Read(kind: kind)}")
+    ];
 
     [Fact]
     public void AMissDerivesEveryChunkAndWritesTheCacheAndTheNextBootAdmitsTheSameWorldFromIt() {
@@ -214,6 +221,10 @@ public sealed class CompiledWorldLawTests {
             expected: HashAfter(definition: fresh.Admission.Definition, ticks: 30),
             actual: HashAfter(definition: cached.Admission.Definition, ticks: 30)
         );
+        // Whether a boot finds a compiled world is the per-user cache's state, so it moves only the kinds classed
+        // Pacing: `puck counters` boots each backend's leg against one cache, and the leg that finds the other's
+        // compiled world must read every deterministic count the first leg read.
+        Assert.Equal(expected: DeterministicCounts(work: fresh.Work), actual: DeterministicCounts(work: cached.Work));
     }
     [Fact]
     public void ACompiledWorldBesideTheDocumentIsTakenAndNothingIsWritten() {

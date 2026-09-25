@@ -7,17 +7,23 @@ namespace Puck.Assets.Textures;
 /// <c>((e &lt;&lt; 16) + 0x8000) &gt;&gt; n</c> (0 and the largest code to 0 and 0xFFFF, and 16-bit endpoints as
 /// they are), texels interpolate as <c>((64 - w) u0 + w u1 + 32) &gt;&gt; 6</c>, and the result finishes as
 /// <c>(v 31) &gt;&gt; 6</c>, a half no larger than 65504.
-/// <para>The decoder reads the four one-region modes exactly: mode 11 (two 10-bit endpoints) and the transformed modes
-/// 12, 13 and 14 (an 11-, 12- or 16-bit base and a 9-, 8- or 4-bit signed delta), each with sixteen 4-bit weights.
-/// Reserved modes decode to zero, as the format defines. It refuses a two-region mode (1 to 10), which the encoder never
-/// writes.</para>
+/// <para>The decoder reads every mode exactly. The one-region modes are mode 11 (two 10-bit endpoints) and the
+/// transformed modes 12, 13 and 14 (an 11-, 12- or 16-bit base and a 9-, 8- or 4-bit signed delta), each with sixteen
+/// 4-bit weights. The two-region modes 1 to 10 split the block by one of the first 32 BC7 two-subset partitions
+/// (<see cref="Bc7Codec.SubsetOf"/>) into two regions of two endpoints each, with 3-bit weights and the anchors at texel
+/// 0 and the partition's second-subset anchor; modes 1 to 9 store the second, third and fourth endpoints as signed
+/// deltas from the first, wrapped at the endpoint bits, and mode 10 stores four 6-bit endpoints. Their fields are
+/// scattered over the block as the format's mode descriptions lay them out. Reserved modes decode to zero, as the format
+/// defines.</para>
 /// <para>The encoder is integer arithmetic over half bits, plus scalar double addition, multiplication and division in
 /// a written order for its least-squares refit, so its bytes are the same on every machine. A negative or NaN input
 /// clamps to zero and one above 65504 to 65504. It fits each one-region mode's endpoints to the block's bounding box and
 /// refits them twice by least squares, measures every candidate's squared error in half bits by decoding it, and keeps
-/// the smallest. A block of one value takes mode 14 and round-trips exactly.</para>
+/// the smallest. It then tries the two-region modes 1 to 10 in that order over the <see cref="PartitionCandidates"/>
+/// partitions whose regions vary least, and keeps one only when it decodes strictly nearer, so the earlier candidate
+/// keeps a tie. A block of one value takes mode 14 and round-trips exactly.</para>
 /// </summary>
-public static class Bc6hCodec {
+public static partial class Bc6hCodec {
     /// <summary>The bytes of one block.</summary>
     public const int BlockBytes = 16;
     /// <summary>The largest half the unsigned format holds, 65504, as bits.</summary>
@@ -38,31 +44,21 @@ public static class Bc6hCodec {
     /// <param name="block">The block's sixteen bytes.</param>
     /// <param name="rgb">The destination: sixteen texels of three half bits each, texel <c>(x, y)</c> at
     /// <c>3 (4 y + x)</c>.</param>
-    /// <exception cref="NotSupportedException">The block is in a two-region mode (1 to 10).</exception>
     public static void DecodeBlock(ReadOnlySpan<byte> block, Span<ushort> rgb) {
+        if (TwoRegionModeOf(block: block) is { } twoRegion) {
+            DecodeTwoRegion(block: block, mode: twoRegion, rgb: rgb);
+            return;
+        }
+
         var bits = new BlockBits(block: block);
-        var code = bits.Read(count: 2);
-
-        if (code < 2) {
-            throw new NotSupportedException(message: $"BC6H mode {(code + 1)} has two regions; this decoder reads modes 11 to 14.");
-        }
-
-        code |= (bits.Read(count: 3) << 2);
-
-        var mode = (Modes.Length - 1);
-
-        while ((mode >= 0) && (Modes[mode].Code != code)) {
-            mode--;
-        }
+        var mode = OneRegionModeOf(block: block);
 
         if (mode < 0) {
-            if ((code & 0x03) == 0x02) {
-                throw new NotSupportedException(message: $"BC6H mode code 0x{code:X2} has two regions; this decoder reads modes 11 to 14.");
-            }
-
             rgb[..48].Clear();
             return;
         }
+
+        _ = bits.Read(count: 5);
 
         var (_, endpointBits, deltaBits) = Modes[mode];
         Span<int> e0 = stackalloc int[3];
@@ -144,7 +140,7 @@ public static class Bc6hCodec {
         for (var mode = 0; (mode < Modes.Length); mode++) {
             var (_, endpointBits, deltaBits) = Modes[mode];
 
-            EndpointFit.BoundingBox(channels: 3, high: high, low: low, stride: 3, texels: values);
+            EndpointFit.BoundingBox(channels: 3, high: high, low: low, members: EndpointFit.AllTexels, stride: 3, texels: values);
 
             for (var pass = 0; (pass < 3); pass++) {
                 for (var channel = 0; (channel < 3); channel++) {
@@ -175,13 +171,40 @@ public static class Bc6hCodec {
                     }
                 }
 
-                if (!EndpointFit.LeastSquares(channels: 3, high: high, indices: indices, low: low, stride: 3, texels: values, weights: Weights)) {
+                if (!EndpointFit.LeastSquares(channels: 3, high: high, indices: indices, low: low, members: EndpointFit.AllTexels, stride: 3, texels: values, weights: Weights)) {
                     break;
                 }
             }
         }
+
+        EncodeTwoRegion(best: block, bestError: bestError, values: values);
+    }
+    /// <summary>Returns the mode of a block, numbered as Direct3D numbers them: 1 to 10 for the two-region modes, 11 to 14
+    /// for the one-region modes, and 0 for a reserved mode code.</summary>
+    /// <param name="block">The block's sixteen bytes.</param>
+    /// <returns>The mode, 0 to 14.</returns>
+    public static int ModeOf(ReadOnlySpan<byte> block) {
+        if (TwoRegionModeOf(block: block) is { } twoRegion) {
+            return twoRegion.Number;
+        }
+
+        var mode = OneRegionModeOf(block: block);
+
+        return ((mode < 0) ? 0 : (11 + mode));
     }
 
+    // The index of a block's one-region mode in Modes, or -1 when its five-bit code names none.
+    private static int OneRegionModeOf(ReadOnlySpan<byte> block) {
+        var code = block[0] & 0x1F;
+
+        for (var mode = 0; (mode < Modes.Length); mode++) {
+            if (Modes[mode].Code == code) {
+                return mode;
+            }
+        }
+
+        return -1;
+    }
     private static int SignExtend(int value, int bits) =>
         ((value << (32 - bits)) >> (32 - bits));
     private static int Unquantize(int value, int bits) {

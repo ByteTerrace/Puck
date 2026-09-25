@@ -13,7 +13,8 @@ public readonly record struct RenderGraphRoot(string Instance, double Width, dou
 /// <param name="Width">The fraction of the consumer's width the producer covers.</param>
 /// <param name="Height">The fraction of the consumer's height the producer covers.</param>
 public readonly record struct RenderGraphFootprint(string Consumer, string Producer, double Width, double Height);
-/// <summary>Everything the scheduler reads about one presented frame: what is visible and how large it appears.</summary>
+/// <summary>Everything the scheduler reads about one presented frame: what is visible and how large it appears. It is a
+/// value, so a host describing each frame over the same root and footprint lists allocates nothing.</summary>
 /// <param name="Index">The presented frame's index, non-negative and increasing from frame to frame.</param>
 /// <param name="DisplayWidth">The display's width, in pixels.</param>
 /// <param name="DisplayHeight">The display's height, in pixels.</param>
@@ -22,7 +23,7 @@ public readonly record struct RenderGraphFootprint(string Consumer, string Produ
 /// <param name="Footprints">The reads visible inside rendering instances.</param>
 /// <param name="PassPixelBudget">The scheduling policy's price ceiling: the pass-pixels (passes times pixels) the
 /// instances the display does not show directly may spend this frame, or zero for no ceiling. Roots always render.</param>
-public sealed record RenderGraphFrame(
+public readonly record struct RenderGraphFrame(
     long Index,
     int DisplayWidth,
     int DisplayHeight,

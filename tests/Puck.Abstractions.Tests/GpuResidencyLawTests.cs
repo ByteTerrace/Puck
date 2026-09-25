@@ -210,13 +210,12 @@ public sealed class GpuResidencyLawTests {
             var gpu = new UploadModelGpu(reportVersion: 0);
             using var copy = CopyPipeline(gpu: gpu);
             using var region = new GpuRegion(
-                buffers: gpu.StorageBufferFactory,
+                bindings: gpu.Bindings,
+                buffers: gpu.BufferFactory,
                 byteCount: ByteCount,
                 copyPipeline: copy,
-                descriptors: gpu.DescriptorAllocator,
-                device: gpu.Device,
                 policy: policy,
-                recorder: gpu.ComputeRecorder,
+                recorder: gpu.Recorder,
                 slotCount: Slots
             );
             var expected = new byte[ByteCount];
@@ -274,13 +273,12 @@ public sealed class GpuResidencyLawTests {
         var gpu = new UploadModelGpu(reportVersion: 0);
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
-            buffers: gpu.StorageBufferFactory,
+            bindings: gpu.Bindings,
+            buffers: gpu.BufferFactory,
             byteCount: 64,
             copyPipeline: copy,
-            descriptors: gpu.DescriptorAllocator,
-            device: gpu.Device,
             policy: GpuResidencyPolicy.Staged,
-            recorder: gpu.ComputeRecorder,
+            recorder: gpu.Recorder,
             slotCount: 2
         );
 
@@ -289,13 +287,12 @@ public sealed class GpuResidencyLawTests {
         _ = region.Write(bytes: [1, 2, 3], offset: 5);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => region.RecordCopy(commandBuffer: 2, slot: 0));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new GpuRegion(
-            buffers: gpu.StorageBufferFactory,
+            bindings: gpu.Bindings,
+            buffers: gpu.BufferFactory,
             byteCount: 6,
             copyPipeline: copy,
-            descriptors: gpu.DescriptorAllocator,
-            device: gpu.Device,
             policy: GpuResidencyPolicy.Ring,
-            recorder: gpu.ComputeRecorder,
+            recorder: gpu.Recorder,
             slotCount: 2
         ));
     }
@@ -303,11 +300,10 @@ public sealed class GpuResidencyLawTests {
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {
         using var module = gpu.ShaderModuleFactory.Create(
             bytecode: new byte[] { UploadModelGpu.FrameUploadBytecode },
-            deviceContext: gpu.Device,
             stage: GpuShaderStage.Compute
         );
 
-        return gpu.ComputePipelineFactory.Create(
+        return gpu.PipelineFactory.Create(
             computeShaderModule: module,
             description: new GpuComputePipelineDescription(
                 Bindings: GpuRegion.CopyBindings,
@@ -316,9 +312,9 @@ public sealed class GpuResidencyLawTests {
                     data: new byte[GpuRegion.CopyPushByteLength],
                     offset: 0,
                     stageFlags: GpuShaderStage.Compute
-                )
-            ),
-            deviceContext: gpu.Device
+                ),
+                Registers: GpuRegisterNumbering.PackedByClass
+            )
         );
     }
     // A frame's writes: none on the first frame, one straddling words, more separate ranges than a host buffer keeps

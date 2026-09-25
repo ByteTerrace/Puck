@@ -177,27 +177,46 @@ public static class VulkanPresenterServiceRegistration {
 
         // Backend-neutral GPU abstractions: adapters that wrap the Vulkan-specific services above and
         // implement the IGpu* interfaces the render nodes (the compute world producer, and future nodes) drive.
-        services.TryAddSingleton<IGpuCommandRecorder>(implementationFactory: static sp => new VulkanGpuCommandRecorder(commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()));
-        services.TryAddSingleton<IGpuDescriptorAllocator>(implementationFactory: static sp => new VulkanGpuDescriptorAllocator(allocator: sp.GetRequiredService<VulkanDescriptorAllocator>()));
-        services.TryAddSingleton<IGpuPipelineFactory>(implementationFactory: static sp => new VulkanGpuPipelineFactory(pipelineFactory: sp.GetRequiredService<IVulkanGraphicsPipelineFactory>()));
+        services.TryAddSingleton<IGpuRecorder>(implementationFactory: static sp => new VulkanGpuRecorder(
+            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
+            recordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()
+        ));
+        services.TryAddSingleton<IGpuBindings>(implementationFactory: static sp => new VulkanGpuBindings(
+            allocator: sp.GetRequiredService<VulkanDescriptorAllocator>(),
+            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>()
+        ));
+        services.TryAddSingleton<IGpuPipelineFactory>(implementationFactory: static sp => new VulkanGpuPipelineFactory(
+            computePipelineApi: sp.GetRequiredService<IVulkanComputePipelineApi>(),
+            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
+            pipelineFactory: sp.GetRequiredService<IVulkanGraphicsPipelineFactory>()
+        ));
         services.TryAddSingleton<IGpuQueueSubmitter>(implementationFactory: static sp => new VulkanGpuQueueSubmitter(
+            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
             frameSynchronizationApi: sp.GetRequiredService<IVulkanFrameSynchronizationApi>(),
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>()
         ));
         services.TryAddSingleton<IGpuRenderPassFactory>(implementationFactory: static sp => new VulkanGpuRenderPassFactory(
+            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
             framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
             renderPassApi: sp.GetRequiredService<IVulkanRenderPassApi>()
         ));
-        services.TryAddSingleton<IGpuShaderModuleFactory>(implementationFactory: static sp => new VulkanGpuShaderModuleFactory(shaderModuleFactory: sp.GetRequiredService<IVulkanShaderModuleFactory>()));
+        services.TryAddSingleton<IGpuShaderModuleFactory>(implementationFactory: static sp => new VulkanGpuShaderModuleFactory(
+            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
+            shaderModuleFactory: sp.GetRequiredService<IVulkanShaderModuleFactory>()
+        ));
         // Optional capability: a Vulkan host can export an image in shared device memory (an opaque Win32 NT
         // handle) for ANOTHER Vulkan instance to import zero-copy. A host resolves this when present and falls back
         // to the CPU-pixel transport otherwise. Unlike Direct3D 12's export, an opaque-Vulkan handle is not
         // importable by D3D12 — this is a Vulkan-to-Vulkan capability.
         services.TryAddSingleton<IGpuSurfaceExportFactory>(implementationFactory: static sp => new VulkanGpuSurfaceExportFactory(
+            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
             externalMemoryApi: sp.GetRequiredService<IVulkanExternalMemoryApi>(),
             framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>()
         ));
-        services.TryAddSingleton<IGpuStorageBufferFactory>(implementationFactory: static sp => new VulkanGpuStorageBufferFactory(bufferApi: sp.GetRequiredService<IVulkanBufferApi>()));
+        services.TryAddSingleton<IGpuBufferFactory>(implementationFactory: static sp => new VulkanGpuBufferFactory(
+            bufferApi: sp.GetRequiredService<IVulkanBufferApi>(),
+            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>()
+        ));
         services.TryAddSingleton<IGpuSurfaceTransferFactory>(implementationFactory: static sp => new VulkanGpuSurfaceTransferFactory(
             bufferApi: sp.GetRequiredService<IVulkanBufferApi>(),
             commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>(),
@@ -208,7 +227,6 @@ public static class VulkanPresenterServiceRegistration {
             offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>(),
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>()
         ));
-        services.TryAddSingleton<IGpuGeometryBufferFactory>(implementationFactory: static sp => new VulkanGpuGeometryBufferFactory(bufferApi: sp.GetRequiredService<IVulkanBufferApi>()));
 
         // Contribute the Vulkan device as an inherited root capability that flows to every node. The host
         // aggregates this with any other contributions into the root host context, so this backend stays free

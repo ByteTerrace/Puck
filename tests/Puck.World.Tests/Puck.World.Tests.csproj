@@ -22,8 +22,7 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Reference the engine seams directly. Authored-game fixtures read JSON modules without bringing
-             the presentation composition root into the test executable. -->
+        <!-- Reference the engine seams directly. -->
         <ProjectReference Include="..\..\src\Puck.Networking\Puck.Networking.csproj" />
         <!-- The Schema-to-presentation capacity seam: Puck.World.Client's bridge derives Puck.Overlays' capacity from
              Schema's ceilings, and the lease table it builds must fit the overlay's backstops — a property neither
@@ -53,9 +52,10 @@
         <ProjectReference Include="..\..\src\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\..\src\Puck.Mcp\Puck.Mcp.csproj" />
         <ProjectReference Include="..\..\src\Puck.Mcp.Azure\Puck.Mcp.Azure.csproj" />
-        <!-- MachineHostSeamLawTests reads the desktop composition root's assembly out of its own build output, so
-             that output has to exist before the suite runs; nothing here links against the assembly. -->
-        <ProjectReference Include="..\..\src\Puck.World\Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <!-- The desktop composition root, linked so WorldBootCompositionLawTests builds each boot shape's service
+             collection through the public WorldBootComposition with no device created; MachineHostSeamLawTests
+             also reads the assembly out of its own build output. -->
+        <ProjectReference Include="..\..\src\Puck.World\Puck.World.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.AgentHarness\Puck.World.AgentHarness.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.AgentHarness.Azure\Puck.World.AgentHarness.Azure.csproj" />
     </ItemGroup>
