@@ -18,7 +18,7 @@ namespace Puck.Cli.Tests;
 /// expectation counts, with a resize naming the exact extents its layout slot halves to.
 /// </summary>
 public sealed class ReleaseProfileLawTests {
-    private const string Layout = """{"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"pipeline":"ink","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}""";
+    private const string Layout = """{"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"instance":"ink","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}""";
 
     private static JsonObject Valid() => JsonNode.Parse(json: """
         {
@@ -219,7 +219,7 @@ public sealed class ReleaseProfileLawTests {
         Assert.Equal(actual: script.Expectation.Inspections, expected: (((2 + pipeline.Reloads) + (2 * pipeline.Resizes)) + pipeline.Loads));
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "pipeline.inspect ink")), expected: (script.Expectation.Inspections + script.Expectation.Releases));
         Assert.Equal(actual: script.Expectation.Releases, expected: pipeline.Loads);
-        Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.row.remove views.pipelines ink")), expected: pipeline.Loads);
+        Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.row.remove views.graphs ink")), expected: pipeline.Loads);
         Assert.Equal(actual: script.Expectation.ArmedWaits, expected: lines.Count(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "pipeline.wait ")));
         Assert.Equal(actual: script.Expectation.CountersReadings, expected: 4);
         Assert.Equal(actual: script.Expectation.SoakWindows, expected: [(0, 1), (2, 3)]);
@@ -229,7 +229,7 @@ public sealed class ReleaseProfileLawTests {
         Assert.Contains(collection: lines, expected: "pipeline.wait ink resized 1280 800 40");
         Assert.Contains(collection: lines, expected: "pipeline.wait ink counted 4 40");
         Assert.Contains(collection: lines, expected: "pipeline.load ink ../pipelines/ink.graph.json");
-        Assert.Contains(collection: lines, filter: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set views.layouts ") && line.Contains(comparisonType: StringComparison.Ordinal, value: "\"pipeline\":null")));
+        Assert.Contains(collection: lines, filter: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set views.layouts ") && line.Contains(comparisonType: StringComparison.Ordinal, value: "\"instance\":null")));
         Assert.Contains(collection: lines, filter: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set views.layouts ") && line.Contains(comparisonType: StringComparison.Ordinal, value: "\"width\":0.5")));
     }
     [Fact]
@@ -262,7 +262,7 @@ public sealed class ReleaseProfileLawTests {
         Assert.False(condition: QualificationPlan.TryWrite(
             cell: cell,
             reason: out var missing,
-            rows: Rows(layout: Layout.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"pipeline\":\"other\"", oldValue: "\"pipeline\":\"ink\"")),
+            rows: Rows(layout: Layout.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"instance\":\"other\"", oldValue: "\"instance\":\"ink\"")),
             script: out _
         ));
         Assert.Contains(actualString: missing, expectedSubstring: "no slot");
@@ -270,7 +270,7 @@ public sealed class ReleaseProfileLawTests {
     [Fact]
     public void RowsAreReadFromWhatTheWorldAuthors() {
         var pipeline = new QualificationPipeline(Instance: "ink", Layout: "pipeline", Loads: 1, Reloads: 1, Resizes: 1, SettleFrames: 4);
-        var world = string.Concat(str0: """{"views":{"layouts":[""", str1: Layout, str2: """],"pipelines":[{"name":"ink","source":"../pipelines/ink.graph.json"}]}}""");
+        var world = string.Concat(str0: """{"views":{"layouts":[""", str1: Layout, str2: """],"graphs":[{"name":"ink","source":"../pipelines/ink.graph.json"}]}}""");
 
         Assert.True(condition: QualificationPlan.TryReadRows(
             pipeline: pipeline,
@@ -292,6 +292,6 @@ public sealed class ReleaseProfileLawTests {
             rows: out _,
             worldText: world
         ));
-        Assert.Contains(actualString: noPipeline, expectedSubstring: "views.pipelines");
+        Assert.Contains(actualString: noPipeline, expectedSubstring: "views.graphs");
     }
 }

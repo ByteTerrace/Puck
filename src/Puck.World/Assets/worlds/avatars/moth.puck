@@ -4715,7 +4715,7 @@ views {
     slots [
       {
         height: 1
-        pipeline: "moth-pipeline"
+        instance: "moth-pipeline"
         width: 0.5
         x: 0
         y: 0
@@ -4765,7 +4765,7 @@ views {
     }
   }
 
-  pipeline "moth-pipeline" {
+  graph "moth-pipeline" {
     camera: "three-quarter"
     source: "../../pipelines/moth.hlsl"
     timeScale: 1

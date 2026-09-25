@@ -87,10 +87,10 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
 
         for (var index = 0; (index < composer.Slots.Count); index++) {
             var slot = composer.Slots[index];
-            var occupant = ((slot.Pipeline is { } pipeline)
-                ? (((renderProbe?.Node is { } node) && !node.HasChild(name: pipeline))
-                    ? $"pipeline:{pipeline}:missing"
-                    : $"pipeline:{pipeline}")
+            var occupant = ((slot.Instance is { } instance)
+                ? (((renderProbe?.Root?.Runtime is { } runtime) && (runtime.Instances.IndexOf(name: instance) < 0))
+                    ? $"instance:{instance}:missing"
+                    : $"instance:{instance}")
                 : ((slot.Camera is { } camera)
                     ? $"cam:{camera}"
                     : $"seat{slot.SeatOrder}"

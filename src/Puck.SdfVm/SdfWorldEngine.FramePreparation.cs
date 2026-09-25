@@ -71,34 +71,23 @@ public sealed partial class SdfWorldEngine {
             m_boundGlyphAtlasViews[m_currentSlot] = glyphView;
         }
     }
-    // Bind (or rebind when a child's image-view changed) the source array in both the CURRENT ring slot's Stage 1
-    // (views) and Stage 2 (composite) sets: an SDF source texture for a normal slot, the hosted child's storage image
-    // for a child slot. Array elements past the live viewport count duplicate slot 0 (Vulkan requires every bound
-    // array element to be a valid descriptor); the kernels never read them. The change-detected cache is per ring
-    // slot (a slot's set is only rewritten after its fence proved the slot idle) and covers ENGINE-OWNED views only —
-    // a child slot's view is host-owned and is rewritten unconditionally (see BindScreenSources for why).
+    // Bind (or rebind when an image-view changed) the source array in both the CURRENT ring slot's Stage 1 (views) and
+    // Stage 2 (composite) sets. Array elements past the live viewport count duplicate slot 0 (Vulkan requires every
+    // bound array element to be a valid descriptor); the kernels never read them. The change-detected cache is per ring
+    // slot (a slot's set is only rewritten after its fence proved the slot idle).
     private void BindSources(uint viewportCount) {
         const int FillerSlot = 0;
 
-        var fillerView = SourceViewForSlot(slot: FillerSlot);
-        var fillerIsHostOwned = IsChildSlot(slot: FillerSlot);
+        var fillerView = m_sourceTextures[FillerSlot]!.ImageViewHandle;
         var boundViews = m_boundSourceViews[m_currentSlot];
 
         for (var element = 0u; (element < MaxViewports); element++) {
-            var live = (element < viewportCount);
-            var view = (live
-                ? SourceViewForSlot(slot: ((int)element))
+            var view = ((element < viewportCount)
+                ? m_sourceTextures[element]!.ImageViewHandle
                 : fillerView
             );
-            var hostOwned = (live
-                ? IsChildSlot(slot: ((int)element))
-                : fillerIsHostOwned
-            );
 
-            if (
-                !hostOwned &&
-                (view == boundViews[element])
-            ) {
+            if (view == boundViews[element]) {
                 continue;
             }
 
@@ -117,14 +106,14 @@ public sealed partial class SdfWorldEngine {
             boundViews[element] = view;
         }
     }
-    // Stage 2's CompositeParams2 { uint2 imageExtent; uint viewportCount; uint childMask; float4 rects[5]; uint2 scaleQPacked;
-    // uint2 sharpnessQPacked; }: the LIVE regions drive the layout every frame. word[3] carries the child mask (using the former HLSL
-    // cbuffer padding ahead of the float4 rects array — KEEP IN SYNC with sdf-world-composite.comp.hlsl's struct);
+    // Stage 2's CompositeParams2 { uint2 imageExtent; uint viewportCount; uint padding; float4 rects[5]; uint2 scaleQPacked;
+    // uint2 sharpnessQPacked; }: the LIVE regions drive the layout every frame. word[3] is the padding that places the
+    // float4 rects array on Direct3D 12's 16-byte boundary (KEEP IN SYNC with sdf-world-composite.comp.hlsl's struct);
     // the final four words carry the byte-packed per-view controls.
     private void BuildCompositePush(SdfFrame frame) {
         var words = MemoryMarshal.Cast<byte, uint>(span: m_compositePush.AsSpan());
 
-        words[0] = m_width; words[1] = m_height; words[2] = ((uint)frame.Views.Count); words[3] = m_childMask;
+        words[0] = m_width; words[1] = m_height; words[2] = ((uint)frame.Views.Count); words[3] = 0u;
 
         var floats = MemoryMarshal.Cast<byte, float>(span: m_compositePush.AsSpan());
 
@@ -146,10 +135,7 @@ public sealed partial class SdfWorldEngine {
             var word = (qBase + (index / 4));
             var shift = ((index % 4) * 8);
 
-            words[word] = (words[word] & ~(0xFFu << shift)) | (((uint)RenderScaleQ(
-                view: frame.Views[index],
-                slot: index
-            )) << shift);
+            words[word] = (words[word] & ~(0xFFu << shift)) | (((uint)RenderScaleQ(view: frame.Views[index])) << shift);
         }
 
         // sharpnessQPacked follows scaleQPacked with the same five-view byte-lane layout. Zero is bilinear and retains
@@ -165,8 +151,6 @@ public sealed partial class SdfWorldEngine {
             words[word] |= (((uint)UpscaleSharpnessQ(view: frame.Views[index])) << shift);
         }
     }
-    private bool IsChildSlot(int slot) =>
-        (0u != (m_childMask & (1u << slot)));
     // Packs the rows the frame's moved set owes into the dynamic-transform mirror — 3 float4 per slot: position.xyz
     // (+ shadow participation), the orientation quaternion (xyzw), then the lanes — for the device-local table
     // SDF_OP_TRANSFORM_DYNAMIC indexes by slot, and owes each packed row an upload. The owed rows are the ones the
@@ -569,10 +553,7 @@ public sealed partial class SdfWorldEngine {
             floats[8] = camera.Up.X; floats[9] = camera.Up.Y; floats[10] = camera.Up.Z; floats[11] = camera.AspectRatio;                   // up.xyz, aspect
             floats[12] = camera.Forward.X; floats[13] = camera.Forward.Y; floats[14] = camera.Forward.Z; floats[15] = DebugMode;           // forward.xyz, debug view mode
             floats[16] = region.X; floats[17] = region.Y; floats[18] = region.Width; floats[19] = region.Height;                           // region origin.xy, size.xy
-            floats[20] = RenderScaleQ(
-                slot: index,
-                view: view
-            ); floats[21] = view.AsymmetricFrustumOffset.X; floats[22] = view.AsymmetricFrustumOffset.Y; floats[23] = frame.FarDistance; // renderScale q, off-axis offset xy, far distance
+            floats[20] = RenderScaleQ(view: view); floats[21] = view.AsymmetricFrustumOffset.X; floats[22] = view.AsymmetricFrustumOffset.Y; floats[23] = frame.FarDistance; // renderScale q, off-axis offset xy, far distance
             _ = StageTableEntry(
                 entry: index,
                 mirror: mirror,
@@ -699,10 +680,10 @@ public sealed partial class SdfWorldEngine {
             slot: slot
         );
 
-        // CompositeParams { uint2 imageExtent; uint2 tileGrid; uint viewportCount; uint childMask; uint screenMask; uint instanceMaskWordCount; uint sampleIndex; } — Stage 0/1 push.
+        // CompositeParams { uint2 imageExtent; uint2 tileGrid; uint viewportCount; uint screenMask; uint instanceMaskWordCount; uint sampleIndex; } — Stage 0/1 push.
         var pushWords = MemoryMarshal.Cast<byte, uint>(span: m_pushConstant.AsSpan());
 
-        pushWords[0] = m_width; pushWords[1] = m_height; pushWords[2] = m_tileGridX; pushWords[3] = m_tileGridY; pushWords[4] = viewportCount; pushWords[5] = m_childMask; pushWords[6] = m_screenSourceMask; pushWords[7] = ((uint)m_liveInstanceMaskWordCount);
+        pushWords[0] = m_width; pushWords[1] = m_height; pushWords[2] = m_tileGridX; pushWords[3] = m_tileGridY; pushWords[4] = viewportCount; pushWords[5] = m_screenSourceMask; pushWords[6] = ((uint)m_liveInstanceMaskWordCount);
         // The deterministic tick clock star twinkle reads (cloud motion is baked into the environment rows). It rides
         // the push and is folded into ComputeFrameSignature via m_pushConstant, so the cadence gate never skips a frame
         // whose tick moved; a sky with no visible twinkle pushes 0, leaving a static frame skippable.
@@ -714,7 +695,7 @@ public sealed partial class SdfWorldEngine {
             (environment.TwinkleDepth > 0f)
         );
 
-        pushWords[8] = (twinkles
+        pushWords[7] = (twinkles
             ? frame.SampleIndex
             : 0u
         );
@@ -727,13 +708,8 @@ public sealed partial class SdfWorldEngine {
         return viewportCount;
     }
     // The quantized render-scale numerator q (1..255; 255 = native): one quantization, shared by the viewport row and
-    // the composite push, so every kernel derives the same integer render extent. A child slot always renders native
-    // (its source is another node's full-rect surface — Stage 1 never renders it, and Stage 2 must copy it 1:1).
-    private byte RenderScaleQ(SdfViewSnapshot view, int slot) {
-        if (IsChildSlot(slot: slot)) {
-            return 255;
-        }
-
+    // the composite push, so every kernel derives the same integer render extent.
+    private static byte RenderScaleQ(SdfViewSnapshot view) {
         var scale = view.RenderScale;
 
         if (
@@ -748,19 +724,6 @@ public sealed partial class SdfWorldEngine {
             min: 1,
             max: 255
         ));
-    }
-    private nint SourceViewForSlot(int slot) {
-        if (IsChildSlot(slot: slot)) {
-            var view = m_childSourceViews[slot];
-
-            if (0 == view) {
-                throw new InvalidOperationException(message: $"The child node for viewport {slot} did not produce a same-device storage-image surface (an integer-copy child must hand back a general-layout storage image view).");
-            }
-
-            return view;
-        }
-
-        return m_sourceTextures[slot]!.ImageViewHandle;
     }
     // The per-view reconstruction blend quantized to one byte. Invalid/negative input degrades to the existing
     // bilinear path; values above one saturate at full clamped Catmull-Rom.

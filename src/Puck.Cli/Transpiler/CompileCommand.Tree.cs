@@ -260,14 +260,17 @@ internal static partial class CompileCommand {
                 )
             ));
 
-            foreach (var row in definition.Views.Pipelines) {
+            foreach (var row in (definition.Views.Graphs ?? [])) {
+                if (row.Source is null) {
+                    continue;
+                }
                 if (!WorldDocumentPaths.TryResolve(
                     documentDirectory: sourceDirectory,
                     path: row.Source,
                     reason: out var unresolved,
                     resolved: out var source
                 )) {
-                    Console.Error.WriteLine(value: $"error: '{owner}' names pipeline '{row.Name}' by a source that does not resolve: {unresolved}.");
+                    Console.Error.WriteLine(value: $"error: '{owner}' names graph instance '{row.Name}' by a source that does not resolve: {unresolved}.");
 
                     return 1;
                 }
@@ -277,7 +280,7 @@ internal static partial class CompileCommand {
                 }
 
                 if (!File.Exists(path: source)) {
-                    Console.Error.WriteLine(value: $"error: '{owner}' names pipeline '{row.Name}' by the source '{row.Source}', and no file exists at '{source}'.");
+                    Console.Error.WriteLine(value: $"error: '{owner}' names graph instance '{row.Name}' by the source '{row.Source}', and no file exists at '{source}'.");
 
                     return 1;
                 }
@@ -288,7 +291,7 @@ internal static partial class CompileCommand {
                 ).GetAwaiter().GetResult();
 
                 if (result.Status != ShaderPipelineLoadStatus.Compiled) {
-                    Console.Error.WriteLine(value: $"error: pipeline '{row.Name}' of '{owner}' could not be packaged from '{source}' ({result.Status}): {result.Message.ReplaceLineEndings(replacementText: " ")}");
+                    Console.Error.WriteLine(value: $"error: graph instance '{row.Name}' of '{owner}' could not be packaged from '{source}' ({result.Status}): {result.Message.ReplaceLineEndings(replacementText: " ")}");
 
                     return ((result.Status == ShaderPipelineLoadStatus.Unsupported)
                         ? 2

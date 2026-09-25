@@ -1,6 +1,6 @@
 // Shared dispatch for primary, surface, ambient and views. Each wrapper selects its pass macro; views reads the
 // resulting visibility records and shades each source texture. SDF_MONOLITHIC_VIEWS retains the combined reference walk.
-// Composite places each source or child into its region. All four hit passes use an 8x8 workgroup and identical
+// Composite places each source into its region. All four hit passes use an 8x8 workgroup and identical
 // indirect tile bbox, camera, masks and active-pixel tests.
 // The shared layout carries dynamic transforms, screen sources, and the read-only instance mask (binding 7 / t37,
 // after screen sources t5..t36). Instance-cull produces that mask; the beam reads it at its own t3 binding.
@@ -60,12 +60,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     if (id.z >= params.viewportCount) {
-        return;
-    }
-
-    // A child viewport's source[] slot already holds another node's rendered output (bound by the host); leave it
-    // untouched so the SDF render never clobbers the child surface.
-    if (isChildViewport(id.z)) {
         return;
     }
 

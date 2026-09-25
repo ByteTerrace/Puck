@@ -1098,49 +1098,6 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        var pipelineNames = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var pipelines = views.Pipelines;
-
-        for (var index = 0; (index < pipelines.Count); index++) {
-            var pipeline = pipelines[index];
-            var path = $"views.pipelines[{index}]";
-
-            if (pipeline is null) {
-                errors.Add(item: $"{path} is required.");
-
-                continue;
-            }
-
-            if (!SafeName.TryParse(
-                candidate: pipeline.Name,
-                name: out _,
-                reason: out var nameReason
-            )) {
-                errors.Add(item: $"{path}.name {nameReason}");
-            } else if (!pipelineNames.Add(item: pipeline.Name)) {
-                errors.Add(item: $"{path}.name '{pipeline.Name}' is duplicated.");
-            }
-
-            if (string.IsNullOrWhiteSpace(value: pipeline.Source)) {
-                errors.Add(item: $"{path}.source is required.");
-            }
-
-            if (
-                (pipeline.Camera is { } pipelineCamera) &&
-                !cameras.Contains(item: pipelineCamera)
-            ) {
-                errors.Add(item: $"{path}.camera '{pipelineCamera}' names no camera row.");
-            }
-
-            ValidateInstanceValues(
-                errors: errors,
-                output: pipeline.Output,
-                overrides: pipeline.Overrides,
-                path: path,
-                timeScale: pipeline.TimeScale
-            );
-        }
-
         var graphNames = ValidateGraphs(
             cameras: cameras,
             errors: errors,
@@ -1212,8 +1169,11 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{slotPath} rect must lie within [0, 1] with positive extents.");
                 }
 
-                if (((((slot.Camera is null) ? 0 : 1) + ((slot.Pipeline is null) ? 0 : 1)) + ((slot.Instance is null) ? 0 : 1)) > 1) {
-                    errors.Add(item: $"{slotPath} must author at most one of camera/pipeline/instance.");
+                if (
+                    (slot.Camera is not null) &&
+                    (slot.Instance is not null)
+                ) {
+                    errors.Add(item: $"{slotPath} must author at most one of camera/instance.");
                 } else if (
                     (slot.Instance is { } instance) &&
                     !graphNames.Contains(item: instance)
@@ -1224,11 +1184,6 @@ public static partial class WorldDefinitionValidator {
                     !cameras.Contains(item: camera)
                 ) {
                     errors.Add(item: $"{slotPath}.camera '{camera}' names no camera row.");
-                } else if (
-                    (slot.Pipeline is { } pipeline) &&
-                    !pipelineNames.Contains(item: pipeline)
-                ) {
-                    errors.Add(item: $"{slotPath}.pipeline '{pipeline}' names no views.pipelines row.");
                 }
             }
         }

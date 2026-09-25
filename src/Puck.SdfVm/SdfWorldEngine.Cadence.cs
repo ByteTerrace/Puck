@@ -92,7 +92,7 @@ public sealed partial class SdfWorldEngine {
     // (the sky pass reads only m_viewportScratch + m_screenLightScratch, both already covered below):
     //   - m_programRevision  : the uploaded program (words, live instance-mask width, kernel variant, reseeded
     //                          screen-surface table, invariant instance grid) — bumped by UploadProgram.
-    //   - m_pushConstant     : Stage 0/1 push — width/height/tileGrid (constant), viewportCount, childMask,
+    //   - m_pushConstant     : Stage 0/1 push — width/height/tileGrid (constant), viewportCount,
     //                          screenSourceMask (bound-slot bitmask), liveInstanceMaskWordCount.
     //   - m_viewportScratch  : per-view camera basis + fov/aspect, region, debug view mode, the quantized
     //                          render-scale numerator, and the frame's far distance — excluding each row's presentation-time lane (PackViewports'

@@ -24,7 +24,7 @@ public enum WorldPipelinePhase : byte {
     /// since boot, when it was never reset) have completed on the GPU and are what <c>pipeline.inspect</c> shows.</summary>
     Counted = 6,
 }
-public sealed partial class WorldPipelineRuntime {
+public sealed partial class WorldViewGraphHost {
     /// <summary>The longest deadline, in seconds, one <c>pipeline.wait</c> may hold a session for.</summary>
     public const int MaxWaitSeconds = 600;
 

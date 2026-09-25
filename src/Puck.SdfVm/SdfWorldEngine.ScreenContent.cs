@@ -33,37 +33,6 @@ public sealed partial class SdfWorldEngine {
         // CADENCE GATE: revision-track the REAL decal change (see SetScreenDecal).
         m_decalRevision++;
     }
-    /// <summary>Sets which viewport slots show a hosted child's surface THIS frame (bit <c>v</c> set = viewport
-    /// <c>v</c>): the beam prepass and Stage 1 skip those slots, Stage 2 reconstructs their host-bound source into the slot, and
-    /// <see cref="SetChildSource"/> accepts exactly those slots. Per frame, never frozen — the host derives it from the
-    /// frame's own view bindings, so a layout switch can turn any slot into a child or back. Call it before this
-    /// frame's <see cref="SetChildSource"/> calls.</summary>
-    /// <param name="mask">The child-slot bitmask over <see cref="MaxViewports"/> slots.</param>
-    public void SetChildMask(uint mask) {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        m_childMask = mask;
-    }
-    /// <summary>Supplies the storage-image view a hosted child produced for its viewport slot this frame; the next
-    /// frame binds it into the source arrays. The host owns this view's lifetime, so the binding is rewritten every
-    /// frame rather than skipped on an unchanged handle value — a retired handle value can be re-issued for a
-    /// different image, which a value-keyed skip would bind stale (see <c>BindScreenSources</c>).</summary>
-    /// <param name="slot">The child's viewport slot (a bit this frame's <see cref="SetChildMask"/> set).</param>
-    /// <param name="imageViewHandle">The child's same-device storage-image view (General layout; the child owns it).</param>
-    public void SetChildSource(int slot, nint imageViewHandle) {
-        if (
-            (slot < 0) ||
-            (slot >= MaxViewports) ||
-            !IsChildSlot(slot: slot)
-        ) {
-            throw new ArgumentException(message: $"Viewport {slot} is not a child slot of this engine (mask 0x{m_childMask:X}).");
-        }
-
-        m_childSourceViews[slot] = imageViewHandle;
-    }
     /// <summary>Uploads the single font atlas the <see cref="SdfShapeType.Glyph"/> primitive samples as a
     /// distance-level field, replacing any previously set atlas. Static: unlike a screen source (an external per-frame
     /// image-view handle), this copies the CPU pixels into a device image once and holds the sampleable view for the

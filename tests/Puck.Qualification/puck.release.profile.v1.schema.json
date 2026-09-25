@@ -144,7 +144,7 @@
             ],
             "properties": {
               "instance": {
-                "description": "The views.pipelines row\u0027s name.",
+                "description": "The views.graphs row\u0027s name.",
                 "type": "string"
               },
               "layout": {

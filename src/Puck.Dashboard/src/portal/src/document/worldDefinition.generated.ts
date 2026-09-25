@@ -10859,7 +10859,7 @@ export type WorldViewDefaults = {
    */
   cameraRig?: WorldCameraProgram | null;
   /**
-   * The directory holding the pipeline compiler's dxc, or null to resolve it by bare name through the ordinary executable search path — never an environment variable.
+   * The directory holding the graph compiler's dxc, or null to resolve it by bare name through the ordinary executable search path — never an environment variable.
    */
   shaderToolchain?: string | null;
   /**
@@ -10878,10 +10878,6 @@ export type WorldViewDefaults = {
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   layouts?: (WorldViewLayout | null)[] | null;
-  /**
-   * Gets the authored views.pipelines rows. The absence-coalesce lives in the accessor for the same reason Elements's does.
-   */
-  pipelines?: (WorldViewPipeline | null)[] | null;
 };
 
 export type WorldViewGraph = {
@@ -10981,35 +10977,6 @@ export type WorldViewLayout = {
   slots: WorldViewSlot[];
 };
 
-export type WorldViewPipeline = {
-  /**
-   * The pipeline's stable name (a SafeName, unique within the section) — what a Pipeline names and a pipeline.* console verb addresses.
-   */
-  name: string;
-  /**
-   * Where the pipeline comes from: a puck.render.graph.v1 graph document of shader passes, a one-off shader source file, which reads as a one-pass graph, or a puck.shader.package.v1 package directory, which loads with its source tree gone. It resolves beside the document that authors it (WorldDocumentPaths), like every relative path a document authors.
-   */
-  source: string;
-  /**
-   * The authored camera feeding the pipeline frame block's cameraPosition, cameraTarget, cameraUp and cameraFov, or null, which leaves cameraFov zero so a pipeline keeps its own pointer orbit.
-   */
-  camera?: string | null;
-  /**
-   * The pipeline clock's rate multiplier — presentation only, never simulation state. Default 1; 0 freezes the clock.
-   */
-  timeScale?: number;
-  /**
-   * The image version the instance shows, or null for the source's first declared output.
-   */
-  output?: string | null;
-  /**
-   * This instance's parameter overrides, keyed by pass name; each value is that pass's config object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one source differ only in what they override. The source's config schema binds them when a boot, a world.load or world.reload, a commit, or an upsert names them (the server reads the source, and refuses a value by name), and again when a graph installs (the host binds them into its passes). null overrides nothing.
-   */
-  overrides?: {
-    [k: string]: unknown;
-  } | null;
-};
-
 export type WorldViewSlot = {
   /**
    * The rect's left edge, normalized [0, 1]. Default 0.
@@ -11028,15 +10995,11 @@ export type WorldViewSlot = {
    */
   height?: number;
   /**
-   * The authored camera name filling this slot, or null for the seat that owns it (or the pipeline named by Pipeline).
+   * The authored camera name filling this slot, or null for the seat that owns it (or the instance named by Instance).
    */
   camera?: string | null;
   /**
-   * The authored views.pipelines row name filling this slot with a compiled shader pipeline, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.
-   */
-  pipeline?: string | null;
-  /**
-   * The views.graphs row name whose output fills this slot, or null for a seat, camera or pipeline slot.
+   * The views.graphs row name whose output fills this slot, or null for a seat or camera slot.
    */
   instance?: string | null;
 };

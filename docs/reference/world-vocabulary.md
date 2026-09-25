@@ -47,7 +47,7 @@ kind.
 | `stabilize` | the document | block | `ruleGroups[]` | A fixpoint group: its members re-fire until the board settles or the pass ceiling refuses. |
 | `state` | the document | section | `state` | The simulation state: the world's rows, its lattices, its embedding spaces, and the per-participant lanes. |
 | `test` | the document | block | `(nothing)` | Behaviour stated in the world's own language — a world's own, a module's under the arguments the test gives it, or a whole composition's; the document carries no trace of it and each test lowers to a generated test world of its own. |
-| `views` | the document | section | `views` | Camera layouts, render pipelines, frame-graph instances, and the seat rig a participant looks through. |
+| `views` | the document | section | `views` | Camera layouts, frame-graph instances, and the seat rig a participant looks through. |
 | `workflow` | the document | block | `ruleGroups[]` | A staged group: a cursor that advances one step per committed firing. |
 | `world` | the document | statement | `(nothing)` | Emits one named world document by invoking a module, declared at the top level of its source. Written `entry world`, it is the world `Puck.World --world` boots when it boots the source; a composition declares at most one. |
 | `request` | `addon` | statement | `addons[].requests[]` | One capability an addon declares it needs. |
@@ -79,7 +79,6 @@ kind.
 | `onFailure` | `transaction` | block | `rules[].effects[][transaction].onFailure` | What fires after a transaction rewinds; more than one on a transaction is refused. |
 | `graph` | `views` | row | `views.graphs[]` | One named instance of a frame graph. |
 | `layout` | `views` | row | `views.layouts[]` | One viewport arrangement. |
-| `pipeline` | `views` | row | `views.pipelines[]` | One named post-render pipeline. |
 | `seatControl` | `views` | section | `views.seatControl` | How a participant's input moves the seat rig. |
 | `seatRig` | `views` | section | `views.seatRig` | The camera program a seated participant sees through. |
 | `step` | `workflow` | block | `rules[]` | One stage of a workflow; its body is a rule body, so a nested `rule` block is refused. |
@@ -437,7 +436,7 @@ Read back as `test` from the rows it generated when a generated test world is de
 ### `views`
 
 ```puck
-views { layout … pipeline … graph … seatRig … seatControl { … } }
+views { layout … graph … seatRig … seatControl { … } }
 ```
 
 Printed back as `views`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
@@ -834,18 +833,6 @@ layout "name" { … }
 | `name` (required) | header | name | — | `name` | — | The layout's name, which a session selects it by. |
 
 Printed back as `layout` when the node carries `name`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
-
-### `pipeline`
-
-```puck
-pipeline "name" { … }
-```
-
-| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
-|---|---|---|---|---|---|---|
-| `name` (required) | header | name | — | `name` | — | The pipeline's name, which a layout slot names it by. |
-
-Printed back as `pipeline` when the node carries `name`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
 ### `seatControl`
 

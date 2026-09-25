@@ -72,7 +72,7 @@
       "default": null
     },
     "shaderToolchain": {
-      "description": "The directory holding the pipeline compiler\u0027s dxc, or null to resolve it by bare name through the ordinary executable search path \u2014 never an environment variable.",
+      "description": "The directory holding the graph compiler\u0027s dxc, or null to resolve it by bare name through the ordinary executable search path \u2014 never an environment variable.",
       "type": [
         "string",
         "null"
@@ -278,7 +278,7 @@
             "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
             "type": "array",
             "items": {
-              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera, Pipeline and Instance are all null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named pipeline (a WorldViewPipeline row) or graph instance (a WorldViewGraph row) shows its selected image output in the rect \u2014 a slot names at most one of the three (the validator refuses more authored together).",
+              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Instance are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named graph instance (a WorldViewGraph row) shows its selected image output in the rect, placed over the SDF world by the render graph\u0027s root \u2014 a slot names at most one of the two (the validator refuses both authored together).",
               "type": "object",
               "properties": {
                 "x": {
@@ -302,15 +302,7 @@
                   "default": 1
                 },
                 "camera": {
-                  "description": "The authored camera name filling this slot, or null for the seat that owns it (or the pipeline named by Pipeline).",
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "pipeline": {
-                  "description": "The authored views.pipelines row name filling this slot with a compiled shader pipeline, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
+                  "description": "The authored camera name filling this slot, or null for the seat that owns it (or the instance named by Instance).",
                   "type": [
                     "string",
                     "null"
@@ -318,7 +310,7 @@
                   "default": null
                 },
                 "instance": {
-                  "description": "The views.graphs row name whose output fills this slot, or null for a seat, camera or pipeline slot.",
+                  "description": "The views.graphs row name whose output fills this slot, or null for a seat or camera slot.",
                   "type": [
                     "string",
                     "null"
@@ -337,69 +329,6 @@
         ],
         "additionalProperties": false,
         "title": "WorldViewLayout"
-      },
-      "default": null
-    },
-    "pipelines": {
-      "description": "Gets the authored views.pipelines rows. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "description": "One named shader-pipeline instance displayed by a Pipeline slot. Its source declares connected GPU passes, or is a single shader adapted into a one-pass pipeline. The row carries authored intent; compilation, resource ownership, history, and presentation inputs belong to the shader runtime and its host.",
-        "type": [
-          "object",
-          "null"
-        ],
-        "properties": {
-          "name": {
-            "description": "The pipeline\u0027s stable name (a SafeName, unique within the section) \u2014 what a Pipeline names and a pipeline.* console verb addresses.",
-            "type": "string"
-          },
-          "source": {
-            "description": "Where the pipeline comes from: a puck.render.graph.v1 graph document of shader passes, a one-off shader source file, which reads as a one-pass graph, or a puck.shader.package.v1 package directory, which loads with its source tree gone. It resolves beside the document that authors it (WorldDocumentPaths), like every relative path a document authors.",
-            "type": "string"
-          },
-          "camera": {
-            "description": "The authored camera feeding the pipeline frame block\u0027s cameraPosition, cameraTarget, cameraUp and cameraFov, or null, which leaves cameraFov zero so a pipeline keeps its own pointer orbit.",
-            "type": [
-              "string",
-              "null"
-            ],
-            "default": null
-          },
-          "timeScale": {
-            "description": "The pipeline clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
-            "type": "number",
-            "default": 1
-          },
-          "output": {
-            "description": "The image version the instance shows, or null for the source\u0027s first declared output.",
-            "type": [
-              "string",
-              "null"
-            ],
-            "default": null
-          },
-          "overrides": {
-            "description": "This instance\u0027s parameter overrides, keyed by pass name; each value is that pass\u0027s config object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one source differ only in what they override. The source\u0027s config schema binds them when a boot, a world.load or world.reload, a commit, or an upsert names them (the server reads the source, and refuses a value by name), and again when a graph installs (the host binds them into its passes). null overrides nothing.",
-            "type": [
-              "object",
-              "null"
-            ],
-            "default": null,
-            "additionalProperties": {
-              "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
-            }
-          }
-        },
-        "required": [
-          "name",
-          "source"
-        ],
-        "additionalProperties": false,
-        "title": "WorldViewPipeline"
       },
       "default": null
     }

@@ -5,9 +5,7 @@ using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-/// <summary>Describes one viewport slot's normalized output region for an SDF frame — an SDF camera render, or,
-/// when <see cref="Child"/> names one, a hosted child render node instead (see <see cref="SdfWorldRenderSpec.Children"/>
-/// and <see cref="SdfEngineNode"/>'s per-frame child-mask derivation). <see cref="Camera"/> is unused for a child slot.</summary>
+/// <summary>Describes one viewport slot's normalized output region for an SDF frame: an SDF camera render.</summary>
 /// <param name="Camera">The camera used to render the view.</param>
 /// <param name="Region">The view's normalized output region.</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
@@ -21,10 +19,6 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <c>ViewportData.renderScale</c>; the row's <c>w</c> lane carries <see cref="SdfFrame.FarDistance"/>) — no row
     /// growth.</summary>
     public Vector2 AsymmetricFrustumOffset { get; init; }
-    /// <summary>The <see cref="SdfWorldRenderSpec.Children"/> key backing this slot instead of an SDF camera render,
-    /// or <see langword="null"/> for an ordinary camera view. A name unresolved when <see cref="SdfEngineNode"/> first
-    /// derives its child mask takes the ordinary camera path for the life of the engine instead — see its remarks.</summary>
-    public string? Child { get; init; }
     /// <summary>The view's internal render scale in (0, 1]: Stage 1 renders the view at this fraction of its output
     /// region (an integer-derived extent — see the shader's <c>worldRenderDims</c>) and Stage 2 upsamples it back.
     /// 1 (the default) renders native through a bit-exact copy path, so an unset frame is byte-identical to a build

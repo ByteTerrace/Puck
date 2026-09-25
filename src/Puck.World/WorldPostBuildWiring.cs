@@ -221,7 +221,7 @@ internal static class WorldPostBuildWiring {
         // toasts are presentation-only (AddWorldPresentation registers it); the stable
         // terminal-session proxy exists in both shapes and mirrors edit outcomes when a windowed bank is attached.
         var toasts = services.GetService<OverlayToastStore>();
-        var pipelineRuntime = services.GetService<WorldPipelineRuntime>();
+        var graphHost = services.GetService<WorldViewGraphHost>();
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
@@ -270,7 +270,7 @@ internal static class WorldPostBuildWiring {
                 definitionSource.SourcePath = origin;
                 // The rendering host resolves views.pipelines sources against this same moved directory from here
                 // on — presentation-only, so a headless boot has no runtime to rebase.
-                pipelineRuntime?.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: origin));
+                graphHost?.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: origin));
             }
 
             // toast/HUD narration is presentation-only; a headless boot simply has nowhere to paint it.

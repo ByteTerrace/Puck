@@ -75,7 +75,7 @@ public sealed record RenderGraphRuntimeRefusal(RenderGraphRuntimeRefusalCode Cod
 /// allocates nothing.
 /// </para>
 /// </summary>
-public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposable {
+public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposable, IRenderGraphInstances {
     private readonly CaptureRequestSlot m_capture = new();
     // Each instance's capture target by name, created when first asked for and kept across a reconfiguration, so a target
     // a caller holds keeps reading the instance of its name.

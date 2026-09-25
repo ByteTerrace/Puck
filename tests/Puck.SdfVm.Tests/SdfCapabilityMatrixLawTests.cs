@@ -28,7 +28,7 @@ public sealed class SdfCapabilityMatrixLawTests {
     private static readonly string[] IdentityMembers = [".ctor", "<Clone>$", "Deconstruct", "Equals", "GetHashCode", "ToString"];
     // The capabilities the plan names; each is the whole or part of a row's capability.
     private static readonly string[] NamedCapabilities = [
-        "screen slots", "decals", "child slots", "viewports", "render scale", "tonemap", "captures", "pass labels",
+        "screen slots", "decals", "viewports", "render scale", "tonemap", "captures", "pass labels",
         "kernel variants", "brick baking", "glyph atlas", "volumes", "lights", "far field", "debug views",
     ];
     // The graph pass that replaces each engine pass.
@@ -111,16 +111,6 @@ public sealed class SdfCapabilityMatrixLawTests {
             Check: null,
             Green: false,
             Members: ["SdfViewSnapshot.RenderScale", "SdfViewSnapshot.UpscaleSharpness"]
-        ),
-        new(
-            Capability: "child slots",
-            Equivalent: "nested view instances joined by the graph's child map",
-            Check: "SdfPipelineBuildLivenessLawTests (a child slot)",
-            Green: false,
-            Members: [
-                "SdfViewSnapshot.Child", "SdfWorldEngine.SetChildMask", "SdfWorldEngine.SetChildSource", "SdfEngineNode.Children",
-                "SdfEngineNode.HasChild", "SdfEngineNode.RegisterChild", "SdfEngineNode.RemoveChild", "SdfWorldRenderSpec.Children",
-            ]
         ),
         new(
             Capability: "screen slots",

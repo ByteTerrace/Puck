@@ -3,6 +3,7 @@ using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.Maths;
 using Puck.Overlays;
 using Puck.SdfVm;
@@ -78,9 +79,12 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // list). See ComposeMarkerCandidates/ComposeMarkerSeat.
     private readonly MarkerStore m_markers;
     private readonly IOverlayPredicateEvaluator? m_overlayFacts;
-    // Null for a document/host with no live pipeline children (no views.pipelines row was registered at boot) — every
-    // pipeline slot then falls through to its degenerate camera fallback below, never a null-reference.
-    private readonly WorldPipelineRuntime? m_pipelines;
+    private readonly WorldViewGraphHost? m_graphs;
+
+    // The display extent the last captured frame was composed for, which the next frame's pane placement reads.
+    private uint m_displayHeight;
+    private uint m_displayWidth;
+
     private readonly WorldBakeSchedule? m_bakes;
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
     private readonly PlayerRoster m_roster;
@@ -134,7 +138,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // This frame's bounded volumes: the static placements' baked ones, then the stamp pool's slot-riding ones, in
     // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
-    private readonly HashSet<string> m_fedPipelines = new(comparer: StringComparer.Ordinal);
     private readonly WorldRenderCycleTrack m_cycle = new();
     // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
     private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
@@ -933,8 +936,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // the instance's pixels through its pane's published SourceMapping, which reports a point off the pane too, so a drag
     // that leaves it keeps tracking. The position moves only while the pointer is pressed. No pointer feed (an offscreen
     // boot), no reported position yet, or a pane with no area leaves the state untouched.
-    private void UpdatePipelinePointer(WorldPipelineRuntime.Entry entry, string name, NormalizedRect region, uint width, uint height) {
-        if (m_pipelines?.ReadPointer is not { } readPointer) {
+    private void UpdatePipelinePointer(WorldViewGraphHost.Entry entry, string name, NormalizedRect region, uint width, uint height) {
+        if (m_graphs?.ReadPointer is not { } readPointer) {
             return;
         }
 
@@ -958,7 +961,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             );
         }
 
-        // The instance renders at the extent the slot's Resize gives it.
+        // The instance renders at the extent its slot's footprint gives it.
         var sourceWidth = Math.Max(
             val1: 1,
             val2: ((int)(region.Width * width))
@@ -1144,7 +1147,91 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         return true;
     }
 
-    /// <inheritdoc/>
+    /// <summary>Prepares the render graph's frame before its runtime schedules it: reconciles the document's
+    /// <c>views.graphs</c> rows onto the runtime, then, for each graph instance a slot of the last composed layout
+    /// shows, places it in its slot's rect at the live upscale sharpness, advances its clock, and hands it this frame's
+    /// camera, pointer and time. The slots are the ones the last captured frame composed, since the world producer
+    /// captures its frame inside the runtime's schedule, so a layout change places its panes one frame later.</summary>
+    /// <param name="context">The host's frame context.</param>
+    public void PrepareGraph(in FrameContext context) {
+        if (m_graphs is not { } graphs) {
+            return;
+        }
+
+        graphs.BeginFrame(views: m_client.Definition.Views);
+
+        var width = m_displayWidth;
+        var height = m_displayHeight;
+        var deltaSeconds = ((float)context.FrameDeltaSeconds);
+
+        foreach (var composed in m_composer.Slots) {
+            var region = composed.Region;
+
+            if (
+                (composed.Instance is not { } name) ||
+                !graphs.Place(
+                    instance: name,
+                    region: region,
+                    sharpness: m_settings.UpscaleSharpness
+                ) ||
+                !graphs.TryGet(
+                    entry: out var entry,
+                    name: name
+                )
+            ) {
+                continue;
+            }
+
+            var instanceDeltaSeconds = entry.AdvanceClock(deltaSeconds: deltaSeconds);
+            var row = WorldDefinitionRows.FindGraph(
+                graphs: m_client.Definition.Views.Graphs,
+                name: name
+            );
+            // The paired camera, or NONE: a row without a camera (or whose name fails to resolve) hands the graph a zero
+            // cameraFov with zero vectors — the documented "no paired camera" signal a graph branches on to keep its own
+            // pointer orbit — never a made-up default eye.
+            var cameraPos = Vector3.Zero;
+            var cameraTarget = Vector3.Zero;
+            var cameraUp = Vector3.Zero;
+            var cameraFov = 0f;
+
+            if (
+                (row?.Camera is { } cameraName) &&
+                ResolveNamedCamera(
+                    camera: out var camera,
+                    deltaSeconds: deltaSeconds,
+                    height: height,
+                    name: cameraName,
+                    region: region,
+                    width: width
+                )
+            ) {
+                cameraPos = camera.Position;
+                cameraTarget = (camera.Position + camera.Forward);
+                cameraUp = camera.Up;
+                cameraFov = (2f * MathF.Atan(x: camera.TanHalfFieldOfView));
+            }
+
+            UpdatePipelinePointer(
+                entry: entry,
+                height: height,
+                name: name,
+                region: region,
+                width: width
+            );
+            entry.Node.Frame = new ShaderFrameValues(
+                CameraFov: cameraFov,
+                CameraPosition: cameraPos,
+                CameraTarget: cameraTarget,
+                CameraUp: cameraUp,
+                Pointer: entry.Pointer,
+                PointerDown: entry.PointerWasDown,
+                PointerPresses: entry.PointerPresses,
+                Time: entry.ClockSeconds,
+                TimeDelta: instanceDeltaSeconds
+            );
+        }
+    }
     /// <inheritdoc/>
     public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
     /// <inheritdoc/>
@@ -1153,6 +1240,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         // It may drive visual-only animation and the FPS witness, but never feeds authoritative world state.
         m_elapsedSeconds += deltaSeconds;
         m_frameRate.Sample(deltaSeconds: deltaSeconds);
+        m_displayWidth = width;
+        m_displayHeight = height;
 
         // Simulation has already advanced on the launcher's exact fixed ticks; the client view holds the two latest
         // snapshot poses. Each active entry's render pose is Lerp(previous tick → current, alpha) plus any eased
@@ -1269,105 +1358,12 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var markerSeatCount = 0;
         Span<bool> seatSlotBound = stackalloc bool[PlayerRoster.MaxSlots];
 
-        // Only accepted rows create instances. Completed whole-pipeline candidates swap before this frame renders.
-        m_pipelines?.Reconcile(rows: m_client.Definition.Views.Pipelines);
-        m_pipelines?.PumpWatches();
-        m_fedPipelines.Clear();
-
         foreach (var composed in m_composer.Slots) {
             var region = composed.Region;
 
-            if (composed.Pipeline is { } pipelineName) {
-                // A pipeline slot: the SDF engine skips its own camera march for this slot (see SdfEngineNode's
-                // per-frame child-mask derivation) and shows the named views.pipelines row's compiled render instead.
-                // The camera here is a degenerate placeholder used ONLY when that name never resolved in the
-                // engine's children map — never a live march (a near-zero field of view keeps it finite/valid
-                // rather than an invalid all-zero default).
-                if (
-                    (m_pipelines is { } pipelines) &&
-                    m_fedPipelines.Add(item: pipelineName) &&
-                    pipelines.TryGet(
-                    entry: out var entry,
-                    name: pipelineName
-                )
-                ) {
-                    entry.Node.Resize(
-                        height: Math.Max(
-                            val1: 1u,
-                            val2: ((uint)(region.Height * height))
-                        ),
-                        width: Math.Max(
-                            val1: 1u,
-                            val2: ((uint)(region.Width * width))
-                        )
-                    );
-
-                    var pipelineDeltaSeconds = entry.AdvanceClock(deltaSeconds: deltaSeconds);
-
-                    var pipelineRow = WorldDefinitionRows.FindPipeline(
-                        name: pipelineName,
-                        pipelines: m_client.Definition.Views.Pipelines
-                    );
-                    // The paired camera, or NONE: a row without a camera (or whose name fails to resolve) hands the
-                    // pipeline a zero cameraFov with zero vectors — the documented "no paired camera" signal a pipeline
-                    // branches on to keep its own pointer orbit — never a made-up default eye.
-                    var cameraPos = Vector3.Zero;
-                    var cameraTarget = Vector3.Zero;
-                    var cameraUp = Vector3.Zero;
-                    var cameraFov = 0f;
-
-                    if (
-                        (pipelineRow?.Camera is { } pipelineCameraName) &&
-                        ResolveNamedCamera(
-                        camera: out var pipelineCamera,
-                        deltaSeconds: deltaSeconds,
-                        height: height,
-                        name: pipelineCameraName,
-                        region: region,
-                        width: width
-                    )
-                    ) {
-                        cameraPos = pipelineCamera.Position;
-                        cameraTarget = (pipelineCamera.Position + pipelineCamera.Forward);
-                        cameraUp = pipelineCamera.Up;
-                        cameraFov = (2f * MathF.Atan(x: pipelineCamera.TanHalfFieldOfView));
-                    }
-
-                    UpdatePipelinePointer(
-                        entry: entry,
-                        height: height,
-                        name: pipelineName,
-                        region: region,
-                        width: width
-                    );
-                    entry.Node.Frame = new ShaderFrameValues(
-                        CameraFov: cameraFov,
-                        CameraPosition: cameraPos,
-                        CameraTarget: cameraTarget,
-                        CameraUp: cameraUp,
-                        Pointer: entry.Pointer,
-                        PointerDown: entry.PointerWasDown,
-                        PointerPresses: entry.PointerPresses,
-                        Time: entry.ClockSeconds,
-                        TimeDelta: pipelineDeltaSeconds
-                    );
-                }
-
-                m_views.Add(item: new SdfViewSnapshot(
-                    Camera: CameraSnapshot.LookAt(
-                        position: Vector3.UnitY,
-                        target: Vector3.Zero,
-                        fieldOfViewRadians: 0.001f,
-                        viewportWidth: width,
-                        viewportHeight: height
-                    ),
-                    Region: region
-                ) {
-                    Child = pipelineName,
-                    RenderScale = transitionScale,
-                    UpscaleSharpness = m_settings.UpscaleSharpness,
-                });
-
+            // An instance slot is placed over the SDF world by the render graph's root (PrepareGraph), so the world
+            // renders no view for it.
+            if (composed.Instance is not null) {
                 continue;
             }
 
@@ -1679,12 +1675,12 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="speech">The speech clock a <see cref="WorldAnchor.RecentSpeaker"/> camera anchor reads.</param>
     /// <param name="overlayFacts">The predicate evaluator a ranked camera anchor list selects through, or
     /// <see langword="null"/> (every candidate condition then holds).</param>
-    /// <param name="pipelines">The shared shader-pipeline runtime, or <see langword="null"/> for a document/host with no
-    /// live pipeline children — every pipeline slot then falls through to its degenerate camera fallback.</param>
+    /// <param name="graphs">The host of the document's <c>views.graphs</c> rows on the render graph, or
+    /// <see langword="null"/> for a presentation with no render graph, whose instance slots then show nothing.</param>
     /// <param name="bakes">The schedule pumped once per captured frame to keep the definition's creation bakes current,
     /// or <see langword="null"/> for a presentation that bakes nothing.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldPipelineRuntime? pipelines = null, WorldBakeSchedule? bakes = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldBakeSchedule? bakes = null) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
@@ -1737,7 +1733,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_seatBindings = seatBindings;
         m_animator = animator;
         m_sdfDocuments = sdfDocuments;
-        m_pipelines = pipelines;
+        m_graphs = graphs;
         m_bakes = bakes;
 
         // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before

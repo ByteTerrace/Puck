@@ -201,12 +201,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
-    // A child viewport shows another node's surface — Stage 1 never reads its mask words, so nothing is written
-    // (matching the beam's own child early-out, which leaves those words untouched).
-    if (isChildViewport(id.z)) {
-        return;
-    }
-
     uint tileIndex = worldTileIndex(id.z, id.xy, params.tileGrid);
     uint maskWordCount = params.instanceMaskWordCount;
     uint maskBase = worldInstanceMaskBase(tileIndex);

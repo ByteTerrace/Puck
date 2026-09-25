@@ -887,8 +887,8 @@ public sealed class WorldSiloLifecycleLawTests {
                 return (definition with {
                     HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Presentation = WorldHostPresentation.None },
                     ViewsRaw = (definition.Views with {
-                        Pipelines = [
-                            new WorldViewPipeline(
+                        Graphs = [
+                            new WorldViewGraph(
                                 Name: "left",
                                 Source: source,
                                 Overrides: new Dictionary<string, JsonElement> {
