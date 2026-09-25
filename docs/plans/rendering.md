@@ -722,7 +722,7 @@ sub-steps, in this order:
     an image port takes. The catalog refuses an input port that writes, an
     output port that reads and a color-attachment buffer port. `post.<id>` and
     `overlay` sample their input and draw their output; `sdf.world`,
-    `sdf.bricks` and `resample` read and write by compute.
+    `sdf.bricks` and `place` read and write by compute.
   - The graph compiler hands each package pass's port accesses to the planner
     (`ShaderPipelinePackagePass.InputAccesses` and `OutputAccesses`), and
     `UseOf` gives a fragment-sampled read and a color-attachment write the uses
@@ -2008,7 +2008,7 @@ Phase 3, the groups, follows phase 2:
       `ShaderPipelineRenderNode` and its float preview
       (`pipeline-preview.frag.hlsl`), the shipped ink pipeline
       (`ink-simulation.hlsl`, `ink-visualize.hlsl`), the package library's
-      `resample.hlsl`, `PostProcessPackage`'s writes, and the seven canary
+      `place.comp.hlsl`, `PostProcessPackage`'s writes, and the seven canary
       sources under `pipeline-edit`, `pipeline-feedback`, `pipeline-shapes`
       and `pipeline-supersede`. Canaries: `no-device-compile`, every
       `pipeline-*`, `source-conversion` and `resample-reconstruction`.
@@ -2024,7 +2024,7 @@ Phase 3, the groups, follows phase 2:
       (binding 44), and the engine's binding lists in
       `SdfWorldEngine.Pipelines.cs`. Canaries: 20 mapped, the 14b-5 set
       without `sdf-decode-sign-refusal`, plus `sdf-visibility-fresh`, which
-      the index has not recorded yet. The package library's `resample.hlsl`,
+      the index has not recorded yet. The package library's `place.comp.hlsl`,
       which took the SDF-side kernel's place, moves with the pipeline node's
       sources in 14b-3, with step 15.
     - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
@@ -2781,11 +2781,12 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups.
-P11b keeps one resample pass in the graph's package library: the `resample`
-package, whose kernel `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`
-holds the SDF composite's reconstruction: an exact copy at equal extent, bilinear at sharpness
+P11b keeps one resample pass in the graph's package library: the `place`
+package, whose build-compiled kernel `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`
+holds the SDF composite's placement and reconstruction: the base outside a destination rect, and
+inside it the source as an exact copy at equal extent, bilinear at sharpness
 0, clamped Catmull-Rom at sharpness 1 and a blend between, all through formatted
-loads with no sampler state. The `resample-reconstruction` canary holds it to the
+loads with no sampler state. A rect of the whole output resamples the whole source. The `resample-reconstruction` canary holds it to the
 analytic bilinear and Catmull-Rom values of known steps on both backends,
 including a column where only the neighbourhood clamp and one where only the edge
 clamp decides the value. Render

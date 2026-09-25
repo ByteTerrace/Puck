@@ -414,7 +414,7 @@ bytecode that no code loaded, so each build paid for them and each reader had
 to discover that they did nothing. Keeping them until P14's final sweep was
 rejected: dead source is not a reference anyone needs, and history keeps it.
 The same rule removed the SDF-side `resample.comp.hlsl` once the graph's package
-library held the one resample pass, the `resample` package. The pixelate
+library held the one resample pass, now the `place` package. The pixelate
 interface fixture under `tests/Puck.Shaders.Tests` is its own copy
 and stays with the spike.
 
