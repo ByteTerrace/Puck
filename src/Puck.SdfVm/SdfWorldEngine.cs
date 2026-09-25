@@ -106,7 +106,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const uint ViewSourceBindingIndex = 4; // sdf-world-views.comp and sdf-sky.comp: sources[] at u0..u4
     private const uint ViewportBindingIndex = 2; // matches sdf-world.hlsli's [[vk::binding(2, 0)]]
     private const int ViewportByteLength = ((sizeof(float) * 4) * 6); // 96-byte ViewportData incl. the renderScale row (KEEP IN SYNC with sdf-world.hlsli)
-    private const uint ViewsCullBoundsBindingIndex = 8; // sdf-world-views.comp: the bbox origin (register t3); the source array is ONE binding number (4) whose 5 elements pack into derived heap slots, so 8 never collides
+    private const uint ViewsCullBoundsBindingIndex = 8; // sdf-world-views.comp: the dispatch box, its group origin and exclusive end (register t3); the source array is ONE binding number (4) whose 5 elements pack into derived heap slots, so 8 never collides
     // Bounded flow/cloud volumes (sdfVolumes), shared by the views and sky passes: appended LAST in the views binding
     // list, so its SRV resolves to register t43 (after sdfFrameInstanceGrid t42). KEEP IN SYNC with sdf-world.hlsli.
     private const uint VolumeBindingIndex = 48;
@@ -685,9 +685,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         );
 
         // GPU-driven cull: the cull-args pass reduces the cull buffer to the Stage-1 INDIRECT dispatch args (the
-        // surviving-tile bbox, 3 group counts) and the bbox group origin (2 uints). Both are device-local — the GPU
-        // writes them as UAVs, then a barrier orders the indirect read; the views dispatch reads the args (the
-        // dispatch grid) and the bounds (its pixel offset). The all-empty margins are never dispatched.
+        // surviving-tile bbox, 3 group counts) and the dispatch box (4 uints: the group origin, then the exclusive
+        // end). Both are device-local — the GPU writes them as UAVs, then a barrier orders the indirect read; the
+        // views dispatch reads the args (the dispatch grid) and the box (its pixel offset, and where a visibility
+        // record is current). The all-empty margins are never dispatched.
         m_viewsArgsBuffer = gpu.BufferFactory.CreateDeviceLocal(
             sizeBytes: (sizeof(uint) * 3),
             usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
