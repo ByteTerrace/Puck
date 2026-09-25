@@ -80,6 +80,9 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         var layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
 
+        if (set.Group is { } group) {
+            throw new NotSupportedException(message: $"A set of group {group.Ordinal} binds through its group's view and sampler tables, which BindDescriptorSet does not set.");
+        }
         if (0 > layout.DescriptorTableParamIndex) {
             return;
         }

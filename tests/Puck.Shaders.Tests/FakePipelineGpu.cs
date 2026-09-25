@@ -497,6 +497,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     }
     private sealed class FakePipeline(Created created) : IGpuComputePipeline, IGpuPipeline {
         public nint DescriptorSetLayoutHandle => (created.Handle + 1);
+        public IReadOnlyList<nint> GroupLayoutHandles => [];
         public nint Handle => created.Handle;
         public nint LayoutHandle => (created.Handle + 2);
 

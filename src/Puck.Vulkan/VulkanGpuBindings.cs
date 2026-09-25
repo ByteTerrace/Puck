@@ -14,31 +14,27 @@ namespace Puck.Vulkan;
 public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, VulkanDescriptorAllocator allocator) : IGpuBindings {
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
 
-    private static ReadOnlyMemory<VulkanDescriptorPoolSize> BuildPoolSizes(uint combinedImageSamplerCount, uint storageBufferCount, uint storageImageCount) {
-        var sizes = new List<VulkanDescriptorPoolSize>(capacity: 3);
+    // One pool size per descriptor type the pool holds any of.
+    private static ReadOnlyMemory<VulkanDescriptorPoolSize> BuildPoolSizes(in GpuDescriptorPoolSizes sizes) {
+        var poolSizes = new List<VulkanDescriptorPoolSize>(capacity: 6);
 
-        if (combinedImageSamplerCount > 0) {
-            sizes.Add(item: new VulkanDescriptorPoolSize(
-                DescriptorCount: combinedImageSamplerCount,
-                DescriptorType: VulkanDescriptorType.CombinedImageSampler
-            ));
+        foreach (var (count, type) in ((ReadOnlySpan<(uint, uint)>)[
+            (sizes.CombinedImageSamplerCount, VulkanDescriptorType.CombinedImageSampler),
+            (sizes.StorageBufferCount, VulkanDescriptorType.StorageBuffer),
+            (sizes.StorageImageCount, VulkanDescriptorType.StorageImage),
+            (sizes.ConstantBufferCount, VulkanDescriptorType.UniformBuffer),
+            (sizes.SampledImageCount, VulkanDescriptorType.SampledImage),
+            (sizes.SamplerCount, VulkanDescriptorType.Sampler),
+        ])) {
+            if (count > 0) {
+                poolSizes.Add(item: new VulkanDescriptorPoolSize(
+                    DescriptorCount: count,
+                    DescriptorType: type
+                ));
+            }
         }
 
-        if (storageBufferCount > 0) {
-            sizes.Add(item: new VulkanDescriptorPoolSize(
-                DescriptorCount: storageBufferCount,
-                DescriptorType: VulkanDescriptorType.StorageBuffer
-            ));
-        }
-
-        if (storageImageCount > 0) {
-            sizes.Add(item: new VulkanDescriptorPoolSize(
-                DescriptorCount: storageImageCount,
-                DescriptorType: VulkanDescriptorType.StorageImage
-            ));
-        }
-
-        return sizes.ToArray();
+        return poolSizes.ToArray();
     }
 
     /// <inheritdoc/>
@@ -60,11 +56,7 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
     }
     /// <inheritdoc/>
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
-        var poolSizes = BuildPoolSizes(
-            combinedImageSamplerCount: sizes.CombinedImageSamplerCount,
-            storageBufferCount: sizes.StorageBufferCount,
-            storageImageCount: sizes.StorageImageCount
-        );
+        var poolSizes = BuildPoolSizes(sizes: in sizes);
 
         return allocator.CreatePool(
             device: Device,

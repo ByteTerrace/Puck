@@ -9,8 +9,9 @@ namespace Puck.Abstractions.Gpu;
 /// <para>What varies is admission. Each pool owner states its pools' <see cref="GpuDescriptorPoolSizes"/> from the same
 /// statement its pool creation uses, and <see cref="TryAdmit"/> checks a candidate's pools against the free ranges
 /// before anything is allocated: a candidate that does not fit is refused by name, whatever is installed keeps
-/// presenting, and nothing grows. Each admitted pool is one range of a <see cref="GpuRangeAllocator"/>, so at most
-/// <see cref="MaxLivePools"/> pools are live on a device.</para>
+/// presenting, and nothing grows. Each admitted pool is one range of the view heap's <see cref="GpuRangeAllocator"/>
+/// for its views and one of the sampler heap's for its samplers, so at most <see cref="MaxLivePools"/> pools holding
+/// views, and as many holding samplers, are live on a device.</para>
 /// </summary>
 public sealed class GpuDescriptorHeapBudget {
     /// <summary>The most descriptor pools live at once on one device. It bounds the range allocator's bookkeeping, not
@@ -23,6 +24,7 @@ public sealed class GpuDescriptorHeapBudget {
     /// <summary>The code every refusal of a candidate that does not fit carries, whichever owner it names.</summary>
     public const string RefusalCode = "GPU_DESCRIPTOR_HEAP";
 
+    private readonly GpuRangeAllocator m_samplers;
     private readonly GpuRangeAllocator m_views;
 
     /// <summary>Initializes a new instance of the <see cref="GpuDescriptorHeapBudget"/> class from a device's
@@ -46,14 +48,20 @@ public sealed class GpuDescriptorHeapBudget {
 
         SamplerDescriptors = capabilities.SamplerHeapSize;
         ViewDescriptors = capabilities.ViewHeapSize;
+        m_samplers = new GpuRangeAllocator(
+            maxRanges: MaxLivePools,
+            size: SamplerDescriptors
+        );
         m_views = new GpuRangeAllocator(
             maxRanges: MaxLivePools,
             size: ViewDescriptors
         );
     }
 
-    /// <summary>Gets the pools live now.</summary>
+    /// <summary>Gets the pools holding views live now.</summary>
     public int LivePools => m_views.LiveRanges;
+    /// <summary>Gets the sampler descriptors not admitted to any pool.</summary>
+    public uint FreeSamplerDescriptors => m_samplers.FreeCount;
     /// <summary>Gets the sampler heap's size in descriptors.</summary>
     public uint SamplerDescriptors { get; }
     /// <summary>Gets the view descriptors not admitted to any pool.</summary>
@@ -67,8 +75,8 @@ public sealed class GpuDescriptorHeapBudget {
     /// <param name="incrementBytes">The device's descriptor handle increment for the heap's type.</param>
     /// <returns>The heap's bytes.</returns>
     public static ulong HeapBytes(uint descriptors, uint incrementBytes) => (((ulong)descriptors) * incrementBytes);
-    /// <summary>Admits a candidate's pools, allocating one view range for each pool that holds a descriptor, or refuses
-    /// it by name and allocates nothing.</summary>
+    /// <summary>Admits a candidate's pools, allocating one view range for each pool that holds a view and one sampler
+    /// range for each pool that holds a sampler, or refuses it by name and allocates nothing.</summary>
     /// <param name="owner">The candidate's name, echoed in a refusal.</param>
     /// <param name="pools">The pools the candidate creates, each as its pool creation states it.</param>
     /// <param name="admission">The admitted ranges, which <see cref="Release"/> returns; <see langword="null"/> on
@@ -82,31 +90,46 @@ public sealed class GpuDescriptorHeapBudget {
         ArgumentNullException.ThrowIfNull(argument: pools);
 
         var starts = new List<(uint Start, uint Count)>(capacity: pools.Count);
+        var samplerStarts = new List<(uint Start, uint Count)>();
 
-        foreach (var pool in pools) {
-            var count = pool.HeapDescriptors;
+        try {
+            foreach (var pool in pools) {
+                var count = pool.HeapDescriptors;
 
-            if (count == 0) {
-                continue;
-            }
-
-            try {
-                starts.Add(item: (m_views.Allocate(count: count), count));
-            } catch (GpuRangeExhaustedException exception) {
-                foreach (var (start, _) in starts) {
-                    _ = m_views.Free(start: start);
+                if (count != 0) {
+                    starts.Add(item: (m_views.Allocate(count: count), count));
                 }
-
-                admission = null;
-                refusal = $"[{RefusalCode}] '{owner}' needs {pools.Sum(selector: static pool => ((long)pool.HeapDescriptors))} view descriptors in {pools.Count} pool(s) and is refused: {exception.Message}";
-
-                return false;
             }
+            foreach (var pool in pools) {
+                var count = pool.SamplerHeapDescriptors;
+
+                if (count != 0) {
+                    samplerStarts.Add(item: (m_samplers.Allocate(count: count), count));
+                }
+            }
+        } catch (GpuRangeExhaustedException exception) {
+            Free(
+                allocator: m_views,
+                ranges: starts
+            );
+            Free(
+                allocator: m_samplers,
+                ranges: samplerStarts
+            );
+            var samplers = pools.Sum(selector: static pool => ((long)pool.SamplerHeapDescriptors));
+
+            admission = null;
+            refusal = $"[{RefusalCode}] '{owner}' needs {pools.Sum(selector: static pool => ((long)pool.HeapDescriptors))} view {((samplers == 0)
+                ? string.Empty
+                : $"and {samplers} sampler ")}descriptors in {pools.Count} pool(s) and is refused: {exception.Message}";
+
+            return false;
         }
 
         admission = new GpuDescriptorAdmission(
             owner: owner,
-            ranges: starts.AsReadOnly()
+            ranges: starts.AsReadOnly(),
+            samplerRanges: samplerStarts.AsReadOnly()
         );
         refusal = string.Empty;
 
@@ -141,21 +164,36 @@ public sealed class GpuDescriptorHeapBudget {
     public void Release(GpuDescriptorAdmission admission) {
         ArgumentNullException.ThrowIfNull(argument: admission);
 
-        foreach (var (start, _) in admission.Ranges) {
-            _ = m_views.Free(start: start);
+        Free(
+            allocator: m_views,
+            ranges: admission.Ranges
+        );
+        Free(
+            allocator: m_samplers,
+            ranges: admission.SamplerRanges
+        );
+    }
+
+    private static void Free(GpuRangeAllocator allocator, IReadOnlyList<(uint Start, uint Count)> ranges) {
+        foreach (var (start, _) in ranges) {
+            _ = allocator.Free(start: start);
         }
     }
 }
-/// <summary>The view ranges one owner's pools hold in a <see cref="GpuDescriptorHeapBudget"/>.</summary>
+/// <summary>The view and sampler ranges one owner's pools hold in a <see cref="GpuDescriptorHeapBudget"/>.</summary>
 public sealed class GpuDescriptorAdmission {
-    internal GpuDescriptorAdmission(string owner, IReadOnlyList<(uint Start, uint Count)> ranges) {
+    internal GpuDescriptorAdmission(string owner, IReadOnlyList<(uint Start, uint Count)> ranges, IReadOnlyList<(uint Start, uint Count)> samplerRanges) {
         Owner = owner;
         Ranges = ranges;
+        SamplerRanges = samplerRanges;
     }
 
     /// <summary>Gets the owner's name.</summary>
     public string Owner { get; }
-    /// <summary>Gets each pool's range: its first view descriptor and its count, in pool order, for the pools that
-    /// hold a descriptor.</summary>
+    /// <summary>Gets each pool's view range: its first view descriptor and its count, in pool order, for the pools that
+    /// hold a view.</summary>
     public IReadOnlyList<(uint Start, uint Count)> Ranges { get; }
+    /// <summary>Gets each pool's sampler range: its first sampler descriptor and its count, in pool order, for the
+    /// pools that hold a sampler.</summary>
+    public IReadOnlyList<(uint Start, uint Count)> SamplerRanges { get; }
 }

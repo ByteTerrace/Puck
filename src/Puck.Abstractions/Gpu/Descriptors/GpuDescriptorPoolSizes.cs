@@ -1,8 +1,9 @@
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
-/// The per-descriptor-kind capacity a pool must provide to back one or more compute descriptor sets, DERIVED from
-/// their binding lists rather than hand-tallied. Pass it to <see cref="IGpuBindings.CreatePool"/>
+/// The per-descriptor-kind capacity a pool must provide to back one or more descriptor sets, compute binding lists'
+/// (<see cref="ForSets"/>) or groups' (<see cref="ForGroups"/>), DERIVED from their binding lists rather than
+/// hand-tallied. Pass it to <see cref="IGpuBindings.CreatePool"/>
 /// so a pool can never silently drift out of sync with the bindings it must satisfy — a hand-counted capacity that
 /// under-provisions throws at <c>AllocateSet</c>.
 /// </summary>
@@ -10,16 +11,89 @@ namespace Puck.Abstractions.Gpu;
 /// <param name="CombinedImageSamplerCount">Total combined image-sampler descriptors — graphics texture bindings and any compute <see cref="GpuComputeBindingKind.SampledImage"/> source.</param>
 /// <param name="StorageBufferCount">Total storage-buffer descriptors (read + read-write).</param>
 /// <param name="StorageImageCount">Total storage-image descriptors.</param>
+/// <param name="ConstantBufferCount">Total constant-buffer descriptors, which only a group's sets hold.</param>
+/// <param name="SampledImageCount">Total sampled-image descriptors read through a separate sampler, which only a
+/// group's sets hold.</param>
+/// <param name="SamplerCount">Total sampler descriptors, which only a group's sets hold: on Direct3D 12 a range of the
+/// device's shader-visible sampler heap rather than of its view heap.</param>
 public readonly record struct GpuDescriptorPoolSizes(
     uint MaxSets,
     uint CombinedImageSamplerCount,
     uint StorageBufferCount,
-    uint StorageImageCount
+    uint StorageImageCount,
+    uint ConstantBufferCount = 0,
+    uint SampledImageCount = 0,
+    uint SamplerCount = 0
 ) {
-    /// <summary>Gets the shader-visible view-heap slots the pool occupies on a backend that packs every kind into one
-    /// heap: the sum of the per-kind counts.</summary>
-    public uint HeapDescriptors => checked(((CombinedImageSamplerCount + StorageBufferCount) + StorageImageCount));
+    /// <summary>Gets the shader-visible view-heap slots the pool occupies on a backend that packs every view kind into
+    /// one heap: the sum of the per-kind counts other than samplers.</summary>
+    public uint HeapDescriptors => checked(((((CombinedImageSamplerCount + StorageBufferCount) + StorageImageCount) + ConstantBufferCount) + SampledImageCount));
+    /// <summary>Gets the shader-visible sampler-heap slots the pool occupies on a backend whose samplers live in a heap
+    /// of their own: <see cref="SamplerCount"/>.</summary>
+    public uint SamplerHeapDescriptors => SamplerCount;
 
+    /// <summary>Sums the per-kind descriptor demand of one set of each group, as a pipeline created from a
+    /// <see cref="GpuPipelineLayoutDescription"/> allocates them: <see cref="MaxSets"/> is the number of groups, and an
+    /// array binding contributes its full count. A Vulkan pool consumes the per-kind counts directly; a Direct3D 12 pool
+    /// is a range of the device's view heap as long as <see cref="HeapDescriptors"/> and a range of its sampler heap as
+    /// long as <see cref="SamplerHeapDescriptors"/>.</summary>
+    /// <param name="groups">The groups whose sets the pool will back, one set each.</param>
+    /// <returns>The pool's sizes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="groups"/> or one of its groups is
+    /// <see langword="null"/>.</exception>
+    public static GpuDescriptorPoolSizes ForGroups(params IReadOnlyList<GpuGroupLayoutDescription> groups) {
+        ArgumentNullException.ThrowIfNull(argument: groups);
+
+        var constantBufferCount = 0u;
+        var sampledImageCount = 0u;
+        var samplerCount = 0u;
+        var storageBufferCount = 0u;
+        var storageImageCount = 0u;
+
+        foreach (var group in groups) {
+            ArgumentNullException.ThrowIfNull(argument: group);
+
+            foreach (var binding in group.Bindings) {
+                var count = binding.Count;
+
+                switch (binding.Kind) {
+                    case GpuBindingKind.ConstantBuffer:
+                        constantBufferCount = checked((constantBufferCount + count));
+
+                        break;
+                    case GpuBindingKind.ReadOnlyBuffer:
+                    case GpuBindingKind.ReadWriteBuffer:
+                        storageBufferCount = checked((storageBufferCount + count));
+
+                        break;
+                    case GpuBindingKind.SampledImage:
+                        sampledImageCount = checked((sampledImageCount + count));
+
+                        break;
+                    case GpuBindingKind.StorageImage:
+                        storageImageCount = checked((storageImageCount + count));
+
+                        break;
+                    case GpuBindingKind.Sampler:
+                        samplerCount = checked((samplerCount + count));
+
+                        break;
+                    default:
+                        throw new InvalidOperationException(message: $"Binding kind '{binding.Kind}' has no pool-size classification.");
+                }
+            }
+        }
+
+        return new GpuDescriptorPoolSizes(
+            CombinedImageSamplerCount: 0,
+            ConstantBufferCount: constantBufferCount,
+            MaxSets: ((uint)groups.Count),
+            SampledImageCount: sampledImageCount,
+            SamplerCount: samplerCount,
+            StorageBufferCount: storageBufferCount,
+            StorageImageCount: storageImageCount
+        );
+    }
     /// <summary>Sums the per-kind descriptor demand across one or more descriptor sets, each a compute pipeline's
     /// binding list. <see cref="MaxSets"/> is the number of sets; an array binding (<see cref="GpuComputeBinding.Count"/>
     /// &gt; 1) contributes its full count. Backend-neutral: a Vulkan pool consumes the per-kind counts directly, while a

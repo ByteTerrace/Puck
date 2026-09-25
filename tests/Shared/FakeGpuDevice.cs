@@ -447,6 +447,7 @@ internal sealed class FakeGpuDevice :
         public nint BufferHandle => 3;
         public nint CommandBufferHandle => 2;
         public nint DescriptorSetLayoutHandle => 10;
+        public IReadOnlyList<nint> GroupLayoutHandles => [];
         public GpuRenderPassDescription Description { get; } = new(Colors: [new GpuColorAttachment(FinalLayout: GpuImageLayout.ShaderReadOnly, Format: GpuPixelFormat.R8G8B8A8Unorm, Load: GpuAttachmentLoad.Clear, Store: GpuAttachmentStore.Store)]);
         public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
         public IGpuRenderPass RenderPass => this;

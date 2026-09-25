@@ -439,7 +439,7 @@ the parity contract's tolerances.
 `ShaderInterfaceLayout.PipelineLayout` turns an interface's groups into a
 `GpuPipelineLayoutDescription`, the backend-neutral statement of what a
 pipeline binds, and each backend plans its own layout from that with no device
-call. The plans are not used to create pipelines yet.
+call.
 
 - `DirectXRootLayout.Plan` makes dense root parameters. For each group, in
   ordinal order, it adds a table of constant buffers, shader resource views
@@ -450,6 +450,15 @@ call. The plans are not used to create pipelines yet.
 - `VulkanGroupLayouts.Plan` makes one set layout for every set number up to
   the highest group. A set number with no group gets an empty layout, and a
   pushed index is a 4-byte push range.
+
+A compute or graphics pipeline description whose `Layout` holds such a
+description is created from these plans: Direct3D 12 creates the planned root
+signature, with its samplers in sampler tables rather than static samplers,
+and Vulkan creates the planned set layouts and a pipeline layout over them. The
+pipeline's `GroupLayoutHandles` give one handle per group, which a set of that
+group is allocated against, and `GpuDescriptorPoolSizes.ForGroups` sizes a
+pool for one set of each group. On Direct3D 12 a group's samplers take a range
+of the device's sampler heap. No shipped pass is created this way yet.
 
 An interface that pushes its frame block has no pipeline layout, because a
 pipeline pushes only an index.

@@ -41,6 +41,11 @@ public interface IVulkanGraphicsPipelineFactory {
     /// <param name="vertexInput">The explicit vertex input layout; an empty layout is used for SV_VertexID shaders.</param>
     /// <param name="outputs">What the pipeline writes: its color attachment count and blending; <see langword="null"/>
     /// for one alpha-over-blended color attachment.</param>
+    /// <param name="groups">The pipeline layout and set layouts of a pipeline created from a
+    /// <see cref="GpuPipelineLayoutDescription"/>, which the pipeline takes ownership of and is created with instead of a
+    /// layout over the texture samplers, storage buffer and push constants; <see langword="null"/> for any other
+    /// pipeline. With groups given, <paramref name="textureSamplerCount"/> is zero, <paramref name="enableStorageBuffer"/>
+    /// is <see langword="false"/> and <paramref name="pushConstantBinding"/> is <see langword="null"/>.</param>
     /// <returns>A new, owning <see cref="VulkanGraphicsPipeline"/>.</returns>
     VulkanGraphicsPipeline Create(
         VulkanLogicalDevice logicalDevice,
@@ -51,6 +56,7 @@ public interface IVulkanGraphicsPipelineFactory {
         uint textureSamplerCount = 64,
         bool enableStorageBuffer = true,
         GpuVertexInputLayout? vertexInput = null,
-        VulkanGraphicsOutputs? outputs = null
+        VulkanGraphicsOutputs? outputs = null,
+        VulkanGroupPipelineLayout? groups = null
     );
 }

@@ -1,0 +1,85 @@
+using System.Runtime.Versioning;
+
+using Puck.Abstractions.Gpu;
+using Puck.DirectX.Apis;
+using Puck.DirectX.Interfaces;
+using Puck.DirectX.Interop;
+using Xunit;
+
+namespace Puck.DirectX.Tests;
+
+/// <summary>The devices the suite's device laws run on: the software (WARP) device without the debug layer, and the
+/// default adapter with it.</summary>
+[SupportedOSPlatform("windows10.0.10240")]
+internal static class DirectXTestDevices {
+    /// <summary>Returns a context on the default adapter with the debug layer on, its device created; skips the calling
+    /// test when the host has no device or the debug layer does not load.</summary>
+    /// <param name="output">The writer the context drains debug messages into.</param>
+    /// <returns>The context, owned by the caller.</returns>
+    internal static DirectXDeviceContext Debug(StringWriter output) {
+        var context = new DirectXDeviceContext(
+            adapterLuid: 0,
+            deviceApi: new DirectXNativeDeviceApi(),
+            minimumFeatureLevel: DirectXFeatureLevel.Level110
+        ) {
+            DebugOutput = output,
+            EnableDebugLayer = true,
+        };
+
+        try {
+            _ = context.Device;
+        } catch (GpuDeviceUnavailableException exception) {
+            context.Dispose();
+            Assert.Skip(reason: $"no Direct3D 12 device with the debug layer on this host: {exception.Message}");
+        }
+
+        if (!context.HasDebugLayer) {
+            context.Dispose();
+            Assert.Skip(reason: "the Direct3D 12 debug layer did not load on this host");
+        }
+
+        return context;
+    }
+    /// <summary>Returns a context whose device is a software device, created; skips the calling test when the host has
+    /// none that meets the floor.</summary>
+    /// <param name="memory">The memory counts the context records into, or <see langword="null"/> for none.</param>
+    /// <returns>The context, owned by the caller.</returns>
+    internal static DirectXDeviceContext Warp(GpuDeviceMemoryWork? memory = null) {
+        var context = new DirectXDeviceContext(
+            adapterLuid: 1L,
+            deviceApi: new WarpDeviceApi(),
+            minimumFeatureLevel: DirectXFeatureLevel.Level110
+        ) {
+            Memory = memory,
+        };
+
+        try {
+            _ = context.Device;
+        } catch (GpuDeviceUnavailableException exception) {
+            context.Dispose();
+            Assert.Skip(reason: $"no Direct3D 12 software device on this host: {exception.Message}");
+        }
+
+        return context;
+    }
+
+    // Creates every device on the software renderer and reads it through the native API.
+    private sealed class WarpDeviceApi : IDirectXDeviceApi {
+        private readonly DirectXNativeDeviceApi m_native = new();
+
+        public DirectXDevice CreateDevice(long adapterLuid, DirectXFeatureLevel minimumFeatureLevel) =>
+            m_native.CreateWarpDevice(minimumFeatureLevel: minimumFeatureLevel);
+        public DirectXDevice CreateWarpDevice(DirectXFeatureLevel minimumFeatureLevel) =>
+            m_native.CreateWarpDevice(minimumFeatureLevel: minimumFeatureLevel);
+        public long GetAdapterLuid(nint deviceHandle) =>
+            m_native.GetAdapterLuid(deviceHandle: deviceHandle);
+        public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) =>
+            m_native.GetDeviceCapabilities(deviceHandle: deviceHandle);
+        public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) =>
+            m_native.GetDeviceIdentity(deviceHandle: deviceHandle);
+        public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) =>
+            m_native.GetMemoryProfile(deviceHandle: deviceHandle);
+        public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) =>
+            m_native.ProbeMaxFeatureLevel(adapterLuid: adapterLuid);
+    }
+}

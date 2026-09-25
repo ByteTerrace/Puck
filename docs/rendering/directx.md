@@ -198,18 +198,30 @@ device up and releases them when the context releases it, on `Recreate` and
 `Dispose`, so a recreated device has a fresh pair. The heaps never grow.
 
 - **A pool is a range.** `CreatePool` admits one range of the view heap through
-  the device's `GpuDescriptorHeapBudget`, and `DestroyPool` returns it, so the
-  next pool that fits receives it. `AllocateSet` places each set inside its
-  pool's range. A pool no free range holds is refused with
-  `GPU_DESCRIPTOR_HEAP`.
+  the device's `GpuDescriptorHeapBudget`, and a pool holding samplers one
+  range of the sampler heap too, and `DestroyPool` returns them, so the next
+  pool that fits receives them. `AllocateSet` places each set inside its
+  pool's ranges. A pool no free range holds is refused with
+  `GPU_DESCRIPTOR_HEAP`, and so is a pool whose views fit and whose samplers
+  do not.
 - **Owners are admitted before they allocate.** `IGpuBindings.CanAdmit` checks
   a candidate's whole statement of pools and allocates nothing. The pipeline
   node checks a candidate at install and a float preview when it is selected;
   an SDF engine's construction checks through `SdfWorldEngine.CheckAdmission`
   before it allocates, so its holder records the refusal like any other failed
-  engine build and tries again only when the build's inputs change. A
-  candidate that does not fit is refused by name, and whatever is installed
+  engine build and tries again only when the build's inputs change; the unified
+  overlay checks its one pool before it creates its resources, and refuses them
+  under its resource refusal like any other failed creation. A candidate that
+  does not fit is refused by name, and whatever is installed
   keeps presenting.
+- **A group's samplers are descriptors.** A pipeline created from a
+  `GpuPipelineLayoutDescription` binds through the root signature
+  `DirectXRootSignatures.CreateLayout` creates from `DirectXRootLayout.Plan`: a
+  view table per group, a sampler table for a group that holds samplers, the
+  pushed index as one root constant at `b0` in space 4, and no static sampler.
+  A set of such a group takes its view table from its pool's view range and
+  its sampler table from its pool's sampler range. Every other pipeline still
+  reads its samplers as static samplers in its root signature.
 - **Every command list binds the pair once.** `DirectXGpuRecorder.BeginCommandBuffer`
   binds both heaps after the reset, so `BindDescriptorSet` sets only the
   descriptor table.

@@ -415,6 +415,7 @@ public sealed class SdfWorldPipelines : IDisposable {
         public GpuComputePipelineDescription Description { get; } = description;
 
         public nint DescriptorSetLayoutHandle => m_current.Native.DescriptorSetLayoutHandle;
+        public IReadOnlyList<nint> GroupLayoutHandles => m_current.Native.GroupLayoutHandles;
         public nint Handle => m_current.Native.Handle;
         public nint LayoutHandle => m_current.Native.LayoutHandle;
 

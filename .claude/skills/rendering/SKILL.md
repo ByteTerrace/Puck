@@ -380,7 +380,8 @@ These are one-line cautions; the owning pages hold the derivations.
 - **A Direct3D 12 descriptor pool is a range of the device's heap.** Each
   device has one shader-visible view heap and one sampler heap
   (`DirectXShaderVisibleHeaps`), created and released with the device; a pool
-  is admitted into the view heap through its `GpuDescriptorHeapBudget`, every
+  is admitted into the view heap, and a pool holding samplers into the sampler
+  heap too, through its `GpuDescriptorHeapBudget`, every
   recording binds both heaps once at `BeginCommandBuffer`, and a clear takes one
   of the device's clear slots. A pool owner states its pools statically, creates
   them from that statement, and checks `IGpuBindings.CanAdmit` before it
@@ -649,9 +650,19 @@ from it with no device call: `DirectXRootLayout.Plan` (a view table per group,
 a second table for a group's samplers, the pushed index last at `b0` in space
 4) and `VulkanGroupLayouts.Plan`. `DirectXRootLayoutLawTests` and
 `VulkanGroupLayoutsLawTests` hold both to the spike's tables in
-`tests/Shared/GpuGroupLayoutTables.cs`. No pipeline is created from a plan
-yet; `GpuComputeBindingKind` and `ShaderSetManifestBindingKind` still carry the
-combined image sampler until the backends bind sampler tables.
+`tests/Shared/GpuGroupLayoutTables.cs`. A pipeline description with a `Layout`
+is created from those plans (`DirectXRootSignatures.CreateLayout`, whose root
+signature has sampler tables and no static sampler; `VulkanPipelineLayouts.Create`
+over the planned sets), and `RequireLayout` refuses a layout beside the bindings
+it replaces. Its `GroupLayoutHandles` are what a group's set is allocated
+against, from a pool sized by `GpuDescriptorPoolSizes.ForGroups`; on Direct3D
+12 that pool's samplers are a range of the sampler heap.
+`DirectXGroupedLayoutLawTests` and `VulkanGroupedPipelineLayoutLawTests` hold the
+created layouts to the same tables. No shipped pipeline is created from a plan
+yet, no write fills a group's constant buffer, separate image or sampler, and no
+recorder binds a set by its group's ordinal; `GpuComputeBindingKind` and
+`ShaderSetManifestBindingKind` still carry the combined image sampler until the
+owners move onto groups.
 
 The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
 [frame graphs](../../../docs/reference/shaders.md#frame-graphs)) and the one

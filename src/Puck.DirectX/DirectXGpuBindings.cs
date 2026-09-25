@@ -11,11 +11,12 @@ namespace Puck.DirectX;
 /// Implements <see cref="IGpuBindings"/> for Direct3D 12 over the device's two shader-visible descriptor heaps
 /// (<see cref="DirectXShaderVisibleHeaps"/>), which it creates when its device context brings a device up
 /// (<see cref="CreateDeviceHeaps"/>) and releases when the context releases the device (<see cref="ReleaseDeviceHeaps"/>),
-/// so a recreated device gets a fresh pair. Each <see cref="CreatePool"/> admits one range of the view heap through the
-/// device's <see cref="GpuDescriptorHeapBudget"/> and <see cref="DestroyPool"/> returns it; <see cref="AllocateSet"/>
-/// bump-allocates each set's region inside its pool's range (advancing a per-pool cursor by the layout's slot count and
-/// bounds-checking against the range), so several sets share one pool like a Vulkan descriptor pool. Samplers are static
-/// in Direct3D 12 root signatures, so <see cref="CreateSampler"/> returns a non-zero sentinel and
+/// so a recreated device gets a fresh pair. Each <see cref="CreatePool"/> admits one range of the view heap, and one of
+/// the sampler heap for a pool holding samplers, through the device's <see cref="GpuDescriptorHeapBudget"/> and
+/// <see cref="DestroyPool"/> returns them; <see cref="AllocateSet"/> bump-allocates each set's region inside its pool's
+/// ranges (advancing a per-pool cursor by the layout's slot count and bounds-checking against the range), so several
+/// sets share one pool like a Vulkan descriptor pool. A pipeline created without a layout description reads its samplers
+/// as static samplers in its root signature, so <see cref="CreateSampler"/> returns a non-zero sentinel and
 /// <see cref="DestroySampler"/> is a no-op.
 /// </summary>
 /// <param name="deviceContext">The device context whose current device creates every heap and view.</param>
@@ -60,8 +61,19 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         heaps?.Dispose();
     }
     /// <inheritdoc/>
+    /// <remarks>A group's layout handle (<see cref="IGpuComputePipeline.GroupLayoutHandles"/>) takes a region of the
+    /// pool's view range as long as the group's view table and a region of its sampler range as long as its sampler
+    /// table, so a group's samplers live in the device's sampler heap.</remarks>
     public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {
         var pool = ((DirectXDescriptorPool)GCHandle.FromIntPtr(value: poolHandle).Target!);
+
+        if (GCHandle.FromIntPtr(value: descriptorSetLayoutHandle).Target is DirectXGroupLayout group) {
+            return AllocateGroupSet(
+                group: group,
+                pool: pool
+            );
+        }
+
         var layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: descriptorSetLayoutHandle).Target!);
         var offset = pool.NextOffset;
         var slotCount = layout.DescriptorSlotCount;
@@ -81,6 +93,35 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
 
         return GCHandle.ToIntPtr(value: GCHandle.Alloc(value: set));
     }
+
+    private static nint AllocateGroupSet(DirectXDescriptorPool pool, DirectXGroupLayout group) {
+        var offset = pool.NextOffset;
+        var samplerOffset = pool.SamplerNextOffset;
+
+        if (
+            ((offset + group.ViewSlotCount) > pool.Capacity) ||
+            ((samplerOffset + group.SamplerSlotCount) > pool.SamplerCapacity)
+        ) {
+            throw new InvalidOperationException(message: $"The descriptor pool (capacity {pool.Capacity} views and {pool.SamplerCapacity} samplers) cannot fit group {group.Ordinal}'s set of {group.ViewSlotCount} views and {group.SamplerSlotCount} samplers at offsets {offset} and {samplerOffset}.");
+        }
+
+        pool.NextOffset = (offset + group.ViewSlotCount);
+        pool.SamplerNextOffset = (samplerOffset + group.SamplerSlotCount);
+
+        var set = new DirectXDescriptorSet {
+            CpuBase = (pool.CpuBase + (((nuint)offset) * pool.DescriptorSize)),
+            DescriptorSize = pool.DescriptorSize,
+            GpuBase = (pool.GpuBase + (((ulong)offset) * pool.DescriptorSize)),
+            Group = group,
+            SamplerCpuBase = (pool.SamplerCpuBase + (((nuint)samplerOffset) * pool.SamplerDescriptorSize)),
+            SamplerDescriptorSize = pool.SamplerDescriptorSize,
+            SamplerGpuBase = (pool.SamplerGpuBase + (((ulong)samplerOffset) * pool.SamplerDescriptorSize)),
+            SlotByBinding = group.SlotByBinding,
+        };
+
+        return GCHandle.ToIntPtr(value: GCHandle.Alloc(value: set));
+    }
+
     /// <inheritdoc/>
     public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) =>
         Heaps.CanAdmit(

@@ -14,9 +14,11 @@ namespace Puck.World.Tests;
 /// <summary>
 /// Laws for the GPU work <see cref="UnifiedOverlayNode"/> counts, driven over <see cref="FakeGpuDevice"/>: the exact
 /// counts of a drawn overlay frame, submission identity across a device loss, that the descriptor pool it states is the
-/// one it creates, that a steady-state drawn frame allocates nothing, and that every creation of its resources failed in
-/// turn through <see cref="GpuCreationFaults"/> releases exactly what was created before it, presents the inner frame
-/// unchanged without throwing, tries nothing again until a device loss, and creates the resources after one.
+/// one it creates, that a pool the device's heap cannot admit is refused by name before anything is created while the
+/// inner frame passes through, that a steady-state drawn frame allocates nothing, and that every creation of its
+/// resources failed in turn through <see cref="GpuCreationFaults"/> releases exactly what was created before it,
+/// presents the inner frame unchanged without throwing, tries nothing again until a device loss, and creates the
+/// resources after one.
 /// </summary>
 public sealed class UnifiedOverlayWorkLawTests {
     // The second drawn cursor frame, published when the third frame polls its fence. The overlay pass is the render
@@ -70,6 +72,64 @@ public sealed class UnifiedOverlayWorkLawTests {
         Assert.Equal(
             expected: [UnifiedOverlayNode.DescriptorPoolSizes],
             actual: rig.Gpu.PoolsCreated
+        );
+    }
+    [Fact]
+    public void AnOverlayWhosePoolDoesNotFitTheHeapIsRefusedByNameBeforeItCreatesAnything() {
+        using var rig = new Rig(
+            countCalls: true,
+            trackObjects: true
+        );
+        var demand = UnifiedOverlayNode.DescriptorPoolSizes.HeapDescriptors;
+
+        GpuDescriptorHeapBudget Heap(uint views) => new(capabilities: (GpuDeviceCapabilities.FromDirectX(
+            resourceBindingTier: 3,
+            rootSignatureVersion: "1.1",
+            samplerHeapSize: 0,
+            shaderModel: "6.6",
+            viewHeapSize: 0
+        ) with {
+            ViewHeapSize = views,
+        }));
+
+        rig.Gpu.DescriptorHeap = Heap(views: (demand - 1U));
+
+        // The refusal is one more refused resource creation: the inner frame passes through and nothing throws.
+        var refused = rig.Node.ProduceFrame(context: default);
+
+        Assert.Equal(
+            actual: (refused.ImageHandle, refused.ImageViewHandle),
+            expected: (Rig.InnerImageHandle, Rig.InnerImageViewHandle)
+        );
+        Assert.StartsWith(
+            actualString: rig.Node.ResourceRefusal,
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'unified overlay' needs {demand} view descriptors in 1 pool(s) and is refused: "
+        );
+        Assert.Empty(collection: rig.Gpu.PoolsCreated);
+        Assert.Empty(collection: rig.Gpu.Created);
+        Assert.Equal(
+            actual: (rig.Gpu.Count(key: "IGpuImageFactory.Create"), rig.Gpu.Count(key: "IGpuPipelineFactory.Create(graphics)")),
+            expected: (0, 0)
+        );
+
+        // Room in the heap is not a frame's change: the refusal holds until its retry, and then the next frame creates
+        // the resources and draws.
+        rig.Gpu.DescriptorHeap = Heap(views: demand);
+        Assert.Equal(
+            actual: rig.Node.ProduceFrame(context: default).ImageViewHandle,
+            expected: Rig.InnerImageViewHandle
+        );
+        Assert.Empty(collection: rig.Gpu.PoolsCreated);
+
+        rig.Node.OnDeviceLost();
+        Assert.NotEqual(
+            actual: rig.Node.ProduceFrame(context: default).ImageViewHandle,
+            expected: Rig.InnerImageViewHandle
+        );
+        Assert.Null(@object: rig.Node.ResourceRefusal);
+        Assert.Equal(
+            actual: rig.Gpu.PoolsCreated,
+            expected: [UnifiedOverlayNode.DescriptorPoolSizes]
         );
     }
     [Fact]
@@ -175,8 +235,9 @@ public sealed class UnifiedOverlayWorkLawTests {
     private sealed class Rig : IDisposable {
         private readonly CursorStore m_cursor = new();
 
-        public Rig(bool trackObjects = false) {
+        public Rig(bool countCalls = false, bool trackObjects = false) {
             var gpu = new FakeGpuDevice(
+                countCalls: countCalls,
                 reportVersion: 0,
                 trackObjects: trackObjects
             );

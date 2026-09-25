@@ -20,17 +20,19 @@ public interface IGpuBindings {
     /// <param name="refusal">Why the candidate does not fit, or empty when it does.</param>
     /// <returns>Whether the candidate fits.</returns>
     bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal);
-    /// <summary>Creates a descriptor pool for combined image samplers, storage buffers, and storage images. On
-    /// Direct3D 12 the pool is a range of the device's shader-visible view heap, and a pool no free range holds is
-    /// refused with an <see cref="InvalidOperationException"/> carrying <see cref="GpuDescriptorHeapBudget.RefusalCode"/>;
-    /// an owner checks <see cref="CanAdmit"/> first, so it is refused before it allocates.</summary>
+    /// <summary>Creates a descriptor pool for the descriptor kinds <paramref name="sizes"/> counts. On Direct3D 12 the
+    /// pool is a range of the device's shader-visible view heap, and a pool holding samplers also a range of its sampler
+    /// heap; a pool no free range holds is refused with an <see cref="InvalidOperationException"/> carrying
+    /// <see cref="GpuDescriptorHeapBudget.RefusalCode"/>; an owner checks <see cref="CanAdmit"/> first, so it is refused
+    /// before it allocates.</summary>
     /// <param name="sizes">The per-descriptor-kind capacity the pool must provide, derived from the binding lists
-    /// of the sets it backs (see <see cref="GpuDescriptorPoolSizes.ForSets"/>) rather than hand-tallied.</param>
+    /// of the sets it backs (see <see cref="GpuDescriptorPoolSizes.ForSets"/> and
+    /// <see cref="GpuDescriptorPoolSizes.ForGroups"/>) rather than hand-tallied.</param>
     /// <returns>The native descriptor pool handle.</returns>
     nint CreatePool(in GpuDescriptorPoolSizes sizes);
-    /// <summary>Creates a sampler with the given filter and clamp-to-edge addressing. On Direct3D 12 samplers are
-    /// static in the root signature, so this returns a non-zero sentinel and the filter is applied by the compute
-    /// pipeline's static sampler instead.</summary>
+    /// <summary>Creates a sampler with the given filter and clamp-to-edge addressing. On Direct3D 12 a pipeline created
+    /// without a layout description reads its samplers as static samplers in its root signature, so this returns a
+    /// non-zero sentinel and the filter is applied by the compute pipeline's static sampler instead.</summary>
     /// <param name="filter">The min/mag filter.</param>
     /// <returns>The native sampler handle.</returns>
     nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear);

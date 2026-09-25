@@ -21,16 +21,22 @@ public sealed class VulkanGpuComputePipeline : IGpuComputePipeline {
     /// <param name="descriptorSetLayoutHandle">The native <c>VkDescriptorSetLayout</c> handle.</param>
     /// <param name="layoutHandle">The native <c>VkPipelineLayout</c> handle.</param>
     /// <param name="pipelineHandle">The native <c>VkPipeline</c> handle.</param>
-    public VulkanGpuComputePipeline(IVulkanComputePipelineApi api, VulkanDeviceCommands device, nint descriptorSetLayoutHandle, nint layoutHandle, nint pipelineHandle) {
+    /// <param name="groupLayoutHandles">The native <c>VkDescriptorSetLayout</c> handle of each set of a pipeline created
+    /// from a <see cref="GpuComputePipelineDescription.Layout"/>, indexed by set number, which the pipeline owns; empty
+    /// or <see langword="null"/> for any other pipeline.</param>
+    public VulkanGpuComputePipeline(IVulkanComputePipelineApi api, VulkanDeviceCommands device, nint descriptorSetLayoutHandle, nint layoutHandle, nint pipelineHandle, IReadOnlyList<nint>? groupLayoutHandles = null) {
         m_api = api;
         m_device = device;
         m_pipeline = pipelineHandle;
         DescriptorSetLayoutHandle = descriptorSetLayoutHandle;
+        GroupLayoutHandles = (groupLayoutHandles ?? []);
         LayoutHandle = layoutHandle;
     }
 
     /// <inheritdoc/>
     public nint DescriptorSetLayoutHandle { get; }
+    /// <inheritdoc/>
+    public IReadOnlyList<nint> GroupLayoutHandles { get; }
     /// <inheritdoc/>
     public nint Handle => m_pipeline;
     /// <inheritdoc/>
@@ -51,6 +57,10 @@ public sealed class VulkanGpuComputePipeline : IGpuComputePipeline {
             descriptorSetLayoutHandle: DescriptorSetLayoutHandle,
             device: m_device,
             pipelineLayoutHandle: LayoutHandle
+        );
+        VulkanPipelineLayouts.DestroySets(
+            device: m_device,
+            setLayoutHandles: GroupLayoutHandles
         );
         m_pipeline = 0;
     }

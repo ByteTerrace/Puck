@@ -28,6 +28,8 @@ D3D12_RESOURCE_BARRIER
 // Direct3D 12: root signatures, pipeline state, and geometry rendering.
 ID3DBlob
 D3D12SerializeRootSignature
+D3D12CreateRootSignatureDeserializer
+ID3D12RootSignatureDeserializer
 ID3D12RootSignature
 ID3D12PipelineState
 D3D12_GRAPHICS_PIPELINE_STATE_DESC
