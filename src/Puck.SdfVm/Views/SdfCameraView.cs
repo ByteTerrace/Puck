@@ -32,7 +32,6 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     private readonly bool m_hostsOnDirectX;
     private readonly int m_instanceCapacity;
     private readonly int m_programWordCapacity;
-    private readonly SdfViewGpuServices m_services;
     private readonly uint m_width;
 
     // Owned here rather than by the engine, so submission identities keep increasing across an engine rebuild.
@@ -59,19 +58,18 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     /// <summary>Initializes a camera view against the host's worst-case capacity envelope, so this view's own program
     /// upload never throws when the shared program grows within that ceiling (same contract as
     /// <c>CameraFeedPool</c>'s constructor).</summary>
-    /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) this view forwards
-    /// to its offscreen engine — resolved once at the composition root and stashed unchanged.</param>
+    /// <param name="pipelines">The composition's pipeline cache the view leases its engine's pipeline set from; the
+    /// engine records through the services of the device each resolve renders on.</param>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12 (selects the kernel bytecode).</param>
     /// <param name="programWordCapacity">The main engine's probed program-word floor.</param>
     /// <param name="instanceCapacity">The main engine's probed instance floor.</param>
     /// <param name="dynamicTransformCapacity">The main engine's dynamic-transform slot count.</param>
     /// <param name="width">The render width (default the native panel size).</param>
     /// <param name="height">The render height (default the native panel size).</param>
-    public SdfCameraView(SdfViewGpuServices services, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, uint width = DefaultWidth, uint height = DefaultHeight) {
-        ArgumentNullException.ThrowIfNull(services);
+    public SdfCameraView(SdfWorldPipelineCache pipelines, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, uint width = DefaultWidth, uint height = DefaultHeight) {
+        ArgumentNullException.ThrowIfNull(pipelines);
 
-        m_pipelines = new SdfWorldPipelineSource(cache: services.Pipelines);
-        m_services = services;
+        m_pipelines = new SdfWorldPipelineSource(cache: pipelines);
         m_hostsOnDirectX = hostsOnDirectX;
         m_programWordCapacity = programWordCapacity;
         m_instanceCapacity = instanceCapacity;
@@ -161,14 +159,13 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     public IWorkCounterSource WorkLifetime => m_work;
 
     // Builds the engine once its pipelines are ready; false while they build on the thread pool.
-    private bool EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfProgram program) {
+    private bool EnsureEngine(IGpuDeviceContext device, SdfProgram program) {
         if (m_engine is not null) {
             return true;
         }
 
         if (m_pipelines.Poll(
             device: device,
-            gpu: gpu,
             hostsOnDirectX: m_hostsOnDirectX,
             includeBrickPipelines: false,
             kernels: null
@@ -180,7 +177,6 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
 
         m_engine = new SdfWorldEngine(
             device: device,
-            gpu: gpu,
             height: m_height,
             options: new SdfWorldEngineOptions(
                 // A filming view never bakes carves (it renders the host world's program, and RequestBrickBake is never
@@ -268,7 +264,6 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
         // its retired engine.
         if (!EnsureEngine(
             device: device,
-            gpu: m_services.Gpu,
             program: context.Program
         )) {
             return (m_retiredEngine?.OutputImageViewHandle ?? 0);

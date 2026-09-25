@@ -117,11 +117,8 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     public void NotifyDeviceLost() =>
         m_worker.NotifyDeviceLost();
     /// <inheritdoc/>
-    public void PublishFrame(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) =>
-        m_worker.PublishFrame(
-            deviceContext: deviceContext,
-            gpu: gpu
-        );
+    public void PublishFrame(IGpuDeviceContext deviceContext) =>
+        m_worker.PublishFrame(deviceContext: deviceContext);
     /// <inheritdoc/>
     public int ReadSamples(Span<short> destination) =>
         m_worker.ReadAudioSamples(destination: destination);

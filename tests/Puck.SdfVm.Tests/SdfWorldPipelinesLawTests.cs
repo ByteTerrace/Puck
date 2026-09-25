@@ -14,8 +14,7 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfWorldPipelinesLawTests {
     [Fact]
     public void ABuildCreatesEveryEnginePipelineAndPersistsTheDeviceCacheOnce() {
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
-        var device = new PersistingDevice();
+        var device = new PersistingDevice(services: new FakeGpuDevice(reportVersion: SdfIsa.Version).Services);
         var ledger = new GpuWorkLedger(
                 framesInFlight: SdfWorldEngine.FrameRingSize,
                 name: "gpu.sdf-engine"
@@ -24,7 +23,6 @@ public sealed class SdfWorldPipelinesLawTests {
         using var pipelines = SdfWorldPipelines.Build(
             cancellationToken: CancellationToken.None,
             device: device,
-            gpu: gpu,
             includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels(beam: 1),
             ledger: ledger
@@ -61,7 +59,6 @@ public sealed class SdfWorldPipelinesLawTests {
         using var pipelines = SdfWorldPipelines.Build(
             cancellationToken: CancellationToken.None,
             device: gpu,
-            gpu: gpu,
             includeBrickPipelines: true,
             kernels: SdfTestPipelines.Kernels(beam: 1) with { BrickBake = new byte[] { 1 }, BrickUpload = new byte[] { 1 } },
             ledger: ledger
@@ -81,7 +78,6 @@ public sealed class SdfWorldPipelinesLawTests {
         Assert.Throws<OperationCanceledException>(testCode: () => SdfWorldPipelines.Build(
             cancellationToken: new CancellationToken(canceled: true),
             device: gpu,
-            gpu: gpu,
             includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels(beam: 1),
             ledger: ledger
@@ -95,16 +91,16 @@ public sealed class SdfWorldPipelinesLawTests {
         return value;
     }
 
-    // A device whose persistent cache counts the writes asked of it.
-    private sealed class PersistingDevice : IGpuDeviceContext, IGpuPipelineCache {
+    // A device whose persistent cache counts the writes asked of it, over another device's services.
+    private sealed class PersistingDevice(GpuDeviceServices services) : IGpuDeviceContext, IGpuPipelineCache {
         private int m_persisted;
 
         public long AdapterLuid => 0L;
-        public nint DeviceHandle => 1;
-        public GpuDeviceIdentity? Identity => null;
         public GpuDeviceCapabilities? Capabilities => null;
+        public GpuDeviceIdentity? Identity => null;
         public GpuMemoryProfile MemoryProfile => default;
         public int Persisted => Volatile.Read(location: ref m_persisted);
+        public GpuDeviceServices Services { get; } = services;
 
         public void Persist() => Interlocked.Increment(location: ref m_persisted);
         public void WaitIdle() { }

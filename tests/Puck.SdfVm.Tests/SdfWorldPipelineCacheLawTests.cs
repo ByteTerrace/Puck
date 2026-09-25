@@ -28,13 +28,11 @@ public sealed class SdfWorldPipelineCacheLawTests {
         var cache = new SdfWorldPipelineCache();
         var first = cache.Acquire(
             device: gpu,
-            gpu: gpu,
             includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels()
         );
         var second = cache.Acquire(
             device: gpu,
-            gpu: gpu,
             includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels()
         );
@@ -54,7 +52,6 @@ public sealed class SdfWorldPipelineCacheLawTests {
 
         var later = cache.Acquire(
             device: gpu,
-            gpu: gpu,
             includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels()
         );
@@ -69,10 +66,10 @@ public sealed class SdfWorldPipelineCacheLawTests {
         var other = new FakeGpuDevice(reportVersion: SdfIsa.Version);
         var cache = new SdfWorldPipelineCache();
         SdfWorldPipelineLease[] leases = [
-            cache.Acquire(device: gpu, gpu: gpu, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels()),
-            cache.Acquire(device: other, gpu: other, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels()),
-            cache.Acquire(device: gpu, gpu: gpu, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels(beam: 2)),
-            cache.Acquire(device: gpu, gpu: gpu, includeBrickPipelines: true, kernels: SdfTestPipelines.Kernels()),
+            cache.Acquire(device: gpu, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels()),
+            cache.Acquire(device: other, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels()),
+            cache.Acquire(device: gpu, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels(beam: 2)),
+            cache.Acquire(device: gpu, includeBrickPipelines: true, kernels: SdfTestPipelines.Kernels()),
         ];
         var sets = leases.Select(selector: Ready).ToArray();
 
@@ -86,44 +83,38 @@ public sealed class SdfWorldPipelineCacheLawTests {
         Assert.All(collection: sets, action: static set => Assert.True(condition: set.IsDisposed));
     }
     [Fact]
-    public void TwoNodesFromOneServicesClosureRenderWithOneSetTheCacheCounts() {
+    public void TwoNodesOverOneCacheRenderWithOneSetTheCacheCounts() {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
-        var services = new SdfViewGpuServices(
-            Gpu: gpu,
-            Pipelines: new SdfWorldPipelineCache()
-        );
+        var pipelines = new SdfWorldPipelineCache();
         var context = Context(gpu: gpu);
 
-        using var first = Node(services: services);
-        using var second = Node(services: services);
+        using var first = Node(pipelines: pipelines);
+        using var second = Node(pipelines: pipelines);
 
         _ = first.ProduceFirstFrame(context: in context);
         _ = second.ProduceFirstFrame(context: in context);
 
-        Assert.Equal(expected: 1, actual: services.Pipelines.SharedSets);
-        Assert.Equal(expected: PipelinesPerSet, actual: Created(cache: services.Pipelines));
+        Assert.Equal(expected: 1, actual: pipelines.SharedSets);
+        Assert.Equal(expected: PipelinesPerSet, actual: Created(cache: pipelines));
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.PipelinesCreated, source: first.WorkLifetime));
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.PipelinesCreated, source: second.WorkLifetime));
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.ShaderModulesCreated, source: first.WorkLifetime));
 
         first.Dispose();
-        Assert.Equal(expected: 1, actual: services.Pipelines.SharedSets);
+        Assert.Equal(expected: 1, actual: pipelines.SharedSets);
         Assert.False(condition: second.ProduceFrame(context: in context).IsEmpty);
 
         second.Dispose();
-        Assert.Equal(expected: 0, actual: services.Pipelines.SharedSets);
+        Assert.Equal(expected: 0, actual: pipelines.SharedSets);
     }
     [Fact]
     public void ANodeWhoseSetAnotherEngineSharesRefusesAKernelReload() {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
-        var services = new SdfViewGpuServices(
-            Gpu: gpu,
-            Pipelines: new SdfWorldPipelineCache()
-        );
+        var pipelines = new SdfWorldPipelineCache();
         var context = Context(gpu: gpu);
 
-        using var first = Node(services: services);
-        using var second = Node(services: services);
+        using var first = Node(pipelines: pipelines);
+        using var second = Node(pipelines: pipelines);
 
         _ = first.ProduceFirstFrame(context: in context);
         _ = second.ProduceFirstFrame(context: in context);
@@ -135,7 +126,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
 
         Assert.Equal(expected: "failed", actual: status.State);
         Assert.Contains(expectedSubstring: "shared", actualString: status.Error);
-        Assert.Equal(expected: PipelinesPerSet, actual: Created(cache: services.Pipelines));
+        Assert.Equal(expected: PipelinesPerSet, actual: Created(cache: pipelines));
     }
 
     private static FrameContext Context(FakeGpuDevice gpu) => new(
@@ -155,7 +146,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
             kind: GpuWork.PipelinesCreated,
             source: cache.Work
         );
-    private static SdfEngineNode Node(SdfViewGpuServices services) {
+    private static SdfEngineNode Node(SdfWorldPipelineCache pipelines) {
         var builder = new SdfProgramBuilder();
 
         builder.Sphere(
@@ -189,7 +180,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
             frameSource: new FixedFrameSource(frame: frame),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
-            services: services,
+            pipelines: pipelines,
             width: Extent
         );
     }

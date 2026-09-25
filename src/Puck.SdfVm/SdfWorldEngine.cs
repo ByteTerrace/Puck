@@ -16,7 +16,7 @@ namespace Puck.SdfVm;
 /// <c>sdf-world-ambient.comp</c> (AO) → <c>sdf-world-views.comp</c> (shading and diagnostics),
 /// all four dispatched indirectly from those args →
 /// <c>sdf-world-composite.comp</c> (source-agnostic region composite, also dispatched indirectly). Fully
-/// backend-neutral through the <see cref="IGpuComputeServices"/> seam.
+/// backend-neutral through its device's <see cref="IGpuDeviceContext.Services"/>.
 /// <para>
 /// Two submission models, and they must never blur: <see cref="RenderFrame"/> is the deterministic harness path — one
 /// submit-and-wait plus a readback (validation, headless render). <see cref="SubmitFrame"/> is the live node path —
@@ -199,12 +199,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuBuffer m_cullBoundsBuffer;
     private readonly IGpuBindings m_bindings;
     private readonly IGpuDeviceContext m_deviceContext;
-    private readonly nint m_deviceHandle;
     private readonly int m_dynamicTransformCapacity;
     private readonly byte[] m_dynamicTransformScratch;
     private readonly bool m_exportMode;
     private readonly IGpuExportableImage? m_exportableImage;
-    private readonly IGpuComputeServices m_gpu;
+    private readonly GpuDeviceServices m_gpu;
     private readonly uint m_height;
 
     private int m_instanceCapacity;
@@ -394,8 +393,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// descriptor set at the provisioned viewport capacity against pipelines already built, verifies the kernels' ISA
     /// version once per device and kernel set, and uploads the scene program once. Creates no pipeline, so it never
     /// waits on the driver's pipeline compiler.</summary>
-    /// <param name="gpu">The neutral GPU compute services.</param>
-    /// <param name="device">The GPU device the engine renders on.</param>
+    /// <param name="device">The GPU device the engine renders on; the engine records through its services, unwrapped.</param>
     /// <param name="pipelines">The pipelines to render with, built on <paramref name="device"/>
     /// (<see cref="SdfWorldPipelines.Build"/>). The caller keeps ownership and disposes them after the engine; one set
     /// may outlive several engines built from it, but serves one live engine at a time, since a kernel reload swaps
@@ -409,8 +407,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <exception cref="ObjectDisposedException"><paramref name="pipelines"/> has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The loaded shader bytecode does not report the host's
     /// <see cref="Puck.SignedDistance.SdfIsa.Version"/>.</exception>
-    public SdfWorldEngine(IGpuComputeServices gpu, IGpuDeviceContext device, SdfWorldPipelines pipelines, uint width, uint height, SdfWorldEngineOptions options) {
-        ArgumentNullException.ThrowIfNull(gpu);
+    public SdfWorldEngine(IGpuDeviceContext device, SdfWorldPipelines pipelines, uint width, uint height, SdfWorldEngineOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pipelines);
         ObjectDisposedException.ThrowIf(
@@ -442,13 +439,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             framesInFlight: FrameRingSize,
             name: "gpu.sdf-engine"
         ));
-        gpu = GpuWorkCounting.Wrap(
+        var gpu = GpuWorkCounting.Wrap(
             ledger: m_work,
-            services: gpu
+            services: device.Services
         );
+
         m_bindings = gpu.Bindings;
         m_deviceContext = device;
-        m_deviceHandle = device.DeviceHandle;
         m_dynamicTransformCapacity = Math.Max(
             val1: Math.Max(
                 val1: 1,

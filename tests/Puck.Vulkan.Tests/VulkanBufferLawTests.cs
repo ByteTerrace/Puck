@@ -224,12 +224,12 @@ public sealed class VulkanBufferLawTests {
     private sealed class UntouchableDeviceContext : IVulkanDeviceContext, IGpuDeviceContext {
         public long AdapterLuid => throw new NotSupportedException();
         public GpuDeviceCapabilities? Capabilities => throw new NotSupportedException();
-        public nint DeviceHandle => throw new NotSupportedException();
         public GpuDeviceIdentity? Identity => throw new NotSupportedException();
         public VulkanInstance Instance => throw new NotSupportedException();
         public VulkanLogicalDevice LogicalDevice => throw new NotSupportedException();
         public GpuMemoryProfile MemoryProfile => throw new NotSupportedException();
         public VkPhysicalDevice PhysicalDevice => throw new NotSupportedException();
+        public GpuDeviceServices Services => throw new NotSupportedException();
         public VulkanSurface Surface => throw new NotSupportedException();
 
         public void WaitIdle() => throw new NotSupportedException();

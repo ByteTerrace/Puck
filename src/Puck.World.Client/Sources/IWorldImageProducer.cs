@@ -30,9 +30,8 @@ public interface IWorldImageFeed : IDisposable {
     void NotifyDeviceLost();
     /// <summary>Publishes the feed's current image for this produced frame, uploading only what its cadence owes.</summary>
     /// <param name="tick">The world's completed-step ordinal.</param>
-    /// <param name="deviceContext">The live GPU device context.</param>
-    /// <param name="gpu">The neutral GPU compute services.</param>
-    void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu);
+    /// <param name="deviceContext">The live GPU device context, whose services upload the image.</param>
+    void Publish(ulong tick, IGpuDeviceContext deviceContext);
 }
 /// <summary>
 /// A producer registered with the World host under an id: it opens a feed for every screen source naming it. Its id,

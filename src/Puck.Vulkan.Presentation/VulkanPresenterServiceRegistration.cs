@@ -37,6 +37,76 @@ public static class VulkanPresenterServiceRegistration {
         services.AddSingleton(implementationInstance: procedures);
         services.AddSingleton<IWorkCounterSource>(implementationInstance: procedures.Work);
     }
+    // How the renderer creates its neutral services (IGpuDeviceContext.Services), each bound to it as the device
+    // context: the native APIs are resolved here, once, so the provider never escapes into the renderer.
+    private static Func<IVulkanDeviceContext, GpuDeviceServices> DeviceServices(IServiceProvider serviceProvider) {
+        var bufferApi = serviceProvider.GetRequiredService<IVulkanBufferApi>();
+        var commandBufferRecordingApi = serviceProvider.GetRequiredService<IVulkanCommandBufferRecordingApi>();
+        var commandResourcesFactory = serviceProvider.GetRequiredService<IVulkanCommandResourcesFactory>();
+        var computePipelineApi = serviceProvider.GetRequiredService<IVulkanComputePipelineApi>();
+        var descriptorAllocator = serviceProvider.GetRequiredService<VulkanDescriptorAllocator>();
+        var externalMemoryApi = serviceProvider.GetRequiredService<IVulkanExternalMemoryApi>();
+        var framebufferSetApi = serviceProvider.GetRequiredService<IVulkanFramebufferSetApi>();
+        var frameSynchronizationApi = serviceProvider.GetRequiredService<IVulkanFrameSynchronizationApi>();
+        var graphicsPipelineFactory = serviceProvider.GetRequiredService<IVulkanGraphicsPipelineFactory>();
+        var offscreenImageApi = serviceProvider.GetRequiredService<IVulkanOffscreenImageApi>();
+        var queueSubmitter = serviceProvider.GetRequiredService<VulkanQueueSubmitter>();
+        var renderPassApi = serviceProvider.GetRequiredService<IVulkanRenderPassApi>();
+        var shaderModuleFactory = serviceProvider.GetRequiredService<IVulkanShaderModuleFactory>();
+
+        return deviceContext => new GpuDeviceServices {
+            Bindings = new VulkanGpuBindings(
+                allocator: descriptorAllocator,
+                deviceContext: deviceContext
+            ),
+            BufferFactory = new VulkanGpuBufferFactory(
+                bufferApi: bufferApi,
+                deviceContext: deviceContext
+            ),
+            CommandPoolFactory = new VulkanGpuCommandPoolFactory(
+                commandResourcesFactory: commandResourcesFactory,
+                deviceContext: deviceContext
+            ),
+            ImageFactory = new VulkanGpuImageFactory(
+                deviceContext: deviceContext,
+                framebufferSetApi: framebufferSetApi,
+                offscreenImageApi: offscreenImageApi
+            ),
+            PipelineFactory = new VulkanGpuPipelineFactory(
+                computePipelineApi: computePipelineApi,
+                deviceContext: deviceContext,
+                pipelineFactory: graphicsPipelineFactory
+            ),
+            QueueSubmitter = new VulkanGpuQueueSubmitter(
+                deviceContext: deviceContext,
+                frameSynchronizationApi: frameSynchronizationApi,
+                queueSubmitter: queueSubmitter
+            ),
+            Recorder = new VulkanGpuRecorder(
+                deviceContext: deviceContext,
+                recordingApi: commandBufferRecordingApi
+            ),
+            RenderPassFactory = new VulkanGpuRenderPassFactory(
+                deviceContext: deviceContext,
+                framebufferSetApi: framebufferSetApi,
+                renderPassApi: renderPassApi
+            ),
+            ShaderModuleFactory = new VulkanGpuShaderModuleFactory(
+                deviceContext: deviceContext,
+                shaderModuleFactory: shaderModuleFactory
+            ),
+            SurfaceTransferFactory = new VulkanGpuSurfaceTransferFactory(
+                bufferApi: bufferApi,
+                commandBufferRecordingApi: commandBufferRecordingApi,
+                commandResourcesFactory: commandResourcesFactory,
+                externalMemoryApi: externalMemoryApi,
+                frameSynchronizationApi: frameSynchronizationApi,
+                framebufferSetApi: framebufferSetApi,
+                offscreenImageApi: offscreenImageApi,
+                queueSubmitter: queueSubmitter
+            ),
+        };
+    }
 
     /// <summary>Registers the factories, command-buffer recorder, asset source, and shader loader the
     /// renderer and compositor compose over the native APIs, and the backend's <c>pipeline-cache.vulkan</c> and
@@ -145,8 +215,7 @@ public static class VulkanPresenterServiceRegistration {
 
         services
             .AddVulkanNativeApis()
-            .AddVulkanFactories()
-            .AddVulkanComputeApis();
+            .AddVulkanFactories();
 
         // The swapchain renderer, its surface-blit compositor, and the seam the host drives. The application
         // name is a cosmetic Vulkan instance label; it defaults to the running app, validation follows the host's
@@ -159,7 +228,24 @@ public static class VulkanPresenterServiceRegistration {
         // Neutral presentation preferences (present mode + surface format); a consumer may register its own
         // before calling this to override the defaults (Vsync + R8G8B8A8).
         services.TryAddSingleton(instance: new PresentationOptions());
-        services.TryAddSingleton<VulkanRenderer>();
+        services.TryAddSingleton(implementationFactory: static sp => new VulkanRenderer(
+            commandBufferRecorder: sp.GetRequiredService<IVulkanCommandBufferRecorder>(),
+            commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
+            createServices: DeviceServices(serviceProvider: sp),
+            framebufferSetFactory: sp.GetRequiredService<IVulkanFramebufferSetFactory>(),
+            framePresenter: sp.GetRequiredService<IVulkanFramePresenter>(),
+            frameSynchronizationFactory: sp.GetRequiredService<IVulkanFrameSynchronizationFactory>(),
+            instanceFactory: sp.GetRequiredService<IVulkanInstanceFactory>(),
+            logicalDeviceFactory: sp.GetRequiredService<IVulkanLogicalDeviceFactory>(),
+            options: sp.GetRequiredService<VulkanRendererOptions>(),
+            physicalDeviceApi: sp.GetRequiredService<IVulkanPhysicalDeviceApi>(),
+            physicalDeviceSelector: sp.GetRequiredService<IVulkanPhysicalDeviceSelector>(),
+            presentationOptions: sp.GetRequiredService<PresentationOptions>(),
+            renderPassFactory: sp.GetRequiredService<IVulkanRenderPassFactory>(),
+            surfaceFactory: sp.GetRequiredService<IVulkanSurfaceFactory>(),
+            swapchainFactory: sp.GetRequiredService<IVulkanSwapchainFactory>(),
+            swapchainSupportApi: sp.GetRequiredService<IVulkanSwapchainSupportApi>()
+        ));
         // Publish the device context as a public interface so a consumer can compose its own root host
         // context (e.g. adding a DirectX device) without referencing the renderer type.
         services.TryAddSingleton<IVulkanDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
@@ -181,40 +267,10 @@ public static class VulkanPresenterServiceRegistration {
         ));
         services.TryAddSingleton(implementationFactory: static sp => new VulkanSurfacePresenter(
             compositor: sp.GetRequiredService<SurfaceCompositor>(),
-            renderer: sp.GetRequiredService<VulkanRenderer>(),
-            surfaceTransferFactory: sp.GetRequiredService<IGpuSurfaceTransferFactory>()
+            renderer: sp.GetRequiredService<VulkanRenderer>()
         ));
         services.TryAddSingleton<ISurfacePresenter>(implementationFactory: static sp => sp.GetRequiredService<VulkanSurfacePresenter>());
 
-        // Backend-neutral GPU abstractions: adapters that wrap the Vulkan-specific services above and
-        // implement the IGpu* interfaces the render nodes (the compute world producer, and future nodes) drive.
-        services.TryAddSingleton<IGpuRecorder>(implementationFactory: static sp => new VulkanGpuRecorder(
-            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
-            recordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()
-        ));
-        services.TryAddSingleton<IGpuBindings>(implementationFactory: static sp => new VulkanGpuBindings(
-            allocator: sp.GetRequiredService<VulkanDescriptorAllocator>(),
-            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>()
-        ));
-        services.TryAddSingleton<IGpuPipelineFactory>(implementationFactory: static sp => new VulkanGpuPipelineFactory(
-            computePipelineApi: sp.GetRequiredService<IVulkanComputePipelineApi>(),
-            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
-            pipelineFactory: sp.GetRequiredService<IVulkanGraphicsPipelineFactory>()
-        ));
-        services.TryAddSingleton<IGpuQueueSubmitter>(implementationFactory: static sp => new VulkanGpuQueueSubmitter(
-            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
-            frameSynchronizationApi: sp.GetRequiredService<IVulkanFrameSynchronizationApi>(),
-            queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>()
-        ));
-        services.TryAddSingleton<IGpuRenderPassFactory>(implementationFactory: static sp => new VulkanGpuRenderPassFactory(
-            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
-            framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
-            renderPassApi: sp.GetRequiredService<IVulkanRenderPassApi>()
-        ));
-        services.TryAddSingleton<IGpuShaderModuleFactory>(implementationFactory: static sp => new VulkanGpuShaderModuleFactory(
-            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
-            shaderModuleFactory: sp.GetRequiredService<IVulkanShaderModuleFactory>()
-        ));
         // Optional capability: a Vulkan host can export an image in shared device memory (an opaque Win32 NT
         // handle) for ANOTHER Vulkan instance to import zero-copy. A host resolves this when present and falls back
         // to the CPU-pixel transport otherwise. Unlike Direct3D 12's export, an opaque-Vulkan handle is not
@@ -223,20 +279,6 @@ public static class VulkanPresenterServiceRegistration {
             deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
             externalMemoryApi: sp.GetRequiredService<IVulkanExternalMemoryApi>(),
             framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>()
-        ));
-        services.TryAddSingleton<IGpuBufferFactory>(implementationFactory: static sp => new VulkanGpuBufferFactory(
-            bufferApi: sp.GetRequiredService<IVulkanBufferApi>(),
-            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>()
-        ));
-        services.TryAddSingleton<IGpuSurfaceTransferFactory>(implementationFactory: static sp => new VulkanGpuSurfaceTransferFactory(
-            bufferApi: sp.GetRequiredService<IVulkanBufferApi>(),
-            commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>(),
-            commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
-            externalMemoryApi: sp.GetRequiredService<IVulkanExternalMemoryApi>(),
-            framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
-            frameSynchronizationApi: sp.GetRequiredService<IVulkanFrameSynchronizationApi>(),
-            offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>(),
-            queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>()
         ));
 
         // Contribute the Vulkan device as an inherited root capability that flows to every node. The host

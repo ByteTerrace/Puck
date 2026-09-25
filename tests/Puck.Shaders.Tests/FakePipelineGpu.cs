@@ -4,7 +4,7 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// A GPU with no device behind it, for driving <see cref="ShaderPipelineRenderNode"/> through its real factory seams
-/// (<see cref="IGpuComputeServices"/> and <see cref="IFullscreenPassServices"/>). Every object a factory creates is a
+/// (the device context's <see cref="IGpuDeviceContext.Services"/>, every one of them this fake). Every object a factory creates is a
 /// <see cref="Created"/> entry with a unique nonzero handle and a disposal count, descriptor pools and samplers included,
 /// so ownership is checked by counting. <see cref="FailAtCreation"/> makes the Nth creation throw, which is how a
 /// candidate's allocation is made to fail partway. Creations, fence waits, device drains and disposals can be recorded in
@@ -13,7 +13,7 @@ namespace Puck.Shaders.Tests;
 /// pipelines on a pool thread, so creation is serialized and each object records its creating thread;
 /// <see cref="PipelineGate"/> holds that compiler work and <see cref="QueueHeld"/> holds the queue unfinished.
 /// </summary>
-internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServices, IGpuDeviceContext,
+internal sealed class FakePipelineGpu : IGpuDeviceContext,
     IGpuCommandPoolFactory, IGpuPipelineFactory, IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory,
     IGpuBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuRenderPassFactory {
     private readonly Dictionary<nint, Created> m_byHandle = [];
@@ -88,31 +88,23 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
     /// <summary>Gets the number of whole-device drains.</summary>
     public int WaitIdleCount { get; private set; }
     public long AdapterLuid => 1L;
-    public IGpuBindings Bindings => this;
-    public IGpuCommandPoolFactory CommandPoolFactory => this;
-    public IGpuComputeServices? ComputeServices => this;
-    public IGpuDeviceContext DeviceContext => this;
-    public nint DeviceHandle {
-        get {
-            DeviceHandleReads++;
-
-            return 0x10;
-        }
-    }
-    public GpuDeviceIdentity? Identity => null;
     public GpuDeviceCapabilities? Capabilities => null;
-    public IGpuPipelineFactory PipelineFactory => this;
-    public IGpuRecorder Recorder => this;
+    public GpuDeviceIdentity? Identity => null;
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
-    /// <summary>Gets the number of times the device handle was read.</summary>
-    public int DeviceHandleReads { get; private set; }
-    public IGpuBufferFactory BufferFactory => this;
-    public IGpuImageFactory ImageFactory => this;
-    public IGpuQueueSubmitter QueueSubmitter => this;
-    public IGpuRenderPassFactory RenderPassFactory => this;
-    public IGpuShaderModuleFactory ShaderModuleFactory => this;
-    public IGpuSurfaceTransferFactory SurfaceTransferFactory => this;
+    /// <summary>Gets this fake as every one of its own services.</summary>
+    public GpuDeviceServices Services => field ??= new GpuDeviceServices {
+        Bindings = this,
+        BufferFactory = this,
+        CommandPoolFactory = this,
+        ImageFactory = this,
+        PipelineFactory = this,
+        QueueSubmitter = this,
+        Recorder = this,
+        RenderPassFactory = this,
+        ShaderModuleFactory = this,
+        SurfaceTransferFactory = this,
+    };
 
     // The texel size of a storage image format, stated here independently of the node's own table.
     private static ulong TexelBytes(GpuPixelFormat format) => format switch {

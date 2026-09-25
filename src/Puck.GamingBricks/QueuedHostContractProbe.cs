@@ -168,16 +168,12 @@ public static class QueuedHostContractProbe {
             firstUpload,
             replacementUpload
         );
-        var gpu = new TestGpuComputeServices(factory: factory);
-        var device = new TestGpuDeviceContext();
+        var device = new TestGpuDeviceContext(factory: factory);
         Exception? publishFault = null;
         Exception? deviceLossFault = null;
         var publish = new Thread(start: () => {
             try {
-                host.PublishFrame(
-                    deviceContext: device,
-                    gpu: gpu
-                );
+                host.PublishFrame(deviceContext: device);
             } catch (Exception exception) {
                 publishFault = exception;
             }
@@ -230,10 +226,7 @@ public static class QueuedHostContractProbe {
             return QueuedHostProbeResult.Fail(detail: $"device loss escaped upload serialization (blocked={deviceLossBlocked}, disposed-during-call={disposedDuringUpload}, disposed={firstUpload.IsDisposed})");
         }
 
-        host.PublishFrame(
-            deviceContext: device,
-            gpu: gpu
-        );
+        host.PublishFrame(deviceContext: device);
 
         if (
             (replacementUpload.CallCount != 1) ||
@@ -248,16 +241,12 @@ public static class QueuedHostContractProbe {
         where THost : QueuedMachineHost {
         var host = empty();
         using var upload = new BlockingSurfaceUpload();
-        var gpu = new TestGpuComputeServices(factory: new TestSurfaceTransferFactory(upload));
-        var device = new TestGpuDeviceContext();
+        var device = new TestGpuDeviceContext(factory: new TestSurfaceTransferFactory(upload));
         Exception? publishFault = null;
         Exception? disposeFault = null;
         var publish = new Thread(start: () => {
             try {
-                host.PublishFrame(
-                    deviceContext: device,
-                    gpu: gpu
-                );
+                host.PublishFrame(deviceContext: device);
             } catch (Exception exception) {
                 publishFault = exception;
             }
@@ -457,8 +446,7 @@ public static class QueuedHostContractProbe {
         where THost : QueuedMachineHost, IQueuedMachineRuntime {
         using var host = withContent();
         using var upload = new BlockingSurfaceUpload();
-        var gpu = new TestGpuComputeServices(factory: new TestSurfaceTransferFactory(upload));
-        var device = new TestGpuDeviceContext();
+        var device = new TestGpuDeviceContext(factory: new TestSurfaceTransferFactory(upload));
         var accepted = 0L;
         var input = MachinePadState.Neutral;
 
@@ -479,20 +467,14 @@ public static class QueuedHostContractProbe {
         Exception? secondPublishFault = null;
         var firstPublish = new Thread(start: () => {
             try {
-                host.PublishFrame(
-                    deviceContext: device,
-                    gpu: gpu
-                );
+                host.PublishFrame(deviceContext: device);
             } catch (Exception exception) {
                 firstPublishFault = exception;
             }
         });
         var secondPublish = new Thread(start: () => {
             try {
-                host.PublishFrame(
-                    deviceContext: device,
-                    gpu: gpu
-                );
+                host.PublishFrame(deviceContext: device);
             } catch (Exception exception) {
                 secondPublishFault = exception;
             }
@@ -1434,23 +1416,24 @@ public static class QueuedHostContractProbe {
         }
         public bool WaitUntilEntered(TimeSpan timeout) => m_entered.Wait(timeout: timeout);
     }
-    private sealed class TestGpuComputeServices(IGpuSurfaceTransferFactory factory) : IGpuComputeServices {
-        public IGpuBindings Bindings => null!;
-        public IGpuBufferFactory BufferFactory => null!;
-        public IGpuCommandPoolFactory CommandPoolFactory => null!;
-        public IGpuImageFactory ImageFactory => null!;
-        public IGpuPipelineFactory PipelineFactory => null!;
-        public IGpuQueueSubmitter QueueSubmitter => null!;
-        public IGpuRecorder Recorder => null!;
-        public IGpuShaderModuleFactory ShaderModuleFactory => null!;
-        public IGpuSurfaceTransferFactory SurfaceTransferFactory { get; } = factory;
-    }
-    private sealed class TestGpuDeviceContext : IGpuDeviceContext {
+    // A device whose only service is the surface-transfer factory a publish uploads through.
+    private sealed class TestGpuDeviceContext(IGpuSurfaceTransferFactory factory) : IGpuDeviceContext {
         public long AdapterLuid => 0;
-        public nint DeviceHandle => 1;
         public GpuDeviceIdentity? Identity => null;
         public GpuDeviceCapabilities? Capabilities => null;
         public GpuMemoryProfile MemoryProfile => default;
+        public GpuDeviceServices Services { get; } = new() {
+            Bindings = null!,
+            BufferFactory = null!,
+            CommandPoolFactory = null!,
+            ImageFactory = null!,
+            PipelineFactory = null!,
+            QueueSubmitter = null!,
+            Recorder = null!,
+            RenderPassFactory = null!,
+            ShaderModuleFactory = null!,
+            SurfaceTransferFactory = factory,
+        };
 
         public void WaitIdle() { }
     }

@@ -163,7 +163,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(imageHandle);
         var descriptors = DirectXClearImageDescriptors.Create(
-            deviceHandle: deviceContext.DeviceHandle,
+            deviceHandle: deviceContext.Device.Handle,
             imageHandle: imageHandle,
             format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format)
         );
@@ -207,7 +207,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
 
         var descriptors = DirectXClearBufferDescriptors.Create(
             bufferHandle: bufferHandle,
-            deviceHandle: deviceContext.DeviceHandle,
+            deviceHandle: deviceContext.Device.Handle,
             sizeBytes: sizeBytes
         );
 

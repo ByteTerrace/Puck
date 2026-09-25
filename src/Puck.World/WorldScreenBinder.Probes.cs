@@ -141,7 +141,7 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
 
-        if (m_viewServices is null) {
+        if (m_viewPipelines is null) {
             fault = "the view pool is not configured";
 
             return false;

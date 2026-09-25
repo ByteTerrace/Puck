@@ -142,7 +142,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private int m_viewInstanceCapacity;
     private int m_viewProgramWordCapacity;
     private int m_viewRefreshCountdown;
-    private SdfViewGpuServices? m_viewServices;
+    private SdfWorldPipelineCache? m_viewPipelines;
     // The offscreen view pool backing the View (jumbotron) screens — created by ConfigureViews once the render envelope
     // is known, null until then (and forever when the world declares no View screen). The view config the pool needs is
     // stashed alongside so a runtime screen.source <index> view can register against the same envelope.

@@ -16,7 +16,6 @@ internal sealed class FakeGpuDevice :
     IGpuRecorder,
     IGpuCommandPoolFactory,
     IGpuPipelineFactory,
-    IGpuComputeServices,
     IGpuBindings,
     IGpuDeviceContext,
     IGpuQueueSubmitter,
@@ -31,25 +30,29 @@ internal sealed class FakeGpuDevice :
     /// <param name="reportVersion">The ISA version a 1×1 readback reports.</param>
     public FakeGpuDevice(byte reportVersion) {
         m_reportVersion = reportVersion;
+        Services = new GpuDeviceServices {
+            Bindings = this,
+            BufferFactory = this,
+            CommandPoolFactory = this,
+            ImageFactory = this,
+            PipelineFactory = this,
+            QueueSubmitter = this,
+            Recorder = this,
+            RenderPassFactory = this,
+            ShaderModuleFactory = this,
+            SurfaceTransferFactory = this,
+        };
     }
 
     public long AdapterLuid => 0L;
     /// <summary>Gets or sets a hook every compute pipeline creation runs first, on whatever thread creates it — a law
     /// holds a pipeline build by blocking here.</summary>
     public Action? BeforeComputePipeline { get; set; }
-    public IGpuBindings Bindings => this;
-    public IGpuBufferFactory BufferFactory => this;
-    public IGpuCommandPoolFactory CommandPoolFactory => this;
-    public nint DeviceHandle => 1;
-    public GpuDeviceIdentity? Identity => null;
     public GpuDeviceCapabilities? Capabilities => null;
-    public IGpuImageFactory ImageFactory => this;
+    public GpuDeviceIdentity? Identity => null;
     public GpuMemoryProfile MemoryProfile => default;
-    public IGpuPipelineFactory PipelineFactory => this;
-    public IGpuQueueSubmitter QueueSubmitter => this;
-    public IGpuRecorder Recorder => this;
-    public IGpuShaderModuleFactory ShaderModuleFactory => this;
-    public IGpuSurfaceTransferFactory SurfaceTransferFactory => this;
+    /// <summary>Gets this device as every one of its own services.</summary>
+    public GpuDeviceServices Services { get; }
     /// <summary>Gets the number of submissions made, fenced or not.</summary>
     public int Submissions { get; private set; }
 

@@ -179,7 +179,7 @@ internal sealed partial class WorldScreenBinder {
     // Services the device table, then every known device's lifecycle and every one of its declared feeds. Opens run
     // on the thread pool (a Media Foundation open can block for seconds proving a graph live); the render thread only
     // adopts a finished open.
-    private void CaptureCamera(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    private void CaptureCamera(IGpuDeviceContext deviceContext) {
         ServiceCameraDevices();
         ReconcileCameraDemand();
 
@@ -204,8 +204,7 @@ internal sealed partial class WorldScreenBinder {
                 ServiceCameraFeed(
                     device: device,
                     deviceContext: deviceContext,
-                    feed: feed,
-                    gpu: gpu
+                    feed: feed
                 );
             }
         }
@@ -854,7 +853,7 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
     }
-    private void ServiceCameraFeed(CameraDevice device, CameraFeed feed, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    private void ServiceCameraFeed(CameraDevice device, CameraFeed feed, IGpuDeviceContext deviceContext) {
         if (feed.SharedStream is { } shared) {
             // The platform publishes completed slots on its own thread and the screen samples the latest one directly;
             // no CPU pixels ever exist on this tier, so Light stays dark.
@@ -908,7 +907,6 @@ internal sealed partial class WorldScreenBinder {
 
         _ = feed.Surface.Publish(
             deviceContext: deviceContext,
-            gpu: gpu,
             surface: in panelSurface
         );
         feed.StarvedPulls = 0;

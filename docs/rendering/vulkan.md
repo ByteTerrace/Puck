@@ -140,10 +140,9 @@ creation. An extension entry point is `null` when its extension is not enabled, 
 caller checks it. Swapchain creation, for example, checks the whole `VK_KHR_swapchain` set
 once, so acquire and present call straight through.
 
-The backend-neutral `IGpu*` interfaces carry an opaque `nint` device handle. On Vulkan
-that value is `VulkanDeviceCommands.Token`, a `GCHandle`, and the `VulkanGpu*` adapters
-turn it back into the table with `VulkanDeviceCommands.FromToken`, which dereferences the
-handle once without searching.
+The backend-neutral `IGpu*` services carry no device value. The renderer creates them
+with itself as their device context (`IGpuDeviceContext.Services`), and each `VulkanGpu*`
+adapter reads the table from that context's logical device when it makes a call.
 
 Every buffer goes through one `IVulkanBufferApi`. A caller states the buffer's usage
 (`VulkanBufferUsageFlags`), the memory it needs (`VulkanBufferMemory`), and its size;

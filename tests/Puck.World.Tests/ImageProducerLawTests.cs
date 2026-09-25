@@ -99,7 +99,6 @@ public sealed class ImageProducerLawTests {
 
         opened.Publish(
             deviceContext: Gpu,
-            gpu: Gpu,
             tick: 640UL
         );
 
@@ -353,7 +352,7 @@ public sealed class ImageProducerLawTests {
         public void Dispose() { }
         public nint Handle() => DesktopHandle;
         public void NotifyDeviceLost() { }
-        public void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) { }
+        public void Publish(ulong tick, IGpuDeviceContext deviceContext) { }
     }
     // The third producer's shape reads its settings without the world serializer's shipped shapes: it names the one
     // member it declares and refuses any other by name.

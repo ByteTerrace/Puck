@@ -155,7 +155,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
     private readonly Dictionary<int, Func<nint>> m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
-    private readonly SdfViewGpuServices m_services;
     private readonly int m_viewportCapacity;
     private readonly uint m_width;
 
@@ -176,7 +175,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     private bool m_disposed;
     private SdfWorldEngine? m_engine;
     private bool m_glyphAtlasInitialized;
-    private IGpuComputeServices? m_gpu;
 
     // The lease on the pipeline set the engine records with, shared through the composition's pipeline cache, built off
     // the frame thread and kept across engine rebuilds until a device loss or disposal releases it.
@@ -218,15 +216,10 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             return true;
         }
 
-        // One cohesive compute-services bundle instead of resolving each granular factory; the granular interfaces
-        // are still registered for a node that needs only one of them. Forwarded unchanged from the composition
-        // root's SdfViewGpuServices rather than re-resolved here.
-        m_gpu ??= m_services.Gpu;
         m_deviceContext = gpuDevice;
 
         if (m_pipelines.Poll(
             device: gpuDevice,
-            gpu: m_gpu,
             hostsOnDirectX: false,
             includeBrickPipelines: (m_brickPoolVoxelCapacity > 0),
             kernels: m_kernels
@@ -247,7 +240,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         m_engine = new SdfWorldEngine(
             device: gpuDevice,
-            gpu: m_gpu,
             height: m_height,
             options: new SdfWorldEngineOptions(
                 BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
@@ -607,13 +599,10 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             );
         }
 
-        // Screen-source PREPARE: hand the frame source the live device + compute services so a CPU-pixel source can
-        // upload THIS frame's image to a stable handle before the providers below are polled (they return that
-        // handle). Mirrors AdvanceBricks — an engine seam, default no-op. m_gpu is set by EnsureEngine just above.
-        m_frameSource.PrepareScreenSources(
-            deviceContext: gpuDevice,
-            gpu: m_gpu!
-        );
+        // Screen-source PREPARE: hand the frame source the live device so a CPU-pixel source can upload THIS frame's
+        // image through its services to a stable handle before the providers below are polled (they return that
+        // handle). Mirrors AdvanceBricks — an engine seam, default no-op.
+        m_frameSource.PrepareScreenSources(deviceContext: gpuDevice);
 
         // View RENDER: hand the frame source this frame's full context so a source hosting an offscreen ViewStack (a
         // diegetic camera / jumbotron) renders its views against the live device now — their handles fresh before the
@@ -734,9 +723,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     }
 
     /// <summary>Initializes a new instance of the <see cref="SdfEngineNode"/> class.</summary>
-    /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) this node forwards
-    /// to its offscreen engine — resolved once at the composition root and stashed unchanged (the device itself
-    /// still comes from the host context each frame).</param>
+    /// <param name="pipelines">The composition's pipeline cache the node leases its engine's pipeline set from. The
+    /// device, and the services the engine records through, come from the host context each frame.</param>
     /// <param name="frameSource">The per-frame source of the scene, cameras, and viewport regions.</param>
     /// <param name="kernels">The compiled world kernel set (SPIR-V for Vulkan, DXIL for Direct3D 12).</param>
     /// <param name="width">The render width in pixels.</param>
@@ -788,8 +776,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// carves (no pool is allocated).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfEngineNode(SdfViewGpuServices services, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, IReadOnlyDictionary<string, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
-        ArgumentNullException.ThrowIfNull(services);
+    public SdfEngineNode(SdfWorldPipelineCache pipelines, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, IReadOnlyDictionary<string, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
+        ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
 
         if (
@@ -831,8 +819,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             ? EmptyScreenSurfaceTransforms
             : new Dictionary<int, Func<SdfScreenSurfaceTransform?>>(collection: screenSurfaceTransforms)
         );
-        m_pipelines = new SdfWorldPipelineSource(cache: services.Pipelines);
-        m_services = services;
+        m_pipelines = new SdfWorldPipelineSource(cache: pipelines);
         m_width = width;
         m_writeDebugCapture = WriteDebugCapture;
     }

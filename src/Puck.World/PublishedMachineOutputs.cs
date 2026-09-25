@@ -21,18 +21,14 @@ public sealed class PublishedMachineOutputs {
     /// <param name="output">The output's name within the instance.</param>
     /// <param name="machine">The output to publish.</param>
     /// <param name="deviceContext">The device the output uploads to.</param>
-    /// <param name="gpu">The upload services of that device.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public void Publish(string instance, string output, IMachineVideoOutput machine, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    public void Publish(string instance, string output, IMachineVideoOutput machine, IGpuDeviceContext deviceContext) {
         ArgumentNullException.ThrowIfNull(argument: instance);
         ArgumentNullException.ThrowIfNull(argument: output);
         ArgumentNullException.ThrowIfNull(argument: machine);
 
         _ = m_published.Add(item: (instance, output));
-        machine.PublishFrame(
-            deviceContext: deviceContext,
-            gpu: gpu
-        );
+        machine.PublishFrame(deviceContext: deviceContext);
     }
     /// <summary>Releases the upload every recorded output holds on the current device and forgets them all. An instance
     /// removed since it published resolves to <see langword="null"/>, because its host released the upload when the

@@ -363,12 +363,12 @@ public sealed class GpuWorkLedgerLawTests {
             framesInFlight: framesInFlight,
             name: "gpu.test"
         );
-            Services = GpuWorkCounting.Wrap(ledger: Ledger, services: ((IGpuComputeServices)Gpu));
+            Services = GpuWorkCounting.Wrap(ledger: Ledger, services: Gpu.Services);
         }
 
         public FakeGpu Gpu { get; }
         public GpuWorkLedger Ledger { get; }
-        public IGpuComputeServices Services { get; }
+        public GpuDeviceServices Services { get; }
 
         public void Dispatch(int count) {
             for (var index = 0; (index < count); index++) {

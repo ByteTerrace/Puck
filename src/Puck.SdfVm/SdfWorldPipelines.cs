@@ -17,13 +17,13 @@ namespace Puck.SdfVm;
 /// </summary>
 public sealed class SdfWorldPipelines : IDisposable {
     private readonly IGpuDeviceContext m_device;
-    private readonly IGpuComputeServices m_gpu;
+    private readonly GpuDeviceServices m_gpu;
     private readonly Slot?[] m_slots;
 
     private bool m_disposed;
     private SdfWorldKernels m_kernels;
 
-    private SdfWorldPipelines(IGpuComputeServices gpu, IGpuDeviceContext device, SdfWorldKernels kernels, bool includesBrickPipelines, Slot?[] slots) {
+    private SdfWorldPipelines(GpuDeviceServices gpu, IGpuDeviceContext device, SdfWorldKernels kernels, bool includesBrickPipelines, Slot?[] slots) {
         m_device = device;
         m_gpu = gpu;
         m_kernels = kernels;
@@ -39,7 +39,7 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// <summary>Gets the kernel set the installed pipelines were created from; a committed reload replaces it.</summary>
     public SdfWorldKernels Kernels => m_kernels;
 
-    private static PipelineVersion CreateVersion(IGpuComputeServices gpu, IGpuDeviceContext device, GpuComputePipelineDescription description, ReadOnlyMemory<byte> bytecode) {
+    private static PipelineVersion CreateVersion(GpuDeviceServices gpu, IGpuDeviceContext device, GpuComputePipelineDescription description, ReadOnlyMemory<byte> bytecode) {
         var shader = gpu.ShaderModuleFactory.Create(
             bytecode: bytecode,
             stage: GpuShaderStage.Compute
@@ -81,9 +81,8 @@ public sealed class SdfWorldPipelines : IDisposable {
 
     /// <summary>Creates every engine pipeline for a kernel set. Safe on any thread; the token is checked before each
     /// pipeline, so a canceled build stops within one pipeline creation and releases what it had created.</summary>
-    /// <param name="gpu">The neutral services, unwrapped; the set counts through its own wrapper over
-    /// <paramref name="ledger"/>.</param>
-    /// <param name="device">The device the pipelines are created on.</param>
+    /// <param name="device">The device the pipelines are created on; the set creates them through its services, counted
+    /// through its own wrapper over <paramref name="ledger"/>.</param>
     /// <param name="kernels">The compiled kernel set for the device's backend.</param>
     /// <param name="includeBrickPipelines">Whether to build the brick bake and upload pipelines, for an engine with a
     /// brick pool.</param>
@@ -91,17 +90,16 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// harness's own.</param>
     /// <param name="cancellationToken">Stops the build between pipelines.</param>
     /// <returns>The built set, owned by the caller.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="gpu"/>, <paramref name="device"/> or
-    /// <paramref name="ledger"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="ledger"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="OperationCanceledException">The build was canceled.</exception>
-    public static SdfWorldPipelines Build(IGpuComputeServices gpu, IGpuDeviceContext device, SdfWorldKernels kernels, bool includeBrickPipelines, GpuWorkLedger ledger, CancellationToken cancellationToken) {
-        ArgumentNullException.ThrowIfNull(gpu);
+    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfWorldKernels kernels, bool includeBrickPipelines, GpuWorkLedger ledger, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(ledger);
 
         var counted = GpuWorkCounting.Wrap(
             ledger: ledger,
-            services: gpu
+            services: device.Services
         );
         var specs = SdfWorldEngine.PipelineLayouts.Specs;
         var slots = new Slot?[specs.Length];

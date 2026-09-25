@@ -573,13 +573,12 @@ internal sealed partial class WorldScreenBinder {
     };
     // Standalone captures ride the same per-frame pull cadence a slot-owned capture does, from Publish (below), and
     // the same device-lost/dispose sweeps every other feed this binder owns gets.
-    private void PublishFrameCaptures(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    private void PublishFrameCaptures(IGpuDeviceContext deviceContext) {
         foreach (var feed in m_frameCaptures.Values) {
             if (feed.ShouldPull()) {
                 CaptureWindow(
                     deviceContext: deviceContext,
-                    feed: feed,
-                    gpu: gpu
+                    feed: feed
                 );
             }
         }

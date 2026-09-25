@@ -73,8 +73,6 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var gpu = new FakePipelineGpu();
         using var node = new ShaderPipelineRenderNode(
             deviceContext: gpu,
-            gpu: gpu,
-            graphics: gpu,
             height: 64,
             hostsOnDirectX: false,
             inFlightFrames: InFlight,

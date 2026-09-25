@@ -20,7 +20,6 @@ public sealed class PublishedMachineOutputsLawTests {
 
         _ = Assert.Throws<DeviceLostException>(testCode: () => outputs.Publish(
             deviceContext: device,
-            gpu: device,
             instance: "cabinet",
             machine: machine,
             output: "screen"
@@ -40,9 +39,9 @@ public sealed class PublishedMachineOutputsLawTests {
         var removed = new UploadThenLoseOutput { LosesDevice = false };
         var outputs = new PublishedMachineOutputs();
 
-        outputs.Publish(deviceContext: device, gpu: device, instance: "kept", machine: kept, output: "screen");
-        outputs.Publish(deviceContext: device, gpu: device, instance: "removed", machine: removed, output: "screen");
-        outputs.Publish(deviceContext: device, gpu: device, instance: "kept", machine: kept, output: "screen");
+        outputs.Publish(deviceContext: device, instance: "kept", machine: kept, output: "screen");
+        outputs.Publish(deviceContext: device, instance: "removed", machine: removed, output: "screen");
+        outputs.Publish(deviceContext: device, instance: "kept", machine: kept, output: "screen");
         Assert.Equal(expected: 2, actual: outputs.Count);
 
         outputs.Retire(resolve: (instance, _) => ((instance == "kept") ? kept : null));
@@ -65,7 +64,7 @@ public sealed class PublishedMachineOutputsLawTests {
             HoldsUpload = false;
             ++Retirements;
         }
-        public void PublishFrame(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+        public void PublishFrame(IGpuDeviceContext deviceContext) {
             HoldsUpload = true;
 
             if (LosesDevice) {

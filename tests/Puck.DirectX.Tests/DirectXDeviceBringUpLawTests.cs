@@ -26,7 +26,7 @@ public sealed class DirectXDeviceBringUpLawTests {
             minimumFeatureLevel: DirectXFeatureLevel.Level120
         );
 
-        var unavailable = Assert.Throws<GpuDeviceUnavailableException>(testCode: () => context.DeviceHandle);
+        var unavailable = Assert.Throws<GpuDeviceUnavailableException>(testCode: () => context.Device);
 
         Assert.Equal(
             expected: "directx",
@@ -67,7 +67,7 @@ public sealed class DirectXDeviceBringUpLawTests {
             expected: 0,
             actual: api.CreateDeviceCalls
         );
-        _ = Assert.Throws<GpuDeviceUnavailableException>(testCode: () => context.DeviceHandle);
+        _ = Assert.Throws<GpuDeviceUnavailableException>(testCode: () => context.Device);
         Assert.Null(@object: context.Identity);
         Assert.Equal(
             expected: 0,
@@ -83,7 +83,7 @@ public sealed class DirectXDeviceBringUpLawTests {
             minimumFeatureLevel: DirectXFeatureLevel.Level110
         );
 
-        _ = Assert.Throws<ArgumentException>(testCode: () => context.DeviceHandle);
+        _ = Assert.Throws<ArgumentException>(testCode: () => context.Device);
 
         if (api.Created.Count == 0) {
             Assert.Skip(reason: "no Direct3D 12 software device on this host");

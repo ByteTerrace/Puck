@@ -43,7 +43,7 @@ public sealed class FullscreenPassNodeRetirementLawTests {
             hostsOnDirectX: false,
             inner: inner,
             manifest: manifest,
-            services: gpu,
+            deviceContext: gpu,
             width: 64
         );
 

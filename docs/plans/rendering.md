@@ -917,7 +917,7 @@ resources and installs it without draining the device; the replaced graph is
 freed once the node's second submission after the install completes.
 
 The engine node and its views share their pipeline sets through one
-`SdfWorldPipelineCache` per composition, carried on `SdfViewGpuServices`: one
+`SdfWorldPipelineCache` per composition, handed to each of them: one
 set per device, kernel set (`SdfWorldKernels.ContentKey`) and brick-pipeline
 choice, leased by every holder and disposed with its last lease after any build
 in flight returns. The cache reads each backend's deployed kernels once, and it
@@ -1244,14 +1244,13 @@ selecting the staged copy. P3 owns resource versions and lifetimes, and this
 package is what gives its planner a pass's declared needs to plan from, so the
 two land beside each other and share one owner per file.
 
-The neutral `IGpu*` services also become bound to their device context. Today
-every call passes `IGpuDeviceContext.DeviceHandle`, and that value means
-different things on each backend: Direct3D 12 passes its native device, while
-Vulkan passes a token that the backend turns back into its device command table
-on every call. A service obtained from its device context needs neither, so
-`DeviceHandle` leaves the neutral surface. The change reaches
-`Puck.Abstractions`, both backends, `Puck.Overlays`, `Puck.Shaders`, and
-`Puck.SdfVm`, which is why it rides this package rather than a smaller one.
+The neutral `IGpu*` services are also bound to their device context. Each
+backend creates them with its context, and a consumer reaches every one through
+`IGpuDeviceContext.Services`; no call passes a device value, so the neutral
+surface has no device handle and Vulkan no token for its device command table.
+The change reaches `Puck.Abstractions`, both backends, `Puck.Overlays`,
+`Puck.Shaders`, and `Puck.SdfVm`, which is why it rides this package rather than
+a smaller one.
 
 **Deletes:** the three residency policies replace the upload paths built by
 hand for each consumer: the SDF engine's ring of host tables and its
@@ -1267,7 +1266,8 @@ directly, does not survive beside it. The closed set of binding kinds replaces
 `GpuComputeBindingKind`, `ShaderSetManifestBindingKind`, the positional
 `TextureSamplerCount` and `EnableStorageBuffer` fields of
 `GpuGraphicsPipelineDescription`, and every binding index set by hand, such as
-`OverlayServices.StorageBufferBinding` and the SDF engine's binding constants.
+the unified overlay's `UnifiedOverlayNode.StorageBufferBinding` and the SDF
+engine's binding constants.
 
 **Gate:** the spike over two passes, `sdf-film-grain.frag.hlsl` and a pixelate
 compute pass, each with two frequency groups, has passed its build-time half,
@@ -1291,12 +1291,10 @@ heap; `IGpuDeviceContext` no longer declares `DeviceHandle` and no `IGpu*`
 member takes a device value; `puck references` finding no consumer of any
 type or member this package deletes; `puck architecture --check` and `puck parity` exit 0.
 
-**P7b, the rest of the package.** The device-bound services and the binding
-groups start from the `IGpuDeviceContext.DeviceHandle` property, which step
-10 deletes now that no service takes a device parameter, several test fakes of
-the whole service surface, and a Direct3D 12 backend with positional registers, static
-samplers and one shader-visible heap per descriptor pool, which cannot bind two
-groups from different pools. P7b is 22 commits in four phases, each done when
+**P7b, the rest of the package.** The binding groups start from several test
+fakes of the whole service surface and a Direct3D 12 backend with positional
+registers, static samplers and one shader-visible heap per descriptor pool,
+which cannot bind two groups from different pools. P7b is 22 commits in four phases, each done when
 its laws pass and `puck parity` holds; the services phase also reads identical
 counts before and after through `puck counters compare`.
 
@@ -1363,10 +1361,23 @@ Phase 2, the services, follows the generated frame block, which has landed:
    initial data, and `CreateDeviceLocal` one only the GPU writes.
    `DirectXBufferStatesLawTests` holds each placement's way into Direct3D 12's
    indirect-argument state. The surface transfer objects the factory creates still
-   take a device context on each call.
-10. The bundles under **Deletes** collapse into `IGpuDeviceContext.Services`
-    and its bring-up; `DeviceHandle`, `VulkanDeviceCommands.Token` and
-    `FromToken` go.
+   take a device context on each call; binding them to it is open work beside
+   the device-loss changes to the upload and import objects.
+10. Done: `IGpuDeviceContext.Services` (`GpuDeviceServices`) holds the recorder,
+    bindings, queue submitter and every factory, and is the one way a consumer
+    reaches a device-bound service. Direct3D 12's context creates the set in its
+    constructor and Vulkan's renderer on first read, each bound to the context
+    rather than to one native device, so the set survives a device recreated in
+    place, and reading it never brings the device up. Neither backend registers
+    the services individually; the optional surface export stays its own
+    registration. The bundles under **Deletes** are gone: a render node, view,
+    engine, pipeline set or producer takes its device context (or the
+    composition's `SdfWorldPipelineCache`) and reads the services from it, and
+    `GpuWorkCounting.Wrap` wraps a `GpuDeviceServices`. A shader pipeline node
+    always has graphics, so nothing refuses a graphics pass for want of
+    graphics services. `IGpuDeviceContext.DeviceHandle`,
+    `VulkanDeviceCommands.Token` and `FromToken` are deleted, and the table is
+    no longer disposable; Direct3D 12 code reads `DirectXDeviceContext.Device`.
 11. `GpuCreationFaults`, a decorator over the factories, injects a creation
     failure on a real device, which closes P1a's partial allocation check. It
     is armed only by the operator console verb `gpu.faults` (arm, disarm,
@@ -1862,9 +1873,9 @@ passes, because the planner's tracker (P3) then decides every barrier:
 pass-index constants, `PassLabels`, and the `Record*` methods that fix the
 dispatch order by hand. `SdfWorldEngine` does not survive as a second path
 beside the pass package: when the last capability row is green, the
-monolith is gone. `WorldPostRenderExtensionServices` is also the graphics
-bundle every `views.pipelines` node receives, so retiring `render.extensions`
-does not free it; P7's bundle collapse does.
+monolith is gone. A `views.pipelines` node and a `render.extensions` pass both
+draw through their device context's services, so retiring `render.extensions`
+frees no graphics bundle.
 
 **Check:** every capability-matrix row green; `puck parity` recorded before the
 move and re-recorded after, with any moved pixels explained in the change; P2's

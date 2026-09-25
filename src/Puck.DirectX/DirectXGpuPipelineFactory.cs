@@ -36,7 +36,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
         ArgumentNullException.ThrowIfNull(description);
         description.ValidateAgainst(renderPass: renderPass);
 
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var vs = ((DirectXGpuShaderModule)vertexShaderModule);
         var ps = ((DirectXGpuShaderModule)fragmentShaderModule);
         // The render pass's formats are the PSO's render-target and depth-stencil formats, as a Vulkan pipeline takes

@@ -407,15 +407,13 @@ ShaderConfigValues config = manifest.BindConfig(config: entry.Config); // throws
 
 IRenderNode pass = new FullscreenPassNode(
     inner: worldNode, manifest: manifest, config: config,
-    services: fullscreenPassServices, hostsOnDirectX: false, width: 1920, height: 1080);
+    deviceContext: deviceContext, hostsOnDirectX: false, width: 1920, height: 1080);
 ```
 
-`IFullscreenPassServices` is the GPU seam a composition root resolves from
-its one registered backend (command recorder, bindings, device
-context, buffer factory, pipeline factory, queue submitter,
-render-pass factory, shader-module factory, surface-transfer factory, and
-cohesive compute services, whose image factory creates the images a pass
-draws into). The adapter delegates GPU recording, resource allocation, and synchronization to `ShaderPipelineRenderNode`. The pass is an `ICaptureRequestTarget`: an armed capture reads
+The pass's GPU seam is the device context the composition root resolves from its
+one registered backend, the device the inner node renders on; the pass records
+through its services (`IGpuDeviceContext.Services`), whose image factory creates
+the images a pass draws into. The adapter delegates GPU recording, resource allocation, and synchronization to `ShaderPipelineRenderNode`. The pass is an `ICaptureRequestTarget`: an armed capture reads
 back the pass's own render target—the composed result—and prints
 `[capture] <set name> -> <path>` on stderr; a frame the pass passes through
 untouched forwards the same request to its inner node instead. The request
@@ -442,7 +440,7 @@ any non-`float` type by return value. `pass.Config` reads the live values back.
 | `ShaderConfigBinding` | The config-schema binder every manifest with a `config` block shares—`TryBind`, `JsonSchema`, `ValidateSchema`. |
 | `ShaderFrameInterface` / `ShaderFrameValues` / `ShaderPipelineParameterLayout` | The [frame block's](#the-frame-block) members and interface; the values a host supplies each frame; a pass's laid-out block, its config binder and its host writer (`WriteFrame`). |
 | `ShaderValueType` | `float`…`int4`, with component count and kind. |
-| `FullscreenPassNode` / `IFullscreenPassServices` | The node that runs a graphics set as one pass over an inner `IRenderNode`; its GPU seam. |
+| `FullscreenPassNode` | The node that runs a graphics set as one pass over an inner `IRenderNode`, recording through its device context's services. |
 | `IShaderModuleLoader` / `ShaderModuleLoader` / `ShaderStageInfo` / `ShaderStage` | Per-stage bytecode loading with content-hash caching. |
 | `ProbeKindManifest` / `ProbeKindCatalog` | A `puck.probe.manifest.v1` probe kind and the shipped kinds under a directory tree, by id. |
 | `ManifestCatalog<TManifest>` | The suffix-scanning, id-indexed discovery both catalogs derive from. |
