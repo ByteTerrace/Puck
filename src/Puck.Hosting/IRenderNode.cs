@@ -15,11 +15,13 @@ public interface IRenderNode : IDisposable {
     /// <summary>Renders one frame and returns the surface the parent composites. The returned surface is
     /// valid until the next call.</summary>
     Surface ProduceFrame(in FrameContext context);
-    /// <summary>Releases the node's device-derived GPU resources after the graphics device was lost and recreated, so the
-    /// next <see cref="ProduceFrame"/> rebuilds them against the new device. The default is a no-op (for nodes that own no
-    /// device resources). A node that HOSTS children MUST override this to forward the call to each child (so the whole
-    /// subtree resets), and a node that owns GPU resources must release them and clear any "resources built" latch here.
-    /// Called on the pump thread during device-loss recovery; the device has already been rebuilt, so this only tears
-    /// down stale handles — it must NOT touch the simulation.</summary>
+    /// <summary>Releases the node's device-derived GPU resources after the graphics device was lost, so the next
+    /// <see cref="ProduceFrame"/> rebuilds them against the replacement device. The default is a no-op (for nodes that own
+    /// no device resources). A node that HOSTS children MUST override this to forward the call to each child (so the whole
+    /// subtree resets), a node that owns GPU resources must release them and clear any "resources built" latch here, and a
+    /// node holding an armed capture refuses it (<c>CaptureRequestSlot.RefuseForDeviceLoss</c>), since the frame it was
+    /// owed is not produced on the lost device. Called on the pump thread during device-loss recovery, before the device
+    /// is rebuilt in place, so every object is released while its device still exists; it must NOT touch the
+    /// simulation.</summary>
     void OnDeviceLost() { }
 }

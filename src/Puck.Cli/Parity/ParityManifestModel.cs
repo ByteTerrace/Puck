@@ -9,7 +9,7 @@ internal sealed record ParityManifest(
     IReadOnlyList<ParityManifestCapture> Captures
 );
 /// <summary>One armed capture's entry. When <see cref="Refusal"/> is present the producer wrote no frame for it —
-/// <c>cameraInside</c>, <c>busy</c>, <c>stale</c>, <c>failed</c> or <c>unserved</c>, with <see cref="Detail"/>
+/// <c>cameraInside</c>, <c>busy</c>, <c>stale</c>, <c>failed</c>, <c>unserved</c> or <c>deviceLost</c>, with <see cref="Detail"/>
 /// naming the ticks involved — so <see cref="Frame"/> and <see cref="Census"/> are <see langword="null"/>, and only
 /// <see cref="StateHash"/>, the sim-state summary at the armed tick, is meaningful.</summary>
 internal sealed record ParityManifestCapture(

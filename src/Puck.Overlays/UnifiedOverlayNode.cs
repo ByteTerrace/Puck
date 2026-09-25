@@ -849,6 +849,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         // neither necessary nor safe.
         RetireForExit(exit: OverlayFrameExit.DeviceLost);
         ReleaseGpuResources();
+        m_capture.RefuseForDeviceLoss();
         m_inner.OnDeviceLost();
     }
     /// <inheritdoc/>

@@ -1304,11 +1304,13 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         Release(wait: true);
     }
     /// <inheritdoc/>
-    /// <remarks>The published image is destroyed with the device. A paused node presents nothing after the rebuild,
-    /// and a capture of it reports that no completed output exists, until a step, resume or reset renders.</remarks>
+    /// <remarks>The published image is destroyed with the device, and a capture armed at the loss is refused
+    /// (<see cref="CaptureRequestSlot.RefuseForDeviceLoss"/>). A paused node presents nothing after the rebuild, and a
+    /// capture of it reports that no completed output exists, until a step, resume or reset renders.</remarks>
     public void OnDeviceLost() {
         Release(wait: false);
         m_publicationLost = true;
+        m_capture.RefuseForDeviceLoss();
     }
     /// <inheritdoc/>
     public Surface ProduceFrame(in FrameContext context) {

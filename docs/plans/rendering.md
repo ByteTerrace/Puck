@@ -839,10 +839,15 @@ numerical thresholds for memory peaks, and the intended publish mode and
 compiler-discovery policy. Run on the producer-built package, never a source
 rebuild, from a clean installation and cache, in the Native AOT form if
 applicable. It covers the existing foundation assets and toolchain; P5's
-user-content packaging is separate. Device loss has one policy: the offscreen
-host recovers the way the windowed host does, rebuilding its device through
-`IDeviceLostRecoverable` and resuming, where today only the windowed launcher
-recovers.
+user-content packaging is separate.
+
+Done: device loss has one policy, `DeviceLossRecovery`, which the windowed and
+the offscreen host both follow: a named `[device-lost]` console line, the
+render tree released while the lost device exists, and the device rebuilt in
+place through an `IDeviceRebuild`, the windowed host's through its presenter
+and the offscreen host's through its GPU activation. A capture armed at the
+loss is refused as `deviceLost` in the capture manifest. No canary injects a
+loss on a real device yet, so the recovery is proven only by fakes.
 
 Thresholds for frame-time median and tail and for reload stalls are deferred.
 They need wall-clock and GPU timing, which the owner has deferred with no date,

@@ -1196,7 +1196,7 @@ puck parity compare <leftDir> <rightDir> --contract <file> [--output <dir>]   co
 Per capture, three independent verdicts, in order:
 
 1. **Content gate**—a capture its producer refused by name (`cameraInside`,
-   `busy`, `stale`, `failed`, `unserved`; see the
+   `busy`, `stale`, `failed`, `unserved`, `deviceLost`; see the
    [parity README](../../tests/Puck.Parity/README.md)), missing, or below its
    station's census floor never reaches comparison: agreement between
    degenerate frames is vacuous.

@@ -37,6 +37,7 @@ Every armed capture is exactly one manifest entry. Either it carries the
 | `stale` | The frame that served it showed a later tick; the detail names both ticks. |
 | `failed` | The readback, PNG write, or PNG decode failed. |
 | `unserved` | No frame served it: the run ended first, or the offscreen host's 60-second capture hold ran out. The detail names why the render chain could not serve it, such as "the engine's pipelines never installed". |
+| `deviceLost` | The graphics device was lost while it was armed or being read back; the host rebuilt the device and ran on, and the detail carries the loss's reason. |
 
 A landed frame is named `<station>~<tick>.png` (`WorldCaptureRow.CaptureName`,
 a generated file name), so a station may not carry `~`. The comparator writes a

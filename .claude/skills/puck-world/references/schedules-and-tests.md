@@ -21,7 +21,8 @@ document; absent: `captures/` under the run's state root, never the working
 directory; overridable by
 `--capture-dir`), rewritten as each capture ends, with exactly one entry per armed capture: the frame
 showing its tick, or a named `refusal` (`cameraInside` when
-`map(cameraPos) <= 0`, `busy`, `stale`, `failed`, `unserved`) with a
+`map(cameraPos) <= 0`, `busy`, `stale`, `failed`, `unserved`, `deviceLost`
+when the graphics device was lost while it was armed) with a
 `detail` naming the ticks.
 
 Offscreen, the host holds its clock for a capture: the pump steps no tick past

@@ -237,7 +237,12 @@ These are one-line cautions; the owning pages hold the derivations.
   `WorldCaptureScheduler.HoldBudgetSeconds`, after which it is refused as
   `unserved` naming `SdfEngineNode.UnservedCaptureReason`. A refused request is
   withdrawn with `FrameCaptureRequest.TryFail`, and `CaptureRequestSlot` drops
-  a withdrawn request rather than serving or forwarding it. Hosts settle owed
+  a withdrawn request rather than serving or forwarding it. A node's
+  `OnDeviceLost` refuses the capture its slot holds
+  (`CaptureRequestSlot.RefuseForDeviceLoss`), which the scheduler writes as a
+  `deviceLost` refusal; both hosts recover through `DeviceLossRecovery`
+  (`Puck.Launcher`), which releases the tree before rebuilding the device
+  through an `IDeviceRebuild`. Hosts settle owed
   frames (`SettleOwedFrames`) before disposing the render root, so no capture
   reaches the disposal refusal. `WorldCaptureScheduler`
   (`Puck.World.Console`) writes every armed capture as one manifest entry: the

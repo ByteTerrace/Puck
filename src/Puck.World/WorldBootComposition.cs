@@ -1055,6 +1055,8 @@ public static class WorldBootComposition {
         // Resolved eagerly by the IRenderNode factory below, before anything touches the GPU — see its own remarks
         // for the per-backend bring-up (surfaceless Direct3D 12; a never-shown window for Vulkan).
         services.AddSingleton<WorldOffscreenGpuActivation>();
+        // The offscreen host rebuilds a lost device through the activation that brought it up.
+        services.AddSingleton<IDeviceRebuild>(implementationFactory: static sp => sp.GetRequiredService<WorldOffscreenGpuActivation>());
 
         services.AddSingleton(implementationFactory: static sp => {
             var hostSettings = sp.GetRequiredService<WorldHostSettings>();
