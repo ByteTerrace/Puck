@@ -692,9 +692,10 @@ sub-steps, in this order:
     at its position: the node publishes that input's image with no copy, in its
     own layout (`ShaderPipelineRenderNode.PublishedLayout`), a root capture reads
     it, and the runtime binds consumers in the published layout. No recorder
-    copies its input. An output another pass touches, that is history, or that
-    is not an RGBA8 image beside an input image of its format is refused by name
-    when its pass draws nothing.
+    copies its input. An output another pass touches, that is history, that
+    would stand for a previous frame's input, or that is not an RGBA8 image
+    beside an input image of its format is refused by name when its pass draws
+    nothing.
   - `OverlayPackage` builds its modules, render pass and pipeline in the
     candidate's build. Its recorder keeps a descriptor set per frame slot and a
     storage-buffer region per slot after the shared static prefix (the token
