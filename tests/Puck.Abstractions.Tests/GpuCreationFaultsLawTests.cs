@@ -1,10 +1,11 @@
 using System.Reflection;
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 
 namespace Puck.Abstractions.Tests;
 
 /// <summary>
-/// Laws for <see cref="GpuCreationFaults"/> over <see cref="FakeGpu"/>: an armed fault fires exactly once, at the nth
+/// Laws for <see cref="GpuCreationFaults"/> over <see cref="FakeGpuDevice"/>: an armed fault fires exactly once, at the nth
 /// creation of its kind counted from the moment it was armed, names its kind and number, and never reaches the device;
 /// every other creation and every non-creating member is forwarded untouched; and every member of every wrapped
 /// interface is either a creation of one declared kind or a pass-through.
@@ -66,7 +67,7 @@ public sealed class GpuCreationFaultsLawTests {
 
     // Calls one creation, and returns whether it reached the fake: a call the fake counts, or one it refuses as having
     // no such object.
-    private static bool Reaches(FakeGpu gpu, GpuDeviceServices services, Action<GpuDeviceServices> create) {
+    private static bool Reaches(FakeGpuDevice gpu, GpuDeviceServices services, Action<GpuDeviceServices> create) {
         var before = gpu.Calls.Values.Sum();
 
         try {
@@ -82,7 +83,7 @@ public sealed class GpuCreationFaultsLawTests {
     [Theory]
     public void AnArmedFaultFiresExactlyOnceAtTheNthCreationOfItsKindAndNamesIt(string key, int nth) {
         var (kind, create) = Creations()[key];
-        var gpu = new FakeGpu();
+        var gpu = new FakeGpuDevice(countCalls: true);
         var faults = new GpuCreationFaults();
         var services = GpuCreationFaults.Wrap(
             faults: faults,
@@ -151,7 +152,7 @@ public sealed class GpuCreationFaultsLawTests {
     }
     [Fact]
     public void ArmingAgainReplacesTheKindsFaultCountedFromNow() {
-        var gpu = new FakeGpu();
+        var gpu = new FakeGpuDevice(countCalls: true);
         var faults = new GpuCreationFaults();
         var services = GpuCreationFaults.Wrap(
             faults: faults,
@@ -184,7 +185,7 @@ public sealed class GpuCreationFaultsLawTests {
     }
     [Fact]
     public void DisarmingClearsEveryFaultAndEveryCount() {
-        var gpu = new FakeGpu();
+        var gpu = new FakeGpuDevice(countCalls: true);
         var faults = new GpuCreationFaults();
         var services = GpuCreationFaults.Wrap(
             faults: faults,
@@ -267,7 +268,7 @@ public sealed class GpuCreationFaultsLawTests {
     }
     [Fact]
     public void WithoutFaultsTheServicesAreReturnedUnchanged() {
-        var gpu = new FakeGpu();
+        var gpu = new FakeGpuDevice(countCalls: true);
 
         Assert.Same(
             actual: GpuCreationFaults.Wrap(
@@ -279,7 +280,7 @@ public sealed class GpuCreationFaultsLawTests {
     }
     [Fact]
     public void TheRecorderSubmitterAndSurfaceTransfersPassThroughUnwrapped() {
-        var gpu = new FakeGpu();
+        var gpu = new FakeGpuDevice(countCalls: true);
         var services = GpuCreationFaults.Wrap(
             faults: new GpuCreationFaults(),
             services: gpu.Services
@@ -294,14 +295,14 @@ public sealed class GpuCreationFaultsLawTests {
         var faults = new GpuCreationFaults();
         var services = GpuCreationFaults.Wrap(
             faults: faults,
-            services: new FakeGpu().Services
+            services: new FakeGpuDevice(countCalls: true).Services
         );
 
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuCreationFaults.Wrap(faults: faults, services: services));
     }
     [Fact]
     public void EveryPassThroughMemberForwardsWithoutCounting() {
-        var gpu = new FakeGpu();
+        var gpu = new FakeGpuDevice(countCalls: true);
         var faults = new GpuCreationFaults();
         var bindings = GpuCreationFaults.Wrap(
             faults: faults,
