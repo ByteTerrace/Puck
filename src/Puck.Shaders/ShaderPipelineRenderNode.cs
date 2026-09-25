@@ -225,7 +225,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         runtime.Secondary = objects.Secondary;
 
         if (declaration.Kind == ShaderPipelinePassKind.Compute) {
-            runtime.Pools = new IGpuComputeCommandPool[m_inFlight];
+            runtime.Pools = new IGpuCommandPool[m_inFlight];
         } else {
             if (declaration.Geometry is { } geometry) {
                 runtime.GeometryBuffer = m_graphics!.BufferFactory.CreateHostVisible(
@@ -238,8 +238,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     usage: GpuBufferUsage.Vertex
                 );
             }
-            runtime.Pre = new IGpuComputeCommandPool[m_inFlight];
-            runtime.Draw = new IGpuComputeCommandPool[m_inFlight];
+            runtime.Pre = new IGpuCommandPool[m_inFlight];
+            runtime.Draw = new IGpuCommandPool[m_inFlight];
             runtime.Framebuffers = new IGpuFramebuffer[m_inFlight];
 
             // A framebuffer owns no image, so one over history the install carries binds the replaced graph's instances,
@@ -1630,7 +1630,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
     private sealed class FrameSlot {
         public IGpuSubmissionFence? Fence;
-        public IGpuComputeCommandPool? Final;
+        public IGpuCommandPool? Final;
     }
     // One storage of the plan, which every version of its forwarding chain names, with one instance per frame slot (one
     // instance only for a host-owned storage).
@@ -1712,12 +1712,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         public List<GpuComputeBinding> Bindings = [];
 
         public IGpuComputePipeline? Compute;
-        public IGpuComputeCommandPool[]? Draw;
+        public IGpuCommandPool[]? Draw;
         public IGpuFramebuffer[]? Framebuffers;
         public IGpuPipeline? Graphics;
-        public IGpuComputeCommandPool[]? Pools;
+        public IGpuCommandPool[]? Pools;
         public nint[]? PoolsDescriptors;
-        public IGpuComputeCommandPool[]? Pre;
+        public IGpuCommandPool[]? Pre;
         public IGpuShaderModule? Primary;
         public IGpuRenderPass? RenderPass;
         public nint[]? Samplers;

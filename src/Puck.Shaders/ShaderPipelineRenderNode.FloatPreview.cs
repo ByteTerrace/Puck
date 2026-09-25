@@ -293,8 +293,8 @@ public sealed partial class ShaderPipelineRenderNode {
     /// included.
     /// </summary>
     private sealed class FloatPreviewPass : IDisposable {
-        private const GpuComputeAccess PriorAccess = GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite | GpuComputeAccess.TransferWrite | GpuComputeAccess.ColorAttachmentWrite;
-        private const GpuComputeStage PriorStages = GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader | GpuComputeStage.Transfer | GpuComputeStage.ColorAttachmentOutput;
+        private const GpuAccess PriorAccess = GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.TransferWrite | GpuAccess.ColorAttachmentWrite;
+        private const GpuStage PriorStages = GpuStage.ComputeShader | GpuStage.FragmentShader | GpuStage.Transfer | GpuStage.ColorAttachmentOutput;
 
         private readonly nint[] m_descriptorPools;
         private readonly nint[] m_descriptorSets;
@@ -303,10 +303,10 @@ public sealed partial class ShaderPipelineRenderNode {
         private readonly IFullscreenPassServices m_graphics;
         private readonly PreviewObjects m_objects;
         private readonly GpuImageLayout m_outputLayout;
-        private readonly IGpuComputeCommandPool[] m_draw;
+        private readonly IGpuCommandPool[] m_draw;
         private readonly IGpuPipeline m_pipeline;
-        private readonly IGpuComputeCommandPool[] m_post;
-        private readonly IGpuComputeCommandPool[] m_pre;
+        private readonly IGpuCommandPool[] m_post;
+        private readonly IGpuCommandPool[] m_pre;
         private readonly nint[] m_samplers;
         private readonly bool[] m_targetInitialized;
         private readonly IGpuImage[] m_targets;
@@ -319,9 +319,9 @@ public sealed partial class ShaderPipelineRenderNode {
             m_outputLayout = outputLayout;
             m_targets = objects.Targets;
             m_pipeline = objects.Pipeline!;
-            m_draw = new IGpuComputeCommandPool[inFlight];
-            m_pre = new IGpuComputeCommandPool[inFlight];
-            m_post = new IGpuComputeCommandPool[inFlight];
+            m_draw = new IGpuCommandPool[inFlight];
+            m_pre = new IGpuCommandPool[inFlight];
+            m_post = new IGpuCommandPool[inFlight];
             m_descriptorPools = new nint[inFlight];
             m_descriptorSets = new nint[inFlight];
             m_samplers = new nint[inFlight];
@@ -446,13 +446,13 @@ public sealed partial class ShaderPipelineRenderNode {
                 targetOld,
                 GpuImageLayout.RenderTarget,
                 ((targetOld == GpuImageLayout.Undefined)
-                ? GpuComputeAccess.None
+                ? GpuAccess.None
                 : PriorAccess),
-                GpuComputeAccess.ColorAttachmentWrite,
+                GpuAccess.ColorAttachmentWrite,
                 ((targetOld == GpuImageLayout.Undefined)
-                ? GpuComputeStage.TopOfPipe
+                ? GpuStage.TopOfPipe
                 : PriorStages),
-                GpuComputeStage.ColorAttachmentOutput
+                GpuStage.ColorAttachmentOutput
             );
             recorder.EndCommandBuffer(
                 commandBufferHandle: pre.CommandBufferHandle
@@ -504,10 +504,10 @@ public sealed partial class ShaderPipelineRenderNode {
                 target.ImageHandle,
                 GpuImageLayout.ShaderReadOnly,
                 m_outputLayout,
-                GpuComputeAccess.ColorAttachmentWrite,
-                GpuComputeAccess.ShaderRead,
-                GpuComputeStage.ColorAttachmentOutput,
-                GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader
+                GpuAccess.ColorAttachmentWrite,
+                GpuAccess.ShaderRead,
+                GpuStage.ColorAttachmentOutput,
+                GpuStage.ComputeShader | GpuStage.FragmentShader
             );
             recorder.EndCommandBuffer(
                 commandBufferHandle: post.CommandBufferHandle

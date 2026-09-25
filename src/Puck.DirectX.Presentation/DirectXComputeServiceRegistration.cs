@@ -9,7 +9,7 @@ namespace Puck.DirectX.Presentation;
 
 /// <summary>
 /// Registers the backend-neutral image and command-pool adapters (<see cref="IGpuImageFactory"/> and
-/// <see cref="IGpuComputeCommandPoolFactory"/>) that wrap the Direct3D 12 compute path. The Direct3D 12 peer of
+/// <see cref="IGpuCommandPoolFactory"/>) that wrap the Direct3D 12 compute path. The Direct3D 12 peer of
 /// <c>VulkanComputeServiceRegistration</c>; kept apart from
 /// <see cref="DirectXPresenterServiceRegistration"/> so the composition root's type coupling stays bounded.
 /// </summary>
@@ -19,7 +19,7 @@ public static class DirectXComputeServiceRegistration {
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddDirectXComputeApis(this IServiceCollection services) {
-        services.TryAddSingleton<IGpuComputeCommandPoolFactory>(implementationFactory: static sp => new DirectXGpuComputeCommandPoolFactory(deviceContext: sp.GetRequiredService<DirectXDeviceContext>()));
+        services.TryAddSingleton<IGpuCommandPoolFactory>(implementationFactory: static sp => new DirectXGpuCommandPoolFactory(deviceContext: sp.GetRequiredService<DirectXDeviceContext>()));
         services.TryAddSingleton<IGpuImageFactory>(implementationFactory: static sp => new DirectXGpuImageFactory(deviceContext: sp.GetRequiredService<DirectXDeviceContext>()));
         // The compute-services bundle composes the nine granular services a compute node drives (the two above plus the
         // recorder, bindings, pipeline, queue submitter, shader-module, buffer and surface-transfer factories the

@@ -1,10 +1,10 @@
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
-/// Specifies a bitmask of pipeline stages bounding a compute barrier's synchronization scope.
+/// Specifies a bitmask of pipeline stages bounding a barrier's synchronization scope, for compute and graphics work alike.
 /// </summary>
 [Flags]
-public enum GpuComputeStage : uint {
+public enum GpuStage : uint {
     /// <summary>No stage.</summary>
     None = 0,
     /// <summary>The top of the pipe (no prior work to wait on).</summary>

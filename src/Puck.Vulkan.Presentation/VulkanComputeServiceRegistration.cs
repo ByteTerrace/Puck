@@ -8,7 +8,7 @@ namespace Puck.Vulkan.Presentation;
 
 /// <summary>
 /// Registers the backend-neutral image and command-pool adapters (<see cref="IGpuImageFactory"/> and
-/// <see cref="IGpuComputeCommandPoolFactory"/>) that wrap the Vulkan compute APIs. Kept apart from
+/// <see cref="IGpuCommandPoolFactory"/>) that wrap the Vulkan compute APIs. Kept apart from
 /// <see cref="VulkanPresenterServiceRegistration"/> so that composition root's type coupling stays bounded.
 /// </summary>
 public static class VulkanComputeServiceRegistration {
@@ -16,7 +16,7 @@ public static class VulkanComputeServiceRegistration {
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddVulkanComputeApis(this IServiceCollection services) {
-        services.TryAddSingleton<IGpuComputeCommandPoolFactory>(implementationFactory: static sp => new VulkanGpuComputeCommandPoolFactory(
+        services.TryAddSingleton<IGpuCommandPoolFactory>(implementationFactory: static sp => new VulkanGpuCommandPoolFactory(
             commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
             deviceContext: sp.GetRequiredService<IVulkanDeviceContext>()
         ));

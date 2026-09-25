@@ -88,7 +88,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // caller. OverlayChannel.Hud is NOT in this table — see FirstPartyChannelCount's remarks.
     private readonly Action<OverlayFrameBuilder>?[] m_channelWriters;
     private readonly IGpuRecorder m_commandRecorder;
-    private readonly IGpuComputeCommandPoolFactory m_commandPoolFactory;
+    private readonly IGpuCommandPoolFactory m_commandPoolFactory;
     private readonly ConsolePanelWriter? m_consoleWriter;
     private readonly CursorWriter? m_cursorWriter;
     private readonly NodeDescriptor m_descriptor;
@@ -132,7 +132,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // delegate reads it (Emit needs renderTicks; the other writers don't) so the draw-order table's delegate shape
     // stays the same one param for every channel.
     private ulong m_currentFrameRenderTicks;
-    private IGpuComputeCommandPool? m_commandPool;
+    private IGpuCommandPool? m_commandPool;
     private IGpuStorageBuffer? m_dataBuffer;
     private nint m_descriptorPool;
     private nint m_descriptorSet;

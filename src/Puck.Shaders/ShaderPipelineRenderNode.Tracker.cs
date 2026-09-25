@@ -8,7 +8,7 @@ namespace Puck.Shaders;
 // instance holds an override until its next access, which starts from the override and always records a barrier, so
 // every later planned barrier, which waits only on planned stages, still orders the unplanned accesses through it.
 public sealed partial class ShaderPipelineRenderNode {
-    private const GpuComputeStage ShaderStages = GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader;
+    private const GpuStage ShaderStages = GpuStage.ComputeShader | GpuStage.FragmentShader;
 
     // The state a reset leaves every owned instance in: contents discarded, and any earlier access, including a
     // downstream reader of a published image, possibly still in flight.
@@ -223,7 +223,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     instance: slot,
                     resource: selected,
                     use: new ShaderPipelineAccessState(
-                        Access: GpuComputeAccess.ShaderRead,
+                        Access: GpuAccess.ShaderRead,
                         Layout: m_outputLayout,
                         Stage: ShaderStages
                     )
@@ -266,9 +266,9 @@ public sealed partial class ShaderPipelineRenderNode {
             ),
             resource: selected,
             use: new ShaderPipelineAccessState(
-                Access: GpuComputeAccess.ShaderRead,
+                Access: GpuAccess.ShaderRead,
                 Layout: GpuImageLayout.ShaderReadOnly,
-                Stage: GpuComputeStage.FragmentShader
+                Stage: GpuStage.FragmentShader
             )
         );
     // A reset discards every owned instance's contents and re-arms zero initialization.

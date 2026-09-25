@@ -8,7 +8,7 @@ namespace Puck.Vulkan;
 /// <summary>
 /// Implements <see cref="IGpuRecorder"/> for Vulkan by forwarding to <see cref="IVulkanCommandBufferRecordingApi"/>
 /// against the current logical device of its device context, mapping the neutral <see cref="GpuImageLayout"/>,
-/// <see cref="GpuComputeStage"/>, and <see cref="GpuComputeAccess"/> values to their Vulkan flags. Graphics pipelines
+/// <see cref="GpuStage"/>, and <see cref="GpuAccess"/> values to their Vulkan flags. Graphics pipelines
 /// take their viewport and scissor dynamically: a render pass sets both to its area, with a negative-height viewport
 /// that points clip-space +y at the top of the area, as Direct3D 12 does.
 /// </summary>
@@ -18,38 +18,38 @@ namespace Puck.Vulkan;
 public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulkanCommandBufferRecordingApi recordingApi) : IGpuRecorder {
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
 
-    private static uint ToVulkanAccess(GpuComputeAccess access) {
+    private static uint ToVulkanAccess(GpuAccess access) {
         var result = 0U;
 
-        if (0 != (access & GpuComputeAccess.ShaderRead)) {
+        if (0 != (access & GpuAccess.ShaderRead)) {
             result |= VulkanAccessFlags.ShaderRead;
         }
 
-        if (0 != (access & GpuComputeAccess.ShaderWrite)) {
+        if (0 != (access & GpuAccess.ShaderWrite)) {
             result |= VulkanAccessFlags.ShaderWrite;
         }
 
-        if (0 != (access & GpuComputeAccess.IndirectCommandRead)) {
+        if (0 != (access & GpuAccess.IndirectCommandRead)) {
             result |= VulkanAccessFlags.IndirectCommandRead;
         }
 
-        if (0 != (access & GpuComputeAccess.TransferWrite)) {
+        if (0 != (access & GpuAccess.TransferWrite)) {
             result |= VulkanAccessFlags.TransferWrite;
         }
 
-        if (0 != (access & GpuComputeAccess.ColorAttachmentWrite)) {
+        if (0 != (access & GpuAccess.ColorAttachmentWrite)) {
             result |= VulkanAccessFlags.ColorAttachmentWrite;
         }
 
-        if (0 != (access & GpuComputeAccess.ColorAttachmentRead)) {
+        if (0 != (access & GpuAccess.ColorAttachmentRead)) {
             result |= VulkanAccessFlags.ColorAttachmentRead;
         }
 
-        if (0 != (access & GpuComputeAccess.DepthAttachmentRead)) {
+        if (0 != (access & GpuAccess.DepthAttachmentRead)) {
             result |= VulkanAccessFlags.DepthStencilAttachmentRead;
         }
 
-        if (0 != (access & GpuComputeAccess.DepthAttachmentWrite)) {
+        if (0 != (access & GpuAccess.DepthAttachmentWrite)) {
             result |= VulkanAccessFlags.DepthStencilAttachmentWrite;
         }
 
@@ -66,34 +66,34 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             _ => VulkanImageLayout.Undefined,
         };
     }
-    private static uint ToVulkanStage(GpuComputeStage stage) {
+    private static uint ToVulkanStage(GpuStage stage) {
         var result = 0U;
 
-        if (0 != (stage & GpuComputeStage.TopOfPipe)) {
+        if (0 != (stage & GpuStage.TopOfPipe)) {
             result |= VulkanPipelineStageFlags.TopOfPipe;
         }
 
-        if (0 != (stage & GpuComputeStage.ComputeShader)) {
+        if (0 != (stage & GpuStage.ComputeShader)) {
             result |= VulkanPipelineStageFlags.ComputeShader;
         }
 
-        if (0 != (stage & GpuComputeStage.FragmentShader)) {
+        if (0 != (stage & GpuStage.FragmentShader)) {
             result |= VulkanPipelineStageFlags.FragmentShader;
         }
 
-        if (0 != (stage & GpuComputeStage.DrawIndirect)) {
+        if (0 != (stage & GpuStage.DrawIndirect)) {
             result |= VulkanPipelineStageFlags.DrawIndirect;
         }
 
-        if (0 != (stage & GpuComputeStage.Transfer)) {
+        if (0 != (stage & GpuStage.Transfer)) {
             result |= VulkanPipelineStageFlags.Transfer;
         }
 
-        if (0 != (stage & GpuComputeStage.ColorAttachmentOutput)) {
+        if (0 != (stage & GpuStage.ColorAttachmentOutput)) {
             result |= VulkanPipelineStageFlags.ColorAttachmentOutput;
         }
 
-        if (0 != (stage & GpuComputeStage.FragmentTests)) {
+        if (0 != (stage & GpuStage.FragmentTests)) {
             result |= VulkanPipelineStageFlags.EarlyFragmentTests | VulkanPipelineStageFlags.LateFragmentTests;
         }
 
@@ -235,7 +235,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             device: Device
         );
     /// <inheritdoc/>
-    public void MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) =>
+    public void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) =>
         recordingApi.PipelineMemoryBarrier(
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: ToVulkanAccess(access: destinationAccessMask),
@@ -263,7 +263,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
     /// <inheritdoc/>
     /// <remarks>Records a buffer memory barrier over the whole buffer; Vulkan buffers carry no layout, so the accesses
     /// and stages are the whole transition.</remarks>
-    public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) =>
+    public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) =>
         recordingApi.PipelineBufferBarrier(
             bufferHandle: bufferHandle,
             commandBufferHandle: commandBufferHandle,
@@ -276,7 +276,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
     /// <inheritdoc/>
     /// <remarks>A transition into or out of <see cref="GpuImageLayout.DepthAttachment"/> covers the depth aspect, since only
     /// a depth image takes that layout; every other transition covers the color aspect.</remarks>
-    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) =>
+    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) =>
         recordingApi.TransitionImageLayout(
             aspectMask: (((oldLayout == GpuImageLayout.DepthAttachment) || (newLayout == GpuImageLayout.DepthAttachment))
                 ? VulkanGpuFormats.DepthAspect

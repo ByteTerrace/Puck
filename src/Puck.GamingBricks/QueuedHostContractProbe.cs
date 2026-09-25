@@ -1437,7 +1437,7 @@ public static class QueuedHostContractProbe {
     private sealed class TestGpuComputeServices(IGpuSurfaceTransferFactory factory) : IGpuComputeServices {
         public IGpuBindings Bindings => null!;
         public IGpuBufferFactory BufferFactory => null!;
-        public IGpuComputeCommandPoolFactory CommandPoolFactory => null!;
+        public IGpuCommandPoolFactory CommandPoolFactory => null!;
         public IGpuImageFactory ImageFactory => null!;
         public IGpuPipelineFactory PipelineFactory => null!;
         public IGpuQueueSubmitter QueueSubmitter => null!;

@@ -15,7 +15,7 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public interface IGpuComputeServices {
     /// <summary>The compute command-pool factory.</summary>
-    IGpuComputeCommandPoolFactory CommandPoolFactory { get; }
+    IGpuCommandPoolFactory CommandPoolFactory { get; }
     /// <summary>The pipeline factory.</summary>
     IGpuPipelineFactory PipelineFactory { get; }
     /// <summary>The command recorder.</summary>

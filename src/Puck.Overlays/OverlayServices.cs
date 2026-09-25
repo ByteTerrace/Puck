@@ -13,7 +13,7 @@ public sealed record OverlayServices {
     /// the services so a caller never re-derives it from the backend flag a second time.</summary>
     public required string BytecodeExtension { get; init; }
     /// <summary>The factory for the command buffer the overlay records its pass into.</summary>
-    public required IGpuComputeCommandPoolFactory CommandPoolFactory { get; init; }
+    public required IGpuCommandPoolFactory CommandPoolFactory { get; init; }
     /// <summary>The command recorder the compositor drives.</summary>
     public required IGpuRecorder Recorder { get; init; }
     /// <summary>The descriptor pool/set allocator.</summary>
@@ -63,7 +63,7 @@ public sealed record OverlayServices {
 
         return new OverlayServices {
             BytecodeExtension = ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX),
-            CommandPoolFactory = Resolve<IGpuComputeCommandPoolFactory>(),
+            CommandPoolFactory = Resolve<IGpuCommandPoolFactory>(),
             Recorder = Resolve<IGpuRecorder>(),
             Bindings = Resolve<IGpuBindings>(),
             DeviceContext = Resolve<IGpuDeviceContext>(),

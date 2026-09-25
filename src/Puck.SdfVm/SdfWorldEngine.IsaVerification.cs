@@ -15,31 +15,31 @@ public sealed partial class SdfWorldEngine {
         if (initializeImages) {
             recorder.TransitionImageLayout(
                 commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuComputeAccess.ShaderRead,
-                destinationStageMask: GpuComputeStage.ComputeShader,
+                destinationAccessMask: GpuAccess.ShaderRead,
+                destinationStageMask: GpuStage.ComputeShader,
                 imageHandle: sampledImage.ImageHandle,
                 newLayout: GpuImageLayout.ShaderReadOnly,
                 oldLayout: GpuImageLayout.Undefined,
-                sourceAccessMask: GpuComputeAccess.None,
-                sourceStageMask: GpuComputeStage.TopOfPipe
+                sourceAccessMask: GpuAccess.None,
+                sourceStageMask: GpuStage.TopOfPipe
             );
         }
 
         recorder.TransitionImageLayout(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderWrite,
-            destinationStageMask: GpuComputeStage.ComputeShader,
+            destinationAccessMask: GpuAccess.ShaderWrite,
+            destinationStageMask: GpuStage.ComputeShader,
             imageHandle: reportImage.ImageHandle,
             newLayout: GpuImageLayout.General,
             oldLayout: (initializeImages
             ? GpuImageLayout.Undefined
             : GpuImageLayout.ShaderReadOnly),
             sourceAccessMask: (initializeImages
-            ? GpuComputeAccess.None
-            : GpuComputeAccess.ShaderRead),
+            ? GpuAccess.None
+            : GpuAccess.ShaderRead),
             sourceStageMask: (initializeImages
-            ? GpuComputeStage.TopOfPipe
-            : GpuComputeStage.ComputeShader)
+            ? GpuStage.TopOfPipe
+            : GpuStage.ComputeShader)
         );
 
         if (initializeImages) {
@@ -107,13 +107,13 @@ public sealed partial class SdfWorldEngine {
         );
         recorder.TransitionImageLayout(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderRead,
-            destinationStageMask: GpuComputeStage.ComputeShader,
+            destinationAccessMask: GpuAccess.ShaderRead,
+            destinationStageMask: GpuStage.ComputeShader,
             imageHandle: reportImage.ImageHandle,
             newLayout: GpuImageLayout.ShaderReadOnly,
             oldLayout: GpuImageLayout.General,
-            sourceAccessMask: GpuComputeAccess.ShaderWrite,
-            sourceStageMask: GpuComputeStage.ComputeShader
+            sourceAccessMask: GpuAccess.ShaderWrite,
+            sourceStageMask: GpuStage.ComputeShader
         );
         recorder.EndCommandBuffer(
             commandBufferHandle: commandBuffer

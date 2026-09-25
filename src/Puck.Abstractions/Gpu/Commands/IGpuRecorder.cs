@@ -3,12 +3,12 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// Records compute and graphics commands into a command buffer of the device the recorder was obtained from. No
 /// barrier is implied: the caller records every image-layout, buffer and memory barrier its accesses need, and the
-/// <see cref="GpuImageLayout"/>, <see cref="GpuComputeStage"/> and <see cref="GpuComputeAccess"/> values map to each
+/// <see cref="GpuImageLayout"/>, <see cref="GpuStage"/> and <see cref="GpuAccess"/> values map to each
 /// backend's native synchronization.
 /// </summary>
 public interface IGpuRecorder {
     /// <summary>Begins recording into a command buffer, discarding what it recorded before.</summary>
-    /// <param name="commandBufferHandle">The command buffer, from an <see cref="IGpuComputeCommandPool"/>.</param>
+    /// <param name="commandBufferHandle">The command buffer, from an <see cref="IGpuCommandPool"/>.</param>
     void BeginCommandBuffer(nint commandBufferHandle);
     /// <summary>Ends recording of a command buffer.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
@@ -120,14 +120,14 @@ public interface IGpuRecorder {
     /// <param name="destinationAccessMask">The following accesses.</param>
     /// <param name="sourceStageMask">The prior stages.</param>
     /// <param name="destinationStageMask">The following stages.</param>
-    void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask);
+    void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask);
     /// <summary>Records a global memory barrier over the given access and stage scopes.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="sourceAccessMask">The prior accesses.</param>
     /// <param name="destinationAccessMask">The following accesses.</param>
     /// <param name="sourceStageMask">The prior stages.</param>
     /// <param name="destinationStageMask">The following stages.</param>
-    void MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask);
+    void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask);
     /// <summary>Records a barrier on one buffer over the given access and stage scopes. Direct3D 12 needs it, rather
     /// than <see cref="MemoryBarrier"/>, to move a GPU-written buffer into <c>INDIRECT_ARGUMENT</c> before an indirect
     /// dispatch reads it; on Vulkan it is a buffer memory barrier over the same scopes.</summary>
@@ -137,5 +137,5 @@ public interface IGpuRecorder {
     /// <param name="destinationAccessMask">The following accesses.</param>
     /// <param name="sourceStageMask">The prior stages.</param>
     /// <param name="destinationStageMask">The following stages.</param>
-    void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask);
+    void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask);
 }

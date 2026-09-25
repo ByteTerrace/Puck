@@ -14,7 +14,7 @@ namespace Puck.Shaders.Tests;
 /// <see cref="PipelineGate"/> holds that compiler work and <see cref="QueueHeld"/> holds the queue unfinished.
 /// </summary>
 internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServices, IGpuDeviceContext,
-    IGpuComputeCommandPoolFactory, IGpuPipelineFactory, IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory,
+    IGpuCommandPoolFactory, IGpuPipelineFactory, IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory,
     IGpuBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuRenderPassFactory {
     private readonly Dictionary<nint, Created> m_byHandle = [];
     private readonly Lock m_gate = new();
@@ -89,7 +89,7 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
     public int WaitIdleCount { get; private set; }
     public long AdapterLuid => 1L;
     public IGpuBindings Bindings => this;
-    public IGpuComputeCommandPoolFactory CommandPoolFactory => this;
+    public IGpuCommandPoolFactory CommandPoolFactory => this;
     public IGpuComputeServices? ComputeServices => this;
     public IGpuDeviceContext DeviceContext => this;
     public nint DeviceHandle {
@@ -219,7 +219,7 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
     public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => RecordGraphics(buffer: bufferHandle, command: "vertices", count: strideBytes, offsetBytes: 0, sizeBytes: sizeBytes);
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => ClearedImages.Add(item: imageHandle);
-    public IGpuComputeCommandPool Create() => new FakeCommandPool(created: Create(kind: "command pool"));
+    public IGpuCommandPool Create() => new FakeCommandPool(created: Create(kind: "command pool"));
     public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => new FakePipeline(created: CreateCompiled(kind: "compute pipeline"));
     public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => new FakeModule(created: CreateCompiled(kind: $"{stage} module"));
     public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => throw new NotSupportedException();
@@ -313,7 +313,7 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
     public void EndCommandBuffer(nint commandBufferHandle) { }
     public void EndDebugGroup(nint commandBufferHandle) { }
     public void EndRenderPass(nint commandBufferHandle) { }
-    public void MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Memory, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: 0);
+    public void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Memory, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: 0);
     /// <summary>Starts a new <see cref="PeakLiveBytes"/> window at the current <see cref="LiveBytes"/>.</summary>
     public void ResetPeakBytes() {
         lock (m_gate) {
@@ -325,8 +325,8 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
     public void Submit(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
     public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => Submissions++;
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
-    public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Buffer, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: bufferHandle);
-    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: imageHandle);
+    public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Buffer, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: bufferHandle);
+    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: imageHandle);
     public void WaitIdle() {
         WaitIdleCount++;
         Record(text: "device drain");
@@ -389,7 +389,7 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => throw new NotSupportedException();
         public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged => throw new NotSupportedException();
     }
-    private sealed class FakeCommandPool(Created created) : IGpuComputeCommandPool {
+    private sealed class FakeCommandPool(Created created) : IGpuCommandPool {
         public nint CommandBufferHandle => created.Handle;
 
         public void Dispose() => created.Dispose();

@@ -11,7 +11,7 @@ namespace Puck.Abstractions.Tests;
 /// </summary>
 internal sealed class FakeGpu :
     IGpuRecorder,
-    IGpuComputeCommandPoolFactory,
+    IGpuCommandPoolFactory,
     IGpuPipelineFactory,
     IGpuComputeServices,
     IGpuBindings,
@@ -27,7 +27,7 @@ internal sealed class FakeGpu :
     public long AdapterLuid => 0L;
     public GpuDeviceIdentity? Identity => null;
     public GpuMemoryProfile MemoryProfile => default;
-    public IGpuComputeCommandPoolFactory CommandPoolFactory => this;
+    public IGpuCommandPoolFactory CommandPoolFactory => this;
     public IGpuPipelineFactory PipelineFactory => this;
     public IGpuRecorder Recorder => this;
     public IGpuBindings Bindings => this;
@@ -60,10 +60,10 @@ internal sealed class FakeGpu :
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => Hit(key: "IGpuRecorder.DispatchIndirect");
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => Hit(key: "IGpuRecorder.ClearStorageBuffer");
-    void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionImageLayout");
-    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
-    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionBuffer");
-    IGpuComputeCommandPool IGpuComputeCommandPoolFactory.Create() => throw new NotSupportedException();
+    void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionImageLayout");
+    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
+    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionBuffer");
+    IGpuCommandPool IGpuCommandPoolFactory.Create() => throw new NotSupportedException();
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
         Hit(key: "IGpuPipelineFactory.Create(graphics)");
 

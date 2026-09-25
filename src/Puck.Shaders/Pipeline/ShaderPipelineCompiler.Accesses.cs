@@ -20,40 +20,40 @@ public sealed partial class ShaderPipelineCompiler {
 
         if (!write) {
             return new ShaderPipelineAccessState(
-                Access: GpuComputeAccess.ShaderRead,
+                Access: GpuAccess.ShaderRead,
                 Layout: (buffer
                     ? GpuImageLayout.Undefined
                     : GpuImageLayout.ShaderReadOnly),
                 Stage: (pass.IsGraphics
-                    ? GpuComputeStage.FragmentShader
-                    : GpuComputeStage.ComputeShader)
+                    ? GpuStage.FragmentShader
+                    : GpuStage.ComputeShader)
             );
         }
         if (resource.Kind == ShaderPipelineResourceKind.Depth) {
             return new ShaderPipelineAccessState(
-                Access: GpuComputeAccess.DepthAttachmentRead | GpuComputeAccess.DepthAttachmentWrite,
+                Access: GpuAccess.DepthAttachmentRead | GpuAccess.DepthAttachmentWrite,
                 Layout: GpuImageLayout.DepthAttachment,
-                Stage: GpuComputeStage.FragmentTests
+                Stage: GpuStage.FragmentTests
             );
         }
         if (pass.IsGraphics) {
             return new ShaderPipelineAccessState(
                 Access: (preserve
-                    ? GpuComputeAccess.ColorAttachmentRead | GpuComputeAccess.ColorAttachmentWrite
-                    : GpuComputeAccess.ColorAttachmentWrite),
+                    ? GpuAccess.ColorAttachmentRead | GpuAccess.ColorAttachmentWrite
+                    : GpuAccess.ColorAttachmentWrite),
                 Layout: GpuImageLayout.RenderTarget,
-                Stage: GpuComputeStage.ColorAttachmentOutput
+                Stage: GpuStage.ColorAttachmentOutput
             );
         }
 
         return new ShaderPipelineAccessState(
             Access: (preserve
-                ? GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite
-                : GpuComputeAccess.ShaderWrite),
+                ? GpuAccess.ShaderRead | GpuAccess.ShaderWrite
+                : GpuAccess.ShaderWrite),
             Layout: (buffer
                 ? GpuImageLayout.Undefined
                 : GpuImageLayout.General),
-            Stage: GpuComputeStage.ComputeShader
+            Stage: GpuStage.ComputeShader
         );
     }
     private static ShaderPipelineAccessState Fold(ShaderPipelineAccessState start, List<(int Pass, int Slot, ShaderPipelineAccessState Use)> uses) {

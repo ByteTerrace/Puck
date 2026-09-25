@@ -20,20 +20,20 @@ public sealed partial class SdfWorldEngine {
             : GpuImageLayout.ShaderReadOnly
         );
         var restingStage = (m_exportMode
-            ? GpuComputeStage.ComputeShader
-            : GpuComputeStage.FragmentShader | GpuComputeStage.ComputeShader
+            ? GpuStage.ComputeShader
+            : GpuStage.FragmentShader | GpuStage.ComputeShader
         );
         var outputOldLayout = (m_imageInitialized
             ? restingLayout
             : GpuImageLayout.Undefined
         );
         var outputSourceAccess = (m_imageInitialized
-            ? GpuComputeAccess.ShaderRead
-            : GpuComputeAccess.None
+            ? GpuAccess.ShaderRead
+            : GpuAccess.None
         );
         var outputSourceStage = (m_imageInitialized
             ? restingStage
-            : GpuComputeStage.TopOfPipe
+            : GpuStage.TopOfPipe
         );
 
         recorder.BeginCommandBuffer(
@@ -57,25 +57,25 @@ public sealed partial class SdfWorldEngine {
 
                 recorder.TransitionImageLayout(
                     commandBufferHandle: commandBuffer,
-                    destinationAccessMask: GpuComputeAccess.ShaderWrite,
-                    destinationStageMask: GpuComputeStage.ComputeShader,
+                    destinationAccessMask: GpuAccess.ShaderWrite,
+                    destinationStageMask: GpuStage.ComputeShader,
                     imageHandle: source.ImageHandle,
                     newLayout: GpuImageLayout.General,
                     oldLayout: GpuImageLayout.Undefined,
-                    sourceAccessMask: GpuComputeAccess.None,
-                    sourceStageMask: GpuComputeStage.TopOfPipe
+                    sourceAccessMask: GpuAccess.None,
+                    sourceStageMask: GpuStage.TopOfPipe
                 );
             }
 
             recorder.TransitionImageLayout(
                 commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuComputeAccess.ShaderRead,
-                destinationStageMask: GpuComputeStage.ComputeShader,
+                destinationAccessMask: GpuAccess.ShaderRead,
+                destinationStageMask: GpuStage.ComputeShader,
                 imageHandle: m_screenSourceFiller.ImageHandle,
                 newLayout: GpuImageLayout.ShaderReadOnly,
                 oldLayout: GpuImageLayout.Undefined,
-                sourceAccessMask: GpuComputeAccess.None,
-                sourceStageMask: GpuComputeStage.TopOfPipe
+                sourceAccessMask: GpuAccess.None,
+                sourceStageMask: GpuStage.TopOfPipe
             );
         }
 
@@ -87,10 +87,10 @@ public sealed partial class SdfWorldEngine {
         // production with GPU execution, not GPU frames); it replaces the host's per-frame whole-device drain.
         recorder.MemoryBarrier(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite,
-            destinationStageMask: GpuComputeStage.ComputeShader,
-            sourceAccessMask: GpuComputeAccess.ShaderWrite | GpuComputeAccess.IndirectCommandRead,
-            sourceStageMask: GpuComputeStage.ComputeShader | GpuComputeStage.DrawIndirect
+            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
+            destinationStageMask: GpuStage.ComputeShader,
+            sourceAccessMask: GpuAccess.ShaderWrite | GpuAccess.IndirectCommandRead,
+            sourceStageMask: GpuStage.ComputeShader | GpuStage.DrawIndirect
         );
 
         // CARVE-BAKE: prepend this frame's background bake slices before the render passes below. Each baking slot
@@ -165,10 +165,10 @@ public sealed partial class SdfWorldEngine {
             // Order the sky pass's source-texture writes before the views pass overwrites the same images.
             recorder.MemoryBarrier(
                 commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite,
-                destinationStageMask: GpuComputeStage.ComputeShader,
-                sourceAccessMask: GpuComputeAccess.ShaderWrite,
-                sourceStageMask: GpuComputeStage.ComputeShader
+                destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
+                destinationStageMask: GpuStage.ComputeShader,
+                sourceAccessMask: GpuAccess.ShaderWrite,
+                sourceStageMask: GpuStage.ComputeShader
             );
 
             // Instance-cull pass (mask-first): one invocation per (tile, viewport) — bins the program's instances
@@ -377,10 +377,10 @@ public sealed partial class SdfWorldEngine {
             // Make Stage 1's source-texture writes visible to Stage 2's reads.
             recorder.MemoryBarrier(
                 commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuComputeAccess.ShaderRead,
-                destinationStageMask: GpuComputeStage.ComputeShader,
-                sourceAccessMask: GpuComputeAccess.ShaderWrite,
-                sourceStageMask: GpuComputeStage.ComputeShader
+                destinationAccessMask: GpuAccess.ShaderRead,
+                destinationStageMask: GpuStage.ComputeShader,
+                sourceAccessMask: GpuAccess.ShaderWrite,
+                sourceStageMask: GpuStage.ComputeShader
             );
         } else {
             // SKIPPED FRAME: no render passes ran; fall through to the composite. The retained tile buffer + source
@@ -397,8 +397,8 @@ public sealed partial class SdfWorldEngine {
 
         recorder.TransitionImageLayout(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderWrite,
-            destinationStageMask: GpuComputeStage.ComputeShader,
+            destinationAccessMask: GpuAccess.ShaderWrite,
+            destinationStageMask: GpuStage.ComputeShader,
             imageHandle: m_storageImage.ImageHandle,
             newLayout: GpuImageLayout.General,
             oldLayout: outputOldLayout,
@@ -450,13 +450,13 @@ public sealed partial class SdfWorldEngine {
         // per-resource state tracking the single source of truth.
         recorder.TransitionImageLayout(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderRead,
+            destinationAccessMask: GpuAccess.ShaderRead,
             destinationStageMask: restingStage,
             imageHandle: m_storageImage.ImageHandle,
             newLayout: restingLayout,
             oldLayout: GpuImageLayout.General,
-            sourceAccessMask: GpuComputeAccess.ShaderWrite,
-            sourceStageMask: GpuComputeStage.ComputeShader
+            sourceAccessMask: GpuAccess.ShaderWrite,
+            sourceStageMask: GpuStage.ComputeShader
         );
 
         recorder.EndDebugGroup(

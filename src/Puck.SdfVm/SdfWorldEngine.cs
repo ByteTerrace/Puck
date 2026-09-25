@@ -335,7 +335,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly nint[][] m_boundSourceViews = BuildRingViewCache(width: MaxViewports);
     private readonly nint[] m_boundGlyphAtlasViews = new nint[FrameRingSize];
     private readonly nint[] m_childSourceViews = new nint[MaxViewports];
-    private readonly IGpuComputeCommandPool[] m_commandPools = new IGpuComputeCommandPool[FrameRingSize];
+    private readonly IGpuCommandPool[] m_commandPools = new IGpuCommandPool[FrameRingSize];
     private readonly byte[] m_compositePush = new byte[CompositePushByteLength];
     private readonly nint[] m_compositeSets = new nint[FrameRingSize];
     private readonly IGpuStorageBuffer[] m_dynamicTransformBuffers = new IGpuStorageBuffer[FrameRingSize];

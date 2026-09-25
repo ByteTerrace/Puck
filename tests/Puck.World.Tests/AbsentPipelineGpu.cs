@@ -13,12 +13,12 @@ internal sealed class AbsentPipelineDevice : IGpuDeviceContext {
 }
 // A render node built over this never records, allocates, or submits: a law over it reads only its readiness. The
 // node wraps every service once for counting when it is built, so each service exists, and every call on one refuses.
-internal sealed class AbsentPipelineGpu : IGpuComputeServices, IGpuComputeCommandPoolFactory, IGpuPipelineFactory,
+internal sealed class AbsentPipelineGpu : IGpuComputeServices, IGpuCommandPoolFactory, IGpuPipelineFactory,
     IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuBufferFactory,
     IGpuImageFactory, IGpuSurfaceTransferFactory {
     public IGpuBindings Bindings => this;
     public IGpuBufferFactory BufferFactory => this;
-    public IGpuComputeCommandPoolFactory CommandPoolFactory => this;
+    public IGpuCommandPoolFactory CommandPoolFactory => this;
     public IGpuImageFactory ImageFactory => this;
     public IGpuPipelineFactory PipelineFactory => this;
     public IGpuQueueSubmitter QueueSubmitter => this;
@@ -26,7 +26,7 @@ internal sealed class AbsentPipelineGpu : IGpuComputeServices, IGpuComputeComman
     public IGpuShaderModuleFactory ShaderModuleFactory => this;
     public IGpuSurfaceTransferFactory SurfaceTransferFactory => this;
 
-    IGpuComputeCommandPool IGpuComputeCommandPoolFactory.Create() => throw new NotSupportedException();
+    IGpuCommandPool IGpuCommandPoolFactory.Create() => throw new NotSupportedException();
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => throw new NotSupportedException();
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) => throw new NotSupportedException();
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) => throw new NotSupportedException();
@@ -46,9 +46,9 @@ internal sealed class AbsentPipelineGpu : IGpuComputeServices, IGpuComputeComman
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => throw new NotSupportedException();
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => throw new NotSupportedException();
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => throw new NotSupportedException();
-    void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => throw new NotSupportedException();
-    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => throw new NotSupportedException();
-    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => throw new NotSupportedException();
+    void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw new NotSupportedException();
+    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw new NotSupportedException();
+    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw new NotSupportedException();
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw new NotSupportedException();
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => throw new NotSupportedException();
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => throw new NotSupportedException();

@@ -34,20 +34,20 @@ public sealed class DirectXBufferStates {
     /// <returns><c>UNORDERED_ACCESS</c> for a transfer write, then <c>INDIRECT_ARGUMENT</c> for an indirect-argument
     /// read, then <c>UNORDERED_ACCESS</c> for a shader write, then <c>NON_PIXEL_SHADER_RESOURCE</c> for a shader read,
     /// otherwise <c>COMMON</c>; the first match wins.</returns>
-    public static D3D12_RESOURCE_STATES RequiredState(GpuComputeAccess access) {
-        if (0 != (access & GpuComputeAccess.TransferWrite)) {
+    public static D3D12_RESOURCE_STATES RequiredState(GpuAccess access) {
+        if (0 != (access & GpuAccess.TransferWrite)) {
             return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
         }
 
-        if (0 != (access & GpuComputeAccess.IndirectCommandRead)) {
+        if (0 != (access & GpuAccess.IndirectCommandRead)) {
             return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
         }
 
-        if (0 != (access & GpuComputeAccess.ShaderWrite)) {
+        if (0 != (access & GpuAccess.ShaderWrite)) {
             return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
         }
 
-        if (0 != (access & GpuComputeAccess.ShaderRead)) {
+        if (0 != (access & GpuAccess.ShaderRead)) {
             return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
         }
 

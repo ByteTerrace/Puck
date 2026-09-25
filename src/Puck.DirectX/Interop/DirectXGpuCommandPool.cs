@@ -7,17 +7,17 @@ using Windows.Win32.System.Com;
 namespace Puck.DirectX.Interop;
 
 /// <summary>
-/// A Direct3D 12 <see cref="IGpuComputeCommandPool"/>: a DIRECT command allocator and command list (initially
+/// A Direct3D 12 <see cref="IGpuCommandPool"/>: a DIRECT command allocator and command list (initially
 /// closed), packed into a <see cref="DirectXCommandBufferState"/> GCHandle token the recorder records into.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXGpuComputeCommandPool : IGpuComputeCommandPool {
+public sealed unsafe class DirectXGpuCommandPool : IGpuCommandPool {
     private readonly GCHandle m_token;
 
     private bool m_disposed;
 
     /// <summary>Initializes a new instance, creating the command allocator and list.</summary>
-    public DirectXGpuComputeCommandPool(IDirectXDeviceContext deviceContext) {
+    public DirectXGpuCommandPool(IDirectXDeviceContext deviceContext) {
         ArgumentNullException.ThrowIfNull(deviceContext);
 
         var device = ((ID3D12Device*)deviceContext.Device.Handle);

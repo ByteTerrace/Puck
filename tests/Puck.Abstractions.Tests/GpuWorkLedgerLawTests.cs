@@ -343,7 +343,7 @@ public sealed class GpuWorkLedgerLawTests {
         for (var submission = 1L; (submission <= 20_000L); submission++) {
             for (var step = 0L; (step < (submission % 16L)); step++) {
                 rig.Dispatch(count: 1);
-                rig.Services.Recorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader);
+                rig.Services.Recorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader, sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader);
             }
 
             rig.Services.QueueSubmitter.SubmitAndWait(commandBufferHandles: []);

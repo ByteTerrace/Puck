@@ -14,7 +14,7 @@ namespace Puck.Testing;
 /// </summary>
 internal sealed class FakeGpuDevice :
     IGpuRecorder,
-    IGpuComputeCommandPoolFactory,
+    IGpuCommandPoolFactory,
     IGpuPipelineFactory,
     IGpuComputeServices,
     IGpuBindings,
@@ -39,7 +39,7 @@ internal sealed class FakeGpuDevice :
     public Action? BeforeComputePipeline { get; set; }
     public IGpuBindings Bindings => this;
     public IGpuBufferFactory BufferFactory => this;
-    public IGpuComputeCommandPoolFactory CommandPoolFactory => this;
+    public IGpuCommandPoolFactory CommandPoolFactory => this;
     public nint DeviceHandle => 1;
     public GpuDeviceIdentity? Identity => null;
     public IGpuImageFactory ImageFactory => this;
@@ -72,10 +72,10 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
-    void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
-    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
-    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
-    IGpuComputeCommandPool IGpuComputeCommandPoolFactory.Create() => new Resource();
+    void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
+    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
+    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
+    IGpuCommandPool IGpuCommandPoolFactory.Create() => new Resource();
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         BeforeComputePipeline?.Invoke();
 
@@ -118,7 +118,7 @@ internal sealed class FakeGpuDevice :
     }
     // Every resource kind in one: a nonzero handle for each member, the requested extent, and nothing to release.
     private sealed class Resource(uint width = 1, uint height = 1, ulong sizeBytes = 0) :
-        IGpuComputeCommandPool,
+        IGpuCommandPool,
         IGpuComputePipeline,
         IGpuFramebuffer,
         IGpuImage,

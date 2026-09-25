@@ -254,7 +254,7 @@ public sealed class TeardownAfterFaultLawTests {
     // Every GPU seam the overlay holds; reaching any of them from a node that never produced a frame is a failure.
     private sealed class UnusedGpu : IGpuRecorder, IGpuBindings, IOverlayFrameSources, IGpuPipelineFactory,
         IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuBufferFactory, IGpuSurfaceTransferFactory, IGpuImageFactory,
-        IGpuRenderPassFactory, IGpuComputeCommandPoolFactory {
+        IGpuRenderPassFactory, IGpuCommandPoolFactory {
         private static InvalidOperationException Reached() => new(message: "A GPU seam was reached during teardown.");
 
         public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw Reached();
@@ -276,9 +276,9 @@ public sealed class TeardownAfterFaultLawTests {
         public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => throw Reached();
         public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => throw Reached();
         public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => throw Reached();
-        public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => throw Reached();
-        public void MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => throw Reached();
-        public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => throw Reached();
+        public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reached();
+        public void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reached();
+        public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reached();
         public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => throw Reached();
         public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => throw Reached();
         public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => throw Reached();
@@ -286,7 +286,7 @@ public sealed class TeardownAfterFaultLawTests {
         public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) => throw Reached();
         public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => throw Reached();
         public IGpuRenderPass Create(GpuRenderPassDescription description) => throw Reached();
-        public IGpuComputeCommandPool Create() => throw Reached();
+        public IGpuCommandPool Create() => throw Reached();
         public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => throw Reached();
         public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => throw Reached();
         public IGpuSurfaceImport CreateImport() => throw Reached();

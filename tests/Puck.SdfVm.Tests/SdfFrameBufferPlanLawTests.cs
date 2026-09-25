@@ -124,19 +124,19 @@ public sealed class SdfFrameBufferPlanLawTests {
     public void EachAccessDeclaresTheScopeItsBindingUses() {
         Assert.Equal(
             actual: SdfFrameBufferPlan.Declared(access: SdfBufferAccess.Read),
-            expected: GpuComputeAccess.ShaderRead
+            expected: GpuAccess.ShaderRead
         );
         Assert.Equal(
             actual: SdfFrameBufferPlan.Declared(access: SdfBufferAccess.Write),
-            expected: GpuComputeAccess.ShaderWrite
+            expected: GpuAccess.ShaderWrite
         );
         Assert.Equal(
             actual: SdfFrameBufferPlan.Declared(access: SdfBufferAccess.ReadWrite),
-            expected: GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite
+            expected: GpuAccess.ShaderRead | GpuAccess.ShaderWrite
         );
         Assert.Equal(
             actual: SdfFrameBufferPlan.Declared(access: SdfBufferAccess.IndirectRead),
-            expected: GpuComputeAccess.IndirectCommandRead
+            expected: GpuAccess.IndirectCommandRead
         );
     }
     [Fact]
@@ -173,7 +173,7 @@ public sealed class SdfFrameBufferPlanLawTests {
 
         Assert.Equal(
             actual: (edge.SourceAccess, edge.SourceStage, edge.DestinationAccess, edge.DestinationStage),
-            expected: (GpuComputeAccess.ShaderWrite, GpuComputeStage.ComputeShader, GpuComputeAccess.IndirectCommandRead, GpuComputeStage.DrawIndirect)
+            expected: (GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuAccess.IndirectCommandRead, GpuStage.DrawIndirect)
         );
     }
     [Fact]

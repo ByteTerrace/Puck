@@ -49,7 +49,7 @@ public sealed class DirectXBufferStatesLawTests {
     }
     [Fact]
     public void EachPlacementReachesIndirectArgumentFromTheStateItIsCreatedIn() {
-        var indirect = DirectXBufferStates.RequiredState(access: GpuComputeAccess.IndirectCommandRead);
+        var indirect = DirectXBufferStates.RequiredState(access: GpuAccess.IndirectCommandRead);
 
         Assert.Equal(
             actual: indirect,
@@ -66,7 +66,7 @@ public sealed class DirectXBufferStatesLawTests {
         var written = new DirectXBufferStates().Plan(
             after: indirect,
             bufferHandle: ArgsBuffer,
-            firstState: DirectXBufferStates.RequiredState(access: GpuComputeAccess.ShaderWrite)
+            firstState: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderWrite)
         );
         // A device-local buffer nothing wrote in this recording starts from the state it is created in.
         var created = new DirectXBufferStates().Plan(
@@ -145,24 +145,24 @@ public sealed class DirectXBufferStatesLawTests {
     [Fact]
     public void EachNeutralAccessNeedsTheStateItsBindingHolds() {
         Assert.Equal(
-            actual: DirectXBufferStates.RequiredState(access: GpuComputeAccess.ShaderRead),
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead),
             expected: NonPixelShaderResource
         );
         // A read through a read-write binding is declared with the write the binding permits.
         Assert.Equal(
-            actual: DirectXBufferStates.RequiredState(access: GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite),
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
             expected: UnorderedAccess
         );
         Assert.Equal(
-            actual: DirectXBufferStates.RequiredState(access: GpuComputeAccess.IndirectCommandRead),
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.IndirectCommandRead),
             expected: IndirectArgument
         );
         Assert.Equal(
-            actual: DirectXBufferStates.RequiredState(access: GpuComputeAccess.TransferWrite),
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.TransferWrite),
             expected: UnorderedAccess
         );
         Assert.Equal(
-            actual: DirectXBufferStates.RequiredState(access: GpuComputeAccess.None),
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.None),
             expected: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON
         );
     }
@@ -171,10 +171,10 @@ public sealed class DirectXBufferStatesLawTests {
         // The SDF engine's cull buffer in one frame: the beam writes it, cull-args reads it through a read-only binding,
         // the hit passes read it through the views layout's read-write binding, and the composite reads it read-only.
         var states = new DirectXBufferStates();
-        (GpuComputeAccess Before, GpuComputeAccess After)[] edges = [
-            (GpuComputeAccess.ShaderWrite, GpuComputeAccess.ShaderRead),
-            (GpuComputeAccess.ShaderRead, GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite),
-            (GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite, GpuComputeAccess.ShaderRead),
+        (GpuAccess Before, GpuAccess After)[] edges = [
+            (GpuAccess.ShaderWrite, GpuAccess.ShaderRead),
+            (GpuAccess.ShaderRead, GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
+            (GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead),
         ];
         (D3D12_RESOURCE_STATES Before, D3D12_RESOURCE_STATES After)[] expected = [
             (UnorderedAccess, NonPixelShaderResource),

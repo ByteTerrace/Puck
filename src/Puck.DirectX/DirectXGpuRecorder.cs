@@ -239,10 +239,10 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         nint imageHandle,
         GpuImageLayout oldLayout,
         GpuImageLayout newLayout,
-        GpuComputeAccess sourceAccessMask,
-        GpuComputeAccess destinationAccessMask,
-        GpuComputeStage sourceStageMask,
-        GpuComputeStage destinationStageMask
+        GpuAccess sourceAccessMask,
+        GpuAccess destinationAccessMask,
+        GpuStage sourceStageMask,
+        GpuStage destinationStageMask
     ) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
@@ -278,10 +278,10 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
     /// <inheritdoc/>
     public void MemoryBarrier(
         nint commandBufferHandle,
-        GpuComputeAccess sourceAccessMask,
-        GpuComputeAccess destinationAccessMask,
-        GpuComputeStage sourceStageMask,
-        GpuComputeStage destinationStageMask
+        GpuAccess sourceAccessMask,
+        GpuAccess destinationAccessMask,
+        GpuStage sourceStageMask,
+        GpuStage destinationStageMask
     ) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
@@ -305,10 +305,10 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
     public void TransitionBuffer(
         nint commandBufferHandle,
         nint bufferHandle,
-        GpuComputeAccess sourceAccessMask,
-        GpuComputeAccess destinationAccessMask,
-        GpuComputeStage sourceStageMask,
-        GpuComputeStage destinationStageMask
+        GpuAccess sourceAccessMask,
+        GpuAccess destinationAccessMask,
+        GpuStage sourceStageMask,
+        GpuStage destinationStageMask
     ) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
 

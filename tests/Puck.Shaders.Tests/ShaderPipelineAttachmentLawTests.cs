@@ -237,11 +237,11 @@ public sealed class ShaderPipelineAttachmentLawTests {
         Assert.Equal(
             actual: accesses,
             expected: [
-                ("near", "d0", GpuComputeAccess.DepthAttachmentRead | GpuComputeAccess.DepthAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.DepthAttachment, GpuImageLayout.DepthAttachment),
-                ("near", "c0", GpuComputeAccess.ColorAttachmentWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.RenderTarget),
-                ("far", "c1", GpuComputeAccess.ColorAttachmentRead | GpuComputeAccess.ColorAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.RenderTarget, GpuImageLayout.RenderTarget),
-                ("far", "d1", GpuComputeAccess.DepthAttachmentRead | GpuComputeAccess.DepthAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.DepthAttachment, GpuImageLayout.DepthAttachment),
-                ("sample", "c1", GpuComputeAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.RenderTarget, GpuImageLayout.ShaderReadOnly),
+                ("near", "d0", GpuAccess.DepthAttachmentRead | GpuAccess.DepthAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.DepthAttachment, GpuImageLayout.DepthAttachment),
+                ("near", "c0", GpuAccess.ColorAttachmentWrite, ShaderPipelineBarrierKind.Image, GpuImageLayout.ShaderReadOnly, GpuImageLayout.RenderTarget),
+                ("far", "c1", GpuAccess.ColorAttachmentRead | GpuAccess.ColorAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.RenderTarget, GpuImageLayout.RenderTarget),
+                ("far", "d1", GpuAccess.DepthAttachmentRead | GpuAccess.DepthAttachmentWrite, ShaderPipelineBarrierKind.Memory, GpuImageLayout.DepthAttachment, GpuImageLayout.DepthAttachment),
+                ("sample", "c1", GpuAccess.ShaderRead, ShaderPipelineBarrierKind.Image, GpuImageLayout.RenderTarget, GpuImageLayout.ShaderReadOnly),
             ]
         );
     }

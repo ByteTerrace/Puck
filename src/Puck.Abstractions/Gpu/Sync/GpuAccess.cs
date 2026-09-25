@@ -1,10 +1,10 @@
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
-/// Specifies a bitmask of memory accesses bounding a compute barrier's synchronization scope.
+/// Specifies a bitmask of memory accesses bounding a barrier's synchronization scope, for compute and graphics work alike.
 /// </summary>
 [Flags]
-public enum GpuComputeAccess : uint {
+public enum GpuAccess : uint {
     /// <summary>No access.</summary>
     None = 0,
     /// <summary>A shader read.</summary>
@@ -12,7 +12,7 @@ public enum GpuComputeAccess : uint {
     /// <summary>A shader write.</summary>
     ShaderWrite = 0x2,
     /// <summary>A read of indirect dispatch/draw arguments by the GPU command processor (Vulkan
-    /// <c>INDIRECT_COMMAND_READ</c>; Direct3D 12 <c>INDIRECT_ARGUMENT</c>). Pair with <see cref="GpuComputeStage.DrawIndirect"/>.</summary>
+    /// <c>INDIRECT_COMMAND_READ</c>; Direct3D 12 <c>INDIRECT_ARGUMENT</c>). Pair with <see cref="GpuStage.DrawIndirect"/>.</summary>
     IndirectCommandRead = 0x4,
     /// <summary>A transfer operation writes the resource.</summary>
     TransferWrite = 0x8,

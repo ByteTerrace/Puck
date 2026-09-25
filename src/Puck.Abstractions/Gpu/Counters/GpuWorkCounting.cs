@@ -177,7 +177,7 @@ file abstract class CountingWrapper(GpuWorkLedger ledger) {
         );
 }
 file sealed class CountingComputeServices(IGpuComputeServices services, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuComputeServices {
-    public IGpuComputeCommandPoolFactory CommandPoolFactory { get; } = services.CommandPoolFactory;
+    public IGpuCommandPoolFactory CommandPoolFactory { get; } = services.CommandPoolFactory;
     public IGpuPipelineFactory PipelineFactory { get; } = GpuWorkCounting.Wrap(
         factory: services.PipelineFactory,
         ledger: ledger
@@ -330,7 +330,7 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.ClearsColumn);
     }
-    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) {
+    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         inner.TransitionImageLayout(
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: destinationAccessMask,
@@ -343,7 +343,7 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.ImageBarriersColumn);
     }
-    public void MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) {
+    public void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         inner.MemoryBarrier(
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: destinationAccessMask,
@@ -353,7 +353,7 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.MemoryBarriersColumn);
     }
-    public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) {
+    public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         inner.TransitionBuffer(
             bufferHandle: bufferHandle,
             commandBufferHandle: commandBufferHandle,
