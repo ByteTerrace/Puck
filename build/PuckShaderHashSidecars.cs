@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 
@@ -80,8 +81,7 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
             var sourcePath = bytecode.GetMetadata(metadataName: "SourcePath");
 
             if (!File.Exists(path: sourcePath)) {
-                // ValidateShaderBytecodeSources already refuses a bytecode file with no matching .hlsl; nothing
-                // further to check here for it.
+                // ValidateShaderBytecodeSources already removed or refused a bytecode file with no matching .hlsl.
                 continue;
             }
 
@@ -116,7 +116,84 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
     }
 }
 
-/// <summary>Shared hashing helpers for the two shader-hash-sidecar tasks above.</summary>
+/// <summary>
+/// Removes shader bytecode the build wrote whose <c>.hlsl</c> source is gone, and refuses any other bytecode
+/// with no source. The build owns what it writes: a <c>.spv</c> or <c>.dxil</c> left behind by a deleted source is
+/// ignored build output, and a checkout that built before the deletion must build again without a person deleting it.
+/// <para>A bytecode file is a build output exactly when its <c>.hash</c> sidecar, which only
+/// <see cref="PuckWriteShaderHashSidecars"/> writes, records its current bytes. Such a file and its sidecar are
+/// removed, one message line each. Bytecode with no sidecar, or with bytes its sidecar does not record, was not
+/// written by the build as it stands, so it is left in place and the build fails naming it. A sidecar whose bytecode
+/// and source are both gone is removed too, once it reads as a sidecar.</para>
+/// </summary>
+public sealed class PuckRemoveOrphanedShaderBytecode : Task {
+    /// <summary>Every bytecode file (.spv/.dxil) on disk under the project's shader globs.</summary>
+    public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>Every bytecode sidecar (.spv.hash/.dxil.hash) on disk under the project's shader directories.</summary>
+    public ITaskItem[] Sidecars { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>The bytecode files this task removed, so the caller can drop them from its item list.</summary>
+    [Output]
+    public ITaskItem[] Removed { get; private set; } = Array.Empty<ITaskItem>();
+
+    public override bool Execute() {
+        var removed = new List<ITaskItem>();
+
+        foreach (var bytecode in BytecodeFiles) {
+            var bytecodePath = bytecode.GetMetadata(metadataName: "FullPath");
+            var sourceName = (Path.GetFileNameWithoutExtension(path: bytecodePath) + ".hlsl");
+
+            if (!File.Exists(path: bytecodePath) || File.Exists(path: Path.Combine(path1: Path.GetDirectoryName(path: bytecodePath)!, path2: sourceName))) {
+                continue;
+            }
+
+            var display = bytecode.ItemSpec.Replace(newChar: '/', oldChar: '\\');
+            var sidecarPath = (bytecodePath + ".hash");
+
+            if (!File.Exists(path: sidecarPath)) {
+                Log.LogError(message: $"Shader bytecode '{display}' has no matching HLSL source '{sourceName}' and no '.hash' sidecar, so the build did not write it and leaves it in place. Remove it or add the source.");
+                continue;
+            }
+
+            var (_, recordedBytecodeHash) = PuckShaderHashing.ReadSidecar(path: sidecarPath);
+
+            if (!string.Equals(a: recordedBytecodeHash, b: PuckShaderHashing.HashFile(path: bytecodePath), comparisonType: StringComparison.Ordinal)) {
+                Log.LogError(message: $"Shader bytecode '{display}' has no matching HLSL source '{sourceName}' and its bytes are not the ones its '.hash' sidecar records, so the build leaves it in place. Remove it or add the source.");
+                continue;
+            }
+
+            File.Delete(path: bytecodePath);
+            File.Delete(path: sidecarPath);
+            removed.Add(item: bytecode);
+            Log.LogMessage(importance: MessageImportance.High, message: $"Removed orphaned shader bytecode '{display}' and its '.hash' sidecar: its source '{sourceName}' no longer exists.");
+        }
+
+        foreach (var sidecar in Sidecars) {
+            var sidecarPath = sidecar.GetMetadata(metadataName: "FullPath");
+            // "<stem>.spv.hash": the bytecode path drops ".hash", the source stem drops the bytecode extension too.
+            var bytecodePath = sidecarPath.Substring(length: (sidecarPath.Length - ".hash".Length), startIndex: 0);
+            var sourceName = (Path.GetFileNameWithoutExtension(path: bytecodePath) + ".hlsl");
+
+            if (!File.Exists(path: sidecarPath) || File.Exists(path: bytecodePath) || File.Exists(path: Path.Combine(path1: Path.GetDirectoryName(path: bytecodePath)!, path2: sourceName))) {
+                continue;
+            }
+
+            var (recordedSourceHash, recordedBytecodeHash) = PuckShaderHashing.ReadSidecar(path: sidecarPath);
+
+            if (!PuckShaderHashing.IsHash(value: recordedSourceHash) || !PuckShaderHashing.IsHash(value: recordedBytecodeHash)) {
+                continue;
+            }
+
+            File.Delete(path: sidecarPath);
+            Log.LogMessage(importance: MessageImportance.High, message: $"Removed orphaned shader sidecar '{sidecar.ItemSpec.Replace(newChar: '/', oldChar: '\\')}': its bytecode and source '{sourceName}' no longer exist.");
+        }
+
+        Removed = removed.ToArray();
+
+        return !Log.HasLoggedErrors;
+    }
+}
+
+/// <summary>Shared hashing helpers for the shader-hash-sidecar tasks above.</summary>
 internal static class PuckShaderHashing {
     /// <summary>Streams <paramref name="firstPath"/> followed by every item in <paramref name="includes"/>, in
     /// order, through one SHA-256 instance — a real byte concatenation, not a hash-of-hashes. Carriage returns are
@@ -156,6 +233,21 @@ internal static class PuckShaderHashing {
         }
 
         return (sourceHash, bytecodeHash);
+    }
+
+    /// <summary>True when <paramref name="value"/> is a SHA-256 in the lowercase hex <see cref="ToHex"/> writes.</summary>
+    public static bool IsHash(string value) {
+        if (value.Length != 64) {
+            return false;
+        }
+
+        foreach (var c in value) {
+            if (!(((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'f')))) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void AppendFile(CryptoStream destination, string path) {

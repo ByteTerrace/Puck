@@ -16,8 +16,10 @@ The recipe is `build/Shaders.targets`, imported into every project by
 SPIR-V and DXIL. Editing any `.hlsl`, `.hlsli`, the project file, or the targets
 file recompiles the whole set. The `.spv`, `.dxil`, and `.hash` outputs are
 gitignored build products; never commit them.
-`ValidateShaderBytecodeSources` fails the build on bytecode without a same-stem
-`.hlsl`; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
+`ValidateShaderBytecodeSources` removes bytecode without a same-stem `.hlsl`
+when its sidecar records its bytes (the build wrote it), printing one line per
+file, and fails the build on any other sourceless bytecode, which it leaves in
+place; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
 source or sidecar. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader Model 6.6;
 do not raise that floor without evidence from every supported GPU.
 

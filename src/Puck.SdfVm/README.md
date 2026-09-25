@@ -326,10 +326,13 @@ reachable from a running world. Use `world.debug-view` for live diagnostics.
 `dotnet build src/Puck.SdfVm -c Release` runs the DirectX Shader Compiler
 in place in the source tree and requires `dxc` on the path (override with
 `/p:DxcCommand=path/to/dxc`). The `.spv`/`.dxil` bytecode and `.hash` sidecars
-are ignored build outputs; never commit them. `ValidateShaderBytecodeSources`
-fails the build on any bytecode file without a matching same-stem `.hlsl`
-source; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
-source or its sidecar. The recipe is `build/Shaders.targets` (`Puck.Shaders`).
+are ignored build outputs; never commit them. When a `.hlsl` source is
+deleted, `ValidateShaderBytecodeSources` removes the bytecode and sidecars the
+build wrote for it and prints one line per file. Bytecode without a same-stem
+source that the build did not write (no sidecar recording its bytes) fails the
+build and stays in place. `ValidateShaderBytecodeFresh` fails the build on
+bytecode stale against its source or its sidecar. The recipe is
+`build/Shaders.targets` (`Puck.Shaders`).
 
 ## Verification
 
