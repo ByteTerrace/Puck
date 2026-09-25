@@ -233,13 +233,13 @@ preview, overlays and `FullscreenPassNode` draw through the same render passes.
 The vertex stage of a geometry pass receives no parameters; a camera or
 per-instance transform for mesh geometry belongs to P4.
 
-P5-1 has landed. A `views.pipelines` row carries per-instance
+P5-1 has landed. A `views.graphs` row carries per-instance
 `overrides` keyed by pass and config field, an authored `output`, and its
 `timeScale`. The server binds them through the pass's config schema whenever a
 mutation changes them. `pipeline.set`, `pipeline.output` and
 `pipeline.time … scale` preview values for the session, `pipeline.overrides`
 shows them beside the committed values, and `pipeline.commit` submits the
-`CommitViewPipeline` mutation. That mutation carries the row's revision and
+`CommitViewGraph` mutation. That mutation carries the row's revision and
 the installed source's content and config-schema identities, and the
 `pipeline.overrides` door refuses a stale, edited-source, or incompatible
 commit by name. `world.save` writes through the atomic file writer.
@@ -270,7 +270,7 @@ directory with its source tree gone. Loading refuses a malformed manifest, a
 missing or altered file, a closure other than the listed files or outside the
 package, a limit, other capabilities, a missing or different tool, and a pass
 identity that differs, each by name. `ShaderPackageLawTests` hold these over
-fixture data. A `views.pipelines` row's `source` names a package by its
+fixture data. A `views.graphs` row's `source` names a package by its
 directory, and the World loads it through `ShaderPackager.LoadSource`: every
 package refusal is the instance's failed compilation by its code, and the
 row's overrides bind against the package's config schema. The
@@ -508,26 +508,26 @@ presentation dimension (`WorldPresentationCost`) and in `world.budget` with its
 extent ceiling, rate and planned passes; the server plans each row's source
 for that price.
 
-P11b owes the rest of the package. The main view runs through the graph
-runtime (commit 6 below), but `SdfEngineNode`'s child composition, `ViewStack`
-and `WorldPipelineRuntime` still render every pane and screen, and
-`views.pipelines` rows, `views.graphs` rows and layout slots do not name live
-graph instances yet. P11b moves those views onto graph instances fed by the
-scheduler, puts the live schedule's extents and prices in `world.budget`,
-runs the parity and counted-GPU checks, and makes the rest of the deletions
-P11 lists. Eleven P11b items have landed: the first-class package pass kind in
+P11b owes the rest of the package. The main view and every `views.graphs` pane
+run through the graph runtime (commits 6 and 9 below), but `ViewStack` still
+renders every screen, and split-screen seats still share one `sdf.world`
+dispatch. P11b moves those views onto graph instances fed by the scheduler,
+puts the live schedule's extents and prices in `world.budget`, runs the parity
+and counted-GPU checks, and makes the rest of the deletions P11 lists. These
+P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
 planner only through its package entry, the fold of the pipeline document
 into the graph document, planned buffer edges, the graph runtime,
 `sdf.world` as the runtime's external producer, the `post.<id>` and
 `overlay` package recorders, planned barriers for package ports (commits
-5a, 5b, 5c and 5d below), and the main view through the runtime with captures
-from its root (commit 6 below). The
+5a, 5b, 5c and 5d below), the main view through the runtime with captures
+from its root (commit 6 below), and graph rows naming packages and the root,
+the `place` package, and panes as graph instances (commit 9 below). The
 fold leaves one document: the pipeline document's tag, its definition type
 and its schema check are gone, a top-level `config` is an unknown member, every
 checked-in document is a `*.graph.json` tagged `puck.render.graph.v1`, and
-`views.pipelines` rows name graph documents until P11b retires that section.
+`views.graphs` rows name them.
 Package
 ports are typed with a buffer's stride and count, `sdf.bricks` publishes the
 brick pool as a buffer output, and an instance read carries the version's
@@ -571,11 +571,11 @@ device-loss and disposal releases, and a steady frame allocating nothing over
 allocates only fixed-size buffers, so a counted package buffer such as
 `sdf.bricks`'s brick pool cannot be an instance's storage until the host
 supplies its counts. A world may author its own root graph in `views.graphs`;
-when it does not, composition synthesizes the default one, `sdf.world` then
-each `render.extensions` pass as `post.<id>` then `overlay`, as a graph
-document that goes through the same compiler, so no render tree is built in C#
-alone. No `views.graphs` row runs live yet, and no row can name the `sdf.world`
-producer or the root, so today every world renders the synthesized graph.
+when it does not, composition synthesizes the default one, `sdf.world` then a
+`place` pass per pane, each `render.extensions` pass as `post.<id>` and then
+`overlay`, as a graph document that goes through the same compiler, so no
+render tree is built in C# alone. `views.graphs` rows run live beside it
+(commit 9).
 
 P11b commit 5 puts the three engine packages behind the graph runtime.
 `RenderGraphRuntime` runs an instance's steps inside that instance's
@@ -816,6 +816,58 @@ captures come from the graph's root output.
   with `pipeline-churn` and the pipeline and SDF canaries under the debug
   layers.
 
+P11b commit 9 has landed in two halves: 9a, the vocabulary and the runtime's
+reconfiguration, and 9b, panes as graph instances.
+
+- 9a: a `views.graphs` row carries what a pipeline row carried (`timeScale`,
+  `output`, `overrides`) and may name an engine package's producer
+  (`package`, such as `sdf.world`) instead of a `source`. `views.root` names
+  the instance the display shows, so a world can author its whole graph; with
+  no root, the synthesized names `world` and `main` stay reserved. A layout
+  slot names a row through `instance`, and a `captures` row may name any row.
+  `RenderGraphRuntime.TryReconfigure` replaces the instance set, keeping every
+  surviving instance's node or producer (installed graph, history, latest
+  output) and retiring the rest once the device idles; `TryInstall` resolves one
+  graph against the set before its node builds it, and `NodeOf` reads the node.
+  `IRenderGraphInstances` is that half of the runtime, which a host drives.
+- 9a: the one resample kernel is the `place` package (`PlacePackage`,
+  build-compiled `place.comp.hlsl`): the base outside a destination rect and
+  the source reconstructed inside it. A host that places panes per frame
+  implements `IRenderGraphPlacements`; a source shown nowhere this frame draws
+  nothing, so the base stands for the output.
+- 9b: `views.pipelines`, `WorldViewPipeline`, `WorldViewSlot.Pipeline` and the
+  transpiler's `pipeline` construct are deleted; the mutations are
+  `UpsertViewGraph`, `RemoveViewGraph` and `CommitViewGraph` (ordinals 74, 75,
+  78), and the row section is `views.graphs`. The `pipeline.*` verbs keep their
+  names and address `views.graphs` rows. Every canary, shipped world, sample
+  and the release profile moved onto `graphs` and `instance`.
+- 9b: `WorldViewGraphHost` replaces `WorldPipelineRuntime`. Before the runtime
+  schedules each frame, `WorldFramePresenter.PrepareGraph` (the root node's
+  `Prepare`) reconciles the accepted `views` section into the instance set
+  (the synthesized `world` and `main` plus the rows, or the rows alone under
+  `views.root`), installs each row's background compile through `TryInstall`,
+  and places every pane the last composed layout shows. `WorldRootGraph`
+  places one `place` pass per instance any layout slot names, ahead of the
+  post passes, and `main` reads every pane and becomes the root when there is
+  one. A pane's footprint is its slot's width and height of `main`; a pane in no
+  active slot draws nothing and is not scheduled. The composer runs inside the
+  world producer's frame, so a layout change places its panes one frame later,
+  and a layout transition's render-scale dip no longer reaches a pane.
+- 9b: the SDF engine's child path is deleted: `SdfEngineNode`'s child map,
+  `SdfWorldRenderSpec.Children`, `SdfViewSnapshot.Child`, `ViewBinding.Child`,
+  `SdfWorldEngine.SetChildMask` and `SetChildSource`, and the kernels'
+  `childMask` and `isChildViewport`. `CompositeParams` is eight words, and the
+  composite composes SDF views only.
+- Checks: `WorldPipelineWaitLawTests` over a fake `IRenderGraphInstances`
+  (reconciling keeps a surviving row's node; a removed row's wait fails as
+  removed), `WorldRootGraphLawTests` with panes, `PipelineOverrideLawTests`,
+  `WorldViewGraphLawTests`, `RenderGraphRuntimeLawTests`,
+  `PlacePackageLawTests`, and on both backends under the debug layers the
+  `pane-display` canary (a pane inside its slot's rect, discriminated by moving
+  the slot), `resample-reconstruction`, `source-conversion`, the pipeline
+  canaries and the `post-pass`, `hud-frame-slots` and `view-screens`
+  baselines, with `puck parity` unmoved.
+
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
 or pane placement, an optional warp pass, a UV layout, a letterboxing fit and a
@@ -859,8 +911,7 @@ Rendering today is a tree of `IRenderNode`s
 `ProduceFrame` from inside its own. `WorldBootComposition` builds the live
 chain:
 
-1. `SdfEngineNode`, which also hosts each `views.pipelines` pane as a child
-   slot.
+1. `SdfEngineNode`, the `sdf.world` producer.
 2. One `FullscreenPassNode` per `render.extensions` row. Each one already runs
    on an internal `ShaderPipelineRenderNode`.
 3. `UnifiedOverlayNode`, which draws the console, HUD, toasts, and cursor.
@@ -1013,7 +1064,7 @@ the first observable. Source entry points: planning and loading in
 `ShaderPipelineRenderNode` (`Ensure`, `InstallPending`, `ProduceFrame`,
 retirement); the fixture runner in `tests/Puck.World.Canaries` and
 `src/Puck.Cli/Canary`; authoring in `WorldPipelineCommandModule`,
-`WorldPipelineRuntime`, `WorldViewPipeline`; work counting in
+`WorldViewGraphHost`, `WorldViewGraph`; work counting in
 `src/Puck.Abstractions/Counting` and `src/Puck.Abstractions/Gpu/Counters`;
 graphics in `src/Puck.Abstractions/Gpu`,
 `DirectXGpuPipelineFactory`, `VulkanNativeGraphicsPipelineApi`, and the SDF
@@ -1205,10 +1256,11 @@ code is what the cache covers.
 
 Done: the engine and its views build their pipelines on the thread pool
 (`SdfWorldPipelines` through `Puck.Hosting.BackgroundBuild`, the mechanism
-`WorldPipelineRuntime`'s compilations also use) and install them when ready; a
+`WorldViewGraphHost`'s compilations also use) and install them when ready; a
 kernel reload prepares its pipelines the same way. Until the engine's pipelines
-exist it presents nothing new, but the panes it hosts (`views.pipelines`) keep
-stepping, compiling and installing, and only the engine's own composite waits.
+exist it presents nothing new, but the `views.graphs` panes render through the
+graph runtime on their own nodes, compiling and installing, and only the
+engine's own frames wait.
 Each backend keeps a persistent pipeline cache per device, `VkPipelineCache` on
 Vulkan and `ID3D12PipelineLibrary` on Direct3D 12, under the state root's
 `pipeline-cache/<backend>/<vendor>-<device>-<driver>/<kernel-set hash>.bin`,
@@ -2221,8 +2273,7 @@ gauge and a camera operand speak, so no second binding grammar appears. The same
 statement binds a whole row, keyed or lattice-shaped, as `state.<row>`, when the
 member it names is an interface array; the member's declared type says which,
 and the pass declares the array's element format. A `views.graphs` row
-(`WorldViewGraph`) gains the parameter list and the tier; P10 never targets
-`WorldViewPipeline`, which P11 deletes with `views.pipelines`. The literal is
+(`WorldViewGraph`) gains the parameter list and the tier. The literal is
 the fallback, so a
 binding that does not resolve draws the authored number; a member both bound
 here and overridden by P5's per-instance override refuses at validation naming
@@ -2311,8 +2362,8 @@ with its extent, rate, and pass cost.
 
 **Deletes:** one graph document remains. The pipeline document has folded
 into `puck.render.graph.v1`, a pipeline being a graph a world names; the
-`views.pipelines` section, `WorldPipelineRuntime`, and
-`WorldComposedSlot.Pipeline` go next. The hand-composed `IRenderNode` tree
+`views.pipelines` section, `WorldPipelineRuntime`, `WorldComposedSlot.Pipeline`,
+`SdfEngineNode`'s child map and `RegisterChild` are gone. The hand-composed `IRenderNode` tree
 and its `Children` wiring in `WorldBootComposition` give way to graph
 instances. The SDF composite kernel `sdf-world-composite.comp`, its
 `MaxViewports` limit and push block, `SdfEngineNode`'s child map and
@@ -2617,8 +2668,7 @@ on P7b's groups.
    binding P7b-20 would move again.
 6. Hits continue through live instances. Can land after P11b wires the graph
    root and P12b-1. `RenderGraphHitWalk` walks the runtime's instance set, and
-   the pane pointer maps through its instance once `views.pipelines` is
-   retired. The portal check needs a nested world rendered as an instance,
+   the pane pointer maps through its instance. The portal check needs a nested world rendered as an instance,
    which no live world does yet.
 
 ### P14 — The SDF engine as a pass package
@@ -2677,7 +2727,7 @@ passes, because the planner's tracker (P3) then decides every barrier:
 pass-index constants, `PassLabels`, and the `Record*` methods that fix the
 dispatch order by hand. `SdfWorldEngine` does not survive as a second path
 beside the pass package: when the last capability row is green, the
-monolith is gone. A `views.pipelines` node and a `render.extensions` pass both
+monolith is gone. A `views.graphs` instance's node and a `render.extensions` pass both
 draw through their device context's services, so retiring `render.extensions`
 frees no graphics bundle.
 

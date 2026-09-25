@@ -343,10 +343,10 @@ These decisions shape packages P11 to P17. The inventory of today's code that
 they respond to is in the programme's implementation status.
 
 **The frame graph is the centre of rendering, and the SDF engine is one pass
-package in it.** The SDF engine began as the host. It composites panes and
-child views in its second stage, owns the 32 screen slots, and caps nested
-cameras through `ViewStack`'s round-robin budget, and post-processing and the
-overlay were nodes chained after it. That
+package in it.** The SDF engine began as the host. It composited panes in its
+second stage, it owns the 32 screen slots and caps nested cameras through
+`ViewStack`'s round-robin budget, and post-processing and the overlay were
+nodes chained after it. That
 design grew from a prototype, and each capacity in it is a constant rather than
 a planned cost. The replacement has to be better at every job the SDF engine
 does now. So composition, nesting, sources, and output belong to the graph, and

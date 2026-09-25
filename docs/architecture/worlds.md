@@ -47,7 +47,7 @@ to mutate another layer state.
 Every relative path a world document authors resolves beside that document,
 through one resolver (`WorldDocumentPaths`): a `basis` or `imports` entry, a
 `references` row, the music, table, tune and patch rows' `source`, an addon's
-`modulePath`, a pipeline or graph `source`, a probe's `track`, a machine's
+`modulePath`, a `views.graphs` row's `source`, a probe's `track`, a machine's
 configured content, `host.icon`, and a `schedule` instance's `document`. An
 absolute path is honored as written. A document and its files therefore move
 together: the build copies the `Assets` tree beside the executable with its
@@ -66,7 +66,7 @@ paths: validation refuses a relative asset row by name, and mounting refuses a
 relative addon module by name. When a basis or an import in another directory
 is merged, its file paths are re-expressed relative to the document that merges
 it, so each path still names the file its author meant; that covers asset rows,
-addon modules, pipeline and graph sources, probe tracks, text fonts, and the
+addon modules, graph sources, probe tracks, text fonts, and the
 window icon. Document names (`references`, `schedule` instances) stay as
 written: worlds staged together reach each other by name. A `captures`
 directory the document names also resolves beside it. A `schedule` names no
@@ -169,8 +169,8 @@ creation many worlds share is baked once per run and stored once. A compile
 without `--tree` writes the pack beside the compiled world and keeps the
 outcomes an earlier compile left in it. The same tree run writes the
 [package store](../reference/shaders.md#the-builds-package-store), `packages/`,
-holding the compiled shader package of every pipeline source its worlds'
-`views.pipelines` rows name, so a released world compiles no shader on the
+holding the compiled shader package of every source its worlds'
+`views.graphs` rows name, so a released world compiles no shader on the
 player's device either.
 
 One cache, `WorldBakeStore`, is filled two ways. A boot that keeps a `BAKE` chunk

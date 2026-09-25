@@ -298,11 +298,18 @@ port. A planner refusal keeps its `SHADERPIPE_` code. A pass `kind` is
 `Compute`, `Fullscreen` or `Geometry`: only the `packages` member declares
 package work, so the reader refuses a pass that names `Package` at its `kind`.
 
-A world names graph instances in `views.graphs`. Each row names a graph
-`source`, relative to the world document as a `views.pipelines` source is, an
-optional `camera`, a `refresh` of either a frame `divisor` or a rate in
-`hertz`, and `inputs` that bind one of the graph's external versions to
-another row's output:
+A world names graph instances in `views.graphs` (`WorldViewGraph`). Each row
+has a `name` and exactly one of two things to render. A `source` is a
+`puck.render.graph.v1` graph document, a one-off `.hlsl` shader read as a
+one-pass graph, or a [package](#packaging-a-pipeline) directory, resolved
+relative to the world document. A `package` names an engine package's
+producer, such as `sdf.world`. A row also takes an optional `camera`, a
+`refresh` of either a frame `divisor` or a rate in `hertz`, `inputs` that bind
+one of the graph's external versions to another row's output, and the
+per-instance `timeScale`, `output` and [`overrides`](#per-instance-overrides).
+A layout slot shows a row by naming it as its `instance`. In `.puck` a row is
+a `graph "name" { … }` block inside `views`, and a slot says
+`instance: "name"`:
 
 ```json
 "views": {
@@ -400,25 +407,59 @@ nothing is drawn over its output. Each instance counts its own passes.
 
 ### The default root graph
 
-The main view runs through the runtime. A world that authors no root of its
-own gets the default graph `WorldRootGraph` synthesizes from its document, a
-graph document value planned by `RenderGraphCompiler` like any other:
+The main view runs through the runtime. A world that authors no `views.root`
+gets the default graph `WorldRootGraph` (in `Puck.World.Client`) synthesizes
+from its document, a graph document value planned by `RenderGraphCompiler` like
+any other:
 
 - `world`: the `sdf.world` external producer, the SDF engine node.
-- `main`: the root graph reading `world`'s output over the whole display, with
-  one `post.<id>` pass per `render.extensions` entry in document order, then
-  the `overlay` pass in a windowed World that loaded its glyph atlas.
+- `main`: the root graph reading `world`'s output over the whole display and
+  every pane's output. It runs one `place` package pass per `views.graphs`
+  instance any layout slot names, each pass named after its instance, then one
+  `post.<id>` pass per `render.extensions` entry in document order, then the
+  `overlay` pass in a windowed World that loaded its glyph atlas.
 
-When there is no pass to draw over the world, as in an offscreen World with no
+`main` is the root whenever anything is drawn over the world, panes included.
+When nothing is, as in an offscreen World with no panes and no
 `render.extensions`, `world` is the root and the display shows the engine's
-output directly. `RenderGraphRuntimeNode` is the host's render root: each frame
-it shows the root over a display of the World's configured extent. A
-`captures` row reads the root, or names `world` to capture the SDF world before
-its post passes and overlay. `world.counters gpu` reports `world` as the engine
-node and `main` as the root's node, whose passes are the post passes and the
-overlay. `views.pipelines`, the SDF engine's child composition and `ViewStack`
-still render the panes and screens a world shows, and `views.graphs` rows do
-not run yet. Moving them onto graph instances is the rest of P11b in
+output directly. A world that sets `views.root` authors its whole render graph,
+the `sdf.world` package row included, and the runtime runs its rows alone.
+`RenderGraphRuntimeNode` is the host's render root: each frame it shows the
+root over a display of the World's configured extent. A `captures` row reads
+the root, or names `world` to capture the SDF world before its panes, post
+passes and overlay. `world.counters gpu` counts every graph instance under its
+instance name: `world` is the engine node, `main` the root's node, whose passes
+are the place, post and overlay passes, and each pane its own node.
+
+### Graph instances in a World
+
+`WorldViewGraphHost` (`src/Puck.World.Client`) runs a world's `views.graphs`
+rows on the runtime through `IRenderGraphInstances`, which `RenderGraphRuntime`
+implements. Each frame, before the runtime schedules, the host reconciles the
+accepted `views` section into the runtime's instance set with `TryReconfigure`:
+an instance that survives keeps its node, its graph and its history, and a
+removed one retires. The host compiles each source row in the background
+through `ShaderPackager.LoadSource` and installs the result with `TryInstall`,
+its inputs taken from the row's `inputs`. The `pipeline.*` console verbs
+address these rows by name.
+
+The `place` package (`PlacePackage`) draws a pane into `main`. Its placements
+come from `IRenderGraphPlacements`, which the host implements. Each frame
+`WorldFramePresenter.PrepareGraph`, installed as
+`RenderGraphRuntimeNode.Prepare`, walks the slots of the last composed layout.
+For every instance a slot shows it places the pane at the slot's rect, with
+the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
+`main`, producer the pane, at the slot's width and height) so the scheduler
+renders the pane at that extent, advances the pane's clock, and feeds its
+camera, pointer and time. A pane the active layout does not show is not shown:
+its place pass draws nothing and its instance is not scheduled.
+
+The layout composer runs inside the world producer's frame, so a layout change
+places panes one frame later. A
+layout transition's render-scale dip does not apply to panes, and a pane slot
+adds no view to the SDF engine, whose composite composes SDF views only.
+Screens still render through `ViewStack`; moving them onto graph instances is
+the rest of P11b in
 [the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
 
 ## Pass interfaces
@@ -968,7 +1009,7 @@ is not retried until the host asks for a different one.
 A paused instance (`pipeline.time pause`, or a time scale of zero) treats each
 host request as either a replacement or a step:
 
-- A reload, an edit of the `views.pipelines` row and a resize replace the graph.
+- A reload, an edit of the `views.graphs` row and a resize replace the graph.
   They are not steps. The paused instance builds and installs the new graph as
   a running one does, and the install renders nothing, consumes no step and
   leaves the submitted-frame count where it was. The instance keeps presenting
@@ -1150,8 +1191,8 @@ answers the operator alone, so no world document reaches it.
 
 ### Per-instance overrides
 
-A world's `views.pipelines` row can override its source's parameters for that
-one instance. `overrides` is keyed by pass name, and each value is that pass's
+A world's `views.graphs` row that names a `source` can override that source's
+parameters for its one instance; a `package` row takes no override. `overrides` is keyed by pass name, and each value is that pass's
 config object, keyed by field. A field the row does not name keeps the default
 the source declares, and the source file itself is never written, so two rows
 that name one source share its defaults and keep their own overrides. `output`
@@ -1178,7 +1219,7 @@ binds nothing again.
 Changing a value live is a preview. A preview is session state, like pause,
 pending steps, elapsed time, capture requests and feedback history, none of
 which a document records. `pipeline.commit` turns the preview into the
-authored row through the `CommitViewPipeline` mutation. The mutation carries
+authored row through the `CommitViewGraph` mutation. The mutation carries
 the revision of the row the preview was based on, which is the row's
 fingerprint, and the content identity and config-schema identity of the source
 the installed graph was compiled from. When the commit applies, the server
@@ -1385,7 +1426,7 @@ instance may hold is bounded separately by its
 
 ### Naming a package from a World
 
-A `views.pipelines` row's `source` names a package the way it names any other
+A `views.graphs` row's `source` names a package the way it names any other
 source: by path, relative to the world document. A path that is a directory is
 a package; any other path is a graph document or a one-off shader.
 
@@ -1409,7 +1450,8 @@ with the package's code.
 
 A shipped world names its pipelines by source, and the game's build compiles
 them. The tree run of `puck compile` that writes the shipped worlds
-(`build/WorldAssets.targets`) reads every `views.pipelines` row of every world
+(`build/WorldAssets.targets`) reads every `views.graphs` row that names a
+`source` in every world
 it compiled, resolves each row's source from the document's place in the tree,
 and writes that source's package into the store at the output's root, shipped as
 `Assets/worlds/packages`. `ShaderPackager.StoreAsync` writes it under the

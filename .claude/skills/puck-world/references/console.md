@@ -592,18 +592,20 @@ Operators and limits live in the Schema README's discrete-state section rather
 than a second command vocabulary here.
 
 `pipeline.*` (`WorldPipelineCommandModule`) is core-registered in rendered and
-headless hosts. `pipeline.load <name> <source> [camera]` upserts a
-`views.pipelines` row through normal authority and validation. A rendered host
-reconciles accepted rows, creates instances, and schedules complete pipeline
-compilation in the background. A refused mutation must never create a GPU
-instance. `pipeline.reload`, `pipeline.watch`, `pipeline.time`, `pipeline.step`,
+headless hosts. The verbs keep their `pipeline.*` names and address
+`views.graphs` rows. `pipeline.load <name> <source> [camera]` upserts a
+`views.graphs` row through normal authority and validation. A rendered host
+(`WorldViewGraphHost`) reconciles the accepted `views` section into the render
+graph runtime's instance set each frame, compiles each source row in the
+background, and installs it when the compilation completes. A refused mutation
+must never create a GPU instance. `pipeline.reload`, `pipeline.watch`, `pipeline.time`, `pipeline.step`,
 `pipeline.reset`, `pipeline.sentinels`, `pipeline.output`, `pipeline.capture` and
 `pipeline.status` control presentation or report state; controls that need a renderer refuse
 when none exists. `pipeline.set` (a field-by-field merge; `null` restores the
 source default), `pipeline.output` and `pipeline.time … scale` are session
-previews on `WorldPipelineRuntime.Entry`; a move of the row's revision
+previews on `WorldViewGraphHost.Entry`; a move of the row's revision
 discards them. `pipeline.commit <name>` (Simulation-routed) submits
-`CommitViewPipeline` built by `Entry.TryPrepareCommit`, which takes only that
+`CommitViewGraph` built by `Entry.TryPrepareCommit`, which takes only that
 entry's preview. `pipeline.overrides <name>` (Immediate, headless too) prints
 `<pass>.<field> committed=… pending=…` lines, then the time scale and output,
 with the row revision and installed source identity on the first line. `pipeline.wait <name> compiled|installed|captured [seconds]`
@@ -634,7 +636,7 @@ renders one frame beyond it. A reload, a row upsert or a resize is not a step:
 a paused (or time-scale-zero) instance installs it without rendering, so
 `installed` and `resized` never wait for `pipeline.step`, and the instance
 keeps showing its last image until a step, resume or reset.
-`WorldPipelineRuntime.PumpWatches` installs completed candidates on the frame
+`WorldViewGraphHost.PumpWatches` installs completed candidates on the frame
 thread and watches source dependencies with a 150 ms debounce. Shader errors
 retain the previous complete pipeline. Frame inputs are filled once per
 instance, even when several view slots show it. The pointer is in the slot's

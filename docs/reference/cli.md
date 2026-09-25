@@ -636,7 +636,7 @@ break, and nothing wider:
   A canary is also chosen for any file its manifest's documents reach, read
   with the documents' own readers: a world reaches the layers it composes,
   the neighbour worlds its adjacencies name and the `.graph.json` documents
-  its `views.pipelines` and `views.graphs` rows name, and a graph document
+  its `views.graphs` rows name, and a graph document
   reaches the pass shaders it declares and every file they include, each
   resolved as the host resolves it. A world is read composed and parsed but not validated, so a world whose
   adjacencies or extensions need the host's resolvers still reaches them.
@@ -2086,7 +2086,8 @@ baked and the field evaluations it spent, each distinct creation baked once. A
 run whose compiled worlds name no bake writes no pack.
 
 A `--tree` run also packages every pipeline its compiled worlds name by source:
-each `views.pipelines` row's source, resolved from the document's place in the
+each `views.graphs` row's `source` (a row naming an engine `package` has none),
+resolved from the document's place in the
 tree, is compiled with `dxc` from the search path into one
 [shader package](shaders.md#the-builds-package-store) under its key in
 `packages/` at the root of the output, and every package file joins the report.

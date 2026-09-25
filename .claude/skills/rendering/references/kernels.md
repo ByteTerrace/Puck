@@ -45,8 +45,9 @@ report of every march pipeline (beam, primary, surface, ambient, and the three
 views variants), then retires the old set; a failure keeps the previous
 kernels. Scene buffers, images, baked bricks, and world state survive; the ISA
 probe's descriptor caches and the cadence signature are invalidated. The last
-successful set survives device-loss recovery. Child engines and
-post-render decorator pipelines are outside this command, and host ABI,
+successful set survives device-loss recovery. `views.graphs` instances
+(`pipeline.reload`) and post-render decorator pipelines are outside this
+command, and host ABI,
 buffer-layout, or C# ISA changes need a rebuild.
 
 ## The frame
@@ -59,7 +60,7 @@ work is pending, and count outside every pass. A cadence-skipped frame marks
 | Label | Kernel | Does |
 |---|---|---|
 | `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies each changed range of the viewport rows, dynamic transforms, and frame grid from the ring slot's host-visible buffer into the persistent device-local tables, one dispatch per table that owes any; two or more runs also stage a run table the kernel binary-searches (`SdfWorldEngine.Uploads.cs`). March kernels bind only the device-local tables. A still frame copies only the rows its time moved. |
-| `sky` | `sdf-sky.comp` | Fills every non-child viewport pixel with sky before any tile is culled. Shares the views bindings. |
+| `sky` | `sdf-sky.comp` | Fills every viewport pixel with sky before any tile is culled. Shares the views bindings. |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |

@@ -77,10 +77,10 @@ uint; "uint4" and "float4" name 16-byte vectors.
 
 | C# (`SdfWorldEngine` unless noted) | HLSL | Contract |
 |---|---|---|
-| `PushConstantByteLength` = 36 | `CompositeParams` in `sdf-world.hlsli` | Nine words: extent, tileGrid, viewportCount, childMask, screenMask, instanceMaskWordCount, sampleIndex. |
-| `CompositePushByteLength`; `BuildCompositePush` | `CompositeParams2` in `sdf-world-composite.comp.hlsl` | Viewport rects, `scaleQPacked`, `sharpnessQPacked`; word 3 = `childMask`. |
+| `PushConstantByteLength` = 32 | `CompositeParams` in `sdf-world.hlsli` | Eight words: imageExtent, tileGrid, viewportCount, screenMask (word 5), instanceMaskWordCount (word 6), sampleIndex (word 7). |
+| `CompositePushByteLength`; `BuildCompositePush` | `CompositeParams2` in `sdf-world-composite.comp.hlsl` | imageExtent, viewportCount, then word 3 = `uint padding`, which places the float4 viewport rects on Direct3D 12's 16-byte constant-buffer boundary; then `scaleQPacked`, `sharpnessQPacked`. The composite composes SDF views only. |
 | `ViewportByteLength` = 96; `PackViewports` | `ViewportData`, `worldRenderDims`, `worldFarDistance` | Six float4 rows; the last (row 5) = (render-scale q byte, asymmetric-frustum offset xy, far distance). Reduced extent = max(1, (dim·q + 127)/255) in integer math, identical in beam, cull, and views; q = 255 is the exact-copy path. |
-| `SdfProgram.InstanceMaskWordCount`; push word 7 | `sdfInstanceMaskWordCount`, `worldInstanceMaskBase` | Width W = max(1, ceil(n/32)). Each tile stores W words plus ceil(W/32) summary words written by `sdf-instance-cull.comp.hlsl`. Indexing is host-pushed, never shader-derived. |
+| `SdfProgram.InstanceMaskWordCount`; push word 6 | `sdfInstanceMaskWordCount`, `worldInstanceMaskBase` | Width W = max(1, ceil(n/32)). Each tile stores W words plus ceil(W/32) summary words written by `sdf-instance-cull.comp.hlsl`. Indexing is host-pushed, never shader-derived. |
 | `SdfProgramBuilder.MaxInstances` | *Generated:* `SDF_MAX_INSTANCES`; `SDF_SHADOW_MASK_WORDS` derives from it | At most 2048 mask words per tile; the shadow and ambient gathers each hold a 2048-word groupshared mask. |
 | `TilePlaneCount` = 4 | `WorldTilePlaneCount` and its four plane accessors | Planes: march start, first exit, second entry, far bound. Stride = tileGrid.x · tileGrid.y · viewportCount. Adding a plane touches both counts and adds an accessor on each side. |
 | `DynamicTransformByteLength` = 48 | `sdfDynamicTransforms` (binding 9, t2) | Three float4: position + shadow participation, quaternion, four render lanes. |

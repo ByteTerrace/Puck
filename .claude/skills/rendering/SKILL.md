@@ -30,7 +30,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldEngine.*.cs`, `SdfEngineNode`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), `sdf-vm.hlsli` the interpreter (`mapCore`, `mapGradCore`), `sdf-world.hlsli` the view logic, one `*.comp.hlsl` wrapper per dispatch | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
 | Cameras and offscreen views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewStack`, `ViewTransition`) | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
-| World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldPipelineRuntime`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
+| World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldViewGraphHost`, `WorldRootGraph`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
 | Shader manifests, pipelines, builds | `src/Puck.Shaders`, `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
 | Image sources and producers | `src/Puck.Abstractions/Sources` (contract, upload layout, conversion reference, verdict); `src/Puck.Shaders/Assets/Shaders/Sources` (conversion kernels); `WorldImageProducerVocabulary`/`WorldImageProducerSettings` (`src/Puck.World.Schema`); `WorldImageProducers`, `WorldCaptureGate` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.Producers.cs` | [the World guide's image producers](../../../src/Puck.World/README.md#image-producers), [rendering plan P12](../../../docs/plans/rendering.md#p12--image-sources) |
 | Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds), [Vulkan](../../../docs/rendering/vulkan.md), [Direct3D 12](../../../docs/rendering/directx.md) |
@@ -102,10 +102,11 @@ register.
   ships. AO lives in `sdf-occlusion.hlsli` (called from the ambient pass's
   `sdfResolveAmbient` in `sdf-surface.hlsli`); normals and curvature in
   `sdfResolveSurface`.
-- **Make sure the image is an SDF image.** A `views.pipelines` pane (the
-  moth studio's side-by-side reference, for one) is a separate
-  `Puck.Shaders` pipeline with its own shader; no SDF kernel edit reaches it,
-  and it reloads with `pipeline.reload`, not `world.shaders.reload`.
+- **Make sure the image is an SDF image.** A `views.graphs` pane (the
+  moth studio's side-by-side reference, for one) is a render-graph instance
+  with its own shader, placed over the world by the root graph's `place` pass;
+  no SDF kernel edit reaches it, and it reloads with `pipeline.reload`, not
+  `world.shaders.reload`.
 - **Every `map*` call site is a full inlined copy of the interpreter.** Keep
   sample loops rolled (`[loop]`) and reuse an existing call site through a loop
   rather than adding one; a new call site costs register pressure in the
@@ -233,8 +234,6 @@ These are one-line cautions; the owning pages hold the derivations.
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`, the
   `source-conversion` canary and `SourceConversionCanaryFixtureTests` together.
-- **Children.** A child slot whose node has not produced yet clears its child
-  bit for that frame; never bind a zero image view.
 - **Builder exception safety.** A throwing `Instance`/`DynamicInstance` callback
   leaves the builder with an open instance; discard it.
 - **Captures.** Create the `FrameCaptureRequest`, arm it with
@@ -840,21 +839,46 @@ bound to a completed output, never a stand-in, and an external producer from
 the next frame it produces; until then `UnservedCaptureReasonOf` names why.
 `RenderGraphRuntimeLawTests` pin the P11 checks on the fake, a steady frame
 at zero allocations included.
-The main view runs through the runtime. `WorldRootGraph` synthesizes a world's
-default graph as a document value the graph compiler plans: `world` (the
-`sdf.world` producer), then, when anything is drawn over it, the root `main`
-reading it with one `post.<id>` pass per `render.extensions` entry in order and
-the overlay last in a windowed World. With nothing drawn over it (offscreen, no
-extensions) `world` is the root. A config that does not bind is the compiler's
+The main view runs through the runtime. `WorldRootGraph`
+(`src/Puck.World.Client`) synthesizes a world's default graph, when
+`views.root` is absent, as a document value the graph compiler plans: `world`
+(the `sdf.world` producer), then the root `main`, which reads `world` and every
+pane and runs one `place` package pass per `views.graphs` instance a layout
+slot names (the pass named after the instance), then one `post.<id>` pass per
+`render.extensions` entry in order, then `overlay` in a windowed World. `main`
+is the root whenever anything is drawn over the world, panes included; with
+nothing drawn over it `world` is the root. With `views.root` set the runtime
+runs the rows alone. A config that does not bind is the compiler's
 `RENDERGRAPH_PACKAGE_CONFIG`, which the boot's pre-flight
 (`WorldPostBuildWiring`) reports as a refused definition. `WorldRenderRoot`
 builds the engine node, the packages and the runtime for both GPU shapes, and
 `RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
 what captures, `world.screenshot` and readiness read. A `captures` row may name
 `world` (`WorldCaptureRow.Instance`) to capture the world beneath the root's
-passes. Panes, screens and `views.graphs` rows still render through
-`SdfEngineNode`'s children, `ViewStack` and `WorldPipelineRuntime` until the
-rest of P11b moves them.
+passes.
+
+`views.graphs` rows run on the same runtime. `WorldViewGraphHost`
+(`src/Puck.World.Client/WorldViewGraphHost*.cs`) drives it through
+`IRenderGraphInstances` (`src/Puck.Shaders/Graph`, implemented by
+`RenderGraphRuntime`): each frame, before the runtime schedules, it reconciles
+the accepted `views` section into the runtime's instance set with
+`TryReconfigure` (a surviving instance keeps its node, graph and history; a
+removed one retires), compiles each source row in the background through
+`ShaderPackager.LoadSource`, and installs it with `TryInstall`, inputs taken
+from the row's `inputs`. A row naming an engine `package` (such as `sdf.world`)
+compiles nothing. Panes are placed by the `place` package (`PlacePackage`,
+`IRenderGraphPlacements`, which the host implements):
+`WorldFramePresenter.PrepareGraph`, installed as
+`RenderGraphRuntimeNode.Prepare`, places every instance a slot of the last
+composed layout shows at the slot's rect with `world.upscale-sharpness`'s
+sharpness, adds a footprint (consumer `main`, producer the pane, at the slot's
+width and height), advances the pane's clock and feeds its camera, pointer and
+time. A pane the active layout does not show draws nothing in its place pass
+and is not scheduled. The composer runs inside the world producer's frame, so a
+layout change places panes one frame later, and a layout transition's
+render-scale dip does not reach panes. A pane slot adds no SDF view, and the
+SDF composite composes SDF views only. Screens still render through
+`ViewStack` until later P11b work moves them.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):
@@ -905,7 +929,7 @@ the one statement of the stages a pass compiles (a fullscreen pass's HLSL
 vertex stage, then its fragment stage), which the loader compiles and the
 packager records, and `ShaderPipelineLoader.ParseDefinition` is the one rule
 for reading a source's definition. A package is named by its directory
-(`ShaderPackager.IsPackage`): a `views.pipelines` row whose `source` is a
+(`ShaderPackager.IsPackage`): a `views.graphs` row whose `source` is a
 directory loads through `ShaderPackager.LoadSource`, `ShaderPipelineSource.TryRead`
 reads it for the server's override gate (its identity is the canonical
 manifest's pin), and a package refusal fails the instance's compilation with
