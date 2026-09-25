@@ -226,7 +226,10 @@ These are one-line cautions; the owning pages hold the derivations.
   `ImageSourceDescriptor`, and a world names its producer by id
   (`WorldScreenSource.Producer`). A new producer registers a
   `WorldImageProducerShape` and an `IWorldImageProducer` under one id, class and
-  transport; it never adds a source kind. An external image (camera, capture,
+  transport; it never adds a source kind. Every feed it opens declares that
+  id, class and transport, or `WorldImageProducers.TryOpen` disposes it and
+  refuses it by name. An import's CPU staged-copy fallback (the camera and
+  capture CPU tiers) is still `Imported`. An external image (camera, capture,
   probe output) is resolved through the binder's `WorldCaptureGate`, never
   directly: a new path that samples one without the gate leaks it into
   captures. An uploaded source's region layout and the conversion kernels are a

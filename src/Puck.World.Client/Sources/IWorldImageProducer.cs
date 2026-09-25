@@ -89,12 +89,13 @@ public sealed class WorldImageProducers {
 
         m_registry.Register(producer: producer);
     }
-    /// <summary>Opens a feed for a producer source through the producer registered under its id.</summary>
+    /// <summary>Opens a feed for a producer source through the producer registered under its id. A feed whose descriptor
+    /// names another producer, content class or transport than the registration is disposed and refused by name.</summary>
     /// <param name="source">The source.</param>
     /// <param name="screenIndex">The engine screen-surface index the feed lights.</param>
     /// <param name="feed">The opened feed, or <see langword="null"/>.</param>
     /// <param name="fault">Why no feed opened, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when a feed opened.</returns>
+    /// <returns><see langword="true"/> when a feed opened and agrees with its registration.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
     public bool TryOpen(WorldScreenSource.Producer source, int screenIndex, out IWorldImageFeed? feed, out string? fault) {
         ArgumentNullException.ThrowIfNull(argument: source);
@@ -109,11 +110,36 @@ public sealed class WorldImageProducers {
             return false;
         }
 
-        return producer.TryOpen(
+        if (!producer.TryOpen(
             fault: out fault,
             feed: out feed,
             screenIndex: screenIndex,
             source: source
-        );
+        )) {
+            return false;
+        }
+
+        // The feed's descriptor is what every consumer reads, so it must say what the registration says: the producer
+        // it came from, and the content class and transport its document shape declares. A feed depends on the source's
+        // settings, so this is checked where it opens.
+        var descriptor = feed!.Descriptor;
+
+        if (
+            !string.Equals(
+                a: descriptor.Producer,
+                b: producer.Id,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+            (descriptor.Content != producer.Content) ||
+            (descriptor.Transport != producer.Transport)
+        ) {
+            feed.Dispose();
+            feed = null;
+            fault = $"image producer '{producer.Id}' opened a feed declaring producer '{descriptor.Producer}' with {descriptor.Content} over {descriptor.Transport}, but it is registered as {producer.Content} over {producer.Transport}";
+
+            return false;
+        }
+
+        return true;
     }
 }

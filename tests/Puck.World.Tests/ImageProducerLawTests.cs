@@ -235,6 +235,51 @@ public sealed class ImageProducerLawTests {
             transport: ImageSourceTransport.Uploaded
         )));
     }
+    /// <summary>A feed's descriptor is what every consumer reads, so one naming another producer, content class or
+    /// transport than its producer's registration is disposed and refused by name when it opens; a feed that agrees
+    /// opens.</summary>
+    [Fact]
+    public void AFeedThatDisagreesWithItsRegistrationIsRefusedByNameWhenItOpens() {
+        _ = ThirdRegistered.Value;
+
+        var source = new WorldScreenSource.Producer(Id: ThirdId);
+
+        foreach (var (disagreeing, expected) in (((FakeProducer, string)[])[
+            (new FakeProducer(content: ImageContentClass.Presentation, feedTransport: ImageSourceTransport.Imported, id: ThirdId, transport: ImageSourceTransport.Uploaded), "with Presentation over Imported"),
+            (new FakeProducer(content: ImageContentClass.Presentation, feedContent: ImageContentClass.External, id: ThirdId, transport: ImageSourceTransport.Uploaded), "with External over Uploaded"),
+            (new FakeProducer(content: ImageContentClass.Presentation, feedProducer: "elsewhere", id: ThirdId, transport: ImageSourceTransport.Uploaded), "declaring producer 'elsewhere'"),
+        ])) {
+            var producers = new WorldImageProducers();
+
+            producers.Register(producer: disagreeing);
+
+            Assert.False(condition: producers.TryOpen(
+                fault: out var fault,
+                feed: out var feed,
+                screenIndex: 0,
+                source: source
+            ));
+            Assert.Null(@object: feed);
+            Assert.True(condition: disagreeing.Feed!.Disposed);
+            Assert.Contains(actualString: fault, comparisonType: StringComparison.Ordinal, expectedSubstring: $"image producer '{ThirdId}' opened a feed");
+            Assert.Contains(actualString: fault, comparisonType: StringComparison.Ordinal, expectedSubstring: expected);
+            Assert.Contains(actualString: fault, comparisonType: StringComparison.Ordinal, expectedSubstring: "but it is registered as Presentation over Uploaded");
+        }
+
+        var agreeing = new WorldImageProducers();
+
+        agreeing.Register(producer: new FakeProducer(
+            content: ImageContentClass.Presentation,
+            id: ThirdId,
+            transport: ImageSourceTransport.Uploaded
+        ));
+        Assert.True(condition: agreeing.TryOpen(
+            fault: out _,
+            feed: out _,
+            screenIndex: 0,
+            source: source
+        ));
+    }
     [Fact]
     public void ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels() {
         var source = Desktop();
@@ -310,8 +355,9 @@ public sealed class ImageProducerLawTests {
         Assert.Equal(expected: 2, actual: desktop.Feed.Acquisitions);
     }
 
-    // A producer standing in for a real one: every feed it opens answers one fixed handle and counts acquisitions.
-    private sealed class FakeProducer(string id, ImageContentClass content, ImageSourceTransport transport) : IWorldImageProducer {
+    // A producer standing in for a real one: every feed it opens answers one fixed handle and counts acquisitions. Its
+    // feed declares the registration's producer, class and transport unless a law overrides one to disagree.
+    private sealed class FakeProducer(string id, ImageContentClass content, ImageSourceTransport transport, string? feedProducer = null, ImageContentClass? feedContent = null, ImageSourceTransport? feedTransport = null) : IWorldImageProducer {
         public ImageContentClass Content { get; } = content;
 
         public FakeFeed? Feed { get; private set; }
@@ -323,11 +369,11 @@ public sealed class ImageProducerLawTests {
             Feed = new FakeFeed(descriptor: new ImageSourceDescriptor(
                 Cadence: ImageSourceCadence.Rate(rateHz: 30U),
                 Color: ImageColorEncoding.Srgb,
-                Content: Content,
+                Content: (feedContent ?? Content),
                 Format: ImagePixelFormat.B8G8R8A8Unorm,
                 Height: 1U,
-                Producer: Id,
-                Transport: Transport,
+                Producer: (feedProducer ?? Id),
+                Transport: (feedTransport ?? Transport),
                 Width: 1U
             ));
             feed = Feed;
@@ -341,6 +387,7 @@ public sealed class ImageProducerLawTests {
 
         public int Acquisitions { get; private set; }
         public ImageSourceDescriptor Descriptor { get; } = descriptor;
+        public bool Disposed { get; private set; }
         public string? Fault => null;
         public Vector3 Light => Vector3.One;
 
@@ -349,7 +396,7 @@ public sealed class ImageProducerLawTests {
 
             return DesktopHandle;
         }
-        public void Dispose() { }
+        public void Dispose() => Disposed = true;
         public nint Handle() => DesktopHandle;
         public void NotifyDeviceLost() { }
         public void Publish(ulong tick, IGpuDeviceContext deviceContext) { }
