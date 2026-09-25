@@ -370,6 +370,8 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     }
 
     /// <summary>Waits for the GPU, then releases the texture, upload buffer, SRV heap, and command resources. Safe to call more than once.</summary>
+    /// <exception cref="InvalidOperationException">The device context was disposed first, so the device has already
+    /// reported these resources as leaked and the owner's teardown order is wrong.</exception>
     public void Dispose() {
         if (m_disposed) {
             return;
@@ -377,13 +379,13 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
 
         m_disposed = true;
 
-        // Drain only while the context is alive — at host shutdown it may already be disposed (CommandQueueHandle
-        // throws), and a dead queue has nothing left in flight (see DirectXGpuExportableImage.Dispose).
-        if (
-            m_deviceContext.IsInitialized &&
-            (0 != m_deviceContext.CommandQueueHandle) &&
-            (0 != m_fence)
-        ) {
+        // Every object below is a child of the device, and the device's teardown reports each one still alive as a
+        // leak. An owner that releases this upload after its device context is gone has its teardown in the wrong
+        // order, and the caller disposing this upload is that owner.
+        if (!m_deviceContext.IsInitialized) {
+            throw new InvalidOperationException(message: $"A {nameof(DirectXSurfaceUpload)} was released after its device context was disposed; the owner disposing it must release it before the device goes.");
+        }
+        if (0 != m_fence) {
             WaitForGpu();
         }
 

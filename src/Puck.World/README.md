@@ -1183,7 +1183,11 @@ protocol. Generic provider operations are refused during recording until the tap
 can capture their execution. `WorldScreenBinder.cs` reads a machine output's
 framebuffer handle and light and calls
 `IMachineVideoOutput.PublishFrame` each produced frame—the one GPU call this
-project still makes on a machine's behalf. It recreates its own slot for a
+project still makes on a machine's behalf. The machines outlive the render
+device, so the binder that published an output's upload also retires it: on
+device loss and when the render chain is torn down, it calls
+`IMachineVideoOutput.NotifyDeviceLost` for every output it has published on
+that device. It recreates its own slot for a
 screen index removed and later restored by `world.reset`/`.load` exactly as
 `WorldMachineHost` does (bounded to indices the render engine's boot-frozen
 provider key set already names). A recreate re-points a `ScreenSourceCell`'s
