@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
@@ -108,6 +109,7 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
     // and staging buffers are created too) already built on it and the faults' counts cleared.
     private sealed class Rig : IDisposable {
         private readonly SdfWorldPipelines m_pipelines;
+        private readonly GpuRegionCopyPipeline m_regionCopy;
         private readonly SdfProgram m_program;
         private readonly GpuWorkLedger m_work = new(
             framesInFlight: SdfWorldEngine.FrameRingSize,
@@ -131,6 +133,10 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
             Device = new FaultingDevice(
                 faults: Faults,
                 gpu: Gpu
+            );
+            m_regionCopy = SdfTestPipelines.RegionCopy(
+                device: Device,
+                ledger: m_work
             );
             m_pipelines = SdfWorldPipelines.Build(
                 cancellationToken: CancellationToken.None,
@@ -183,8 +189,12 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
                     WorkLedger: m_work
                 ),
                 pipelines: m_pipelines,
+                regionCopy: m_regionCopy,
                 width: Extent
             );
-        public void Dispose() => m_pipelines.Dispose();
+        public void Dispose() {
+            m_pipelines.Dispose();
+            m_regionCopy.Dispose();
+        }
     }
 }

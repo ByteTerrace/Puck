@@ -32,6 +32,11 @@ public sealed class GpuDeviceServices {
     public required IGpuRenderPassFactory RenderPassFactory { get; init; }
     /// <summary>Gets the shader-module factory.</summary>
     public required IGpuShaderModuleFactory ShaderModuleFactory { get; init; }
+    /// <summary>Gets the operator's faults this set's creations pass through (<see cref="GpuCreationFaults.Wrap"/>), or
+    /// <see langword="null"/> when the host arms none. A holder that retries a refused build only when a recorded input
+    /// changes records <see cref="GpuCreationFaults.Revision"/> as one of them, so arming or clearing a fault retries it.
+    /// Every wrap carries it over unchanged.</summary>
+    public GpuCreationFaults? Faults { get; init; }
     /// <summary>Gets the surface-transfer factory (readback, upload and import).</summary>
     public required IGpuSurfaceTransferFactory SurfaceTransferFactory { get; init; }
 }

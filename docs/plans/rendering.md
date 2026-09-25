@@ -452,12 +452,12 @@ GPU upload heap support on Direct3D 12, and from the device type and
 profile and a region's size onto writing in place, a per-frame ring, or a
 staged copy, and `GpuRegion` writes a region under any of the three through
 the neutral buffer, descriptor and compute-recorder interfaces. Its staged
-copy speaks the ABI of `sdf-frame-upload.comp`, which stays in the SDF engine
-until that engine adopts the region. `pipeline.inspect` ends with the profile
-and the policy chosen for the instance's parameter bytes. No consumer writes
-through a region yet: the SDF engine's host-table ring, its
-`sdf-frame-upload.comp` copy and brick staging, and the overlay's
-host-written buffer still upload by hand. The neutral buffer factory places a
+copy is `Puck.Shaders`' `region-copy.comp`, one pipeline a device that every
+owner leases (P7b-17). `pipeline.inspect` ends with the profile
+and the policy chosen for the instance's parameter bytes. The SDF engine's mesh
+region is the one consumer that writes through a region: the engine's
+host-table ring, whose copy records the same kernel by hand, its brick staging,
+and the overlay's host-written buffer still upload by hand. The neutral buffer factory places a
 ring's buffers in host-visible memory, not in the device-local aperture the
 profile reports, and an in-place region serves a caller that retires every
 frame reading it before it writes, as the overlay does and the SDF engine's
@@ -1470,12 +1470,14 @@ follow its device-bound services, its one recorder and the SDF engine's groups.
    the static placement path P17's bakes also reach, adds one `SdfMeshDraw` per
    placement instance (the engine-frame triangles under the instance's scale,
    mirror, yaw and position), and `WorldFramePresenter` hands them to
-   `SdfFrame.MeshDraws`. `world.budget` prints the bytes the mesh region needs
-   (`SdfMeshRegion`: each distinct mesh's positions and indices once, and a
-   matrix and material a draw) and the draws they cover. `PrototypeMeshLawTests`
-   hold the round trip, the refusals and the placement's draw. Open: the
-   `GpuRegion` those bytes upload through, which rides P7b-17 and P7b-19 with
-   the region-copy kernel; meshes on animated and attached stamps, which follow
+   `SdfFrame.MeshDraws`. The SDF engine uploads them into its mesh region
+   (P7b-17): a `GpuRegion` in `SdfMeshRegion`'s raw layout, an 80-byte record a
+   draw naming its matrix, material and mesh (first index, index count, base
+   vertex), then each distinct mesh's positions and indices once, copied by
+   the device's region-copy pipeline under the staged policy. `world.budget`
+   prints the bytes the region holds and the draws they cover.
+   `PrototypeMeshLawTests` hold the round trip, the refusals and the
+   placement's draw. Open: the reader, P4-2c's raster pass; meshes on animated and attached stamps, which follow
    when a reader needs them (P4-2c's motion canary or P6-3); and meshes in
    session views and neighbour worlds, whose static emitters pass no draw list.
 7. P4-2c, the raster pass and the bounded primary. Done when parity holds and
@@ -1609,7 +1611,7 @@ a smaller one.
 
 **Deletes:** the three residency policies replace the upload paths built by
 hand for each consumer: the SDF engine's ring of host tables and its
-`sdf-frame-upload.comp` copy, its brick staging buffer, and the unified
+hand-recorded table copy, its brick staging buffer, and the unified
 overlay's single host-written buffer all go through the selector. The service
 bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuComputeServices`, `IFullscreenPassServices` and
@@ -1760,8 +1762,8 @@ Phase 3, the groups, follows phase 2:
     that breaks the rule: the SDF engine's, which P7b-19 and P7b-20 remove. The
     list may only shrink. Direct3D 12 numbers a compute pipeline's registers at
     its binding numbers unless the description declares
-    `GpuRegisterNumbering.PackedByClass`, which only the SDF engine and the
-    region copy do; P7b-20 deletes that numbering with the engine's last
+    `GpuRegisterNumbering.PackedByClass`, which only the SDF engine does (the
+    region copy numbers at its bindings since P7b-17); P7b-20 deletes that numbering with the engine's last
     packed register.
 13. Done: the GPU-free group contract. `GpuBindingKind`
     (`src/Puck.Abstractions/Gpu/Bindings`) is the one closed set of binding
@@ -1789,8 +1791,8 @@ Phase 3, the groups, follows phase 2:
     `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
     planners and the spike's interfaces to the same tables. The combined image
     sampler that `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`
-    still state is not in the closed set, so their users, and the 16 sources
-    declaring `vk::combinedImageSampler` (9 under `src` and 7 canary shaders),
+    still state is not in the closed set, so their users, and the 15 sources
+    declaring `vk::combinedImageSampler` (8 under `src` and 7 canary shaders),
     move to a separate image and sampler with 14b's sampler tables, and both
     enums are deleted there.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
@@ -1863,8 +1865,8 @@ Phase 3, the groups, follows phase 2:
       before it allocates, which its holder's build refuses by name.
       A refusal carries `GPU_DESCRIPTOR_HEAP` and names the owner, and the
       installed graph keeps presenting. `UnifiedOverlayNode` checks its one
-      pool before it creates its resources. `GpuRegion` is not admitted
-      beforehand, since no engine consumer writes through a region yet. The pipeline node
+      pool before it creates its resources. A standalone `GpuRegion` is not admitted
+      beforehand; the SDF engine's admission covers its mesh region's copy pool. The pipeline node
       holds one pool for all its passes and in-flight slots and one for its
       float preview, rather than one per pass and slot: a node at
       `ShaderPipelineLimits.MaxPasses` with three frames in flight would
@@ -1971,18 +1973,34 @@ Phase 3, the groups, follows phase 2:
       `GpuCreationFaultsLawTests`. `DirectXGroupedLayoutDebugLayerTests`
       also writes and binds a film grain pass-group set under the debug
       layer.
-    - 14b-2, the Vulkan presenter: `blit.frag.hlsl` and
-      `VulkanGraphicsPipelineFactory`, which `SurfaceCompositor` builds from,
-      read a separate image and sampler. Canaries: 17, the 14b-1 set without
-      `world-seat-binding-recompose`.
-    - 14b-3, the pipeline node and the sources it runs:
+    - 14b-2, done: the Vulkan presenter. `blit.frag.hlsl` reads a separate
+      image and sampler in the pass group, set 3 (the image at binding 0, the
+      sampler at 1, each register equal to its binding). `SurfaceCompositor`
+      plans that one group through `VulkanGroupLayouts.Plan`, creates the
+      layouts with `VulkanPipelineLayouts.Create` and hands them to
+      `VulkanGraphicsPipelineFactory`'s swapchain overload, which now takes
+      groups like its other overload; its ring sets are allocated against the
+      pass group's set layout, each takes the sampler once, a blit writes only
+      the image, and a `VulkanDrawCommand` binds its set at its
+      `DescriptorSetGroup`. Canaries: the 14b-1 set without
+      `world-seat-binding-recompose`, and the windowed `post-pass`,
+      `view-screens`, `hud-frame-slots` and `device-loss-windowed`, which draw
+      through the presenter.
+    - 14b-3, the pipeline node and the sources it runs, lands with step 15,
+      not before it. Every pipeline pass pushes its whole frame block, and a
+      separate sampler is stated only through a pipeline description's
+      `Layout`, which pushes nothing but a 4-byte index
+      (`RequireLayout` refuses a push-constant binding beside it); the
+      legacy binding list has no sampler kind, and adding one would patch
+      `GpuComputeBindingKind`, which 14b-7 deletes. So the node's sources
+      split their samplers when the frame block moves into the frame group:
       `ShaderPipelineRenderNode` and its float preview
       (`pipeline-preview.frag.hlsl`), the shipped ink pipeline
       (`ink-simulation.hlsl`, `ink-visualize.hlsl`), the package library's
-      `resample.hlsl`, and the seven canary sources under `pipeline-edit`,
-      `pipeline-feedback`, `pipeline-shapes` and `pipeline-supersede`.
-      Canaries: `no-device-compile`, the thirteen `pipeline-*`,
-      `source-conversion` and `resample-reconstruction`.
+      `resample.hlsl`, `PostProcessPackage`'s writes, and the seven canary
+      sources under `pipeline-edit`, `pipeline-feedback`, `pipeline-shapes`
+      and `pipeline-supersede`. Canaries: `no-device-compile`, every
+      `pipeline-*`, `source-conversion` and `resample-reconstruction`.
     - 14b-4, the overlay: `overlay-unified.frag.hlsl`'s nineteen combined
       declarations and `UnifiedOverlayNode`'s pool. Canaries:
       `instrument-clock-source`, `music-conditional-layer-and-embellishment`,
@@ -1997,7 +2015,7 @@ Phase 3, the groups, follows phase 2:
       without `sdf-decode-sign-refusal`, plus `sdf-visibility-fresh`, which
       the index has not recorded yet. The package library's `resample.hlsl`,
       which took the SDF-side kernel's place, moves with the pipeline node's
-      sources in 14b-3.
+      sources in 14b-3, with step 15.
     - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
       then states a `GpuBindingKind`, `ShaderSetManifestBindingKind`, and
       `GpuDescriptorPoolSizes.CombinedImageSamplerCount`, with their last
@@ -2008,11 +2026,42 @@ Phase 3, the groups, follows phase 2:
     a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
     3; passes include their generated interface; the graph document's
     binding fields are deleted; and a load checks `SHADERPIPE_INTERFACE`.
+    14b-3 lands here: each of the node's sources declares a separate image and
+    sampler, the sampler at the binding after its image, as the spike's film
+    grain table does.
 16. The gate spike's GPU half, a binding station in `tests/Puck.Parity`.
-17. The region-copy kernel leaves the SDF engine for `Puck.Shaders`.
+17. Done: the region-copy kernel leaves the SDF engine for `Puck.Shaders`
+    (`Assets/Shaders/Residency/region-copy.comp.hlsl`), each register at its
+    binding number, so `ShaderRegisterBindingLawTests` no longer names it. It
+    stays off the grouped path: its four-word push (count, run count, offset,
+    table base) does not fit the grouped layout's one pushed index, and moving
+    those words into the staging buffer would change the SDF engine's upload
+    bytes. `GpuRegion.CopyPipeline` is its one description.
+    `GpuRegionCopyPipelineCache` creates one pipeline a device on the thread
+    pool (`BackgroundBuild`), counted under `gpu.region-copy`, and owners lease
+    it: `SdfWorldPipelineSource` takes a lease beside its set's, and an SDF
+    engine takes the pipeline at construction, records its table upload with it
+    exactly as before, and never owns it. The engine's pipeline set loses its
+    frame-upload pipeline. The engine also creates the mesh region: a
+    `GpuRegion` holding `SdfFrame.MeshDraws` in `SdfMeshRegion`'s raw word
+    layout (an 80-byte record a draw: its row-vector matrix, material, first
+    index, index count and base vertex; then each distinct mesh's positions and
+    indices once), created by the first frame that draws a mesh, repacked only
+    when the draw list changes, owing only the words that differ, grown by half
+    again after the frame ring retires, and read by nothing until P4-2c. The
+    engine's admission covers the region's copy pool. `world.budget`'s mesh
+    line reads the region's allocated bytes. Laws:
+    `GpuRegionCopyPipelineCacheLawTests` (one pipeline a device, created and
+    counted once, shared by two leases and a new one after the last release;
+    two regions copying through it byte-exact under every policy),
+    `SdfWorldPipelineCacheLawTests` (two engine nodes record with the device's
+    one region-copy pipeline), `SdfWorldEngineUploadLawTests` (the mesh
+    region's words for a known draw set, and a moved draw owing one word), with
+    the upload laws and `GpuResidencyLawTests` unchanged.
 18. The overlay and fullscreen passes move onto groups.
-19. The SDF engine uploads through `GpuRegion`, deleting
-    `sdf-frame-upload.comp`, `sdf-brick-upload.comp` and `SdfRingTable`.
+19. The SDF engine uploads through `GpuRegion`, deleting its hand-recorded
+    table copy (`RecordFrameUpload` and its sets), `sdf-brick-upload.comp` and
+    `SdfRingTable`.
 20. The SDF engine moves onto groups, its push blocks and hand-set binding
     constants included. It follows P4-1, which rewrites the same kernels.
 21. The owning guides and the `rendering` skill describe the result.
@@ -2542,8 +2591,7 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
     pass does.
 13. The final sweep deletes the matrix law, `SdfWorldEngine` and the types
     listed above, `SdfShaderSetVerification`,
-    `SdfWorldKernels`, the SDF pipeline set and its cache,
-    `sdf-frame-upload.comp`, and corrects the comments and
+    `SdfWorldKernels`, the SDF pipeline set and its cache, and corrects the comments and
     guides.
 
 **Decisions.** P4's visibility record is the surface sample record staged

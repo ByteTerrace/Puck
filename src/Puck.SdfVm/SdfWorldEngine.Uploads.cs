@@ -12,7 +12,7 @@ namespace Puck.SdfVm;
 // A slot's staging buffer is [run table: FrameUploadRunTableWords][table], each range staged at FrameUploadRunTableWords
 // + its own table offset. One owed range rides the push constants alone; two or more also stage the run table: per run,
 // (table offset, prefix) in uints, where prefix is the run's first thread index — the sum of the lengths before it —
-// so each thread of the one dispatch finds its run by binary search (sdf-frame-upload.comp.hlsl).
+// so each thread of the one dispatch finds its run by binary search (Puck.Shaders' region-copy.comp.hlsl).
 //
 // The staging buffers are never read outside what the same frame wrote, so a slot's stale remainder is harmless: the
 // device-local table is the single copy the kernels read, and the top-of-frame barrier orders every frame's copies
@@ -29,7 +29,7 @@ public sealed partial class SdfWorldEngine {
 
     // The most runs one table's copy carries per frame; past it neighbouring runs pair up, re-sending the gap between
     // them. A tunable: it bounds the run-table reserve and the copy's binary search, never the dispatch count.
-    internal const int MaxUploadRunsPerTable = 256;
+    internal const int MaxUploadRunsPerTable = GpuRegion.MaxCopyRuns;
 
     // The most separate owed ranges one ring-table slot holds before neighbours pair up.
     private const int RingTableRunCapacity = 8;
@@ -37,10 +37,10 @@ public sealed partial class SdfWorldEngine {
     private const int ViewportWordCount = (ViewportByteLength / sizeof(uint));
 
     /// <summary>The most words one device-local table may hold: its whole-table first copy is one one-dimensional
-    /// dispatch of <c>sdf-frame-upload.comp</c>, 64 threads per group, and one dispatch dimension carries at most
+    /// dispatch of <c>region-copy.comp</c>, 64 threads per group, and one dispatch dimension carries at most
     /// 65,535 groups on both backends (Vulkan's guaranteed <c>maxComputeWorkGroupCount</c>, Direct3D 12's
     /// <c>D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION</c>).</summary>
-    public const ulong MaxFrameUploadTableWords = (65_535UL * FrameUploadWorkgroupSize);
+    public const ulong MaxFrameUploadTableWords = (65_535UL * GpuRegion.CopyWorkgroupSize);
 
     /// <summary>Refuses, by table name, a device-local table too large for one copy dispatch, so an oversized table
     /// fails where it is sized instead of dispatching past the group limit.</summary>
@@ -52,7 +52,7 @@ public sealed partial class SdfWorldEngine {
         var words = (byteLength / sizeof(uint));
 
         if (words > MaxFrameUploadTableWords) {
-            throw new InvalidOperationException(message: $"the SDF engine's {table} table holds {words} words, past the {MaxFrameUploadTableWords} one copy dispatch carries (65535 groups of {FrameUploadWorkgroupSize} threads); lower the capacity that sizes it.");
+            throw new InvalidOperationException(message: $"the SDF engine's {table} table holds {words} words, past the {MaxFrameUploadTableWords} one copy dispatch carries (65535 groups of {GpuRegion.CopyWorkgroupSize} threads); lower the capacity that sizes it.");
         }
     }
 

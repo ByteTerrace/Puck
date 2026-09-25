@@ -17,7 +17,6 @@ public sealed partial class SdfWorldEngine {
     internal const int CompositePipelineIndex = 10;
     internal const int BrickBakePipelineIndex = 11;
     internal const int BrickUploadPipelineIndex = 12;
-    internal const int FrameUploadPipelineIndex = 13;
 
     // The pipelines this engine records with. The owner built them and disposes them; a kernel reload swaps the
     // native objects behind the same slots, so the fields below never change.
@@ -280,24 +279,11 @@ public sealed partial class SdfWorldEngine {
                 Kind: GpuComputeBindingKind.StorageBufferReadWrite
             ),
         ];
-        // The per-frame table uploader (sdf-frame-upload.comp): t0 a ring slot's host-visible table, u0 its device-local
-        // twin. Direct3D 12 assigns registers from THIS order.
-        internal static readonly GpuComputeBinding[] FrameUpload = [
-            new GpuComputeBinding(
-                Binding: FrameUploadSourceBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            new GpuComputeBinding(
-                Binding: FrameUploadDestinationBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferReadWrite
-            ),
-        ];
 
         // A pipeline factory reads a push-constant range's size and stages; each engine records its own payload.
         private static readonly GpuPushConstantBinding PassPush = Push(length: PushConstantByteLength);
         private static readonly GpuPushConstantBinding CompositePush = Push(length: CompositePushByteLength);
         private static readonly GpuPushConstantBinding BrickPush = Push(length: BrickBakePushByteLength);
-        private static readonly GpuPushConstantBinding FrameUploadPush = Push(length: FrameUploadPushByteLength);
 
         // Indexed by the *PipelineIndex constants. The hit passes, the sky and the three views variants share Views,
         // so their descriptor-set layouts are identically defined and one per-slot views set binds against each of them.
@@ -317,7 +303,6 @@ public sealed partial class SdfWorldEngine {
             Spec(name: "sdf-world-composite", bindings: Composite, push: CompositePush),
             Spec(name: "sdf-brick-bake", bindings: BrickBake, push: BrickPush, brick: true),
             Spec(name: "sdf-brick-upload", bindings: BrickBake, push: BrickPush, brick: true),
-            Spec(name: "sdf-frame-upload", bindings: FrameUpload, push: FrameUploadPush),
         ];
         // The order a build starts the pipelines in (SdfWorldPipelines.Build): the views variants, the longest driver
         // translations, start last, lightest first (core, folds, full), and every other pipeline starts before them in
@@ -333,7 +318,6 @@ public sealed partial class SdfWorldEngine {
             CompositePipelineIndex,
             BrickBakePipelineIndex,
             BrickUploadPipelineIndex,
-            FrameUploadPipelineIndex,
             ViewsCorePipelineIndex,
             ViewsFoldsPipelineIndex,
             ViewsPipelineIndex,

@@ -985,6 +985,7 @@ public static class WorldBootComposition {
     /// files.</summary>
     /// <param name="services">The service collection a presentation shape composes.</param>
     private static void AddWorldPipelineCache(IServiceCollection services) {
+        services.TryAddSingleton(implementationFactory: static sp => new GpuRegionCopyPipelineCache(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)));
         services.TryAddSingleton<SdfWorldPipelineCache>();
         services.TryAddSingleton(implementationFactory: static sp => new GpuPipelineCacheStore(
             contentKey: sp.GetRequiredService<SdfWorldPipelineCache>().LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)).ContentKey(),
@@ -993,8 +994,9 @@ public static class WorldBootComposition {
     }
     /// <summary>Registers the shader compiler every presentation shape's pipelines compile through, under the state
     /// root's <c>pipelines</c> cache with the document's toolchain, and the shader work sources a counters report reads:
-    /// the compiler's <c>shaders.compiler</c> counts, the process's kernel-set and shader-set manifest load counts, and the SDF pipeline cache every node and view shares with its <c>gpu.sdf-pipelines</c>
-    /// creation counts.</summary>
+    /// the compiler's <c>shaders.compiler</c> counts, the process's kernel-set and shader-set manifest load counts,
+    /// the SDF pipeline cache every node and view shares with its <c>gpu.sdf-pipelines</c> creation counts, and the
+    /// device's region-copy pipeline with its <c>gpu.region-copy</c> counts.</summary>
     /// <param name="services">The service collection a presentation shape composes.</param>
     private static void AddWorldShaderWork(IServiceCollection services) {
         services.TryAddSingleton(implementationFactory: static sp => new ShaderCompiler(
@@ -1005,6 +1007,7 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfWorldKernels.LoadWork);
         services.TryAddSingleton<SdfWorldPipelineCache>();
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<SdfWorldPipelineCache>().Work);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<GpuRegionCopyPipelineCache>().Work);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: ShaderSetManifest.LoadWork);
     }
     /// <summary>Registers the presentation's bake schedule over the registered <see cref="WorldCacheRoots"/>' bake

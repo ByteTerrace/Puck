@@ -35,6 +35,7 @@ public static class GpuWorkCounting {
                 ledger: ledger
             ),
             CommandPoolFactory = services.CommandPoolFactory,
+            Faults = services.Faults,
             ImageFactory = Wrap(
                 factory: services.ImageFactory,
                 ledger: ledger

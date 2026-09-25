@@ -29,7 +29,8 @@ internal sealed record AffectedPlan(IReadOnlyList<string> Canaries, bool Catalog
 /// Chooses the suites and canaries a set of changed files needs, and nothing wider. Suites follow the project graph:
 /// a changed project and every project that references it, transitively. Canaries follow what they were recorded
 /// executing (the coverage index) plus the files their manifests name. A change the rules cannot place is reported,
-/// never silently widened into "run everything".
+/// never silently widened into "run everything". A file the index cannot know, such as a project file or a shader, is
+/// placed through the indexed sources it stands for.
 /// </summary>
 internal static class AffectedSelection {
     // Changing any of these changes how every project builds.
@@ -62,6 +63,9 @@ internal static class AffectedSelection {
     /// <param name="worldClosure">The projects the World executable is built from, itself included.</param>
     /// <param name="declaresTests">Whether a changed <c>.puck</c> source declares <c>test</c> blocks.</param>
     /// <param name="catalogInputs">Whether a changed file is an input of the shipped catalog's tree compile.</param>
+    /// <param name="standInsFor">The indexed sources a changed file the index does not know stands for
+    /// (<see cref="AffectedStandIns"/>): their canaries are its canaries, and a file with an indexed stand-in is not
+    /// unmapped.</param>
     /// <returns>The plan.</returns>
     public static AffectedPlan Select(
         IReadOnlyList<string> changed,
@@ -71,7 +75,8 @@ internal static class AffectedSelection {
         Func<string, IReadOnlyList<string>> consumersOf,
         IReadOnlySet<string> worldClosure,
         Func<string, bool> declaresTests,
-        Func<string, string?, bool> catalogInputs
+        Func<string, string?, bool> catalogInputs,
+        Func<string, IReadOnlyList<string>> standInsFor
     ) {
         var catalog = false;
         var everything = false;
@@ -109,8 +114,17 @@ internal static class AffectedSelection {
                 }
             }
 
-            if (coverage.TryGetValue(key: path, value: out var executedBy)) {
-                selected.UnionWith(other: executedBy);
+            var mapped = coverage.TryGetValue(key: path, value: out var executedBy);
+
+            if (mapped) {
+                selected.UnionWith(other: executedBy!);
+            } else {
+                foreach (var standIn in standInsFor(arg: path)) {
+                    if (coverage.TryGetValue(key: standIn, value: out var standInExecutedBy)) {
+                        mapped = true;
+                        selected.UnionWith(other: standInExecutedBy);
+                    }
+                }
             }
 
             var owner = owners.FirstOrDefault(predicate: project => IsUnder(path: path, directory: project.Directory));
@@ -127,7 +141,7 @@ internal static class AffectedSelection {
 
             if (
                 worldClosure.Contains(item: owner.Name) &&
-                !coverage.ContainsKey(key: path)
+                !mapped
             ) {
                 _ = unmapped.Add(item: path);
             }

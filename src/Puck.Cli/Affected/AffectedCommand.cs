@@ -106,6 +106,24 @@ internal static class AffectedCommand {
         return closure;
     }
 
+    /// <summary>Returns every project in the repository's graph as selection sees it.</summary>
+    /// <param name="model">The repository's project graph.</param>
+    /// <param name="repositoryRoot">The repository root.</param>
+    /// <returns>The projects.</returns>
+    internal static AffectedProject[] Projects(ArchitectureModel model, string repositoryRoot) => [.. model.Projects.Values.Select(selector: project => {
+        var directory = Relative(
+            path: Path.GetDirectoryName(path: project.File)!,
+            repositoryRoot: repositoryRoot
+        );
+
+        return new AffectedProject(
+            Directory: directory,
+            IsSuite: directory.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/"),
+            Name: project.Name,
+            References: project.References
+        );
+    })];
+
     /// <summary>Plans what the working tree's changes against <paramref name="since"/> need.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
     /// <param name="since">The base revision.</param>
@@ -121,19 +139,7 @@ internal static class AffectedCommand {
         }
 
         var model = ArchitectureModel.Load(repositoryRoot: repositoryRoot);
-        var projects = model.Projects.Values.Select(selector: project => {
-            var directory = Relative(
-                path: Path.GetDirectoryName(path: project.File)!,
-                repositoryRoot: repositoryRoot
-            );
-
-            return new AffectedProject(
-                Directory: directory,
-                IsSuite: directory.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/"),
-                Name: project.Name,
-                References: project.References
-            );
-        }).ToArray();
+        var projects = Projects(model: model, repositoryRoot: repositoryRoot);
 
         if (!CanaryManifestLoader.TryLoadAll(
             error: out error,
@@ -158,17 +164,24 @@ internal static class AffectedCommand {
         var closure = Closure(model: model, seeds: ["Puck.World"]);
         var catalogProjects = Closure(model: model, seeds: CatalogSeeds);
 
+        var coverage = AffectedCoverage.Read(repositoryRoot: repositoryRoot);
+
         plan = AffectedSelection.Select(
             canaries: canaries,
             changed: changed,
             consumersOf: ConsumerSearch(projects: projects, repositoryRoot: repositoryRoot),
-            coverage: AffectedCoverage.Read(repositoryRoot: repositoryRoot),
+            coverage: coverage,
             catalogInputs: (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: (ShippedTree + "/")) ||
                 (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World/Assets/") && (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".graph.json"))) ||
                 path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.Cli/Transpiler/") ||
                 ((owner is not null) && catalogProjects.Contains(item: owner))),
             declaresTests: path => File.ReadLines(path: Path.Combine(path1: repositoryRoot, path2: path)).Any(predicate: static line => line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "test \"")),
             projects: projects,
+            standInsFor: AffectedStandIns.Create(
+                indexed: [.. coverage.Keys],
+                projects: projects,
+                repositoryRoot: repositoryRoot
+            ),
             worldClosure: closure
         );
 
@@ -337,8 +350,13 @@ internal static class AffectedCommand {
               references included), owns a changed file; a file in a directory no project owns chooses
               the projects whose sources name that directory. A canary is chosen when a changed file is
               one its manifest names, lies in its directory, or is a source the canary executed when
-              coverage was last recorded ({CoveragePath}); parity is chosen with any GPU canary. A changed
-              World source the index does not know is listed as unmapped rather than widening the run.
+              coverage was last recorded ({CoveragePath}); parity is chosen with any GPU canary. A file no
+              canary can execute is placed through the indexed sources it stands for: a project file,
+              restore lock or NativeMethods list through its project's sources, a shader source or
+              include through the C# that names each kernel whose include closure reaches it, and a file
+              puck schema writes through the sources declaring the types it is generated from. A changed
+              World source neither the index nor a stand-in places is listed as unmapped rather than
+              widening the run.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test.
               Prose, .claude/, .github/, editors/ and experimental/ choose nothing.

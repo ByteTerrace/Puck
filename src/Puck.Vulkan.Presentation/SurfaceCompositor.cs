@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Shaders;
@@ -24,11 +25,33 @@ public sealed class SurfaceCompositor : IDisposable {
     // (WaitForFrameSlot) has already proven retired. A single set was updated while a pending blit still referenced
     // it (VUID-vkUpdateDescriptorSets-None-03047, caught by the validation layer once the per-frame drain left).
     private const int DescriptorSetRingSize = 2;
-    private const uint SamplerBindingIndex = 0;
+    // The blit's source in blit.frag.hlsl: a separate image and sampler in the pass group.
+    private const uint PassGroup = 3;
+    private const uint SamplerBinding = 1;
+    private const uint SourceImageBinding = 0;
     private const string VertexShaderFileName = "fullscreen.vert.spv";
 
+    // The blit's one group, which VulkanGroupLayouts plans into set layouts and a pipeline layout.
+    private static readonly GpuPipelineLayoutDescription BlitLayout = new(
+        groups: [new GpuGroupLayoutDescription(
+            bindings: [
+                new GpuGroupBinding(
+                    binding: SourceImageBinding,
+                    kind: GpuBindingKind.SampledImage
+                ),
+                new GpuGroupBinding(
+                    binding: SamplerBinding,
+                    kind: GpuBindingKind.Sampler
+                ),
+            ],
+            ordinal: PassGroup
+        )],
+        pushesIndex: false,
+        stages: (GpuShaderStage.Vertex | GpuShaderStage.Fragment)
+    );
     private static readonly byte[] FullscreenTriangleVertexData = FullscreenTriangle.CreateVertexData();
 
+    private readonly IAllocator m_allocator;
     private readonly IVulkanBufferApi m_bufferApi;
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
     private readonly IVulkanCommandResourcesFactory m_commandResourcesFactory;
@@ -61,6 +84,7 @@ public sealed class SurfaceCompositor : IDisposable {
     private VulkanShaderModule? m_vertexShader;
 
     public SurfaceCompositor(
+        IAllocator allocator,
         VulkanRenderer renderer,
         string shaderDirectory,
         IShaderModuleLoader shaderModuleLoader,
@@ -75,6 +99,7 @@ public sealed class SurfaceCompositor : IDisposable {
         IVulkanCommandBufferRecordingApi commandBufferRecordingApi,
         VulkanQueueSubmitter queueSubmitter
     ) {
+        ArgumentNullException.ThrowIfNull(allocator);
         ArgumentNullException.ThrowIfNull(bufferApi);
         ArgumentNullException.ThrowIfNull(commandBufferRecordingApi);
         ArgumentNullException.ThrowIfNull(commandResourcesFactory);
@@ -89,6 +114,7 @@ public sealed class SurfaceCompositor : IDisposable {
         ArgumentNullException.ThrowIfNull(shaderModuleFactory);
         ArgumentNullException.ThrowIfNull(shaderModuleLoader);
 
+        m_allocator = allocator;
         m_bufferApi = bufferApi;
         m_commandBufferRecordingApi = commandBufferRecordingApi;
         m_commandResourcesFactory = commandResourcesFactory;
@@ -212,19 +238,23 @@ public sealed class SurfaceCompositor : IDisposable {
 
         m_resourceDevice = device;
 
-        // The blit binds one sampled source texture per ring set. This single count drives BOTH the pipeline's
-        // descriptor-set layout and the pool's capacity, so they cannot drift out of sync (a pool undersized for
-        // the layout would fail vkAllocateDescriptorSets).
-        const uint TextureSamplerCount = 1;
-
+        // The blit's layout is planned from BlitLayout, which the pipeline owns once created; the pool holds exactly
+        // one source image and one sampler per ring set, the pass group's two bindings.
+        VulkanPipelineLayouts.Create(
+            allocator: m_allocator,
+            device: device.Commands,
+            groups: VulkanGroupLayouts.Plan(description: BlitLayout),
+            layouts: out var groups
+        ).ThrowIfFailed(operation: "vkCreatePipelineLayout");
         m_blitPipeline = m_graphicsPipelineFactory.Create(
             enableStorageBuffer: false,
             fragmentShaderModule: m_blitFragmentShader!,
+            groups: groups,
             logicalDevice: device,
             pushConstantBinding: null,
             renderPass: m_renderer.RenderPass,
             swapchain: m_renderer.Swapchain,
-            textureSamplerCount: TextureSamplerCount,
+            textureSamplerCount: 0,
             vertexShaderModule: m_vertexShader!
         );
         m_descriptorPool = m_descriptorAllocator.CreatePool(
@@ -233,24 +263,37 @@ public sealed class SurfaceCompositor : IDisposable {
             poolSizes: new VulkanDescriptorPoolSize[]
             {
                 new(
-                DescriptorCount: (TextureSamplerCount * DescriptorSetRingSize),
-                DescriptorType: VulkanDescriptorType.CombinedImageSampler
+                DescriptorCount: DescriptorSetRingSize,
+                DescriptorType: VulkanDescriptorType.SampledImage
+            ),
+                new(
+                DescriptorCount: DescriptorSetRingSize,
+                DescriptorType: VulkanDescriptorType.Sampler
             ),
             }
         );
 
         // One set + one prebuilt draw-command list per ring slot (the draw command bakes the set handle in, so the
-        // Blit path just indexes — see DescriptorSetRingSize).
+        // Blit path just indexes — see DescriptorSetRingSize). The sampler never changes, so each set takes it once
+        // here; a blit writes only the source image.
         var drawCommandsPerSet = new VulkanDrawCommand[DescriptorSetRingSize][];
 
         for (var setIndex = 0; (setIndex < DescriptorSetRingSize); setIndex++) {
             m_descriptorSets[setIndex] = m_descriptorAllocator.AllocateSet(
                 device: device.Commands,
-                descriptorSetLayoutHandle: m_blitPipeline.DescriptorSetLayoutHandle,
+                descriptorSetLayoutHandle: m_blitPipeline.GroupLayoutHandles[((int)PassGroup)],
                 poolHandle: m_descriptorPool
+            );
+            m_descriptorAllocator.WriteSampler(
+                arrayElement: 0,
+                binding: SamplerBinding,
+                descriptorSetHandle: m_descriptorSets[setIndex],
+                device: device.Commands,
+                samplerHandle: m_sampler
             );
             drawCommandsPerSet[setIndex] = [
                 new VulkanDrawCommand(
+                    DescriptorSetGroup: PassGroup,
                     DescriptorSetHandle: m_descriptorSets[setIndex],
                     DrawParameters: new VulkanDrawParameters(
                         firstInstance: 0,
@@ -341,13 +384,12 @@ public sealed class SurfaceCompositor : IDisposable {
             // referenced by a blit the renderer's frame-slot wait already proved retired; the pending blit rides the
             // other set untouched.
             m_descriptorSetIndex = ((m_descriptorSetIndex + 1) % DescriptorSetRingSize);
-            m_descriptorAllocator.WriteCombinedImageSampler(
+            m_descriptorAllocator.WriteSampledImage(
                 arrayElement: 0,
-                binding: SamplerBindingIndex,
+                binding: SourceImageBinding,
                 descriptorSetHandle: m_descriptorSets[m_descriptorSetIndex],
                 device: m_renderer.Device.Commands,
-                imageViewHandle: imageViewHandle,
-                samplerHandle: m_sampler
+                imageViewHandle: imageViewHandle
             );
 
             m_lastWrittenImageView = imageViewHandle;

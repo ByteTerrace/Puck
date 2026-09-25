@@ -279,7 +279,10 @@ public sealed class SdfCapabilityMatrixLawTests {
             Equivalent: "a P3 geometry pass over the shared visibility record",
             Check: null,
             Green: false,
-            Members: ["SdfFrame.MeshDraws", "SdfEngineNode.MeshRegionBytes", "SdfEngineNode.MeshDrawCount"]
+            Members: [
+                "SdfFrame.MeshDraws", "SdfEngineNode.MeshRegionBytes", "SdfEngineNode.MeshDrawCount", "SdfWorldEngine.MeshRegionBytes",
+                "SdfWorldEngine.MeshRegionLayout",
+            ]
         ),
         new(
             Capability: "assembly and lifetime",

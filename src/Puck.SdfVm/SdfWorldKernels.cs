@@ -3,7 +3,7 @@ using Puck.Abstractions.Counting;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The compiled compute kernels of the SDF world pipeline. Frame upload precedes sky, instance-mask culling,
+/// The compiled compute kernels of the SDF world pipeline: sky, instance-mask culling,
 /// beam cone marching, indirect-argument generation, primary traversal, surface evaluation, ambient occlusion,
 /// views shading, and composition. Views has
 /// full, folds, and core variants selected from the program's operations by <see cref="SdfViewsKernelVariants"/>. Brick baking and
@@ -26,9 +26,6 @@ namespace Puck.SdfVm;
 /// the engine provisions a brick pool.</param>
 /// <param name="BrickUpload">The host-baked brick uploader (<c>sdf-brick-upload.comp</c>) — a staging-to-pool copy, dispatched
 /// only when the engine provisions a brick pool.</param>
-/// <param name="FrameUpload">The per-frame table uploader (<c>sdf-frame-upload.comp</c>) — copies this frame's host-written
-/// viewport rows, dynamic transforms, and frame instance grid into their device-local twins at the top of every frame,
-/// so no march kernel reads a host-visible buffer per sample.</param>
 public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> Sky,
     ReadOnlyMemory<byte> Beam,
@@ -42,8 +39,7 @@ public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> ViewsFolds,
     ReadOnlyMemory<byte> Composite,
     ReadOnlyMemory<byte> BrickBake,
-    ReadOnlyMemory<byte> BrickUpload,
-    ReadOnlyMemory<byte> FrameUpload
+    ReadOnlyMemory<byte> BrickUpload
 ) {
     /// <summary>The name a counters report heads <see cref="LoadWork"/>'s section with.</summary>
     public const string LoadWorkSourceName = "shaders.sdf-kernels";
@@ -78,7 +74,7 @@ public readonly record struct SdfWorldKernels(
     /// changed kernel starts a new cache file.</summary>
     /// <returns>A lowercase 16-digit hexadecimal key.</returns>
     public string ContentKey() =>
-        Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: [Sky, Beam, InstanceCull, CullArgs, Primary, Surface, Ambient, Views, ViewsCore, ViewsFolds, Composite, BrickBake, BrickUpload, FrameUpload]);
+        Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: [Sky, Beam, InstanceCull, CullArgs, Primary, Surface, Ambient, Views, ViewsCore, ViewsFolds, Composite, BrickBake, BrickUpload]);
     /// <summary>Loads the world kernel set from the standard deploy location (<see cref="DefaultDirectory"/>).</summary>
     /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for Direct3D 12).</param>
     /// <returns>The loaded kernel set.</returns>
@@ -135,7 +131,6 @@ public readonly record struct SdfWorldKernels(
             BrickUpload: Read(stem: "sdf-brick-upload"),
             Composite: Read(stem: "sdf-world-composite"),
             CullArgs: Read(stem: "sdf-cull-args"),
-            FrameUpload: Read(stem: "sdf-frame-upload"),
             InstanceCull: Read(stem: "sdf-instance-cull"),
             Primary: Read(stem: "sdf-world-primary"),
             Sky: Read(stem: "sdf-sky"),

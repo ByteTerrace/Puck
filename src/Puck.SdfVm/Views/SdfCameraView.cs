@@ -169,11 +169,12 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
         // The program the next engine uploads at construction, and one input a refused build is retried on.
         m_currentProgram = program;
         m_engine = m_pipelines.TryBuild(
-            construct: static (pipelines, inputs) => new SdfWorldEngine(
+            construct: static (pipelines, regionCopy, inputs) => new SdfWorldEngine(
                 device: inputs.Device,
                 height: inputs.View.m_height,
                 options: inputs.Options,
                 pipelines: pipelines,
+                regionCopy: regionCopy,
                 width: inputs.View.m_width
             ),
             device: device,

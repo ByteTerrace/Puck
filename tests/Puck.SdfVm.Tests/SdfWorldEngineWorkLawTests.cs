@@ -5,6 +5,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.SignedDistance;
 using Puck.Abstractions.Counting;
+using Puck.Shaders;
 using Puck.Testing;
 using Xunit;
 
@@ -59,10 +60,10 @@ public sealed class SdfWorldEngineWorkLawTests {
                 name: "gpu.sdf-engine"
             )
         );
-        var demand = SdfWorldEngine.DescriptorPoolSizes(
+        var demand = (SdfWorldEngine.DescriptorPoolSizes(
             brickPool: false,
             brickUpload: false
-        ).HeapDescriptors;
+        ).HeapDescriptors + GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize).HeapDescriptors);
         var builder = new SdfProgramBuilder();
 
         builder.Sphere(
@@ -97,7 +98,7 @@ public sealed class SdfWorldEngineWorkLawTests {
 
         Assert.StartsWith(
             actualString: refusal.Message,
-            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view descriptors in 1 pool(s) and is refused: "
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view descriptors in 2 pool(s) and is refused: "
         );
         Assert.Empty(collection: gpu.PoolsCreated);
 
@@ -246,6 +247,10 @@ public sealed class SdfWorldEngineWorkLawTests {
             ));
 
             // A brick pool needs its bake and upload pipelines, so its set is built with one-byte brick kernels.
+            RegionCopy = SdfTestPipelines.RegionCopy(
+                device: gpu,
+                ledger: owned
+            );
             Pipelines = ((brickPoolVoxelCapacity == 0)
                 ? SdfTestPipelines.Build(
                     device: gpu,
@@ -272,6 +277,7 @@ public sealed class SdfWorldEngineWorkLawTests {
                     WorkLedger: owned
                 ),
                 pipelines: Pipelines,
+                regionCopy: RegionCopy,
                 width: Extent
             );
             Frame = new SdfFrame(
@@ -302,10 +308,12 @@ public sealed class SdfWorldEngineWorkLawTests {
         public SdfFrame Frame { get; }
         public FakeGpuDevice Gpu { get; }
         public SdfWorldPipelines Pipelines { get; }
+        public GpuRegionCopyPipeline RegionCopy { get; }
 
         public void Dispose() {
             Engine.Dispose();
             Pipelines.Dispose();
+            RegionCopy.Dispose();
         }
         // Prepares a reload of the rig's pipelines and installs it, as a node does across two produced frames.
         public int Reload(SdfWorldKernels kernels) {

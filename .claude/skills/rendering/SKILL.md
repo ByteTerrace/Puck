@@ -283,7 +283,10 @@ These are one-line cautions; the owning pages hold the derivations.
   by `Describe` (the node's `NotReadyReason`), and the holder keeps its lease.
   A refused build is retried only when an input it was made from changes (the
   device, the kernels asked for, the set or its installed kernels, and the
-  holder's inputs: its `SdfWorldEngineOptions`, and for the node a kernel
+  operator's GPU faults (`GpuCreationFaults.Revision`, read through
+  `GpuDeviceServices.Faults` and re-read after a refused attempt, so the fault
+  that refused it is no change), and the holder's inputs: its
+  `SdfWorldEngineOptions`, and for the node a kernel
   reload request), or after `Release` on device loss. A build refused by the
   device's descriptor heap (`GpuDescriptorHeapRefusalException`,
   `GPU_DESCRIPTOR_HEAP`) has one input more, heap space: it is retried when
@@ -474,13 +477,20 @@ These are one-line cautions; the owning pages hold the derivations.
   options 16 structures. `GpuResidency.Select(profile, bytes)` is the one choice
   of `InPlace`, `Ring` or `Staged`, and the default profile selects `Staged`.
   `GpuRegion` (`src/Puck.Abstractions/Gpu/Residency`) writes a region under any
-  policy; its staged copy speaks `sdf-frame-upload.comp`'s ABI, and its ranges
-  are `GpuUploadRuns`, the same run list the SDF engine's tables use. No engine
-  consumer writes through a region yet. The SDF engine's host tables, brick
-  staging and the overlay's buffer still upload by hand, so a new host upload
-  goes through a region rather than a fourth hand-built path. `GpuResidencyLawTests`
-  pins the selector and byte-identical region contents over `UploadModelGpu`
-  (`tests/Shared`), and `pipeline.inspect` echoes the profile and the policy.
+  policy; its staged copy is `Puck.Shaders`' `region-copy.comp`, created from
+  `GpuRegion.CopyPipeline` once per device by `GpuRegionCopyPipelineCache`
+  (built on the pool, leased by every owner, counted under `gpu.region-copy`)
+  and never by an owner, and its ranges are `GpuUploadRuns`, the same run list
+  the SDF engine's tables use. The SDF engine records its table upload with that
+  pipeline (its holder leases it beside the set, and the engine takes it at
+  construction) and writes its mesh region (`SdfFrame.MeshDraws` laid out by
+  `SdfMeshRegion`) through a region, which nothing reads until P4-2c. The
+  engine's host tables, brick staging and the overlay's buffer still upload by
+  hand, so a new host upload goes through a region rather than a fourth
+  hand-built path. `GpuResidencyLawTests` pins the selector and byte-identical
+  region contents over `UploadModelGpu` (`tests/Shared`),
+  `GpuRegionCopyPipelineCacheLawTests` one pipeline per device shared by its
+  owners, and `pipeline.inspect` echoes the profile and the policy.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.

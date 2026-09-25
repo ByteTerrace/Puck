@@ -56,6 +56,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuBindings m_bindings;
     private readonly IGpuDeviceContext m_deviceContext;
+    private readonly GpuCreationFaults? m_faults;
     private readonly ReadOnlyMemory<byte> m_fragmentBytecode;
     private readonly uint m_height;
     private readonly IGpuImageFactory m_imageFactory;
@@ -77,8 +78,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         name: "gpu.overlay"
     );
 
-    // Whether the standing ResourceRefusal is the descriptor heap's, and the heap's release revision when it was made.
+    // Whether the standing ResourceRefusal is the descriptor heap's, and the heap's release revision and the operator's
+    // faults' revision when it was made.
     private bool m_heapRefused;
+    private long m_refusedFaultsRevision;
     private long m_refusedHeapRevision;
     private IGpuCommandPool? m_commandPool;
     private IGpuStorageBuffer? m_dataBuffer;
@@ -175,6 +178,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             ledger: m_work
         );
         m_deviceContext = deviceContext;
+        m_faults = services.Faults;
         m_fragmentBytecode = fragmentBytecode;
         m_height = height;
         m_imageFactory = services.ImageFactory;
@@ -233,7 +237,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     /// been tried. While refused, a produced frame presents the inner frame unchanged and forwards any capture to it; the
     /// refusal holds until <see cref="OnDeviceLost"/>, after which the next frame with overlay content creates them
     /// again, or, for a refusal by the device's descriptor heap, until another owner returns heap space
-    /// (<see cref="IGpuBindings.HeapReleaseRevision"/>).</summary>
+    /// (<see cref="IGpuBindings.HeapReleaseRevision"/>). The operator's GPU faults are an input too: arming or clearing one
+    /// (<see cref="GpuCreationFaults.Revision"/>) tries the creation once more.</summary>
     public string? ResourceRefusal { get; private set; }
 
     // Reads back this node's own render target (the overlay composited over the world — what the player actually
@@ -249,7 +254,9 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // that changes what the creation depends on (the device, the extent and the shaders are fixed at construction), so
     // a produced frame never retries it. A refusal by the device's descriptor heap (GpuDescriptorHeapRefusalException)
     // depends on heap space too, so it is tried again once the heap's release revision moves, as another owner returns
-    // its pools. A device loss is never refused: it reaches the host's recovery.
+    // its pools. The operator's GPU faults are an input of every creation: when their revision moves (an arm, a disarm,
+    // or a fault firing elsewhere) the creation is tried once more. A device loss is never refused: it reaches the
+    // host's recovery.
     private bool EnsureResources() {
         if (m_resourcesReady) {
             return true;
@@ -259,8 +266,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         if (ResourceRefusal is not null) {
             if (
-                !m_heapRefused ||
-                (heapRevision == m_refusedHeapRevision)
+                ((m_faults?.Revision ?? 0L) == m_refusedFaultsRevision) &&
+                (
+                    !m_heapRefused ||
+                    (heapRevision == m_refusedHeapRevision)
+                )
             ) {
                 return false;
             }
@@ -275,6 +285,9 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         } catch (Exception refusal) when ((refusal is not DeviceLostException)) {
             ReleaseGpuResources();
             m_heapRefused = (refusal is GpuDescriptorHeapRefusalException);
+            // Read after the attempt: a creation fault that fired inside it moved the revision, which is no change a
+            // retry could succeed on.
+            m_refusedFaultsRevision = (m_faults?.Revision ?? 0L);
             m_refusedHeapRevision = heapRevision;
             ResourceRefusal = refusal.Message;
             Console.Error.WriteLine(value: $"[overlay] resources refused, presenting the inner frame until the device is recreated{(m_heapRefused
