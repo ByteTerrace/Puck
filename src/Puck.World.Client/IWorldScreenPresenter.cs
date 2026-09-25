@@ -21,9 +21,8 @@ public interface IWorldScreenPresenter {
     void NotifyDeviceLost();
     /// <summary>Publishes this tick's declared-screen content to the device.</summary>
     /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
-    /// <param name="deviceContext">The live GPU device context to upload on.</param>
-    /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
-    void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu);
+    /// <param name="deviceContext">The live GPU device context to upload on, through its services.</param>
+    void Publish(ulong tick, IGpuDeviceContext deviceContext);
     /// <summary>Reconciles the offscreen camera-view pool against a mutated camera list.</summary>
     /// <param name="cameras">The mutated camera list (the live definition's cameras).</param>
     void ReconcileCameras(IReadOnlyList<WorldCamera> cameras);

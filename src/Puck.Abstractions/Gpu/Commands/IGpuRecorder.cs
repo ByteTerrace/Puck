@@ -24,8 +24,9 @@ public interface IGpuRecorder {
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     void EndDebugGroup(nint commandBufferHandle);
     /// <summary>Begins a framebuffer's render pass. Each attachment is cleared, loaded or discarded as the pass
-    /// declares, a depth attachment clearing to its <see cref="GpuDepthAttachment.ClearDepth"/>, and the viewport and
-    /// scissor cover <paramref name="area"/> with clip-space +y at its top edge.</summary>
+    /// declares, a depth attachment clearing to its <see cref="GpuDepthAttachment.ClearDepth"/>; a clear covers
+    /// <paramref name="area"/> and leaves the pixels outside it as they were. The viewport and scissor cover
+    /// <paramref name="area"/> with clip-space +y at its top edge.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="framebuffer">The framebuffer, from the same device's <see cref="IGpuRenderPassFactory"/>.</param>
     /// <param name="area">The pixels the pass draws, inside the framebuffer's extent, or <see langword="null"/> for the

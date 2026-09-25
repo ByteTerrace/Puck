@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
@@ -7,8 +8,8 @@ namespace Puck.Shaders;
 /// Reads the descriptor bindings a SPIR-V module declares, in the neutral <see cref="ShaderInterfaceBinding"/> shape,
 /// from the module's own decorations: <c>DescriptorSet</c> and <c>Binding</c> on each variable, <c>Offset</c> on each
 /// constant block member, and the <c>OpName</c> and <c>OpMemberName</c> debug names DXC emits. A variable in the
-/// <c>PushConstant</c> storage class carries no set or binding and is reported as the
-/// <see cref="ShaderBindingKind.PushConstants"/> block at set 0, binding 0. Pure C#, no GPU and no native tool; it
+/// <c>PushConstant</c> storage class carries no set or binding and is reported as a pushed
+/// <see cref="GpuBindingKind.ConstantBuffer"/> block (<see cref="ShaderInterfaceBinding.Pushed"/>) at set 0, binding 0. Pure C#, no GPU and no native tool; it
 /// follows the Khronos SPIR-V specification's instruction encoding and nothing else.
 /// </summary>
 public static class SpirvInterfaceReader {
@@ -106,7 +107,7 @@ public static class SpirvInterfaceReader {
             );
             var name = (parsed.Names.GetValueOrDefault(key: id) ?? $"%{id}");
             var kind = (pushed
-                ? ShaderBindingKind.PushConstants
+                ? GpuBindingKind.ConstantBuffer
                 : Kind(
                     module: parsed,
                     name: name,
@@ -117,13 +118,14 @@ public static class SpirvInterfaceReader {
             bindings.Add(item: new ShaderInterfaceBinding(
                 Binding: parsed.Bindings.GetValueOrDefault(key: id),
                 Kind: kind,
-                Members: ((kind is ShaderBindingKind.ConstantBuffer or ShaderBindingKind.PushConstants)
+                Members: ((kind == GpuBindingKind.ConstantBuffer)
                     ? BlockMembers(
                         module: parsed,
                         structId: pointee
                     )
                     : []),
                 Name: name,
+                Pushed: pushed,
                 Set: set
             ));
         }
@@ -165,7 +167,7 @@ public static class SpirvInterfaceReader {
 
         return result.AsReadOnly();
     }
-    private static ShaderBindingKind Kind(Module module, uint typeId, uint storageClass, string name) {
+    private static GpuBindingKind Kind(Module module, uint typeId, uint storageClass, string name) {
         var (kind, operands) = module.Types[typeId];
 
         switch (kind) {
@@ -180,29 +182,30 @@ public static class SpirvInterfaceReader {
                 }
 
                 return (readOnly
-                    ? ShaderBindingKind.ReadOnlyBuffer
-                    : ShaderBindingKind.ReadWriteBuffer);
+                    ? GpuBindingKind.ReadOnlyBuffer
+                    : GpuBindingKind.ReadWriteBuffer);
             case OpTypeStruct when (
                 (storageClass == StorageClassUniform) &&
                 module.Blocks.Contains(item: typeId)
             ):
-                return ShaderBindingKind.ConstantBuffer;
+                return GpuBindingKind.ConstantBuffer;
             case OpTypeImage:
                 // Operands: sampled type, Dim, Depth, Arrayed, MS, Sampled (1 read through a sampler, 2 read and
                 // written by coordinate), Image Format.
-                var buffer = (operands[1] == DimBuffer);
+                if (operands[1] == DimBuffer) {
+                    throw ShaderInterfaceBinding.TypedBuffer(
+                        name: name,
+                        reader: "SPIR-V"
+                    );
+                }
 
                 return ((operands[5] == 2)
-                    ? (buffer
-                        ? ShaderBindingKind.ReadWriteBuffer
-                        : ShaderBindingKind.StorageImage)
-                    : (buffer
-                        ? ShaderBindingKind.ReadOnlyBuffer
-                        : ShaderBindingKind.SampledImage));
+                    ? GpuBindingKind.StorageImage
+                    : GpuBindingKind.SampledImage);
             case OpTypeSampledImage:
-                return ShaderBindingKind.SampledImage;
+                return GpuBindingKind.SampledImage;
             case OpTypeSampler:
-                return ShaderBindingKind.Sampler;
+                return GpuBindingKind.Sampler;
             default:
                 throw new InvalidDataException(message: $"SPIR-V variable '{name}' carries a descriptor set but its type (opcode {kind}) is no binding kind.");
         }

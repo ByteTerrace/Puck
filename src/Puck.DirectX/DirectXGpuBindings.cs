@@ -49,7 +49,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     }
     /// <inheritdoc/>
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var totalDescriptors = ((sizes.CombinedImageSamplerCount + sizes.StorageBufferCount) + sizes.StorageImageCount);
         var capacity = ((totalDescriptors > 0)
             ? totalDescriptors
@@ -102,7 +102,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         nint imageViewHandle,
         nint samplerHandle
     ) {
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
         var imageView = ((DirectXImageView)GCHandle.FromIntPtr(value: imageViewHandle).Target!);
         var slotIndex = (set.SlotByBinding[binding] + arrayElement);
@@ -139,10 +139,18 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         uint binding,
         nint bufferHandle,
         ulong bufferSize,
-        GpuBufferAccess access,
+        GpuBindingKind kind,
         uint elementStride
     ) {
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        if (kind is not (GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: kind,
+                message: "A buffer write names a read-only or read-write buffer kind.",
+                paramName: nameof(kind)
+            );
+        }
+
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
             ptr = (set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize))),
@@ -157,7 +165,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             : elementStride
         )));
 
-        if (access == GpuBufferAccess.ReadWrite) {
+        if (kind == GpuBindingKind.ReadWriteBuffer) {
             var uavDesc = new D3D12_UNORDERED_ACCESS_VIEW_DESC {
                 Format = format,
                 ViewDimension = D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_BUFFER,
@@ -213,7 +221,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         uint arrayElement,
         nint imageViewHandle
     ) {
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
         var imageView = ((DirectXImageView)GCHandle.FromIntPtr(value: imageViewHandle).Target!);
         var slotIndex = (set.SlotByBinding[binding] + arrayElement);

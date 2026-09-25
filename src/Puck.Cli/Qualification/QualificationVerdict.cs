@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Gpu;
 using Puck.Cli.Canary;
 using Puck.Cli.Counters;
 using Puck.World;
@@ -60,6 +61,13 @@ internal sealed record QualificationReadings(
     int WorldReloads,
     IReadOnlyList<string> SubmissionRefusals
 ) {
+    /// <summary>Gets the most device-local bytes the World held at once, as the largest <c>gpu.memory.device-local.peak</c> any
+    /// <c>world.counters --json</c> reading reports, or <see langword="null"/> when no reading carries
+    /// it.</summary>
+    public long? PeakDeviceLocalBytes => Counters.SelectMany(selector: static run => run.Counts)
+        .Where(predicate: static count => (count.Kind == GpuDeviceMemoryWork.Peak.Name))
+        .Select(selector: static count => ((long?)count.Value))
+        .Max();
     /// <summary>Gets the most bytes the instance owned or planned to own at any inspection, or <see langword="null"/>
     /// when nothing was inspected.</summary>
     public long? PeakOwnedPipelineBytes => ((Inspections.Count == 0)
@@ -336,6 +344,13 @@ internal static partial class QualificationJudge {
             (peak > limit)
         ) {
             findings.Add(item: $"the pipeline instance owned or planned {peak} bytes, over the cell's threshold of {limit}");
+        }
+        if (cell.Threshold.PeakDeviceLocalBytes is { } deviceLocalLimit) {
+            if (readings.PeakDeviceLocalBytes is not { } deviceLocalPeak) {
+                findings.Add(item: $"no world.counters reading reported {GpuDeviceMemoryWork.Peak.Name}, which the cell's threshold of {deviceLocalLimit} bytes judges");
+            } else if (deviceLocalPeak > deviceLocalLimit) {
+                findings.Add(item: $"the World held {deviceLocalPeak} device-local bytes at its peak, over the cell's threshold of {deviceLocalLimit}");
+            }
         }
         if (readings.Releases != expectation.Releases) {
             findings.Add(item: $"{readings.Releases} unload(s) released the instance, of the {expectation.Releases} the script makes");

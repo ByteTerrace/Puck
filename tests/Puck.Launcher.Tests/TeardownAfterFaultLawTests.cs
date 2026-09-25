@@ -36,8 +36,7 @@ public sealed class TeardownAfterFaultLawTests {
     }
     // The shipped overlay decorator over a producer that renders nothing, on services that must never be called: a
     // node that never produced a frame acquired nothing, so its teardown reaches none of them.
-    private static UnifiedOverlayNode Overlay(IGpuDeviceContext device) {
-        var unused = new UnusedGpu();
+    private static UnifiedOverlayNode Overlay(IGpuDeviceContext device, UnusedGpu unused) {
         var glyphs = OverlayGlyphSdfPack.TryCreate(new FontAtlas(
             FontAtlasKind.Mtsdf,
             "test://fixed-grid",
@@ -86,22 +85,8 @@ public sealed class TeardownAfterFaultLawTests {
             glyphs: glyphs,
             height: 32U,
             inner: new WindowedHostFixture.FakeRenderNode(),
-            services: new OverlayServices {
-                Bindings = unused,
-                BufferFactory = unused,
-                BytecodeExtension = ".spv",
-                CommandPoolFactory = unused,
-                DeviceContext = device,
-                FrameSources = unused,
-                ImageFactory = unused,
-                PipelineFactory = unused,
-                QueueSubmitter = unused,
-                Recorder = unused,
-                RenderPassFactory = unused,
-                ShaderModuleFactory = unused,
-                StorageBufferBinding = 1U,
-                SurfaceTransferFactory = unused,
-            },
+            deviceContext: device,
+            frameSources: unused,
             sources: new UnifiedOverlaySources(
                 BindingBar: null,
                 Console: null,
@@ -115,12 +100,16 @@ public sealed class TeardownAfterFaultLawTests {
 
     [Fact]
     public async Task ADeviceThatNeverCameUpSurfacesUnmaskedThroughTheRealOverlayTeardown() {
-        var device = new WindowedHostFixture.NeverInitializedDeviceContext();
+        var unused = new UnusedGpu();
+        var device = new WindowedHostFixture.NeverInitializedDeviceContext(services: unused.Services);
         var presenter = new WindowedHostFixture.FakePresenter(failure: NoDevice());
         var host = WindowedHostFixture.Build(
             device: device,
             presenter: presenter,
-            root: Overlay(device: device)
+            root: Overlay(
+                device: device,
+                unused: unused
+            )
         );
 
         var (exit, error) = await RunAsync(host: host);
@@ -135,7 +124,7 @@ public sealed class TeardownAfterFaultLawTests {
         );
         Assert.Equal(
             expected: 0,
-            actual: device.DeviceHandleReads
+            actual: unused.Reaches
         );
         Assert.Equal(
             expected: 1,
@@ -173,15 +162,18 @@ public sealed class TeardownAfterFaultLawTests {
     }
     [Fact]
     public void AnOverlayThatNeverProducedReleasesNothingAndNeverAsksForTheDevice() {
-        var device = new WindowedHostFixture.NeverInitializedDeviceContext();
-        var overlay = Overlay(device: device);
+        var unused = new UnusedGpu();
+        var overlay = Overlay(
+            device: new WindowedHostFixture.NeverInitializedDeviceContext(services: unused.Services),
+            unused: unused
+        );
 
         overlay.Dispose();
         overlay.OnDeviceLost();
 
         Assert.Equal(
             expected: 0,
-            actual: device.DeviceHandleReads
+            actual: unused.Reaches
         );
     }
     [Fact]
@@ -251,11 +243,33 @@ public sealed class TeardownAfterFaultLawTests {
     private sealed class NoDeviceService : BackgroundService {
         protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
     }
-    // Every GPU seam the overlay holds; reaching any of them from a node that never produced a frame is a failure.
+    // Every GPU seam the overlay holds; reaching any of them from a node that never produced a frame is a failure, and
+    // is counted, because a teardown that keeps the pump's fault could otherwise swallow the throw.
     private sealed class UnusedGpu : IGpuRecorder, IGpuBindings, IOverlayFrameSources, IGpuPipelineFactory,
         IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuBufferFactory, IGpuSurfaceTransferFactory, IGpuImageFactory,
         IGpuRenderPassFactory, IGpuCommandPoolFactory {
-        private static InvalidOperationException Reached() => new(message: "A GPU seam was reached during teardown.");
+        public UnusedGpu() =>
+            Services = new GpuDeviceServices {
+                Bindings = this,
+                BufferFactory = this,
+                CommandPoolFactory = this,
+                ImageFactory = this,
+                PipelineFactory = this,
+                QueueSubmitter = this,
+                Recorder = this,
+                RenderPassFactory = this,
+                ShaderModuleFactory = this,
+                SurfaceTransferFactory = this,
+            };
+
+        public int Reaches { get; private set; }
+        public GpuDeviceServices Services { get; }
+
+        private InvalidOperationException Reached() {
+            Reaches++;
+
+            return new(message: "A GPU seam was reached during teardown.");
+        }
 
         public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw Reached();
         public void BeginCommandBuffer(nint commandBufferHandle) => throw Reached();
@@ -306,7 +320,7 @@ public sealed class TeardownAfterFaultLawTests {
         public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
         public bool TryAcquire(int key, out Puck.Hosting.GpuImageLease lease) => throw Reached();
         public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw Reached();
-        public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => throw Reached();
+        public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => throw Reached();
         public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reached();
     }
 }

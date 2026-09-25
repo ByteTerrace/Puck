@@ -14,6 +14,11 @@ namespace Puck.DirectX;
 public static unsafe class DirectXConstants {
     /// <summary><c>D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES</c>: transitions every subresource of a resource at once.</summary>
     public const uint AllSubresources = 0xFFFFFFFFu;
+    /// <summary>The vtable slot of <c>ID3D12Device::CheckFeatureSupport</c> (the three <c>IUnknown</c> methods,
+    /// <c>ID3D12Object</c>'s four, then <c>GetNodeCount</c> and the five creation methods preceding it). The CsWin32
+    /// wrapper throws on a failing HRESULT, and a query about a feature, version or model the runtime does not know
+    /// fails with <c>E_INVALIDARG</c>, so callers invoke the slot directly and read the result.</summary>
+    public const int CheckFeatureSupportSlot = 13;
     /// <summary><c>D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING</c>: the identity RGBA component swizzle for SRVs.</summary>
     public const uint DefaultShader4ComponentMapping = 0x00001688u;
     /// <summary><c>GENERIC_ALL</c>: the shared-resource access flag passed when opening a cross-API shared handle.</summary>

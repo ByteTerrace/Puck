@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and ViewStack, how world render data reaches SdfFrame, Puck.Shaders manifests and pipelines, render.extensions, and Puck.ShaderVm. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
+description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and ViewStack, how world render data reaches SdfFrame, Puck.Shaders manifests and pipelines, and render.extensions. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
 ---
 
 # Rendering
@@ -33,7 +33,6 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldPipelineRuntime`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
 | Shader manifests, pipelines, builds | `src/Puck.Shaders`, `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
 | Image sources and producers | `src/Puck.Abstractions/Sources` (contract, upload layout, conversion reference, verdict); `src/Puck.Shaders/Assets/Shaders/Sources` (conversion kernels); `WorldImageProducerVocabulary`/`WorldImageProducerSettings` (`src/Puck.World.Schema`); `WorldImageProducers`, `WorldCaptureGate` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.Producers.cs` | [the World guide's image producers](../../../src/Puck.World/README.md#image-producers), [rendering plan P12](../../../docs/plans/rendering.md#p12--image-sources) |
-| Generic shader VM | `src/Puck.ShaderVm`, `Assets/Shaders/ShaderVm/shader-vm.hlsli` | [`Puck.ShaderVm` README](../../../src/Puck.ShaderVm/README.md) |
 | Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds), [Vulkan](../../../docs/rendering/vulkan.md), [Direct3D 12](../../../docs/rendering/directx.md) |
 
 Before adding a mechanism, find the existing one (`CLAUDE.md` rule 8): ask the
@@ -248,8 +247,8 @@ These are one-line cautions; the owning pages hold the derivations.
   [references/kernels.md](references/kernels.md#buffer-hazards).
 - **Pipelines are never created on the frame thread.** `SdfWorldEngine`'s
   constructor takes a built `SdfWorldPipelines` and creates none. Nodes and
-  views lease that set from `SdfViewGpuServices.Pipelines`, the composition's
-  one `SdfWorldPipelineCache`: one set per device, `SdfWorldKernels.ContentKey`
+  views lease that set from the `SdfWorldPipelineCache` the composition hands
+  each of them, its one cache: one set per device, `SdfWorldKernels.ContentKey`
   and brick-pipeline choice, built on the thread pool
   (`Puck.Hosting.BackgroundBuild`) by the first lease and shared by the rest.
   A holder (`SdfWorldPipelineSource`) takes its lease off the frame thread,
@@ -305,8 +304,11 @@ These are one-line cautions; the owning pages hold the derivations.
   value is `GpuDepthAttachment.ClearDepth` on the render pass, never a recorder
   argument.
   The recorder, `IGpuBindings`, every `IGpu*Factory` and the queue submitter are
-  bound to their backend's device context when they are registered and take no
-  device argument; a new service follows them. `IGpuBufferFactory` creates by
+  `IGpuDeviceContext.Services` (`GpuDeviceServices`), which the backend creates
+  with its context, bound to it and taking no device argument; a consumer takes
+  the device context and reads them there, never a bundle of its own or a DI
+  registration of one service, and a new device-bound service joins that set.
+  The optional `IGpuSurfaceExportFactory` is registered on its own. `IGpuBufferFactory` creates by
   `GpuBufferUsage` and placement (`CreateHostVisible`, `CreateDeviceLocal`), and a
   geometry buffer is a host-visible one created with its data.
   A candidate (never the device-loss rebuild) is refused in `EnsureBuild` with
@@ -377,7 +379,13 @@ These are one-line cautions; the owning pages hold the derivations.
   device factory reads it (with the pipeline-cache UUID) and hangs it on
   `VulkanLogicalDevice.Identity`. Its one use beyond display is naming the
   device's pipeline-cache file; no selection, fallback or workaround may read a
-  vendor or driver from it.
+  vendor or driver from it. `IGpuDeviceContext.Capabilities`
+  (`GpuDeviceCapabilities`) is filled beside it and is recorded the same way:
+  Vulkan's `maxBoundDescriptorSets`, `maxPushConstantsSize` and per-stage
+  limits from the physical device's limits, Direct3D 12's binding tier, root
+  signature version, shader model and options 19 heap sizes, with the per-stage
+  limits `GpuDeviceCapabilities.FromDirectX` derives from the tier.
+  `world.counters gpu` prints it as a `capabilities` line and JSON object.
 - **The memory profile is what residency and the pipeline budget branch on.** Each backend fills
   `IGpuDeviceContext.MemoryProfile` (`GpuMemoryProfile`) beside the identity —
   Vulkan through `GpuMemoryProfile.FromVulkan` over the device type and
@@ -396,11 +404,12 @@ These are one-line cautions; the owning pages hold the derivations.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
-- **GPU work is counted through wrapped services.** `SdfWorldEngine` wraps the
-  services it is handed with `GpuWorkCounting` over its `GpuWorkLedger` (the
+- **GPU work is counted through wrapped services.** `SdfWorldEngine` wraps its
+  device context's services with `GpuWorkCounting` over its `GpuWorkLedger` (the
   owner's, through `SdfWorldEngineOptions.WorkLedger`, so submission identity
-  survives a rebuild); hand it unwrapped services, since wrapping twice is
-  refused. A new pass needs its `EnterPass`/`LeavePass` where it submits, and
+  survives a rebuild). A counting set is never a device's own
+  `IGpuDeviceContext.Services`, and wrapping a counting member again is refused.
+  A new pass needs its `EnterPass`/`LeavePass` where it submits, and
   a new cadence-skipped pass its `SkipPass`. `SdfWorldEngineWorkLawTests`
   pins every pass's exact counts over `tests/Shared/FakeGpuDevice.cs`, so a
   recording change re-records those constants in the same change.
@@ -418,14 +427,15 @@ These are one-line cautions; the owning pages hold the derivations.
   runs in `RunStepAsync`, the one place `StepsOf`'s steps run; a new tool
   needs its kind in `RunsOf`. The static loaders count into process sets:
   `SdfWorldKernels.LoadWork`, `FullscreenPassNode.LoadWork`,
-  `ShaderSetManifest.LoadWork` (loads and bytecode bytes), and
-  `VulkanProcResolver.Work` (`procedures.vulkan`, every device- and
-  instance-level resolution). Each loader has an overload or constructor
-  parameter taking a fresh set, which is what a law counts into, since sibling
-  tests load shaders in parallel. `AddWorldShaderWork` registers the shader
+  `ShaderSetManifest.LoadWork` (loads and bytecode bytes). Each loader has an
+  overload or constructor parameter taking a fresh set, which is what a law
+  counts into, since sibling tests load shaders in parallel. `VulkanProcResolver`
+  is an instance the command tables take through their constructors; its `Work`
+  (`procedures.vulkan`) counts every device- and instance-level resolution made
+  through it. `AddWorldShaderWork` registers the shader
   sources and the `SdfWorldPipelineCache` singleton with its
   `gpu.sdf-pipelines` ledger in both presentation shapes, and `AddVulkanFactories` registers
-  `procedures.vulkan` once.
+  the host's one resolver and its `procedures.vulkan` once.
 
 ## Performance work
 
@@ -476,13 +486,21 @@ the largest `owned=`/`peak=` within the cell's `peakOwnedPipelineBytes`), the
 refused inspection after an unload, and, for the backends listed under
 `debugLayers`, no `[vulkan-debug] validation` or `[d3d12-debug]` line.
 Compiler discovery `None` strips every `dxc` directory from a matrix leg's
-`PATH`. Lengths are ticks and frames; the profile sets no time threshold, and
-peak device-local bytes are deferred because nothing reads them. With the
+`PATH`. Lengths are ticks and frames; the profile sets no time threshold. A
+cell's `peakDeviceLocalBytes` judges the largest `gpu.memory.device-local.peak`
+of `memory.<backend>` (`GpuDeviceMemoryWork`, counted where each backend
+allocates buffers, images and exported or imported memory, by role through
+`GpuDeviceMemoryWork.IsCounted` and never by memory type, never swapchain
+images); every cell leaves it null until a reference-device reading sets it. With the
 Direct3D 12 debug layer on, `DirectXDeviceContext.Dispose` releases its own
 objects, then asks `ID3D12DebugDevice::ReportLiveDeviceObjects` for the rest and
 prints each (the device's own entry left out) as a `[d3d12-debug] live` line, so
 a leak fails a debug-layer run; `Recreate` never reports, because the nodes
-still hold their old objects while a removed device is replaced. A new counted object kind or inspection field that
+still hold their old objects while a removed device is replaced. Every device
+teardown ends its `GpuDeviceMemoryWork` entries (`EndDevice`): a Vulkan logical
+device's disposal and a Direct3D 12 context's `Dispose` and `Recreate` refuse by
+name any counted allocation still held on the device, and release the device
+regardless, so fix a late release's order, never the refusal. A new counted object kind or inspection field that
 qualification should judge joins `QualificationJudge`, and its laws are
 `ReleaseProfileLawTests` and `QualificationVerdictLawTests`. The owning
 explanation is [Qualifying a package](../../../docs/development/qualification.md).
@@ -498,7 +516,7 @@ field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, and its
 shader consumer in the same change. What a document field means belongs to
 `puck-world`.
 
-## Shader manifests, pipelines, and ShaderVm
+## Shader manifests and pipelines
 
 `docs/reference/shaders.md` owns the `puck.shader.manifest.v1` and
 `puck.shader.pipeline.v1` contracts and pipeline live development; the
@@ -522,7 +540,15 @@ planner refuses them on a shader pass, because the node records extent
 dispatches over raw fixed buffers. `SdfPassPlanLawTests` plans the SDF engine's
 passes from `SdfFrameBufferPlan`'s uses and holds the order to `PassLabels` and
 the between-pass buffer barriers to its edges, so a change to either side moves
-the law.
+the law. It also counts each SDF buffer over the bases it grows with (a sum of
+terms, each a product of bases) and holds the planner's size to
+`SdfWorldEngine.FrameBufferBytes`, the one statement of every device-local
+frame buffer's size that construction and program growth allocate by; a new
+buffer or a resized one changes that function and the law's counts together.
+`SdfCapabilityMatrixLawTests` assigns every public member of the engine's
+surface to one capability row with its graph equivalent and check, so a new
+public member needs a row, and nothing a row claims is deleted before the row
+is green.
 The grouped binding contract is the pass interface in `src/Puck.Shaders/Interface`
 ([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)); every
 pipeline pass and shader set reads its frame block through one, and no shipped
@@ -536,6 +562,18 @@ and `ShaderInterfaceSpikeTests` hold both bytecode readers to it; never add a
 register remap. `ShaderRegisterBindingLawTests` holds every shader the build
 compiles to the register rule, with a shrink-only list of the declarations that
 break it today ([kernels](references/kernels.md#registers-and-bindings)).
+A binding's kind is `GpuBindingKind`, the one closed set for graphics and
+compute; push constants are not a kind, and a pushed block is a constant
+buffer marked `ShaderInterfaceBinding.Pushed`. A pipeline's groups are one
+`GpuPipelineLayoutDescription` (`src/Puck.Abstractions/Gpu/Bindings`,
+`ShaderInterfaceLayout.PipelineLayout`), and each backend's layout is planned
+from it with no device call: `DirectXRootLayout.Plan` (a view table per group,
+a second table for a group's samplers, the pushed index last at `b0` in space
+4) and `VulkanGroupLayouts.Plan`. `DirectXRootLayoutLawTests` and
+`VulkanGroupLayoutsLawTests` hold both to the spike's tables in
+`tests/Shared/GpuGroupLayoutTables.cs`. No pipeline is created from a plan
+yet; `GpuComputeBindingKind` and `ShaderSetManifestBindingKind` still carry the
+combined image sampler until the backends bind sampler tables.
 
 The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
 [frame graphs](../../../docs/reference/shaders.md#frame-graphs)): the pipeline
@@ -641,9 +679,6 @@ a camera device only creates them, and the colorimetry is constant-buffer data.
 The Direct3D 12 surface compositor's blit is build DXIL
 (`surface-blit.*.hlsl`, `PuckShaderSpirvEnabled` false). No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
-`Puck.ShaderVm` is not wired into any kernel or
-host, and no check compares its host and GPU interpreters — never describe it
-as the render path or claim the two agree.
 
 ## Verifying
 

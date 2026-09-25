@@ -33,7 +33,8 @@ public sealed class VulkanRenderer(
     IVulkanFrameSynchronizationFactory frameSynchronizationFactory,
     IVulkanFramePresenter framePresenter,
     IVulkanCommandBufferRecorder commandBufferRecorder,
-    IVulkanPhysicalDeviceApi physicalDeviceApi
+    IVulkanPhysicalDeviceApi physicalDeviceApi,
+    Func<IVulkanDeviceContext, GpuDeviceServices> createServices
 ) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext, IGpuPipelineCache {
     /// <summary>The presentation frame-ring depth: how many presented frames may be in flight before
     /// <see cref="WaitForFrameSlot"/> blocks. Each slot owns a full <see cref="VulkanFrameSynchronization"/>
@@ -45,6 +46,7 @@ public sealed class VulkanRenderer(
 
     private long? m_adapterLuid;
     private VulkanLogicalDevice? m_device;
+    private GpuDeviceServices? m_services;
     private int m_frameSlot;
     private VulkanFramebufferSet? m_framebufferSet;
     private uint m_height;
@@ -78,9 +80,9 @@ public sealed class VulkanRenderer(
         ))
         : 0L
     );
-    nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Commands.Token;
     // Read from the physical device when the logical device is created; null without a device.
     GpuDeviceIdentity? IGpuDeviceContext.Identity => m_device?.Identity;
+    GpuDeviceCapabilities? IGpuDeviceContext.Capabilities => m_device?.Capabilities;
     // Read with the identity; the default profile, which reports nothing, without a device.
     GpuMemoryProfile IGpuDeviceContext.MemoryProfile => (m_device?.MemoryProfile ?? default);
 
@@ -92,6 +94,10 @@ public sealed class VulkanRenderer(
     public VulkanLogicalDevice LogicalDevice => Device;
     /// <summary>The selected physical device; valid after <see cref="Initialize"/>.</summary>
     public VkPhysicalDevice PhysicalDevice => m_physicalDevice;
+    /// <summary>Gets the neutral services bound to this renderer as its device context, created on the first read.
+    /// Reading it never brings the device up, and a device recreated after a loss is reached through the same
+    /// services.</summary>
+    public GpuDeviceServices Services => (Volatile.Read(location: ref m_services) ?? CreateServices());
     /// <summary>The current render pass; valid after the first <see cref="BeginFrame"/> and replaced on
     /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
     public VulkanRenderPass RenderPass => (m_renderPass ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
@@ -107,6 +113,18 @@ public sealed class VulkanRenderer(
     public VulkanSwapchain Swapchain => (m_swapchain ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
 
     void IGpuDeviceContext.WaitIdle() => WaitForGpuIdle();
+
+    // The first reader's set is kept; another created by a racing first read binds nothing native and is dropped.
+    private GpuDeviceServices CreateServices() {
+        var created = createServices(this);
+
+        return (Interlocked.CompareExchange(
+            comparand: null,
+            location1: ref m_services,
+            value: created
+        ) ?? created);
+    }
+
     // The current device's cache; a device recreated after a loss brings its own, loaded from the same file.
     void IGpuPipelineCache.Persist() => m_device?.PipelineCache?.Persist();
 

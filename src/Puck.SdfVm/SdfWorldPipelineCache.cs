@@ -52,7 +52,6 @@ public sealed class SdfWorldPipelineCache {
         entry.Build.Start(build: token => SdfWorldPipelines.Build(
             cancellationToken: token,
             device: entry.Device,
-            gpu: entry.Gpu,
             includeBrickPipelines: entry.IncludesBrickPipelines,
             kernels: entry.Kernels,
             ledger: m_work
@@ -61,16 +60,13 @@ public sealed class SdfWorldPipelineCache {
     /// <summary>Takes a lease on the set for <paramref name="kernels"/> on <paramref name="device"/>, joining the set
     /// another holder already leases or starting its build on the thread pool. Safe on any thread; it hashes the kernel
     /// set, so a holder on the frame thread calls it from its own background work.</summary>
-    /// <param name="gpu">The neutral services the set is created through, unwrapped.</param>
-    /// <param name="device">The device the set is created on.</param>
+    /// <param name="device">The device the set is created on, through its services.</param>
     /// <param name="kernels">The compiled kernel set for the device's backend.</param>
     /// <param name="includeBrickPipelines">Whether the set includes the brick bake and upload pipelines, for an engine
     /// with a brick pool. A set with them and one without are different sets.</param>
     /// <returns>The lease, which the caller releases once no engine records with its set.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="gpu"/> or <paramref name="device"/> is
-    /// <see langword="null"/>.</exception>
-    public SdfWorldPipelineLease Acquire(IGpuComputeServices gpu, IGpuDeviceContext device, SdfWorldKernels kernels, bool includeBrickPipelines) {
-        ArgumentNullException.ThrowIfNull(gpu);
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
+    public SdfWorldPipelineLease Acquire(IGpuDeviceContext device, SdfWorldKernels kernels, bool includeBrickPipelines) {
         ArgumentNullException.ThrowIfNull(device);
 
         var key = kernels.ContentKey();
@@ -100,7 +96,6 @@ public sealed class SdfWorldPipelineCache {
 
             var created = new SdfWorldPipelineLease.Entry(
                 device: device,
-                gpu: gpu,
                 includesBrickPipelines: includeBrickPipelines,
                 kernels: kernels,
                 key: key
@@ -249,10 +244,9 @@ public sealed class SdfWorldPipelineLease {
         ((m_cache is { } cache) && cache.TryMakePrivate(entry: m_entry));
 
     // One set and its holders. Every field but the immutable key is read and written under the cache's gate.
-    internal sealed class Entry(IGpuDeviceContext device, IGpuComputeServices gpu, SdfWorldKernels kernels, string key, bool includesBrickPipelines) {
+    internal sealed class Entry(IGpuDeviceContext device, SdfWorldKernels kernels, string key, bool includesBrickPipelines) {
         public BackgroundBuild<SdfWorldPipelines> Build { get; } = new();
         public IGpuDeviceContext Device { get; } = device;
-        public IGpuComputeServices Gpu { get; } = gpu;
         public int Holders { get; set; } = 1;
         public bool IncludesBrickPipelines { get; } = includesBrickPipelines;
         public string Key { get; } = key;

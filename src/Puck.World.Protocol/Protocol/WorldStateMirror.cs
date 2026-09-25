@@ -196,7 +196,9 @@ public sealed class WorldStateMirror : IWorkCounterSource {
 
         return slot;
     }
-    /// <summary>Resolves every slot to its row ordinal in the newly installed document and reads every slot.</summary>
+    /// <summary>Resolves every slot to its row ordinal in the newly installed document, registers every binding the
+    /// document's presentation manifest (<see cref="IWorldStateView.Manifest"/>) records, and reads every slot.
+    /// Installing a document whose manifest the mirror already holds registers nothing new and allocates nothing.</summary>
     /// <param name="tick">The tick the installed document's values hold as of.</param>
     /// <param name="engineTick">The engine tick the installed document's values hold as of.</param>
     public void Install(ulong tick, ulong engineTick) {
@@ -216,6 +218,22 @@ public sealed class WorldStateMirror : IWorkCounterSource {
 
             m_slots[slot].Ordinal = -1;
             Link(slot: slot);
+        }
+
+        // A manifest slot is linked here and read once by the refresh below, like every slot already held.
+        foreach (ref readonly var entry in m_view.Manifest.Bindings) {
+            if (!m_slotByBinding.TryGetValue(
+                key: (entry.Binding, entry.Conversion),
+                value: out var slot
+            )) {
+                slot = Allocate(
+                    binding: entry.Binding,
+                    conversion: entry.Conversion,
+                    read: false
+                );
+            }
+
+            m_slots[slot].Registered = true;
         }
 
         RefreshSlots(everything: true, moved: default);
@@ -388,7 +406,7 @@ public sealed class WorldStateMirror : IWorkCounterSource {
             }
         }
     }
-    private int Allocate(in StateBinding binding, WorldStateConversion conversion) {
+    private int Allocate(in StateBinding binding, WorldStateConversion conversion, bool read = true) {
         int slot;
 
         if (m_freeCount > 0) {
@@ -436,6 +454,11 @@ public sealed class WorldStateMirror : IWorkCounterSource {
         };
         m_slotByBinding[(binding, conversion)] = slot;
         Link(slot: slot);
+
+        if (!read) {
+            return slot;
+        }
+
         Read(slot: slot);
 
         if (m_slots[slot].Sample.Motion != WorldStateMotion.Still) {
@@ -590,6 +613,7 @@ public sealed class WorldStateMirror : IWorkCounterSource {
     }
     private void Read(int slot) {
         ref var entry = ref m_slots[slot];
+        var hadNumber = entry.HasNumber;
         var previousMotion = entry.Sample.Motion;
         var previousValue = entry.Sample.Value;
 
@@ -616,12 +640,20 @@ public sealed class WorldStateMirror : IWorkCounterSource {
             value: sample.Value
         );
         entry.Current = number;
+
+        // A slot never read, or whose last read held no number, has nothing to interpolate from: it presents its
+        // first number whole rather than easing in from zero.
+        if (!hadNumber) {
+            entry.Previous = entry.Current;
+        }
+
         entry.Interpolates = (
             (sample.Motion is WorldStateMotion.Easing or WorldStateMotion.Advancing) ||
             (previousMotion is WorldStateMotion.Easing or WorldStateMotion.Advancing)
         );
         entry.HasColor = (
             (entry.Conversion == WorldStateConversion.Color) &&
+            sample.Value.HasValue &&
             (sample.Value.Kind == CellKind.Text) &&
             HexColor.TryParseRgba(
             rgba: out entry.Color,

@@ -123,7 +123,7 @@ public sealed class GpuWorkReportLawTests {
             framesInFlight: 1,
             name: "gpu.test"
         );
-            var services = GpuWorkCounting.Wrap(ledger: ledger, services: ((IGpuComputeServices)gpu));
+            var services = GpuWorkCounting.Wrap(ledger: ledger, services: gpu.Services);
 
             ledger.Configure(passLabels: ["alpha", "beta", "gamma"], revision: 7L);
             services.ShaderModuleFactory.Create(bytecode: ReadOnlyMemory<byte>.Empty, stage: GpuShaderStage.Compute).Dispose();

@@ -16,21 +16,14 @@ namespace Puck.SdfVm;
 /// <c>sdf-world-ambient.comp</c> (AO) → <c>sdf-world-views.comp</c> (shading and diagnostics),
 /// all four dispatched indirectly from those args →
 /// <c>sdf-world-composite.comp</c> (source-agnostic region composite, also dispatched indirectly). Fully
-/// backend-neutral through the <see cref="IGpuComputeServices"/> seam.
+/// backend-neutral through its device's <see cref="IGpuDeviceContext.Services"/>.
 /// <para>
-/// Three submission models, and they must never blur — nor run against one engine instance at overlapping times, since
-/// all three re-record the shared per-slot command buffers: <see cref="RenderFrame"/> is the deterministic harness path —
-/// one submit-and-wait plus a readback (validation, headless render). <see cref="SubmitFrame"/> is the live node path —
+/// Two submission models, and they must never blur: <see cref="RenderFrame"/> is the deterministic harness path — one
+/// submit-and-wait plus a readback (validation, headless render). <see cref="SubmitFrame"/> is the live node path —
 /// fire-and-forget behind the engine's own <see cref="FrameRingSize"/>-deep frame ring (each slot's fence orders that
 /// slot's rewrites against its previous submission, so a pipelining host needs no per-frame device drain), plus the
-/// export-mode queue drain when the output crosses a backend seam.
-/// <see cref="SubmitFramePipelined"/> is the demo-preview path — a non-blocking fenced readback (submit fire-and-forget,
-/// poll <see cref="IsFramePixelsReady"/> on a later produced frame, then <see cref="AcquireFramePixels"/> maps it), so
-/// the live in-editor bake preview never idles the shared present queue mid-sculpt. It stays frame-count driven
-/// (determinism is a feature even here), and a single-in-flight guard forbids interleaving it with the other two on one
-/// engine — <see cref="RenderFrame"/>, <see cref="SubmitFrame"/>, and <see cref="SubmitFramePipelined"/> each throw while
-/// a pipelined frame is outstanding. Adding a wait to <see cref="SubmitFrame"/> is a frame-rate regression; removing the
-/// wait from <see cref="RenderFrame"/> is a nondeterminism bug.
+/// export-mode queue drain when the output crosses a backend seam. Adding a wait to <see cref="SubmitFrame"/> is a
+/// frame-rate regression; removing the wait from <see cref="RenderFrame"/> is a nondeterminism bug.
 /// </para>
 /// </summary>
 public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
@@ -52,6 +45,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const uint CompositeSourceBindingIndex = 1; // sdf-world-composite.comp: sources[] at binding 1
     private const uint CullArgsBindingIndex = 5; // sdf-cull-args.comp: views indirect dispatch args (register u0)
     private const uint CullBoundsBindingIndex = 6; // sdf-cull-args.comp: bbox group origin and exclusive end (register u1); read by sdf-world-views.comp at binding 8
+    private const ulong CullBoundsByteLength = (sizeof(uint) * 4); // the dispatch box sdf-cull-args.comp writes: the group origin, then the exclusive end
     private const int DecalBufferCells = (DecalDescriptorCount + (MaxScreenSurfaces * MaxScreenDecalCells));
     // The decal buffer's leading DESCRIPTOR band (one uint4 per screen slot) precedes the shared cell region; a screen's
     // cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells (KEEP IN SYNC with sdfSampleGlyphDecal).
@@ -91,7 +85,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // Primary and AO cache bands, each holding two float3 corners per (viewport, live instance), after the tile planes.
     // KEEP IN SYNC with SdfPartBoundFloatCount and sdfPartBoundIndex in sdf-part-bounds.hlsli.
     private const uint PartBoundFloatCount = 12;
-    private const uint TileSize = 16; // KEEP IN SYNC with WorldTileSize in sdf-world.hlsli
 
     /// <summary>The primary (camera) march's per-pixel step budget. KEEP IN SYNC with <c>MaxSteps</c> in
     /// sdf-world.hlsli. Exposed so a host's cost sheet can quote an authored <see cref="SdfFrame.FarDistance"/>
@@ -102,11 +95,15 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// the SDF march (<see cref="Puck.Abstractions.Cameras.ViewProjection.Create"/>'s <c>near</c>). KEEP IN SYNC with
     /// <c>ConeNear</c> in sdf-world.hlsli.</summary>
     public const float ConeNear = 0.02f;
+    /// <summary>The edge of one screen tile in pixels, the unit the beam, the instance masks and the cull buffer
+    /// count in. KEEP IN SYNC with <c>WorldTileSize</c> in sdf-world.hlsli.</summary>
+    public const uint TileSize = 16;
 
     private const uint ViewSourceBindingIndex = 4; // sdf-world-views.comp and sdf-sky.comp: sources[] at u0..u4
     private const uint ViewportBindingIndex = 2; // matches sdf-world.hlsli's [[vk::binding(2, 0)]]
     private const int ViewportByteLength = ((sizeof(float) * 4) * 6); // 96-byte ViewportData incl. the renderScale row (KEEP IN SYNC with sdf-world.hlsli)
-    private const uint ViewsCullBoundsBindingIndex = 8; // sdf-world-views.comp: the bbox origin (register t3); the source array is ONE binding number (4) whose 5 elements pack into derived heap slots, so 8 never collides
+    private const ulong ViewsArgsByteLength = (sizeof(uint) * 3); // the three indirect group counts sdf-cull-args.comp writes
+    private const uint ViewsCullBoundsBindingIndex = 8; // sdf-world-views.comp: the dispatch box, its group origin and exclusive end (register t3); the source array is ONE binding number (4) whose 5 elements pack into derived heap slots, so 8 never collides
     // Bounded flow/cloud volumes (sdfVolumes), shared by the views and sky passes: appended LAST in the views binding
     // list, so its SRV resolves to register t43 (after sdfFrameInstanceGrid t42). KEEP IN SYNC with sdf-world.hlsli.
     private const uint VolumeBindingIndex = 48;
@@ -202,12 +199,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuBuffer m_cullBoundsBuffer;
     private readonly IGpuBindings m_bindings;
     private readonly IGpuDeviceContext m_deviceContext;
-    private readonly nint m_deviceHandle;
     private readonly int m_dynamicTransformCapacity;
     private readonly byte[] m_dynamicTransformScratch;
     private readonly bool m_exportMode;
     private readonly IGpuExportableImage? m_exportableImage;
-    private readonly IGpuComputeServices m_gpu;
+    private readonly GpuDeviceServices m_gpu;
     private readonly uint m_height;
 
     private int m_instanceCapacity;
@@ -259,9 +255,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly ulong m_visibilityRecordBytes;
     private readonly uint m_width;
 
-    private SdfCadenceDiagnostics m_cadenceDiagnostics;
-    private ulong m_cadenceRenderedFrameCount;
-    private ulong m_cadenceSkippedFrameCount;
     private int m_currentSlot;
     private ulong m_decalRevision;
     private bool m_disposed;
@@ -273,16 +266,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // saturated band, so a glyph-free program with no atlas is safe.
     private IGpuSurfaceUpload? m_glyphAtlasUpload;
     private nint m_glyphAtlasView;
-    private bool m_hasPreviousCadenceSpanHashes;
     private bool m_hasPreviousFrameSignature;
     private bool m_imageInitialized;
     private int m_liveInstanceMaskWordCount;
-    private bool m_pipelinedFrameInFlight;
-    // Diagnostics only: the previous decided frame's independent per-span hashes (each starting fresh from the FNV
-    // basis — unlike m_previousFrameSignature's chained fold, so one span's hash never smears into another's), the
-    // cumulative skip/render counts since the gate last armed, and the latest published SdfCadenceDiagnostics. None
-    // of this feeds DecideCadenceSkip's skip decision.
-    private CadenceSpanHashes m_previousCadenceSpanHashes;
     // The previous RENDERED frame's change signature (a 64-bit hash of every packed span + revision the skipped passes
     // consume — see ComputeFrameSignature) and whether one exists yet. Reset whenever the gate is off, so re-enabling it
     // always renders the first frame before it can skip.
@@ -408,8 +394,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// descriptor set at the provisioned viewport capacity against pipelines already built, verifies the kernels' ISA
     /// version once per device and kernel set, and uploads the scene program once. Creates no pipeline, so it never
     /// waits on the driver's pipeline compiler.</summary>
-    /// <param name="gpu">The neutral GPU compute services.</param>
-    /// <param name="device">The GPU device the engine renders on.</param>
+    /// <param name="device">The GPU device the engine renders on; the engine records through its services, unwrapped.</param>
     /// <param name="pipelines">The pipelines to render with, built on <paramref name="device"/>
     /// (<see cref="SdfWorldPipelines.Build"/>). The caller keeps ownership and disposes them after the engine; one set
     /// may outlive several engines built from it, but serves one live engine at a time, since a kernel reload swaps
@@ -423,8 +408,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <exception cref="ObjectDisposedException"><paramref name="pipelines"/> has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The loaded shader bytecode does not report the host's
     /// <see cref="Puck.SignedDistance.SdfIsa.Version"/>.</exception>
-    public SdfWorldEngine(IGpuComputeServices gpu, IGpuDeviceContext device, SdfWorldPipelines pipelines, uint width, uint height, SdfWorldEngineOptions options) {
-        ArgumentNullException.ThrowIfNull(gpu);
+    public SdfWorldEngine(IGpuDeviceContext device, SdfWorldPipelines pipelines, uint width, uint height, SdfWorldEngineOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pipelines);
         ObjectDisposedException.ThrowIf(
@@ -456,13 +440,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             framesInFlight: FrameRingSize,
             name: "gpu.sdf-engine"
         ));
-        gpu = GpuWorkCounting.Wrap(
+        var gpu = GpuWorkCounting.Wrap(
             ledger: m_work,
-            services: gpu
+            services: device.Services
         );
+
         m_bindings = gpu.Bindings;
         m_deviceContext = device;
-        m_deviceHandle = device.DeviceHandle;
         m_dynamicTransformCapacity = Math.Max(
             val1: Math.Max(
                 val1: 1,
@@ -481,11 +465,19 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_instanceGridWorkspace = new SdfInstanceGrid.Workspace(maxInstances: m_instanceCapacity);
         m_instanceGridWordCapacity = SdfInstanceGrid.WordCapacity(maxInstances: m_instanceCapacity);
         m_instanceGridMirror = new uint[m_instanceGridWordCapacity];
-        m_tileGridX = ((width + (TileSize - 1)) / TileSize);
-        m_tileGridY = ((height + (TileSize - 1)) / TileSize);
         m_viewportCapacity = options.ViewportCapacity;
         m_viewportScratch = new byte[(((int)m_viewportCapacity) * ViewportByteLength)];
         m_width = width;
+        m_brickPoolVoxelCapacity = Math.Max(
+            val1: 0,
+            val2: options.BrickPoolVoxelCapacity
+        );
+        m_brickPoolEnabled = (m_brickPoolVoxelCapacity > 0);
+
+        var capacity = FrameCapacity;
+
+        m_tileGridX = capacity.TileGridX;
+        m_tileGridY = capacity.TileGridY;
 
         m_pipelines = pipelines;
         m_beamPipeline = pipelines.Pipeline(index: BeamPipelineIndex);
@@ -601,14 +593,19 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // those bounds from this frame's poses and camera; primary reads them after the existing compute barrier.
         // Reserve the construction envelope, but index with live viewport/instance counts, as the masks do.
         m_tileBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: checked(((((ulong)m_viewportCapacity) *
-                (((((ulong)TilePlaneCount) * m_tileGridX) * m_tileGridY) + (((ulong)PartBoundFloatCount) * ((uint)m_instanceCapacity)))) * sizeof(float))),
+            sizeBytes: FrameBufferBytes(
+                buffer: SdfFrameBuffer.Tiles,
+                capacity: capacity
+            ),
             usage: GpuBufferUsage.Storage
         );
         // One full-extent slice per viewport, like the source textures: changing regions must never overrun a
         // buffer sized for a previous layout. Shared across frame slots; Record orders primary writes before
         // shading reads and this frame's writes after the preceding frame's reads.
-        m_visibilityRecordBytes = checked((((((ulong)width) * height) * m_viewportCapacity) * PrimaryHitByteLength));
+        m_visibilityRecordBytes = FrameBufferBytes(
+            buffer: SdfFrameBuffer.PrimaryHits,
+            capacity: capacity
+        );
         m_primaryHitBuffer = gpu.BufferFactory.CreateDeviceLocal(
             sizeBytes: m_visibilityRecordBytes,
             usage: GpuBufferUsage.Storage
@@ -618,14 +615,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // buffer is sized for the CONSTRUCTION program's width (ceil(instanceCount/32) uints, at least 1 —
         // SdfProgram.InstanceMaskWordCount); the kernels index with the LIVE uploaded program's width, pushed per
         // frame (m_liveInstanceMaskWordCount). UploadProgram grows this reserve when necessary.
-        m_instanceMaskWordCount = Math.Max(
-            val1: options.Program.InstanceMaskWordCount,
-            val2: SdfProgram.InstanceMaskWordCountFor(instanceCount: options.InstanceCapacity)
-        );
-        var instanceMaskStorageWordCount = (m_instanceMaskWordCount + ((m_instanceMaskWordCount + 31) / 32));
-
+        m_instanceMaskWordCount = SdfProgram.InstanceMaskWordCountFor(instanceCount: m_instanceCapacity);
         m_instanceMaskBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: ((((((ulong)m_viewportCapacity) * m_tileGridX) * m_tileGridY) * ((uint)instanceMaskStorageWordCount)) * sizeof(uint)),
+            sizeBytes: FrameBufferBytes(
+                buffer: SdfFrameBuffer.InstanceMasks,
+                capacity: capacity
+            ),
             usage: GpuBufferUsage.Storage
         );
 
@@ -647,15 +642,24 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             table: "instance-grid"
         );
         m_viewportDeviceBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: ((ulong)m_viewportScratch.Length),
+            sizeBytes: FrameBufferBytes(
+                buffer: SdfFrameBuffer.Viewports,
+                capacity: capacity
+            ),
             usage: GpuBufferUsage.Storage
         );
         m_dynamicTransformDeviceBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: ((ulong)m_dynamicTransformScratch.Length),
+            sizeBytes: FrameBufferBytes(
+                buffer: SdfFrameBuffer.DynamicTransforms,
+                capacity: capacity
+            ),
             usage: GpuBufferUsage.Storage
         );
         m_instanceGridDeviceBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: (((ulong)m_instanceGridWordCapacity) * sizeof(uint)),
+            sizeBytes: FrameBufferBytes(
+                buffer: SdfFrameBuffer.InstanceGrid,
+                capacity: capacity
+            ),
             usage: GpuBufferUsage.Storage
         );
 
@@ -665,15 +669,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // the always-present sdfBrickPool binding valid — the kernels compile the binding unconditionally, and
         // sdfSampledRegion detects the filler by its element count and renders SampledRegion programs via the
         // conservative uncarved-hull fallback (only RequestBrickBake stays rejected on a pool-less engine).
-        m_brickPoolVoxelCapacity = Math.Max(
-            val1: 0,
-            val2: options.BrickPoolVoxelCapacity
-        );
-        m_brickPoolEnabled = (m_brickPoolVoxelCapacity > 0);
         m_brickPoolBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: (((ulong)(m_brickPoolEnabled
-            ? m_brickPoolVoxelCapacity
-            : 1)) * sizeof(float)),
+            sizeBytes: FrameBufferBytes(
+                buffer: SdfFrameBuffer.BrickPool,
+                capacity: capacity
+            ),
             usage: GpuBufferUsage.Storage
         );
         // The carve-bake baker and uploader run only when the pool is enabled (nothing bakes into a filler).
@@ -687,15 +687,22 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         );
 
         // GPU-driven cull: the cull-args pass reduces the cull buffer to the Stage-1 INDIRECT dispatch args (the
-        // surviving-tile bbox, 3 group counts) and the bbox group origin (2 uints). Both are device-local — the GPU
-        // writes them as UAVs, then a barrier orders the indirect read; the views dispatch reads the args (the
-        // dispatch grid) and the bounds (its pixel offset). The all-empty margins are never dispatched.
+        // surviving-tile bbox, 3 group counts) and the dispatch box (4 uints: the group origin, then the exclusive
+        // end). Both are device-local — the GPU writes them as UAVs, then a barrier orders the indirect read; the
+        // views dispatch reads the args (the dispatch grid) and the box (its pixel offset, and where a visibility
+        // record is current). The all-empty margins are never dispatched.
         m_viewsArgsBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: (sizeof(uint) * 3),
+            sizeBytes: FrameBufferBytes(
+                buffer: SdfFrameBuffer.ViewsArgs,
+                capacity: capacity
+            ),
             usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
         );
         m_cullBoundsBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: (sizeof(uint) * 4),
+            sizeBytes: FrameBufferBytes(
+                buffer: SdfFrameBuffer.CullBounds,
+                capacity: capacity
+            ),
             usage: GpuBufferUsage.Storage
         );
 
@@ -1091,33 +1098,33 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // The program words: a read-only StructuredBuffer<uint4>.
     private void WriteStorageBuffer(nint set, uint binding, IGpuBuffer buffer) =>
         m_bindings.WriteBuffer(
-            access: GpuBufferAccess.Read,
             binding: binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            elementStride: (4 * sizeof(uint))
+            elementStride: (4 * sizeof(uint)),
+            kind: GpuBindingKind.ReadOnlyBuffer
         );
     // A read-only StructuredBuffer of 4-byte elements (the float cull buffer, the uint cull bounds). The program words'
     // 16-byte stride over the 8-byte bounds buffer is a zero-element view on Direct3D 12.
     private void WriteStorageBufferReadOnly(nint set, uint binding, IGpuBuffer buffer) =>
         m_bindings.WriteBuffer(
-            access: GpuBufferAccess.Read,
             binding: binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            elementStride: sizeof(uint)
+            elementStride: sizeof(uint),
+            kind: GpuBindingKind.ReadOnlyBuffer
         );
     // A RWStructuredBuffer of 4-byte elements.
     private void WriteStorageBufferReadWrite(nint set, uint binding, IGpuBuffer buffer) =>
         m_bindings.WriteBuffer(
-            access: GpuBufferAccess.ReadWrite,
             binding: binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            elementStride: sizeof(uint)
+            elementStride: sizeof(uint),
+            kind: GpuBindingKind.ReadWriteBuffer
         );
 
     /// <inheritdoc/>

@@ -959,11 +959,9 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <summary>Uploads the staged framebuffer to a shader-readable GPU image and (re)binds
     /// <see cref="NativeImageViewHandle"/>. A blocked upload leases an immutable complete frame without holding the frame
     /// lock, so the worker keeps publishing newer frames while it runs; concurrent publishes serialize.</summary>
-    /// <param name="deviceContext">The GPU device context to upload on.</param>
-    /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
-    public void PublishFrame(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    /// <param name="deviceContext">The GPU device context to upload on, through its services.</param>
+    public void PublishFrame(IGpuDeviceContext deviceContext) {
         ArgumentNullException.ThrowIfNull(argument: deviceContext);
-        ArgumentNullException.ThrowIfNull(argument: gpu);
 
         if (0 != Volatile.Read(location: ref m_disposed)) {
             return;
@@ -991,7 +989,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
 
             try {
-                m_upload ??= gpu.SurfaceTransferFactory.CreateUpload();
+                m_upload ??= deviceContext.Services.SurfaceTransferFactory.CreateUpload();
                 m_boundSourceView = m_upload.Upload(
                     deviceContext: deviceContext,
                     format: GpuPixelFormat.R8G8B8A8Unorm,

@@ -283,6 +283,9 @@ internal static class ReleaseProfileLoader {
             } else if (threshold.PeakOwnedPipelineBytes is not > 0L) {
                 return $"thresholds {cell}: peakOwnedPipelineBytes must be a positive byte count, since the workload churns a pipeline";
             }
+            if (threshold.PeakDeviceLocalBytes is <= 0L) {
+                return $"thresholds {cell}: peakDeviceLocalBytes must be a positive byte count or null";
+            }
         }
 
         foreach (var workload in profile.Workloads) {

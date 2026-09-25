@@ -126,6 +126,11 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
                 0,
                 out var memoryHandle
             ).ThrowIfFailed(operation: "vkAllocateMemory");
+            request.Device.CountAllocated(
+                allocationSize: allocateInfo.AllocationSize,
+                memoryHandle: memoryHandle,
+                role: GpuMemoryRole.DeviceLocal
+            );
 
             try {
                 request.Device.BindImageMemory(
@@ -268,6 +273,11 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
                 0,
                 out var memoryHandle
             ).ThrowIfFailed(operation: "vkAllocateMemory");
+            request.Device.CountAllocated(
+                allocationSize: allocateInfo.AllocationSize,
+                memoryHandle: memoryHandle,
+                role: GpuMemoryRole.DeviceLocal
+            );
 
             try {
                 request.Device.BindImageMemory(
@@ -377,6 +387,11 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
                 0,
                 out var memoryHandle
             ).ThrowIfFailed(operation: "vkAllocateMemory");
+            request.Device.CountAllocated(
+                allocationSize: allocateInfo.AllocationSize,
+                memoryHandle: memoryHandle,
+                role: GpuMemoryRole.DeviceLocal
+            );
 
             try {
                 request.Device.BindImageMemory(

@@ -194,25 +194,20 @@ public sealed partial class WorldAuthorityBlobStore {
         if (checkpoint!.Server.LastCompletedTick != protectedRoot.Root.CheckpointTick) {
             return WorldAuthorityStoreOutcome.Failed(detail: "protected checkpoint tick does not match its authority root");
         }
-        // Package definitions retain unfilled boot draws. Only the checkpoint's live documents require resolved values.
+        // Package definitions are published undrawn and only parsed here: the transition compares their metadata and
+        // rewrites the checkpoint's live documents, the only ones that hold drawn cells.
         if (
-            !WorldDefinitionFileSource.TryParseComposed(
-            Encoding.UTF8.GetString(bytes: sourceBytes.Span),
-            source.DefinitionFiles[key],
-            null,
-            false,
-            out var sourceDefinition,
-            out reason,
-            machines
+            !WorldDefinitionFileSource.TryParseDocument(
+            definition: out var sourceDefinition,
+            json: Encoding.UTF8.GetString(bytes: sourceBytes.Span),
+            reason: out reason,
+            sourceName: source.DefinitionFiles[key]
         ) ||
-            !WorldDefinitionFileSource.TryParseComposed(
-            Encoding.UTF8.GetString(bytes: targetBytes.Span),
-            target.DefinitionFiles[key],
-            null,
-            false,
-            out var targetDefinition,
-            out reason,
-            machines
+            !WorldDefinitionFileSource.TryParseDocument(
+            definition: out var targetDefinition,
+            json: Encoding.UTF8.GetString(bytes: targetBytes.Span),
+            reason: out reason,
+            sourceName: target.DefinitionFiles[key]
         ) ||
             !WorldReleaseMetadataTransition.TryApply(
             after: targetDefinition!,

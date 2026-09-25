@@ -30,7 +30,7 @@ public interface IGpuBindings {
     /// <param name="samplerHandle">The native sampler handle.</param>
     void DestroySampler(nint samplerHandle);
     /// <summary>Writes a buffer descriptor into a set. A Vulkan storage buffer carries no view-side layout, so there
-    /// every buffer write is the same descriptor. On Direct3D 12 <paramref name="access"/> chooses a shader resource
+    /// every buffer write is the same descriptor. On Direct3D 12 <paramref name="kind"/> chooses a shader resource
     /// view or an unordered access view, and <paramref name="elementStride"/> the view's shape: zero is a raw view over
     /// 4-byte words (<c>ByteAddressBuffer</c>), any other value a structured view over elements of that size
     /// (<c>StructuredBuffer&lt;T&gt;</c>), whose element count is the size divided by the stride.</summary>
@@ -38,9 +38,11 @@ public interface IGpuBindings {
     /// <param name="binding">The binding index within the set.</param>
     /// <param name="bufferHandle">The native buffer handle.</param>
     /// <param name="bufferSize">The viewed size in bytes, a multiple of four and of <paramref name="elementStride"/>.</param>
-    /// <param name="access">The access the binding's shader declaration has.</param>
+    /// <param name="kind">The binding's kind, <see cref="GpuBindingKind.ReadOnlyBuffer"/> or
+    /// <see cref="GpuBindingKind.ReadWriteBuffer"/>, as its shader declaration reads or writes the buffer.</param>
     /// <param name="elementStride">The size in bytes of the element the shader declares, or zero for a raw view.</param>
-    void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride);
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is not a storage-buffer kind.</exception>
+    void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride);
     /// <summary>Writes a combined image sampler descriptor into a set.</summary>
     /// <param name="descriptorSetHandle">The descriptor set to write into.</param>
     /// <param name="binding">The binding index within the set.</param>

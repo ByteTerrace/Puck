@@ -26,7 +26,7 @@ public sealed class ShaderInterfaceLawTests {
             expected: [
                 new ShaderInterfaceBinding(
                     Binding: 0,
-                    Kind: ShaderBindingKind.ConstantBuffer,
+                    Kind: GpuBindingKind.ConstantBuffer,
                     Members: [
                         Member(name: "tick", offset: 0, type: ShaderValueType.Uint),
                         Pad(offset: 4),
@@ -37,7 +37,7 @@ public sealed class ShaderInterfaceLawTests {
                 ),
                 new ShaderInterfaceBinding(
                     Binding: 0,
-                    Kind: ShaderBindingKind.ConstantBuffer,
+                    Kind: GpuBindingKind.ConstantBuffer,
                     Members: [
                         Member(name: "intensity", offset: 0, type: ShaderValueType.Float),
                         Pad(offset: 4),
@@ -53,14 +53,14 @@ public sealed class ShaderInterfaceLawTests {
                 ),
                 new ShaderInterfaceBinding(
                     Binding: 1,
-                    Kind: ShaderBindingKind.SampledImage,
+                    Kind: GpuBindingKind.SampledImage,
                     Members: [],
                     Name: "source",
                     Set: 3
                 ),
                 new ShaderInterfaceBinding(
                     Binding: 2,
-                    Kind: ShaderBindingKind.Sampler,
+                    Kind: GpuBindingKind.Sampler,
                     Members: [],
                     Name: "sourceSampler",
                     Set: 3
@@ -101,7 +101,7 @@ public sealed class ShaderInterfaceLawTests {
 
         Assert.Equal(
             actual: layout.Bindings.Select(selector: static binding => (binding.Set, binding.Binding, binding.Kind)),
-            expected: [(1u, 0u, ShaderBindingKind.SampledImage), (1u, 1u, ShaderBindingKind.Sampler)]
+            expected: [(1u, 0u, GpuBindingKind.SampledImage), (1u, 1u, GpuBindingKind.Sampler)]
         );
     }
     [Fact]

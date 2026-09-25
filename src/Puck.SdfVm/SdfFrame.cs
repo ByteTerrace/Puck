@@ -40,13 +40,11 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
 /// <param name="ProgramChanged">Whether the renderer must upload <paramref name="Program"/> for this frame.</param>
 /// <param name="Views">The camera views to render and composite.</param>
 /// <param name="Time">The presentation time in seconds.</param>
-/// <param name="WarpAmount">The presentation warp amount supplied to the compositor.</param>
 public sealed record SdfFrame(
     SdfProgram Program,
     bool ProgramChanged,
     IReadOnlyList<SdfViewSnapshot> Views,
-    float Time,
-    float WarpAmount
+    float Time
 ) {
     /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Must supply
     /// at least the program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> entries (the render frame

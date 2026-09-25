@@ -71,7 +71,7 @@ uint; "uint4" and "float4" name 16-byte vectors.
 | `SdfProgram.Lipschitz.cs` per-op factors | `sdfStepScale()` and `mapCore`'s final multiply in `sdf-vm.hlsli`; the de-scaling readers in `sdf-occlusion.hlsli`, `sdf-surface.hlsli`, `sdf-primary.hlsli`, `sdf-world.hlsli` | `Displace` and `DomainWarp` use 1 + amp · max\|freqᵢ\| (infinity norm); flare uses `FlareOperatorNorm`. The program `stepScale` is the reciprocal of the worst unscoped factor. |
 | `SdfFieldEvaluator` supported sets | the full GPU vocabulary | The evaluator interprets a subset of ops and shapes and refuses everything else by name, including Path, the warps, the noise family, several folds, dynamic transforms, multi-strand sweeps, and non-uniform `Scale`. Read the current sets from its `IsSupported*` switches rather than from a list. `Overlap` resolves a failed world-origin rebase toward occupied. |
 | Superellipsoid (shape 18) | `sdfSuperellipsoid` / `sdfSuperellipsoidGradient`, e == 2 fast paths `sdfEllipsoidGauge` / `sdfEllipsoidGaugeGradient` | Every ellipsoid is shape 18 at exponent 2, mirrored by the e == 2 branch of `SdfFieldEvaluator`. Only the e == 2 path compiles in the Folds tier. |
-| `Pcg3dLatticeNoise.Pcg3d` in `Puck.Maths`; `ShaderIsa.Pcg3d` in `Puck.ShaderVm` | `sdfPcg3d` in `sdf-vm.hlsli`; `shaderVmPcg3d` in `shader-vm.hlsli` | One hash, four implementations. |
+| `Pcg3dLatticeNoise.Pcg3d` in `Puck.Maths` | `sdfPcg3d` in `sdf-vm.hlsli` | One hash, a C# and an HLSL implementation. |
 
 ## Engine buffers, push constants, and bindings
 
@@ -101,15 +101,6 @@ uint; "uint4" and "float4" name 16-byte vectors.
 | `PrimaryMarchSteps` = 128 | `MaxSteps` in `sdf-world.hlsli` | |
 | `ConeNear` = 0.02 | `ConeNear` in `sdf-world.hlsli` | The camera cone's start and the near plane a `ViewProjection` for the same view is created with, so rasterized depth and the march agree on where a view begins. |
 | `SdfProgram.MaxDynamicTransformSlot` = int.MaxValue − 1 | the `TransformDynamic` slot decode | `slot + 1` must fit. The C# validation compares the float lane in double, because `(float)int.MaxValue` rounds up to 2³¹. |
-
-## Puck.ShaderVm
-
-`ShaderIsa`, `ShaderOp`, `ShaderInput`, and `ShaderInstruction` pair with the
-constants in `src/Puck.ShaderVm/Assets/Shaders/ShaderVm/shader-vm.hlsli`: magic
-0x4D564853, four header words, 8-bit opcode plus 24-bit operand, and the stack,
-local, instruction, and constant ceilings. `ShaderInterpreter` is the reference
-semantics. No kernel includes the HLSL half, so a divergence there is invisible
-until one does.
 
 ## Image sources
 

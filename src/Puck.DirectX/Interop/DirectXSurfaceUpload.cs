@@ -272,6 +272,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             format: format,
             height: height,
             initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            memory: m_deviceContext.Memory,
             width: width
         ));
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
@@ -366,6 +367,10 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     }
     private void DisposeImageResources() {
         Release(pointer: ref m_uploadBuffer);
+        DirectXDeviceMemory.CountReleased(
+            memory: m_deviceContext.Memory,
+            resource: m_texture
+        );
         Release(pointer: ref m_texture);
     }
 
@@ -377,14 +382,16 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             return;
         }
 
-        m_disposed = true;
-
         // Every object below is a child of the device, and the device's teardown reports each one still alive as a
         // leak. An owner that releases this upload after its device context is gone has its teardown in the wrong
-        // order, and the caller disposing this upload is that owner.
+        // order, and the caller disposing this upload is that owner. A refused release changes nothing: the texture
+        // stays counted as held on its device, whose teardown names it.
         if (!m_deviceContext.IsInitialized) {
             throw new InvalidOperationException(message: $"A {nameof(DirectXSurfaceUpload)} was released after its device context was disposed; the owner disposing it must release it before the device goes.");
         }
+
+        m_disposed = true;
+
         if (0 != m_fence) {
             WaitForGpu();
         }

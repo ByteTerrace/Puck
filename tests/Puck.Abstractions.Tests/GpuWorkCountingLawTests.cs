@@ -106,6 +106,10 @@ public sealed class GpuWorkCountingLawTests {
         );
         Assert.Same(
             expected: rig.Gpu,
+            actual: rig.Services.RenderPassFactory
+        );
+        Assert.Same(
+            expected: rig.Gpu,
             actual: rig.Services.SurfaceTransferFactory
         );
     }
@@ -153,7 +157,7 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuBindings.DestroyPool"] = (rig => rig.Services.Bindings.DestroyPool(poolHandle: 2), none),
             ["IGpuBindings.DestroySampler"] = (rig => rig.Services.Bindings.DestroySampler(samplerHandle: 2), none),
             ["IGpuBindings.WriteCombinedImageSampler"] = (rig => rig.Services.Bindings.WriteCombinedImageSampler(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5, samplerHandle: 6), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuBindings.WriteBuffer"] = (rig => rig.Services.Bindings.WriteBuffer(access: GpuBufferAccess.ReadWrite, binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, elementStride: 0), [(GpuWork.DescriptorWrites, 1L)]),
+            ["IGpuBindings.WriteBuffer"] = (rig => rig.Services.Bindings.WriteBuffer(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, elementStride: 0, kind: GpuBindingKind.ReadWriteBuffer), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuBindings.WriteStorageImage"] = (rig => rig.Services.Bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuPipelineFactory.Create(graphics)"] = (rig => rig.Pipelines.Create(description: null!, fragmentShaderModule: null!, renderPass: null!, vertexShaderModule: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
             ["IGpuQueueSubmitter.CreateSubmissionFence"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(), none),
@@ -187,7 +191,7 @@ public sealed class GpuWorkCountingLawTests {
             ? method.Name[4..]
             : method.Name);
 
-    private sealed record Rig(FakeGpu Gpu, GpuWorkLedger Ledger, IGpuComputeServices Services, IGpuPipelineFactory Pipelines) {
+    private sealed record Rig(FakeGpu Gpu, GpuWorkLedger Ledger, GpuDeviceServices Services, IGpuPipelineFactory Pipelines) {
         public static Rig Create() {
             var gpu = new FakeGpu();
             var ledger = new GpuWorkLedger(
@@ -199,7 +203,7 @@ public sealed class GpuWorkCountingLawTests {
                 Gpu: gpu,
                 Ledger: ledger,
                 Pipelines: GpuWorkCounting.Wrap(factory: ((IGpuPipelineFactory)gpu), ledger: ledger),
-                Services: GpuWorkCounting.Wrap(ledger: ledger, services: ((IGpuComputeServices)gpu))
+                Services: GpuWorkCounting.Wrap(ledger: ledger, services: gpu.Services)
             );
         }
     }

@@ -26,8 +26,7 @@ public sealed class PackEnvironmentLawTests {
             Program: TinyProgram(),
             ProgramChanged: true,
             Views: [],
-            Time: 0f,
-            WarpAmount: 0f
+            Time: 0f
         ) {
             Environment = environment,
         };

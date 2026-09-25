@@ -119,7 +119,51 @@ internal static class ShaderInterfaceSpike {
 
     /// <summary>Generates the pass's include into a fresh directory beside a copy of its variant source, then compiles it
     /// to SPIR-V and DXIL with the flags the shared shader recipe (<c>build/Shaders.targets</c>) passes.</summary>
-    internal static async Task<Build> CompileAsync(Pass pass, string generatedInclude, CancellationToken cancellationToken) {
+    internal static Task<Build> CompileAsync(Pass pass, string generatedInclude, CancellationToken cancellationToken) =>
+        CompileInAsync(
+            cancellationToken: cancellationToken,
+            entryPoint: pass.EntryPoint,
+            profile: pass.Profile,
+            sourceFileName: pass.SourceFileName,
+            stage: async (root, token) => {
+                File.Copy(
+                    destFileName: Path.Combine(
+                        path1: root,
+                        path2: pass.SourceFileName
+                    ),
+                    sourceFileName: Path.Combine(paths: [AppContext.BaseDirectory, "Assets", "Interfaces", pass.Interface.Name, pass.SourceFileName])
+                );
+                await File.WriteAllTextAsync(
+                    cancellationToken: token,
+                    contents: generatedInclude,
+                    path: Path.Combine(
+                        path1: root,
+                        path2: ShaderInterfaceHlsl.FileName(shaderInterface: pass.Interface)
+                    )
+                );
+            }
+        );
+    /// <summary>Compiles one source written out as text to SPIR-V and DXIL with the same flags as
+    /// <see cref="CompileAsync(Pass, string, CancellationToken)"/>.</summary>
+    internal static Task<Build> CompileSourceAsync(string source, string profile, string entryPoint, CancellationToken cancellationToken) =>
+        CompileInAsync(
+            cancellationToken: cancellationToken,
+            entryPoint: entryPoint,
+            profile: profile,
+            sourceFileName: "source.hlsl",
+            stage: (root, token) => File.WriteAllTextAsync(
+                cancellationToken: token,
+                contents: source,
+                path: Path.Combine(
+                    path1: root,
+                    path2: "source.hlsl"
+                )
+            )
+        );
+
+    // Stages the sources into a fresh directory, then compiles the named one with the flags the shared shader recipe
+    // (build/Shaders.targets) passes.
+    private static async Task<Build> CompileInAsync(string sourceFileName, string profile, string entryPoint, Func<string, CancellationToken, Task> stage, CancellationToken cancellationToken) {
         var dxc = (Dxc ?? throw new ShaderToolMissingException(
             directory: null,
             tool: "dxc"
@@ -134,20 +178,12 @@ internal static class ShaderInterfaceSpike {
         try {
             var source = Path.Combine(
                 path1: root,
-                path2: pass.SourceFileName
+                path2: sourceFileName
             );
 
-            File.Copy(
-                destFileName: source,
-                sourceFileName: Path.Combine(paths: [AppContext.BaseDirectory, "Assets", "Interfaces", pass.Interface.Name, pass.SourceFileName])
-            );
-            await File.WriteAllTextAsync(
-                cancellationToken: cancellationToken,
-                contents: generatedInclude,
-                path: Path.Combine(
-                    path1: root,
-                    path2: ShaderInterfaceHlsl.FileName(shaderInterface: pass.Interface)
-                )
+            await stage(
+                arg1: root,
+                arg2: cancellationToken
             );
 
             var include = ("-I" + Path.Combine(
@@ -166,12 +202,12 @@ internal static class ShaderInterfaceSpike {
             );
 
             await RunAsync(
-                arguments: ["-spirv", "-fspv-target-env=vulkan1.3", "-fspv-entrypoint-name=main", "-enable-16bit-types", "-O3", "-T", pass.Profile, "-E", pass.EntryPoint, include, "-Fo", spirvPath, source],
+                arguments: ["-spirv", "-fspv-target-env=vulkan1.3", "-fspv-entrypoint-name=main", "-enable-16bit-types", "-O3", "-T", profile, "-E", entryPoint, include, "-Fo", spirvPath, source],
                 cancellationToken: cancellationToken,
                 dxc: dxc
             );
             await RunAsync(
-                arguments: ["-Wno-ignored-attributes", "-enable-16bit-types", "-O3", "-T", pass.Profile, "-E", pass.EntryPoint, include, "-Fo", dxilPath, source],
+                arguments: ["-Wno-ignored-attributes", "-enable-16bit-types", "-O3", "-T", profile, "-E", entryPoint, include, "-Fo", dxilPath, source],
                 cancellationToken: cancellationToken,
                 dxc: dxc
             );
@@ -193,7 +229,6 @@ internal static class ShaderInterfaceSpike {
             );
         }
     }
-
     private static async Task RunAsync(string dxc, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
         var result = await ChildProcess.RunAsync(
             arguments: arguments,

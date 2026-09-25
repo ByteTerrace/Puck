@@ -141,7 +141,7 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
 
-        if (m_viewServices is null) {
+        if (m_viewPipelines is null) {
             fault = "the view pool is not configured";
 
             return false;
@@ -370,7 +370,8 @@ internal sealed partial class WorldScreenBinder {
             images: images,
             importedViews: views,
             imports: imports,
-            ring: slots
+            ring: slots,
+            targetDevice: m_cameraTargetDevice
         );
 
         feed.Targets = targets;
@@ -383,7 +384,9 @@ internal sealed partial class WorldScreenBinder {
         );
         feed.Fault = null;
     }
-    private void DisposeProbeFeeds() {
+    // Retires every probe's ring on the current device and keeps each feed's request, so after a device loss the next
+    // publish provisions a fresh ring (a new generation) on the replacement.
+    private void ReleaseProbeFeeds() {
         foreach (var feed in m_probeFeeds.Values) {
             feed.Release();
         }

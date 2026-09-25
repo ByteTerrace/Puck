@@ -15,21 +15,50 @@ namespace Puck.Abstractions.Gpu;
 /// </para>
 /// </summary>
 public static class GpuWorkCounting {
-    /// <summary>Wraps every counted member of a compute service bundle. The command-pool factory and the
-    /// surface-transfer factory are passed through unwrapped, because nothing they do is counted.</summary>
-    /// <param name="services">The node's services.</param>
+    /// <summary>Wraps every counted member of a device's services. The command-pool, render-pass and surface-transfer
+    /// factories are passed through unwrapped, because nothing they do is counted.</summary>
+    /// <param name="services">The device's services.</param>
     /// <param name="ledger">The ledger the counts go to.</param>
-    /// <returns>A bundle whose members count into <paramref name="ledger"/>.</returns>
+    /// <returns>A set whose counted members count into <paramref name="ledger"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="services"/> is already a counting bundle.</exception>
-    public static IGpuComputeServices Wrap(IGpuComputeServices services, GpuWorkLedger ledger) =>
-        new CountingComputeServices(
-            ledger: ledger,
-            services: Guard(
-                instance: services,
+    /// <exception cref="ArgumentException">A member of <paramref name="services"/> already counts.</exception>
+    public static GpuDeviceServices Wrap(GpuDeviceServices services, GpuWorkLedger ledger) {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return new GpuDeviceServices {
+            Bindings = Wrap(
+                bindings: services.Bindings,
                 ledger: ledger
-            )
-        );
+            ),
+            BufferFactory = Wrap(
+                factory: services.BufferFactory,
+                ledger: ledger
+            ),
+            CommandPoolFactory = services.CommandPoolFactory,
+            ImageFactory = Wrap(
+                factory: services.ImageFactory,
+                ledger: ledger
+            ),
+            PipelineFactory = Wrap(
+                factory: services.PipelineFactory,
+                ledger: ledger
+            ),
+            QueueSubmitter = Wrap(
+                ledger: ledger,
+                submitter: services.QueueSubmitter
+            ),
+            Recorder = Wrap(
+                ledger: ledger,
+                recorder: services.Recorder
+            ),
+            RenderPassFactory = services.RenderPassFactory,
+            ShaderModuleFactory = Wrap(
+                factory: services.ShaderModuleFactory,
+                ledger: ledger
+            ),
+            SurfaceTransferFactory = services.SurfaceTransferFactory,
+        };
+    }
     /// <summary>Wraps a command recorder. Counts command buffers begun, render passes begun, pipeline and
     /// descriptor-set binds, push-constant bytes, draws, dispatches, indirect dispatches, image, memory, and buffer
     /// barriers, and storage image and buffer clears.</summary>
@@ -175,38 +204,6 @@ file abstract class CountingWrapper(GpuWorkLedger ledger) {
             amount: amount,
             column: column
         );
-}
-file sealed class CountingComputeServices(IGpuComputeServices services, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuComputeServices {
-    public IGpuCommandPoolFactory CommandPoolFactory { get; } = services.CommandPoolFactory;
-    public IGpuPipelineFactory PipelineFactory { get; } = GpuWorkCounting.Wrap(
-        factory: services.PipelineFactory,
-        ledger: ledger
-    );
-    public IGpuRecorder Recorder { get; } = GpuWorkCounting.Wrap(
-        ledger: ledger,
-        recorder: services.Recorder
-    );
-    public IGpuBindings Bindings { get; } = GpuWorkCounting.Wrap(
-        bindings: services.Bindings,
-        ledger: ledger
-    );
-    public IGpuQueueSubmitter QueueSubmitter { get; } = GpuWorkCounting.Wrap(
-        ledger: ledger,
-        submitter: services.QueueSubmitter
-    );
-    public IGpuShaderModuleFactory ShaderModuleFactory { get; } = GpuWorkCounting.Wrap(
-        factory: services.ShaderModuleFactory,
-        ledger: ledger
-    );
-    public IGpuBufferFactory BufferFactory { get; } = GpuWorkCounting.Wrap(
-        factory: services.BufferFactory,
-        ledger: ledger
-    );
-    public IGpuImageFactory ImageFactory { get; } = GpuWorkCounting.Wrap(
-        factory: services.ImageFactory,
-        ledger: ledger
-    );
-    public IGpuSurfaceTransferFactory SurfaceTransferFactory { get; } = services.SurfaceTransferFactory;
 }
 file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuRecorder {
     public void BeginCommandBuffer(nint commandBufferHandle) {
@@ -385,14 +382,14 @@ file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : C
         inner.DestroyPool(poolHandle: poolHandle);
     public void DestroySampler(nint samplerHandle) =>
         inner.DestroySampler(samplerHandle: samplerHandle);
-    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) {
+    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
         inner.WriteBuffer(
-            access: access,
             binding: binding,
             bufferHandle: bufferHandle,
             bufferSize: bufferSize,
             descriptorSetHandle: descriptorSetHandle,
-            elementStride: elementStride
+            elementStride: elementStride,
+            kind: kind
         );
         Tally(column: GpuWork.DescriptorWritesColumn);
     }

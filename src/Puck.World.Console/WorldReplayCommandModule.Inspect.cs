@@ -47,7 +47,7 @@ public sealed partial class WorldReplayCommandModule {
         }
 
         try {
-            var loaded = WorldReplayInspector.Load(name: name);
+            var loaded = WorldReplayInspector.Load(path: m_tape.PathFor(name: name));
             var tickCount = loaded.Recording.TickCount;
 
             if (from >= tickCount) {

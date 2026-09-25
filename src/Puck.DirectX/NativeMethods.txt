@@ -105,6 +105,12 @@ D3D12_FEATURE_DATA_FEATURE_LEVELS
 D3D12_FEATURE_DATA_ARCHITECTURE
 D3D12_FEATURE_DATA_D3D12_OPTIONS16
 
+// Direct3D 12: the device's capabilities (GpuDeviceCapabilities), recorded and never branched on — options' resource
+// binding tier, the highest root signature version, and options 19's shader-visible heap sizes.
+D3D12_FEATURE_DATA_D3D12_OPTIONS
+D3D12_FEATURE_DATA_ROOT_SIGNATURE
+D3D12_FEATURE_DATA_D3D12_OPTIONS19
+
 // Direct3D 12: debug layer + info queue (validation message surfacing), and the live-object report at teardown.
 D3D12GetDebugInterface
 ID3D12Debug

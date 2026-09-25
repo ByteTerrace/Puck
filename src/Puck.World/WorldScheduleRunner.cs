@@ -131,12 +131,14 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
 
     private readonly string m_worldDirectory;
     private readonly string m_worldFile;
+    private readonly bool m_armed;
 
     private bool m_armedInstances;
     private bool m_exported;
 
-    public WorldScheduleRunner(WorldServer server, WorldDefinitionSource definitionSource, Func<TextCommandSource> source, Func<CommandRegistry> registry, Func<InputRouter> router, WorldInstanceHost instances) {
+    public WorldScheduleRunner(WorldServer server, WorldDefinitionSource definitionSource, Func<TextCommandSource> source, Func<CommandRegistry> registry, Func<InputRouter> router, WorldInstanceHost instances, WorldScheduleRoot scheduleRoot) {
         ArgumentNullException.ThrowIfNull(argument: server);
+        ArgumentNullException.ThrowIfNull(argument: scheduleRoot);
         ArgumentNullException.ThrowIfNull(argument: definitionSource);
         ArgumentNullException.ThrowIfNull(argument: instances);
         ArgumentNullException.ThrowIfNull(argument: registry);
@@ -144,6 +146,7 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         m_instances = instances;
+        m_armed = scheduleRoot.IsArmed;
         m_registry = registry;
         m_router = router;
         m_server = server;
@@ -153,8 +156,8 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
 
         var schedule = server.Definition.Schedule;
 
-        m_directory = (((schedule is not null) && WorldScheduleRoot.IsArmed)
-            ? WorldScheduleRoot.Directory
+        m_directory = (((schedule is not null) && m_armed)
+            ? scheduleRoot.Directory
             : string.Empty
         );
         m_exportTick = (schedule?.ExportTick ?? 0UL);
@@ -163,7 +166,7 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
             return;
         }
 
-        if (!WorldScheduleRoot.IsArmed) {
+        if (!m_armed) {
             Console.Error.WriteLine(value: $"[schedule] {m_worldFile} authors a schedule ({rows.Count} row(s), export tick {m_exportTick}) and this boot did not arm it — no row is submitted and no export is written. Pass --schedule-dir <directory> to run it.");
 
             return;
@@ -197,7 +200,7 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
     public ulong ExportTick => m_exportTick;
     /// <summary>Gets a value indicating whether this run submits the document's schedule: the document authors one
     /// and the boot armed it with <c>--schedule-dir</c>.</summary>
-    public bool IsArmed => ((m_server.Definition.Schedule is not null) && WorldScheduleRoot.IsArmed);
+    public bool IsArmed => ((m_server.Definition.Schedule is not null) && m_armed);
 
     // A handler that THREW judged nothing: the line reached it and it broke, which is a host failure rather than a
     // verdict about the world, so it never folds into "refused".

@@ -14,6 +14,9 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
     private readonly Func<WorldDefinition> m_definition = (definition ?? throw new ArgumentNullException(paramName: nameof(definition)));
 
     /// <inheritdoc/>
+    public WorldPresentationManifest Manifest => WorldPresentationManifest.Of(definition: m_definition());
+
+    /// <inheritdoc/>
     public bool TryResolveRow(string rowName, out int ordinal) {
         ArgumentNullException.ThrowIfNull(argument: rowName);
 

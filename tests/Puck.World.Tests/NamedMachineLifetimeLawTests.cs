@@ -1234,6 +1234,6 @@ public sealed class NamedMachineLifetimeLawTests {
         public nint NativeImageViewHandle => 0;
 
         public void NotifyDeviceLost() { }
-        public void PublishFrame(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) { }
+        public void PublishFrame(IGpuDeviceContext deviceContext) { }
     }
 }

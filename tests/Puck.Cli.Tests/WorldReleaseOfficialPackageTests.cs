@@ -21,17 +21,15 @@ public sealed class WorldReleaseOfficialPackageTests {
 
         tree["host"] = JsonNode.Parse(WorldDefinitionSerialization.Serialize(definition: new WorldDefinition(HostRaw: WorldHostDefaults.Absent with { Width = 320, Height = 200 })))!["host"]!.DeepClone();
         Assert.True(
-            condition: WorldDefinitionFileSource.TryParseComposed(
-                tree.ToJsonString(),
-                "draw fixture",
-                null,
-                false,
-                out var definition,
-                out var reason
+            condition: WorldDefinitionLoader.TryReadPublishable(
+                definition: out var definition,
+                json: tree.ToJsonString(),
+                reason: out var reason,
+                sourceName: "draw fixture"
             ),
             userMessage: reason
         );
-        var bytes = WorldDefinitionSerialization.Serialize(definition: definition!);
+        var bytes = WorldDefinitionSerialization.Serialize(definition: definition);
 
         Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: bytes));
         return bytes;

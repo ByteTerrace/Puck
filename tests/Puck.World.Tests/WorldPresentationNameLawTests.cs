@@ -200,7 +200,7 @@ public sealed class WorldPresentationNameLawTests {
         var rewritten = key.Replace(
             comparisonType: StringComparison.Ordinal,
             newValue: "3",
-            oldValue: WorldGaitDrivers.BodyKeyToken
+            oldValue: StateBinding.BodyKey
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
@@ -237,7 +237,7 @@ public sealed class WorldPresentationNameLawTests {
     public void AKeyThatIsTheBodyTokenNamesTheReadingBody() {
         Assert.True(condition: WorldGaitDrivers.TryResolveBodyKey(
             bodyIndex: 3,
-            key: WorldGaitDrivers.BodyKeyToken,
+            key: StateBinding.BodyKey,
             resolved: out var resolved
         ));
         Assert.Equal(
@@ -246,7 +246,7 @@ public sealed class WorldPresentationNameLawTests {
         );
         Assert.False(condition: WorldGaitDrivers.TryResolveBodyKey(
             bodyIndex: -1,
-            key: WorldGaitDrivers.BodyKeyToken,
+            key: StateBinding.BodyKey,
             resolved: out _
         ));
     }

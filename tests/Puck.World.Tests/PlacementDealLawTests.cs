@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Commands;
 using System.Numerics;
 using Puck.Abstractions.Counting;
@@ -549,11 +550,12 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     /// same ticks: the tape carries the cell writes, and the sweep re-derives the children from them.</summary>
     [Fact]
     public void AReplayOfTheTapeReproducesTheChildrenOnTheSameTick() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer(definition: Dealt("a"));
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,

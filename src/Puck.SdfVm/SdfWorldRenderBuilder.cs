@@ -49,14 +49,13 @@ public sealed record SdfWorldRender(
 /// </summary>
 public static class SdfWorldRenderBuilder {
     /// <summary>Assembles the SDF world render host a spec describes.</summary>
-    /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) forwarded
-    /// unchanged into the built <see cref="SdfEngineNode"/> — resolved once at the composition root. The factory reads
-    /// the node's kernels through its <see cref="SdfViewGpuServices.Pipelines"/> cache
+    /// <param name="pipelines">The composition's pipeline cache, forwarded unchanged into the built
+    /// <see cref="SdfEngineNode"/>. The factory reads the node's kernels through it
     /// (<see cref="SdfWorldPipelineCache.LoadDeployed"/>).</param>
     /// <param name="spec">The render spec.</param>
     /// <returns>The assembled producer and root.</returns>
-    public static SdfWorldRender Build(SdfViewGpuServices services, SdfWorldRenderSpec spec) {
-        ArgumentNullException.ThrowIfNull(services);
+    public static SdfWorldRender Build(SdfWorldPipelineCache pipelines, SdfWorldRenderSpec spec) {
+        ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(spec);
 
         // The frame-source decorator seam (SdfWorldRenderSpec.DecorateFrameSource): a host wraps the scene's frame
@@ -71,20 +70,19 @@ public static class SdfWorldRenderBuilder {
         var producer = new SdfEngineNode(
             brickPoolVoxelCapacity: spec.BrickPoolVoxelCapacity,
             children: spec.Children,
-            createStorageImage: spec.CreateOutputImage,
             dynamicTransformCapacity: spec.DynamicTransformCapacity,
             frameSource: frameSource,
             height: spec.Height,
             instanceCapacity: spec.InstanceCapacity,
-            // The views the same services build read this same deployed set, so a boot reads the kernels once.
-            kernels: services.Pipelines.LoadDeployed(bytecodeExtension: BytecodeExtension(hostsOnDirectX: spec.HostsOnDirectX)),
+            // The views built over the same cache read this same deployed set, so a boot reads the kernels once.
+            kernels: pipelines.LoadDeployed(bytecodeExtension: BytecodeExtension(hostsOnDirectX: spec.HostsOnDirectX)),
             programWordCapacity: spec.ProgramWordCapacity,
             screenSources: spec.ScreenSources,
             screenLights: spec.ScreenLights,
             // Read straight off the frame source (ISdfFrameSource.ScreenSurfaceTransforms, default null) rather than
             // a spec field: this is the ONE place that needs to know the seam exists at all.
             screenSurfaceTransforms: frameSource.ScreenSurfaceTransforms,
-            services: services,
+            pipelines: pipelines,
             viewportCapacity: spec.ViewportCapacity,
             width: spec.Width
         );

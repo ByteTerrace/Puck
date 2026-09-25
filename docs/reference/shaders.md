@@ -323,7 +323,8 @@ binding allocator is consulted:
   16 on both backends.
 - Every gap is filled with a `uint` padding member named `_pad<offset>`.
 - An interface may push its frame group's block (`ShaderInterface.PushConstants`):
-  the block is then a `PushConstants` binding at set 0, binding 0, laid out by
+  the block is then a pushed constant-buffer binding
+  (`ShaderInterfaceBinding.Pushed`) at set 0, binding 0, laid out by
   the same rule and declared `[[vk::push_constant]]` with `register(b0, space0)`,
   where both backends' root constants live. A pushed group holds values and
   arrays only.
@@ -340,9 +341,13 @@ land each member on the offset Vulkan is told explicitly. The text is a pure
 function of the interface, with LF line endings.
 
 Two readers return the same `ShaderInterfaceBinding` records, so one
-comparison holds both kinds of bytecode to the same layout (a pushed block
-reflects in DXIL as the constant buffer at `b0`, space 0, which
-`ShaderInterfaceLayout.DxilBindings` states):
+comparison holds both kinds of bytecode to the same layout. A record's kind is
+a `GpuBindingKind` (`src/Puck.Abstractions/Gpu/Bindings`), the one closed set
+of binding kinds: constant buffer, read-only buffer, read-write buffer,
+sampled image, storage image and sampler. Push constants are not a kind. A
+pushed block is a constant buffer marked `Pushed`, which only SPIR-V can tell
+apart; DXIL reflects it as the constant buffer at `b0`, space 0, which
+`ShaderInterfaceLayout.DxilBindings` states:
 
 - `SpirvInterfaceReader` parses a SPIR-V module's `DescriptorSet`, `Binding`
   and `Offset` decorations, its push-constant variable and its debug names. It
@@ -363,6 +368,24 @@ second build in another directory. A hand-edited `vk::offset` fails the SPIR-V
 reader, and a removed padding member fails the DXIL reader. The GPU half of
 the spike has not run: executing the two-group layout on both backends inside
 the parity contract's tolerances.
+
+`ShaderInterfaceLayout.PipelineLayout` turns an interface's groups into a
+`GpuPipelineLayoutDescription`, the backend-neutral statement of what a
+pipeline binds, and each backend plans its own layout from that with no device
+call. The plans are not used to create pipelines yet.
+
+- `DirectXRootLayout.Plan` makes dense root parameters. For each group, in
+  ordinal order, it adds a table of constant buffers, shader resource views
+  and unordered access views. A group that holds a sampler also gets a second
+  table for its samplers. Each binding is one range, at register space equal
+  to the group's ordinal and base register equal to the binding number. A
+  pushed index comes last, as one root constant at `b0` in space 4.
+- `VulkanGroupLayouts.Plan` makes one set layout for every set number up to
+  the highest group. A set number with no group gets an empty layout, and a
+  pushed index is a 4-byte push range.
+
+An interface that pushes its frame block has no pipeline layout, because a
+pipeline pushes only an index.
 
 `ShaderInterfaceLayout.PushedBlockMismatch` names how a compiled module reads a
 pushed block other than as laid out. `ShaderInterfaceEcho.Generate` writes a
@@ -385,15 +408,13 @@ ShaderConfigValues config = manifest.BindConfig(config: entry.Config); // throws
 
 IRenderNode pass = new FullscreenPassNode(
     inner: worldNode, manifest: manifest, config: config,
-    services: fullscreenPassServices, hostsOnDirectX: false, width: 1920, height: 1080);
+    deviceContext: deviceContext, hostsOnDirectX: false, width: 1920, height: 1080);
 ```
 
-`IFullscreenPassServices` is the GPU seam a composition root resolves from
-its one registered backend (command recorder, bindings, device
-context, buffer factory, pipeline factory, queue submitter,
-render-pass factory, shader-module factory, surface-transfer factory, and
-cohesive compute services, whose image factory creates the images a pass
-draws into). The adapter delegates GPU recording, resource allocation, and synchronization to `ShaderPipelineRenderNode`. The pass is an `ICaptureRequestTarget`: an armed capture reads
+The pass's GPU seam is the device context the composition root resolves from its
+one registered backend, the device the inner node renders on; the pass records
+through its services (`IGpuDeviceContext.Services`), whose image factory creates
+the images a pass draws into. The adapter delegates GPU recording, resource allocation, and synchronization to `ShaderPipelineRenderNode`. The pass is an `ICaptureRequestTarget`: an armed capture reads
 back the pass's own render target—the composed result—and prints
 `[capture] <set name> -> <path>` on stderr; a frame the pass passes through
 untouched forwards the same request to its inner node instead. The request
@@ -420,7 +441,7 @@ any non-`float` type by return value. `pass.Config` reads the live values back.
 | `ShaderConfigBinding` | The config-schema binder every manifest with a `config` block shares—`TryBind`, `JsonSchema`, `ValidateSchema`. |
 | `ShaderFrameInterface` / `ShaderFrameValues` / `ShaderPipelineParameterLayout` | The [frame block's](#the-frame-block) members and interface; the values a host supplies each frame; a pass's laid-out block, its config binder and its host writer (`WriteFrame`). |
 | `ShaderValueType` | `float`…`int4`, with component count and kind. |
-| `FullscreenPassNode` / `IFullscreenPassServices` | The node that runs a graphics set as one pass over an inner `IRenderNode`; its GPU seam. |
+| `FullscreenPassNode` | The node that runs a graphics set as one pass over an inner `IRenderNode`, recording through its device context's services. |
 | `IShaderModuleLoader` / `ShaderModuleLoader` / `ShaderStageInfo` / `ShaderStage` | Per-stage bytecode loading with content-hash caching. |
 | `ProbeKindManifest` / `ProbeKindCatalog` | A `puck.probe.manifest.v1` probe kind and the shipped kinds under a directory tree, by id. |
 | `ManifestCatalog<TManifest>` | The suffix-scanning, id-indexed discovery both catalogs derive from. |
@@ -655,9 +676,19 @@ more pieces of vocabulary:
   version's writer first and records a barrier into that state even after
   shader reads: a read of another kind is another read state.
 - A buffer's `strideBytes` makes it a structured buffer of elements that size.
-- A buffer's `count` sizes it by `elements` per unit of a `basis` the host
-  resolves (`Extent` pixels, program `Instances`, or `ProgramWords`) in place of
-  `sizeBytes`; `ShaderPipelineResource.ResolveSizeBytes` computes the bytes.
+- A buffer's `count` sizes it in place of `sizeBytes`, as a sum of terms. Each
+  term is `elements` per unit of the product of the bases in `per`, counts the
+  host resolves: `Extent` pixels, program `Instances`, `ProgramWords`,
+  `Viewports`, `Tiles` of one viewport, `DynamicTransforms`, and the
+  `InstanceMaskWords` of one tile and `InstanceGridWords` the host derives from
+  its instances. The SDF engine's cull buffer, for one, is
+  `[{ "per": ["Viewports", "Tiles"], "elements": 4 }, { "per": ["Viewports", "Instances"], "elements": 12 }]`
+  floats. A term names at least one basis and each basis once, and no two terms
+  name the same bases, so a count has one spelling and a size that scales with
+  nothing stays `sizeBytes`. `ShaderPipelineResource.ResolveSizeBytes` computes
+  the bytes. A term whose bases the host resolves to zero units adds nothing,
+  and a buffer whose terms all resolve to zero bytes is refused, naming the
+  buffer and its terms.
 
 A shader pass declaring a `Groups` or `Indirect` dispatch is refused
 (`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding, or a document
@@ -1220,7 +1251,8 @@ pin, and each pass's name, interface hash and generated declarations' pin. A
 one-off shader plans under its instance's name, so two rows naming one shader
 under two names store two packages. A missing source, a closure that does not
 fit a package, or a pass that does not compile fails the build, and a package
-no row names any more is removed.
+no row names any more is removed, both from the store and, after the copy,
+from the output's `Assets/worlds/packages`.
 
 The World's packager is given the store, so `LoadSource` computes a source row's
 key the same way, without compiling, and loads the stored package with that

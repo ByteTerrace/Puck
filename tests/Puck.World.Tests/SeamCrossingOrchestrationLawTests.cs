@@ -138,7 +138,7 @@ public sealed class SeamCrossingOrchestrationLawTests {
         using var host = new WorldInstanceHost(
             applicationStopping: CancellationToken.None, admitsSpawn: true, machineHostFactory: Fixtures.MachineHostFactory,
             machineId: Guid.NewGuid(), resolver: new WorldSessionResolver(), seats: WorldEmbodiedSeats.None,
-            stateRoot: hostStateRoot.RootPath
+            stateRoot: new WorldStateRoot(path: hostStateRoot.RootPath)
         );
         var rows = new[] {
             BuildFileBackedRow(definition: sourceDefinition, name: "source", path: sourcePath), BuildFileBackedRow(definition: eastDefinition, name: "east", path: eastPath),
@@ -205,7 +205,7 @@ public sealed class SeamCrossingOrchestrationLawTests {
             machineId: machineId,
             resolver: new WorldSessionResolver(),
             seats: WorldEmbodiedSeats.None,
-            stateRoot: hostStateRoot.RootPath
+            stateRoot: new WorldStateRoot(path: hostStateRoot.RootPath)
         );
 
         var (rowAInstance, rowAServer, rowAStateDirectory) = BuildFileBackedRow(

@@ -297,7 +297,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             ) {
                 var value = reads.Sample(slot: reads.Slot(
                     key: (row.IsKeyed
-                    ? WorldGaitDrivers.BodyKeyToken
+                    ? StateBinding.BodyKey
                     : null),
                     row: row.Name.Value,
                     source: context.Family,

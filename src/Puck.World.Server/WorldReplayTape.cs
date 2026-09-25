@@ -79,6 +79,7 @@ public sealed partial class WorldReplayTape {
     private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldServer m_liveServer;
     private readonly WorldOwnedWorlds m_profiles;
+    private readonly WorldStateRoot m_stateRoot;
     private readonly LoopbackTransport m_transport;
 
     private byte[]? m_definitionJson;
@@ -138,14 +139,16 @@ public sealed partial class WorldReplayTape {
     /// <see cref="WorldServer"/> it is handed (or rely on <see cref="WorldReplaySnapshot.Drive"/> attaching it) — a
     /// host that never reaches <see cref="WorldServer.AttachAddons"/> re-drives with no guests and produces a MATCH
     /// that proves nothing.</param>
+    /// <param name="stateRoot">The host's state root; recordings persist in its <c>Replays</c> directory.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldReplayTape(WorldServer liveServer, WorldOwnedWorlds profiles, LoopbackTransport transport, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public WorldReplayTape(WorldServer liveServer, WorldOwnedWorlds profiles, LoopbackTransport transport, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, WorldStateRoot stateRoot) {
         ArgumentNullException.ThrowIfNull(argument: liveServer);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: transport);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
         ArgumentNullException.ThrowIfNull(argument: addonHostFactory);
+        ArgumentNullException.ThrowIfNull(argument: stateRoot);
 
         m_liveServer = liveServer;
         m_profiles = profiles;
@@ -153,6 +156,7 @@ public sealed partial class WorldReplayTape {
         m_engines = [.. engines];
         m_machineHostFactory = machineHostFactory;
         m_addonHostFactory = addonHostFactory;
+        m_stateRoot = stateRoot;
     }
 
     /// <summary>Gets the tape's current mode.</summary>
@@ -269,12 +273,10 @@ public sealed partial class WorldReplayTape {
 
         return name;
     }
-    /// <summary>Returns the <c>Replays/</c> directory (created on first use), beside World's other local data.</summary>
-    public static string Directory() {
-        var directory = Path.Combine(
-            path1: WorldStateRoot.Resolve(),
-            path2: "Replays"
-        );
+    /// <summary>Returns the <c>Replays</c> directory under the tape's state root, creating it on first use.</summary>
+    /// <returns>The absolute directory path.</returns>
+    public string Directory() {
+        var directory = m_stateRoot.PathOf(name: "Replays");
 
         _ = System.IO.Directory.CreateDirectory(path: directory);
 
@@ -295,7 +297,7 @@ public sealed partial class WorldReplayTape {
     }
     /// <summary>Returns the names of every persisted replay.</summary>
     /// <returns>The saved names, sorted; empty when none exist.</returns>
-    public static IReadOnlyList<string> List() {
+    public IReadOnlyList<string> List() {
         var directory = Directory();
         var names = new List<string>();
 
@@ -427,7 +429,7 @@ public sealed partial class WorldReplayTape {
     /// <summary>Returns the on-disk path a valid <paramref name="name"/> resolves to.</summary>
     /// <param name="name">The replay's name.</param>
     /// <returns>The path.</returns>
-    public static string PathFor(string name) {
+    public string PathFor(string name) {
         return Path.Combine(
             path1: Directory(),
             path2: (name + Extension)

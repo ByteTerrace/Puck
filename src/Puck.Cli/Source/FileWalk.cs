@@ -105,9 +105,12 @@ internal static class FileWalk {
                     // what makes `--not publish` exclude the directory rather than nothing. Path-form globs
                     // stay a file filter. Agent worktrees (.claude/worktrees) hold live duplicate checkouts
                     // whose copies answer a query as if they were live consumers, so they are pruned for
-                    // every verb; naming one as a root still walks it.
+                    // every verb; naming one as a root still walks it. A directory link (a junction or symbolic
+                    // link) is never followed: one pointing into the tree answers every query twice, and one whose
+                    // target is gone cannot be read at all.
                     if (
                         !SkipDirectories.Contains(item: name) &&
+                        (0 == (File.GetAttributes(path: entry) & FileAttributes.ReparsePoint)) &&
                         !MatchesAnyName(
                         globs: exclude,
                         name: name

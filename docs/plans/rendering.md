@@ -300,7 +300,11 @@ The gate stays open until three legs run:
   `setup-dxc` installs;
 - the two-group layout on Direct3D 12 and Vulkan inside the parity contract,
   with one parity station, once both backends build more than one set;
-- the capability reports on the floor and ceiling devices.
+- the capability report on the floor device. Each backend fills
+  `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
+  and `world.counters gpu` prints it on a `capabilities` line and in its JSON;
+  the ceiling device's reading on both backends is recorded, so only the floor
+  run remains.
 
 P8 has landed, pending its GPU canaries; the frame group's move from push
 constants to a descriptor set waits on P7's grouped binding. HLSL is the one
@@ -357,17 +361,30 @@ binaries, while an unpackaged source is refused. Both canaries wait for their
 GPU run, after which P8 is complete.
 
 Open: the frame group's descriptor set and the pass group's named inputs wait
-on P7's grouped binding; only the `default` variant is built, with no authored
-quality tier; and the worlds under the repository's `worlds/` tree, the genesis
-card among them, are not part of the game's build, so their source rows compile
-where DXC is present.
+on P7's grouped binding, and the worlds under the repository's `worlds/` tree,
+the genesis card among them, are not part of the game's build, so their source
+rows compile where DXC is present. Only the `default` variant is built, which
+is all P8 closes with.
 P9's CPU half has landed; its frame-group half is open. Every presentation
 read of state goes through one state mirror, `WorldStateMirror` in
 `Puck.World.Protocol`: a flat table of slots, each a row ordinal, a key, a
-target flag, and a conversion. A binding the document authors registers its
-slot once, by the HUD resolver, camera rigs, markers, render colors, the theme,
-the binding bar, overlay predicates, the radial wheel and the binding bar's
-icon row; the wheel and the icon row both read a keyed cell through
+target flag, and a conversion. When the mirror installs a document it
+registers the document's presentation manifest, `WorldPresentationManifest`,
+compiled once per document from every section that carries a state binding: HUD
+element bindings and template placeholders, overlay `state` predicates, the
+binding bar's layout and model cells, every bindable scalar and color (camera
+program operands, markers, render lighting, sky and environment colors, the
+theme), and a render cycle's position row. The manifest finds a surface by the
+type that carries it, walking the generated model shape, so a section that gains
+a bindable member needs no new walker; re-installing a document whose manifest
+the mirror already holds registers nothing and allocates nothing. Its per-body
+half is a list of templates — the population scale row, a look's pose
+references and lane operands, a creation driver's state signal and gate tokens,
+an effector's gate tokens and state target — each keeping its `$body` key as authored. The
+consumers still register their own slots on first read and find the manifest's
+slot already there: the HUD resolver, camera rigs, markers, render colors, the
+theme, the binding bar, overlay predicates, the radial wheel and the binding
+bar's icon row; the wheel and the icon row both read a keyed cell through
 `WorldStateCells`, which keeps each slot it registered. A read made on behalf of a body or a seat acquires its slot through a
 `WorldStateLease`, and releases it when the body leaves, the seat's route or
 controlled body changes, or the mirror installs a document: a look's lanes, gait
@@ -584,8 +601,8 @@ code, the capture CPU tier and the fills through `CpuSurfaceSource`. Each waits
 for P12b to record its region flush and conversion dispatch as a graph source
 node. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
 through Media Foundation (`Win32MediaFoundationCameraService`). Linux registers
-null capture services, and there is no POSIX file-descriptor import, external
-semaphore, or keyed mutex.
+null capture services, and there is no POSIX file-descriptor import or
+external semaphore.
 A hit maps back to a source's pixels only through P13's CPU model; no live
 consumer feeds it a world-surface hit yet. The GPU bakes
 settled carves into 128-cubed bricks (`SdfWorldEngine.BrickBake.cs`).
@@ -628,10 +645,8 @@ P17 still owes:
 - the parity world shipping its bakes, and the check that a missing bake draws
   through its field and then switches.
 
-The two largest kernel includes are `sdf-vm.hlsli` (4,584 lines) and
-`sdf-world.hlsli` (2,814 lines). The frame data is written by hand in three
-places: an `SdfFrame` field, a numbered row in the packed buffer, and an HLSL
-accessor.
+The SDF engine's frame data is written by hand in three places: an `SdfFrame`
+field, a numbered row in the packed buffer, and an HLSL accessor.
 
 ## The forcing artifact
 
@@ -823,7 +838,10 @@ numerical thresholds for memory peaks, and the intended publish mode and
 compiler-discovery policy. Run on the producer-built package, never a source
 rebuild, from a clean installation and cache, in the Native AOT form if
 applicable. It covers the existing foundation assets and toolchain; P5's
-user-content packaging is separate.
+user-content packaging is separate. Device loss has one policy: the offscreen
+host recovers the way the windowed host does, rebuilding its device through
+`IDeviceLostRecoverable` and resuming, where today only the windowed launcher
+recovers.
 
 Thresholds for frame-time median and tail and for reload stalls are deferred.
 They need wall-clock and GPU timing, which the owner has deferred with no date,
@@ -898,7 +916,7 @@ resources and installs it without draining the device; the replaced graph is
 freed once the node's second submission after the install completes.
 
 The engine node and its views share their pipeline sets through one
-`SdfWorldPipelineCache` per composition, carried on `SdfViewGpuServices`: one
+`SdfWorldPipelineCache` per composition, handed to each of them: one
 set per device, kernel set (`SdfWorldKernels.ContentKey`) and brick-pipeline
 choice, leased by every holder and disposed with its last lease after any build
 in flight returns. The cache reads each backend's deployed kernels once, and it
@@ -937,15 +955,20 @@ explanation. The release profile,
 (framework-dependent ReadyToRun, since `Puck.World` is not AOT-compatible),
 compiler discovery `None`, the validation layers on both backends, the
 functional canaries, and the stability matrix: both backends, 1280×800 and
-1920×1080, the flagship world (the forcing world is not authored yet) and the
-shipped ink pipeline. Warm-up, soak and churn are counted in ticks and frames.
+1920×1080, and two workloads, `flagship`, which boots the shipped flagship
+world because the forcing world is not authored yet, and the shipped ink
+pipeline. The functional set includes every `pipeline-*` canary, with
+`pipeline-geometry` and `pipeline-echo` among them, and `no-device-compile`;
+`ReleaseProfileLawTests` fails when a `pipeline-*` canary is missing from it.
+Warm-up, soak and churn are counted in ticks and frames.
 `puck qualify <package>` runs that matrix on a published package's own World
 from a clean install and a cold pipeline cache, reads its evidence from
 `world.counters` and `pipeline.inspect`, and judges each cell pass, fail or
 blocked. The debug-layer run answers the buffer-transition question above.
-The peak owned pipeline bytes threshold is set for every pipeline cell. Peak
-device-local bytes is deferred, because no reading of what a World process
-allocates exists. A leak at teardown fails a cell on both backends: the Vulkan
+The peak owned pipeline bytes threshold is set for every pipeline cell. The
+peak device-local bytes threshold is judged from `memory.<backend>`, but every
+cell leaves it null until a reading of the published package on the reference
+devices sets it. A leak at teardown fails a cell on both backends: the Vulkan
 validation layer reports every object alive at `vkDestroyDevice`, and the
 Direct3D 12 device context prints each object its debug layer still holds as a
 `[d3d12-debug] live` line.
@@ -956,8 +979,9 @@ the validation layers on: every functional canary, the flagship cells with
 both of their world reloads applied, and the `ink` cells at exactly that peak,
 with no validation message and a clean teardown in any cell. The screen binder
 retires every machine output it published before the device goes, and a
-surface upload released after its device throws, with its owner's release on
-the stack, rather than leaking.
+surface upload, a Vulkan shared-surface import or a Direct3D 12 exportable
+image released after its device throws, with its owner's release on the stack,
+rather than leaking.
 
 Still open: the runs on the RTX 4070 and the AMD devices. Direct3D 12 cells are
 blocked on a machine whose debug layer stops device creation.
@@ -1102,8 +1126,10 @@ follow its device-bound services, its one recorder and the SDF engine's groups.
    `SdfFrame.MeshDraws`, with laws that include the fixed-point raycast bounded
    at a distance agreeing with the unbounded one whenever its hit is nearer. A
    pipeline `Geometry` pass takes its camera as a `ViewProjection` here.
-6. P4-2b, the mesh source: a minimal document row of inline indexed triangles
-   reaches `SdfFrame.MeshDraws` through a `GpuRegion`.
+6. P4-2b, the mesh source: a prototype carries its mesh as inline indexed
+   triangles (`prototypes.<name>.mesh`), and placements place it, so a mesh
+   has the one placement path P17's bakes also reach. Placed meshes reach
+   `SdfFrame.MeshDraws` through a `GpuRegion`.
 7. P4-2c, the raster pass and the bounded primary. Done when parity holds and
    the mesh fixtures of the check above pass.
 8. P4-2d, the canaries: `sdf-mesh-visibility` and `sdf-mesh-motion` on both
@@ -1176,20 +1202,27 @@ passes without P4 or an importer.
 individually scoped.
 
 **Delivers:** representations chosen by editing needs, silhouette, repetition,
-animation, and measured cost, never "all environments are SDFs": capsule or
-ellipsoid proxies on a character's bones for approximate shadows and ambient
-occlusion that never silently become the contact surface; shared shadows,
-reflections, volumes, and transparency as distinct contracts after opaque
-visibility; distance-field particle collision and destructible fields as
-further consumers, with field evaluation priced as many operations and no
-zero-penetration guarantee assumed; a bounded mesh import subset only after the
-procedural geometry proof, static geometry before skinning and animation,
-facial deformation, foliage, hair, and richer materials as separate measured
-slices, preserving identity, transforms, authority, and editing relationships
-across representations. Transient aliasing, output-selected specialization,
-asynchronous compute, a larger parameter ABI, more resource kinds, and device
-recovery are considered only against a demonstrated need, with simple
-allocation kept as the correctness reference.
+animation, and measured cost, never "all environments are SDFs". Three
+experiments are in scope:
+
+- a per-placement choice between the field, a bake, and a mesh, decided by
+  counted cost;
+- shadows and ambient occlusion on meshes, which P4 shades neutral;
+- capsule or ellipsoid proxies on a character's bones for approximate shadows
+  and ambient occlusion that never silently become the contact surface.
+
+Distance-field particle collision, destructible fields, mesh import, skinning,
+foliage, and hair stay out until a scene shows the need. When one returns,
+field evaluation is priced as many operations with no zero-penetration
+guarantee assumed, import is a bounded subset that follows the procedural
+geometry proof, and static geometry comes before skinning. Reflections,
+volumes, and transparency remain distinct contracts after opaque visibility,
+and facial deformation and richer materials remain separate measured slices.
+Every representation preserves identity, transforms, authority, and editing
+relationships. Transient aliasing, output-selected specialization,
+asynchronous compute, a larger parameter ABI, and more resource kinds are
+considered only against a demonstrated need, with simple allocation kept as
+the correctness reference.
 
 **Check:** each addition demonstrates a useful scene, its fidelity limits, and
 its measured cost before becoming a default.
@@ -1218,14 +1251,13 @@ selecting the staged copy. P3 owns resource versions and lifetimes, and this
 package is what gives its planner a pass's declared needs to plan from, so the
 two land beside each other and share one owner per file.
 
-The neutral `IGpu*` services also become bound to their device context. Today
-every call passes `IGpuDeviceContext.DeviceHandle`, and that value means
-different things on each backend: Direct3D 12 passes its native device, while
-Vulkan passes a token that the backend turns back into its device command table
-on every call. A service obtained from its device context needs neither, so
-`DeviceHandle` leaves the neutral surface. The change reaches
-`Puck.Abstractions`, both backends, `Puck.Overlays`, `Puck.Shaders`, and
-`Puck.SdfVm`, which is why it rides this package rather than a smaller one.
+The neutral `IGpu*` services are also bound to their device context. Each
+backend creates them with its context, and a consumer reaches every one through
+`IGpuDeviceContext.Services`; no call passes a device value, so the neutral
+surface has no device handle and Vulkan no token for its device command table.
+The change reaches `Puck.Abstractions`, both backends, `Puck.Overlays`,
+`Puck.Shaders`, and `Puck.SdfVm`, which is why it rides this package rather than
+a smaller one.
 
 **Deletes:** the three residency policies replace the upload paths built by
 hand for each consumer: the SDF engine's ring of host tables and its
@@ -1234,33 +1266,28 @@ overlay's single host-written buffer all go through the selector. The service
 bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuComputeServices`, `IFullscreenPassServices` and
 `WorldPostRenderExtensionServices`, `OverlayServices`, and
-`SdfViewGpuServices` are deleted. The closed set of binding kinds replaces
+`SdfViewGpuServices` are deleted. The pipeline factories merge into the one
+`IGpuPipelineFactory`: Vulkan's `IVulkanGraphicsPipelineFactory`, which
+`VulkanGpuPipelineFactory` wraps and the Vulkan swapchain compositor calls
+directly, does not survive beside it. The closed set of binding kinds replaces
 `GpuComputeBindingKind`, `ShaderSetManifestBindingKind`, the positional
 `TextureSamplerCount` and `EnableStorageBuffer` fields of
 `GpuGraphicsPipelineDescription`, and every binding index set by hand, such as
-`OverlayServices.StorageBufferBinding` and the SDF engine's binding constants.
+the unified overlay's `UnifiedOverlayNode.StorageBufferBinding` and the SDF
+engine's binding constants.
 
-**Gate before P8 starts:** a one-day spike builds one package over two passes,
-`sdf-film-grain.frag.hlsl` and a pixelate compute pass (which has no live
-consumer, so the spike drives its fixture copy from a test pipeline), with
-two frequency groups rather than today's single flat set: the interface as data,
-declarations generated from it as paired Vulkan binding and Direct3D register
-annotations, a C# reader for SPIR-V decorations and one for the DXIL container
-asserting both against the interface, two builds on one host and one on Linux
-compared byte for byte, and one parity station recorded against the current
-contract. It passes when both readers confirm identical group, binding, and
-member offsets for every interface member across both groups, when DXC output is
-byte-identical across two runs on one host, and when the two-group layout runs
-on Direct3D 12 and Vulkan inside `tests/Puck.Parity/parity.contract.json`'s
-tolerances. It fails toward Slang when the DXIL container cannot be read well
-enough to assert group, binding, and offset for every member without parsing
-undocumented structure, when a second group cannot be expressed identically on
-both backends from generated annotations — anything resembling
-a register remap surviving into the new design is
-that failure — or when DXC output is not byte-stable run to run. It also reads
-both backends' capability reports on the floor and ceiling devices to establish
-that neither lacks what the grouped contract assumes, which is a real-hardware
-run rather than a remote session.
+**Gate:** the spike over two passes, `sdf-film-grain.frag.hlsl` and a pixelate
+compute pass, each with two frequency groups, has passed its build-time half,
+as the [implementation status](#implementation-status) records. Three legs
+remain. One build on Linux is compared byte for byte with the two on one host.
+The two-group layout runs on Direct3D 12 and Vulkan inside
+`tests/Puck.Parity/parity.contract.json`'s tolerances, with one parity station.
+Both backends' capability reports are read on the floor and ceiling devices to
+establish that neither lacks what the grouped contract assumes, which is a
+real-hardware run rather than a remote session. The gate still fails toward
+Slang when DXC output is not byte-stable across hosts, or when the second group
+cannot run identically on both backends from generated annotations; anything
+resembling a register remap surviving into the new design is that failure.
 
 **Check:** a law over the selector on synthetic profiles — coherent unified,
 discrete with a small host-visible aperture, discrete with none, and one
@@ -1271,23 +1298,22 @@ heap; `IGpuDeviceContext` no longer declares `DeviceHandle` and no `IGpu*`
 member takes a device value; `puck references` finding no consumer of any
 type or member this package deletes; `puck architecture --check` and `puck parity` exit 0.
 
-**P7b, the rest of the package.** The device-bound services and the binding
-groups start from `DeviceHandle` passed about a hundred times by `SdfWorldEngine`
-and fifty by `ShaderPipelineRenderNode`, several test fakes of the whole
-service surface, and a Direct3D 12 backend with positional registers, static
-samplers and one shader-visible heap per descriptor pool, which cannot bind two
-groups from different pools. P7b is 22 commits in four phases, each done when
+**P7b, the rest of the package.** The binding groups start from several test
+fakes of the whole service surface and a Direct3D 12 backend with positional
+registers, static samplers and one shader-visible heap per descriptor pool,
+which cannot bind two groups from different pools. P7b is 22 commits in four phases, each done when
 its laws pass and `puck parity` holds; the services phase also reads identical
 counts before and after through `puck counters compare`.
 
-Phase 0 needs nothing else, and all of it but part of step 2 has landed:
+Phase 0 needs nothing else, and all of it has landed:
 
 1. Done: no ray-query path or acceleration-structure surface exists, and no
    world or schema names `host.rayQuery`.
-2. The command tables take the proc lookup through their constructors, and a
-   test stands in for the driver there. Still open: `VulkanProcResolver`
-   becomes an instance rather than a static class, and
-   `VulkanDestroyGuardLawTests` stops enumerating the tables by reflection.
+2. Done: `VulkanProcResolver` is an instance the command tables take through
+   their constructors, and `procedures.vulkan` is its counter set, registered
+   once. A test builds one over lookups that stand in for the driver, and
+   `VulkanDestroyGuardLawTests` finds the tables' destroy entry points from the
+   names they resolve rather than by reflection.
 3. Done: a law fails each link of the Vulkan boot chain and holds that
    everything built before it is destroyed once, in reverse.
 4. Done: under `--debug-layers`, Direct3D 12 teardown prints a `[d3d12-debug] live` line
@@ -1295,15 +1321,27 @@ Phase 0 needs nothing else, and all of it but part of step 2 has landed:
    `DirectXDebugLayerLivenessTests`, and qualification no longer defers
    `Direct3D12LiveObjects`.
 
-Phase 1 follows P3, which has landed:
+Phase 1 follows P3, which has landed, and all of it has landed:
 
 5. Done: destroying descriptor pool zero does nothing and reaches no device on
    either backend, so `GpuRegion.Dispose`, `UnifiedOverlayNode` and
    `ShaderPipelineRenderNode` and its float preview destroy their pools
    unguarded.
-6. `memory.vulkan` and `memory.directx` count device-local bytes allocated and
-   released (per-backend-deterministic) at their actual size, and the peak
-   (pacing); `QualificationJudge` gains the peak device-local threshold.
+6. Done: `memory.vulkan` and `memory.directx` (`GpuDeviceMemoryWork`) count
+   device-local bytes allocated and released (per-backend-deterministic) at
+   their actual allocation size, and the peak held (pacing), where each backend
+   allocates buffers, images and exported or imported memory; swapchain images
+   are never counted. An allocation counts by its role (`GpuMemoryRole`), never
+   by the memory type the driver chose, and `GpuDeviceMemoryWork.IsCounted` is
+   the one statement of the rule: images, device-local buffers, exportable
+   images and imports count; host-visible, staging, upload and readback buffers
+   never do, even on a unified-memory device where every Vulkan memory type is
+   device-local. Entries are keyed per device, and each backend's device
+   teardown refuses by name any allocation still held on it: a Vulkan logical
+   device's disposal, and a Direct3D 12 context's `Dispose` and `Recreate`, each
+   of which still releases the device. `QualificationJudge` judges a cell's
+   `peakDeviceLocalBytes`, which every cell leaves null until a
+   reference-device reading sets it.
 
 Phase 2, the services, follows the generated frame block, which has landed:
 
@@ -1320,7 +1358,7 @@ Phase 2, the services, follows the generated frame block, which has landed:
    context.
 8. Done: `IGpuBindings` creates pools, sets and samplers and writes descriptors,
    with no device parameter; each backend registers one, bound to its device
-   context. One `WriteBuffer` names the binding's `GpuBufferAccess` and element
+   context. One `WriteBuffer` names the binding's `GpuBindingKind` and element
    stride (zero for a raw view), which chooses a Direct3D 12 raw or structured
    view, read-only or read-write; Vulkan writes one storage-buffer descriptor.
 9. Done: every factory and the queue submitter take no device parameter; each
@@ -1331,13 +1369,28 @@ Phase 2, the services, follows the generated frame block, which has landed:
    initial data, and `CreateDeviceLocal` one only the GPU writes.
    `DirectXBufferStatesLawTests` holds each placement's way into Direct3D 12's
    indirect-argument state. The surface transfer objects the factory creates still
-   take a device context on each call.
-10. The bundles under **Deletes** collapse into `IGpuDeviceContext.Services`
-    and its bring-up; `DeviceHandle`, `VulkanDeviceCommands.Token` and
-    `FromToken` go.
-11. `GpuCreationFaults`, a decorator over the factories armed by a console verb,
-    injects a creation failure on a real device, which closes P1a's partial
-    allocation check.
+   take a device context on each call; binding them to it is open work beside
+   the device-loss changes to the upload and import objects.
+10. Done: `IGpuDeviceContext.Services` (`GpuDeviceServices`) holds the recorder,
+    bindings, queue submitter and every factory, and is the one way a consumer
+    reaches a device-bound service. Direct3D 12's context creates the set in its
+    constructor and Vulkan's renderer on first read, each bound to the context
+    rather than to one native device, so the set survives a device recreated in
+    place, and reading it never brings the device up. Neither backend registers
+    the services individually; the optional surface export stays its own
+    registration. The bundles under **Deletes** are gone: a render node, view,
+    engine, pipeline set or producer takes its device context (or the
+    composition's `SdfWorldPipelineCache`) and reads the services from it, and
+    `GpuWorkCounting.Wrap` wraps a `GpuDeviceServices`. A shader pipeline node
+    always has graphics, so nothing refuses a graphics pass for want of
+    graphics services. `IGpuDeviceContext.DeviceHandle`,
+    `VulkanDeviceCommands.Token` and `FromToken` are deleted, and the table is
+    no longer disposable; Direct3D 12 code reads `DirectXDeviceContext.Device`.
+11. `GpuCreationFaults`, a decorator over the factories, injects a creation
+    failure on a real device, which closes P1a's partial allocation check. It
+    is armed only by the operator console verb `gpu.faults` (arm, disarm,
+    list), which no world document can reach, and it ships in release builds
+    so qualification can use it.
 
 Phase 3, the groups, follows phase 2:
 
@@ -1351,12 +1404,44 @@ Phase 3, the groups, follows phase 2:
     `GpuRegisterNumbering.PackedByClass`, which only the SDF engine and the
     region copy do; P7b-20 deletes that numbering with the engine's last
     packed register.
-13. The GPU-free group contract: a closed `GpuBindingKind` set, group and
-    pipeline layout descriptions, and the `DirectXRootLayout.Plan` and
-    `VulkanGroupLayouts.Plan` planners, tested against the spike's tables.
+13. Done: the GPU-free group contract. `GpuBindingKind`
+    (`src/Puck.Abstractions/Gpu/Bindings`) is the one closed set of binding
+    kinds. The pass interface's readers and layout use it, and
+    `IGpuBindings.WriteBuffer` takes it as the one statement of buffer
+    access. Push constants are not a kind: a pushed block is a constant buffer
+    marked `ShaderInterfaceBinding.Pushed`. `GpuPipelineLayoutDescription`
+    holds a pipeline's groups (`GpuGroupLayoutDescription`, each a set of
+    `GpuGroupBinding`s) and whether it pushes an index, and refuses by name a
+    group outside the four ordinals, an empty group, a repeated group or
+    binding, and a binding inside another's array.
+    `ShaderInterfaceLayout.PipelineLayout` derives one from an interface and
+    the pipeline's stages, which `ShaderPipelinePassKinds.Stages` reads from
+    the pass kind: compute, or vertex and fragment for a fullscreen or
+    geometry pass. `DirectXRootLayout.Plan` plans dense root parameters: per
+    group in ordinal order a view table, then a sampler table when the group
+    holds a sampler, each range at the group's space and the binding's
+    register, and the pushed index last as one 32-bit root constant at `b0` in
+    space 4. Every root parameter's visibility is `ALL`, except a graphics
+    pipeline of one stage, whose parameters see that stage. `VulkanGroupLayouts.Plan`
+    plans one set layout per set number up to the highest group, empty where
+    no group sits, and a 4-byte push range, with every binding and the range
+    visible to the pipeline's stages. The plans carry everything 14b needs to
+    create root signatures and pipeline layouts. `DirectXRootLayoutLawTests`,
+    `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
+    planners and the spike's interfaces to the same tables. The combined image
+    sampler that `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`
+    still state is not in the closed set, so their users, and the 16 sources
+    declaring `vk::combinedImageSampler` (9 under `src` and 7 canary shaders),
+    move to a separate image and sampler with 14b's sampler tables, and both
+    enums are deleted there.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
-    of it (14a). Both backends then realize several groups, with sampler tables
-    and one 4-byte push range (14b), the riskiest commit.
+    of it (14a). The heap's sizes come from the capability report:
+    `GpuDeviceCapabilities` records options 19's view and sampler heap sizes
+    on Direct3D 12. Both backends then realize several groups, with sampler
+    tables and one 4-byte push range (14b), the riskiest commit. 14b creates root
+    signatures and pipeline layouts from step 13's plans, moves every combined
+    image sampler to a separate image and sampler, and deletes
+    `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`.
 15. Pipelines move onto groups: `WriteFrame` writes the frame group, set 0, into
     a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
     3; passes include their generated interface; the pipeline document's
@@ -1381,7 +1466,7 @@ readers are in flight, and brick staging is a region with an external
 destination. The SDF engine's groups are P14's; its 32 screens bind as 32
 bindings and one sampler until P14 makes them an array. The test fakes
 consolidate as the surface shrinks. Open: the gate's Linux build and the floor
-and ceiling capability reports.
+device's capability report.
 
 ### P8 — The shader package, and one source language
 
@@ -1395,7 +1480,9 @@ explicit offsets and explicit binding slots, a named struct for scalars and
 accessors for arrays that hide the element format. A package carries its
 sources, its interface, the generated declarations, and precompiled binaries per
 backend and per variant, versioned by the interface hash; a quality variant has
-the same interface, so a tier cannot change what a pass reads. A generated echo
+the same interface, so a tier cannot change what a pass reads. P8 closes with
+the `default` variant alone: quality tiers, and the variants they select,
+belong to P10. A generated echo
 pass per interface reads every member through the generated declarations, writes
 it to an output buffer, and has to read back distinct sentinels exactly on both
 backends, so a generator mistake fails the package on a real driver; compiler
@@ -1483,30 +1570,38 @@ the shipped-world state baselines unmoved and the `rim-drop` and
 change when the eased default moves a station's pixels.
 
 **Open:** filling the generated frame group's `tick` and `time` from the
-mirror's delivered tick and interpolation fraction; the manifest compiled from
-the document at install rather than
-registered by each consumer on first read, which P10's tier law needs; and the
-materials a program bakes at build, which join the mirror when the field
-lattice becomes a region kind. The `WorldStateMirrorLawTests`,
+mirror's delivered tick and interpolation fraction; the consumers reading the
+manifest's pre-registered slots rather than registering on first read, with a
+body's lease acquiring its templates when the body arrives, which P10's tier law
+needs; the reads the manifest does not yet record — a seat's binding contexts,
+whose row comes from a family resolved at run time, the radial wheel's and the
+icon row's keyed cells, whose keys are action names, and a binding bar a player
+profile authors rather than the world; retiring a manifest slot a later document
+no longer binds; and the materials a program bakes at build, which join the
+mirror when the field lattice becomes a region kind. The
+`WorldStateMirrorLawTests`, `WorldPresentationManifestLawTests`,
 `WorldStateReadRoutingLawTests`, `SeatRouteDeliveryLawTests`,
 `WorldWheelRingsLawTests` and `WorldSceneMovedTransformsLawTests` laws cover the
 landed half.
 
 ### P10 — Bound rows reach a pass
 
-**Owns:** the `parameter` statement on the authored pipeline row and its
+**Owns:** the `parameter` statement on the authored graph instance row and its
 validation, schema, and mutation; the World group's regions and their
 residency writers; the deterministic tick in the frame group; the capture's
-frame tick and the parity verdict; the cost report's presentation dimension and
-the tier a pipeline names.
+frame tick and the parity verdict; the cost report's presentation dimension;
+and quality tiers, both the variants a package builds beyond `default` and the
+tier a pipeline names.
 
 **Delivers:** `parameter <pass>.<member> = <value>` binding one interface member
 to a literal or a `state.<row>[.<key>][.$target]` token — the same token a HUD
 gauge and a camera operand speak, so no second binding grammar appears. The same
 statement binds a whole row, keyed or lattice-shaped, as `state.<row>`, when the
 member it names is an interface array; the member's declared type says which,
-and the pass declares the array's element format. `WorldViewPipeline` gains the
-parameter list and the tier; the literal is the fallback, so a
+and the pass declares the array's element format. A `views.graphs` row
+(`WorldViewGraph`) gains the parameter list and the tier; P10 never targets
+`WorldViewPipeline`, which P11 deletes with `views.pipelines`. The literal is
+the fallback, so a
 binding that does not resolve draws the authored number; a member both bound
 here and overridden by P5's per-instance override refuses at validation naming
 the pipeline, the pass, and the member; a row whose kind or bounds cannot fill
@@ -1652,13 +1747,15 @@ A producer registers with the host under an id, and the graph names a source by
 id and transport. Adding an emulator, a capture API, or a video decoder means
 registering a producer; the graph schema and the planner do not change. The
 producer-named `WorldScreenSource` kinds become producer ids, and
-`TestPatternSource` becomes an ordinary producer rather than a fallback the
+`WorldTestPatternProducer` is an ordinary producer rather than a fallback the
 view stack owns.
 
 Format and color conversion are shipped passes that the planner inserts once
 per source and shares across every consumer. Uploads use P7's residency policy.
 Imports are zero-copy where the backend can import the producer's memory, with
-the staged copy as the fallback. Filtering is the consumer's choice, so pixel
+the staged copy as the fallback. An import across APIs synchronizes with fence
+semantics, a shared fence that Vulkan sees as a timeline semaphore, never with
+a keyed mutex. Filtering is the consumer's choice, so pixel
 art can sample nearest while a camera feed samples filtered.
 
 The content class decides what verification and privacy apply. External
@@ -1733,8 +1830,8 @@ pick through a portal reaches the nested world's surface.
 **Starts from:** `SdfWorldEngine`'s own dispatch sequence (the
 `SdfWorldEngine.PassLabels` passes plus brick bake and upload), its Stage 2
 composition, the hand-written frame data, `SdfEnvironment`'s separate packing,
-the two large includes, the orphaned shaders, and the prose sync pairs in the
-`rendering` skill's reference.
+the two large includes, and the prose sync pairs in the `rendering` skill's
+reference. The kernels nothing dispatched are already deleted.
 
 **Owns:** the capability matrix, the SDF pass package, its generated frame
 block, the HLSL module tree and its layering check, staged shading, and the
@@ -1772,8 +1869,8 @@ Then:
 This retires `render.extensions` as a separate document section, because a
 post-process pass becomes a graph node. It also retires `FullscreenPassNode`,
 `WorldPostRenderExtensionPasses`, the child plumbing in `SdfEngineNode`,
-`ViewStack`'s fixed budget, the orphaned shaders, and the shaders README lines
-that name consumers which no longer exist. Every internal caller and world
+`ViewStack`'s fixed budget, and the shaders README lines that name consumers
+which no longer exist. Every internal caller and world
 document is updated in the same change.
 
 The engine's own pass and hazard model is deleted once its passes are graph
@@ -1784,9 +1881,9 @@ passes, because the planner's tracker (P3) then decides every barrier:
 pass-index constants, `PassLabels`, and the `Record*` methods that fix the
 dispatch order by hand. `SdfWorldEngine` does not survive as a second path
 beside the pass package: when the last capability row is green, the
-monolith is gone. `WorldPostRenderExtensionServices` is also the graphics
-bundle every `views.pipelines` node receives, so retiring `render.extensions`
-does not free it; P7's bundle collapse does.
+monolith is gone. A `views.pipelines` node and a `render.extensions` pass both
+draw through their device context's services, so retiring `render.extensions`
+frees no graphics bundle.
 
 **Check:** every capability-matrix row green; `puck parity` recorded before the
 move and re-recorded after, with any moved pixels explained in the change; P2's
@@ -1819,10 +1916,23 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 
 **Build sequence.**
 
-1. The capability matrix as a law, with the members nothing calls deleted:
-   `SubmitFramePipelined`, `AcquireFramePixels`, `IsFramePixelsReady`,
-   `TryReadCadenceDiagnostics`, `SdfFrame.WarpAmount`, and the export-mode
-   output image branch.
+1. Landed, the capability matrix as a law: `SdfCapabilityMatrixLawTests`
+   (`tests/Puck.SdfVm.Tests`) assigns every public member of `SdfWorldEngine`,
+   `SdfEngineNode`, `SdfFrame`, `SdfViewSnapshot`, `SdfWorldEngineOptions` and
+   `SdfWorldRenderSpec` to exactly one capability row, names each row's graph
+   equivalent and check, maps every pass label to the graph pass that replaces
+   it, and holds the rows without a check to a named list of gaps: the live
+   program report, render scale, screen slots, decals, the glyph atlas,
+   volumes, the shading levers, debug views, the grid overlay, brick baking,
+   the output image and export, mesh draws, and assembly and lifetime. No row
+   is green, because no graph equivalent runs yet. A console verb is covered
+   through the member it drives rather than enumerated, because the verbs live
+   in `Puck.World`, which the SDF tests do not reach. The members nothing
+   called are gone: the pipelined preview path, the node's cadence diagnostics
+   and the engine's diagnostics hashing behind them, `SdfFrame.WarpAmount`, and
+   the world node's output-image factory with its shared-handle branch. An
+   offscreen camera view still selects export mode through
+   `SdfCameraView.ExportFactory`, so the engine's export path stays.
 2. The HLSL module split and the upward-include refusal, with every compiled
    kernel's hash unchanged.
 3. Landed, the generated instruction-set declarations: `puck shaders generate`
@@ -1833,16 +1943,23 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 4. Landed, the planner's vocabulary: a pass's `dispatch` (`Extent`, `Groups`,
    or `Indirect` from a buffer version and offset, which the pass reaches in the
    indirect-argument state), a buffer's `strideBytes`, and a buffer's `count`
-   by `Extent`, `Instances` or `ProgramWords` in place of `sizeBytes`. A read
-   of another kind than the prior reads records a barrier. The pipeline node
-   records none of it, so the planner refuses it on a shader pass.
-   `SdfPassPlanLawTests` builds the SDF passes as package passes from
-   `SdfFrameBufferPlan.Uses` and plans them in `PassLabels`' order less the
-   composite, with exactly `SdfFrameBufferPlan`'s edges between passes. The
-   engine records no graphics pass, so a package pass stays compute-shaped. A
-   single count basis cannot state the mask, tile and hit-record capacities,
-   which also scale with viewports and tiles; the cutover needs that before
-   the planner sizes them.
+   in place of `sizeBytes`. A count is a sum of terms, each `elements` per unit
+   of a product of bases: `Extent`, `Instances`, `ProgramWords`, `Viewports`,
+   `Tiles`, `DynamicTransforms`, `InstanceMaskWords` and `InstanceGridWords`.
+   A term names each basis once, and no two terms name the same bases. A term
+   whose bases the host resolves to zero units adds nothing, and a buffer whose
+   terms all resolve to zero bytes is refused by name. A read of another kind
+   than the prior reads records a barrier. The pipeline node records none of
+   it, so the planner refuses it on a shader pass. `SdfPassPlanLawTests` builds
+   the SDF passes as package
+   passes from `SdfFrameBufferPlan.Uses` and plans them in `PassLabels`' order
+   less the composite, with exactly `SdfFrameBufferPlan`'s edges between
+   passes, and at several viewport, tile and instance capacities sizes every
+   SDF buffer exactly as `SdfWorldEngine.FrameBufferBytes`, the one statement
+   of the engine's allocations. The engine records no graphics pass, so a
+   package pass stays compute-shaped. A program with no instances still sizes
+   the cull buffer by its tile-plane term, so the cutover resolves its real
+   instance count.
 5. The SDF pass interfaces over the four groups, with generated declarations;
    parity reads identically.
 6. The cutover, the riskiest commit: the package records into the graph's
@@ -1858,8 +1975,11 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 11. Staged shading.
 12. `render.extensions` retires with `FullscreenPassNode`, its validation and
     the `world.extensions` verb; `comprehensive.synthetic.world.puck` migrates.
+    `ShaderSetManifest`, the `puck.shader.manifest.v1` form film grain ships
+    in, folds into the pass package, so a post-process set ships the way any
+    pass does.
 13. The final sweep deletes the matrix law, `SdfWorldEngine` and the types
-    listed above, `SdfViewGpuServices`, `SdfShaderSetVerification`,
+    listed above, `SdfShaderSetVerification`,
     `SdfWorldKernels`, the SDF pipeline set and its cache,
     `sdf-frame-upload.comp`, and corrects the comments and
     guides.
@@ -1894,9 +2014,12 @@ as a reduced extent and a resample pass; and buffer edges.
 
 ### P15 — Temporal reconstruction
 
-**Starts from:** no jitter, motion vectors, or history in the SDF kernels, and
-render scale implemented as an upsample in the composite pass
-(`RenderScaleQ`, `UpscaleSharpnessQ` in `SdfWorldEngine.FramePreparation.cs`).
+**Starts from:** no jitter, motion vectors, or history in the SDF kernels.
+Render scale is a spatial upsample: each view renders at a quantized fraction
+of its region (`SdfViewSnapshot.RenderScale`), and the SDF engine's kernel that
+assembles the views' regions scales it back up, blending from bilinear toward
+clamped Catmull-Rom by `SdfViewSnapshot.UpscaleSharpness`. P11b deletes that
+kernel, and the graph's one resample pass takes the upsample over.
 
 **Owns:** jitter, motion vectors, the temporal upscaler, history management,
 dynamic resolution, and temporal reuse inside the SDF march.
@@ -1954,8 +2077,11 @@ swapchain selection, and paper white for UI.
 
 **Delivers:** the smallest HDR path that exercises the contracts. That means a
 scene-linear working space and one display-transform node at the end of the
-graph, which tonemaps and encodes for the target. On Windows it adds an HDR10
-or scRGB swapchain, chosen from what the display reports. The HUD and overlays
+graph, which tonemaps and encodes for the target. The swapchain compositors,
+`SurfaceCompositor` on Vulkan and `DirectXSurfaceCompositor` on Direct3D 12,
+become that node's writer rather than a blit after it. On Windows it adds an
+HDR10 or scRGB swapchain on both backends, chosen from what the display
+reports. The HUD and overlays
 use a paper-white level, and one HDR source, desktop capture on an HDR display,
 converts through P12. SDR stays the default and the fallback. Calibration UI,
 per-display metadata, and HDR on the Steam Deck OLED under Linux are later work
@@ -1989,7 +2115,11 @@ its chunk in compiled worlds, and background baking on the device.
 
 The texture pipeline that stores these generates mips and compresses with BC7
 for color, BC5 for normals, and BC6H for HDR data, and each texture declares
-whether it is sRGB or linear. The Steam Deck supports all three formats.
+whether it is sRGB or linear. The Steam Deck supports all three formats. Once
+P17's first step puts a baked texture on the GPU, one pixel-format vocabulary
+remains: `GpuPixelFormat`, `SurfaceFormat`, `ImagePixelFormat` and the baker's
+`TextureFormat` fold into it rather than being bridged by conversions such as
+`GpuPixelFormats.FromSurfaceFormat`.
 
 Each bake is keyed by the prototype's content hash, the baker version, and the
 quality tier, and one cache is filled in two ways. A build ships each bake once
@@ -2016,34 +2146,48 @@ packaging, and compiled worlds in the runtime and delivery programme.
 
 ## Sequencing
 
-**Foundation.** P1a, then P2, then P1b and P3 in parallel, then P4, then P5,
-then P6. P1a and P5's design can proceed independently. P1b does not block P3
-or P4, and neither blocks releasing the foundation. Image-only packaging stays
+**Foundation.** P2, P3 and P5 are complete. P1a and P1b stay open beside the
+rest: neither blocks P4 or releasing the foundation. P4's GPU-free commits
+(P4-0, P4-1a and P4-2a) have landed. P4-1b and P4-1c need nothing else, and
+its remaining commits follow P7b's device-bound services, its one recorder and
+the SDF engine's groups, as P4's build sequence orders them. P6 follows P4. Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
-owner at a time. P1a is under way.
+owner at a time.
 
-**Contracts.** P7 lands beside P3, because P3's planner reads the interface P7
-declares, and P7's spike gates P8. P8 lands beside P5-2 or after it, because a
-package's manifest and interface hash extend P5's source closure. P7 and P8 do
-not read simulation state, so they do not wait on the state rebuild.
+**Contracts.** P7's memory profile and residency selector have landed, and P7b
+is under way: steps 5, 7, 8, 9 and 12 have landed. Step 6 needs nothing else;
+steps 10 and 11 follow step 9. The groups run in order from step 13, the
+GPU-free group contract, which the rest of phase 3 builds on; step 20, the SDF
+engine's groups, also follows P4-1. P8 has landed pending its GPU canaries, and
+its frame group moves from push constants to a descriptor set when step 15
+puts pipelines on groups. P7 and P8 do not read simulation state, so they do
+not wait on the state rebuild.
 
-**The frame graph and nesting.** P11 follows P3 and P7. P12 follows P11, and
-P13 follows P12. P14 follows P4, P7b, P8, P11, and P12, because the engine's
-composition and screens need somewhere to go before it moves. P7b's services
-and P4-1 run beside each other; P7b's SDF groups follow P4-1, and P4-2's mesh
-work follows both. P15 and P16 both
-follow P14: P15 also needs P4, and P16, the smallest package in this group,
-needs P14's float working targets. P17 follows P3, P4, P5, and compiled worlds.
+**The frame graph and nesting.** P11's CPU half has landed, and so have two of
+P11b's items: the first-class package pass kind and a steady-state schedule
+that allocates nothing. The rest of P11b waits on P7b's binding groups. P12's
+source contract, producers and conversion passes have landed; P12b, the graph
+wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
+P11b and P12b, because the engine's composition and screens need somewhere to
+go before it moves; its capability matrix (P14-1), generated instruction-set
+declarations (P14-3) and the planner's vocabulary with multi-basis counts
+(P14-4) needed none of them and have landed. P4-2's mesh
+work follows P4-1 and P7b's services. P15 and P16 both follow P14: P15 also needs P4, and P16, the smallest package
+in this group, needs P14's float working targets. P17's CPU half, the bakes and
+their texture codecs, has landed; drawing a bake follows P4 and choosing
+between a bake and the field follows P6.
 
-**Bound state.** P9 follows P8 for the frame group it fills. It is written
-against the state interface of
+**Bound state.** P9's CPU half has landed; its frame-group half fills the
+frame group P8 declares. It is written against the state interface of
 [the presentation view](runtime-and-delivery.md#the-presentation-view), which
 the runtime and delivery programme owns. P10 is last in this group: a bound
 member and an overridden member have to compose by a stated rule, so it needs
-P5-1 as well as P7's residency policies, P8's interface, and P9's mirror.
+P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
+which have landed. It also follows P11b's graph wiring, because the rows it
+binds are `views.graphs` rows.
 
-The longest dependency chain runs from P1a and P2 through P3 and P7 to P11
-and P12, joins P8 (which also waits on P5-2), and ends with P14 and then P15.
+The longest remaining chain runs through P7b's groups to P11b and P12b, then
+P14, and ends with P15.
 
 ## Verification summary
 

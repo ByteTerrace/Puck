@@ -552,4 +552,69 @@ public sealed class RenderGraphSchedulerLawTests {
             frame++;
         }
     }
+    [Fact]
+    public void AReusedScheduleMatchesAFreshOneWhileTheFrameChanges() {
+        var set = Set(
+            Instance(name: "north"),
+            Instance(name: "south"),
+            Instance(
+                name: "security",
+                refresh: RenderGraphRefresh.Every(divisor: 3)
+            ),
+            Instance(
+                name: "mirror",
+                reads: [new RenderGraphRead(Producer: "mirror")]
+            ),
+            Instance(
+                name: "main",
+                reads: [new RenderGraphRead(Producer: "north"), new RenderGraphRead(Producer: "south"), new RenderGraphRead(Producer: "security")]
+            )
+        );
+        var north = new RenderGraphFootprint(Consumer: "main", Height: 0.25, Producer: "north", Width: 0.25);
+        var south = new RenderGraphFootprint(Consumer: "main", Height: 0.5, Producer: "south", Width: 0.5);
+        var security = new RenderGraphFootprint(Consumer: "main", Height: 0.2, Producer: "security", Width: 0.2);
+        var mirror = new RenderGraphFootprint(Consumer: "mirror", Height: 0.5, Producer: "mirror", Width: 0.5);
+        var corner = new RenderGraphRoot(Height: 0.25, Instance: "mirror", Width: 0.25);
+        // Each frame changes what the one before it showed: roots and footprints come and go, a producer grows, and the
+        // budget tightens, lifts and returns, so a reused schedule holds a larger frame's entries when a smaller follows.
+        var frames = new Func<long, RenderGraphFrame>[] {
+            index => Frame(budget: (480 * 270), footprints: [north, south, security, mirror], index: index, roots: [Full(instance: "main"), corner]),
+            index => Frame(footprints: [north], index: index, roots: [Full(instance: "main")]),
+            index => Frame(budget: (480 * 270), footprints: [mirror], index: index, roots: [corner]),
+            index => Frame(budget: (960 * 540), footprints: [south, security], index: index, roots: [Full(instance: "main"), corner]),
+            index => Frame(index: index, roots: [Full(instance: "north"), Full(instance: "south")]),
+        };
+        const long Count = 40;
+        var reference = Run(
+            count: Count,
+            frame: index => frames[(index % frames.Length)](arg: index),
+            set: set
+        );
+        RenderGraphSchedule[] schedules = [new(set: set), new(set: set)];
+        var history = RenderGraphHistory.Empty(set: set);
+
+        for (var index = 0L; (index < Count); index++) {
+            var schedule = schedules[(index % 2)];
+            var fresh = reference[((int)index)];
+
+            RenderGraphScheduler.Schedule(
+                frame: frames[(index % frames.Length)](arg: index),
+                history: history,
+                schedule: schedule,
+                set: set
+            );
+            history = schedule.Next;
+
+            Assert.Equal(expected: fresh.Frame, actual: schedule.Frame);
+            Assert.Equal(expected: fresh.PassPixels, actual: schedule.PassPixels);
+            Assert.Equal(expected: fresh.Instances, actual: schedule.Instances);
+            Assert.Equal(expected: fresh.Renders, actual: schedule.Renders);
+            Assert.Equal(expected: fresh.Reads, actual: schedule.Reads);
+
+            for (var instance = 0; (instance < set.Instances.Count); instance++) {
+                Assert.Equal(expected: fresh.Next.LatestFrame(index: instance), actual: schedule.Next.LatestFrame(index: instance));
+                Assert.Equal(expected: fresh.Next.Allocated(index: instance), actual: schedule.Next.Allocated(index: instance));
+            }
+        }
+    }
 }

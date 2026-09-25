@@ -465,8 +465,11 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   coverage. Tagging is one-directional: it proves a door cannot refuse with
   an unlisted reason, not that every listed reason has a live call site.
 - `wire.errors [reset]` counts rejections: synchronous text-path errors,
-  snapshot re-parse mismatches, and deferred `WorldEditEcho` rejections
-  (via `NoteDeferredRejection` in `WorldPostBuildWiring`). The per-tick drive denial
+  snapshot re-parse mismatches, and deferred `WorldEditEcho` rejections of
+  the local console connection's lines (via `NoteDeferredRejection` in
+  `WorldDeferredVerbAnswers`, which the World and the silo both tap). A remote
+  peer's refusal, and a rebuild no console line registered (the silo's reload,
+  a replay drive), are NOT counted. The per-tick drive denial
   in `ApplyIntentSubmission` is stderr-only and NOT counted.
 - Read-backs: `world.grants [principal]` (echoes rows with `(x)` exclusive,
   `budget:`, `channels:0x…`, per-ordinal ceilings), `world.why <principal>

@@ -129,8 +129,8 @@ public sealed record ResourceReference(
 /// refused by name.</param>
 /// <param name="StrideBytes">A structured buffer's element stride in bytes, a positive multiple of four, or
 /// <see langword="null"/> for a raw buffer. Only a package pass reaches a structured buffer.</param>
-/// <param name="Count">A counted buffer's size, which scales with a count the host resolves, in place of
-/// <paramref name="SizeBytes"/>. Only a package pass reaches a counted buffer.</param>
+/// <param name="Count">A counted buffer's size in elements, a sum of terms that each scale with a product of counts the
+/// host resolves, in place of <paramref name="SizeBytes"/>. Only a package pass reaches a counted buffer.</param>
 public sealed record ShaderPipelineResource(
     string Name,
     ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image,
@@ -142,7 +142,7 @@ public sealed record ShaderPipelineResource(
     string? From = null,
     uint Samples = 1,
     uint? StrideBytes = null,
-    ShaderPipelineBufferCount? Count = null
+    IReadOnlyList<ShaderPipelineCountTerm>? Count = null
 ) {
     /// <summary>Gets whether the host supplies the resource rather than a pass producing it.</summary>
     [JsonIgnore]
@@ -157,10 +157,13 @@ public sealed record ShaderPipelineResource(
     public bool IsPackageStorage => ((StrideBytes is not null) || (Count is not null));
 
     /// <summary>Resolves a buffer's capacity: its fixed <see cref="SizeBytes"/>, or its <see cref="Count"/> of elements
-    /// against the host's counts.</summary>
+    /// against the host's counts. A term whose bases resolve to zero units adds nothing; a counted buffer whose terms
+    /// all resolve to zero is refused by name, because a zero-byte buffer cannot be bound.</summary>
     /// <param name="counts">The counts a counted buffer scales with.</param>
     /// <returns>The capacity in bytes.</returns>
     /// <exception cref="InvalidOperationException">The resource is not a buffer, or declares neither size.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="counts"/> resolves every term of the buffer's
+    /// count to zero units, which would size it at zero bytes.</exception>
     /// <exception cref="OverflowException">The capacity does not fit in 64 bits.</exception>
     public ulong ResolveSizeBytes(ShaderPipelineStorageCounts counts) {
         if (Kind != ShaderPipelineResourceKind.Buffer) {
@@ -173,31 +176,111 @@ public sealed record ShaderPipelineResource(
             throw new InvalidOperationException(message: $"Buffer '{Name}' declares neither sizeBytes nor a count.");
         }
 
-        return checked(((((ulong)ElementBytes) * count.Elements) * counts.UnitsOf(basis: count.Basis)));
+        var elements = 0UL;
+
+        foreach (var term in count) {
+            var product = term.Elements;
+
+            foreach (var basis in term.Per) {
+                product = checked((product * counts.UnitsOf(basis: basis)));
+            }
+
+            elements = checked((elements + product));
+        }
+
+        if (elements == 0) {
+            var bases = string.Join(
+                separator: " + ",
+                values: count.Select(selector: static term => string.Join(
+                    separator: " * ",
+                    values: term.Per
+                ))
+            );
+
+            throw new ArgumentOutOfRangeException(
+                actualValue: counts,
+                message: $"Buffer '{Name}' counts by {bases}, and the counts resolve every term to zero units, so it would hold zero bytes.",
+                paramName: nameof(counts)
+            );
+        }
+
+        return checked((((ulong)ElementBytes) * elements));
     }
 }
-/// <summary>A counted buffer's size: <see cref="Elements"/> elements per unit of <see cref="Basis"/>, each element
-/// <see cref="ShaderPipelineResource.ElementBytes"/> long.</summary>
-/// <param name="Basis">What the count scales with.</param>
-/// <param name="Elements">The elements per unit, at least one.</param>
-public sealed record ShaderPipelineBufferCount(
-    ShaderPipelineCountBasis Basis,
+/// <summary>One term of a counted buffer's size: <see cref="Elements"/> elements per unit of the product of the bases
+/// in <see cref="Per"/>, each element <see cref="ShaderPipelineResource.ElementBytes"/> long. A buffer's count is the
+/// sum of its terms.</summary>
+/// <param name="Per">The bases whose units multiply, at least one, each at most once.</param>
+/// <param name="Elements">The elements per unit of the product, at least one.</param>
+public sealed record ShaderPipelineCountTerm(
+    IReadOnlyList<ShaderPipelineCountBasis> Per,
     ulong Elements = 1
-);
-/// <summary>The counts a host resolves counted buffers against.</summary>
+) {
+    /// <summary>Returns whether two counts are the same terms in the same order, or both absent.</summary>
+    /// <param name="left">The first count.</param>
+    /// <param name="right">The second count.</param>
+    /// <returns>Whether the counts are equal.</returns>
+    public static bool SameCount(IReadOnlyList<ShaderPipelineCountTerm>? left, IReadOnlyList<ShaderPipelineCountTerm>? right) => (
+        ReferenceEquals(
+            objA: left,
+            objB: right
+        ) ||
+        ((left is not null) && (right is not null) && left.SequenceEqual(second: right))
+    );
+    /// <summary>Returns whether another term scales with the same bases, in the same order, by the same elements.</summary>
+    /// <param name="other">The term to compare.</param>
+    /// <returns>Whether the terms are equal.</returns>
+    public bool Equals(ShaderPipelineCountTerm? other) => (
+        (other is not null) &&
+        (Elements == other.Elements) &&
+        Per.SequenceEqual(second: other.Per)
+    );
+    /// <inheritdoc/>
+    public override int GetHashCode() {
+        var hash = new HashCode();
+
+        hash.Add(value: Elements);
+
+        foreach (var basis in Per) {
+            hash.Add(value: basis);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+/// <summary>The counts a host resolves counted buffers against. A basis the host leaves at zero zeroes every term that
+/// scales with it, and a counted buffer whose terms all resolve to zero is refused.</summary>
 /// <param name="Width">The frame extent's width in pixels.</param>
 /// <param name="Height">The frame extent's height in pixels.</param>
-/// <param name="Instances">The instances of the program the host renders.</param>
-/// <param name="ProgramWords">The words of the program the host renders.</param>
-public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Height, ulong Instances, ulong ProgramWords) {
+public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Height) {
+    /// <summary>Gets the instances of the program the host renders.</summary>
+    public ulong Instances { get; init; }
+    /// <summary>Gets the words of the program the host renders.</summary>
+    public ulong ProgramWords { get; init; }
+    /// <summary>Gets the viewports the host renders into one frame.</summary>
+    public ulong Viewports { get; init; }
+    /// <summary>Gets the tiles of one viewport, at the host's tile size.</summary>
+    public ulong Tiles { get; init; }
+    /// <summary>Gets the dynamic transforms the host provisions.</summary>
+    public ulong DynamicTransforms { get; init; }
+    /// <summary>Gets the words of one tile's instance mask, which the host derives from its instances.</summary>
+    public ulong InstanceMaskWords { get; init; }
+    /// <summary>Gets the words of the instance grid, which the host derives from its instances.</summary>
+    public ulong InstanceGridWords { get; init; }
+
     /// <summary>Returns the units a basis counts.</summary>
     /// <param name="basis">The basis.</param>
-    /// <returns>The pixels of the extent, the instances, or the program words.</returns>
+    /// <returns>The pixels of the extent, or the count the basis names.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="basis"/> is not a declared basis.</exception>
     public ulong UnitsOf(ShaderPipelineCountBasis basis) => basis switch {
         ShaderPipelineCountBasis.Extent => (((ulong)Width) * Height),
         ShaderPipelineCountBasis.Instances => Instances,
         ShaderPipelineCountBasis.ProgramWords => ProgramWords,
+        ShaderPipelineCountBasis.Viewports => Viewports,
+        ShaderPipelineCountBasis.Tiles => Tiles,
+        ShaderPipelineCountBasis.DynamicTransforms => DynamicTransforms,
+        ShaderPipelineCountBasis.InstanceMaskWords => InstanceMaskWords,
+        ShaderPipelineCountBasis.InstanceGridWords => InstanceGridWords,
         _ => throw new ArgumentOutOfRangeException(
             actualValue: basis,
             message: "Unknown count basis.",
@@ -513,7 +596,7 @@ public sealed class ShaderPipelineCompilationException : Exception {
 [JsonSerializable(typeof(ShaderPipelineGeometry))]
 [JsonSerializable(typeof(ShaderPipelineVertexAttribute))]
 [JsonSerializable(typeof(ShaderPipelineDispatch))]
-[JsonSerializable(typeof(ShaderPipelineBufferCount))]
+[JsonSerializable(typeof(ShaderPipelineCountTerm))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
 public partial class ShaderPipelineJsonContext : JsonSerializerContext {
 }

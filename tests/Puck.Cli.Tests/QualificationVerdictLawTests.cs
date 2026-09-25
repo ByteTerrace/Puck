@@ -24,7 +24,7 @@ public sealed class QualificationVerdictLawTests {
     private static readonly QualificationCell Cell = new(
         Backend: "vulkan",
         Resolution: new QualificationResolution(Height: 32, Width: 64),
-        Threshold: new QualificationThreshold(Backend: "vulkan", Height: 32, PeakOwnedPipelineBytes: Limit, Width: 64, Workload: "ink"),
+        Threshold: new QualificationThreshold(Backend: "vulkan", Height: 32, PeakDeviceLocalBytes: null, PeakOwnedPipelineBytes: Limit, Width: 64, Workload: "ink"),
         Workload: new QualificationWorkload(
             Name: "ink",
             Pipeline: new QualificationPipeline(Instance: "ink", Layout: "pipeline", Loads: 1, Reloads: 0, Resizes: 0, SettleFrames: 4),
@@ -44,10 +44,11 @@ public sealed class QualificationVerdictLawTests {
         WorldReloads: 2
     );
 
-    private static WorldCountersRun Counters(long pipelines, long images = 3L) => new(
+    private static WorldCountersRun Counters(long pipelines, long images = 3L, long deviceLocalPeak = 0L) => new(
         Backend: "vulkan",
         Compiler: "toolchain",
         Counts: [
+            new WorldCount(Class: WorkClass.Pacing, Kind: GpuDeviceMemoryWork.Peak.Name, Node: null, Pass: null, Source: "memory.vulkan", Value: deviceLocalPeak),
             new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: "gpu.created.pipelines", Node: "ink", Pass: null, Source: "gpu", Value: pipelines),
             new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: "gpu.created.images", Node: "ink", Pass: null, Source: "gpu", Value: images),
             new WorldCount(Class: WorkClass.Pacing, Kind: "gpu.pipeline-cache.hits", Node: null, Pass: null, Source: "pipeline-cache.vulkan", Value: (pipelines * 7L)),
@@ -106,6 +107,30 @@ public sealed class QualificationVerdictLawTests {
             finding: "over the cell's threshold of 1000",
             readings: (readings with { Inspections = [.. readings.Inspections, new QualificationInspection(Budget: 4096L, Owned: 500L, Peak: (Limit + 1L), Steady: 500L)] })
         );
+    }
+    [Fact]
+    public void ADeviceLocalThresholdJudgesTheLargestPeakInclusively() {
+        const long DeviceLocalLimit = 4096L;
+
+        var cell = (Cell with { Threshold = (Cell.Threshold with { PeakDeviceLocalBytes = DeviceLocalLimit }) });
+        QualificationVerdict JudgeCell(QualificationReadings readings) => QualificationJudge.Judge(
+            cell: cell,
+            compiler: ReleaseCompilerDiscovery.None,
+            debugLayers: true,
+            expectation: Expected,
+            leg: WorldOffscreenLegStatus.Completed,
+            legDetail: string.Empty,
+            readings: readings
+        );
+        var atLimit = (Good() with { Counters = [Counters(deviceLocalPeak: 1024L, pipelines: 2L), Counters(deviceLocalPeak: DeviceLocalLimit, pipelines: 2L)] });
+        var overLimit = (Good() with { Counters = [Counters(deviceLocalPeak: (DeviceLocalLimit + 1L), pipelines: 2L), Counters(deviceLocalPeak: 1024L, pipelines: 2L)] });
+        var unread = (Good() with { Counters = [Counters(pipelines: 2L) with { Counts = [] }, Counters(pipelines: 2L) with { Counts = [] }] });
+
+        Assert.Equal(actual: atLimit.PeakDeviceLocalBytes, expected: DeviceLocalLimit);
+        Assert.Equal(actual: JudgeCell(readings: atLimit).Outcome, expected: QualificationOutcome.Pass);
+        Assert.Contains(collection: JudgeCell(readings: overLimit).Findings, filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: "4097 device-local bytes at its peak, over the cell's threshold of 4096"));
+        Assert.Contains(collection: JudgeCell(readings: unread).Findings, filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: "no world.counters reading reported gpu.memory.device-local.peak"));
+        Assert.Equal(actual: Judge(readings: overLimit).Outcome, expected: QualificationOutcome.Pass);
     }
     [Fact]
     public void AnObjectCreatedAcrossASoakFails() {

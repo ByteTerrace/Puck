@@ -127,10 +127,11 @@ table that every API reads:
   goes straight to the driver rather than through the loader's dispatch trampoline.
   `VulkanLogicalDevice.Commands` owns it, and destroying the device disposes it.
 
-Each table's constructor also takes the resolver itself, a `vkGetInstanceProcAddr`- or
-`vkGetDeviceProcAddr`-shaped function pointer. The native APIs pass the loader's
-(`VulkanProcResolver.LoaderInstanceProcAddr`, `LoaderDeviceProcAddr`); a law passes one
-that stands in for the driver, so its tables are built exactly as real ones are.
+Each table's constructor also takes the `VulkanProcResolver` it resolves through. The
+host registers one resolver over the loader, whose `vkGetInstanceProcAddr` and
+`vkGetDeviceProcAddr` load on its first resolution, and the native instance and device
+APIs take it through their constructors; a law builds a resolver over lookups that stand
+in for the driver, so its tables are built exactly as real ones are.
 
 The APIs take the table itself, not a raw `VkDevice` or `VkInstance`, so a call is one
 field load and one indirect call, with no lookup. Code that needs the raw handle reads
@@ -139,10 +140,9 @@ creation. An extension entry point is `null` when its extension is not enabled, 
 caller checks it. Swapchain creation, for example, checks the whole `VK_KHR_swapchain` set
 once, so acquire and present call straight through.
 
-The backend-neutral `IGpu*` interfaces carry an opaque `nint` device handle. On Vulkan
-that value is `VulkanDeviceCommands.Token`, a `GCHandle`, and the `VulkanGpu*` adapters
-turn it back into the table with `VulkanDeviceCommands.FromToken`, which dereferences the
-handle once without searching.
+The backend-neutral `IGpu*` services carry no device value. The renderer creates them
+with itself as their device context (`IGpuDeviceContext.Services`), and each `VulkanGpu*`
+adapter reads the table from that context's logical device when it makes a call.
 
 Every buffer goes through one `IVulkanBufferApi`. A caller states the buffer's usage
 (`VulkanBufferUsageFlags`), the memory it needs (`VulkanBufferMemory`), and its size;
@@ -450,8 +450,9 @@ deleted beyond the eight (removed directories are not counted). Every pipeline
 created is exactly one hit or one miss, and the counts survive device loss.
 `VulkanProcResolver` counts every procedure it resolves under the
 `procedures.vulkan` source: `vulkan.procedures.device-resolved` and
-`vulkan.procedures.instance-resolved`, found or not. The counts belong to the
-process, so a device recreated after a loss adds its command table again.
+`vulkan.procedures.instance-resolved`, found or not. Each resolver counts into its
+own `Work`, and the host's resolver is registered once, so its counts cover every
+table the host builds and a device recreated after a loss adds its table again.
 
 ## Constraints and invariants
 

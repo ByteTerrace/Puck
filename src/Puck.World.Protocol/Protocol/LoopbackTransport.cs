@@ -111,14 +111,27 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             return envelope.CorrelationId;
         }
 
-        completion?.Invoke(CodecRefusal(failure: failure));
+        RefuseCodec(
+            completion: completion,
+            failure: failure
+        );
         return 0;
     }
-    // The transport verdict for a payload the canonical frame refused, naming the codec's own reason.
-    private static WorldSubmissionResult.Refusal CodecRefusal(WorldCodecFailure failure) => new(
-        Code: "world.transport.codec_refused",
-        Detail: $"the submission could not be encoded or decoded: {failure}"
-    );
+    // Reports a payload the canonical frame refused exactly once, naming the codec's own reason: as the submission's
+    // verdict when its caller takes one, which answers the submitting line, and on stderr only when nothing else
+    // would ever report it.
+    private static void RefuseCodec(WorldCodecFailure failure, Action<WorldSubmissionResult>? completion) {
+        if (completion is null) {
+            Console.Error.WriteLine(value: $"[world.codec refused: {failure}]");
+
+            return;
+        }
+
+        completion(new WorldSubmissionResult.Refusal(
+            Code: "world.transport.codec_refused",
+            Detail: $"the submission could not be encoded or decoded: {failure}"
+        ));
+    }
     // Encodes and decodes a typed payload, taps its canonical value with the envelope's principal, then submits it.
     // The payload's concrete leaf type proves that decoding returned the expected union case.
     private long SubmitTapped<TPayload, TValue>(TPayload payload, Principal principal, Func<TPayload, TValue> selectValue, Action<TValue, Principal>? tap, Action<WorldSubmissionResult>? completion = null) where TPayload : WorldSubmissionPayload {
@@ -140,7 +153,10 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             return envelope.CorrelationId;
         }
 
-        completion?.Invoke(CodecRefusal(failure: failure));
+        RefuseCodec(
+            completion: completion,
+            failure: failure
+        );
         return 0;
     }
     // The ALWAYS-BYTES rule: even the in-process link is defined by the same canonical frame a future socket carries.
@@ -161,7 +177,6 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         ) ||
             (decoded is null)
         ) {
-            Console.Error.WriteLine(value: $"[world.codec refused: {failure}]");
             envelope = default;
             return false;
         }
@@ -205,7 +220,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             principal: principal,
             payload: new WorldSubmissionPayload.Query(Value: query),
             envelope: out var envelope,
-            failure: out _
+            failure: out var failure
         )) {
             if (envelope.Payload is WorldSubmissionPayload.Query canonical) {
                 QueryTap?.Invoke(
@@ -221,7 +236,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         } else {
             completion(new QueryAnswer(
                 Refused: true,
-                Text: "loopback codec refused the query payload"
+                Text: $"loopback codec refused the query payload: {failure}"
             ));
         }
     }
@@ -261,7 +276,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
                 if (
                     TryNextEnvelope(
                     envelope: out var commandEnvelope,
-                    failure: out _,
+                    failure: out var commandFailure,
                     operationId: operationId,
                     payload: command,
                     principal: principal
@@ -273,6 +288,10 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
 
                     return commandEnvelope.CorrelationId;
                 }
+                RefuseCodec(
+                    completion: completion,
+                    failure: commandFailure
+                );
                 return 0;
             case WorldSubmissionPayload.Composition composition:
                 return SubmitTapped<WorldSubmissionPayload.Composition, WorldComposition>(
@@ -342,7 +361,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             principal: request.Principal,
             payload: new WorldSubmissionPayload.Session(Value: request),
             envelope: out var envelope,
-            failure: out _
+            failure: out var failure
         ) &&
             (envelope.Payload is WorldSubmissionPayload.Session canonical)
         ) {
@@ -355,7 +374,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             completion(new SessionReply(
                 Accepted: false,
                 AssignedIndex: -1,
-                Reason: "loopback codec refused the session payload",
+                Reason: $"loopback codec refused the session payload: {failure}",
                 RosterEcho: string.Empty
             ));
         }

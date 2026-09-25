@@ -51,7 +51,6 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
             name: "ink",
             node: new ShaderPipelineRenderNode(
                 deviceContext: new AbsentPipelineDevice(),
-                gpu: new AbsentPipelineGpu(),
                 height: 4,
                 hostsOnDirectX: false,
                 name: "ink",

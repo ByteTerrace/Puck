@@ -14,13 +14,23 @@ namespace Puck.World.Protocol;
 /// outcome. This table belongs to one local authority. Mutations use their typed completion callback instead of
 /// this table, so multiple worlds sharing a console cannot collide on world-local correlations.
 /// Past <see cref="Capacity"/> pending entries the oldest is evicted, so a verdict that never
-/// fires cannot grow the table, and an evicted entry settles as an unknown outcome rather than holding its session.</remarks>
+/// fires cannot grow the table; an evicted entry settles as an unknown outcome rather than holding its session, and
+/// <see cref="Evicted"/> reports it, since no echo will answer it.</remarks>
 public sealed class WorldDeferredVerbEchoes {
     /// <summary>Reports a per-verb typed mutation result, independently of world-local echo correlations.</summary>
     public event Action<CommandResult>? Completed;
+    /// <summary>Reports a registered verb evicted before its verdict arrived. The error is that line's only answer:
+    /// no echo will name its correlation again, so a host prints it and counts it as a refusal, as it counts a
+    /// rejected echo.</summary>
+    public event Action<CommandResult>? Evicted;
 
-    internal void Publish(CommandResult result) {
-        if (Completed is not { } callbacks) {
+    internal void Publish(CommandResult result) => Publish(
+        callbacks: Completed,
+        result: result
+    );
+
+    private static void Publish(Action<CommandResult>? callbacks, CommandResult result) {
+        if (callbacks is null) {
             return;
         }
         foreach (var callback in Delegate.EnumerateInvocationList(d: callbacks)) {
@@ -35,7 +45,14 @@ public sealed class WorldDeferredVerbEchoes {
     /// <summary>The pending-entry bound. Rebuilds and undos drain at the next tick boundary, so the steady-state population is
     /// one stdin batch's worth; the bound only matters when a verdict never fires.</summary>
     public const int Capacity = 256;
+    /// <summary>The number of most recent evictions whose correlation ids the table remembers, so a verdict that
+    /// arrives after its line was evicted is known to have been answered by <see cref="Evicted"/> already
+    /// (<see cref="TryTakeEvicted"/>). A verdict arriving after this many later evictions reads as one no line
+    /// registered.</summary>
+    public const int EvictedMemory = Capacity;
 
+    private readonly Queue<long> m_evictedOrder = new();
+    private readonly HashSet<long> m_evicted = [];
     private readonly Queue<long> m_order = new();
     private readonly Dictionary<long, (string Verb, CommandSettlement Settlement)> m_verbs = [];
 
@@ -67,8 +84,17 @@ public sealed class WorldDeferredVerbEchoes {
 
             // Evict oldest-first past the bound; an id whose entry was already taken dequeues as a no-op.
             while (m_verbs.Count > Capacity) {
-                if (m_verbs.Remove(key: m_order.Dequeue(), value: out var evicted)) {
-                    evicted.Settlement.Settle(result: CommandResult.Error(output: $"[{evicted.Verb}: no verdict arrived; inspect state before any retry]"));
+                var evictedId = m_order.Dequeue();
+
+                if (m_verbs.Remove(key: evictedId, value: out var evicted)) {
+                    var unanswered = CommandResult.Error(output: $"[{evicted.Verb}: evicted unanswered — {Capacity} later submissions were pending before its verdict arrived; inspect state before any retry]");
+
+                    RememberEvicted(correlationId: evictedId);
+                    evicted.Settlement.Settle(result: unanswered);
+                    Publish(
+                        callbacks: Evicted,
+                        result: unanswered
+                    );
                 }
             }
 
@@ -117,5 +143,22 @@ public sealed class WorldDeferredVerbEchoes {
         settlement = null;
 
         return false;
+    }
+    /// <summary>Takes a remembered eviction: a verdict for this correlation id arrived after its line was evicted,
+    /// and <see cref="Evicted"/> already answered and counted that line, so the verdict is neither printed nor
+    /// counted again. The id is forgotten, so only its first verdict matches.</summary>
+    /// <param name="correlationId">The verdict's correlation id.</param>
+    /// <returns><see langword="true"/> when the id is one of the last <see cref="EvictedMemory"/> evictions and no
+    /// verdict has taken it yet.</returns>
+    public bool TryTakeEvicted(long correlationId) => m_evicted.Remove(item: correlationId);
+
+    // The queue holds exactly the last EvictedMemory evictions and the set those no verdict has taken yet.
+    private void RememberEvicted(long correlationId) {
+        _ = m_evicted.Add(item: correlationId);
+        m_evictedOrder.Enqueue(item: correlationId);
+
+        while (m_evictedOrder.Count > EvictedMemory) {
+            _ = m_evicted.Remove(item: m_evictedOrder.Dequeue());
+        }
     }
 }

@@ -8,6 +8,10 @@ namespace Puck.World.Protocol;
 /// runtime and delivery programme builds implements the same contract over its own transport.
 /// </summary>
 public interface IWorldStateView {
+    /// <summary>Gets the presentation manifest of the installed document: every state read its presentation sections
+    /// bind, compiled once per document.</summary>
+    Puck.World.Client.WorldPresentationManifest Manifest { get; }
+
     /// <summary>Resolves a document-lane row name to its state catalog ordinal in the installed layout.</summary>
     /// <param name="rowName">The row's name.</param>
     /// <param name="ordinal">The row's ordinal, or -1 when the installed layout declares no such row.</param>

@@ -149,8 +149,6 @@ public sealed class ShaderPipelineVersionLawTests {
     private static ShaderPipelineRenderNode InstalledNode(FakePipelineGpu gpu, ShaderPipelinePlan plan) {
         var node = new ShaderPipelineRenderNode(
             deviceContext: gpu,
-            gpu: gpu,
-            graphics: gpu,
             height: Extent,
             hostsOnDirectX: false,
             inFlightFrames: InFlight,

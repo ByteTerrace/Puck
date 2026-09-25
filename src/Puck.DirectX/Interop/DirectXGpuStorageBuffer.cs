@@ -91,12 +91,20 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
 /// <summary>Owns a Direct3D 12 device-local buffer without exposing host-write operations.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuDeviceBuffer : IGpuBuffer {
+    private readonly GpuDeviceMemoryWork? m_memory;
+
     private nint m_buffer;
 
     /// <summary>Initializes an owner for a device-local buffer.</summary>
-    public DirectXGpuDeviceBuffer(nint bufferHandle, ulong sizeBytes) {
+    /// <param name="bufferHandle">The native <c>ID3D12Resource</c>; ownership moves to the new instance.</param>
+    /// <param name="sizeBytes">The buffer's size, in bytes.</param>
+    /// <param name="memory">The device-local counts the buffer was counted into, whose release this owner counts, or
+    /// <see langword="null"/>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bufferHandle"/> is zero.</exception>
+    public DirectXGpuDeviceBuffer(nint bufferHandle, ulong sizeBytes, GpuDeviceMemoryWork? memory = null) {
         ArgumentOutOfRangeException.ThrowIfZero(value: bufferHandle);
         m_buffer = bufferHandle;
+        m_memory = memory;
         SizeBytes = sizeBytes;
     }
 
@@ -108,6 +116,10 @@ public sealed unsafe class DirectXGpuDeviceBuffer : IGpuBuffer {
     /// <inheritdoc/>
     public void Dispose() {
         if (0 != m_buffer) {
+            DirectXDeviceMemory.CountReleased(
+                memory: m_memory,
+                resource: m_buffer
+            );
             _ = ((IUnknown*)m_buffer)->Release();
             m_buffer = 0;
         }

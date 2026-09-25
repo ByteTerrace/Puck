@@ -1545,8 +1545,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             Program: program,
             ProgramChanged: programChanged,
             Time: m_elapsedSeconds,
-            Views: m_views,
-            WarpAmount: 0f
+            Views: m_views
         ) {
             // Shadow reach is continuous: zero skips the march; (0,1) scales gather + march reach; one uses the
             // engine's 0 sentinel for full reach.
@@ -1598,14 +1597,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     public void NotifyDeviceLost() {
         m_binder.NotifyDeviceLost();
     }
-    public void PrepareScreenSources(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    public void PrepareScreenSources(IGpuDeviceContext deviceContext) {
         // Render + upload every CPU-fed screen for this frame off the sim tick advanced during CaptureFrame, so the
         // provider polled just after this call returns a handle to THIS frame's image. The engine seam calls this
         // AFTER capture and BEFORE the source poll.
         m_binder.Publish(
             tick: m_simulation.Tick,
-            deviceContext: deviceContext,
-            gpu: gpu
+            deviceContext: deviceContext
         );
     }
     /// <inheritdoc/>

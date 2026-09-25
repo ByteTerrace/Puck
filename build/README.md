@@ -18,7 +18,10 @@ are not copied. No build step writes a world document into `src/` or `worlds/`,
 so there is nothing to ignore there: an untracked `*.world.json` in either tree
 is an error that `WorldDocumentOutputLawTests` names. The tree run also removes any
 document in its output that no source compiles to any more, so a renamed or
-deleted source leaves nothing behind. The CLI is a build-time tool of the game,
+deleted source leaves nothing behind. A copy never deletes, so after copying,
+the build also removes every file in the output's `Assets/worlds/packages`
+store that it no longer deploys, with the directories that leaves empty
+(`PuckRemoveStaleWorldPackages.cs`), and prints one line per file. The CLI is a build-time tool of the game,
 never an assembly or runtime dependency.
 
 A new world needs no build edit: add its `.puck` source under

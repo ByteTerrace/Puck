@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using Puck.Assets;
 
 namespace Puck.Shaders.Tests;
@@ -36,6 +37,49 @@ public sealed class ShaderInterfaceSpikeTests {
             actual: SpirvInterfaceReader.Read(module: build.Spirv),
             expected: pass.Interface.Layout().Bindings
         );
+    }
+    // Buffer<T> read through a structured copy, and RWBuffer<T> read and written in place: each is a typed buffer both
+    // bytecode forms carry (a DXIL buffer-dimension view, a SPIR-V image of Dim Buffer).
+    [InlineData("[[vk::binding(0, 0)]] Buffer<float4> texels : register(t0, space0);\n[[vk::binding(1, 0)]] RWStructuredBuffer<float4> output : register(u1, space0);\n[numthreads(1, 1, 1)] void CSMain(uint3 id : SV_DispatchThreadID) { output[id.x] = texels[id.x]; }")]
+    [InlineData("[[vk::binding(0, 0)]] RWBuffer<float4> texels : register(u0, space0);\n[numthreads(1, 1, 1)] void CSMain(uint3 id : SV_DispatchThreadID) { texels[id.x] = (texels[id.x] * 2.0); }")]
+    [Theory]
+    public async Task Both_readers_refuse_a_typed_buffer_by_name(string source) {
+        SkipWithoutDxc();
+
+        var build = await ShaderInterfaceSpike.CompileSourceAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            entryPoint: "CSMain",
+            profile: "cs_6_6",
+            source: source
+        );
+
+        Assert.Contains(
+            actualString: Assert.Throws<InvalidDataException>(testCode: () => SpirvInterfaceReader.Read(module: build.Spirv)).Message,
+            expectedSubstring: "SPIR-V binding 'texels' is a typed buffer"
+        );
+
+        if (OperatingSystem.IsWindows()) {
+            AssertDxilRefuses(container: build.Dxil);
+        }
+
+        [SupportedOSPlatform("windows")]
+        static void AssertDxilRefuses(byte[] container) {
+            using var reader = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
+            InvalidDataException? refusal = null;
+
+            // Read directly rather than through Assert.Throws: the platform analyzer does not carry this function's
+            // Windows-only attribute into a lambda.
+            try {
+                _ = reader.Read(container: container);
+            } catch (InvalidDataException exception) {
+                refusal = exception;
+            }
+
+            Assert.Contains(
+                actualString: Assert.IsType<InvalidDataException>(@object: refusal).Message,
+                expectedSubstring: "DXIL binding 'texels' is a typed buffer"
+            );
+        }
     }
     [MemberData(memberName: nameof(PassNames))]
     [Theory]

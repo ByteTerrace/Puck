@@ -499,6 +499,12 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
             riid: &resourceIid,
             ppvObj: &resource
         );
+        DirectXDeviceMemory.CountAllocated(
+            device: device,
+            memory: deviceContext.Memory,
+            resource: ((ID3D12Resource*)resource),
+            role: GpuMemoryRole.DeviceLocal
+        );
 
         var imageView = new DirectXImageView {
             Format = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
@@ -523,6 +529,10 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
 
         foreach (var (resource, token) in m_imports.Values) {
             if (0 != resource) {
+                DirectXDeviceMemory.CountReleased(
+                    memory: deviceContext.Memory,
+                    resource: resource
+                );
                 _ = ((IUnknown*)resource)->Release();
             }
 

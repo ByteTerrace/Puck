@@ -19,8 +19,10 @@ public static unsafe class DirectXBuffers {
     /// <param name="initialState">The state it is created in: <c>GENERIC_READ</c> on an upload heap, <c>COPY_DEST</c> on
     /// a readback heap, and otherwise <c>COMMON</c>.</param>
     /// <param name="flags">Its resource flags; <c>ALLOW_UNORDERED_ACCESS</c> for a buffer a shader writes.</param>
+    /// <param name="memory">The device-local counts a <c>DEFAULT</c>-heap buffer joins, or <see langword="null"/>; the
+    /// owner counts its release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
     /// <returns>The buffer, owned by the caller.</returns>
-    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, ulong sizeBytes, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE) {
+    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, ulong sizeBytes, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, GpuDeviceMemoryWork? memory = null) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = heapType,
         };
@@ -46,6 +48,16 @@ public static unsafe class DirectXBuffers {
             pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
             ppvResource: &buffer,
             riidResource: in resourceIid
+        );
+
+        DirectXDeviceMemory.CountAllocated(
+            device: device,
+            memory: memory,
+            resource: ((ID3D12Resource*)buffer),
+            role: ((heapType == D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT)
+                ? GpuMemoryRole.DeviceLocal
+                : GpuMemoryRole.HostVisible
+            )
         );
 
         return ((ID3D12Resource*)buffer);

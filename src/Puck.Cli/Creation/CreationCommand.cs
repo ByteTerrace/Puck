@@ -157,11 +157,14 @@ internal static partial class CreationCommand {
     private static int RunStats(string worldPath, string? prototypeId) {
         var fullPath = Path.GetFullPath(path: worldPath);
 
-        if (!WorldDefinitionFileSource.TryLoadLocally(
+        // Stats inspect the document a boot would run, so the file is drawn before it is read; a cross-document
+        // claim needs its neighbours, which an offline inspection has none of.
+        if (!WorldDefinitionLoader.TryLoadFileForAdmission(
+            admission: out var admission,
             contentHash: out _,
-            definition: out var definition,
             documents: PuckDocumentComposer.Instance,
             path: fullPath,
+            proveNeighbours: false,
             reason: out var reason
         )) {
             Console.Error.WriteLine(value: $"creation stats: '{fullPath}' failed to load — {reason}");
@@ -169,7 +172,9 @@ internal static partial class CreationCommand {
             return 1;
         }
 
-        var prototypes = definition!.Creations
+        var definition = admission!.Definition;
+
+        var prototypes = definition.Creations
             .Where(predicate: p => (p.Document is not null))
             .Where(predicate: p => ((prototypeId is null) || string.Equals(
             a: p.Id,

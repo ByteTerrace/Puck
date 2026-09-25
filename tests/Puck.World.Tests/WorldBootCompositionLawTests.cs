@@ -7,6 +7,7 @@ using Puck.Hosting;
 using Puck.Testing;
 using Puck.World.Machines;
 using Puck.World.Protocol;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -20,7 +21,7 @@ namespace Puck.World.Tests;
 /// <see cref="FakeGpuDevice"/>, and every other service that owns or brings up a device throws when resolved, so a law
 /// that reached a device fails by name instead of creating one.
 /// </summary>
-public sealed class WorldBootCompositionLawTests {
+public sealed class WorldBootCompositionLawTests : IDisposable {
     private const string WorkloadScript = "tests/Puck.Counters/counters.script.txt";
     private const string WorkloadWorld = "tests/Puck.Counters/counters.world.json";
 
@@ -31,7 +32,11 @@ public sealed class WorldBootCompositionLawTests {
         "quit",
     ];
 
-    private static HostApplicationBuilder ComposeBoot(WorldHostPresentation presentation) {
+    // Each law's boot resolves its per-run files and its device caches under a root of its own, never the per-user
+    // one.
+    private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-boot-");
+
+    private HostApplicationBuilder ComposeBoot(WorldHostPresentation presentation) {
         var extensions = WorldBootComposition.ComposeExtensions(directories: []);
         var machineCatalog = WorldMachineCatalog.From(extensions: extensions);
 
@@ -53,6 +58,11 @@ public sealed class WorldBootCompositionLawTests {
 
         builder.Services.AddWorldBoot(inputs: new WorldBootInputs(
             Authenticator: new WorldAttestedAuthenticator(),
+            Caches: new WorldCacheRoots(
+                bakes: m_stateDirectory.PathOf(name: "bakes"),
+                compilations: m_stateDirectory.PathOf(name: "compilations"),
+                compiledWorlds: m_stateDirectory.PathOf(name: "compiled-worlds")
+            ),
             Extensions: extensions,
             HostSettings: WorldHostSettings.Resolve(
                 backendOverride: null,
@@ -69,7 +79,8 @@ public sealed class WorldBootCompositionLawTests {
                 widthOverride: null
             ),
             MachineCatalog: machineCatalog,
-            Source: source
+            Source: source,
+            StateRoot: new WorldStateRoot(path: m_stateDirectory.RootPath)
         ));
         SealDevice(services: builder.Services);
 
@@ -88,8 +99,8 @@ public sealed class WorldBootCompositionLawTests {
             (type.Name == "WorldOffscreenGpuActivation")
         );
     }
-    // A neutral GPU service the fake stands in for: the device context, the compute bundle, and every device-bound
-    // recorder, binding writer, factory and submitter a backend registers over its own device context.
+    // A neutral GPU service the fake stands in for: the device context, whose services the fake also is, and the
+    // optional surface export a backend registers beside it.
     private static bool IsNeutralGpuService(Type type, FakeGpuDevice fake) => (
         type.IsInterface &&
         string.Equals(a: type.Namespace, b: typeof(IGpuDeviceContext).Namespace, comparisonType: StringComparison.Ordinal) &&
@@ -113,7 +124,7 @@ public sealed class WorldBootCompositionLawTests {
                 continue;
             }
 
-            if (IsNeutralGpuService(type: serviceType, fake: fake)) {
+            if (IsNeutralGpuService(fake: fake, type: serviceType)) {
                 services[index] = new ServiceDescriptor(
                     instance: fake,
                     serviceType: serviceType
@@ -177,6 +188,7 @@ public sealed class WorldBootCompositionLawTests {
     // registration silently keeps the pipeline cache in memory).
     private static bool RegistersPipelineCacheStore(IServiceCollection services) => services.Any(predicate: static descriptor => (descriptor.ServiceType == typeof(GpuPipelineCacheStore)));
 
+    public void Dispose() => m_stateDirectory.Dispose();
     [Fact]
     public void TheOffscreenShapeAnswersEveryVerbTheCountersWorkloadSends() => Assert.Empty(collection: UnansweredWorkloadVerbs(builder: ComposeBoot(presentation: WorldHostPresentation.Offscreen)));
     [Fact]

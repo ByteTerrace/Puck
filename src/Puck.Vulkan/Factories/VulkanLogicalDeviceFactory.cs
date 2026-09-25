@@ -271,6 +271,10 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
         );
+        var capabilities = m_physicalDeviceApi.GetDeviceCapabilities(
+            instance: instance.Commands,
+            physicalDeviceHandle: physicalDevice.Handle
+        );
 
         var (extensionNames, featureStructureTypes) = ComposeExtensionsAndFeatures(
             instance: instance.Commands,
@@ -334,6 +338,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
                 physicalDevice: physicalDevice,
                 presentQueue: presentQueue
             ) {
+                Capabilities = capabilities,
                 Identity = identity,
                 MemoryProfile = memoryProfile,
                 PipelineCache = pipelineCache,

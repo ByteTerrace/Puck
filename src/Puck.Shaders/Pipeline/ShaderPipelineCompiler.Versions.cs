@@ -101,7 +101,10 @@ public sealed partial class ShaderPipelineCompiler {
             if (
                 (predecessor.Dimensions != successor.Dimensions) ||
                 (predecessor.SizeBytes != successor.SizeBytes) ||
-                (predecessor.Count != successor.Count) ||
+                !ShaderPipelineCountTerm.SameCount(
+                    left: predecessor.Count,
+                    right: successor.Count
+                ) ||
                 (predecessor.StrideBytes != successor.StrideBytes)
             ) {
                 Add(

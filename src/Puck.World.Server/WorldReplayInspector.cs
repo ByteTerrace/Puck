@@ -511,15 +511,13 @@ public sealed class WorldReplayInspector {
 
         return lines;
     }
-    /// <summary>Reads a saved tape by name — its leading shape words verbatim, then the decoded recording through
+    /// <summary>Reads a saved tape — its leading shape words verbatim, then the decoded recording through
     /// <see cref="WorldReplaySnapshot.Read"/> (which refuses a foreign shape by name before anything else decodes).</summary>
-    /// <param name="name">The saved recording's name (already validated by <see cref="WorldReplayTape.IsValidName"/>).</param>
+    /// <param name="path">The tape's path, as <see cref="WorldReplayTape.PathFor"/> resolves a validated name.</param>
     /// <returns>The loaded tape.</returns>
-    /// <exception cref="FileNotFoundException">No recording of that name exists.</exception>
+    /// <exception cref="FileNotFoundException">No recording exists at <paramref name="path"/>.</exception>
     /// <exception cref="InvalidDataException">The file is not a readable <c>.puckreplay</c> tape.</exception>
-    public static WorldReplayLoad Load(string name) {
-        var path = WorldReplayTape.PathFor(name: name);
-
+    public static WorldReplayLoad Load(string path) {
         using var stream = File.OpenRead(path: path);
 
         Span<byte> header = stackalloc byte[8];

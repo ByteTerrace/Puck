@@ -18,7 +18,8 @@ public enum SdfFrameBuffer {
     Tiles,
     /// <summary>The indirect dispatch arguments the cull-args pass writes for the hit and views passes.</summary>
     ViewsArgs,
-    /// <summary>The surviving-tile bbox group origin the cull-args pass writes.</summary>
+    /// <summary>The dispatch box the cull-args pass writes: the surviving-tile bbox's group origin and exclusive
+    /// end.</summary>
     CullBounds,
     /// <summary>The per-pixel visibility records (<c>sdf-visibility.hlsli</c>) the hit passes write and shading reads.</summary>
     PrimaryHits,

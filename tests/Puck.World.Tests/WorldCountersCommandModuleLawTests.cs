@@ -51,6 +51,7 @@ public sealed class WorldCountersCommandModuleLawTests {
         }
     }
     private sealed class FakeRegistry(GpuDeviceIdentity? identity, params GpuWorkNode[] registered) : IGpuWorkRegistry {
+        public GpuDeviceCapabilities? DeviceCapabilities { get; init; }
         public GpuDeviceIdentity? DeviceIdentity => identity;
 
         public void CopyNodes(List<GpuWorkNode> nodes) =>
@@ -186,7 +187,7 @@ public sealed class WorldCountersCommandModuleLawTests {
             ).Output
         );
         Assert.Equal(
-            expected: (("""[world.counters: {"sources":[],"gpu":{"device":null,"nodes":[{"name":"world","sample":null,"lifetime":{"gpu.created.pipelines":0,"gpu.created.shader-modules":0,"gpu.created.images":0,"gpu.created.buffers":0,"gpu.created.descriptor-pools":0,"gpu.created.descriptor-sets":0}},{"name":"overlay","sample":null,"lifetime":null}]},"kinds":{""" + GpuLegend) + "}}]"),
+            expected: (("""[world.counters: {"sources":[],"gpu":{"device":null,"capabilities":null,"nodes":[{"name":"world","sample":null,"lifetime":{"gpu.created.pipelines":0,"gpu.created.shader-modules":0,"gpu.created.images":0,"gpu.created.buffers":0,"gpu.created.descriptor-pools":0,"gpu.created.descriptor-sets":0}},{"name":"overlay","sample":null,"lifetime":null}]},"kinds":{""" + GpuLegend) + "}}]"),
             actual: Run(
                 gpu: registry,
                 line: "world.counters gpu --json"
@@ -223,10 +224,71 @@ public sealed class WorldCountersCommandModuleLawTests {
             ).Output
         );
         Assert.Equal(
-            expected: (("""[world.counters: {"sources":[],"gpu":{"device":{"backend":"vulkan","adapter":"Example GPU","vendor":4318,"device":10118,"driver":"566.36","driver.raw":2374860800,"api":"1.4.303","driver.name":"","driver.id":0,"conformance":"","pipeline-cache.uuid":""},"nodes":[]},"kinds":{""" + GpuLegend) + "}}]"),
+            expected: (("""[world.counters: {"sources":[],"gpu":{"device":{"backend":"vulkan","adapter":"Example GPU","vendor":4318,"device":10118,"driver":"566.36","driver.raw":2374860800,"api":"1.4.303","driver.name":"","driver.id":0,"conformance":"","pipeline-cache.uuid":""},"capabilities":null,"nodes":[]},"kinds":{""" + GpuLegend) + "}}]"),
             actual: Run(
                 gpu: registry,
                 line: "world.counters gpu --json"
+            ).Output
+        );
+    }
+    [Fact]
+    public void TheGpuHeaderNamesWhatTheDeviceCanBind() {
+        var identity = new GpuDeviceIdentity(
+            AdapterName: "Example GPU",
+            ApiVersion: "12_2",
+            Backend: "directx",
+            DeviceId: 0x2786U,
+            DriverVersion: "32.0.15.6636",
+            DriverVersionRaw: 1UL,
+            VendorId: 0x10DEU
+        );
+        var registry = new FakeRegistry(identity: identity) {
+            DeviceCapabilities = GpuDeviceCapabilities.FromDirectX(
+                resourceBindingTier: 3U,
+                rootSignatureVersion: "1.1",
+                samplerHeapSize: 0U,
+                shaderModel: "6.8",
+                viewHeapSize: 0U
+            ),
+        };
+
+        Assert.Equal(
+            expected: "[world.counters: gpu backend=directx adapter=\"Example GPU\" vendor=0x10de device=0x2786 driver=32.0.15.6636 driver.raw=0x1 api=12_2\ncapabilities backend=directx root-signature-words=64 push-constant-bytes=256 stage.samplers=2048 stage.uniform-buffers=1000000 stage.storage-buffers=1000000 stage.sampled-images=1000000 stage.storage-images=1000000 binding-tier=3 root-signature=1.1 shader-model=6.8 heap.views=1000000 heap.samplers=2048\nnodes none: the renderer is not built yet\n]",
+            actual: Run(
+                gpu: registry,
+                line: "world.counters gpu"
+            ).Output
+        );
+        Assert.Equal(
+            expected: (("""[world.counters: {"sources":[],"gpu":{"device":{"backend":"directx","adapter":"Example GPU","vendor":4318,"device":10118,"driver":"32.0.15.6636","driver.raw":1,"api":"12_2","driver.name":"","driver.id":0,"conformance":"","pipeline-cache.uuid":""},"capabilities":{"backend":"directx","descriptor-sets":0,"root-signature-words":64,"push-constant-bytes":256,"stage.samplers":2048,"stage.uniform-buffers":1000000,"stage.storage-buffers":1000000,"stage.sampled-images":1000000,"stage.storage-images":1000000,"stage.resources":0,"binding-tier":3,"root-signature":"1.1","shader-model":"6.8","heap.views":1000000,"heap.samplers":2048},"nodes":[]},"kinds":{""" + GpuLegend) + "}}]"),
+            actual: Run(
+                gpu: registry,
+                line: "world.counters gpu --json"
+            ).Output
+        );
+    }
+    [Fact]
+    public void AVulkanDeviceNamesItsSetsAndStageLimits() {
+        var registry = new FakeRegistry(identity: null) {
+            DeviceCapabilities = new GpuDeviceCapabilities(
+                Backend: "vulkan",
+                MaxBoundDescriptorSets: 32U,
+                MaxPerStageResources: 4294967295U,
+                MaxPerStageSampledImages: 1048576U,
+                MaxPerStageSamplers: 1048576U,
+                MaxPerStageStorageBuffers: 1048576U,
+                MaxPerStageStorageImages: 1048576U,
+                MaxPerStageUniformBuffers: 1048576U,
+                MaxPushConstantBytes: 256U,
+                MaxRootSignatureWords: 0U
+            ),
+        };
+
+        Assert.Equal(
+            expected: "[world.counters: gpu device unavailable\ncapabilities backend=vulkan descriptor-sets=32 push-constant-bytes=256 stage.samplers=1048576 stage.uniform-buffers=1048576 stage.storage-buffers=1048576 stage.sampled-images=1048576 stage.storage-images=1048576 stage.resources=4294967295\nnodes none: the renderer is not built yet\n]",
+            actual: Run(
+                gpu: registry,
+                line: "world.counters gpu"
             ).Output
         );
     }

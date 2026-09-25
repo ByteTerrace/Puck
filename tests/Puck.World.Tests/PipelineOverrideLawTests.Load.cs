@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Commands;
 using System.Text.Json;
 using Puck.Abstractions;
@@ -184,11 +185,12 @@ public sealed partial class PipelineOverrideLawTests {
     // the drive names as a mutation outcome that disagrees with the recording.
     [Fact]
     public void ARecordedCommitReDrivesToTheOutcomeItHadLive() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Server();
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             addonHostFactory: static (_, _) => new NullAddonHost(),
             engines: [],
             liveServer: fixture.Server,
@@ -222,7 +224,7 @@ public sealed partial class PipelineOverrideLawTests {
 
         WorldReplaySnapshot recording;
 
-        using (var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name))) {
+        using (var stream = File.OpenRead(path: tape.PathFor(name: name))) {
             recording = WorldReplaySnapshot.Read(stream: stream);
         }
 

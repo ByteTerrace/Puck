@@ -618,7 +618,7 @@ public sealed class AdmissionSecurityLawTests {
     /// and replay sides. Omitting identity metadata makes the replay drop Drive at reset and diverge on the command.</summary>
     [Fact]
     public async Task RecordedRemoteAdmissionFollowedByReset_ReplaysWithTheSameAuthorization() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         var identity = GenerateIdentity(subject: "replay-admission-peer");
         var name = $"admission-replay-{Guid.NewGuid():N}";
@@ -638,6 +638,7 @@ public sealed class AdmissionSecurityLawTests {
             using var fixture = Fixtures.FreshServer(definition: document);
             var transport = new LoopbackTransport(server: fixture.Server);
             var tape = new WorldReplayTape(
+                stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
                 liveServer: fixture.Server,
                 profiles: fixture.Server.Profiles,
                 transport: transport,
@@ -710,12 +711,6 @@ public sealed class AdmissionSecurityLawTests {
             }
         } finally {
             identity.Key.Dispose();
-
-            var path = WorldReplayTape.PathFor(name: name);
-
-            if (File.Exists(path: path)) {
-                File.Delete(path: path);
-            }
         }
     }
     /// <summary>Finding 3 (P1): a connection that completes the Hello version door but then withholds its identity

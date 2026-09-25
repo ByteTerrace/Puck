@@ -429,20 +429,20 @@ public sealed class GpuRegion : IDisposable {
             );
 
             m_bindings.WriteBuffer(
-                access: GpuBufferAccess.Read,
                 binding: CopySourceBinding,
                 bufferHandle: m_hostBuffers[slot].BufferHandle,
                 bufferSize: m_hostBuffers[slot].SizeBytes,
                 descriptorSetHandle: set,
-                elementStride: sizeof(uint)
+                elementStride: sizeof(uint),
+                kind: GpuBindingKind.ReadOnlyBuffer
             );
             m_bindings.WriteBuffer(
-                access: GpuBufferAccess.ReadWrite,
                 binding: CopyDestinationBinding,
                 bufferHandle: m_deviceLocal!.BufferHandle,
                 bufferSize: m_deviceLocal.SizeBytes,
                 descriptorSetHandle: set,
-                elementStride: sizeof(uint)
+                elementStride: sizeof(uint),
+                kind: GpuBindingKind.ReadWriteBuffer
             );
             m_copySets[slot] = set;
         }

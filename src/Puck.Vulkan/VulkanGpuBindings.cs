@@ -109,9 +109,17 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
             samplerHandle: samplerHandle
         );
     /// <inheritdoc/>
-    /// <remarks>The access and element stride describe only a Direct3D 12 view; every Vulkan buffer write is the
-    /// same storage-buffer descriptor.</remarks>
-    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) =>
+    /// <remarks>Whether the buffer is read-only or read-write, and the element stride, describe only a Direct3D 12
+    /// view; every Vulkan buffer write is the same storage-buffer descriptor.</remarks>
+    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
+        if (kind is not (GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: kind,
+                message: "A buffer write names a read-only or read-write buffer kind.",
+                paramName: nameof(kind)
+            );
+        }
+
         allocator.WriteStorageBuffer(
             binding: binding,
             bufferHandle: bufferHandle,
@@ -119,6 +127,7 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
             descriptorSetHandle: descriptorSetHandle,
             device: Device
         );
+    }
     /// <inheritdoc/>
     public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) =>
         allocator.WriteCombinedImageSampler(

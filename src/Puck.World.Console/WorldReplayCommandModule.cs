@@ -43,7 +43,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
                 return CommandResult.Error(output: "[replay.cancel: not recording or replaying]");
         }
     }
-    private static CommandResult ListReplays(WireArgs args) {
+    private CommandResult ListReplays(WireArgs args) {
         if (CommandResult.RequireNoArguments(
             args: args,
             verb: "replay.list"
@@ -51,7 +51,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
             return refusal;
         }
 
-        var names = WorldReplayTape.List();
+        var names = m_tape.List();
 
         return new CommandResult(Output: ((names.Count == 0)
             ? "[replay.list: none saved — replay.record <name> then replay.stop records one]"

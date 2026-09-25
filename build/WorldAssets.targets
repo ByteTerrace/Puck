@@ -23,6 +23,20 @@
         <Content Include="Assets\**" Exclude="Assets\worlds\**\*.puck;Assets\worlds\**\*.world.json;Assets\worlds\**\*.puckb;Assets\worlds\**\*.puckbake" CopyToOutputDirectory="PreserveNewest" />
         <ProjectReference Include="$(MSBuildThisFileDirectory)..\src\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
+    <UsingTask
+        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        TaskFactory="RoslynCodeTaskFactory"
+        TaskName="PuckRemoveStaleWorldPackages"
+    >
+        <ParameterGroup>
+            <OutputDirectory ParameterType="System.String" Required="true" />
+            <PackageDirectory ParameterType="System.String" Required="true" />
+            <Deployed ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+        </ParameterGroup>
+        <Task>
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckRemoveStaleWorldPackages.cs" Type="Class" />
+        </Task>
+    </UsingTask>
     <!-- The intermediate directory is set by the SDK's targets, after this file is read, so the report is named here.
          The files the last run reported are outputs of the next one, so a run is repeated when one of them is gone. -->
     <Target Name="PuckNameWorldReport">
@@ -73,5 +87,10 @@
             <ContentWithTargetPath Include="@(PuckWorldWritten->'%(FullPath)')" TargetPath="Assets\worlds\$([MSBuild]::MakeRelative('$(PuckWorldDocumentDirectory)', '%(FullPath)'))" CopyToOutputDirectory="PreserveNewest" />
             <FileWrites Include="$(PuckWorldReport);@(PuckWorldWritten->'%(FullPath)')" />
         </ItemGroup>
+    </Target>
+    <!-- A copy never deletes, so a package no shipped row names any more would stay in the output's package store and a
+         World would still find it. After the copy, the store keeps exactly the files this build deploys. -->
+    <Target Name="PuckRemoveStaleWorldPackages" AfterTargets="CopyFilesToOutputDirectory" Condition="'$(DesignTimeBuild)' != 'true'">
+        <PuckRemoveStaleWorldPackages Deployed="@(ContentWithTargetPath);@(AllItemsFullPathWithTargetPath)" OutputDirectory="$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(OutDir)'))" PackageDirectory="Assets\worlds\packages" />
     </Target>
 </Project>

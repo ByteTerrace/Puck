@@ -39,22 +39,8 @@ public sealed class OverlayFrameSlotsLawTests {
         ),
         height: 1,
         inner: inner,
-        services: new OverlayServices {
-            BytecodeExtension = ".test",
-            CommandPoolFactory = Unused,
-            Recorder = Unused,
-            Bindings = Unused,
-            DeviceContext = new FixedDeviceContext(),
-            FrameSources = new RecordingFrameSources(events: events),
-            BufferFactory = Unused,
-            ImageFactory = Unused,
-            PipelineFactory = Unused,
-            QueueSubmitter = Unused,
-            RenderPassFactory = Unused,
-            ShaderModuleFactory = Unused,
-            StorageBufferBinding = 0,
-            SurfaceTransferFactory = Unused,
-        },
+        deviceContext: Unused,
+        frameSources: new RecordingFrameSources(events: events),
         sources: new UnifiedOverlaySources(
             Console: null,
             BindingBar: null,
@@ -294,16 +280,6 @@ public sealed class OverlayFrameSlotsLawTests {
 
             return true;
         }
-    }
-    // Only ReleaseGpuResources' unconditional DeviceHandle read needs a real instance (the null-service fields
-    // this suite's nodes carry are never exercised by an early-exit or device-loss path).
-    private sealed class FixedDeviceContext : IGpuDeviceContext {
-        public long AdapterLuid => 0L;
-        public nint DeviceHandle => 0;
-        public GpuDeviceIdentity? Identity => null;
-        public GpuMemoryProfile MemoryProfile => default;
-
-        public void WaitIdle() { }
     }
     private sealed class FixedRenderNode(Surface surface) : IRenderNode {
         public NodeDescriptor Descriptor { get; } = new(

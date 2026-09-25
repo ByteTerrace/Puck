@@ -87,7 +87,7 @@ public enum ShaderPipelineDispatchKind : byte {
     /// and the dispatch reads as indirect arguments.</summary>
     Indirect = 3,
 }
-/// <summary>Identifies what a counted buffer's element count scales with.</summary>
+/// <summary>Identifies a count a term of a counted buffer's size scales with.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineCountBasis>))]
 public enum ShaderPipelineCountBasis : byte {
     /// <summary>Per pixel of the frame extent.</summary>
@@ -96,4 +96,14 @@ public enum ShaderPipelineCountBasis : byte {
     Instances = 2,
     /// <summary>Per word of the program the host renders.</summary>
     ProgramWords = 3,
+    /// <summary>Per viewport the host renders into one frame.</summary>
+    Viewports = 4,
+    /// <summary>Per tile of one viewport, at the host's tile size.</summary>
+    Tiles = 5,
+    /// <summary>Per dynamic transform the host provisions.</summary>
+    DynamicTransforms = 6,
+    /// <summary>Per word of one tile's instance mask, which the host derives from its instances.</summary>
+    InstanceMaskWords = 7,
+    /// <summary>Per word of the instance grid, which the host derives from its instances.</summary>
+    InstanceGridWords = 8,
 }

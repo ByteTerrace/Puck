@@ -16,7 +16,7 @@ public interface IVulkanLogicalDeviceApi {
     /// <returns>A <see cref="VkResult"/> indicating whether the device was created successfully.</returns>
     VkResult CreateLogicalDevice(VulkanLogicalDeviceCreateRequest request, out VulkanDeviceCommands? device);
     /// <summary>Destroys a logical device.</summary>
-    /// <param name="device">The command table of the device to destroy; the table is disposed with the device.</param>
+    /// <param name="device">The command table of the device to destroy; it is never used again.</param>
     void DestroyDevice(VulkanDeviceCommands device);
     /// <summary>Retrieves a queue from a logical device.</summary>
     /// <param name="device">The command table of the logical device.</param>

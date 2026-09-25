@@ -1,9 +1,10 @@
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
+using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interop;
 using Puck.Vulkan.Messages;
 using Xunit;
@@ -16,8 +17,8 @@ namespace Puck.Vulkan.Tests;
 /// points record instead of reaching a driver: a zero handle makes no call, and a non-zero one makes exactly one call
 /// through the kind's own entry point.</summary>
 /// <remarks>The recording tables are built through their constructors over a procedure resolver that stands in for the
-/// driver, so each table is resolved exactly as a real one is. Reflection only enumerates the tables' destroy fields,
-/// to prove every one is covered by a kind.</remarks>
+/// driver, so each table is resolved exactly as a real one is, and the names a table asks that resolver for are the
+/// destroy entry points every kind must cover.</remarks>
 public sealed unsafe class VulkanDestroyGuardLawTests {
     private const nint DeviceHandle = 0x0D00;
     private const nint FirstHandle = 0x1000;
@@ -28,6 +29,8 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
     private static List<(nint Parent, nint Handle, nint Allocator)>? RecordedCalls;
     [ThreadStatic]
     private static List<(nint Parent, nint Handle, nint Allocator)>? RecordedStrayCalls;
+    [ThreadStatic]
+    private static List<string>? ResolvedNames;
     [ThreadStatic]
     private static (IReadOnlyList<string> DestroyEntryPoints, IReadOnlyCollection<string> Wired)? Wiring;
 
@@ -185,7 +188,10 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
     private static readonly Dictionary<string, InstanceKind> InstanceKinds = new() {
         ["debug messenger"] = new(
             EntryPoint: nameof(VulkanInstanceCommands.DestroyDebugUtilsMessengerExt),
-            Release: (instance, handle) => new VulkanNativeInstanceApi(allocator: new RefusingAllocator()).DestroyDebugMessenger(
+            Release: (instance, handle) => new VulkanNativeInstanceApi(
+                allocator: new RefusingAllocator(),
+                procedures: new VulkanProcResolver()
+            ).DestroyDebugMessenger(
                 instance: instance,
                 messengerHandle: handle
             )
@@ -260,6 +266,78 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
         Assert.Empty(collection: calls.Stray);
     }
     [Fact]
+    public void DeviceLocalMemoryIsCountedAtAllocationAndReleasedThroughTheFreeGuard() {
+        const nint DeviceLocalMemory = 0x3000;
+        const nint HostMemory = 0x4000;
+
+        var memory = new GpuDeviceMemoryWork(backend: "vulkan");
+        var device = RecordingDevice(
+            memory: memory,
+            wired: [nameof(VulkanDeviceCommands.FreeMemory)]
+        );
+
+        device.CountAllocated(
+            allocationSize: 65536UL,
+            memoryHandle: DeviceLocalMemory,
+            role: GpuMemoryRole.DeviceLocal
+        );
+        device.CountAllocated(
+            allocationSize: 4096UL,
+            memoryHandle: HostMemory,
+            role: GpuMemoryRole.HostVisible
+        );
+
+        var calls = Record(release: () => {
+            device.Destroy(destroy: device.FreeMemory, handle: HostMemory);
+            device.Destroy(destroy: device.FreeMemory, handle: DeviceLocalMemory);
+        });
+
+        Assert.Equal(
+            actual: calls.Calls,
+            expected: [(device.Handle, HostMemory, ((nint)0)), (device.Handle, DeviceLocalMemory, ((nint)0))]
+        );
+        Assert.Equal(expected: (65536L, 65536L, 65536L), actual: (memory.Read(kind: GpuDeviceMemoryWork.Allocated), memory.Read(kind: GpuDeviceMemoryWork.Released), memory.Read(kind: GpuDeviceMemoryWork.Peak)));
+    }
+    [Fact]
+    public void AHostVisibleBufferOnAUnifiedMemoryDeviceIsNotCounted() {
+        const nint DeviceLocalBuffer = 0x5000;
+        const nint HostVisibleBuffer = 0x6000;
+        const uint DeviceLocalBit = 0x1U;
+
+        var memory = new GpuDeviceMemoryWork(backend: "vulkan");
+        var device = RecordingDevice(
+            memory: memory,
+            wired: []
+        );
+        // A unified-memory table: every type is DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT.
+        var unified = new VkPhysicalDeviceMemoryProperties { MemoryTypeCount = 2U };
+
+        unified.MemoryTypePairs[0] = 0x7U;
+        unified.MemoryTypePairs[2] = 0x7U;
+
+        foreach (var (kind, handle) in new[] { (VulkanBufferMemory.HostCoherent, HostVisibleBuffer), (VulkanBufferMemory.DeviceLocal, DeviceLocalBuffer) }) {
+            var (preferred, required, role) = VulkanNativeBufferApi.MemoryProperties(memory: kind);
+            var index = VulkanMemoryTypes.FindIndex(
+                memoryProperties: in unified,
+                memoryTypeBits: 0x3U,
+                preferredProperties: preferred,
+                requireProperties: required,
+                resourceDescription: "a law buffer"
+            );
+
+            Assert.Equal(expected: DeviceLocalBit, actual: unified.MemoryTypePropertyFlags(memoryTypeIndex: ((int)index)) & DeviceLocalBit);
+            device.CountAllocated(
+                allocationSize: 1024UL,
+                memoryHandle: handle,
+                role: role
+            );
+        }
+
+        Assert.Equal(expected: (1024L, 1024L), actual: (memory.Read(kind: GpuDeviceMemoryWork.Allocated), memory.Held));
+        Assert.False(condition: memory.CountReleased(allocation: HostVisibleBuffer, device: device.Handle));
+        Assert.True(condition: memory.CountReleased(allocation: DeviceLocalBuffer, device: device.Handle));
+    }
+    [Fact]
     public void EveryDestroyEntryPointOfBothTablesIsCoveredByAKind() {
         var deviceCovered = DeviceKinds.Values.SelectMany(selector: kind => kind.EntryPoints).ToHashSet();
         var instanceCovered = InstanceKinds.Values.Select(selector: kind => kind.EntryPoint).ToHashSet();
@@ -273,24 +351,43 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
             expected: InstanceDestroyEntryPoints.Order()
         );
         Assert.Equal(
-            actual: ChildDestroyFields(type: typeof(VulkanDeviceCommands)),
+            actual: ChildReleasesResolvedBy(build: static () => RecordingDevice(wired: [])),
             expected: DeviceDestroyEntryPoints.Order()
         );
         Assert.Equal(
-            actual: ChildDestroyFields(type: typeof(VulkanInstanceCommands)),
+            actual: ChildReleasesResolvedBy(build: static () => RecordingInstance(wired: [])),
             expected: InstanceDestroyEntryPoints.Order()
         );
     }
 
-    // Every child-object release shares the (parent, handle, allocator) shape; the parent's own vkDestroyDevice and
-    // vkDestroyInstance take two arguments and are not child releases.
-    private static IOrderedEnumerable<string> ChildDestroyFields(Type type) =>
-        type.GetFields(bindingAttr: BindingFlags.Instance | BindingFlags.Public)
-            .Where(predicate: field => (field.FieldType.IsFunctionPointer &&
-                (field.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Destroy") || (field.Name == nameof(VulkanDeviceCommands.FreeMemory))) &&
-                (3 == field.FieldType.GetFunctionPointerParameterTypes().Length)))
-            .Select(selector: field => field.Name)
-            .Order();
+    // The child-object releases a table resolves while it is built, named as its fields are: every vkDestroy* and
+    // vkFreeMemory the table asks its resolver for, except the parent's own vkDestroyDevice and vkDestroyInstance.
+    private static IOrderedEnumerable<string> ChildReleasesResolvedBy(Action build) {
+        ResolvedNames = [];
+
+        try {
+            build();
+
+            return ResolvedNames
+                .Where(predicate: static name => ((name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Destroy") || (name == nameof(VulkanDeviceCommands.FreeMemory))) &&
+                    (name != nameof(VulkanDeviceCommands.DestroyDevice)) &&
+                    (name != nameof(VulkanInstanceCommands.DestroyInstance))))
+                .Select(selector: static name => (DeviceDestroyEntryPoints.Concat(second: InstanceDestroyEntryPoints).FirstOrDefault(predicate: entryPoint => string.Equals(
+                    a: entryPoint,
+                    b: name,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) ?? name))
+                .ToArray()
+                .Order();
+        } finally {
+            ResolvedNames = null;
+        }
+    }
+    private static VulkanProcResolver RecordingProcedures() =>
+        new(
+            getDeviceProcAddr: &ResolveRecording,
+            getInstanceProcAddr: &ResolveRecording
+        );
     private static (List<(nint Parent, nint Handle, nint Allocator)> Calls, List<(nint Parent, nint Handle, nint Allocator)> Stray) Record(Action release) {
         RecordedCalls = [];
         RecordedStrayCalls = [];
@@ -309,11 +406,12 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void RecordStrayCall(nint parent, nint handle, nint allocator) =>
         RecordedStrayCalls!.Add(item: (parent, handle, allocator));
-    private static VulkanDeviceCommands RecordingDevice(IReadOnlyCollection<string> wired) =>
+    private static VulkanDeviceCommands RecordingDevice(IReadOnlyCollection<string> wired, GpuDeviceMemoryWork? memory = null) =>
         RecordingTable(
-            build: static () => new VulkanDeviceCommands(
+            build: () => new VulkanDeviceCommands(
                 deviceHandle: DeviceHandle,
-                getDeviceProcAddr: &ResolveRecording
+                memory: memory,
+                procedures: RecordingProcedures()
             ),
             destroyEntryPoints: DeviceDestroyEntryPoints,
             wired: wired
@@ -321,8 +419,8 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
     private static VulkanInstanceCommands RecordingInstance(IReadOnlyCollection<string> wired) =>
         RecordingTable(
             build: static () => new VulkanInstanceCommands(
-                getInstanceProcAddr: &ResolveRecording,
-                instanceHandle: InstanceHandle
+                instanceHandle: InstanceHandle,
+                procedures: RecordingProcedures()
             ),
             destroyEntryPoints: InstanceDestroyEntryPoints,
             wired: wired
@@ -345,6 +443,8 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
     private static nint ResolveRecording(nint handle, byte* name) {
         var (destroyEntryPoints, wired) = Wiring!.Value;
         var field = Encoding.UTF8.GetString(bytes: MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: name))[2..];
+
+        ResolvedNames?.Add(item: field);
 
         if (destroyEntryPoints.FirstOrDefault(predicate: entryPoint => string.Equals(
             a: entryPoint,

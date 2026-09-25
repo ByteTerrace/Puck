@@ -469,9 +469,11 @@ public sealed class WorldOwnedWorldSync {
                 path: probePath
             );
             if (
-                !WorldDefinitionFileSource.TryLoad(
-                contentHash: out _,
-                definition: out var document,
+                !WorldOwnedWorlds.TryLoadOwned(
+                catalog: null,
+                catalogFingerprint: string.Empty,
+                document: out var document,
+                id: safe.Value,
                 neighbours: neighbours,
                 path: probePath,
                 reason: out var reason

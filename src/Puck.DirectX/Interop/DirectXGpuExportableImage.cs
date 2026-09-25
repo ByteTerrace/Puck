@@ -110,55 +110,64 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
             heapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,
             height: height,
             initialState: initialState,
+            memory: deviceContext.Memory,
             width: width
         );
 
         m_resource = ((nint)resource);
-        DirectXResourceStates.Register(
-            resource: m_resource,
-            state: initialState
-        );
 
-        if (access != DirectXExportableImageAccess.ComputeWrite) {
-            DirectXSimultaneousAccessResources.Register(resourceHandle: m_resource);
-        }
-
-        var sharedHandle = default(HANDLE);
-
-        device->CreateSharedHandle(
-            Access: GenericAll,
-            Name: default(PCWSTR),
-            pAttributes: ((SECURITY_ATTRIBUTES*)null),
-            pHandle: &sharedHandle,
-            pObject: ((ID3D12DeviceChild*)resource)
-        );
-        m_sharedHandle = sharedHandle;
-
-        m_imageViewToken = GCHandle.Alloc(value: new DirectXImageView {
-            Format = dxgiFormat,
-            ResourceHandle = m_resource,
-        });
-
-        device->CreateFence(
-            Flags: default,
-            InitialValue: 0,
-            ppFence: out var fence,
-            riid: ID3D12Fence.IID_Guid
-        );
-        m_fence = ((nint)fence);
-        m_fenceValue = 1;
-        m_fenceEvent = PInvoke.CreateEvent(
-            bInitialState: false,
-            bManualReset: false,
-            lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
-            lpName: default(PCWSTR)
-        );
-
-        if (m_fenceEvent.IsNull) {
-            throw new DirectXException(
-                operation: "CreateEventW",
-                result: Marshal.GetHRForLastWin32Error()
+        // The resource is counted from here on, so a failure below releases everything made so far, the count
+        // included, before it propagates.
+        try {
+            DirectXResourceStates.Register(
+                resource: m_resource,
+                state: initialState
             );
+
+            if (access != DirectXExportableImageAccess.ComputeWrite) {
+                DirectXSimultaneousAccessResources.Register(resourceHandle: m_resource);
+            }
+
+            var sharedHandle = default(HANDLE);
+
+            device->CreateSharedHandle(
+                Access: GenericAll,
+                Name: default(PCWSTR),
+                pAttributes: ((SECURITY_ATTRIBUTES*)null),
+                pHandle: &sharedHandle,
+                pObject: ((ID3D12DeviceChild*)resource)
+            );
+            m_sharedHandle = sharedHandle;
+
+            m_imageViewToken = GCHandle.Alloc(value: new DirectXImageView {
+                Format = dxgiFormat,
+                ResourceHandle = m_resource,
+            });
+
+            device->CreateFence(
+                Flags: default,
+                InitialValue: 0,
+                ppFence: out var fence,
+                riid: ID3D12Fence.IID_Guid
+            );
+            m_fence = ((nint)fence);
+            m_fenceValue = 1;
+            m_fenceEvent = PInvoke.CreateEvent(
+                bInitialState: false,
+                bManualReset: false,
+                lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
+                lpName: default(PCWSTR)
+            );
+
+            if (m_fenceEvent.IsNull) {
+                throw new DirectXException(
+                    operation: "CreateEventW",
+                    result: Marshal.GetHRForLastWin32Error()
+                );
+            }
+        } catch {
+            ReleaseResources(drainQueue: false);
+            throw;
         }
     }
 
@@ -177,6 +186,39 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     /// <inheritdoc/>
     public uint Width { get; }
 
+    // Releases every object the image holds, each one only if it was made, and counts the resource's release.
+    private void ReleaseResources(bool drainQueue) {
+        DirectXResourceStates.Forget(resource: m_resource);
+        DirectXSimultaneousAccessResources.Withdraw(resourceHandle: m_resource);
+
+        if (
+            drainQueue &&
+            (0 != m_fence)
+        ) {
+            WaitForGpu();
+        }
+
+        if (m_imageViewToken.IsAllocated) {
+            m_imageViewToken.Free();
+        }
+
+        Release(pointer: ref m_fence);
+        DirectXDeviceMemory.CountReleased(
+            memory: m_deviceContext.Memory,
+            resource: m_resource
+        );
+        Release(pointer: ref m_resource);
+
+        if (!m_sharedHandle.IsNull) {
+            _ = PInvoke.CloseHandle(hObject: m_sharedHandle);
+            m_sharedHandle = HANDLE.Null;
+        }
+
+        if (!m_fenceEvent.IsNull) {
+            _ = PInvoke.CloseHandle(hObject: m_fenceEvent);
+            m_fenceEvent = HANDLE.Null;
+        }
+    }
     private void WaitForGpu() {
         DirectXFence.SignalAndWait(
             deviceContext: m_deviceContext,
@@ -197,43 +239,23 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
         // importing backend opens the shared handle on completed pixels in the resting state.
         WaitForGpu();
     }
-    /// <inheritdoc/>
+    /// <summary>Waits for the producer queue, then releases the texture, its shared handle and its fence. Safe to call
+    /// more than once.</summary>
+    /// <exception cref="InvalidOperationException">The device context was disposed first, so the device has already
+    /// reported the texture as leaked and the owner's teardown order is wrong; the image stays undisposed and its
+    /// texture stays counted as held.</exception>
     public void Dispose() {
         if (m_disposed) {
             return;
         }
 
+        // The texture and fence are children of the device. An owner that releases this image after its device context
+        // is gone has its teardown in the wrong order, and the caller disposing this image is that owner.
+        if (!m_deviceContext.IsInitialized) {
+            throw new InvalidOperationException(message: $"A {nameof(DirectXGpuExportableImage)} was released after its device context was disposed; the owner disposing it must release it before the device goes.");
+        }
+
         m_disposed = true;
-        DirectXResourceStates.Forget(resource: m_resource);
-        DirectXSimultaneousAccessResources.Withdraw(resourceHandle: m_resource);
-
-        // Drain the producer queue only while the device context is still alive: at host shutdown the DI container
-        // may tear the context down before a late owner (e.g. a screen binder's capture feed) releases its shared
-        // textures, and CommandQueueHandle THROWS on a disposed context — with the queue gone there is nothing left
-        // in flight to wait for, so the drain is skipped rather than resurrected.
-        if (
-            m_deviceContext.IsInitialized &&
-            (0 != m_deviceContext.CommandQueueHandle) &&
-            (0 != m_fence)
-        ) {
-            WaitForGpu();
-        }
-
-        if (m_imageViewToken.IsAllocated) {
-            m_imageViewToken.Free();
-        }
-
-        Release(pointer: ref m_fence);
-        Release(pointer: ref m_resource);
-
-        if (!m_sharedHandle.IsNull) {
-            _ = PInvoke.CloseHandle(hObject: m_sharedHandle);
-            m_sharedHandle = HANDLE.Null;
-        }
-
-        if (!m_fenceEvent.IsNull) {
-            _ = PInvoke.CloseHandle(hObject: m_fenceEvent);
-            m_fenceEvent = HANDLE.Null;
-        }
+        ReleaseResources(drainQueue: (0 != m_deviceContext.CommandQueueHandle));
     }
 }

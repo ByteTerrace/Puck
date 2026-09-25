@@ -97,15 +97,13 @@ internal static partial class AzureCommand {
                 var name = WorldDocumentName.OfDocumentFile(path: Path.GetFileName(path: file));
 
                 _ = SafeName.Parse(candidate: name);
-                // A published definition can still contain boot draw sites; it is not a saved runtime document.
-                if (!WorldDefinitionFileSource.TryParseComposed(
-                    File.ReadAllText(path: file),
-                    file,
-                    null,
-                    false,
-                    out var parsed,
-                    out var reason,
-                    documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: file)
+                // Only parsed here and published undrawn, draw sites and all: WorldReleaseCommand.Prepare below reads
+                // every definition this writes back through the admission proof.
+                if (!WorldDefinitionFileSource.TryParseDocument(
+                    definition: out var parsed,
+                    json: File.ReadAllText(path: file),
+                    reason: out var reason,
+                    sourceName: file
                 )) {
                     throw new InvalidDataException(message: reason);
                 }
@@ -119,14 +117,11 @@ internal static partial class AzureCommand {
 
                         world["admission"] ??= new JsonArray();
                         foreach (var participant in delegated) { world["admission"]!.AsArray().Add(item: participant!.DeepClone()); }
-                        if (!WorldDefinitionFileSource.TryParseComposed(
-                            world.ToJsonString(),
-                            file,
-                            null,
-                            false,
-                            out parsed,
-                            out reason,
-                            documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: file)
+                        if (!WorldDefinitionFileSource.TryParseDocument(
+                            definition: out parsed,
+                            json: world.ToJsonString(),
+                            reason: out reason,
+                            sourceName: file
                         )) {
                             throw new InvalidDataException(message: reason);
                         }

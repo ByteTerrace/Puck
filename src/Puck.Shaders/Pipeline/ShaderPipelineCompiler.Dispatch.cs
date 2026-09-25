@@ -2,8 +2,8 @@ namespace Puck.Shaders;
 
 // Dispatch shapes and package storage. A pass dispatches over the frame extent, by fixed group counts, or indirectly
 // from a buffer version it reads in the indirect-argument state; a buffer is raw and fixed, or structured by an element
-// stride, or counted by a basis the host resolves. The pipeline node records only extent dispatches over raw fixed
-// buffers, so the other shapes and storages belong to package passes, which record their own work.
+// stride, or counted by a sum of terms over counts the host resolves. The pipeline node records only extent dispatches
+// over raw fixed buffers, so the other shapes and storages belong to package passes, which record their own work.
 public sealed partial class ShaderPipelineCompiler {
     // Everything a pass reads this frame or the previous one: an indirect dispatch's arguments, then its inputs.
     private static IEnumerable<ResourceReference> ReadsOf(ShaderPipelinePass pass) {
@@ -61,17 +61,47 @@ public sealed partial class ShaderPipelineCompiler {
                 resource.Name
             );
         }
-        if (
-            !Enum.IsDefined(value: count.Basis) ||
-            (count.Elements == 0)
-        ) {
+        if (count.Count == 0) {
             Add(
                 diagnostics,
                 "SHADERPIPE_BUFFER_COUNT",
-                $"Buffer resource '{resource.Name}' needs a declared count basis and at least one element per unit.",
+                $"Buffer resource '{resource.Name}' declares a count with no terms.",
                 resource.Name
             );
         }
+
+        var seen = new HashSet<ShaderPipelineCountBasis>();
+
+        for (var index = 0; (index < count.Count); index++) {
+            var term = count[index];
+
+            seen.Clear();
+
+            if (
+                (term.Elements == 0) ||
+                (term.Per.Count == 0) ||
+                term.Per.Any(predicate: basis => (!Enum.IsDefined(value: basis) || !seen.Add(item: basis)))
+            ) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_BUFFER_COUNT",
+                    $"Buffer resource '{resource.Name}' count term {index} needs at least one element per unit and one or more declared bases, each named once; a size that scales with nothing is sizeBytes.",
+                    resource.Name
+                );
+            } else if (count.Take(count: index).Any(predicate: earlier => SameBases(left: earlier.Per, right: term.Per))) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_BUFFER_COUNT",
+                    $"Buffer resource '{resource.Name}' count term {index} scales with the same bases as an earlier term; one term states them.",
+                    resource.Name
+                );
+            }
+        }
+
+        static bool SameBases(IReadOnlyList<ShaderPipelineCountBasis> left, IReadOnlyList<ShaderPipelineCountBasis> right) => (
+            (left.Count == right.Count) &&
+            left.All(predicate: basis => right.Contains(value: basis))
+        );
     }
     private static void ValidateDispatch(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
         if (pass.Dispatch is not { } dispatch) {

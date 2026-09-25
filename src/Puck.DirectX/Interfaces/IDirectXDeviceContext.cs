@@ -24,6 +24,9 @@ public interface IDirectXDeviceContext {
     DirectXFeatureLevel FeatureLevel { get; }
     /// <summary>Gets a value indicating whether the context has been fully initialized.</summary>
     bool IsInitialized { get; }
+    /// <summary>Gets the device-local memory counts (<c>memory.directx</c>) every resource on this device joins, or
+    /// <see langword="null"/> when nothing is counted.</summary>
+    GpuDeviceMemoryWork? Memory { get; }
     /// <summary>Gets the device's pipeline library, which every compute and graphics pipeline creation on the device
     /// asks first; <see langword="null"/> for a context created without one.</summary>
     DirectXPipelineLibrary? PipelineLibrary { get; }

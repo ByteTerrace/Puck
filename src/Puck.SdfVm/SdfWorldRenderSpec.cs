@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.SignedDistance;
 
@@ -28,8 +27,6 @@ public sealed record SdfWorldRenderSpec(
     /// per-view bindings resolve against, not a fixed viewport slot — see <see cref="SdfEngineNode"/>'s remarks for the
     /// per-frame slot derivation.</summary>
     public IReadOnlyDictionary<string, IRenderNode>? Children { get; init; }
-    /// <summary>An optional factory for the output image (export mode when it returns an exportable image).</summary>
-    public Func<IGpuDeviceContext, IGpuImage>? CreateOutputImage { get; init; }
     /// <summary>An optional render-node decorator wrapped around the producer (e.g. the unified overlay). Applied on
     /// every host backend — a decorator resolves neutral services and selects its bytecode from the resolved host
     /// (the <see cref="SdfWorldRenderBuilder.BytecodeExtension"/> convention), exactly like the kernels.</summary>

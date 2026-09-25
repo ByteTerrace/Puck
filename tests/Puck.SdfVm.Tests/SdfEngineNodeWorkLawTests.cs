@@ -121,8 +121,7 @@ public sealed class SdfEngineNodeWorkLawTests {
                         X: 0f,
                         Y: 0f
                     )
-                )],
-                WarpAmount: 0f
+                )]
             );
 
             Node = new SdfEngineNode(
@@ -130,10 +129,7 @@ public sealed class SdfEngineNodeWorkLawTests {
                 frameSource: new FixedFrameSource(frame: frame),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
-                services: new SdfViewGpuServices(
-                Gpu: gpu,
-                Pipelines: new SdfWorldPipelineCache()
-            ),
+                pipelines: new SdfWorldPipelineCache(),
                 width: Extent
             );
             m_context = new FrameContext(

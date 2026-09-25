@@ -152,7 +152,7 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
         public void Dispose() => m_surface.Dispose();
         public nint Handle() => m_surface.CurrentHandle;
         public void NotifyDeviceLost() => m_surface.NotifyDeviceLost();
-        public void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+        public void Publish(ulong tick, IGpuDeviceContext deviceContext) {
             Render(
                 bgra: m_pixels,
                 height: ((int)Descriptor.Height),
@@ -162,7 +162,6 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
             _ = m_surface.Publish(
                 deviceContext: deviceContext,
                 format: SurfaceFormat.B8G8R8A8Unorm,
-                gpu: gpu,
                 height: Descriptor.Height,
                 pixels: m_pixels,
                 width: Descriptor.Width

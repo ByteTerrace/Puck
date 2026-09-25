@@ -179,7 +179,7 @@ internal sealed partial class WorldScreenBinder {
     // Services the device table, then every known device's lifecycle and every one of its declared feeds. Opens run
     // on the thread pool (a Media Foundation open can block for seconds proving a graph live); the render thread only
     // adopts a finished open.
-    private void CaptureCamera(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    private void CaptureCamera(IGpuDeviceContext deviceContext) {
         ServiceCameraDevices();
         ReconcileCameraDemand();
 
@@ -204,8 +204,7 @@ internal sealed partial class WorldScreenBinder {
                 ServiceCameraFeed(
                     device: device,
                     deviceContext: deviceContext,
-                    feed: feed,
-                    gpu: gpu
+                    feed: feed
                 );
             }
         }
@@ -745,7 +744,8 @@ internal sealed partial class WorldScreenBinder {
                 images: images,
                 importedViews: views,
                 imports: imports,
-                ring: stream
+                ring: stream,
+                targetDevice: m_cameraTargetDevice
             );
 
             try {
@@ -793,11 +793,11 @@ internal sealed partial class WorldScreenBinder {
             // imports each handle (one importer per slot).
             var targetContext = (m_hostsOnDirectX
                 ? deviceContext
-                : (m_cameraTargetDevice ??= new DirectXDeviceContext(
+                : ((DirectXDeviceContext)(m_cameraTargetDevice ??= new DisposeAfterDependents<IDisposable>(resource: new DirectXDeviceContext(
                     adapterLuid: adapterLuid,
                     deviceApi: new DirectXNativeDeviceApi(),
                     minimumFeatureLevel: DirectXFeatureLevel.Level110
-                ))
+                ))).Resource)
             );
             var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)targetContext));
 
@@ -853,7 +853,7 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
     }
-    private void ServiceCameraFeed(CameraDevice device, CameraFeed feed, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    private void ServiceCameraFeed(CameraDevice device, CameraFeed feed, IGpuDeviceContext deviceContext) {
         if (feed.SharedStream is { } shared) {
             // The platform publishes completed slots on its own thread and the screen samples the latest one directly;
             // no CPU pixels ever exist on this tier, so Light stays dark.
@@ -907,7 +907,6 @@ internal sealed partial class WorldScreenBinder {
 
         _ = feed.Surface.Publish(
             deviceContext: deviceContext,
-            gpu: gpu,
             surface: in panelSurface
         );
         feed.StarvedPulls = 0;
@@ -1518,6 +1517,10 @@ internal sealed partial class WorldScreenBinder {
         private readonly Action<int> m_release;
         private readonly nint[] m_sharedHandles;
         private readonly ISharedSlotRing m_stream;
+        // The binder's headless device the images were made on (the Vulkan host's), or null when they were made on the
+        // render device. The set is one of its dependents, so the device outlives the images however late the last
+        // lease releases them.
+        private readonly DisposeAfterDependents<IDisposable>? m_targetDevice;
 
         private bool m_disposed;
         private int m_outstanding;
@@ -1527,17 +1530,20 @@ internal sealed partial class WorldScreenBinder {
         /// the set, so a per-frame reader never re-derives them.</summary>
         public IReadOnlyList<nint> SharedHandles => m_sharedHandles;
 
-        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ISharedSlotRing ring) {
+        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
             m_images = images;
             m_importedViews = importedViews;
             m_imports = imports;
             m_stream = ring;
             m_release = Release;
             m_sharedHandles = new nint[images.Count];
+            m_targetDevice = targetDevice;
 
             for (var index = 0; (index < images.Count); index++) {
                 m_sharedHandles[index] = images[index].SharedHandle;
             }
+
+            targetDevice?.AddDependent();
         }
 
         private void DisposeResources() {
@@ -1556,6 +1562,8 @@ internal sealed partial class WorldScreenBinder {
             foreach (var image in m_images) {
                 image.Dispose();
             }
+
+            m_targetDevice?.RemoveDependent();
         }
         private void Release(int slot) {
             m_stream.Release(slot: slot);
