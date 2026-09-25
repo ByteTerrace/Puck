@@ -1,5 +1,6 @@
 using System.Globalization;
 using Puck.Commands;
+using Puck.SdfVm;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -11,11 +12,12 @@ namespace Puck.World;
 /// ambient occlusion and its quality, the far field, the unchanged-frame cadence gate, the shadow mask and march, render
 /// scale, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
 /// called with no argument. Every write is a session lever submitted through the server's grant check and lands in
-/// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame; nothing here needs a window or
-/// a presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
+/// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view,
+/// which sets the render node's mode through <see cref="WorldRenderProbe"/>. Nothing here needs a window or a
+/// presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
 /// canary can set the same levers a player can. Headless composes no renderer and refuses these as unknown.
 /// </summary>
-internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link) : ICommandModule {
+internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
     /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
     private string DescribeAdaptiveQuality(string verb, int mode, string exact = "exact", string fast = "fast") {
         var (configured, isFast) = mode switch {
@@ -482,6 +484,40 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     : 0.0),
                     formatEcho: () => new CommandResult(Output: CadenceEcho(settings: settings))
                 );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.debug-view",
+            description: $"Selects the live SDF diagnostic output for every World camera: world.debug-view [{string.Join(
+                separator: '|',
+                value: DebugViewModes.Names
+            )}]. Depth is the primary-march-only performance probe; off restores final shading.",
+            handler: (_, args) => {
+                if (renderProbe.Node is not { } node) {
+                    return CommandResult.Error(output: "[world.debug-view: renderer not built yet]");
+                }
+
+                if (args.Count == 0) {
+                    return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: node.DebugMode)}]");
+                }
+
+                if (
+                    (args.Count != 1) ||
+                    !DebugViewModes.TryParse(
+                    name: args[0].ToString(),
+                    mode: out var mode
+                )
+                ) {
+                    return CommandResult.Error(output: $"[world.debug-view: unknown mode '{args.Tail(start: 0)}' — {string.Join(
+                        separator: '|',
+                        value: DebugViewModes.Names
+                    )}]");
+                }
+
+                node.DebugMode = mode;
+
+                return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: mode)}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

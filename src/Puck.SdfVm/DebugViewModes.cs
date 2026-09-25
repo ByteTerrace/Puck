@@ -22,6 +22,7 @@ public static class DebugViewModes {
         "mask",
         "overshoot",
         "evals",
+        "visibility",
     ];
 
     /// <summary>Gets the number of debug view modes.</summary>

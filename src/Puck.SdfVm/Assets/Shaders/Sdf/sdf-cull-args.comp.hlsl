@@ -19,7 +19,7 @@
 // register, because the factory assigns registers POSITIONALLY and an annotation change alone desyncs the root signature.
 [[vk::binding(3, 0)]] StructuredBuffer<float> tiles : register(t0);       // read-only beam cull buffer
 [[vk::binding(5, 0)]] RWStructuredBuffer<uint> viewsArgs : register(u0);  // [groupCountX, groupCountY, groupCountZ]
-[[vk::binding(6, 0)]] RWStructuredBuffer<uint> cullBounds : register(u1); // [minGroupX, minGroupY]
+[[vk::binding(6, 0)]] RWStructuredBuffer<uint> cullBounds : register(u1); // [minGroupX, minGroupY, endGroupX, endGroupY]
 
 #define SDF_CULL_ARGS_THREADS 256u
 
@@ -88,11 +88,14 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
     }
 
     // A tile is WorldTileSize (16) px = (WorldTileSize / 8) groups of the views kernel's 8x8 workgroup. The dispatch
-    // is origin-anchored (0,0); the views kernel adds cullBounds as its pixel-group origin to land on the bbox.
+    // is origin-anchored (0,0); the views kernel adds cullBounds as its pixel-group origin to land on the bbox. The
+    // box's exclusive end is the extent the hit passes wrote this frame, which is where a visibility record is current.
     uint groupsPerTile = (WorldTileSize / 8u);
 
     cullBounds[0] = (boxMinX * groupsPerTile);
     cullBounds[1] = (boxMinY * groupsPerTile);
+    cullBounds[2] = ((boxMaxX + 1u) * groupsPerTile);
+    cullBounds[3] = ((boxMaxY + 1u) * groupsPerTile);
     viewsArgs[0] = (((boxMaxX - boxMinX) + 1u) * groupsPerTile);
     viewsArgs[1] = (((boxMaxY - boxMinY) + 1u) * groupsPerTile);
     viewsArgs[2] = params.viewportCount;

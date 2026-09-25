@@ -62,6 +62,16 @@ uint worldVisibilityRecord(uint2 pixel, uint viewIndex) {
     return sdfVisibilityRecord(pixel, viewIndex, params.imageExtent);
 }
 #endif
+#ifdef SDF_PRIMARY_READ
+// Whether `pixel`'s visibility record belongs to this frame. The hit passes share one indirect dispatch box, and primary
+// writes a record for every active pixel inside it, misses included, so a record is current exactly inside the box.
+// Outside it a record is whatever an earlier frame left, and every tile there is one the beam proved empty this frame.
+bool worldVisibilityCurrent(uint2 pixel) {
+    uint2 boxOrigin = (uint2(cullBounds[0], cullBounds[1]) * 8u);
+    uint2 boxEnd = (uint2(cullBounds[2], cullBounds[3]) * 8u);
+    return (all(pixel >= boxOrigin) && all(pixel < boxEnd));
+}
+#endif
 
 // Whether viewport v is a hosted child surface (its source[] slot holds another node's output): the beam prepass
 // and Stage 1 skip such slots so the SDF render never overwrites the child's pixels.
@@ -1492,7 +1502,7 @@ uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceC
 // The debug-view-mode wire contract: viewport forward.w carries the mode index into DebugViewModes.Names
 // (src/Puck.SdfVm/DebugViewModes.cs — the list's ORDER is the wire value; KEEP IN SYNC, including the switch below).
 // Mode 0 / >= DebugViewModeCount render final shading.
-static const int DebugViewModeCount = 11;
+static const int DebugViewModeCount = 12;
 static const int DebugViewModeNormals = 2;
 // Mode 7 (slice) is special-cased in TWO other places: renderView SKIPS the march for it (the slice never needs a
 // hit), and the beam prepass FORCE-SURVIVES every in-viewport tile for it (sdf-beam.comp) so the indirect dispatch
@@ -1513,6 +1523,10 @@ static const int DebugViewModeOvershoot = 9;
 // shadow, AO, coverage-AA) so the tallied count reflects actual per-frame cost — see useFinalShading below, which
 // folds this mode in alongside the final-image modes instead of skipping straight to a cheap switch-only case.
 static const int DebugViewModeEvals = 10;
+// Mode 11 (visibility) colors each pixel by the kind of its visibility record: background dark blue, SDF green, mesh
+// orange. Like the termination view it shows what the pipeline dispatched, so a tile outside the dispatch box keeps the
+// sky pre-pass's color. KEEP IN SYNC with DebugViewModes.Names in src/Puck.SdfVm/DebugViewModes.cs.
+static const int DebugViewModeVisibility = 11;
 
 // The analytic-normal A/B toggle (the forward-mode dual's debug lever). Rides a reserved lane of the grid-object-params
 // screen-light row (SdfGridObjParams.z): 0 (the DEFAULT) selects the analytic dual normal (calculateNormalAnalytic),
@@ -2573,10 +2587,9 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 [unroll] for (uint i = 0u; i < 4u; i++) {
                     int2 neighbor = int2(pixel) + offsets[i];
                     if (all(neighbor >= 0) && all(neighbor < int2(renderDims))) {
-                        uint neighborTile = worldTileIndex(viewIndex, uint2(neighbor) / WorldTileSize, params.tileGrid);
-                        // Empty tiles outside the indirect dispatch bbox have stale visibility records. Use the
-                        // beam's current-frame emptiness proof directly; only live tiles may read the records.
-                        if (tiles[worldTileMarchStartIndex(neighborTile)] == TileEmpty) {
+                        // A neighbour outside the dispatch box has no record from this frame, and the beam proved
+                        // its tile empty, so it is sky; inside the box its record is current, empty tiles included.
+                        if (!worldVisibilityCurrent(uint2(neighbor))) {
                             adjacentSky = true;
                         } else {
                             SdfVisibility adjacent = sdfLoadVisibility(worldVisibilityRecord(uint2(neighbor), viewIndex));
@@ -2782,6 +2795,23 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             float evalRamp = saturate(sdfEvalCount / EvalHeatmapCeiling);
             float3 coldBand = lerp(float3(0.02, 0.04, 0.20), float3(0.14, 0.85, 0.30), saturate(evalRamp * 2.0));
             viewColor = lerp(coldBand, float3(0.95, 0.16, 0.10), saturate((evalRamp - 0.5) * 2.0));
+            break;
+        }
+        case 11: { // VISIBILITY — the kind of the pixel's current visibility record: background dark blue, SDF green,
+                   // mesh orange. The monolithic reference keeps no records, so it reads its own march's outcome.
+#ifdef SDF_PRIMARY_READ
+            uint kind = SdfVisibilityKindBackground;
+
+            if (worldVisibilityCurrent(pixel)) {
+                kind = sdfVisibilityKind(sdfLoadVisibility(worldVisibilityRecord(pixel, viewIndex)).identity);
+            }
+
+            viewColor = ((kind == SdfVisibilityKindSdf)
+                ? float3(0.15, 0.90, 0.25)
+                : ((kind == SdfVisibilityKindMesh) ? float3(0.95, 0.55, 0.10) : float3(0.02, 0.05, 0.28)));
+#else
+            viewColor = (hitSurface ? float3(0.15, 0.90, 0.25) : float3(0.02, 0.05, 0.28));
+#endif
             break;
         }
     }

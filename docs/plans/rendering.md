@@ -1073,10 +1073,22 @@ follow its device-bound services, its one recorder and the SDF engine's groups.
    threshold, blend weight and partner), lanes, normal and surface, and every
    pass reads and writes `PrimaryHits` through it. Done when `puck parity` and
    `puck counters` read identically before and after.
-3. P4-1b, freshness: a record is current only inside the frame's dispatch box,
-   which replaces the `TileEmpty` neighbour test, and a `visibility` debug view
-   (mode 11, `debug.view.visibility`) shows each pixel's record kind. Done when
-   a fixture shows no stale record reaching the resolve.
+3. P4-1b, landed, freshness: `sdf-cull-args` writes the dispatch box's
+   exclusive end beside its origin, and `worldVisibilityCurrent` in
+   `sdf-world.hlsli` holds a record current exactly inside that box, because
+   primary writes every active pixel it dispatches, misses included. It is the
+   one freshness test: it replaced the `TileEmpty` neighbour test in the
+   silhouette sky blend, the `visibility` debug view (mode 11,
+   `debug.view.visibility`) colors each pixel by its current record's kind, and
+   P4-2c's mesh resolve reads through it rather than a second test. For SDF-only
+   frames it answers exactly as the `TileEmpty` test did, since every tile
+   outside the box is empty and every record inside it is current, so parity is
+   unmoved by construction; its work begins when mesh pixels resolve outside
+   the SDF dispatch box. The `sdf-visibility-fresh` canary moves a block out of
+   the frame's centre on both backends and holds the vacated pixels to
+   background records and the block to an SDF record where it went, with a
+   no-move leg as the negative control; it proves current-kind reads after a
+   move, not a difference between the two tests.
 4. P4-1c, the compact-record trial: a smaller encoding, measured in counted
    work and bytes against the full record, kept only within the limit below.
 5. P4-2a, landed, the GPU-free contracts: `ViewProjection` in

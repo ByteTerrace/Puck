@@ -88,7 +88,12 @@ L (lanes), N (geometric normal and gradient magnitude) and S (curvature, the
 surface/AO query count, raw AO, and surface flags). Primary writes V, C and L;
 surface writes N and S; ambient updates S. Every reader and writer uses the
 module's typed load and store functions, so a layout change edits only that
-module and `PrimaryHitByteLength`. Material `Soften` changes the later
+module and `PrimaryHitByteLength`. A record is current only inside the frame's
+dispatch box, where primary writes every active pixel, misses included: a
+reader of another pixel's record asks `worldVisibilityCurrent` first and
+treats a pixel outside the box as sky, since the beam proved its tile empty.
+`world.debug-view visibility` (mode 11) colors each pixel by its record's kind.
+Material `Soften` changes the later
 lighting normal, while AO uses the geometric normal. Before accepting a record or
 pass-split change, compare material seams, detail and secondary shape modes,
 uneven viewport rectangles, reduced render scale, layout changes, and the
