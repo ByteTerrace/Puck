@@ -4,8 +4,13 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    /// <summary>Gets the currently allocated program-word capacity, including any growth during live uploads.</summary>
-    public int ProgramWordCapacity => m_programWordCapacity;
+    /// <summary>Gets the program words the engine is provisioned for: the options' reserve, or the program region's
+    /// words once a program has grown it past that. The region itself holds the live program and grows by half again
+    /// when a larger one is uploaded.</summary>
+    public int ProgramWordCapacity => Math.Max(
+        val1: m_programWordCapacity,
+        val2: m_programWordReserve
+    );
     /// <summary>Gets the bytes allocated for the visibility records: one record of <see cref="VisibilityRecordByteLength"/>
     /// bytes for every pixel of the full extent in every viewport the engine reserves.</summary>
     public ulong VisibilityRecordBytes => FrameBufferBytes(

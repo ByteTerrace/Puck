@@ -198,8 +198,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
     private readonly nint m_pool;
 
+    // The program region's words, and the words the options provisioned for, which ProgramWordCapacity reports when
+    // larger.
     private int m_programWordCapacity;
 
+    private readonly int m_programWordReserve;
     private readonly nint m_screenSampler;
     private readonly IGpuImage m_screenSourceFiller;
     // Shares Stage 1's exact bindings array (PipelineLayouts.Views) and push/sampler shape, so its descriptor-set layout is
@@ -497,10 +500,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_exportableImage = (m_storageImage as IGpuExportableImage);
         m_exportMode = (m_exportableImage is not null);
 
-        m_programWordCapacity = Math.Max(
-            val1: options.Program.Words.Length,
-            val2: options.ProgramWordCapacity
-        );
+        // The program region holds the live program, not the options' reserve: a probed worst case can run to hundreds
+        // of megabytes, which a ring holds once per slot. A larger program grows the region by half again.
+        m_programWordReserve = options.ProgramWordCapacity;
+        m_programWordCapacity = options.Program.Words.Length;
         // The host-written tables, each a region the kernels bind through its slot's buffer (SdfWorldEngine.Regions.cs).
         // The screen-surface table is always MaxScreenSurfaces entries, indexed directly by screen index, so Stage 1's
         // binding stays valid for a program with none: an all-zero undeclared entry is never addressed.

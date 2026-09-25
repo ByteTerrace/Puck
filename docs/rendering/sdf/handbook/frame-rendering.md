@@ -178,7 +178,8 @@ flight:
 Dynamic transforms are never compared as a table: the engine packs only the
 rows the frame's moved set (`SdfFrame.MovedTransforms`) owes since the frame it
 last consumed, and the region owes the words of those rows that changed. The
-program is written only by a program upload. Mesh draws (`SdfFrame.MeshDraws`)
+program is written only by a program upload, into a region sized to the live
+program and grown by half again when a larger one arrives. Mesh draws (`SdfFrame.MeshDraws`)
 are packed into the mesh region (`SdfMeshRegion`: one 80-byte record a draw,
 then each distinct mesh's positions and indices once) only when the frame hands
 a different draw list; the region is created by the first frame that draws a

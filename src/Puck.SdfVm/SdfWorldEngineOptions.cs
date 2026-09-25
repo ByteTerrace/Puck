@@ -20,9 +20,10 @@ namespace Puck.SdfVm;
 /// cross-backend handoff layout and <see cref="SdfWorldEngine.SubmitFrame"/> drains the producer queue so the shared
 /// handle may be consumed on another device. When <see langword="null"/>, a plain same-device storage image is
 /// created from the resolved <see cref="IGpuImageFactory"/>.</param>
-/// <param name="ProgramWordCapacity">An optional initial reserve in packed words (the engine always provisions at
-/// least <paramref name="Program"/>'s length). <see cref="SdfWorldEngine.UploadProgram"/> grows it as needed;
-/// reserving expected content here avoids reallocations during authoring.</param>
+/// <param name="ProgramWordCapacity">The packed words the engine is provisioned for, which
+/// <see cref="SdfWorldEngine.ProgramWordCapacity"/> reports while no program exceeds it. It allocates nothing: the
+/// program region holds the live program and <see cref="SdfWorldEngine.UploadProgram"/> grows it by half again when a
+/// larger one arrives.</param>
 /// <param name="InstanceCapacity">An optional initial instance reserve for the per-tile masks and instance grids.
 /// The engine provisions at least the initial program's instance count and grows with later uploads.</param>
 /// <param name="BrickPoolVoxelCapacity">The carve-bake brick pool's voxel (f32 word) capacity, fixed at construction.

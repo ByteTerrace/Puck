@@ -2042,9 +2042,11 @@ Phase 3, the groups, follows phase 2:
     copy kernel takes no push constants: a staging buffer leads with a
     four-word header (count, run count, block base, destination word) and a run
     entry for every run, so a copy stages 16 bytes of header and 8 bytes a run
-    that the push and the single-run case used to carry. The program upload no
-    longer drains the frame ring unless a capacity grows, and a table past one
-    staged copy is refused by name on every device. `GpuResidency.Select` takes
+    that the push and the single-run case used to carry. The program region
+    holds the live program rather than the render envelope's worst-case reserve,
+    which a ring would hold once per slot, and grows by half again past it; the
+    program upload drains the frame ring only when a capacity grows, and a table
+    past one staged copy is refused by name on every device. `GpuResidency.Select` takes
     whether readers are in flight, which replaces the mesh region's own ring
     override. `RecordFrameUpload`, its sets and the engine's device-local table
     buffers, `sdf-brick-upload.comp` and its pipeline, and `SdfRingTable` are

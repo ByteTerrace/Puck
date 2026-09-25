@@ -19,7 +19,8 @@ namespace Puck.SdfVm.Tests;
 /// set owes write the words of each that changed, in one copy dispatch however scattered they are; a change reaches the
 /// device-local buffer once and stays there through every frame in flight after it, whichever ring slot those frames
 /// stage in; changes past the run bound still leave the table exact; a program edit writes only the program words that
-/// changed; and an engine rebuilt after a device loss owes every table again and reads back exact.
+/// changed; the program region holds the live program rather than the reserve and grows by half again past it; and an
+/// engine rebuilt after a device loss owes every table again and reads back exact.
 /// </summary>
 public sealed class SdfWorldEngineUploadLawTests {
     // The packed width of a dynamic transform (sdf-vm.hlsli sdfDynamicTransforms).
@@ -253,6 +254,51 @@ public sealed class SdfWorldEngineUploadLawTests {
         );
     }
     [Fact]
+    public void TheProgramRegionHoldsTheLiveProgramAndGrowsByHalfAgainPastIt() {
+        const int Reserve = (1 << 20);
+        using var rig = new Rig(
+            programWordReserve: Reserve,
+            slots: 1
+        );
+        var words = Program(albedo: Vector3.One).Words.Length;
+
+        rig.Warm();
+
+        // The reserve allocates nothing; the engine reports it as the words it is provisioned for.
+        Assert.Equal(expected: Reserve, actual: rig.Engine.ProgramWordCapacity);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => rig.Gpu.DeviceLocal(sizeBytes: (Reserve * sizeof(uint))));
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: Program(albedo: Vector3.One).Words).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(words * sizeof(uint))))
+        );
+
+        // A larger program grows the region by half again, and the grown region holds it whole.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        for (var sphere = 0; (sphere < 4); sphere++) {
+            builder.Sphere(
+                material: material,
+                radius: (1f + sphere)
+            );
+        }
+
+        var larger = builder.Build();
+        var grown = Math.Max(
+            val1: larger.Words.Length,
+            val2: (words + (words / 2))
+        );
+
+        Assert.True(condition: (larger.Words.Length > words));
+        rig.Engine.UploadProgram(program: larger);
+        rig.Render(time: 0f);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: larger.Words).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(grown * sizeof(uint))))[..(larger.Words.Length * sizeof(uint))]
+        );
+        Assert.Equal(expected: Reserve, actual: rig.Engine.ProgramWordCapacity);
+    }
+    [Fact]
     public void TheMeshRegionHoldsAKnownDrawSetAndOwesOnlyTheWordsANewSetChanges() {
         using var rig = new Rig(slots: 1);
         var quad = new SdfMesh(
@@ -416,13 +462,15 @@ public sealed class SdfWorldEngineUploadLawTests {
         private readonly List<int> m_pendingMoves = [];
 
         private readonly SdfProgram m_program;
+        private readonly int m_programWordReserve;
         private readonly DynamicTransform[] m_transforms;
 
         private SdfWorldPipelines m_pipelines = null!;
         private GpuRegionCopyPipeline m_regionCopy = null!;
 
-        public Rig(int slots) {
+        public Rig(int slots, int programWordReserve = 0) {
             Gpu = new UploadModelGpu(reportVersion: SdfIsa.Version);
+            m_programWordReserve = programWordReserve;
             m_program = Program(albedo: Vector3.One);
             m_transforms = Transforms(slots: slots);
             Engine = Build();
@@ -516,6 +564,7 @@ public sealed class SdfWorldEngineUploadLawTests {
                     BrickPoolVoxelCapacity: 0,
                     DynamicTransformCapacity: m_transforms.Length,
                     Program: m_program,
+                    ProgramWordCapacity: m_programWordReserve,
                     ViewportCapacity: 1,
                     WorkLedger: ledger
                 ),
