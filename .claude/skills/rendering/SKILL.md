@@ -547,10 +547,12 @@ These are one-line cautions; the owning pages hold the derivations.
   member takes a name and its backends hand the object to the naming;
   `SdfWorldEngineObjectNameLawTests` holds the engine's names. To trace a
   validation message, run with `--debug-layers` (`puck canary --debug-layers`,
-  or the World flag) and read the name the message prints: a Vulkan
-  `[vulkan-debug] validation` line carries `handle = 0x…, name = sdf.world/…`
-  in its `Objects:` list, and a `[d3d12-debug]` line quotes the name beside
-  the resource pointer, as does its teardown `live` report.
+  or the World flag) and read the name the message prints beside the handle:
+  the validation layer names each object a `[vulkan-debug] validation` line
+  lists, and a `[d3d12-debug]` message or teardown `live` line carries the
+  name of the object it reports (`DirectXDebugLayerLivenessTests` holds the
+  `live` line to its leaked buffer's name). A clean run prints no such line,
+  so names appear only when something is reported.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
   backends), created-object kinds `PerBackendDeterministic`, and anything

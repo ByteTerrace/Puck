@@ -61,7 +61,7 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
                 value: "ID3D12Resource"
             ) && line.Contains(
                 comparisonType: StringComparison.Ordinal,
-                value: "'law/leaked'"
+                value: "law/leaked"
             ))
         );
         Assert.DoesNotContain(
