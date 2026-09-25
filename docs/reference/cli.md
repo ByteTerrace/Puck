@@ -751,7 +751,7 @@ exactly `vulkan` and `directx` and declare the `gpu` requirement, so it is never
 automatic. It reports one proof per backend, as `<id> on <backend>`, and the
 manifest holds only when both did. No other shape reads `backends`.
 The `pipeline-feedback`, `pipeline-ink`, `pipeline-edit`, `pipeline-supersede`,
-`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn` and `pipeline-geometry` canaries use this shape to test shader
+`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault` and `pipeline-geometry` canaries use this shape to test shader
 pipelines, and `source-conversion` uses it to run the shipped image-source
 conversion kernels; the [World guide](../../src/Puck.World/README.md#shader-pipelines)
 covers the `pipeline.wait` phases their scripts use.
@@ -957,7 +957,7 @@ its own build output:
 
 ```text
 dotnet build src/Puck.Cli -c Release
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-geometry
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry
 ```
 
 ---

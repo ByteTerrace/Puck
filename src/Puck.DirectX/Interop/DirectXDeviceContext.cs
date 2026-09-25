@@ -62,8 +62,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// without a library.</param>
     /// <param name="pipelineCacheStore">Where the library lives on disk, or <see langword="null"/> to keep it in
     /// memory only.</param>
+    /// <param name="creationFaults">The host's operator-armed creation faults its services pass through
+    /// (<see cref="GpuCreationFaults.Wrap"/>), or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="deviceApi"/> is <see langword="null"/>.</exception>
-    public DirectXDeviceContext(long adapterLuid, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null) {
+    public DirectXDeviceContext(long adapterLuid, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null, GpuCreationFaults? creationFaults = null) {
         ArgumentNullException.ThrowIfNull(deviceApi);
 
         m_adapterLuid = adapterLuid;
@@ -71,7 +73,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheStore = pipelineCacheStore;
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
-        Services = CreateServices();
+        Services = CreateServices(creationFaults: creationFaults);
     }
     /// <summary>Initializes a new instance whose adapter LUID is resolved lazily on first use.</summary>
     /// <param name="adapterLuidProvider">Resolves the adapter LUID to create the device on (zero for the default adapter); invoked once, on first use.</param>
@@ -82,8 +84,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// without a library.</param>
     /// <param name="pipelineCacheStore">Where the library lives on disk, or <see langword="null"/> to keep it in
     /// memory only.</param>
+    /// <param name="creationFaults">The host's operator-armed creation faults its services pass through
+    /// (<see cref="GpuCreationFaults.Wrap"/>), or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="adapterLuidProvider"/> or <paramref name="deviceApi"/> is <see langword="null"/>.</exception>
-    public DirectXDeviceContext(Func<long> adapterLuidProvider, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null) {
+    public DirectXDeviceContext(Func<long> adapterLuidProvider, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null, GpuCreationFaults? creationFaults = null) {
         ArgumentNullException.ThrowIfNull(adapterLuidProvider);
         ArgumentNullException.ThrowIfNull(deviceApi);
 
@@ -92,7 +96,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheStore = pipelineCacheStore;
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
-        Services = CreateServices();
+        Services = CreateServices(creationFaults: creationFaults);
     }
 
     /// <inheritdoc />
@@ -193,8 +197,9 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// needs it, and a device recreated after a loss is reached through the same services.</remarks>
     public GpuDeviceServices Services { get; }
 
-    private GpuDeviceServices CreateServices() =>
-        new() {
+    private GpuDeviceServices CreateServices(GpuCreationFaults? creationFaults) => GpuCreationFaults.Wrap(
+        faults: creationFaults,
+        services: new() {
             Bindings = new DirectXGpuBindings(deviceContext: this),
             BufferFactory = new DirectXGpuBufferFactory(deviceContext: this),
             CommandPoolFactory = new DirectXGpuCommandPoolFactory(deviceContext: this),
@@ -205,7 +210,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             RenderPassFactory = new DirectXGpuRenderPassFactory(deviceContext: this),
             ShaderModuleFactory = new DirectXGpuShaderModuleFactory(),
             SurfaceTransferFactory = new DirectXGpuSurfaceTransferFactory(deviceContext: this),
-        };
+        }
+    );
     private void EnsureCreated() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,

@@ -464,6 +464,18 @@ installed graph), `peak=` (what a reload of it would reach) and `budget=`.
 device's, and `pipeline.budget <name> device` removes the cap. A reload whose
 peak does not fit is refused with `SHADERPIPE_BUDGET`, and the installed graph
 keeps running.
+`gpu.faults arm <kind> [<n>]` makes the device fail the nth creation of a kind
+from now, or the next one, before the call reaches the device, so a reload can
+be refused partway through its allocation on real hardware. The kinds are
+`pipeline`, `buffer`, `image`, `render-pass`, `framebuffer`, `shader-module`,
+`command-pool` and `bindings-pool`. The refusal is `GPU_CREATION_FAULT`, naming
+the kind and the creation's number; the node releases what the candidate
+created and the installed graph keeps running. A fault fires once.
+`gpu.faults disarm` clears every fault and restarts the counts, and
+`gpu.faults list` prints `armed=<kind>:<n>,…` (or `armed=none`) and one
+`<kind>=<count>` field per kind: the creations since the last disarm. Only the
+operator's console runs it; a seat, binding, schedule step or world document
+cannot.
 `pipeline.capture` queues a PNG of the selected output, including while paused.
 The completion report says when the file has been written.
 

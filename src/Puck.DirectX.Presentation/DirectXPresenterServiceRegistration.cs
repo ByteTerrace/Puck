@@ -32,9 +32,11 @@ public static class DirectXPresenterServiceRegistration {
         services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);
         // The device is created lazily on the default adapter; its pipeline library lives under the host's
         // GpuPipelineCacheStore when one is registered, and in memory otherwise. The debug layer follows the host's
-        // GpuDeviceOptions, and is off when none is registered.
+        // GpuDeviceOptions, and is off when none is registered. Its services pass through the host's GpuCreationFaults
+        // when one is registered.
         services.TryAddSingleton(implementationFactory: static sp => new DirectXDeviceContext(
             adapterLuid: 0,
+            creationFaults: sp.GetService<GpuCreationFaults>(),
             deviceApi: new DirectXNativeDeviceApi(),
             minimumFeatureLevel: DirectXFeatureLevel.Level110,
             pipelineCacheStore: sp.GetService<GpuPipelineCacheStore>(),

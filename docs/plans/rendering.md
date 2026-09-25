@@ -113,9 +113,13 @@ validation or Direct3D 12 debug-layer message. Both canaries hold on both
 backends, and `pipeline-churn` holds under `puck canary --debug-layers`.
 The Direct3D 12 drain skips
 `D3D12_MESSAGE_ID_LOADPIPELINE_NAMENOTFOUND`, a cold pipeline-library miss the
-`gpu.pipeline-cache.misses` count already reports. P1a still owes a
-partial-allocation failure on a real device: the device factories have no
-fault-injection seam, so only the fake proves exact disposal.
+`gpu.pipeline-cache.misses` count already reports. A partial-allocation
+failure is injected on a real device through P7b-11's `gpu.faults`: the
+`pipeline-fault` canary fails a pipeline edit's second image, and the refused
+edit leaves the instance owning exactly its installed graph's bytes while the
+installed graph keeps presenting and a clean retry installs. The node's laws
+fail every creation of a replacement in turn through the same decorator on the
+fake and hold its disposal exact.
 
 P2 has landed. The pipeline
 node wraps its GPU services once and counts each pass's work into the ledger,
@@ -1403,11 +1407,19 @@ Phase 2, the services, follows the generated frame block, which has landed:
     graphics services. `IGpuDeviceContext.DeviceHandle`,
     `VulkanDeviceCommands.Token` and `FromToken` are deleted, and the table is
     no longer disposable; Direct3D 12 code reads `DirectXDeviceContext.Device`.
-11. `GpuCreationFaults`, a decorator over the factories, injects a creation
-    failure on a real device, which closes P1a's partial allocation check. It
-    is armed only by the operator console verb `gpu.faults` (arm, disarm,
-    list), which no world document can reach, and it ships in release builds
-    so qualification can use it.
+11. Done: `GpuCreationFaults` injects a creation failure on a real device. Each
+    backend wraps the services it creates with its context once
+    (`GpuCreationFaults.Wrap`: `DirectXDeviceContext` and the Vulkan
+    registration's services factory), so the pipeline, buffer, image, render
+    pass, framebuffer, shader module, command pool and descriptor pool
+    creations pass through it. The armed creation throws
+    `GpuCreationFaultException` (`GPU_CREATION_FAULT`, naming its kind and
+    number) before it reaches the device. Faults are counted per kind from
+    their arming, fire once, and use no randomness and no clock. Only the
+    operator verb `gpu.faults arm <kind> [<n>] | disarm | list` arms them, so
+    no world document can reach it, and it ships in release builds so
+    qualification can use it. The `pipeline-fault` canary closes P1a's
+    partial-allocation check on both backends under `--debug-layers`.
 
 Phase 3, the groups, follows phase 2:
 

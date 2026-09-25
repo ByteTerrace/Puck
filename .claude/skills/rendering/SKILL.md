@@ -413,6 +413,17 @@ These are one-line cautions; the owning pages hold the derivations.
   a new cadence-skipped pass its `SkipPass`. `SdfWorldEngineWorkLawTests`
   pins every pass's exact counts over `tests/Shared/FakeGpuDevice.cs`, so a
   recording change re-records those constants in the same change.
+- **Creation faults are one decorator at service creation.** Each backend wraps
+  the services it creates with its context once, through
+  `GpuCreationFaults.Wrap` (`DirectXDeviceContext.CreateServices`, the Vulkan
+  registration's `DeviceServices`), over the host's one `GpuCreationFaults`
+  read with `GetService`. So a device's own `IGpuDeviceContext.Services` does
+  pass through faults, and counting wraps above them. The World registers the
+  faults and the operator-only `gpu.faults` verb (`GpuFaultsCommandModule`) in
+  both GPU presentation shapes (`WorldBootCompositionLawTests`). A new creating
+  member of a wrapped factory joins a `GpuCreationKind`, and
+  `GpuCreationFaultsLawTests`' coverage table fails on a member it does not
+  name.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
   backends), created-object kinds `PerBackendDeterministic`, and anything
@@ -711,11 +722,11 @@ puck canary world-counters                                  # world.counters gpu
 puck canary source-conversion                               # the shipped palette and NV12 conversion kernels against their CPU reference, offscreen on both backends
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
-puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-geometry pipeline-echo no-device-compile    # shader pipelines offscreen on both backends
+puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo no-device-compile    # shader pipelines offscreen on both backends
 dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
 ```
 
-The fourteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
+The fifteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
 an arithmetic feedback oracle, the shipped ink pipeline's exposure regions, a
 broken middle-pass edit followed by a corrected one, two valid edits back to
 back (only the latest renders), compute-compute-fullscreen
@@ -727,7 +738,9 @@ override that renders after a relaunch on the saved document, a relocated packag
 a candidate refused by `SHADERPIPE_BUDGET` under a `pipeline.budget` cap with
 exact counts while the installed graph keeps running, a running instance
 whose graph is replaced and whose row is removed and reloaded three times over,
-two indexed, depth-tested geometry passes continuing one color and one depth
+an edit whose second image `gpu.faults` fails on the real device, refused with
+`GPU_CREATION_FAULT` while the instance's owned bytes return to its installed
+graph's and a clean retry installs, two indexed, depth-tested geometry passes continuing one color and one depth
 attachment, with a fullscreen pass sampling by UV the right way up,
 a generated echo pass reading back every frame-block sentinel (a hand-perturbed
 offset turns its pixels red), and, in a World with `dxc` hidden from its path,
@@ -735,15 +748,15 @@ the shipped ink pipeline rendering from its stored package and a relocated
 package from its binaries while an unpackaged source row is refused by
 `SHADERPKG_ABSENT`.
 Each proof runs once per backend, and an absent GPU or compiler is reported as
-unsupported rather than passed, except in a leg that hides the compiler. `pipeline-churn` fails on any `[vulkan-debug] validation`
+unsupported rather than passed, except in a leg that hides the compiler. `pipeline-churn` and `pipeline-fault` fail on any `[vulkan-debug] validation`
 or `[d3d12-debug]` line (the Vulkan loader's `general` notices about the
 machine's own layers do not count, nor does a Direct3D 12 pipeline-library miss, which the
-cache counts instead), so run it with `puck canary --debug-layers` for the
-validation proof. No canary injects an allocation
-failure on a real device: the device factories have no fault seam.
+cache counts instead), so run them with `puck canary --debug-layers` for the
+validation proof.
 `ShaderPipelineRenderNodeLawTests` drive the render node through its factory
 seams without a device: refusal of a candidate, a float-output candidate, a
 selection or a resize whose allocation fails partway (exact disposal counts),
+every creation of a replacement failed in turn through `GpuCreationFaults`,
 a planned steady state and replacement peak equal to the bytes the fake
 creates for every graph shape (the fake counts them independently), a candidate
 one byte over the budget refused with nothing created and the same candidate

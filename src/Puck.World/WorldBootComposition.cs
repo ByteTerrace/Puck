@@ -1034,6 +1034,7 @@ public static class WorldBootComposition {
         AddWorldPipelineCache(services: services);
         AddWorldShaderWork(services: services);
         AddWorldBakes(services: services);
+        services.AddGpuCreationFaults();
         // The render levers need only the render settings, the session-lever submit and the render probe registered
         // below, so an offscreen boot honors the same engine-wide options and debug views a windowed one does (the
         // presentation-only console modules stay unregistered).
@@ -1213,6 +1214,7 @@ public static class WorldBootComposition {
         AddWorldPipelineCache(services: services);
         AddWorldShaderWork(services: services);
         AddWorldBakes(services: services);
+        services.AddGpuCreationFaults();
 
         // The world speaker device: the hosted service owning the mixer + the WASAPI governor/pump threads. One
         // dedicated bounded-join worker owns the device lifecycle, so a stalled device cannot wedge shutdown; a

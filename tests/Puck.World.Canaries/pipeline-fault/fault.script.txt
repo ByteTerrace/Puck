@@ -1,0 +1,41 @@
+# The feedback pipeline compiles and installs; paused and reset, submission 2 holds 2/16.
+pipeline.wait feedback compiled 40
+pipeline.wait feedback installed 10
+pipeline.time feedback pause
+pipeline.reset feedback
+pipeline.wait feedback submitted 1 10
+pipeline.step feedback
+pipeline.wait feedback submitted 2 10
+# Before the edit the instance owns exactly its installed graph, 49152 bytes: three frame slots of a 32x32 half-float
+# history (24576), the 32x32 RGBA8 gray (12288) and the copy's 32x32 RGBA8 targets (12288).
+pipeline.inspect feedback
+# The counts restart from zero, and the second image created from here fails before it reaches the device.
+gpu.faults disarm
+gpu.faults arm image 2
+# The corrected edit carries the installed history and creates the other six images. Its first image is created and
+# its second fails, so the candidate is refused by name, disposes the one image it made, and the paused instance still
+# presents submission 2.
+pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.status
+pipeline.wait feedback installed 40
+# The fault fired once: nothing is armed, and exactly two images were asked for.
+gpu.faults list
+# Nothing leaked: the instance owns its installed graph's 49152 bytes again.
+pipeline.inspect feedback
+pipeline.capture feedback {run}/after-refusal.png
+pipeline.wait feedback captured 10
+# The installed graph keeps running: submission 3 holds 3/16 over its retained history.
+pipeline.step feedback
+pipeline.wait feedback submitted 3 10
+pipeline.capture feedback {run}/refused-step.png
+pipeline.wait feedback captured 10
+# The same edit compiled again with nothing armed creates all six images and installs while paused; the next step
+# renders submission 4 through it over the retained history as 1 - 4/16.
+gpu.faults disarm
+pipeline.reload feedback
+pipeline.wait feedback installed 40
+gpu.faults list
+pipeline.step feedback
+pipeline.wait feedback submitted 4 10
+pipeline.capture feedback {run}/clean-edit.png
+pipeline.wait feedback captured 10
