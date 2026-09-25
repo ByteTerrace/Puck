@@ -208,6 +208,25 @@ public sealed class GpuRegion : IDisposable {
             Kind: GpuComputeBindingKind.StorageBufferReadWrite
         ),
     ];
+
+    /// <summary>Returns the descriptor pool a <see cref="GpuResidencyPolicy.Staged"/> region creates: one
+    /// <see cref="CopyBindings"/> set per frame slot. A region under any other policy creates none.</summary>
+    /// <param name="slotCount">The frame slots the region serves.</param>
+    /// <returns>The copy pool's sizes.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slotCount"/> is not positive.</exception>
+    public static GpuDescriptorPoolSizes CopyPoolSizes(int slotCount) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: slotCount);
+
+        var sets = new IReadOnlyList<GpuComputeBinding>[slotCount];
+
+        Array.Fill(
+            array: sets,
+            value: CopyBindings
+        );
+
+        return GpuDescriptorPoolSizes.ForSets(sets: sets);
+    }
+
     /// <summary>Gets the region's size in bytes.</summary>
     public int ByteCount { get; }
     /// <summary>Gets the host's copy of the region: what every slot's <see cref="Buffer"/> holds once flushed and
@@ -412,15 +431,7 @@ public sealed class GpuRegion : IDisposable {
     // One copy set per slot from one pool: the slot's staging buffer as the source, the device-local buffer as the
     // destination.
     private void CreateCopySets() {
-        var sets = new IReadOnlyList<GpuComputeBinding>[SlotCount];
-
-        Array.Fill(
-            array: sets,
-            value: CopyBindings
-        );
-        m_copyPool = m_bindings.CreatePool(
-            sizes: GpuDescriptorPoolSizes.ForSets(sets: sets)
-        );
+        m_copyPool = m_bindings.CreatePool(sizes: CopyPoolSizes(slotCount: SlotCount));
 
         for (var slot = 0; (slot < SlotCount); slot++) {
             var set = m_bindings.AllocateSet(

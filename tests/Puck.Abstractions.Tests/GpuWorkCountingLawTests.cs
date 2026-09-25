@@ -1,6 +1,7 @@
 using System.Reflection;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 
 namespace Puck.Abstractions.Tests;
 
@@ -88,13 +89,13 @@ public sealed class GpuWorkCountingLawTests {
         var rig = Rig.Create();
         var fence = rig.Services.QueueSubmitter.CreateSubmissionFence();
 
-        Assert.IsNotType<FakeGpu.FakeFence>(@object: fence);
+        Assert.IsNotType<FakeGpuDevice.Fence>(@object: fence);
         rig.Services.QueueSubmitter.Submit(
             commandBufferHandles: [],
             fence: fence
         );
-        Assert.IsType<FakeGpu.FakeFence>(@object: rig.Gpu.LastSubmittedFence);
-        Assert.True(condition: ((FakeGpu.FakeFence)rig.Gpu.LastSubmittedFence!).Armed);
+        Assert.IsType<FakeGpuDevice.Fence>(@object: rig.Gpu.LastSubmittedFence);
+        Assert.True(condition: ((FakeGpuDevice.Fence)rig.Gpu.LastSubmittedFence!).Armed);
     }
     [Fact]
     public void CountingServicesPassUncountedMembersThrough() {
@@ -191,9 +192,9 @@ public sealed class GpuWorkCountingLawTests {
             ? method.Name[4..]
             : method.Name);
 
-    private sealed record Rig(FakeGpu Gpu, GpuWorkLedger Ledger, GpuDeviceServices Services, IGpuPipelineFactory Pipelines) {
+    private sealed record Rig(FakeGpuDevice Gpu, GpuWorkLedger Ledger, GpuDeviceServices Services, IGpuPipelineFactory Pipelines) {
         public static Rig Create() {
-            var gpu = new FakeGpu();
+            var gpu = new FakeGpuDevice(countCalls: true, holdFences: true);
             var ledger = new GpuWorkLedger(
             framesInFlight: 2,
             name: "gpu.test"

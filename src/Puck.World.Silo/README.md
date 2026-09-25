@@ -231,6 +231,10 @@ activation's fence and requires recovery.
   blocking here for a grain turn that itself waits on that mailbox would
   deadlock. Read `silo.grains` for the outcome. `<key>` is
   `owner/{oid}/{world}` or the bare world id (`WorldSiloHost.TryResolveKey`).
+  `silo.publish` publishes the document undrawn, as a release does
+  (`WorldFileOrigin.TryReadPublishable`): each instance draws its own cells
+  when it admits the bytes, and a release bootstrap of the same composed document
+  finds the published bytes equal.
 - `SiloConsoleRouting`—one `TextCommandSession` per admitted row, created
   and retired in the same tick-thread mailbox action that admits/retires the
   row itself. Each session carries its own `WorldConsoleWaitGate` (`row.

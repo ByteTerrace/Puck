@@ -567,6 +567,131 @@ in `views.graphs`; when it does not, composition synthesizes the default one,
 as a graph document that goes through the same compiler, so no render tree is
 built in C# alone.
 
+P11b commit 5 puts the three engine packages behind the graph runtime.
+`RenderGraphRuntime` runs an instance's steps inside that instance's
+`ShaderPipelineRenderNode` submission, and a package pass calls the
+`IRenderGraphPackageRecorder` that `RenderGraphPackageRecorders` registers for
+its exact package id. The runtime creates the recorder at install and disposes
+it on replacement, device loss and disposal. Each frame the recorder records
+into the begun command buffer it is handed, and it never submits, waits or
+creates a pipeline on the frame thread. `post.<id>` and `overlay` become
+recorders. `sdf.world` stays an external producer until P14-6: its output is
+the engine's latest completed image, held as a `GpuImageLease` until the
+submission that samples it retires, and never copied. The commit lands as three
+sub-steps, in this order:
+
+- 5a, `sdf.world` as an external-producer instance, GPU-free apart from its
+  gate.
+  - `RenderGraphInstance` gains a kind: a rendered graph, or an external
+    producer that names a package id. `RenderGraphInstanceSet.TryCreate`
+    refuses an external instance that reads another instance, and, until P14-6,
+    a previous-frame read of an `sdf.world` external producer, each by name. The
+    engine writes one output image (`SdfWorldEngine.OutputImageHandle`) that its
+    next render overwrites, so a previous-frame read would sample the current
+    frame, and the output is not double-buffered to allow one.
+    The scheduler is unchanged: demand, divisor, quantized extent, and a price
+    of `SdfWorldEngine.PassLabels.Length` passes.
+  - An `IRenderGraphExternalProducer` is registered per package id beside the
+    package recorders. When its instance is scheduled, the runtime produces it
+    before its consumers: `sdf.world` submits through the engine's own ring
+    (`SdfEngineNode.ProduceFrame` at the scheduled extent). Then, and on frames
+    the schedule skips or defers, the producer hands out its latest completed
+    output as a lease and an external image.
+  - The consuming instance's `ShaderPipelineRenderNode` keeps one
+    `LeaseRetireList` per frame slot, as `SdfEngineNode` does for screen
+    sources. Resolving an input port to a lease holds it for the frame, submit
+    moves it into the slot's list, and the list retires after that slot's fence
+    wait, on device loss and on disposal. `BindImage` stays for host images that
+    need no retirement. The engine's output is a storage image in `General`
+    layout, so the external image states that layout and the planner's first
+    access transitions from it.
+  - `SdfEngineNode` counts acquisitions of each engine's output. A replaced
+    engine, after a resize or rebuild, is disposed once its acquisitions are
+    released. The drain in `SdfWorldEngine.Dispose` stays until P14-6 as the
+    backstop.
+  - The synthesized default composition becomes two instances: `world`, the
+    external `sdf.world` producer, and the root graph, which reads `world`'s
+    output as its input and runs the `post.<id>` passes and then `overlay`.
+  - Laws on `FakeGpuDevice`: the instance-set refusals by name; a lease is
+    released exactly once, after the sampling slot's fence, on device loss or on
+    disposal; a skipped world frame hands out the same image; and a steady frame
+    allocates nothing.
+- 5b, `post.<id>` as a recorder. Today `FullscreenPassNode` wraps a one-pass
+  `ShaderPipelineRenderNode`. That executor has its own frame ring, per-slot
+  fences and submission, and builds its modules, pipeline and render pass
+  through `BackgroundBuild`. It allocates a descriptor pool, set and sampler per
+  slot at install, binds the inner `Surface` as the external `input`, and draws
+  an `R8G8B8A8Unorm` `output`. Its extent is fixed when the node is
+  constructed, and it swaps executors when the input's format or extent changes.
+  `WorldBootComposition` wraps one node per `render.extensions` entry and
+  records it in `WorldPostRenderExtensionPasses` for parameter bindings.
+  - One recorder serves every `post.<id>` id. The runtime builds its modules,
+    graphics pipeline and render pass with the same `BackgroundBuild` before the
+    candidate installs. Creating the recorder on the frame thread only takes the
+    built objects and allocates its descriptor objects from the node's pool
+    statement (`ShaderPipelineRenderNode.DescriptorPools`), one pool per node as
+    P7b-14a-3 decides.
+  - Each frame the recorder writes the input port's image into the slot's set,
+    pushes the config block, and records the render pass and the draw over a
+    framebuffer on the output port's image. The framebuffer is cached per
+    image.
+  - The recorder deletes `FullscreenPassNode`'s own submission, fences, frame
+    ring, executor swap and retirement lag. The extent comes from the schedule,
+    so a post pass resizes with its instance for the first time. An entry's
+    `config` becomes the package pass's parameters in the synthesized graph, and
+    `WorldPostRenderExtensionPasses` finds the recorder by pass name.
+  - Validation moves out of boot. The id check
+    (`WorldExtensionVocabularyHook.IsRegisteredPostRenderExtension`, read by
+    `WorldDefinitionValidator.ValidateRenderExtensions`) becomes the catalog's
+    `post.<id>` lookup. The config's binding against the manifest's schema,
+    which today throws `InvalidOperationException` in `WorldBootComposition`,
+    becomes a named refusal by the compiler before boot. A probe's `target.id`
+    cross-reference stays in world validation.
+- 5c, `overlay` as a recorder. Today `UnifiedOverlayNode` runs one frame in
+  flight: it creates its render pass, pipeline, modules, buffers, pool and
+  sampler on the frame thread at its first drawn frame, waits its own fence
+  before rewriting descriptors and its storage buffer, and submits. It binds nine
+  combined image samplers (the inner image and eight `OverlayFrameSlots`), one
+  storage buffer and a 48-byte push block. When nothing is visible it returns
+  the inner frame untouched and forwards captures to it.
+  - What lands now, over today's set layout: the pipeline and modules are built
+    with `BackgroundBuild` at install. Descriptor sets and the storage buffer's
+    per-frame regions exist once per frame slot from the context's frames in
+    flight, because the recorder can no longer wait its own fence. The frame
+    slots' leases move from `OverlayFrameSlots`' one-frame-behind retirement to
+    the instance's per-slot `LeaseRetireList` from 5a.
+  - The pass-through belongs to the runtime. A recording may declare that it
+    drew nothing this frame, and the runtime then aliases the pass's output port
+    to its input's version, with no copy; a capture served from the root follows
+    the alias. The runtime owns that rule, so no recorder copies its input, and
+    the contract gains it before 5c lands.
+  - What waits on P7b-14b and 18: converting `overlay-unified.frag.hlsl`'s
+    combined declarations to separate images and a sampler table, moving the
+    overlay onto binding groups, and sizing its pool without
+    `CombinedImageSamplerCount`.
+
+Each sub-step's gate:
+
+- 5a: `puck parity` on both backends, with exact state hashes and per-tile
+  pixels unchanged, once the default composition runs through the graph. The
+  canaries that `tests/Puck.Affected/canary-coverage.json` maps to
+  `SdfEngineNode.cs` and `LeaseRetireList.cs` run too. The mapping is read as
+  text rather than from a `puck affected` run, so it is unverified.
+- 5b: a new post canary, which 5b lands behind. It boots one shipped
+  `post.<id>` on both backends and pins its pixels, with a discriminating leg
+  without the extension. No existing gate covers a post pass: no canary or parity
+  world authors `render.extensions`, and although the coverage index maps
+  `FullscreenPassNode.cs` to 21 canaries, none of them composes a post pass.
+- 5c: parity likely does not cross the overlay: with nothing visible the
+  pass-through returns the SDF frame, and the parity world appears to show no
+  overlay, which is unverified. The coverage index maps
+  `src/Puck.Overlays` to four canaries: `instrument-clock-source`,
+  `music-conditional-layer-and-embellishment`, `voice-babble` and
+  `world-seat-binding-recompose`. Whether their captures include overlay pixels
+  is unverified, so 5c also runs `UnifiedOverlayWorkLawTests` and
+  `OverlayFrameSlotsLawTests` and states which of those canaries observes an
+  overlay.
+
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
 or pane placement, an optional warp pass, a UV layout, a letterboxing fit and a
@@ -1552,25 +1677,41 @@ Phase 3, the groups, follows phase 2:
       free list as it began and allocate nothing (reuse). A double free and a
       free of a range never allocated are refused by name
       (`GpuRangeAllocatorLawTests`).
-    - 14a-2, the heap's size, GPU-free: the composition sums the descriptor
-      demand every pool owner declares before it creates a pool, from the
-      same `GpuDescriptorPoolSizes` its pool is created with, times the sets
-      it keeps in flight: the SDF engine per frame-ring slot, each pipeline
-      node pass per in-flight slot and per instance the graph budget admits,
-      the overlay, the float preview's slots and each `GpuRegion`'s copy
-      pool. The heap holds twice that demand, because a reloaded graph keeps
-      its predecessor's pools until the predecessor's last submission
-      retires, so a reload briefly holds both. The size is the smaller of
-      that and `GpuDeviceCapabilities.ViewHeapSize`, and a demand the device
-      cannot hold is refused by name at device creation rather than
-      truncated. The sampler heap is the smaller of 2,048 and
-      `GpuDeviceCapabilities.SamplerHeapSize`. Laws: the demand sum over a
-      fake composition, the doubling, the cap, and the refusal.
+    - 14a-2, done: the heaps' size and admission, GPU-free.
+      `GpuDescriptorHeapBudget` in `Puck.Abstractions/Gpu` sizes the view
+      heap to `GpuDeviceCapabilities.ViewHeapSize` and the sampler heap to
+      `SamplerHeapSize`, each as the device reports it, and refuses by name a
+      device that reports neither, as a Vulkan device does. Every pool owner
+      states its pools statically and creates them from that statement:
+      `SdfWorldEngine.DescriptorPoolSizes`, `UnifiedOverlayNode.DescriptorPoolSizes`,
+      `ShaderPipelineRenderNode.DescriptorPools` (a pass's pool per in-flight
+      slot, then `PreviewDescriptorPool` per slot) and
+      `GpuRegion.CopyPoolSizes`. `TryAdmit` takes a candidate's statement
+      and either allocates one view range per pool that holds a descriptor or
+      refuses the whole candidate by name with its demand, allocating
+      nothing; `Release` returns an admission's ranges. At most
+      `MaxLivePools` pools, 1,024, are live on a device. `HeapBytes` is the
+      figure `memory.directx` records. Laws: `GpuDescriptorHeapBudgetLawTests`
+      (the reported and guaranteed sizes, the no-heap refusal, whole-or-nothing
+      admission, release and reuse, the live-pool refusal, the bytes), and on
+      the fakes one law per owner that its statement equals the pools it
+      creates (`SdfWorldEngineWorkLawTests`, `UnifiedOverlayWorkLawTests`,
+      `ShaderPipelineRenderNodeLawTests`, `GpuResidencyLawTests`). Nothing
+      admits through the budget yet. The choice and the two rejected sizings
+      are in [the decisions](../decisions/rendering.md#how-worlds-reach-the-gpu).
     - 14a-3, the heap in place: `DirectXGpuBindings` creates the two
-      shader-visible heaps once per device and a pool allocates its range
-      from them instead of a heap of its own; each command list binds the
-      device's heaps once. It also reads `ResourceBindingTier`, and on Vulkan
-      the device creation refuses a `MaxBoundDescriptorSets` below four or a
+      shader-visible heaps once per device from the device's
+      `GpuDescriptorHeapBudget` and a pool allocates its range from them
+      instead of a heap of its own; each command list binds the device's
+      heaps once, and the heaps' bytes count under `memory.directx`. An owner
+      is admitted before it allocates, and a pipeline candidate that does not
+      fit is refused by name at install while the installed graph keeps
+      presenting. The pipeline node holds one pool for all its passes and
+      in-flight slots rather than one per pass and slot: a node at
+      `ShaderPipelineLimits.MaxPasses` with three frames in flight otherwise
+      holds 387 pools, so three such nodes would pass `MaxLivePools`. It
+      also reads `ResourceBindingTier`, and on Vulkan the device creation
+      refuses a `MaxBoundDescriptorSets` below four or a
       `MaxPushConstantBytes` below four by name. Check: `puck parity` and
       the GPU canaries on Direct3D 12, whose sources the coverage index does
       not map because it is recorded on Vulkan, so every Direct3D 12 canary

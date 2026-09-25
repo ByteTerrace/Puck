@@ -156,4 +156,129 @@ public sealed class WorldReleaseBootstrapTests {
             }
         } finally { directory.Delete(recursive: true); }
     }
+    // silo.publish reads its file through WorldFileOrigin.TryReadPublishable. A document with a boot draw site proves
+    // the difference: undrawn, the silo publishes the bytes a release's bootstrap carries, and the bootstrap finds the
+    // row unchanged; drawn, as silo.publish once published it, the row holds one instance's cells and the bootstrap
+    // refuses it as a different world definition.
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public async Task ASiloPublishedDocumentMatchesItsReleaseBootstrapOnlyWhenPublishedUndrawn(bool drawn) {
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-silo-publish-");
+
+        try {
+            var services = new ServiceCollection();
+
+            Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);
+            using var provider = services.BuildServiceProvider();
+            var target = new DirectoryObjectStorageTarget(Path.Combine(
+                path1: directory.FullName,
+                path2: "store"
+            ));
+            var blobs = provider.GetRequiredService<IObjectBlobStore>();
+            var owner = Guid.NewGuid();
+            var token = TestContext.Current.CancellationToken;
+            var authority = new WorldAuthorityBlobStore(
+                store: blobs,
+                target: target
+            );
+            var archive = new WorldReleaseArchive(
+                blobs,
+                target,
+                owner
+            );
+            var bytes = WorldReleaseOfficialPackageTests.DeferredDrawDefinition();
+            var package = Path.Combine(
+                path1: directory.FullName,
+                path2: "package"
+            );
+            var path = Path.Combine(
+                path1: package,
+                path2: "world.json"
+            );
+
+            Directory.CreateDirectory(path: package);
+            File.WriteAllBytes(
+                bytes: bytes,
+                path: path
+            );
+
+            var origin = new WorldFileOrigin(resolvedPath: path);
+            WorldDefinition? published;
+            string reason;
+
+            Assert.True(
+                condition: (drawn
+                    ? origin.TryLoad(
+                        definition: out published,
+                        instanceIdentity: "amber",
+                        reason: out reason
+                    )
+                    : origin.TryReadPublishable(
+                        definition: out published,
+                        reason: out reason
+                    )),
+                userMessage: reason
+            );
+            Assert.Equal(
+                actual: WorldDefinitionSerialization.Serialize(definition: published!).AsSpan().SequenceEqual(other: bytes),
+                expected: !drawn
+            );
+
+            var amber = new WorldAuthorityIdentity(
+                Owner: owner,
+                World: SafeName.Parse(candidate: "amber")
+            );
+
+            Assert.True(condition: (await authority.PublishDefinitionAsync(
+                amber,
+                published!,
+                token
+            )).Ok);
+
+            var manifest = new WorldReleaseManifest {
+                CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
+                Label = "silo-publish",
+                SourceRevision = "test",
+                EngineImageDigest = ("sha256:" + new string(
+                c: 'a',
+                count: 64
+            )),
+                PersistenceContract = "test",
+                PeerProtocolContract = "test",
+                Definitions = new Dictionary<string, string> { [$"{owner:D}/amber"] = ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes))) },
+                DefinitionFiles = new Dictionary<string, string> { [$"{owner:D}/amber"] = "world.json" },
+            };
+
+            await archive.SaveAsync(
+                cancellationToken: token,
+                manifest: manifest,
+                packageDirectory: package
+            );
+
+            Task Bootstrap() => AzureCommand.InitializeWorldReleaseBootstrapAsync(
+                archive: archive,
+                authority: authority,
+                cancellationToken: token,
+                manifest: manifest,
+                owner: owner
+            );
+
+            if (drawn) {
+                Assert.Contains(
+                    actualString: (await Assert.ThrowsAsync<InvalidDataException>(testCode: Bootstrap)).Message,
+                    expectedSubstring: "cannot replace an existing different world definition"
+                );
+            } else {
+                await Bootstrap();
+                Assert.Equal(
+                    bytes,
+                    (await authority.LoadPublishedDefinitionBytesAsync(
+                        cancellationToken: token,
+                        identity: amber
+                    ))!.Value.ToArray()
+                );
+            }
+        } finally { directory.Delete(recursive: true); }
+    }
 }

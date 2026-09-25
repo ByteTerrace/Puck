@@ -15,6 +15,9 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\Shared\RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\..\src\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\..\src\Puck.Launcher\Puck.Launcher.csproj" />

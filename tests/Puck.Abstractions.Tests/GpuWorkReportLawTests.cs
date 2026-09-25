@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 using Puck.Abstractions.Counting;
 
 namespace Puck.Abstractions.Tests;
@@ -118,7 +119,7 @@ public sealed class GpuWorkReportLawTests {
         // One completed submission under three passes: alpha executed with two dispatches, beta skipped, gamma not
         // reached, and eight push-constant bytes outside every pass.
         public static Rig Create() {
-            var gpu = new FakeGpu();
+            var gpu = new FakeGpuDevice(holdFences: true);
             var ledger = new GpuWorkLedger(
             framesInFlight: 1,
             name: "gpu.test"

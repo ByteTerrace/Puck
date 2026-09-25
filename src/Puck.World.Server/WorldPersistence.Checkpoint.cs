@@ -33,7 +33,6 @@ public sealed partial class WorldPersistence {
             return RefuseUndo(
                 connectionId: connectionId,
                 correlationId: correlationId,
-                logged: "nothing to undo",
                 refusal: "undo refused: nothing to undo"
             );
         }
@@ -252,18 +251,12 @@ public sealed partial class WorldPersistence {
 
         var applied = $"dropped {drop}, {Host.Document.Journal.Count} remaining";
 
-        if (Host.Output.HasNarrationSink) {
-            Host.Output.Narrate(
-                channel: "world.undo",
-                text: $"[world.undo: {applied}]"
-            );
-        }
-
         if (addonPlanCommitted) {
             Host.Addons!.Finish(plan: addonPlan!);
         }
 
-        // The acceptance answers the submitting line the way a refusal does (RefuseUndo), through the same tap.
+        // The acceptance answers the submitting line the way a refusal does (RefuseUndo), through the same tap; that
+        // answer is the undo's one report, so nothing narrates it beside.
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: applied,
             Rejected: false,
@@ -279,16 +272,9 @@ public sealed partial class WorldPersistence {
     // this candidate carries could still mount, without ever registering, disclosing, or journaling anything — the
     // plan is disposed immediately regardless of outcome. Only the FINAL candidate's prepare (after the loop above)
     // ever actually commits. A server with no addon runtime attached vacuously succeeds.
-    // Every ApplyUndo gate refuses identically: loud on stderr under world.undo, echoed to the same tap a rejected
-    // live mutation reaches, and false to the caller. logged overrides the stderr body for the one gate whose line
-    // predates the echo's own "undo refused:" prefix.
-    private bool RefuseUndo(string refusal, int connectionId, long correlationId, string? logged = null) {
-        if (Host.Output.HasNarrationSink) {
-            Host.Output.Narrate(
-                channel: "world.undo",
-                text: $"[world.undo: {(logged ?? refusal)}]"
-            );
-        }
+    // Every ApplyUndo gate refuses identically: echoed to the same tap a rejected live mutation reaches, whose answer
+    // is the refusal's one report, and false to the caller.
+    private bool RefuseUndo(string refusal, int connectionId, long correlationId) {
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: refusal,
             Rejected: true,

@@ -9,8 +9,9 @@ machine content carriers, and self-registration through
 The work-counting laws need no GPU. `WorkCountingLawTests` covers work kinds,
 monotonic counts, and the difference between an undeclared kind and a zero
 count. `GpuWorkLedgerLawTests` and `GpuWorkCountingLawTests` drive the GPU work
-ledger and its pass-through wrappers over `FakeGpu`, a recording stand-in with
-fences the test signals by hand.
+ledger and its pass-through wrappers over `FakeGpuDevice`, the shared stand-in
+in `tests/Shared`, which holds fences until the test signals them and, for the
+wrapper laws, counts each call.
 
 `GpuResidencyLawTests` covers residency without a device. It fills memory
 profiles from fixture Vulkan types and heaps and Direct3D 12 values, pins one

@@ -25,6 +25,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
     /// <summary>Gets every object created so far, in creation order.</summary>
     public List<Created> CreatedObjects { get; } = [];
+    /// <summary>Gets every descriptor pool created so far, in creation order, as its creation sized it.</summary>
+    public List<GpuDescriptorPoolSizes> DescriptorPools { get; } = [];
 
     /// <summary>Gets the number of creations so far.</summary>
     public int CreationCount => CreatedObjects.Count;
@@ -286,7 +288,11 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         sizeBytes: sizeBytes
     );
     public IGpuSurfaceImport CreateImport() => throw new NotSupportedException();
-    public nint CreatePool(in GpuDescriptorPoolSizes sizes) => Create(kind: "descriptor pool").Handle;
+    public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
+        DescriptorPools.Add(item: sizes);
+
+        return Create(kind: "descriptor pool").Handle;
+    }
     public IGpuSurfaceReadback CreateReadback() => (ReadbackSupported
         ? new FakeReadback(gpu: this)
         : throw new NotSupportedException());

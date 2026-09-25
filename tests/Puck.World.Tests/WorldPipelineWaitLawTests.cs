@@ -1,5 +1,6 @@
 using Puck.Shaders;
 using Puck.World.Client;
+using Puck.Testing;
 
 using Xunit;
 
@@ -50,7 +51,7 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
         m_runtime.Register(
             name: "ink",
             node: new ShaderPipelineRenderNode(
-                deviceContext: new AbsentPipelineDevice(),
+                deviceContext: new RefusingGpuDevice(),
                 height: 4,
                 hostsOnDirectX: false,
                 name: "ink",

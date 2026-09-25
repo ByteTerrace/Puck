@@ -13,8 +13,8 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// Laws for the GPU work <see cref="UnifiedOverlayNode"/> counts, driven over <see cref="FakeGpuDevice"/>: the exact
-/// counts of a drawn overlay frame, submission identity across a device loss, and that a steady-state drawn frame
-/// allocates nothing.
+/// counts of a drawn overlay frame, submission identity across a device loss, that the descriptor pool it states is the
+/// one it creates, and that a steady-state drawn frame allocates nothing.
 /// </summary>
 public sealed class UnifiedOverlayWorkLawTests {
     // The second drawn cursor frame, published when the third frame polls its fence. The overlay pass is the render
@@ -60,6 +60,17 @@ public sealed class UnifiedOverlayWorkLawTests {
         );
     }
     [Fact]
+    public void TheDescriptorPoolTheOverlayStatesIsThePoolItCreates() {
+        using var rig = new Rig();
+
+        rig.Produce();
+
+        Assert.Equal(
+            expected: [UnifiedOverlayNode.DescriptorPoolSizes],
+            actual: rig.Gpu.PoolsCreated
+        );
+    }
+    [Fact]
     public void ASteadyStateDrawnFrameAllocatesNothing() {
         using var rig = new Rig();
         var sample = new GpuWorkSample();
@@ -86,6 +97,7 @@ public sealed class UnifiedOverlayWorkLawTests {
         public Rig() {
             var gpu = new FakeGpuDevice(reportVersion: 0);
 
+            Gpu = gpu;
             m_cursor.Publish(frame: new OverlayCursorFrame(Seats: new[] {
                 new OverlayCursorSeat(
                     Hover: false,
@@ -153,6 +165,7 @@ public sealed class UnifiedOverlayWorkLawTests {
             );
         }
 
+        public FakeGpuDevice Gpu { get; }
         public UnifiedOverlayNode Node { get; }
 
         public void Dispose() => Node.Dispose();
