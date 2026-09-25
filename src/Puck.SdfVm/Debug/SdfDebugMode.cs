@@ -69,7 +69,7 @@ public sealed class SdfDebugMode {
     /// <summary>Whether the lit surface normal uses the four-tap finite-difference probe instead of
     /// the default analytic forward-mode gradient dual. A pure frame-channel flag (<see cref="SdfFrame.UseFiniteDifferenceNormals"/>) —
     /// it changes no geometry, so it needs no revision bump; the frame source reads it fresh each frame. Pair with
-    /// <c>debug.view.normals</c> for the visual A/B.</summary>
+    /// <c>world.debug-view normals</c> for the visual A/B.</summary>
     public bool UseFiniteDifferenceNormals => m_useFdNormals;
 
     // Drains a pending pad-chord carve — appending it to the scene and

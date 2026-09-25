@@ -45,7 +45,7 @@ public sealed class SdfGalleryScene {
                 "A twist-rate-3 thin blade — the field over-estimates distance where the hard twist shears space, so",
                 "it is NOT 1-Lipschitz along a ray. This is exactly WHY the per-program Lipschitz clamp (SdfProgram",
                 "stepScale) exists: an unclamped march tunnels straight through the blade.",
-                "PAIR WITH debug.view.overshoot — it lights hot right here where the clamp is load-bearing.",
+                "PAIR WITH world.debug-view overshoot — it lights hot right here where the clamp is load-bearing.",
             ]
         ),
         new ExhibitEntry(
@@ -110,7 +110,7 @@ public sealed class SdfGalleryScene {
             Plaque: [
                 "Eight spheres blended in a long alternating SmoothUnion/ChamferUnion chain — each blend accumulates a",
                 "least-significant-bit of rounding, so a deep chain drifts. The scoped field accumulator bounds where",
-                "this can reach. Inspect the seams under debug.view.normals.",
+                "this can reach. Inspect the seams under world.debug-view normals.",
             ]
         ),
         new ExhibitEntry(
@@ -143,7 +143,7 @@ public sealed class SdfGalleryScene {
                 "~256 hard carves packed onto one subject, densely overlapping the same screen tiles — the honest",
                 "destruction budget made visible (every overlapping carve is evaluated per covered tile: the views-cost",
                 "worst case). Measured ~1024 in-frame scattered carves at 60 fps; dense per-tile stacking is the real",
-                "ceiling. Watch it with debug.view.mask — the tiles under the cluster run red.",
+                "ceiling. Watch it with world.debug-view mask — the tiles under the cluster run red.",
             ]
         ),
         new ExhibitEntry(
@@ -163,7 +163,7 @@ public sealed class SdfGalleryScene {
                 "The folded field can overestimate distance near shell boundaries, so marchers step on the minimum of",
                 "the field value and the published boundary gap while terminating on the field value (sdfMapStepBound).",
                 "The world-droste-solidity stage protects this contract. The accepted residual is pixel-level containment-crease",
-                "speckle + MaxSteps filaments at extreme grazes. PAIR WITH debug.view.overshoot AND debug.view.termination",
+                "speckle + MaxSteps filaments at extreme grazes. PAIR WITH world.debug-view overshoot AND world.debug-view termination",
                 "— a regression re-opens tile-size holes, which that solidity gate now catches.",
             ]
         ),
