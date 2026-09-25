@@ -655,11 +655,11 @@ puck canary world-counters                                  # world.counters gpu
 puck canary source-conversion                               # the shipped palette and NV12 conversion kernels against their CPU reference, offscreen on both backends
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
-puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-echo no-device-compile    # shader pipelines offscreen on both backends
+puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-geometry pipeline-echo no-device-compile    # shader pipelines offscreen on both backends
 dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
 ```
 
-The thirteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
+The fourteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
 an arithmetic feedback oracle, the shipped ink pipeline's exposure regions, a
 broken middle-pass edit followed by a corrected one, two valid edits back to
 back (only the latest renders), compute-compute-fullscreen
@@ -671,6 +671,8 @@ override that renders after a relaunch on the saved document, a relocated packag
 a candidate refused by `SHADERPIPE_BUDGET` under a `pipeline.budget` cap with
 exact counts while the installed graph keeps running, a running instance
 whose graph is replaced and whose row is removed and reloaded three times over,
+two indexed, depth-tested geometry passes continuing one color and one depth
+attachment, with a fullscreen pass sampling by UV the right way up,
 a generated echo pass reading back every frame-block sentinel (a hand-perturbed
 offset turns its pixels red), and, in a World with `dxc` hidden from its path,
 the shipped ink pipeline rendering from its stored package and a relocated
