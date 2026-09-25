@@ -57,7 +57,7 @@ public class DecompilerTests {
         );
         Assert.Contains(
             actualString: decompiledPuck,
-            expectedSubstring: "pipeline \"ink\" {"
+            expectedSubstring: "graph \"ink\" {"
         );
 
         // 2. Recompile the printed source

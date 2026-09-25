@@ -251,7 +251,7 @@ world.
 
 **Resolve a document's paths beside it.** Every relative path a world document
 authors (basis, imports, `references`, asset-row `source`, addon `modulePath`,
-pipeline/graph `source`, probe `track`, machine content, `host.icon`, schedule
+`views.graphs` `source`, probe `track`, machine content, `host.icon`, schedule
 instance `document`) resolves through `WorldDocumentPaths` against
 `WorldDefinition.DocumentDirectory`, the directory the loader read the document
 from; engine content the build ships (default world, fonts, shaders, probe

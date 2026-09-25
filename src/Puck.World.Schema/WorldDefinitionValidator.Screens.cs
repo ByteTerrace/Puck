@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Puck.Commands;
 using Puck.Maths;
 
@@ -1099,67 +1098,7 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        var pipelineNames = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var pipelines = views.Pipelines;
-
-        for (var index = 0; (index < pipelines.Count); index++) {
-            var pipeline = pipelines[index];
-            var path = $"views.pipelines[{index}]";
-
-            if (pipeline is null) {
-                errors.Add(item: $"{path} is required.");
-
-                continue;
-            }
-
-            if (!SafeName.TryParse(
-                candidate: pipeline.Name,
-                name: out _,
-                reason: out var nameReason
-            )) {
-                errors.Add(item: $"{path}.name {nameReason}");
-            } else if (!pipelineNames.Add(item: pipeline.Name)) {
-                errors.Add(item: $"{path}.name '{pipeline.Name}' is duplicated.");
-            }
-
-            if (string.IsNullOrWhiteSpace(value: pipeline.Source)) {
-                errors.Add(item: $"{path}.source is required.");
-            }
-
-            if (
-                (pipeline.Camera is { } pipelineCamera) &&
-                !cameras.Contains(item: pipelineCamera)
-            ) {
-                errors.Add(item: $"{path}.camera '{pipelineCamera}' names no camera row.");
-            }
-
-            if (
-                !float.IsFinite(f: pipeline.TimeScale) ||
-                (pipeline.TimeScale < 0f)
-            ) {
-                errors.Add(item: $"{path}.timeScale {pipeline.TimeScale} must be finite and non-negative.");
-            }
-
-            if (
-                (pipeline.Output is { } output) &&
-                string.IsNullOrWhiteSpace(value: output)
-            ) {
-                errors.Add(item: $"{path}.output must name an image version when present.");
-            }
-
-            // The shape of an override set; the source's config schema binds the values themselves.
-            foreach (var (pass, config) in (pipeline.Overrides ?? new Dictionary<string, JsonElement>())) {
-                if (string.IsNullOrWhiteSpace(value: pass)) {
-                    errors.Add(item: $"{path}.overrides names an empty pass.");
-                } else if (config.ValueKind != JsonValueKind.Object) {
-                    errors.Add(item: $"{path}.overrides.{pass} must be an object of config fields.");
-                } else if (!config.EnumerateObject().Any()) {
-                    errors.Add(item: $"{path}.overrides.{pass} overrides no field; omit the pass instead.");
-                }
-            }
-        }
-
-        ValidateGraphs(
+        var graphNames = ValidateGraphs(
             cameras: cameras,
             errors: errors,
             views: views
@@ -1232,19 +1171,19 @@ public static partial class WorldDefinitionValidator {
 
                 if (
                     (slot.Camera is not null) &&
-                    (slot.Pipeline is not null)
+                    (slot.Instance is not null)
                 ) {
-                    errors.Add(item: $"{slotPath} must author at most one of camera/pipeline, never both.");
+                    errors.Add(item: $"{slotPath} must author at most one of camera/instance.");
+                } else if (
+                    (slot.Instance is { } instance) &&
+                    !graphNames.Contains(item: instance)
+                ) {
+                    errors.Add(item: $"{slotPath}.instance '{instance}' names no views.graphs row.");
                 } else if (
                     (slot.Camera is { } camera) &&
                     !cameras.Contains(item: camera)
                 ) {
                     errors.Add(item: $"{slotPath}.camera '{camera}' names no camera row.");
-                } else if (
-                    (slot.Pipeline is { } pipeline) &&
-                    !pipelineNames.Contains(item: pipeline)
-                ) {
-                    errors.Add(item: $"{slotPath}.pipeline '{pipeline}' names no views.pipelines row.");
                 }
             }
         }

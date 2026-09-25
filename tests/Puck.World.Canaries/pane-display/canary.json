@@ -1,0 +1,46 @@
+{
+  "id": "pane-display",
+  "title": "A pipeline pane named by a layout slot shows inside that slot's rect of the composed display, captured at the render graph's root",
+  "binding": "The positive leg boots an offscreen 64x64 world whose one layout slot fills the left half of the display with the pane instance, a one-pass graph that writes opaque magenta over its whole extent. Once the pane has installed and submitted frames, world.screenshot captures the composed display at the render graph's root: every pixel of the left half is magenta, and the right half, which no slot fills, is not. The discriminating leg boots the same world with the slot moved to the right half, so the left-half observation turns red and the right-half one turns green: the capture shows where the slot places the pane, not only that a pane rendered.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "solid.hlsl"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pane-display/fixture.world.json",
+    "script": "pane.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "the-left-half-is-the-pane", "capture": "frame.png", "extent": [64, 64], "region": [0.03125, 0.03125, 0.46875, 0.96875], "reduce": "every", "minimum": [1, 0, 1, 1], "maximum": [1, 0, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-right-half-is-the-pane", "capture": "frame.png", "extent": [64, 64], "region": [0.53125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [1, 0, 1, 1], "maximum": [1, 0, 1, 1], "toleranceCodes": 1, "holds": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pane-display/moved.world.json",
+    "script": "pane.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "the-left-half-is-the-pane", "capture": "frame.png", "extent": [64, 64], "region": [0.03125, 0.03125, 0.46875, 0.96875], "reduce": "every", "minimum": [1, 0, 1, 1], "maximum": [1, 0, 1, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "the-right-half-is-the-pane", "capture": "frame.png", "extent": [64, 64], "region": [0.53125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [1, 0, 1, 1], "maximum": [1, 0, 1, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  }
+}

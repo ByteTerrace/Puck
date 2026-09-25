@@ -31,17 +31,20 @@ internal sealed class WorldOverlayGlyphs {
     /// <summary>Gets the loaded pack, or <see langword="null"/> when none could be loaded.</summary>
     public OverlayGlyphSdfPack? Pack { get; }
 }
-/// <summary>Builds the render root both GPU presentation shapes present and capture: the SDF engine node as the default
-/// render graph's <c>sdf.world</c> producer, the graph's packages (each <c>render.extensions</c> set, and the overlay when
-/// the shape draws one), and the <see cref="RenderGraphRuntime"/> that runs them, behind the node the host
-/// produces frames from.</summary>
+/// <summary>Builds the render root both GPU presentation shapes present and capture: the SDF engine node as the
+/// <c>sdf.world</c> producer, the graph's packages (<c>place</c>, each <c>render.extensions</c> set, and the overlay when
+/// the shape draws one), and the <see cref="RenderGraphRuntime"/> that runs the document's instances — its
+/// <c>views.graphs</c> rows beside the default graph composition synthesizes, or the rows alone under an authored
+/// <c>views.root</c> — behind the node the host produces frames from. The <see cref="WorldViewGraphHost"/> drives the
+/// runtime from then on, frame by frame.</summary>
 internal static class WorldRenderRoot {
     /// <summary>Builds the render root and records it, and the engine node, on the <see cref="WorldRenderProbe"/>.</summary>
     /// <param name="sp">The composed services.</param>
     /// <param name="overlay">The overlay package the root graph draws, or <see langword="null"/> when it draws
     /// none.</param>
     /// <returns>The render root, tied to the screen binder's teardown.</returns>
-    /// <exception cref="InvalidOperationException">The runtime refused the default graph it was given.</exception>
+    /// <exception cref="InvalidOperationException">The document's instances do not form a set, or the runtime refused
+    /// them.</exception>
     public static IRenderNode Build(IServiceProvider sp, OverlayPackage? overlay) {
         var hostSettings = sp.GetRequiredService<WorldHostSettings>();
         var width = ((uint)hostSettings.Width);
@@ -51,6 +54,23 @@ internal static class WorldRenderRoot {
         var device = sp.GetRequiredService<IGpuDeviceContext>();
         var definition = sp.GetRequiredService<WorldDefinition>();
         var graph = sp.GetRequiredService<WorldRootGraph>();
+        var host = sp.GetRequiredService<WorldViewGraphHost>();
+        var synthesized = ((definition.Views.Root is null)
+            ? graph
+            : null);
+
+        if (!WorldViewGraphHost.TryCompose(
+            graphs: out var graphs,
+            passes: static _ => 1,
+            reason: out var composeReason,
+            root: out var rootName,
+            set: out var set,
+            synthesized: synthesized,
+            views: definition.Views
+        )) {
+            throw new InvalidOperationException(message: $"The document's render graph instances were refused: {composeReason}");
+        }
+
         var engine = SdfWorldRenderBuilder.Build(
             pipelines: sp.GetRequiredService<SdfWorldPipelineCache>(),
             spec: new SdfWorldRenderSpec(
@@ -58,10 +78,6 @@ internal static class WorldRenderRoot {
                 Height: height,
                 Width: width
             ) {
-                Children = sp.GetRequiredService<WorldPipelineRuntime>().Entries.ToDictionary(
-                    keySelector: static entry => entry.Key,
-                    elementSelector: static entry => ((IRenderNode)entry.Value.Node)
-                ),
                 DynamicTransformCapacity = frameSource.DynamicTransformCapacity,
                 HostsOnDirectX = hostSettings.HostsOnDirectX,
                 InstanceCapacity = frameSource.InstanceCapacity,
@@ -80,6 +96,11 @@ internal static class WorldRenderRoot {
             factory: _ => engine,
             package: RenderGraphPackageCatalog.SdfWorld
         );
+        // The root places each pane where the host's composer shows it this frame.
+        packages.Register(
+            factory: new PlacePackage(placements: host),
+            package: RenderGraphPackageCatalog.Place
+        );
 
         foreach (var id in graph.PostPasses.Keys) {
             packages.Register(
@@ -97,25 +118,44 @@ internal static class WorldRenderRoot {
 
         if (!RenderGraphRuntime.TryCreate(
             deviceContext: device,
-            graphs: graph.Graphs(),
+            graphs: graphs,
             hostsOnDirectX: hostSettings.HostsOnDirectX,
             packages: packages,
             refusal: out var refusal,
-            root: graph.Root,
+            root: rootName,
             runtime: out var runtime,
-            set: graph.Instances
+            set: set
         )) {
             engine.Dispose();
 
-            throw new InvalidOperationException(message: $"The default render graph was refused: {refusal.Code}: {refusal.Message}");
+            throw new InvalidOperationException(message: $"The document's render graph was refused: {refusal.Code}: {refusal.Message}");
         }
 
+        var extensions = definition.Render.Extensions;
+        var overlaid = (overlay is not null);
+
+        host.Attach(
+            compose: panes => WorldRootGraph.Compose(
+                extensions: extensions,
+                overlay: overlaid,
+                packages: RenderGraphPackageCatalog.Shipped,
+                panes: panes
+            ),
+            runtime: runtime,
+            synthesized: synthesized
+        );
+
         var root = new RenderGraphRuntimeNode(
-            footprints: graph.Footprints,
+            footprints: host.Footprints,
             height: height,
             runtime: runtime,
             width: width
-        );
+        ) {
+            // The host rewrites its footprint list in place every frame, so the node reads that list rather than the
+            // copy its constructor takes.
+            Footprints = host.Footprints,
+            Prepare = frameSource.PrepareGraph,
+        };
         var probe = sp.GetRequiredService<WorldRenderProbe>();
 
         probe.Device = device;
@@ -124,9 +164,7 @@ internal static class WorldRenderRoot {
         sp.GetRequiredService<WorldPostRenderExtensionPasses>().Attach(
             extensions: definition.Render.Extensions,
             graph: graph,
-            root: ((graph.Plan is null)
-                ? null
-                : runtime.Node(instance: runtime.Instances.IndexOf(name: WorldViewGraphs.MainInstance)))
+            root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)
         );
 
         // The teardown tie: the host loop disposes this root (device alive) before the presenter and long before the

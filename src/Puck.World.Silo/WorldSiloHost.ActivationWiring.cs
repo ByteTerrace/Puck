@@ -16,7 +16,7 @@ public sealed partial class WorldSiloHost {
         server.PipelineSources = new WorldPipelineSources(documentDirectory: server.Definition.DocumentDirectory);
 
         // The same boot check WorldPostBuildWiring runs for the desktop host, run here for the activated document:
-        // a views.pipelines row naming a bad override value is refused by name at activation rather than only when
+        // a views.graphs row naming a bad override value is refused by name at activation rather than only when
         // a live commit or a graph install eventually reaches it.
         if (!server.TryBindPipelineRows(reason: out var pipelineReason)) {
             Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (pipeline {pipelineReason})]");

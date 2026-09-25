@@ -1,0 +1,341 @@
+using System.Buffers.Binary;
+using Puck.Abstractions.Gpu;
+using Puck.Hosting;
+
+namespace Puck.Shaders;
+
+/// <summary>Where a host shows one <c>place</c> pass's source this frame.</summary>
+/// <param name="Shown">Whether the source shows at all; a pass whose source is not shown draws nothing, and its output
+/// stands for its base.</param>
+/// <param name="Left">The rect's left edge, as a fraction of the output's width.</param>
+/// <param name="Top">The rect's top edge, as a fraction of the output's height.</param>
+/// <param name="Width">The rect's width, as a fraction of the output's width.</param>
+/// <param name="Height">The rect's height, as a fraction of the output's height.</param>
+/// <param name="Sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+public readonly record struct RenderGraphPlacement(bool Shown, float Left, float Top, float Width, float Height, float Sharpness);
+/// <summary>Answers where a host shows each <c>place</c> pass's source this frame. The recorder asks once per recorded
+/// frame, on the frame thread.</summary>
+public interface IRenderGraphPlacements {
+    /// <summary>Returns where the host shows one pass's source this frame.</summary>
+    /// <param name="instance">The instance whose graph holds the pass.</param>
+    /// <param name="pass">The pass's name.</param>
+    /// <param name="placement">The placement, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="false"/> when the host places nothing for the pass, which then draws its bound config's
+    /// rect and sharpness.</returns>
+    bool TryGet(string instance, string pass, out RenderGraphPlacement placement);
+}
+/// <summary>The <c>place</c> package (<see cref="RenderGraphPackageCatalog.Place"/>): one compute dispatch of the
+/// build-compiled <c>place.comp</c> kernel over the output's extent, writing the base outside a destination rect and
+/// the source reconstructed inside it, with the pass's frame block pushed as its push constants.
+/// <para>
+/// The rect and sharpness are the pass's config, bound like any package pass's. A host that places the source per frame
+/// (<see cref="IRenderGraphPlacements"/>) overrides both in the pushed block without rebinding anything, and one that
+/// shows the source nowhere this frame has the pass draw nothing, so the output stands for the base. Its build creates
+/// the shader module and the compute pipeline on the thread pool; its recorder allocates one descriptor set and one
+/// sampler per frame slot from the instance's pool. Its ports are compute reads and a compute write, so the node's
+/// planned barriers leave the inputs shader-readable and the output in the storage layout; it records no
+/// barrier.</para>
+/// </summary>
+public sealed class PlacePackage : IRenderGraphPackageFactory {
+    /// <summary>The binding of the output storage image, register <c>u0</c>.</summary>
+    public const uint OutputBinding = 0;
+    /// <summary>The binding of the base image, register <c>t1</c>.</summary>
+    public const uint BaseBinding = 1;
+    /// <summary>The binding of the source image, register <c>t2</c>.</summary>
+    public const uint SourceBinding = 2;
+    /// <summary>The file stem of the deployed kernel beside <c>Assets/Shaders/Graph</c>, completed by the backend's
+    /// extension.</summary>
+    public const string KernelStem = "place.comp";
+
+    private const uint GroupSize = 8;
+
+    private static readonly GpuComputeBinding[] Bindings = [
+        new GpuComputeBinding(OutputBinding, GpuComputeBindingKind.StorageImage),
+        new GpuComputeBinding(BaseBinding, GpuComputeBindingKind.SampledImage),
+        new GpuComputeBinding(SourceBinding, GpuComputeBindingKind.SampledImage),
+    ];
+
+    private readonly string m_directory;
+    private readonly IRenderGraphPlacements? m_placements;
+
+    /// <summary>Initializes a new instance of the <see cref="PlacePackage"/> class.</summary>
+    /// <param name="placements">Where the host shows each pass's source per frame, or <see langword="null"/> for a host
+    /// whose place passes draw their bound config.</param>
+    /// <param name="directory">The directory holding the deployed kernel, or <see langword="null"/> for
+    /// <c>Assets/Shaders/Graph</c> beside the executable.</param>
+    public PlacePackage(IRenderGraphPlacements? placements = null, string? directory = null) {
+        m_directory = (directory ?? Path.Combine(
+            path1: AppContext.BaseDirectory,
+            path2: "Assets",
+            path3: "Shaders",
+            path4: "Graph"
+        ));
+        m_placements = placements;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>The output storage image, then the base and the source as sampled images.</remarks>
+    public IReadOnlyList<GpuComputeBinding> SetBindings => Bindings;
+
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The pass does not read two images and write one.</exception>
+    /// <exception cref="IOException">The deployed kernel is missing or cannot be read.</exception>
+    public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        if (
+            (context.Inputs.Count != 2) ||
+            (context.Outputs.Count != 1) ||
+            context.Inputs.Concat(second: context.Outputs).Any(predicate: static resource => (resource.Kind != ShaderPipelineResourceKind.Image))
+        ) {
+            throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{RenderGraphPackageCatalog.Place}' must read two images and write one.");
+        }
+
+        var bytecode = File.ReadAllBytes(path: Path.Combine(
+            path1: m_directory,
+            path2: (KernelStem + (context.HostsOnDirectX
+                ? ".dxil"
+                : ".spv"))
+        ));
+        var built = new Built();
+
+        try {
+            cancellationToken.ThrowIfCancellationRequested();
+            built.Module = context.Services.ShaderModuleFactory.Create(
+                bytecode: bytecode,
+                stage: GpuShaderStage.Compute
+            );
+            cancellationToken.ThrowIfCancellationRequested();
+            built.Pipeline = context.Services.PipelineFactory.Create(
+                computeShaderModule: built.Module,
+                description: new GpuComputePipelineDescription(
+                    RenderGraphPackageCatalog.Place,
+                    Bindings,
+                    new GpuPushConstantBinding(
+                        data: new byte[context.Parameters.SizeBytes],
+                        offset: 0,
+                        stageFlags: ShaderPipelineRenderNode.FrameBlockStages
+                    )
+                ),
+                name: new GpuObjectName(
+                    owner: context.Instance,
+                    part: context.Pass
+                )
+            );
+        } catch {
+            built.Dispose();
+
+            throw;
+        }
+
+        return built;
+    }
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="built"/> is not this package's build, or
+    /// <paramref name="descriptorPool"/> is zero.</exception>
+    public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, nint descriptorPool) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        if (built is not Built objects) {
+            built?.Dispose();
+
+            throw new ArgumentException(
+                message: $"Package '{RenderGraphPackageCatalog.Place}' was handed another package's build.",
+                paramName: nameof(built)
+            );
+        }
+        if (descriptorPool == 0) {
+            objects.Dispose();
+
+            throw new ArgumentException(
+                message: $"Package '{RenderGraphPackageCatalog.Place}' allocates its sets from the instance's pool, and none was created.",
+                paramName: nameof(descriptorPool)
+            );
+        }
+
+        return new Recorder(
+            built: objects,
+            context: context,
+            descriptorPool: descriptorPool,
+            placements: m_placements
+        );
+    }
+
+    // The module and pipeline one pass's build creates, which its recorder owns once created.
+    private sealed class Built : IDisposable {
+        public IGpuShaderModule? Module;
+        public IGpuComputePipeline? Pipeline;
+
+        public void Dispose() {
+            Pipeline?.Dispose();
+            Pipeline = null;
+            Module?.Dispose();
+            Module = null;
+        }
+    }
+    // Records one place pass. Everything a frame slot binds is per slot, since the instance waits only that slot's
+    // previous submission before recording into it.
+    private sealed class Recorder : IRenderGraphPackageRecorder {
+        private readonly byte[] m_block;
+        private readonly Built m_built;
+        private readonly string m_instance;
+        private readonly string m_pass;
+        private readonly IRenderGraphPlacements? m_placements;
+        private readonly uint m_rectOffset;
+        private readonly nint[] m_samplers;
+        private readonly GpuDeviceServices m_services;
+        private readonly nint[] m_sets;
+        private readonly uint m_sharpnessOffset;
+
+        private bool m_disposed;
+
+        public Recorder(RenderGraphPackageRecorderContext context, Built built, nint descriptorPool, IRenderGraphPlacements? placements) {
+            var inFlight = context.InFlightFrames;
+
+            m_block = new byte[context.Parameters.SizeBytes];
+            m_built = built;
+            m_instance = context.Instance;
+            m_pass = context.Pass;
+            m_placements = placements;
+            m_rectOffset = OffsetOf(
+                context: context,
+                field: RenderGraphPackageCatalog.PlaceRect
+            );
+            m_samplers = new nint[inFlight];
+            m_services = context.Services;
+            m_sets = new nint[inFlight];
+            m_sharpnessOffset = OffsetOf(
+                context: context,
+                field: RenderGraphPackageCatalog.PlaceSharpness
+            );
+
+            try {
+                for (var slot = 0; (slot < inFlight); slot++) {
+                    m_sets[slot] = m_services.Bindings.AllocateSet(
+                        descriptorPool,
+                        built.Pipeline!.DescriptorSetLayoutHandle,
+                        name: new GpuObjectName(
+                            index: slot,
+                            owner: context.Instance,
+                            part: context.Pass
+                        )
+                    );
+                    m_samplers[slot] = m_services.Bindings.CreateSampler();
+                }
+            } catch {
+                Dispose();
+
+                throw;
+            }
+        }
+
+        private static uint OffsetOf(RenderGraphPackageRecorderContext context, string field) => (context.Parameters.Slots.FirstOrDefault(predicate: slot => string.Equals(
+            a: slot.Name,
+            b: field,
+            comparisonType: StringComparison.Ordinal
+        ))?.Offset ?? throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{RenderGraphPackageCatalog.Place}' has no '{field}' in its frame block."));
+
+        public void Dispose() {
+            if (m_disposed) {
+                return;
+            }
+
+            m_disposed = true;
+
+            foreach (var sampler in m_samplers) {
+                if (sampler != 0) {
+                    m_services.Bindings.DestroySampler(samplerHandle: sampler);
+                }
+            }
+
+            m_built.Dispose();
+        }
+        public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
+            recording.FrameBlock.CopyTo(destination: m_block);
+
+            if (
+                (m_placements is not null) &&
+                m_placements.TryGet(
+                    instance: m_instance,
+                    pass: m_pass,
+                    placement: out var placement
+                )
+            ) {
+                if (
+                    !placement.Shown &&
+                    recording.MayStandIn
+                ) {
+                    return RenderGraphPackageOutcome.DrewNothing;
+                }
+
+                var rect = m_block.AsSpan(start: ((int)m_rectOffset));
+
+                BinaryPrimitives.WriteSingleLittleEndian(destination: rect, value: (placement.Shown ? placement.Left : 0f));
+                BinaryPrimitives.WriteSingleLittleEndian(destination: rect[4..], value: (placement.Shown ? placement.Top : 0f));
+                BinaryPrimitives.WriteSingleLittleEndian(destination: rect[8..], value: (placement.Shown ? placement.Width : 0f));
+                BinaryPrimitives.WriteSingleLittleEndian(destination: rect[12..], value: (placement.Shown ? placement.Height : 0f));
+                BinaryPrimitives.WriteSingleLittleEndian(
+                    destination: m_block.AsSpan(start: ((int)m_sharpnessOffset)),
+                    value: placement.Sharpness
+                );
+            }
+
+            var command = recording.CommandBuffer;
+            var recorder = recording.Recorder;
+            var pipeline = m_built.Pipeline!;
+            var set = m_sets[recording.Slot];
+            var sampler = m_samplers[recording.Slot];
+
+            m_services.Bindings.WriteStorageImage(
+                arrayElement: 0,
+                binding: OutputBinding,
+                descriptorSetHandle: set,
+                imageViewHandle: recording.Outputs[0].Image.ImageViewHandle
+            );
+            m_services.Bindings.WriteCombinedImageSampler(
+                arrayElement: 0,
+                binding: BaseBinding,
+                descriptorSetHandle: set,
+                imageViewHandle: recording.Inputs[0].Image.ImageViewHandle,
+                samplerHandle: sampler
+            );
+            m_services.Bindings.WriteCombinedImageSampler(
+                arrayElement: 0,
+                binding: SourceBinding,
+                descriptorSetHandle: set,
+                imageViewHandle: recording.Inputs[1].Image.ImageViewHandle,
+                samplerHandle: sampler
+            );
+            recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
+                commandBufferHandle: command,
+                pipelineHandle: pipeline.Handle
+            );
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
+                commandBufferHandle: command,
+                descriptorSetHandle: set,
+                group: 0,
+                pipelineLayoutHandle: pipeline.LayoutHandle
+            );
+            recorder.PushConstants(
+                bindPoint: GpuBindPoint.Compute,
+                commandBufferHandle: command,
+                data: m_block,
+                offset: 0,
+                pipelineLayoutHandle: pipeline.LayoutHandle,
+                stageFlags: ShaderPipelineRenderNode.FrameBlockStages
+            );
+            recorder.Dispatch(
+                commandBufferHandle: command,
+                groupCountX: (((recording.Width + GroupSize) - 1) / GroupSize),
+                groupCountY: (((recording.Height + GroupSize) - 1) / GroupSize),
+                groupCountZ: 1
+            );
+
+            return RenderGraphPackageOutcome.Drew;
+        }
+    }
+}

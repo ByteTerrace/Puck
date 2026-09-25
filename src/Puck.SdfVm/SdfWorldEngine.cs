@@ -36,7 +36,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // POSITIONAL (views append it LAST -> t41, the beam after its instance mask -> t4). KEEP IN SYNC with sdf-vm.hlsli.
     private const uint BrickPoolBindingIndex = 46;
     private const uint CompositeOutputBindingIndex = 0; // sdf-world-composite.comp: Output at binding 0
-    private const int CompositePushByteLength = ((16 + ((sizeof(float) * 4) * MaxViewports)) + (sizeof(uint) * 4)); // CompositeParams2: uint2 extent + uint count + 4 bytes padding (16) + float4 rects[5] + uint2 scaleQPacked + uint2 sharpnessQPacked
+    private const int CompositePushByteLength = ((16 + ((sizeof(float) * 4) * MaxViewports)) + (sizeof(uint) * 4)); // CompositeParams2: uint2 extent + uint count + uint padding (16) + float4 rects[5] + uint2 scaleQPacked + uint2 sharpnessQPacked
     private const uint CompositeSourceBindingIndex = 1; // sdf-world-composite.comp: sources[] at binding 1
     private const uint CullArgsBindingIndex = 5; // sdf-cull-args.comp: views indirect dispatch args (register u0)
     private const uint CullBoundsBindingIndex = 6; // sdf-cull-args.comp: bbox group origin and exclusive end (register u1); read by sdf-world-views.comp at binding 8
@@ -57,7 +57,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
-    private const int PushConstantByteLength = (((sizeof(uint) * 4) * 2) + sizeof(uint)); // 36-byte CompositeParams; word 6 = screenMask, word 7 = instanceMaskWordCount, word 8 = sampleIndex (the deterministic tick clock the sky reads). KEEP IN SYNC with sdf-world.hlsli's CompositeParams.
+    private const int PushConstantByteLength = ((sizeof(uint) * 4) * 2); // 32-byte CompositeParams; word 5 = screenMask, word 6 = instanceMaskWordCount, word 7 = sampleIndex (the deterministic tick clock the sky reads). KEEP IN SYNC with sdf-world.hlsli's CompositeParams.
     private const uint ScreenLightBindingIndex = 11; // shared hit-pass layout: sdfScreenLights, register t38 (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
     private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfEnvBase
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
@@ -136,7 +136,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// hand-syncing). 32 separate combined-image-sampler bindings (not one array binding): DXC's
     /// <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState pair, so a true single Vulkan
     /// combined-image-sampler array isn't expressible in the shared HLSL — see <see cref="ScreenSourceBindingIndices"/>.
-    /// Capped at 32 because <c>screenMask</c> (the per-frame bound-slot bitmask, CompositeParams word 6) is a single
+    /// Capped at 32 because <c>screenMask</c> (the per-frame bound-slot bitmask, CompositeParams word 5) is a single
     /// <c>uint</c> — raising past 32 needs a second mask word on both sides.</summary>
     public const int MaxScreenSurfaces = Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces;
     /// <summary>The kernels' source array length (<c>sources[5]</c>) — the most viewports one engine composites.</summary>
@@ -166,13 +166,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuBuffer m_brickPoolBuffer;
     private readonly bool m_brickPoolEnabled;
     private readonly int m_brickPoolVoxelCapacity;
-
-    // The LIVE child-slot mask (bit v set = viewport v shows a hosted child's surface this frame, so the beam prepass
-    // and Stage 1 skip it and Stage 2 copies the host-bound source 1:1) — rewritten every frame by SetChildMask from
-    // the frame's own view bindings, never construction-frozen: a layout switch may turn any slot into a child or
-    // back, so every slot keeps its SDF source texture regardless.
-    private uint m_childMask;
-
     private readonly IGpuStorageBuffer m_compositeArgsBuffer;
     private readonly IGpuComputePipeline m_compositePipeline;
     private readonly IGpuComputePipeline m_cullArgsPipeline;
@@ -297,12 +290,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly nint[] m_beamSets = new nint[FrameRingSize];
     // The change-detected descriptor caches are PER RING SLOT: each slot's sets are only rewritten once that slot's
     // fence proves its previous frame retired, so a descriptor update can never race an in-flight command buffer.
-    // They cover ENGINE-OWNED views only — a host-owned view (a screen source, a child's storage image) is rebound
+    // They cover ENGINE-OWNED views only — a host-owned view (a screen source) is rebound
     // unconditionally, since its handle value is not a durable identity (BindScreenSources' handle-identity rule).
     private readonly nint[][] m_boundScreenSourceViews = BuildRingViewCache(width: MaxScreenSurfaces);
     private readonly nint[][] m_boundSourceViews = BuildRingViewCache(width: MaxViewports);
     private readonly nint[] m_boundGlyphAtlasViews = new nint[FrameRingSize];
-    private readonly nint[] m_childSourceViews = new nint[MaxViewports];
     private readonly IGpuCommandPool[] m_commandPools = new IGpuCommandPool[FrameRingSize];
     private readonly byte[] m_compositePush = new byte[CompositePushByteLength];
     private readonly nint[] m_compositeSets = new nint[FrameRingSize];
@@ -459,10 +451,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // Stage 2 copies that into the screen region. Sized to the FULL frame extent (the largest any region can
         // reach), NOT any one frame's region: the regions animate every frame, so a frozen region-sized texture (e.g. a
         // half-width split) under-allocated the pane and blanked it when the layout grew. Writes/reads stay within the
-        // live region (≤ full), so full-size is always in-bounds. EVERY slot gets one, child or not: which slots show
-        // a hosted child is a per-frame decision (SetChildMask), so a slot that is a child this frame may be an SDF
-        // camera the next. A child slot's texture simply goes unread that frame — its bound source is the hosted
-        // child's storage image (SetChildSource), whose layout the child owns, so the engine never transitions that one.
+        // live region (≤ full), so full-size is always in-bounds.
         m_sourceTextures = new IGpuImage?[((int)m_viewportCapacity)];
 
         for (var index = 0; (index < ((int)m_viewportCapacity)); index++) {
@@ -476,7 +465,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         }
 
         // A dedicated 1x1 ShaderReadOnly filler for an unbound screen-source slot: the per-viewport sources[] filler
-        // (SourceViewForSlot(0)) is wrong here — it lives in the General (UAV) layout Stage 1/2 read/write it in,
+        // (slot 0's source texture) is wrong here — it lives in the General (UAV) layout Stage 1/2 read/write it in,
         // while a combined-image-sampler binding requires ShaderReadOnly, so aliasing it trips Vulkan validation the
         // moment any viewport-source dispatch runs. This image is transitioned ONCE, below, and never written again.
         m_screenSourceFiller = scope.Own(created: gpu.ImageFactory.Create(

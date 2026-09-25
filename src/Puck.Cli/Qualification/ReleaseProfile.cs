@@ -90,9 +90,9 @@ internal sealed record QualificationWorkload(
     QualificationPipeline? Pipeline,
     int TimeoutSeconds
 );
-/// <summary>The pipeline instance a workload churns: one the world authors in <c>views.pipelines</c>, shown by a slot
-/// of one of its <c>views.layouts</c> rows.</summary>
-/// <param name="Instance">The <c>views.pipelines</c> row's name.</param>
+/// <summary>The graph instance a workload churns: one the world authors in <c>views.graphs</c> with a source, shown by
+/// a slot of one of its <c>views.layouts</c> rows.</summary>
+/// <param name="Instance">The <c>views.graphs</c> row's name.</param>
 /// <param name="Layout">The <c>views.layouts</c> row whose slot shows the instance.</param>
 /// <param name="SettleFrames">The submissions counted after each reset before the instance is inspected, enough for a
 /// replaced graph and its held images to retire.</param>

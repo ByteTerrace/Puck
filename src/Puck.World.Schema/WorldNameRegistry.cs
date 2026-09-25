@@ -1607,8 +1607,6 @@ public static partial class WorldNameRegistry {
             nameof(WorldViewLayout.Name),
             "a view layout name"
         ),
-        new(typeof(WorldViewPipeline), nameof(WorldViewPipeline.Name), "a view pipeline name"),
-        new(typeof(WorldViewPipeline), nameof(WorldViewPipeline.Source), "a view pipeline's source is a document path"),
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Name), "a view graph instance name"),
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Source), "a view graph's source is a document path"),
         new(

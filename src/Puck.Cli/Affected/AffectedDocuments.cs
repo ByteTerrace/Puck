@@ -7,7 +7,7 @@ namespace Puck.Cli.Affected;
 /// The documents a canary reaches through its manifest, read with the documents' own readers: a world document reaches
 /// every layer it composes (<see cref="WorldDefinitionFileSource.TryDescribeComposition"/>) and, from its composed and
 /// parsed document (<see cref="WorldDefinitionFileSource.TryParseDocument"/>, unvalidated), the neighbour worlds its
-/// adjacencies name and the graph documents its <c>views.pipelines</c> and <c>views.graphs</c> rows name, each
+/// adjacencies name and the graph documents its <c>views.graphs</c> rows name, each
 /// resolved as the host resolves it (<see cref="WorldDocumentPaths.TryResolve"/>); a graph document reaches every shader
 /// pass source it declares (<see cref="ShaderPipelineLoader.ReadDefinition"/>, resolved beside the document as the
 /// loader resolves it) and every include each of those sources reaches (<see cref="ShaderSourceClosure.Collect"/>). A
@@ -98,7 +98,7 @@ internal static class AffectedDocuments {
 
             var directory = WorldDocumentPaths.DirectoryOf(documentPath: file);
 
-            foreach (var source in definition!.Views.Pipelines.Select(selector: static row => row.Source).Concat(second: (definition.Views.Graphs ?? []).Select(selector: static row => row.Source))) {
+            foreach (var source in (definition!.Views.Graphs ?? []).Select(selector: static row => row.Source).OfType<string>()) {
                 if (WorldDocumentPaths.TryResolve(
                     documentDirectory: directory,
                     path: source,

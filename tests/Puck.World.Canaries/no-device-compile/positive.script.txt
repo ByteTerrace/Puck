@@ -12,7 +12,7 @@ pipeline.wait ink submitted 1 10
 pipeline.capture ink {run}/shipped.png
 pipeline.wait ink captured 10
 # The same tint instance names the tint package, whose binaries the runner built before the boot with the compiler it sees.
-world.row.set views.pipelines {"name":"tint","source":"{run}/tint"}
+world.row.set views.graphs {"name":"tint","source":"{run}/tint"}
 pipeline.reload tint
 pipeline.wait tint compiled 40
 pipeline.wait tint installed 10

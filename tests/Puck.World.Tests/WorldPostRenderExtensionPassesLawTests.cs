@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Shaders;
+using Puck.World.Client;
 
 using Xunit;
 
@@ -28,7 +29,7 @@ public sealed class WorldPostRenderExtensionPassesLawTests {
                 overlay: false,
                 packages: RenderGraphPackageCatalog.Shipped
             ),
-            root: null
+            root: static () => null
         );
 
         return (passes, new Dictionary<string, JsonNode?>(comparer: StringComparer.Ordinal));

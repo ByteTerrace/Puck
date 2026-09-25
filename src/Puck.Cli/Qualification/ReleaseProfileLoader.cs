@@ -213,7 +213,7 @@ internal static class ReleaseProfileLoader {
             }
             if (workload.Pipeline is { } pipeline) {
                 if (string.IsNullOrWhiteSpace(value: pipeline.Instance)) {
-                    return $"{at}.pipeline.instance: a views.pipelines row name is required";
+                    return $"{at}.pipeline.instance: a views.graphs row name is required";
                 }
                 if (string.IsNullOrWhiteSpace(value: pipeline.Layout)) {
                     return $"{at}.pipeline.layout: a views.layouts row name is required";

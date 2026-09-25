@@ -284,10 +284,10 @@ public sealed class WorldReplaySnapshot {
     /// content hash, fuel, lane) the re-drive re-establishes before it runs a tick. Empty when the recorded session
     /// mounted nothing, which is itself pinned: a re-drive that mounts a guest against an empty set is refused.</summary>
     public required IReadOnlyList<WorldAddonReceipt> MountedAddons { get; init; }
-    /// <summary>Gets the directory the recording server's pipeline source reader resolved <c>views.pipelines</c> rows
+    /// <summary>Gets the directory the recording server's pipeline source reader resolved <c>views.graphs</c> rows
     /// against (<see cref="WorldPipelineSources.DocumentDirectory"/>), or <see langword="null"/> when it attached none.
     /// <see cref="Drive"/> attaches a reader over the same directory to the shadow server, so a recorded
-    /// <c>CommitViewPipeline</c>, or a row upsert naming overrides, binds against the sources it bound against live.
+    /// <c>CommitViewGraph</c>, or a row upsert naming overrides, binds against the sources it bound against live.
     /// It is the recorded document's own directory, so the re-drive's definition resolves every relative path it
     /// authors (<see cref="WorldDefinition.DocumentDirectory"/>) where the live one did.</summary>
     public string? PipelineSourceDirectory { get; init; }

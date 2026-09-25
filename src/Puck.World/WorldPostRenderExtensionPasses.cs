@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Shaders;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -15,16 +16,18 @@ public sealed class WorldPostRenderExtensionPasses {
     private readonly Dictionary<string, JsonObject> m_live = new(comparer: StringComparer.Ordinal);
 
     private WorldRootGraph? m_graph;
-    private ShaderPipelineRenderNode? m_root;
+    private Func<ShaderPipelineRenderNode?>? m_root;
 
     /// <summary>Attaches the root instance the default render graph's post passes record in.</summary>
     /// <param name="graph">The composed default graph, which names each extension's passes.</param>
-    /// <param name="root">The root instance's node, or <see langword="null"/> when the graph draws nothing over the
-    /// world.</param>
+    /// <param name="root">Reads the synthesized root instance's node, which is <see langword="null"/> while the graph
+    /// draws nothing over the world.</param>
     /// <param name="extensions">The document's <c>render.extensions</c> entries, whose configs each pass starts from.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="graph"/> is <see langword="null"/>.</exception>
-    public void Attach(WorldRootGraph graph, ShaderPipelineRenderNode? root, IReadOnlyList<WorldRenderExtensionEntry>? extensions) {
+    /// <exception cref="ArgumentNullException"><paramref name="graph"/> or <paramref name="root"/> is
+    /// <see langword="null"/>.</exception>
+    public void Attach(WorldRootGraph graph, Func<ShaderPipelineRenderNode?> root, IReadOnlyList<WorldRenderExtensionEntry>? extensions) {
         ArgumentNullException.ThrowIfNull(argument: graph);
+        ArgumentNullException.ThrowIfNull(argument: root);
 
         m_graph = graph;
         m_root = root;
@@ -61,7 +64,7 @@ public sealed class WorldPostRenderExtensionPasses {
     /// <returns><see langword="true"/> when the root has installed its graph and every pass of the id bound the value;
     /// <see langword="false"/> otherwise, and the caller writes it again later.</returns>
     public bool TrySetConfig(string id, string field, float value) => (
-        (m_root is { } root) &&
+        (m_root?.Invoke() is { } root) &&
         TrySetConfig(
             field: field,
             id: id,

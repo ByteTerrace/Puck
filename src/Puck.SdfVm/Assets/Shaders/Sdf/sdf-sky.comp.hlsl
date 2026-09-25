@@ -30,12 +30,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
-    // A child viewport shows another node's surface — there is no SDF camera and no source texture of this engine's
-    // own to write; sdf-world-composite.comp copies the child's own image untouched, exactly as before.
-    if (isChildViewport(id.z)) {
-        return;
-    }
-
     ViewportData view = viewports[id.z];
     uint2 rectDims = worldRenderDims((uint2)(view.region.zw * float2(params.imageExtent)), view.renderScale.x);
 

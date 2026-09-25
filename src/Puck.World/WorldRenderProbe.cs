@@ -68,8 +68,8 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
             ? root
             : root.Runtime.CaptureTarget(instance: instance)));
     /// <inheritdoc/>
-    /// <remarks>The engine node reads as <c>world</c>, its hosted children that count their work by their registered
-    /// names, each render-graph instance that renders a graph by its instance name (the root's passes are its post
+    /// <remarks>The engine node reads as <c>world</c>, each render-graph instance that renders a graph by its instance
+    /// name (the root's passes are its post
     /// passes and the overlay), and each registered view as <c>view:&lt;name&gt;</c>.</remarks>
     public void CopyNodes(List<GpuWorkNode> nodes) {
         ArgumentNullException.ThrowIfNull(nodes);
@@ -80,16 +80,6 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
                 Name: "world",
                 Work: node.Work
             ));
-
-            foreach (var (name, child) in node.Children) {
-                if (child is IGpuWorkSource childWork) {
-                    nodes.Add(item: new GpuWorkNode(
-                        Lifetime: (child as IWorkCounterSource),
-                        Name: name,
-                        Work: childWork
-                    ));
-                }
-            }
         }
 
         if (Root?.Runtime is { } runtime) {

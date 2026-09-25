@@ -385,8 +385,11 @@ changes, held commands and chord/page latches from the old group are cleared.
 
 ## Shader pipelines
 
-A `views.pipelines` row names a pipeline instance and its source: a pipeline
-document, a one-off HLSL shader, or a shader package directory written by
+A `views.graphs` row (a `graph "name" { … }` block inside `views` in `.puck`)
+names an instance of a
+[frame graph](../../docs/reference/shaders.md#frame-graphs) and its source: a
+`puck.render.graph.v1` graph document, a one-off HLSL shader read as a
+one-pass graph, or a shader package directory written by
 `puck shaders package`, which loads from its precompiled binaries with its
 source tree gone and no compiler on the machine. A document or shader source
 loads the package the game's build stored for it in `Assets/worlds/packages`
@@ -404,22 +407,21 @@ document from another directory moves that directory for every row the
 loaded document names, the same directory a live `pipeline.commit` binds
 against from that point on. A silo-hosted world has no local document file
 (its definition arrives from cloud storage), so a relative source there
-resolves against the executable's own directory instead. A layout
-slot selects the instance with `pipeline`; it can instead select a `camera`,
-but cannot select both. The row's optional camera supplies shader camera
-inputs, and `timeScale` seeds its presentation clock. `views.shaderToolchain`
+resolves against the executable's own directory instead. A row may instead
+name an engine `package` producer, such as `sdf.world`, in place of a source.
+A layout slot shows the instance by naming it with `instance`; it can instead
+select a `camera`, but cannot select both. The root graph places each pane
+over the world at its slot's rect, renders it at the slot's size, and feeds it
+the slot's pointer; a pane the active layout does not show is not rendered,
+and a layout change places panes one frame later. The row's optional camera
+supplies shader camera inputs, and `timeScale` seeds its presentation clock.
+A row also takes a refresh divisor or rate and inputs bound to other rows'
+outputs, with `views.graphBudget` as the scheduler's pass-pixel ceiling, and
+`world.budget` prices each row by planning its source. `views.shaderToolchain`
 optionally selects the directory holding `dxc`. `pipeline.sentinels <name> on`
 writes each frame-block word's echo sentinel in place of the frame values and
 config, which an [echo pass](../../docs/reference/shaders.md#pass-interfaces)
-reads back.
-
-A `views.graphs` row names an instance of a
-[frame graph](../../docs/reference/shaders.md#frame-graphs): its graph source,
-resolved like a pipeline source, a camera, a refresh divisor or rate, and
-inputs bound to other rows' outputs, with `views.graphBudget` as the
-scheduler's pass-pixel ceiling. The document validates the rows and
-`world.budget` prices each one by planning its source, but no view renders
-through a graph yet.
+reads back. The `pipeline.*` verbs address `views.graphs` rows by name.
 
 Start the three-pass feedback example from the repository root:
 
@@ -494,7 +496,7 @@ default. `pipeline.overrides <name>` shows every overridden field's committed
 value beside its preview, then the time scale and output the same way. It also
 shows the row revision the preview is based on and the source identity of the
 installed graph. `pipeline.commit <name>` writes the preview into the
-instance's `views.pipelines` row as `overrides`, `timeScale` and `output`, and
+instance's `views.graphs` row as `overrides`, `timeScale` and `output`, and
 `world.save` then writes the document:
 
 ```text
@@ -580,8 +582,8 @@ To try a one-off shader in the example's existing slot, run
 through the same background compilation path. Return with
 `pipeline.load ink ../pipelines/ink.graph.json`.
 
-Loading a new row does not change the active layout: select its name in a layout
-slot. The [shader reference](../../docs/reference/shaders.md#shader-pipelines-and-live-development)
+Loading a new row does not change the active layout: name it as a layout
+slot's `instance`. The [shader reference](../../docs/reference/shaders.md#shader-pipelines-and-live-development)
 owns the graph document and pass contracts.
 
 [The Moth shader](Assets/pipelines/moth.hlsl) remains a one-pass procedural
@@ -1558,7 +1560,9 @@ it can bind: `descriptor-sets` or `root-signature-words`,
 `push-constant-bytes`, the `stage.*` descriptor limits, and on Direct3D 12
 `binding-tier`, `root-signature`, `shader-model`, `heap.views`,
 `heap.samplers` and `heap.samplers-static`; it is recorded the same way. Then come each render node
-(`world`, its hosted pipelines, `overlay`, `view:<name>`) with its newest
+(`world` for the SDF engine, then every render-graph instance by its instance
+name, such as the root `main` and each `views.graphs` pane, then
+`view:<name>` for each offscreen view) with its newest
 completed submission's per-pass counts and its created objects, or
 `work unavailable` until a submission completes. A filter selects whole dotted
 segments (`world.counters gpu`, `world.counters state`); a filter that selects

@@ -88,8 +88,8 @@ the geometric normal, gradient magnitude and curvature; ambient adds AO and
 their combined query count. Each consumer's buffer transition orders the producer's
 record writes before it. Views binds the record read-only, and every hit pass binds the
 beam's tile planes read-only, so a buffer a pass only reads is never held in a
-read-write state. These four dispatches share indirect bounds and live view dimensions,
-and skip child views. Primary, surface and ambient retain the full ISA.
+read-write state. These four dispatches share indirect bounds and live view
+dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
 The buffer reserves `width × height × viewportCapacity × 80` bytes so changing
 view rectangles cannot overrun an allocation sized for an earlier layout.
@@ -216,9 +216,10 @@ or refused, and a capture refused while the engine is not ready names the
 node's `NotReadyReason`, such as "the engine's pipeline set is building (5 of
 14 pipelines created)" (see [the World guide](../Puck.World/README.md#usage)).
 The node is `IsReady` once its set is installed and the engine built from it
-has produced its first frame; that is the fact `world.wait ready` waits on. The node's hosted child panes keep
-stepping and producing too, so a pane builds and installs its own pipelines
-while the engine's are still pending. A holder keeps its lease across engine
+has produced its first frame; that is the fact `world.wait ready` waits on. A
+`views.graphs` pane is not part of the node: it is its own render-graph
+instance with its own node, so it compiles and builds its pipelines without
+waiting for the engine's set. A holder keeps its lease across engine
 rebuilds, such as a capacity or export-factory change, and releases it on
 device loss and disposal. A set's build creates up to
 `SdfWorldPipelines.BuildConcurrency` pipelines at once on the thread pool,
@@ -294,8 +295,9 @@ reload replaces pipelines in place, so the node first takes its set out of the
 cache's sharing; when another engine on the device leases the same set, the
 request fails instead.
 
-This is the primary SDF engine's compute-kernel reload. Child engines and
-overlay/postprocess decorators own separate pipelines. Changing host bindings,
+This is the primary SDF engine's compute-kernel reload. `views.graphs`
+instances (reloaded with `pipeline.reload`) and overlay/postprocess decorators
+own separate pipelines. Changing host bindings,
 buffer layouts, or the C# ISA requires a host rebuild, not a shader reload.
 
 ## Composition, anchors, and views

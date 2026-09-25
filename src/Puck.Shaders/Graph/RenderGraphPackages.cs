@@ -140,10 +140,18 @@ public sealed class RenderGraphPackageCatalog {
     public const string Overlay = "overlay";
     /// <summary>The prefix of a shipped post-process shader set's package id: <c>post.&lt;set id&gt;</c>.</summary>
     public const string PostProcessPrefix = "post.";
-    /// <summary>The id of the one resample pass: its input reconstructed at its output's extent, an exact copy at the
-    /// same extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its kernel is
-    /// <c>Assets/Shaders/Graph/resample.hlsl</c>, a compute pass whose config is its sharpness.</summary>
-    public const string Resample = "resample";
+    /// <summary>The id of the one placement pass: its base image, with its source reconstructed into a destination rect
+    /// over it, an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to
+    /// clamped Catmull-Rom at sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
+    /// <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at build; its config is the rect (<see cref="PlaceRect"/>)
+    /// and the sharpness (<see cref="PlaceSharpness"/>).</summary>
+    public const string Place = "place";
+    /// <summary>The <see cref="Place"/> config field holding the destination rect as fractions of the output's extent:
+    /// left, top, width, height.</summary>
+    public const string PlaceRect = "rect";
+    /// <summary>The <see cref="Place"/> config field holding the reconstruction's sharpness, from 0 (bilinear) to 1
+    /// (clamped Catmull-Rom).</summary>
+    public const string PlaceSharpness = "sharpness";
 
     private readonly Dictionary<string, RenderGraphPackage> m_packages;
 
@@ -200,8 +208,26 @@ public sealed class RenderGraphPackageCatalog {
         count: [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.BrickPoolVoxels])],
         strideBytes: sizeof(float)
     );
+    /// <summary>Gets the config schema of <see cref="Place"/>: the rect, whole by default, and the sharpness, 0 by
+    /// default.</summary>
+    public static IReadOnlyDictionary<string, ShaderConfigField> PlaceConfig { get; } = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
+        [PlaceRect] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "[0, 0, 1, 1]").RootElement.Clone(),
+            Description: "The destination rect as fractions of the destination extent: left, top, width, height.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Float4
+        ),
+        [PlaceSharpness] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
+            Description: "Reconstruction sharpness: 0 is bilinear, 1 clamped Catmull-Rom.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Float
+        ),
+    });
     /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>
-    /// and <see cref="Resample"/>.</summary>
+    /// and <see cref="Place"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
     /// <summary>Gets the catalog of a host that offers no package, whose graphs are shader passes alone.</summary>
     public static RenderGraphPackageCatalog None { get; } = new(packages: []);
@@ -235,10 +261,14 @@ public sealed class RenderGraphPackageCatalog {
             Summary: "The console, HUD, toasts and cursor drawn over the input image."
         ),
         new RenderGraphPackage(
-            Id: Resample,
-            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead)],
+            Config: PlaceConfig,
+            Id: Place,
+            Inputs: [
+                RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead),
+                RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead),
+            ],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
-            Summary: "The input image reconstructed at the output's extent, bilinear to clamped Catmull-Rom by sharpness."
+            Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom by sharpness."
         ),
     ];
 

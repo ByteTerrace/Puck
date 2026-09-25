@@ -45,8 +45,9 @@ report of every march pipeline (beam, primary, surface, ambient, and the three
 views variants), then retires the old set; a failure keeps the previous
 kernels. Scene buffers, images, baked bricks, and world state survive; the ISA
 probe's descriptor caches and the cadence signature are invalidated. The last
-successful set survives device-loss recovery. Child engines and
-post-render decorator pipelines are outside this command, and host ABI,
+successful set survives device-loss recovery. `views.graphs` instances
+(`pipeline.reload`) and post-render decorator pipelines are outside this
+command, and host ABI,
 buffer-layout, or C# ISA changes need a rebuild.
 
 ## The frame
@@ -59,7 +60,7 @@ work is pending, and count outside every pass. A cadence-skipped frame marks
 | Label | Kernel | Does |
 |---|---|---|
 | `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged region owes (program words, viewport rows, dynamic transforms, frame grid, screen surfaces, screen lights, volumes, decals, mesh draws) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldEngine.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A still frame copies only the viewport word its time moved. |
-| `sky` | `sdf-sky.comp` | Fills every non-child viewport pixel with sky before any tile is culled. Shares the views bindings. |
+| `sky` | `sdf-sky.comp` | Fills every viewport pixel with sky before any tile is culled. Shares the views bindings. |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |

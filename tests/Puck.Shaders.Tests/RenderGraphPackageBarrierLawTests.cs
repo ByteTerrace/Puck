@@ -224,14 +224,14 @@ public sealed class RenderGraphPackageBarrierLawTests {
     [Fact]
     public void ADrawnTargetIsAColorAttachmentAndAComputeTargetIsNot() {
         var plan = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: new RenderGraphDefinition(
-            Name: "resampled",
+            Name: "placed",
             Outputs: ["composed"],
             Packages: [
                 new RenderGraphPackagePass(
-                    Inputs: ["world"],
-                    Name: "resample",
+                    Inputs: ["base", "world"],
+                    Name: "place",
                     Outputs: ["scaled"],
-                    Package: RenderGraphPackageCatalog.Resample
+                    Package: RenderGraphPackageCatalog.Place
                 ),
                 new RenderGraphPackagePass(
                     Inputs: ["scaled"],
@@ -241,6 +241,10 @@ public sealed class RenderGraphPackageBarrierLawTests {
                 ),
             ],
             Resources: [
+                Image(
+                    external: true,
+                    name: "base"
+                ),
                 Image(name: "composed"),
                 Image(name: "scaled"),
                 Image(
@@ -251,10 +255,11 @@ public sealed class RenderGraphPackageBarrierLawTests {
             Schema: RenderGraphSchemas.Graph
         )).Pipeline;
 
-        // The resample package writes its output as a compute dispatch does, and the overlay samples it and draws.
+        // The place package reads its base and source and writes its output as a compute dispatch does, and the overlay
+        // samples it and draws.
         Assert.Equal(
-            expected: [(ComputeRead, ComputeWrite), (Sampled, Drawn)],
-            actual: plan.Passes.Select(selector: static pass => (pass.Accesses[0].Use, pass.Accesses[1].Use))
+            expected: [[ComputeRead, ComputeRead, ComputeWrite], [Sampled, Drawn]],
+            actual: plan.Passes.Select(selector: static pass => pass.Accesses.Select(selector: static access => access.Use).ToArray())
         );
         Assert.Equal(
             expected: [

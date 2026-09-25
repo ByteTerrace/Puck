@@ -343,10 +343,10 @@ These decisions shape packages P11 to P17. The inventory of today's code that
 they respond to is in the programme's implementation status.
 
 **The frame graph is the centre of rendering, and the SDF engine is one pass
-package in it.** The SDF engine began as the host. It composites panes and
-child views in its second stage, owns the 32 screen slots, and caps nested
-cameras through `ViewStack`'s round-robin budget, and post-processing and the
-overlay were nodes chained after it. That
+package in it.** The SDF engine began as the host. It composited panes in its
+second stage, it owns the 32 screen slots and caps nested cameras through
+`ViewStack`'s round-robin budget, and post-processing and the overlay were
+nodes chained after it. That
 design grew from a prototype, and each capacity in it is a constant rather than
 a planned cost. The replacement has to be better at every job the SDF engine
 does now. So composition, nesting, sources, and output belong to the graph, and
@@ -414,7 +414,7 @@ bytecode that no code loaded, so each build paid for them and each reader had
 to discover that they did nothing. Keeping them until P14's final sweep was
 rejected: dead source is not a reference anyone needs, and history keeps it.
 The same rule removed the SDF-side `resample.comp.hlsl` once the graph's package
-library held the one resample pass, the `resample` package. The pixelate
+library held the one resample pass, now the `place` package. The pixelate
 interface fixture under `tests/Puck.Shaders.Tests` is its own copy
 and stays with the spike.
 

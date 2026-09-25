@@ -52,7 +52,7 @@ views {
       {
         camera: null
         height: 1
-        pipeline: "moth-pipeline"
+        instance: "moth-pipeline"
         width: 1
         x: 0
         y: 0
@@ -70,7 +70,7 @@ views {
 
   seatRigPreset("pilot", turnAngle, 2.5m)
 
-  pipeline "moth-pipeline" {
+  graph "moth-pipeline" {
     camera: null
     source: "../pipelines/moth.hlsl"
     timeScale: 1

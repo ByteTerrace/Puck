@@ -96,7 +96,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldSeatViewControl))]
 [JsonSerializable(typeof(WorldViewDefaults))]
 [JsonSerializable(typeof(WorldViewLayout))]
-[JsonSerializable(typeof(WorldViewPipeline))]
+[JsonSerializable(typeof(WorldViewGraph))]
 [JsonSerializable(typeof(WorldSpawnPoint[]))]
 [JsonSerializable(typeof(WorldMotionDefaults))]
 [JsonSerializable(typeof(WorldRenderDefaults))]
@@ -474,10 +474,10 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldStateRow> WorldStateRow => Get<WorldStateRow>();
     /// <summary>Gets the type info for <see cref="WorldTune"/>.</summary>
     public JsonTypeInfo<WorldTune> WorldTune => Get<WorldTune>();
+    /// <summary>Gets the type info for <see cref="WorldViewGraph"/>.</summary>
+    public JsonTypeInfo<WorldViewGraph> WorldViewGraph => Get<WorldViewGraph>();
     /// <summary>Gets the type info for <see cref="WorldViewLayout"/>.</summary>
     public JsonTypeInfo<WorldViewLayout> WorldViewLayout => Get<WorldViewLayout>();
-    /// <summary>Gets the type info for <see cref="WorldViewPipeline"/>.</summary>
-    public JsonTypeInfo<WorldViewPipeline> WorldViewPipeline => Get<WorldViewPipeline>();
 
     private WorldJsonContext() {
         var options = new JsonSerializerOptions(options: WorldJsonSourceContext.Default.Options) {

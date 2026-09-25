@@ -7,7 +7,7 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
-public sealed partial class WorldPipelineRuntime {
+public sealed partial class WorldViewGraphHost {
     public sealed partial class Entry {
         private readonly Dictionary<string, JsonElement> m_pending = new(comparer: StringComparer.Ordinal);
 
@@ -18,7 +18,7 @@ public sealed partial class WorldPipelineRuntime {
 
         internal string Name { get; init; } = string.Empty;
 
-        internal WorldPipelineRuntime? Owner { get; init; }
+        internal WorldViewGraphHost? Owner { get; init; }
 
         /// <summary>Gets the source read the installed graph was compiled from, or <see langword="null"/> before a graph
         /// this runtime compiled has installed.</summary>
@@ -26,16 +26,16 @@ public sealed partial class WorldPipelineRuntime {
         /// <summary>Gets the previewed parameter overrides not yet committed, keyed by pass; each value is the pass's
         /// whole previewed config object. Session state: a move of the row's revision discards them.</summary>
         public IReadOnlyDictionary<string, JsonElement> PendingOverrides => m_pending;
-        /// <summary>Gets the <c>WorldDefinitionFingerprint.ComputePipeline</c> of <see cref="Row"/>, the revision a
+        /// <summary>Gets the <c>WorldDefinitionFingerprint.ComputeGraph</c> of <see cref="Row"/>, the revision a
         /// preview is based on, or <see langword="null"/> before a row has been reconciled.</summary>
         public string? Revision { get; private set; }
         /// <summary>Gets the accepted row this instance last reconciled, or <see langword="null"/> before one.</summary>
-        public WorldViewPipeline? Row { get; private set; }
+        public WorldViewGraph? Row { get; private set; }
         /// <summary>Gets the image version a live <c>pipeline.output</c> selected, or <see langword="null"/> when the
         /// instance shows its row's output.</summary>
         public string? SelectedOutput { get; private set; }
 
-        internal void Adopt(WorldViewPipeline row) {
+        internal void Adopt(WorldViewGraph row) {
             if (ReferenceEquals(
                 objA: Row,
                 objB: row
@@ -43,7 +43,7 @@ public sealed partial class WorldPipelineRuntime {
                 return;
             }
 
-            var revision = WorldDefinitionFingerprint.ComputePipeline(pipeline: row);
+            var revision = WorldDefinitionFingerprint.ComputeGraph(graph: row);
 
             Row = row;
             if (string.Equals(
@@ -227,7 +227,7 @@ public sealed partial class WorldPipelineRuntime {
         /// <param name="commit">The commit, when this returns <see langword="true"/>.</param>
         /// <param name="reason">Why nothing can be committed.</param>
         /// <returns><see langword="true"/> when a graph this runtime compiled is installed.</returns>
-        public bool TryPrepareCommit(Principal principal, [NotNullWhen(returnValue: true)] out WorldMutation.CommitViewPipeline? commit, out string reason) {
+        public bool TryPrepareCommit(Principal principal, [NotNullWhen(returnValue: true)] out WorldMutation.CommitViewGraph? commit, out string reason) {
             commit = null;
             Synchronize();
 
@@ -272,13 +272,13 @@ public sealed partial class WorldPipelineRuntime {
     /// the installed source's identities.</summary>
     /// <param name="principal">The acting identity.</param>
     /// <param name="row">The row the preview is based on.</param>
-    /// <param name="revision">The row's <c>WorldDefinitionFingerprint.ComputePipeline</c>.</param>
+    /// <param name="revision">The row's <c>WorldDefinitionFingerprint.ComputeGraph</c>.</param>
     /// <param name="pending">The previewed passes.</param>
     /// <param name="installed">The source read the installed graph was compiled from.</param>
     /// <param name="timeScale">The live clock rate.</param>
     /// <param name="output">The shown image version, or <see langword="null"/> for the source's first output.</param>
     /// <returns>The commit.</returns>
-    public static WorldMutation.CommitViewPipeline BuildCommit(Principal principal, WorldViewPipeline row, string revision, IReadOnlyDictionary<string, JsonElement> pending, ShaderPipelineSource installed, float timeScale, string? output) {
+    public static WorldMutation.CommitViewGraph BuildCommit(Principal principal, WorldViewGraph row, string revision, IReadOnlyDictionary<string, JsonElement> pending, ShaderPipelineSource installed, float timeScale, string? output) {
         ArgumentNullException.ThrowIfNull(argument: row);
         ArgumentNullException.ThrowIfNull(argument: pending);
         ArgumentNullException.ThrowIfNull(argument: installed);
@@ -296,7 +296,7 @@ public sealed partial class WorldPipelineRuntime {
             }
         }
 
-        return new WorldMutation.CommitViewPipeline(
+        return new WorldMutation.CommitViewGraph(
             ConfigIdentity: installed.ConfigIdentity,
             Name: row.Name,
             Output: output,

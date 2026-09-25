@@ -709,28 +709,29 @@ public abstract record WorldMutation(Principal Principal) {
             return true;
         }
     }
-    /// <summary>Upserts a <c>views.pipelines</c> row (whole-row, keyed by name) — the authored intent for a compiled
-    /// shader pipeline; compiling and swapping the live pipeline are console/composition-root concerns, not this
+    /// <summary>Upserts a <c>views.graphs</c> row (whole-row, keyed by name) — the authored intent for a render-graph
+    /// instance; compiling and installing its graph live are console/composition-root concerns, not this
     /// mutation's.</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Pipeline">The whole pipeline row.</param>
+    /// <param name="Graph">The whole graph row.</param>
     [MutationKind(ordinal: 74, section: WorldSection.Views)]
-    public sealed record UpsertViewPipeline(Principal Principal, WorldViewPipeline Pipeline) : WorldMutation(Principal);
-    /// <summary>Removes a <c>views.pipelines</c> row by name. Rejected loudly by full-document revalidation while any
-    /// <c>views.layouts</c> slot (<c>WorldViewSlot.Pipeline</c>) still names it.</summary>
+    public sealed record UpsertViewGraph(Principal Principal, WorldViewGraph Graph) : WorldMutation(Principal);
+    /// <summary>Removes a <c>views.graphs</c> row by name. Rejected loudly by full-document revalidation while any
+    /// <c>views.layouts</c> slot (<c>WorldViewSlot.Instance</c>), another row's input, a capture or <c>views.root</c>
+    /// still names it.</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Name">The pipeline name to remove.</param>
+    /// <param name="Name">The instance name to remove.</param>
     [MutationKind(ordinal: 75, section: WorldSection.Views)]
-    public sealed record RemoveViewPipeline(Principal Principal, string Name) : WorldMutation(Principal);
-    /// <summary>Commits one pipeline instance's previewed presentation into its <c>views.pipelines</c> row: the
+    public sealed record RemoveViewGraph(Principal Principal, string Name) : WorldMutation(Principal);
+    /// <summary>Commits one graph instance's previewed presentation into its <c>views.graphs</c> row: the
     /// parameter overrides, the time scale and the selected output replace the row's own, and every other member is
     /// kept. The commit names what the preview was based on, and each is checked when it applies: a row whose
     /// revision moved refuses it as stale, and a source whose content or config schema no longer matches the
     /// installed graph's refuses it as incompatible, so a value tuned against one revision is never recorded against
     /// another and a preview never lands on a different instance.</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Name">The pipeline instance to commit.</param>
-    /// <param name="Revision">The <c>WorldDefinitionFingerprint.ComputePipeline</c> of the row the preview was based
+    /// <param name="Name">The graph instance to commit.</param>
+    /// <param name="Revision">The <c>WorldDefinitionFingerprint.ComputeGraph</c> of the row the preview was based
     /// on.</param>
     /// <param name="SourceIdentity">The content identity of the source the installed graph was compiled from.</param>
     /// <param name="ConfigIdentity">The identity of that source's parameter schemas.</param>
@@ -738,7 +739,7 @@ public abstract record WorldMutation(Principal Principal) {
     /// <param name="Output">The committed image version, or <see langword="null"/> for the source's first output.</param>
     /// <param name="Overrides">The committed overrides by pass name, or <see langword="null"/> for none.</param>
     [MutationKind(ordinal: 78, section: WorldSection.Views)]
-    public sealed record CommitViewPipeline(Principal Principal, string Name, string Revision, string SourceIdentity, string ConfigIdentity, float TimeScale,
+    public sealed record CommitViewGraph(Principal Principal, string Name, string Revision, string SourceIdentity, string ConfigIdentity, float TimeScale,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Output = null,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides = null) : WorldMutation(Principal);
 }

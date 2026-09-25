@@ -180,7 +180,7 @@ public sealed partial class SdfWorldEngine {
         _ = BitConverter.TryWriteBytes(
             destination: m_pushConstant.AsSpan(
                 length: sizeof(uint),
-                start: (8 * sizeof(uint))
+                start: (7 * sizeof(uint))
             ),
             value: SdfShaderSetVerification.ReportRequest
         );

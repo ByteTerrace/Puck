@@ -33,8 +33,11 @@ view.override layout pipeline
 pipeline.watch moth-pipeline on
 ```
 
-The Pipeline is on the left and the native SDF creation is on the right. Both read
-the `three-quarter` camera. `pipeline.status` reports the compile and watch state;
+The Pipeline is on the left and the native SDF creation is on the right. The
+Pipeline pane is the `graph "moth-pipeline"` row inside `views`, and the
+`pipeline` layout's left slot shows it with `instance: "moth-pipeline"`; the
+root render graph places it over the SDF world. Both read the `three-quarter`
+camera. `pipeline.status` reports the compile and watch state;
 `pipeline.reload moth-pipeline` recompiles the Pipeline when needed. Inspection layouts
 switch immediately so a close-up does not render overlapping camera transitions.
 

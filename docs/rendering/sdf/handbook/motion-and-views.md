@@ -233,10 +233,11 @@ This is the distinction that is easiest to blur and most important not to.
 A screen surface in the world touches **two entirely separate systems**,
 and they answer two different questions:
 
-**A child** is a render this frame **composites in**: it occupies one of
-the frame's viewport slots, gets skipped by the cone-march beam and the
-first render stage the way any other viewport does, and the compositor
-copies its finished surface into place. This is about **layout**—how many
+**A pane** is a render this frame **places over the world**: a
+`views.graphs` instance that a layout slot names. It is a render-graph
+instance with its own shader, not an SDF view, so it takes none of the SDF
+engine's viewports. The root graph's `place` pass draws its finished image
+into the slot's rect over the SDF world. This is about **layout**—how many
 things this frame renders and where each one's pixels land.
 
 **A screen source** is a program-declared `ScreenSlab` shape's **material**:
@@ -256,11 +257,10 @@ a *different* bug (a dead image or a zeroed room-light entry), never the
 correct look for "nothing is wired here."
 
 The conflation to watch for: treating a screen surface as if it needs a
-*viewport slot* to show something, or treating a *child* render as if it
-needs a `ScreenSlab` material to appear. Neither is true. A child is pure
-layout; a screen source is pure shading fed by a wire. A booted cabinet's
-CRT is a `ScreenSlab` sampling a view's handle—never a viewport child of
-the room's own frame.
+*layout slot* to show something, or treating a *pane* as if it needs a
+`ScreenSlab` material to appear. Neither is true. A pane is pure layout; a
+screen source is pure shading fed by a wire. A booted cabinet's CRT is a
+`ScreenSlab` sampling a view's handle—never a pane of the room's own frame.
 
 ---
 
