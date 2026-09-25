@@ -246,19 +246,7 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             support: new DirectXDeviceFeatureSupport(device: device)
         );
     }
-    /// <inheritdoc/>
-    public int GetDeviceRemovedReason(nint deviceHandle) {
-        if (0 == deviceHandle) {
-            return 0;
-        }
 
-        // CsWin32 maps GetDeviceRemovedReason's HRESULT into a throwing void-returning friendly overload, discarding the
-        // exact reason — so invoke the vtable slot directly to read the raw HRESULT (e.g. DXGI_ERROR_DEVICE_HUNG).
-        var device = ((ID3D12Device*)deviceHandle);
-        var vtable = *((void***)device);
-
-        return ((delegate* unmanaged[Stdcall]<ID3D12Device*, int>)vtable[DirectXConstants.GetDeviceRemovedReasonSlot])(device);
-    }
     /// <inheritdoc/>
     public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) {
         var factory = DxgiInterop.CreateFactory();

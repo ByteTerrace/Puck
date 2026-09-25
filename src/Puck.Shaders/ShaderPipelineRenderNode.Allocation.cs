@@ -29,6 +29,51 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
 
+    /// <summary>States the descriptor pools a node creates for an installed <paramref name="plan"/>: one per pass that
+    /// binds a descriptor per in-flight frame, in pass order and slot order within a pass, then the float preview's one
+    /// per frame when it has a preview. The node's own pool creation reads the same statement, so an admission computed
+    /// from it before anything is allocated is what the node requests.</summary>
+    /// <param name="plan">The pipeline plan the node installs.</param>
+    /// <param name="inFlight">The node's frames in flight.</param>
+    /// <param name="preview">Whether the node presents a float preview.</param>
+    /// <returns>Each pool's sizes, in creation order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlight"/> is zero.</exception>
+    public static IReadOnlyList<GpuDescriptorPoolSizes> DescriptorPools(ShaderPipelinePlan plan, uint inFlight, bool preview) {
+        ArgumentNullException.ThrowIfNull(argument: plan);
+        ArgumentOutOfRangeException.ThrowIfZero(value: inFlight);
+
+        var specs = VersionSpecs(plan: plan);
+        var pools = new List<GpuDescriptorPoolSizes>();
+
+        foreach (var planned in plan.Passes) {
+            var bindings = Descriptors(
+                pass: planned.Declaration,
+                specs: specs
+            );
+
+            if (bindings.Count == 0) {
+                continue;
+            }
+
+            var sizes = PassDescriptorPool(bindings: bindings);
+
+            for (var slot = 0u; (slot < inFlight); slot++) {
+                pools.Add(item: sizes);
+            }
+        }
+        if (preview) {
+            for (var slot = 0u; (slot < inFlight); slot++) {
+                pools.Add(item: PreviewDescriptorPool);
+            }
+        }
+
+        return pools;
+    }
+
+    // One pass's descriptor pool for one in-flight frame: the one set its bindings describe.
+    private static GpuDescriptorPoolSizes PassDescriptorPool(IReadOnlyList<GpuComputeBinding> bindings) =>
+        GpuDescriptorPoolSizes.ForSets(bindings);
     // Allocates every per-slot object a built pass needs: its descriptor pool, set and sampler, and its command pools
     // (one per slot for a compute pass; the pre-barrier and draw pools for a fullscreen pass). They are allocated on the frame
     // thread when the built candidate installs, so an allocation failure refuses the candidate before the installed graph
@@ -41,17 +86,17 @@ public sealed partial class ShaderPipelineRenderNode {
 
         for (var slot = 0; (slot < m_inFlight); slot++) {
             if (pass.Bindings.Count != 0) {
-                pass.PoolsDescriptors![slot] = bindings.CreatePool(sizes: GpuDescriptorPoolSizes.ForSets(pass.Bindings));
+                pass.PoolsDescriptors![slot] = bindings.CreatePool(sizes: PassDescriptorPool(bindings: pass.Bindings));
                 pass.Sets![slot] = bindings.AllocateSet(
                     pass.PoolsDescriptors[slot],
-                    ((pass.Spec.Kind == ShaderPipelinePassKind.Compute)
+                    ((pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute)
                     ? pass.Compute!.DescriptorSetLayoutHandle
                     : pass.Graphics!.DescriptorSetLayoutHandle)
                 );
                 pass.Samplers![slot] = bindings.CreateSampler();
             }
 
-            if (pass.Spec.Kind == ShaderPipelinePassKind.Compute) {
+            if (pass.Spec.Kind == ShaderPipelineDocumentPassKind.Compute) {
                 pass.Pools![slot] = m_gpu.CommandPoolFactory.Create();
             } else {
                 pass.Pre![slot] = m_gpu.CommandPoolFactory.Create();

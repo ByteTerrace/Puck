@@ -91,14 +91,14 @@ internal static class PipelineCommand {
                 }
 
                 if (result.GetValue(option: inspect)) {
-                    var plan = new ShaderPipelineCompiler().Compile(definition: ShaderPipelineLoader.ReadDefinition(
+                    var plan = RenderGraphCompiler.ShaderPasses.Compile(definition: ShaderPipelineLoader.ReadDefinition(
                         name: name,
                         path: path
-                    ));
+                    )).Pipeline;
 
                     Console.WriteLine(value: $"{plan.Definition.Name}: {plan.Passes.Count} passes, {plan.Resources.Count} resources");
                     foreach (var pass in plan.Passes) {
-                        Console.WriteLine(value: $"  {pass.Name}: {pass.Declaration.Kind}; inputs={string.Join(
+                        Console.WriteLine(value: $"  {pass.Name}: {pass.Kind}; inputs={string.Join(
                             separator: ",",
                             values: pass.Declaration.InputReferences.Select(selector: input => (input.Name + (input.PreviousFrame
                             ? "@previous"

@@ -65,7 +65,7 @@ public sealed class ShadersPackageCommandLawTests {
             foreach (var args in new[] {
                 new[] { "shaders", "compile", Path.Combine(path1: root, path2: "absent.hlsl"), "--out", Path.Combine(path1: root, path2: "out") },
                 new[] { "shaders", "compile", manifest, "--out", Path.Combine(path1: root, path2: "out"), "--stage", "geometry" },
-                new[] { "shaders", "pipeline", Path.Combine(path1: root, path2: "absent.pipeline.json") },
+                new[] { "shaders", "pipeline", Path.Combine(path1: root, path2: "absent.graph.json") },
                 new[] { "shaders", "pipeline", manifest },
             }) {
                 var (exitCode, _, error) = await RunAsync(args: args);

@@ -3,7 +3,7 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    // Indices into PipelineLayouts.Specs and SdfWorldPipelines, in creation order.
+    // Indices into PipelineLayouts.Specs and SdfWorldPipelines; PipelineLayouts.BuildOrder is the creation order.
     internal const int BeamPipelineIndex = 0;
     internal const int InstanceCullPipelineIndex = 1;
     internal const int CullArgsPipelineIndex = 2;
@@ -318,6 +318,25 @@ public sealed partial class SdfWorldEngine {
             Spec(name: "sdf-brick-bake", bindings: BrickBake, push: BrickPush, brick: true),
             Spec(name: "sdf-brick-upload", bindings: BrickBake, push: BrickPush, brick: true),
             Spec(name: "sdf-frame-upload", bindings: FrameUpload, push: FrameUploadPush),
+        ];
+        // The order a build starts the pipelines in (SdfWorldPipelines.Build): the views variants, the longest driver
+        // translations, start last, lightest first (core, folds, full), and every other pipeline starts before them in
+        // index order. Each Specs index appears exactly once.
+        internal static readonly int[] BuildOrder = [
+            BeamPipelineIndex,
+            InstanceCullPipelineIndex,
+            CullArgsPipelineIndex,
+            PrimaryPipelineIndex,
+            SurfacePipelineIndex,
+            AmbientPipelineIndex,
+            SkyPipelineIndex,
+            CompositePipelineIndex,
+            BrickBakePipelineIndex,
+            BrickUploadPipelineIndex,
+            FrameUploadPipelineIndex,
+            ViewsCorePipelineIndex,
+            ViewsFoldsPipelineIndex,
+            ViewsPipelineIndex,
         ];
 
         private static GpuPushConstantBinding Push(int length) =>

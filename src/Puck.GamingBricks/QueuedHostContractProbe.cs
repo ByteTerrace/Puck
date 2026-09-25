@@ -1372,7 +1372,6 @@ public static class QueuedHostContractProbe {
         }
         public void Release() => m_release.Set();
         public nint Upload(
-            IGpuDeviceContext deviceContext,
             ReadOnlyMemory<byte> pixels,
             GpuPixelFormat format,
             uint width,

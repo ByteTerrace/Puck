@@ -113,9 +113,13 @@ validation or Direct3D 12 debug-layer message. Both canaries hold on both
 backends, and `pipeline-churn` holds under `puck canary --debug-layers`.
 The Direct3D 12 drain skips
 `D3D12_MESSAGE_ID_LOADPIPELINE_NAMENOTFOUND`, a cold pipeline-library miss the
-`gpu.pipeline-cache.misses` count already reports. P1a still owes a
-partial-allocation failure on a real device: the device factories have no
-fault-injection seam, so only the fake proves exact disposal.
+`gpu.pipeline-cache.misses` count already reports. A partial-allocation
+failure is injected on a real device through P7b-11's `gpu.faults`: the
+`pipeline-fault` canary fails a pipeline edit's second image, and the refused
+edit leaves the instance owning exactly its installed graph's bytes while the
+installed graph keeps presenting and a clean retry installs. The node's laws
+fail every creation of a replacement in turn through the same decorator on the
+fake and hold its disposal exact.
 
 P2 has landed. The pipeline
 node wraps its GPU services once and counts each pass's work into the ledger,
@@ -161,9 +165,13 @@ the leg machinery it shares with `puck parity`, writes a
 backends disagree on. `puck counters compare` holds two reports to each other
 by class. Laws over fixture readings and reports cover the classification and
 the comparison, and a server law covers the forwarders across `world.reload`.
-The workload sets `world.cadence off` so every pass runs; the render levers
-(`WorldRenderLeverCommandModule`) are composed by the offscreen shape as well as
-the windowed one. The pipeline-cache counts in a
+The workload sets `world.cadence off` so every pass runs, pauses the
+simulation, waits for the engine to be ready (`world.wait ready 180`: its
+pipeline set installed and its first frame produced), resumes, and reads 120
+ticks after that. A cold driver cache cannot leave a leg reading a partial
+pipeline set and every world pass as absent, and because the simulation holds
+while the engine builds, both backends read the state counts at the same tick. The render levers (`WorldRenderLeverCommandModule`) are
+composed by the offscreen shape as well as the windowed one. The pipeline-cache counts in a
 report are pacing: each leg boots on a fresh state root, so every run starts
 with a cold cache and reports misses only.
 
@@ -299,21 +307,12 @@ The gate stays open until two legs run:
 - one build on Linux compared byte for byte, which needs the pinned DXC that
   `setup-dxc` installs;
 - the two-group layout on Direct3D 12 and Vulkan inside the parity contract,
-  with one parity station, once both backends build more than one set.
-
-The capability leg is closed. Each backend fills `IGpuDeviceContext.Capabilities`
-(`GpuDeviceCapabilities`) at device creation, and `world.counters gpu` prints it
-on a `capabilities` line and in its JSON. The ceiling device's reading and the
-floor's both satisfy everything the grouped contract assumes. On the floor, the
-RTX 2060, Vulkan reports 32 descriptor sets, 256 push-constant bytes and
-1,048,576 descriptors of each kind per stage; Direct3D 12 reports binding tier
-3, root signature 1.2, shader model 6.8, a 64-word root signature, a
-1,000,000-descriptor view heap and a 4,080-descriptor sampler heap, the two heap
-sizes being exactly the largest shader-visible heaps the device creates. Four
-groups, their sampler tables and a four-byte push range fit both, and both
-backends dispatch indirectly and record debug groups. Vulkan's per-set totals
-(`maxDescriptorSet*`) are not in the report; the floor's are 1,048,576 of each
-kind, 15 dynamic uniform and 16 dynamic storage buffers.
+  with one parity station, once both backends build more than one set;
+- the capability report on the floor device. Each backend fills
+  `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
+  and `world.counters gpu` prints it on a `capabilities` line and in its JSON;
+  the floor and ceiling devices' readings on both backends are recorded under
+  step 14.
 
 P8 has landed, pending its GPU canaries; the frame group's move from push
 constants to a descriptor set waits on P7's grouped binding. HLSL is the one
@@ -466,19 +465,26 @@ frame ring does not. The one state-shaped path that reaches the GPU is the
 physics field lattice, mirrored on the client by `WorldClientFieldLattice` and
 uploaded by `WorldFieldEmitter` one field per produced frame.
 
-P11's CPU half has landed; its second half, P11b, waits on P7's binding
-groups. The frame graph is a document, `puck.render.graph.v1`
-(`RenderGraphDefinition` in `src/Puck.Shaders/Graph`). Its members are the
-pipeline document's, plus `packages`: engine work named by package id from
-`RenderGraphPackageCatalog`, which offers `sdf.world`, `overlay` and one
-`post.<id>` package per shipped post-process set. `RenderGraphCompiler` plans a
-graph with P3's planner: a package pass enters the plan as its own pass kind,
-`ShaderPipelinePassKind.Package`, whose source is its package id and whose
-references keep no descriptor binding, so one planner orders, versions and
-barriers every pass. A document's `passes` never declare that kind, and the
-planner refuses one there with `SHADERPIPE_PACKAGE_PASS`.
-`RenderGraphDocumentLawTests` holds every
-checked-in pipeline document to planning identically as a graph, and
+P11's CPU half has landed. Its second half, P11b, runs beside P7b: only the
+overlay as a true package and the per-device pass-pipeline cache wait on P7's
+binding groups. The frame graph is a document, `puck.render.graph.v1`
+(`RenderGraphDefinition` in `src/Puck.Shaders/Graph`), and it is the one
+pass-graph document: a pipeline is a graph of shader passes that a world
+names, and a lone `.hlsl` source reads as a one-pass graph. Its members are
+`name`, `resources`, `passes` and `outputs`, plus `packages`: engine work
+named by package id from `RenderGraphPackageCatalog`, which offers
+`sdf.world`, `overlay` and one `post.<id>` package per shipped post-process
+set. `RenderGraphCompiler` checks the schema tag and plans a graph with P3's
+planner: a package pass enters the plan only through the planner's package
+entry, and its planned pass carries its own kind,
+`ShaderPipelinePassKind.Package`, over the compute shape it reaches
+resources by, so one planner orders, versions and barriers every pass. A
+shader pass's kind has no `Package` member, so the JSON reader refuses that
+name. A pipeline host offers no package, so the packager and the loader see
+shader passes alone, and a node given recorders runs a graph's package passes
+(`RenderGraphRuntime`). Every checked-in graph
+document is named `*.graph.json`, `RenderGraphDocumentLawTests` holds each to
+planning alike through a pipeline host and the engine's catalog, and
 `puck schema` generates the document's schema. A world names instances in
 `views.graphs`: a graph source, a camera, a refresh divisor or rate, and
 inputs bound to other instances' outputs, with `views.graphBudget` as the
@@ -503,15 +509,194 @@ for that price.
 
 P11b owes the rest of the package. The live renderer does not run graphs:
 `SdfEngineNode`'s child composition, `ViewStack` and `WorldPipelineRuntime`
-still render every view, nothing feeds the scheduler a frame, and
+still render every view, no host feeds the scheduler a frame, and
 `views.pipelines` rows and layout slots do not name graph instances yet. P11b
 wires `WorldBootComposition`'s node tree onto graph instances fed by the
 scheduler, puts the live schedule's extents and prices in `world.budget`,
-runs the parity and counted-GPU checks, and makes the deletions P11 lists,
-including the `puck.shader.pipeline.v1` schema, whose documents then need only
-their tag changed. Two P11b items have landed: the first-class package pass
-kind in `ShaderPipelineCompiler`, and a steady-state schedule that allocates
-nothing.
+runs the parity and counted-GPU checks, and makes the rest of the deletions
+P11 lists. Six P11b items have landed: the first-class package pass kind in
+`ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
+document pass kind with no package member, so package work enters the
+planner only through its package entry, the fold of the pipeline document
+into the graph document, planned buffer edges, and the graph runtime. The
+fold leaves one document: the pipeline document's tag, its definition type
+and its schema check are gone, a top-level `config` is an unknown member, every
+checked-in document is a `*.graph.json` tagged `puck.render.graph.v1`, and
+`views.pipelines` rows name graph documents until P11b retires that section.
+Package
+ports are typed with a buffer's stride and count, `sdf.bricks` publishes the
+brick pool as a buffer output, and an instance read carries the version's
+kind, so the scheduler orders a buffer producer before its readers at no
+extent while the planner records the read's buffer barrier; no world row
+declares a buffer edge yet.
+
+The runtime is `RenderGraphRuntime` in `src/Puck.Shaders/Graph`, beside the
+node it drives, since `Puck.Hosting` cannot reach `Puck.Shaders`. It owns an
+instance set, schedules each frame into one of two alternating schedules, and
+renders each scheduled instance through its own `ShaderPipelineRenderNode`,
+resized to the scheduled extent. That node's one submission records the
+graph's shader passes and its package passes in the planner's order with the
+planner's barriers: a package pass hands its command buffer and the versions
+bound to its ports to a recorder that `RenderGraphPackageRecorders` holds by
+package id, and a graph naming a package with no recorder is refused by name
+when it installs. Before an instance renders, each external version is bound
+to the frame of its producer's output the schedule names: an image to the
+published image, a buffer to the buffer of the frame slot that wrote it. A
+slower producer is read at its latest completed frame, and a previous-frame
+edge, a self-read included, at the output before this frame's. An image
+input with no completed output yet binds a one-texel transparent-black
+stand-in, so a mirror renders its first frame; an instance whose buffer
+producer has not produced does not render. A bound image may have any
+extent, since a producer renders at its own footprint's. Each instance counts
+its own passes through its node's `IGpuWorkSource`. The root instance is what
+the runtime returns and captures read: a `FrameCaptureRequest` armed on the
+runtime moves to the root's node once that node renders a graph, and until
+then `UnservedCaptureReason` names the root, so a withdrawn request is
+dropped. A device loss refuses a capture still armed on the runtime as the
+root's node refuses one forwarded to it, releases every node's graph and
+recorders and the stand-ins, and starts every instance again with no output
+and no history.
+`RenderGraphRuntimeLawTests` hold it on the fake GPU: a camera on two
+screens rendered once a frame and counted, an off-view camera rendered zero
+times, a mirror and a self-bound input sampling the previous frame's image,
+a quarter-screen view at a quarter extent, a buffer edge binding the
+producer's buffer, captures served from the root or refused by name, the
+device-loss and disposal releases, and a steady frame allocating nothing over
+64 frames. Nothing drives the runtime yet: `WorldBootComposition` keeps its
+hand-built tree, no host registers a recorder, the `sdf.world`, `post.<id>`
+and `overlay` adapters are the next item, and the node allocates only
+fixed-size buffers, so a counted package buffer such as `sdf.bricks`'s brick
+pool cannot be an instance's storage until the host supplies its counts.
+A world may author its own root graph
+in `views.graphs`; when it does not, composition synthesizes the default one,
+`sdf.world` then each `render.extensions` pass as `post.<id>` then `overlay`,
+as a graph document that goes through the same compiler, so no render tree is
+built in C# alone.
+
+P11b commit 5 puts the three engine packages behind the graph runtime.
+`RenderGraphRuntime` runs an instance's steps inside that instance's
+`ShaderPipelineRenderNode` submission, and a package pass calls the
+`IRenderGraphPackageRecorder` that `RenderGraphPackageRecorders` registers for
+its exact package id. The runtime creates the recorder at install and disposes
+it on replacement, device loss and disposal. Each frame the recorder records
+into the begun command buffer it is handed, and it never submits, waits or
+creates a pipeline on the frame thread. `post.<id>` and `overlay` become
+recorders. `sdf.world` stays an external producer until P14-6: its output is
+the engine's latest completed image, held as a `GpuImageLease` until the
+submission that samples it retires, and never copied. The commit lands as three
+sub-steps, in this order:
+
+- 5a, `sdf.world` as an external-producer instance, GPU-free apart from its
+  gate.
+  - `RenderGraphInstance` gains a kind: a rendered graph, or an external
+    producer that names a package id. `RenderGraphInstanceSet.TryCreate`
+    refuses an external instance that reads another instance, and, until P14-6,
+    a previous-frame read of an `sdf.world` external producer, each by name. The
+    engine writes one output image (`SdfWorldEngine.OutputImageHandle`) that its
+    next render overwrites, so a previous-frame read would sample the current
+    frame, and the output is not double-buffered to allow one.
+    The scheduler is unchanged: demand, divisor, quantized extent, and a price
+    of `SdfWorldEngine.PassLabels.Length` passes.
+  - An `IRenderGraphExternalProducer` is registered per package id beside the
+    package recorders. When its instance is scheduled, the runtime produces it
+    before its consumers: `sdf.world` submits through the engine's own ring
+    (`SdfEngineNode.ProduceFrame` at the scheduled extent). Then, and on frames
+    the schedule skips or defers, the producer hands out its latest completed
+    output as a lease and an external image.
+  - The consuming instance's `ShaderPipelineRenderNode` keeps one
+    `LeaseRetireList` per frame slot, as `SdfEngineNode` does for screen
+    sources. Resolving an input port to a lease holds it for the frame, submit
+    moves it into the slot's list, and the list retires after that slot's fence
+    wait, on device loss and on disposal. `BindImage` stays for host images that
+    need no retirement. The engine's output is a storage image in `General`
+    layout, so the external image states that layout and the planner's first
+    access transitions from it.
+  - `SdfEngineNode` counts acquisitions of each engine's output. A replaced
+    engine, after a resize or rebuild, is disposed once its acquisitions are
+    released. The drain in `SdfWorldEngine.Dispose` stays until P14-6 as the
+    backstop.
+  - The synthesized default composition becomes two instances: `world`, the
+    external `sdf.world` producer, and the root graph, which reads `world`'s
+    output as its input and runs the `post.<id>` passes and then `overlay`.
+  - Laws on `FakeGpuDevice`: the instance-set refusals by name; a lease is
+    released exactly once, after the sampling slot's fence, on device loss or on
+    disposal; a skipped world frame hands out the same image; and a steady frame
+    allocates nothing.
+- 5b, `post.<id>` as a recorder. Today `FullscreenPassNode` wraps a one-pass
+  `ShaderPipelineRenderNode`. That executor has its own frame ring, per-slot
+  fences and submission, and builds its modules, pipeline and render pass
+  through `BackgroundBuild`. It allocates a descriptor pool, set and sampler per
+  slot at install, binds the inner `Surface` as the external `input`, and draws
+  an `R8G8B8A8Unorm` `output`. Its extent is fixed when the node is
+  constructed, and it swaps executors when the input's format or extent changes.
+  `WorldBootComposition` wraps one node per `render.extensions` entry and
+  records it in `WorldPostRenderExtensionPasses` for parameter bindings.
+  - One recorder serves every `post.<id>` id. The runtime builds its modules,
+    graphics pipeline and render pass with the same `BackgroundBuild` before the
+    candidate installs. Creating the recorder on the frame thread only takes the
+    built objects and allocates its descriptor objects from the node's pool
+    statement (`ShaderPipelineRenderNode.DescriptorPools`), one pool per node as
+    P7b-14a-3 decides.
+  - Each frame the recorder writes the input port's image into the slot's set,
+    pushes the config block, and records the render pass and the draw over a
+    framebuffer on the output port's image. The framebuffer is cached per
+    image.
+  - The recorder deletes `FullscreenPassNode`'s own submission, fences, frame
+    ring, executor swap and retirement lag. The extent comes from the schedule,
+    so a post pass resizes with its instance for the first time. An entry's
+    `config` becomes the package pass's parameters in the synthesized graph, and
+    `WorldPostRenderExtensionPasses` finds the recorder by pass name.
+  - Validation moves out of boot. The id check
+    (`WorldExtensionVocabularyHook.IsRegisteredPostRenderExtension`, read by
+    `WorldDefinitionValidator.ValidateRenderExtensions`) becomes the catalog's
+    `post.<id>` lookup. The config's binding against the manifest's schema,
+    which today throws `InvalidOperationException` in `WorldBootComposition`,
+    becomes a named refusal by the compiler before boot. A probe's `target.id`
+    cross-reference stays in world validation.
+- 5c, `overlay` as a recorder. Today `UnifiedOverlayNode` runs one frame in
+  flight: it creates its render pass, pipeline, modules, buffers, pool and
+  sampler on the frame thread at its first drawn frame, waits its own fence
+  before rewriting descriptors and its storage buffer, and submits. It binds nine
+  combined image samplers (the inner image and eight `OverlayFrameSlots`), one
+  storage buffer and a 48-byte push block. When nothing is visible it returns
+  the inner frame untouched and forwards captures to it.
+  - What lands now, over today's set layout: the pipeline and modules are built
+    with `BackgroundBuild` at install. Descriptor sets and the storage buffer's
+    per-frame regions exist once per frame slot from the context's frames in
+    flight, because the recorder can no longer wait its own fence. The frame
+    slots' leases move from `OverlayFrameSlots`' one-frame-behind retirement to
+    the instance's per-slot `LeaseRetireList` from 5a.
+  - The pass-through belongs to the runtime. A recording may declare that it
+    drew nothing this frame, and the runtime then aliases the pass's output port
+    to its input's version, with no copy; a capture served from the root follows
+    the alias. The runtime owns that rule, so no recorder copies its input, and
+    the contract gains it before 5c lands.
+  - What waits on P7b-14b and 18: converting `overlay-unified.frag.hlsl`'s
+    combined declarations to separate images and a sampler table, moving the
+    overlay onto binding groups, and sizing its pool without
+    `CombinedImageSamplerCount`.
+
+Each sub-step's gate:
+
+- 5a: `puck parity` on both backends, with exact state hashes and per-tile
+  pixels unchanged, once the default composition runs through the graph. The
+  canaries that `tests/Puck.Affected/canary-coverage.json` maps to
+  `SdfEngineNode.cs` and `LeaseRetireList.cs` run too. The mapping is read as
+  text rather than from a `puck affected` run, so it is unverified.
+- 5b: a new post canary, which 5b lands behind. It boots one shipped
+  `post.<id>` on both backends and pins its pixels, with a discriminating leg
+  without the extension. No existing gate covers a post pass: no canary or parity
+  world authors `render.extensions`, and although the coverage index maps
+  `FullscreenPassNode.cs` to 21 canaries, none of them composes a post pass.
+- 5c: parity likely does not cross the overlay: with nothing visible the
+  pass-through returns the SDF frame, and the parity world appears to show no
+  overlay, which is unverified. The coverage index maps
+  `src/Puck.Overlays` to four canaries: `instrument-clock-source`,
+  `music-conditional-layer-and-embellishment`, `voice-babble` and
+  `world-seat-binding-recompose`. Whether their captures include overlay pixels
+  is unverified, so 5c also runs `UnifiedOverlayWorkLawTests` and
+  `OverlayFrameSlotsLawTests` and states which of those canaries observes an
+  overlay.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
@@ -534,7 +719,7 @@ press went, and returns focus to the game on Control, Alt and Escape.
 `RenderGraphHitWalk` in `src/Puck.Hosting/Graph` continues a hit on a rendered
 source through the producer's camera up to a depth limit, normally
 `RenderGraphInstanceSet.NestingDepth`. The pipeline pane's pointer
-(`WorldFramePresenter.ResolvePipelineMouse`) maps through its pane's
+(`WorldFramePresenter.UpdatePipelinePointer`) maps through its pane's
 `SourceMapping`. The laws are `SourceMappingLawTests`,
 `SourcePointerCommandLawTests`, `RenderGraphHitWalkLawTests`,
 `SourceFocusLawTests`, `WorldScreenInputLawTests` and the Maths
@@ -695,7 +880,8 @@ wall-clock and GPU timing are deferred with no date.
 Each package's two halves land together, because the second is what makes
 the first observable. Source entry points: planning and loading in
 `src/Puck.Shaders/Pipeline` (`ShaderPipelineCompiler`, `ShaderPipelinePlan`,
-`ShaderPipelineDefinition`, `ShaderPipelineLoader`); execution and replacement in
+`ShaderPipelineLoader`) and `src/Puck.Shaders/Graph` (`RenderGraphDefinition`,
+`RenderGraphCompiler`); execution and replacement in
 `ShaderPipelineRenderNode` (`Ensure`, `InstallPending`, `ProduceFrame`,
 retirement); the fixture runner in `tests/Puck.World.Canaries` and
 `src/Puck.Cli/Canary`; authoring in `WorldPipelineCommandModule`,
@@ -847,10 +1033,15 @@ numerical thresholds for memory peaks, and the intended publish mode and
 compiler-discovery policy. Run on the producer-built package, never a source
 rebuild, from a clean installation and cache, in the Native AOT form if
 applicable. It covers the existing foundation assets and toolchain; P5's
-user-content packaging is separate. Device loss has one policy: the offscreen
-host recovers the way the windowed host does, rebuilding its device through
-`IDeviceLostRecoverable` and resuming, where today only the windowed launcher
-recovers.
+user-content packaging is separate.
+
+Done: device loss has one policy, `DeviceLossRecovery`, which the windowed and
+the offscreen host both follow: a named `[device-lost]` console line, the
+render tree released while the lost device exists, and the device rebuilt in
+place through an `IDeviceRebuild`, the windowed host's through its presenter
+and the offscreen host's through its GPU activation. A capture armed at the
+loss is refused as `deviceLost` in the capture manifest. No canary injects a
+loss on a real device yet, so the recovery is proven only by fakes.
 
 Thresholds for frame-time median and tail and for reload stalls are deferred.
 They need wall-clock and GPU timing, which the owner has deferred with no date,
@@ -903,14 +1094,24 @@ through P2's model (`GpuPipelineCacheWork`, source `pipeline-cache.<backend>`). 
 leg, a `puck counters` leg, or any boot with a fresh `--state-dir` starts cold.
 The offscreen harness holds its clock for that cold build: it steps no tick past
 an armed capture's tick until the capture is served or refused, so a cold first
-boot lengthens a `puck parity` leg instead of losing its first capture, and a
-capture still unserved after a 60-second hold is refused as `unserved`, naming
-the reason.
+boot lengthens a `puck parity` leg instead of losing its first capture. The
+hold counts from readiness: while the engine is not ready it spends a
+180-second pipeline-build budget (`WorldCaptureScheduler.BuildHoldBudgetSeconds`),
+and once it is ready the 60-second capture hold, each summed over the run; a
+capture still unserved past either is refused as `unserved`, and a refusal the
+build caused names it and its progress. `world.wait ready <seconds>` is the
+console's wait on the same readiness (`IWorldEngineReadiness`, over
+`SdfEngineNode.IsReady`), and `puck counters`, the `world-counters` canary and
+`puck qualify` wait on it before they read counted work.
 
 **Check** for that part, all holding: `SdfPipelineBuildLivenessLawTests` shows
 the frame thread keeps draining the console and a wait keeps its deadline while
-a pipeline build is held, and that a hosted pane still produces every frame
-meanwhile. On both backends, a second offscreen boot on the same state root
+a pipeline build is held, that a hosted pane still produces every frame
+meanwhile, and that a device loss or the last release during a build waits for
+exactly the creations already in the driver. `WorldCaptureHoldLawTests` shows a
+build held past the capture hold budget still serves its capture, and one held
+past the build budget refuses it naming the build. `WorldWaitReadyLawTests`
+shows `world.wait ready` holds its session until the engine is ready. On both backends, a second offscreen boot on the same state root
 creates every pipeline from a cache hit with no miss, where the first boot
 misses. After a kernel rebuild that changes most kernel binaries, the supersede
 fixture runs six instances in parallel on each backend: every leg installs its
@@ -927,8 +1128,11 @@ freed once the node's second submission after the install completes.
 The engine node and its views share their pipeline sets through one
 `SdfWorldPipelineCache` per composition, handed to each of them: one
 set per device, kernel set (`SdfWorldKernels.ContentKey`) and brick-pipeline
-choice, leased by every holder and disposed with its last lease after any build
-in flight returns. The cache reads each backend's deployed kernels once, and it
+choice, leased by every holder and disposed with its last lease. A set builds up
+to `SdfWorldPipelines.BuildConcurrency` pipelines at once on the thread pool,
+the three views variants last, and checks its cancel between pipelines, so the
+last release waits only for the pipelines already in the driver and a shutdown
+never waits out a whole cold build. The cache reads each backend's deployed kernels once, and it
 counts the pipelines and shader modules it creates as its own source,
 `gpu.sdf-pipelines`, so no node's or view's ledger counts them. A node whose
 set another engine on the device also leases refuses a kernel reload, because a
@@ -1391,9 +1595,13 @@ Phase 2, the services, follows the generated frame block, which has landed:
    placement: `CreateHostVisible` returns a host-writable buffer, with or without
    initial data, and `CreateDeviceLocal` one only the GPU writes.
    `DirectXBufferStatesLawTests` holds each placement's way into Direct3D 12's
-   indirect-argument state. The surface transfer objects the factory creates still
-   take a device context on each call; binding them to it is open work beside
-   the device-loss changes to the upload and import objects.
+   indirect-argument state. The surface readback, upload and import objects
+   `IGpuSurfaceTransferFactory` creates are bound to its device context too, and
+   none of their calls takes a device. Each holds its resources on the device of
+   its first use and is released before that device goes; on Vulkan a
+   readback, upload or import refuses a replaced device and a release after its
+   device is destroyed (`VulkanDeviceOwnership`), and a creation that fails part
+   way releases what it made. A readback only reads synchronously.
 10. Done: `IGpuDeviceContext.Services` (`GpuDeviceServices`) holds the recorder,
     bindings, queue submitter and every factory, and is the one way a consumer
     reaches a device-bound service. Direct3D 12's context creates the set in its
@@ -1409,11 +1617,19 @@ Phase 2, the services, follows the generated frame block, which has landed:
     graphics services. `IGpuDeviceContext.DeviceHandle`,
     `VulkanDeviceCommands.Token` and `FromToken` are deleted, and the table is
     no longer disposable; Direct3D 12 code reads `DirectXDeviceContext.Device`.
-11. `GpuCreationFaults`, a decorator over the factories, injects a creation
-    failure on a real device, which closes P1a's partial allocation check. It
-    is armed only by the operator console verb `gpu.faults` (arm, disarm,
-    list), which no world document can reach, and it ships in release builds
-    so qualification can use it.
+11. Done: `GpuCreationFaults` injects a creation failure on a real device. Each
+    backend wraps the services it creates with its context once
+    (`GpuCreationFaults.Wrap`: `DirectXDeviceContext` and the Vulkan
+    registration's services factory), so the pipeline, buffer, image, render
+    pass, framebuffer, shader module, command pool and descriptor pool
+    creations pass through it. The armed creation throws
+    `GpuCreationFaultException` (`GPU_CREATION_FAULT`, naming its kind and
+    number) before it reaches the device. Faults are counted per kind from
+    their arming, fire once, and use no randomness and no clock. Only the
+    operator verb `gpu.faults arm <kind> [<n>] | disarm | list` arms them, so
+    no world document can reach it, and it ships in release builds so
+    qualification can use it. The `pipeline-fault` canary closes P1a's
+    partial-allocation check on both backends under `--debug-layers`.
 
 Phase 3, the groups, follows phase 2:
 
@@ -1458,16 +1674,133 @@ Phase 3, the groups, follows phase 2:
     move to a separate image and sampler with 14b's sampler tables, and both
     enums are deleted there.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
-    of it (14a). The heap's sizes come from the capability report:
-    `GpuDeviceCapabilities` records options 19's view and sampler heap sizes
-    on Direct3D 12, 1,000,000 and 4,080 on the floor device. Both backends then realize several groups, with sampler
-    tables and one 4-byte push range (14b), the riskiest commit. 14b creates root
-    signatures and pipeline layouts from step 13's plans, moves every combined
-    image sampler to a separate image and sampler, and deletes
-    `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`.
+    of it (14a). Both backends then realize several groups, with sampler
+    tables and one 4-byte push range (14b), the riskiest step, which lands as
+    the commits below rather than one. The floor device, the RTX 2060, reports
+    resource binding tier 3, a shader-visible CBV/SRV/UAV heap of at most
+    1,000,000 descriptors (it refuses 1,000,001), a sampler heap of 2,048,
+    and on Vulkan `maxBoundDescriptorSets` 32 and `maxPushConstantsSize` 256,
+    so four groups and a 4-byte push index fit with room on both backends.
+    The ceiling device, the RTX 4070, reads on Direct3D 12 binding tier 3, root
+    signature 1.2, shader model 6.8, 64 root-signature words, a view heap of
+    1,000,000 and a sampler heap of 4,080 (so 4,080 samplers a stage and
+    1,000,000 of each view kind), and on Vulkan 32 descriptor sets, 256
+    push-constant bytes and 1,048,576 of each descriptor kind a stage, with no
+    per-stage resource limit. Its Direct3D 12 sampler heap is larger than the
+    floor's, so the floor's 2,048 bounds a group's samplers.
+
+    14a, the device heap, touches Direct3D 12 alone; a Vulkan pool stays a
+    `VkDescriptorPool`.
+    - 14a-1, done: the range allocator, `GpuRangeAllocator` in
+      `Puck.Abstractions/Gpu`, GPU-free: a free list over `[0, size)`
+      that allocates a pool's contiguous range first-fit, returns it on free,
+      and coalesces neighbours. A request no free range can hold is refused
+      by name, stating the request, the largest free range and the heap's
+      size; the heap never grows. Laws on a fake heap: a request of exactly
+      the free size succeeds and one descriptor more is refused
+      (exhaustion); after freeing a middle range, a request larger than it
+      but smaller than the total free count is refused until its neighbours
+      free and coalesce (fragmentation); a freed range is the one the next
+      equal request receives, and a thousand allocate-free cycles leave the
+      free list as it began and allocate nothing (reuse). A double free and a
+      free of a range never allocated are refused by name
+      (`GpuRangeAllocatorLawTests`).
+    - 14a-2, done: the heaps' size and admission, GPU-free.
+      `GpuDescriptorHeapBudget` in `Puck.Abstractions/Gpu` sizes the view
+      heap to `GpuDeviceCapabilities.ViewHeapSize` and the sampler heap to
+      `SamplerHeapSize`, each as the device reports it, and refuses by name a
+      device that reports neither, as a Vulkan device does. Every pool owner
+      states its pools statically and creates them from that statement:
+      `SdfWorldEngine.DescriptorPoolSizes`, `UnifiedOverlayNode.DescriptorPoolSizes`,
+      `ShaderPipelineRenderNode.DescriptorPools` (a pass's pool per in-flight
+      slot, then `PreviewDescriptorPool` per slot) and
+      `GpuRegion.CopyPoolSizes`. `TryAdmit` takes a candidate's statement
+      and either allocates one view range per pool that holds a descriptor or
+      refuses the whole candidate by name with its demand, allocating
+      nothing; `Release` returns an admission's ranges. At most
+      `MaxLivePools` pools, 1,024, are live on a device. `HeapBytes` is the
+      figure `memory.directx` records. Laws: `GpuDescriptorHeapBudgetLawTests`
+      (the reported and guaranteed sizes, the no-heap refusal, whole-or-nothing
+      admission, release and reuse, the live-pool refusal, the bytes), and on
+      the fakes one law per owner that its statement equals the pools it
+      creates (`SdfWorldEngineWorkLawTests`, `UnifiedOverlayWorkLawTests`,
+      `ShaderPipelineRenderNodeLawTests`, `GpuResidencyLawTests`). Nothing
+      admits through the budget yet. The choice and the two rejected sizings
+      are in [the decisions](../decisions/rendering.md#how-worlds-reach-the-gpu).
+    - 14a-3, the heap in place: `DirectXGpuBindings` creates the two
+      shader-visible heaps once per device from the device's
+      `GpuDescriptorHeapBudget` and a pool allocates its range from them
+      instead of a heap of its own; each command list binds the device's
+      heaps once, and the heaps' bytes count under `memory.directx`. An owner
+      is admitted before it allocates, and a pipeline candidate that does not
+      fit is refused by name at install while the installed graph keeps
+      presenting. The pipeline node holds one pool for all its passes and
+      in-flight slots rather than one per pass and slot: a node at
+      `ShaderPipelineLimits.MaxPasses` with three frames in flight otherwise
+      holds 387 pools, so three such nodes would pass `MaxLivePools`. It
+      also reads `ResourceBindingTier`, and on Vulkan the device creation
+      refuses a `MaxBoundDescriptorSets` below four or a
+      `MaxPushConstantBytes` below four by name. Check: `puck parity` and
+      the GPU canaries on Direct3D 12, whose sources the coverage index does
+      not map because it is recorded on Vulkan, so every Direct3D 12 canary
+      runs (unverified against a Direct3D 12 recording).
+
+    14b, the groups. Each commit lands with `puck parity` unchanged, and the
+    canaries named are those `tests/Puck.Affected/canary-coverage.json` maps
+    to the commit's sources, by text rather than a `puck affected` run, so
+    they are unverified; Direct3D 12 files are unmapped, so a commit that
+    touches one also runs its canaries on Direct3D 12. Each owner's commit
+    also moves its binding lists from `GpuComputeBindingKind` to
+    `GpuBindingKind`, so the last one leaves the old enum unused.
+    - 14b-1, layouts from the plans: Direct3D 12 creates a root signature from
+      `DirectXRootLayout.Plan` (each table's ranges at the plan's registers,
+      spaces and offsets, the pushed index as one 32-bit root constant at
+      `b0` in space 4, every parameter at the plan's visibility) and Vulkan a
+      pipeline layout from `VulkanGroupLayouts.Plan` (a set layout per set
+      number with its bindings' stage flags, and the push range). Sampler
+      tables allocate from the sampler heap, replacing static samplers for a
+      pipeline built this way. No shipped pipeline moves yet: laws hold a
+      fake device to the descriptions built from the spike's tables, and a
+      debug-layer run creates the film grain and pixelate layouts on both
+      backends. Canaries: the 18 the pipeline factories map to,
+      `no-device-compile`, the thirteen `pipeline-*`, `sdf-decode-sign-refusal`,
+      `source-conversion`, `world-counters` and `world-seat-binding-recompose`.
+    - 14b-2, the Vulkan presenter: `blit.frag.hlsl` and
+      `VulkanGraphicsPipelineFactory`, which `SurfaceCompositor` builds from,
+      read a separate image and sampler. Canaries: 17, the 14b-1 set without
+      `world-seat-binding-recompose`.
+    - 14b-3, the pipeline node and the sources it runs:
+      `ShaderPipelineRenderNode` and its float preview
+      (`pipeline-preview.frag.hlsl`), the shipped ink pipeline
+      (`ink-simulation.hlsl`, `ink-visualize.hlsl`), the package library's
+      `resample.hlsl`, and the seven canary sources under `pipeline-edit`,
+      `pipeline-feedback`, `pipeline-shapes` and `pipeline-supersede`.
+      Canaries: `no-device-compile`, the thirteen `pipeline-*`,
+      `source-conversion` and `resample-reconstruction`.
+    - 14b-4, the overlay: `overlay-unified.frag.hlsl`'s nineteen combined
+      declarations and `UnifiedOverlayNode`'s pool. Canaries:
+      `instrument-clock-source`, `music-conditional-layer-and-embellishment`,
+      `voice-babble` and `world-seat-binding-recompose`.
+    - 14b-5, film grain and the fullscreen passes: `sdf-film-grain.frag.hlsl`,
+      `FullscreenPassNode`, and `ShaderSetManifest` with its binding record.
+      Canaries: 21, the 14b-1 set with the overlay's three audio canaries.
+    - 14b-6, the SDF engine, last: `sdf-world.hlsli`'s thirty-two screen
+      sources (bindings 12 to 43), the glyph atlas in `sdf-vm.hlsli`
+      (binding 44), and the engine's binding lists in
+      `SdfWorldEngine.Pipelines.cs`. Canaries: 20 mapped, the 14b-5 set
+      without `sdf-decode-sign-refusal`, plus `sdf-visibility-fresh`, which
+      the index has not recorded yet. The package library's `resample.hlsl`,
+      which took the SDF-side kernel's place, moves with the pipeline node's
+      sources in 14b-3.
+    - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
+      then states a `GpuBindingKind`, `ShaderSetManifestBindingKind`, and
+      `GpuDescriptorPoolSizes.CombinedImageSamplerCount`, with their last
+      users in `GpuRegion`, the backends' pipeline factories and the
+      contract and wire-name laws. Canaries: the 19 `GpuDescriptorPoolSizes`
+      and `GpuRegion` map to.
 15. Pipelines move onto groups: `WriteFrame` writes the frame group, set 0, into
     a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
-    3; passes include their generated interface; the pipeline document's
+    3; passes include their generated interface; the graph document's
     binding fields are deleted; and a load checks `SHADERPIPE_INTERFACE`.
 16. The gate spike's GPU half, a binding station in `tests/Puck.Parity`.
 17. The region-copy kernel leaves the SDF engine for `Puck.Shaders`.
@@ -1710,10 +2043,10 @@ instead of the test card. The planner refuses a same-frame cycle and names the
 instances in it. Every instance appears in the cost report and `world.budget`
 with its extent, rate, and pass cost.
 
-**Deletes:** one graph document remains. `puck.shader.pipeline.v1` folds into
-`puck.render.graph.v1`, a pipeline being a graph a world names, and the
+**Deletes:** one graph document remains. The pipeline document has folded
+into `puck.render.graph.v1`, a pipeline being a graph a world names; the
 `views.pipelines` section, `WorldPipelineRuntime`, and
-`WorldComposedSlot.Pipeline` go with it. The hand-composed `IRenderNode` tree
+`WorldComposedSlot.Pipeline` go next. The hand-composed `IRenderNode` tree
 and its `Children` wiring in `WorldBootComposition` give way to graph
 instances. The SDF composite kernel `sdf-world-composite.comp`, its
 `MaxViewports` limit and push block, `SdfEngineNode`'s child map and
@@ -1807,7 +2140,7 @@ schema or planner change.
 
 ### P13 — Hit-to-source mapping and input destinations
 
-**Starts from:** `WorldFramePresenter.ResolvePipelineMouse`, which maps the
+**Starts from:** `WorldFramePresenter.UpdatePipelinePointer`, which maps the
 pointer into a pipeline pane, and `WorldCursorFeed`, which hover-tests HUD
 rectangles only. Nothing maps a hit on a world surface to a source's pixels.
 
@@ -1931,7 +2264,7 @@ words, screens, decals, the glyph atlas, the brick pool), group 2 the instance
 visibility, shadow, color, and the 32 screen sources as an array with a sampler
 table). `SdfEngineNode` splits into an `SdfWorldResidency` for the world's
 half and the graph runtime for captures, work, readiness and
-`UnservedCaptureReason`; `SdfWorldEngine`'s partials become per-pass recorders
+`NotReadyReason`; `SdfWorldEngine`'s partials become per-pass recorders
 and its frame packers frame-block writers; the views become `sdf.world`
 instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 `sdf-world.hlsli` into a generated `frame/`, `march/`, `surface/`, `shade/` and
@@ -2188,9 +2521,13 @@ its frame group moves from push constants to a descriptor set when step 15
 puts pipelines on groups. P7 and P8 do not read simulation state, so they do
 not wait on the state rebuild.
 
-**The frame graph and nesting.** P11's CPU half has landed, and so have two of
-P11b's items: the first-class package pass kind and a steady-state schedule
-that allocates nothing. The rest of P11b waits on P7b's binding groups. P12's
+**The frame graph and nesting.** P11's CPU half has landed, and so have five
+of P11b's items: the first-class package pass kind, a steady-state schedule
+that allocates nothing, the document pass kind, the fold of the pipeline
+document into the graph document, and planned buffer edges. The rest of P11b runs
+beside P7b; only the overlay as a true package waits on its sampler tables and
+the overlay's move onto groups, and only the per-device pass-pipeline cache
+waits on pipelines moving onto groups. P12's
 source contract, producers and conversion passes have landed; P12b, the graph
 wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
 P11b and P12b, because the engine's composition and screens need somewhere to
@@ -2211,8 +2548,9 @@ P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
 which have landed. It also follows P11b's graph wiring, because the rows it
 binds are `views.graphs` rows.
 
-The longest remaining chain runs through P7b's groups to P11b and P12b, then
-P14, and ends with P15.
+The longest remaining chain runs through P7b's groups to the two P11b items
+that wait on them, then P14, and ends with P15; the rest of P11b and P12b
+proceed beside P7b.
 
 ## Verification summary
 

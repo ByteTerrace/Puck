@@ -1,18 +1,103 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-/// <summary>One engine package a graph can name: an id and its ports. Every port carries an image.</summary>
+/// <summary>One port of an engine package: what the version a pass binds to it carries, and a buffer's storage. A pass
+/// binds a version of the port's kind, and to a buffer port a buffer of the port's stride and count, or the graph
+/// compiler refuses it by name.</summary>
+/// <param name="Kind">What the port carries: an <see cref="ShaderPipelineResourceKind.Image"/> or a
+/// <see cref="ShaderPipelineResourceKind.Buffer"/>.</param>
+/// <param name="StrideBytes">A buffer port's element stride in bytes, or <see langword="null"/> for a raw buffer or an
+/// image.</param>
+/// <param name="Count">A buffer port's size in elements as a sum of terms, or <see langword="null"/> for an image or a
+/// buffer whose fixed <c>sizeBytes</c> the graph states.</param>
+public sealed record RenderGraphPackagePort(
+    ShaderPipelineResourceKind Kind,
+    uint? StrideBytes = null,
+    IReadOnlyList<ShaderPipelineCountTerm>? Count = null
+) {
+    /// <summary>Gets the port that carries an image.</summary>
+    public static RenderGraphPackagePort Image { get; } = new(Kind: ShaderPipelineResourceKind.Image);
+    /// <summary>Gets whether the port is well formed: an image port declares no storage, and a buffer port's stride,
+    /// when it has one, is a positive multiple of four.</summary>
+    public bool IsValid => (Kind switch {
+        ShaderPipelineResourceKind.Image => ((StrideBytes is null) && (Count is null)),
+        ShaderPipelineResourceKind.Buffer => ((StrideBytes is not { } stride) || ((stride != 0) && ((stride % 4) == 0))),
+        _ => false,
+    });
+
+    /// <summary>Creates a buffer port.</summary>
+    /// <param name="strideBytes">The element stride in bytes, or <see langword="null"/> for a raw buffer.</param>
+    /// <param name="count">The size in elements as a sum of terms, or <see langword="null"/> for a fixed size the graph
+    /// states.</param>
+    /// <returns>The port.</returns>
+    public static RenderGraphPackagePort Buffer(uint? strideBytes, IReadOnlyList<ShaderPipelineCountTerm>? count) => new(
+        Count: count,
+        Kind: ShaderPipelineResourceKind.Buffer,
+        StrideBytes: strideBytes
+    );
+    /// <summary>Returns whether a version may bind to the port: it carries the port's kind, and a buffer has the port's
+    /// stride and count.</summary>
+    /// <param name="resource">The version's resource declaration.</param>
+    /// <returns><see langword="true"/> when the resource matches the port.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="resource"/> is <see langword="null"/>.</exception>
+    public bool Accepts(ShaderPipelineResource resource) {
+        ArgumentNullException.ThrowIfNull(argument: resource);
+
+        return (
+            (resource.Kind == Kind) &&
+            (
+                (Kind != ShaderPipelineResourceKind.Buffer) ||
+                ((resource.StrideBytes == StrideBytes) && ShaderPipelineCountTerm.SameCount(
+                    left: resource.Count,
+                    right: Count
+                ))
+            )
+        );
+    }
+
+    // What a port or resource carries, as a refusal names it: the kind, and a buffer's stride and count.
+    internal static string Describe(ShaderPipelineResourceKind kind, uint? strideBytes, IReadOnlyList<ShaderPipelineCountTerm>? count) {
+        if (kind != ShaderPipelineResourceKind.Buffer) {
+            return kind.ToString();
+        }
+
+        var stride = ((strideBytes is { } bytes)
+            ? bytes.ToString(provider: CultureInfo.InvariantCulture)
+            : "raw"
+        );
+        var terms = ((count is null)
+            ? "fixed"
+            : string.Join(
+                separator: " + ",
+                values: count.Select(selector: static term => string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"{term.Elements} per {string.Join(separator: " * ", values: term.Per)}"
+                ))
+            )
+        );
+
+        return $"Buffer (stride {stride}, count {terms})";
+    }
+}
+/// <summary>One engine package a graph can name: an id and its typed ports.</summary>
 /// <param name="Id">The id a <see cref="RenderGraphPackagePass"/> names.</param>
-/// <param name="Inputs">The input ports: how many versions a pass of it reads.</param>
-/// <param name="Outputs">The output ports: how many image versions a pass of it writes, at least one.</param>
+/// <param name="Inputs">The input ports, in port order: what each version a pass of it reads carries.</param>
+/// <param name="Outputs">The output ports, in port order: what each version a pass of it writes carries, at least
+/// one.</param>
 /// <param name="Summary">What the package renders.</param>
-public sealed record RenderGraphPackage(string Id, int Inputs, int Outputs, string Summary);
+public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, string Summary);
 /// <summary>The engine packages a host offers graphs, by id.</summary>
 public sealed class RenderGraphPackageCatalog {
-    /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion, lighting and
-    /// composition from the instance's camera. The screens it shows are the instance's reads, not ports.</summary>
+    /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
+    /// from the instance's camera. The screens it shows are the instance's reads, not ports.</summary>
     public const string SdfWorld = "sdf.world";
+    /// <summary>The id of the world's SDF brick pool: brick uploads and carve bakes into one pool the world's views
+    /// read. It is world-scoped, one instance for the world, and its output is a buffer, so the views reach it over
+    /// buffer edges.</summary>
+    public const string SdfBricks = "sdf.bricks";
     /// <summary>The id of the unified overlay: the console, HUD, toasts and cursor drawn over its input.</summary>
     public const string Overlay = "overlay";
     /// <summary>The prefix of a shipped post-process shader set's package id: <c>post.&lt;set id&gt;</c>.</summary>
@@ -28,8 +113,8 @@ public sealed class RenderGraphPackageCatalog {
     /// <param name="packages">The packages.</param>
     /// <exception cref="ArgumentNullException"><paramref name="packages"/> or one of its entries is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">A package has no id, a negative input count, or no output, or two share an
-    /// id.</exception>
+    /// <exception cref="ArgumentException">A package has no id, null port lists, a null or malformed port
+    /// (<see cref="RenderGraphPackagePort.IsValid"/>) or no output, or two share an id.</exception>
     public RenderGraphPackageCatalog(IEnumerable<RenderGraphPackage> packages) {
         ArgumentNullException.ThrowIfNull(argument: packages);
 
@@ -40,11 +125,13 @@ public sealed class RenderGraphPackageCatalog {
 
             if (
                 string.IsNullOrWhiteSpace(value: package.Id) ||
-                (package.Inputs < 0) ||
-                (package.Outputs < 1)
+                (package.Inputs is null) ||
+                (package.Outputs is null) ||
+                (package.Outputs.Count < 1) ||
+                package.Inputs.Concat(second: package.Outputs).Any(predicate: static port => ((port is null) || !port.IsValid))
             ) {
                 throw new ArgumentException(
-                    message: $"Package '{package.Id}' needs an id, a non-negative input count and at least one output.",
+                    message: $"Package '{package.Id}' needs an id, well-formed input and output ports, and at least one output.",
                     paramName: nameof(packages)
                 );
             }
@@ -65,8 +152,17 @@ public sealed class RenderGraphPackageCatalog {
         )]);
     }
 
-    /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="Overlay"/> and <see cref="Resample"/>.</summary>
+    /// <summary>Gets the port <see cref="SdfBricks"/> writes: the brick pool, one 32-bit float distance per voxel,
+    /// counted by <see cref="ShaderPipelineCountBasis.BrickPoolVoxels"/>.</summary>
+    public static RenderGraphPackagePort BrickPool { get; } = RenderGraphPackagePort.Buffer(
+        count: [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.BrickPoolVoxels])],
+        strideBytes: sizeof(float)
+    );
+    /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>
+    /// and <see cref="Resample"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
+    /// <summary>Gets the catalog of a host that offers no package, whose graphs are shader passes alone.</summary>
+    public static RenderGraphPackageCatalog None { get; } = new(packages: []);
 
     /// <summary>Gets the packages this build offers: the engine's own and one per shipped post-process shader set
     /// (<see cref="ShaderSetCatalog.Shipped"/>).</summary>
@@ -80,20 +176,26 @@ public sealed class RenderGraphPackageCatalog {
     private static IEnumerable<RenderGraphPackage> EnginePackages() => [
         new RenderGraphPackage(
             Id: SdfWorld,
-            Inputs: 0,
-            Outputs: 1,
+            Inputs: [],
+            Outputs: [RenderGraphPackagePort.Image],
             Summary: "The SDF world as the instance's camera sees it."
         ),
         new RenderGraphPackage(
+            Id: SdfBricks,
+            Inputs: [],
+            Outputs: [BrickPool],
+            Summary: "The world's SDF brick pool: brick uploads and carve bakes, which the views read over a buffer edge."
+        ),
+        new RenderGraphPackage(
             Id: Overlay,
-            Inputs: 1,
-            Outputs: 1,
+            Inputs: [RenderGraphPackagePort.Image],
+            Outputs: [RenderGraphPackagePort.Image],
             Summary: "The console, HUD, toasts and cursor drawn over the input image."
         ),
         new RenderGraphPackage(
             Id: Resample,
-            Inputs: 1,
-            Outputs: 1,
+            Inputs: [RenderGraphPackagePort.Image],
+            Outputs: [RenderGraphPackagePort.Image],
             Summary: "The input image reconstructed at the output's extent, bilinear to clamped Catmull-Rom by sharpness."
         ),
     ];
@@ -108,8 +210,8 @@ public sealed class RenderGraphPackageCatalog {
 
         return new RenderGraphPackageCatalog(packages: EnginePackages().Concat(second: postProcess.Ids.Select(selector: static id => new RenderGraphPackage(
             Id: (PostProcessPrefix + id),
-            Inputs: 1,
-            Outputs: 1,
+            Inputs: [RenderGraphPackagePort.Image],
+            Outputs: [RenderGraphPackagePort.Image],
             Summary: $"The shipped post-process shader set '{id}' over the input image."
         ))));
     }

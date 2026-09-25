@@ -1,0 +1,22 @@
+{
+  "$schema": "puck.render.graph.v1",
+  "name": "missing",
+  "resources": [
+    {
+      "name": "image",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 8, "height": 8 }
+    }
+  ],
+  "passes": [
+    {
+      "name": "fill",
+      "source": "fill.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [ { "name": "image", "binding": 0 } ]
+    }
+  ],
+  "outputs": ["image"]
+}

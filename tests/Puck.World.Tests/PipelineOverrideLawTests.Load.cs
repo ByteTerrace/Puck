@@ -101,7 +101,7 @@ public sealed partial class PipelineOverrideLawTests {
     // A row's relative source resolves against the LOADED document's own directory, not the boot document's — both
     // where the server's own bind gate reads it (Host.PipelineSources, re-pointed once the load applies) and where
     // the rendering host reads it (WorldPipelineRuntime, re-pointed by WorldPostBuildWiring's identical Rebuild-echo
-    // tap). "only-here.pipeline.json" exists in the loaded directory alone, so a resolution that stayed pinned to
+    // tap). "only-here.graph.json" exists in the loaded directory alone, so a resolution that stayed pinned to
     // the boot directory would refuse the load by name instead of accepting it.
     [Fact]
     public void AWorldLoadFromAnotherDirectoryBindsAndTheRuntimeResolvesARelativeSourceThere() {
@@ -114,7 +114,7 @@ public sealed partial class PipelineOverrideLawTests {
         Directory.CreateDirectory(path: otherDirectory);
 
         try {
-            const string RelativeSource = "only-here.pipeline.json";
+            const string RelativeSource = "only-here.graph.json";
 
             File.Copy(
                 destFileName: Path.Combine(path1: otherDirectory, path2: RelativeSource),

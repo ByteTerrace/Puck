@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "conversion",
-        "source": "discriminating.pipeline.json",
+        "source": "discriminating.graph.json",
         "timeScale": 1
       }
     ]

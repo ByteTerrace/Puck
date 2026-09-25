@@ -67,13 +67,13 @@
       {
         "camera": null,
         "name": "ink",
-        "source": "../../../src/Puck.World/Assets/pipelines/ink.pipeline.json",
+        "source": "../../../src/Puck.World/Assets/pipelines/ink.graph.json",
         "timeScale": 0
       },
       {
         "camera": null,
         "name": "tint",
-        "source": "../pipeline-package/tint.pipeline.json"
+        "source": "../pipeline-package/tint.graph.json"
       }
     ]
   }

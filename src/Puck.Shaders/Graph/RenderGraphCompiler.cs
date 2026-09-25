@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -27,12 +28,34 @@ public sealed class RenderGraphPlan {
     public IReadOnlyList<string> Inputs { get; }
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs => Pipeline.Outputs;
-    /// <summary>Gets the pipeline planner's plan. A package pass appears in it as a
-    /// <see cref="ShaderPipelinePassKind.Package"/> pass whose source is its package id; it is ordered, given its
-    /// accesses and barriers, and kept live exactly as a shader pass is.</summary>
+    /// <summary>Gets the pipeline planner's plan. A package pass appears in it as a planned pass of kind
+    /// <see cref="ShaderPipelinePassKind.Package"/> whose declaration is the compute shape it reaches resources by, its
+    /// source the package id its step names; it is ordered, given its accesses and barriers, and kept live exactly as a
+    /// shader pass is.</summary>
     public ShaderPipelinePlan Pipeline { get; }
     /// <summary>Gets the planned passes in execution order, parallel to the planner's passes.</summary>
     public IReadOnlyList<RenderGraphStep> Steps { get; }
+
+    /// <summary>Returns what a version of the graph carries, which is what an instance edge bound to it carries: the
+    /// kind of an <see cref="Inputs"/> version a consumer's read binds, or of the <see cref="Outputs"/> version its
+    /// producer publishes.</summary>
+    /// <param name="version">The version name.</param>
+    /// <returns>The version's kind.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="version"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The plan holds no version of that name.</exception>
+    public ShaderPipelineResourceKind KindOf(string version) {
+        ArgumentNullException.ThrowIfNull(argument: version);
+
+        return ((Pipeline.Storages.FirstOrDefault(predicate: storage => storage.Versions.Contains(
+            comparer: StringComparer.Ordinal,
+            value: version
+        )) is { } found)
+            ? found.Declaration.Kind
+            : throw new ArgumentException(
+                message: $"Graph '{Definition.Name}' plans no version '{version}'.",
+                paramName: nameof(version)
+            ));
+    }
 }
 /// <summary>Validates a <c>puck.render.graph.v1</c> document and plans it with the pipeline planner. Package passes are
 /// checked against the host's catalog and planned as passes that read and write their declared versions, so one
@@ -42,6 +65,11 @@ public sealed class RenderGraphPlan {
 public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, ShaderPipelineLimits? limits = null) {
     private readonly ShaderPipelineCompiler m_planner = new(limits: limits);
     private readonly RenderGraphPackageCatalog m_packages = (packages ?? throw new ArgumentNullException(paramName: nameof(packages)));
+
+    /// <summary>Gets the compiler of a host that runs shader passes alone, such as a pipeline instance's node, the
+    /// shader packager and the pipeline verbs: it offers no package, so a graph naming one is refused by
+    /// <c>RENDERGRAPH_PACKAGE_UNKNOWN</c>.</summary>
+    public static RenderGraphCompiler ShaderPasses { get; } = new(packages: RenderGraphPackageCatalog.None);
 
     private static void Add(List<ShaderPipelineDiagnostic> diagnostics, string code, string message, string? name) => diagnostics.Add(item: new ShaderPipelineDiagnostic(
         Code: code,
@@ -105,13 +133,13 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 continue;
             }
             if (
-                (pass.InputReferences.Count != package.Inputs) ||
-                (pass.OutputReferences.Count != package.Outputs)
+                (pass.InputReferences.Count != package.Inputs.Count) ||
+                (pass.OutputReferences.Count != package.Outputs.Count)
             ) {
                 Add(
                     code: "RENDERGRAPH_PACKAGE_PORTS",
                     diagnostics: diagnostics,
-                    message: $"Package pass '{pass.Name}' binds {pass.InputReferences.Count} input(s) and {pass.OutputReferences.Count} output(s); package '{package.Id}' has {package.Inputs} and {package.Outputs}.",
+                    message: $"Package pass '{pass.Name}' binds {pass.InputReferences.Count} input(s) and {pass.OutputReferences.Count} output(s); package '{package.Id}' has {package.Inputs.Count} and {package.Outputs.Count}.",
                     name: pass.Name
                 );
             }
@@ -123,37 +151,48 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                     name: pass.Name
                 );
             }
-            foreach (var output in pass.OutputReferences) {
-                if (
-                    resources.TryGetValue(
-                        key: output.Name,
-                        value: out var resource
-                    ) &&
-                    (resource.Kind != ShaderPipelineResourceKind.Image)
-                ) {
-                    Add(
-                        code: "RENDERGRAPH_PACKAGE_OUTPUT",
-                        diagnostics: diagnostics,
-                        message: $"Package pass '{pass.Name}' writes '{output.Name}', which is not an image; every package port carries an image.",
-                        name: output.Name
-                    );
-                }
-            }
-            foreach (var input in pass.InputReferences) {
-                if (
-                    resources.TryGetValue(
-                        key: input.Name,
-                        value: out var resource
-                    ) &&
-                    (resource.Kind != ShaderPipelineResourceKind.Image)
-                ) {
-                    Add(
-                        code: "RENDERGRAPH_PACKAGE_INPUT",
-                        diagnostics: diagnostics,
-                        message: $"Package pass '{pass.Name}' reads '{input.Name}', which is not an image; every package port carries an image.",
-                        name: input.Name
-                    );
-                }
+            CheckPorts(
+                code: "RENDERGRAPH_PACKAGE_OUTPUT",
+                diagnostics: diagnostics,
+                direction: "output",
+                package: package,
+                pass: pass,
+                ports: package.Outputs,
+                references: pass.OutputReferences,
+                resources: resources
+            );
+            CheckPorts(
+                code: "RENDERGRAPH_PACKAGE_INPUT",
+                diagnostics: diagnostics,
+                direction: "input",
+                package: package,
+                pass: pass,
+                ports: package.Inputs,
+                references: pass.InputReferences,
+                resources: resources
+            );
+        }
+    }
+    // Each version a pass binds must carry what its port carries: its kind, and a buffer port's stride and count. A pass
+    // binding the wrong number of versions is refused by its port count instead, so only the ports both sides name are
+    // compared.
+    private static void CheckPorts(string code, string direction, RenderGraphPackagePass pass, RenderGraphPackage package, IReadOnlyList<RenderGraphPackagePort> ports, IReadOnlyList<ResourceReference> references, Dictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
+        for (var index = 0; (index < Math.Min(val1: ports.Count, val2: references.Count)); index++) {
+            var port = ports[index];
+
+            if (
+                resources.TryGetValue(
+                    key: references[index].Name,
+                    value: out var resource
+                ) &&
+                !port.Accepts(resource: resource)
+            ) {
+                Add(
+                    code: code,
+                    diagnostics: diagnostics,
+                    message: $"Package pass '{pass.Name}' binds '{resource.Name}', carrying {RenderGraphPackagePort.Describe(count: resource.Count, kind: resource.Kind, strideBytes: resource.StrideBytes)}, to {direction} port {index} of package '{package.Id}', which carries {RenderGraphPackagePort.Describe(count: port.Count, kind: port.Kind, strideBytes: port.StrideBytes)}.",
+                    name: resource.Name
+                );
             }
         }
     }
@@ -180,7 +219,7 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
         }
 
         var packageByPass = new Dictionary<string, RenderGraphPackage>(comparer: StringComparer.Ordinal);
-        var packagePasses = new List<ShaderPipelinePass>(capacity: definition.PackagePasses.Count);
+        var packagePasses = new List<ShaderPipelinePackagePass>(capacity: definition.PackagePasses.Count);
 
         foreach (var pass in definition.PackagePasses) {
             m_packages.TryGet(
@@ -191,25 +230,16 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 key: pass.Name,
                 value: package!
             );
-            packagePasses.Add(item: new ShaderPipelinePass(
-                EntryPoint: string.Empty,
+            packagePasses.Add(item: new ShaderPipelinePackagePass(
                 Inputs: pass.InputReferences,
-                Kind: ShaderPipelinePassKind.Package,
                 Name: pass.Name,
                 Outputs: pass.OutputReferences,
-                Source: pass.Package
+                Package: pass.Package
             ));
         }
 
         var pipeline = m_planner.Compile(
-            definition: new ShaderPipelineDefinition(
-                Config: null,
-                Name: definition.Name,
-                Outputs: definition.Outputs,
-                Passes: definition.ShaderPasses,
-                Resources: definition.Resources,
-                Schema: ShaderPipelineSchemas.Pipeline
-            ),
+            definition: definition with { Packages = null },
             packages: packagePasses
         );
         var steps = pipeline.Passes.Select(selector: planned => new RenderGraphStep(

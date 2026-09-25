@@ -316,11 +316,15 @@ served or refused. Whatever keeps the render chain from serving the capture
 (the engine's pipelines still building on a cold driver shader cache, or a
 device being rebuilt), the host keeps producing frames and answering the
 console but steps no further tick, and the time it waits is spent, not owed,
-so serving the capture releases no burst. The hold is bounded: once the run
-has held its clock for 60 seconds in all (`WorldCaptureScheduler.HoldBudgetSeconds`),
-the capture is refused as `unserved` with the reason the chain gave, such as
-"the engine's pipelines never installed", and the run steps on; a later
-capture the chain still cannot serve is refused at once. `world.counters`
+so serving the capture releases no burst. The hold is bounded, and counts
+from readiness: while the engine's pipeline set builds (or rebuilds after a
+device loss), the run may hold its clock for 180 seconds in all
+(`WorldCaptureScheduler.BuildHoldBudgetSeconds`), and once the engine is ready
+for 60 seconds in all (`WorldCaptureScheduler.HoldBudgetSeconds`). Past either,
+the capture is refused as `unserved` and the run steps on; a refusal the build
+caused names it and its progress, such as "the engine's pipeline set is
+building (5 of 14 pipelines created)", and a later capture the chain still
+cannot serve is refused at once. `world.counters`
 reports the hold under `world.captures`: `world.captures.held` (engine ticks
 withheld) and `world.captures.ticks-while-armed` (ticks stepped while a
 capture waited, which stays 0 offscreen). A capture still waiting when the run
@@ -464,6 +468,18 @@ installed graph), `peak=` (what a reload of it would reach) and `budget=`.
 device's, and `pipeline.budget <name> device` removes the cap. A reload whose
 peak does not fit is refused with `SHADERPIPE_BUDGET`, and the installed graph
 keeps running.
+`gpu.faults arm <kind> [<n>]` makes the device fail the nth creation of a kind
+from now, or the next one, before the call reaches the device, so a reload can
+be refused partway through its allocation on real hardware. The kinds are
+`pipeline`, `buffer`, `image`, `render-pass`, `framebuffer`, `shader-module`,
+`command-pool` and `bindings-pool`. The refusal is `GPU_CREATION_FAULT`, naming
+the kind and the creation's number; the node releases what the candidate
+created and the installed graph keeps running. A fault fires once.
+`gpu.faults disarm` clears every fault and restarts the counts, and
+`gpu.faults list` prints `armed=<kind>:<n>,…` (or `armed=none`) and one
+`<kind>=<count>` field per kind: the creations since the last disarm. Only the
+operator's console runs it; a seat, binding, schedule step or world document
+cannot.
 `pipeline.capture` queues a PNG of the selected output, including while paused.
 The completion report says when the file has been written.
 
@@ -499,7 +515,7 @@ states the contract.
 A row naming a package reads the same way:
 
 ```text
-puck shaders package src/Puck.World/Assets/pipelines/ink.pipeline.json --output artifacts/packages/ink
+puck shaders package src/Puck.World/Assets/pipelines/ink.graph.json --output artifacts/packages/ink
 pipeline.load ink ../../../../artifacts/packages/ink
 pipeline.wait ink installed
 ```
@@ -558,11 +574,11 @@ validation. The rendered host creates it only after the mutation is accepted.
 To try a one-off shader in the example's existing slot, run
 `pipeline.load ink ../pipelines/moth.hlsl`; it replaces that instance's source
 through the same background compilation path. Return with
-`pipeline.load ink ../pipelines/ink.pipeline.json`.
+`pipeline.load ink ../pipelines/ink.graph.json`.
 
 Loading a new row does not change the active layout: select its name in a layout
 slot. The [shader reference](../../docs/reference/shaders.md#shader-pipelines-and-live-development)
-owns the pipeline document and pass contracts.
+owns the graph document and pass contracts.
 
 [The Moth shader](Assets/pipelines/moth.hlsl) remains a one-pass procedural
 character example; its header controls poses and framing. Its
@@ -593,7 +609,12 @@ Facts a script needs:
   pending simulation traffic applies, so a scripted write-then-read pair
   (`world.row.set` then `world.status`, `player.bind` then
   `player.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
-  `world.wait` are the explicit waits.
+  `world.wait` are the explicit waits. `world.wait ready <seconds>` waits for
+  the rendering engine instead of a tick count: it holds the session until
+  the engine's pipeline set is installed and it has produced its first frame,
+  or the deadline passes, and reports which on standard error. A script that
+  reads rendered work (`world.counters gpu`) waits on it, since a cold driver
+  cache can hold the first frame back for many ticks.
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
   after a `world.wait` that releases at tick R runs before tick R+1. The

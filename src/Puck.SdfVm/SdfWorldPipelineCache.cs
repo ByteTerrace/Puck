@@ -10,7 +10,8 @@ namespace Puck.SdfVm;
 /// device, kernel set (<see cref="SdfWorldKernels.ContentKey"/>) and brick-pipeline choice, however many nodes and views
 /// render with it. A holder takes an <see cref="SdfWorldPipelineLease"/>; the first lease on a key starts the set's
 /// build on the thread pool (<see cref="BackgroundBuild{T}"/>), every lease polls the same build from the frame thread,
-/// and the set is disposed when its last lease is released, after any build still in flight has returned.
+/// and the set is disposed when its last lease is released. That release cancels a build still in flight and waits,
+/// outside the cache's lock, only for the pipelines already in the driver.
 /// <para>
 /// The cache counts the shader modules and pipelines it creates into <see cref="Work"/>, a
 /// <see cref="GpuWorkLedger"/> named <see cref="WorkSourceName"/>, including those a reload creates for a set; the
@@ -54,7 +55,8 @@ public sealed class SdfWorldPipelineCache {
             device: entry.Device,
             includeBrickPipelines: entry.IncludesBrickPipelines,
             kernels: entry.Kernels,
-            ledger: m_work
+            ledger: m_work,
+            progress: entry.Progress
         ));
 
     /// <summary>Takes a lease on the set for <paramref name="kernels"/> on <paramref name="device"/>, joining the set
@@ -164,16 +166,24 @@ public sealed class SdfWorldPipelineCache {
         }
     }
     internal void Release(SdfWorldPipelineLease.Entry entry) {
+        CanceledBuild<SdfWorldPipelines> build;
+
+        // The cancel lands inside the gate, before the entry leaves the list, so a reader that no longer finds the set
+        // knows its build has been told to stop.
         lock (m_gate) {
             if (--entry.Holders > 0) {
                 return;
             }
 
+            build = entry.Build.Detach();
             _ = m_entries.Remove(item: entry);
-            entry.Build.CancelAndWait(discard: static pipelines => pipelines.Dispose());
-            entry.Pipelines?.Dispose();
-            entry.Pipelines = null;
         }
+
+        // With its last lease released and the entry out of the list, nothing else reaches the entry, so the wait for
+        // the pipelines still in the driver holds no lock another holder's poll or acquire needs.
+        build.Wait(discard: static pipelines => pipelines.Dispose());
+        entry.Pipelines?.Dispose();
+        entry.Pipelines = null;
     }
     internal bool TryMakePrivate(SdfWorldPipelineLease.Entry entry) {
         lock (m_gate) {
@@ -210,6 +220,8 @@ public sealed class SdfWorldPipelineLease {
     );
     /// <summary>Gets whether the lease has been released.</summary>
     public bool IsReleased => (m_cache is null);
+    /// <summary>Gets how far the set's latest build has come; a ready set reads every pipeline created.</summary>
+    public SdfWorldPipelineBuildProgress Progress => m_entry.Progress;
 
     /// <summary>Returns the ready set, or <see langword="null"/> while its build runs. A build that failed rethrows its
     /// exception here, on the frame thread, so a device loss reaches the host's recovery; the next poll starts a fresh
@@ -246,6 +258,7 @@ public sealed class SdfWorldPipelineLease {
     // One set and its holders. Every field but the immutable key is read and written under the cache's gate.
     internal sealed class Entry(IGpuDeviceContext device, SdfWorldKernels kernels, string key, bool includesBrickPipelines) {
         public BackgroundBuild<SdfWorldPipelines> Build { get; } = new();
+        public SdfWorldPipelineBuildProgress Progress { get; } = new();
         public IGpuDeviceContext Device { get; } = device;
         public int Holders { get; set; } = 1;
         public bool IncludesBrickPipelines { get; } = includesBrickPipelines;

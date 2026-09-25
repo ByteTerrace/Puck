@@ -140,7 +140,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
                 path2: (m_manifest.Stages.Fragment! + ".hlsl")
             ),
             EntryPoint: "PSMain",
-            Kind: ShaderPipelinePassKind.Fullscreen,
+            Kind: ShaderPipelineDocumentPassKind.Fullscreen,
             Inputs: [new ResourceReference(
                     "input",
                     Binding: m_manifest.Bindings[0].VulkanBinding
@@ -149,7 +149,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             Vertex: ShaderPipelineVertexInput.Position,
             Config: ConfigDefaultingTo(values: m_config)
         );
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             m_manifest.Name,
             [input, output],
             [pass],
@@ -287,7 +287,8 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
         } finally { m_inner.Dispose(); }
     }
     /// <summary>Forwards device loss to the active executor, any executor building for a new input, and the inner
-    /// node; a replaced executor still waiting to retire is released at once, since the lost device's work is gone.</summary>
+    /// node; a replaced executor still waiting to retire is released at once, since the lost device's work is gone, and
+    /// a capture armed here is refused (<see cref="CaptureRequestSlot.RefuseForDeviceLoss"/>).</summary>
     public void OnDeviceLost() {
         m_nextExecutor?.OnDeviceLost();
         m_executor?.OnDeviceLost();
@@ -295,6 +296,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             retiring.Node.DisposeRetired();
         }
         m_retiring.Clear();
+        m_capture.RefuseForDeviceLoss();
         m_inner.OnDeviceLost();
     }
     /// <summary>Produces one adapted frame from the inner node.</summary>

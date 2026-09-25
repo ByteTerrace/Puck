@@ -54,6 +54,8 @@ internal sealed class UploadModelGpu :
         };
     }
 
+    /// <summary>Gets every descriptor pool created, in creation order, as its creation sized it.</summary>
+    public IReadOnlyList<GpuDescriptorPoolSizes> PoolsCreated => m_inner.PoolsCreated;
     public long AdapterLuid => 0L;
     public GpuDeviceCapabilities? Capabilities => null;
     public GpuDeviceIdentity? Identity => null;

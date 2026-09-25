@@ -12,7 +12,7 @@
   ],
   "timeoutSeconds": 60,
   "fixtures": [
-    "wide.pipeline.json"
+    "wide.graph.json"
   ],
   "positive": {
     "world": "tests/Puck.World.Canaries/pipeline-budget/fixture.world.json",

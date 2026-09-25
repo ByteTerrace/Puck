@@ -1,7 +1,7 @@
 namespace Puck.Shaders.Tests;
 
 public sealed class ShaderPipelineBindingTests {
-    private static ShaderPipelineDefinition Definition(ShaderPipelinePass pass) => new(
+    private static RenderGraphDefinition Definition(ShaderPipelinePass pass) => new(
         "bindings",
         [Image(
                 "input",
@@ -23,7 +23,7 @@ public sealed class ShaderPipelineBindingTests {
             "pass",
             "pass.hlsl",
             "main",
-            ShaderPipelinePassKind.Compute,
+            ShaderPipelineDocumentPassKind.Compute,
             [input],
             [output]
         );
@@ -55,7 +55,7 @@ public sealed class ShaderPipelineBindingTests {
                 "output",
                 Binding: 7
             )
-        ) with { Kind = ShaderPipelinePassKind.Fullscreen };
+        ) with { Kind = ShaderPipelineDocumentPassKind.Fullscreen };
         var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => ShaderPipelineCompiler.Plan(definition: Definition(pass: pass)));
 
         Assert.Contains(
@@ -68,7 +68,7 @@ public sealed class ShaderPipelineBindingTests {
         var authored = Pass(
             input: "input",
             output: "output"
-        ) with { Kind = ShaderPipelinePassKind.Fullscreen };
+        ) with { Kind = ShaderPipelineDocumentPassKind.Fullscreen };
         var pass = new ShaderPipelineCompiler().Compile(definition: Definition(pass: authored)).Passes[0].Declaration;
 
         Assert.Equal(
@@ -117,7 +117,7 @@ public sealed class ShaderPipelineBindingTests {
     }
     [Fact]
     public void Null_document_collections_produce_a_planner_diagnostic() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             name: "null",
             outputs: [],
             passes: [],
@@ -132,7 +132,7 @@ public sealed class ShaderPipelineBindingTests {
     }
     [Fact]
     public void History_still_requires_initialized_first_frame_contents() {
-        var definition = new ShaderPipelineDefinition(
+        var definition = new RenderGraphDefinition(
             "history",
             [Image("output") with { History = true }],
             [Pass(
@@ -159,7 +159,7 @@ public sealed class ShaderPipelineBindingTests {
                 Binding: 3
             ),
             output: "output"
-        ) with { Kind = ShaderPipelinePassKind.Fullscreen };
+        ) with { Kind = ShaderPipelineDocumentPassKind.Fullscreen };
         var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => ShaderPipelineCompiler.Plan(definition: Definition(pass: pass)));
 
         Assert.Contains(

@@ -58,6 +58,9 @@ internal sealed record QualificationPipelineRows(JsonObject Layout, string Sourc
 internal static class QualificationPlan {
     /// <summary>The seconds a <c>pipeline.wait</c> may take, the longest the World accepts, of presentation time.</summary>
     public const int WaitSeconds = 40;
+    /// <summary>The seconds the script's <c>world.wait ready</c> may wait for the engine's pipeline set to build and
+    /// produce its first frame; every workload's timeout outlasts it.</summary>
+    public const int ReadySeconds = 180;
 
     private const string WorldSuffix = ".world.json";
 
@@ -197,6 +200,8 @@ internal static class QualificationPlan {
         Line(line: $"# puck qualify: {cell.Id}, generated from the release profile. Lengths are ticks and frames, never time.");
         Line(line: "# Every frame renders every pass, so a soak exercises the whole frame.");
         Line(line: "world.cadence off");
+        Line(line: "# A clean install builds the engine's pipelines on a cold driver cache: warm up from readiness, not boot.");
+        Line(line: $"world.wait ready {Number(value: ReadySeconds)}");
 
         if (workload.Pipeline is not { } pipeline) {
             Line(line: $"world.wait {Number(value: workload.WarmupTicks)}");

@@ -114,21 +114,11 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
                 height: height,
                 width: width
             );
-        } catch (DeviceLostException) {
-            throw;
-        } catch (GpuDeviceUnavailableException exception) {
-            // A creation the absent adapter cannot satisfy yet: the same recoverable signal as a failing call below.
-            throw new DeviceLostException(
-                message: "The Direct3D 12 device could not be recreated yet (the adapter is unavailable).",
-                reasonCode: ((exception.InnerException as DirectXException)?.Result ?? 0),
-                innerException: exception
-            );
         } catch (DirectXException exception) {
-            // The device could not be recreated — almost always because the adapter has not come back yet (a real
-            // removal leaves no capable device for seconds; D3D12CreateDevice fails until it returns). Surface it as the
-            // neutral recoverable signal so the host pump waits and retries rather than aborting the run.
+            // Recreate reports an absent adapter as a loss itself; a swap chain the returning adapter cannot back yet is
+            // the same wait, so the host's recovery retries it rather than aborting the run.
             throw new DeviceLostException(
-                message: "The Direct3D 12 device could not be recreated yet (the adapter is unavailable).",
+                message: "The Direct3D 12 swap chain could not be recreated yet (the adapter is unavailable).",
                 reasonCode: exception.Result,
                 innerException: exception
             );

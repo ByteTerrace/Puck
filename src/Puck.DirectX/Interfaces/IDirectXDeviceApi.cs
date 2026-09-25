@@ -58,11 +58,4 @@ public interface IDirectXDeviceApi {
     /// <returns>The device's capabilities, recorded and never branched on.</returns>
     /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
     Puck.Abstractions.Gpu.GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle);
-    /// <summary>Reads <c>ID3D12Device::GetDeviceRemovedReason</c> — the specific HRESULT explaining a device removal
-    /// (e.g. <c>DXGI_ERROR_DEVICE_HUNG</c> 0x887A0006 for a GPU timeout/too-much-work, <c>DXGI_ERROR_DEVICE_RESET</c>
-    /// 0x887A0007, <c>DXGI_ERROR_DRIVER_INTERNAL_ERROR</c> 0x887A0020 for invalid GPU work / a page fault). Returns
-    /// <c>S_OK</c> (0) when the device is healthy.</summary>
-    /// <param name="deviceHandle">The native <c>ID3D12Device</c> handle (zero returns 0).</param>
-    /// <returns>The removal-reason HRESULT.</returns>
-    int GetDeviceRemovedReason(nint deviceHandle);
 }

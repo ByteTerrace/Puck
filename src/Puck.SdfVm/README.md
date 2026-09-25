@@ -80,7 +80,8 @@ kernel ships in three compiled variants
 CoreOps also strips the remaining exotic cases. The program selects the smallest
 variant that supports its operations, reducing shader size and register pressure.
 
-The hit buffer reserves an 80-byte record per active pixel. Primary traversal preserves
+The hit buffer reserves one record per active pixel, `SdfVisibilityWords` words
+(`sdf-visibility.hlsli`, 60 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
 data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
@@ -210,15 +211,21 @@ returns its last image, or no signal. The frame thread keeps draining the
 console and stepping the simulation meanwhile, so a `world.wait` or
 `pipeline.wait` still reaches its deadline. The one exception is the offscreen
 host with a capture armed: it steps no further tick until the capture is served
-or refused, and a capture refused for outlasting the hold names the node's
-`UnservedCaptureReason`, "the engine's pipelines never installed" (see
-[the World guide](../Puck.World/README.md#usage)). The node's hosted child panes keep
+or refused, and a capture refused while the engine is not ready names the
+node's `NotReadyReason`, such as "the engine's pipeline set is building (5 of
+14 pipelines created)" (see [the World guide](../Puck.World/README.md#usage)).
+The node is `IsReady` once its set is installed and the engine built from it
+has produced its first frame; that is the fact `world.wait ready` waits on. The node's hosted child panes keep
 stepping and producing too, so a pane builds and installs its own pipelines
 while the engine's are still pending. A holder keeps its lease across engine
 rebuilds, such as a capacity or export-factory change, and releases it on
-device loss and disposal. The last lease on a set waits out any build still in
-flight before disposing the set: nothing may be created on a device that is
-being torn down.
+device loss and disposal. A set's build creates up to
+`SdfWorldPipelines.BuildConcurrency` pipelines at once on the thread pool,
+starting the three views variants last, and checks its cancel between
+pipelines, never during one. The last lease on a set cancels a build still in
+flight and waits, outside the cache's lock, for only the pipelines already in
+the driver before disposing the set: nothing may be created on a device that is
+being torn down, and a shutdown never waits out a whole cold build.
 
 Each backend also keeps a persistent pipeline cache per device, so a warm start
 translates nothing. See [Vulkan](../../docs/rendering/vulkan.md#pipeline-cache)

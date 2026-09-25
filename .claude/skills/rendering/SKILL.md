@@ -233,11 +233,20 @@ These are one-line cautions; the owning pages hold the derivations.
   `IFixedStepSimulation.AwaitsFrame` until a frame serves it, so the pump
   composes that tick's frame before stepping on. Offscreen the pump also holds
   its clock (`IFixedStepSimulation.HoldsClock`): no tick past the armed one
-  runs until the capture is served or refused, bounded by
-  `WorldCaptureScheduler.HoldBudgetSeconds`, after which it is refused as
-  `unserved` naming `SdfEngineNode.UnservedCaptureReason`. A refused request is
+  runs until the capture is served or refused. The hold counts from
+  readiness (`IWorldEngineReadiness`, the render probe over
+  `SdfEngineNode.IsReady`): time held while the engine is not ready is spent
+  from `WorldCaptureScheduler.BuildHoldBudgetSeconds`, and time held once it is
+  from `HoldBudgetSeconds`; past either the capture is refused as `unserved`,
+  naming `SdfEngineNode.NotReadyReason` (the build and its progress) when the
+  build spent it. A refused request is
   withdrawn with `FrameCaptureRequest.TryFail`, and `CaptureRequestSlot` drops
-  a withdrawn request rather than serving or forwarding it. Hosts settle owed
+  a withdrawn request rather than serving or forwarding it. A node's
+  `OnDeviceLost` refuses the capture its slot holds
+  (`CaptureRequestSlot.RefuseForDeviceLoss`), which the scheduler writes as a
+  `deviceLost` refusal; both hosts recover through `DeviceLossRecovery`
+  (`Puck.Launcher`), which releases the tree before rebuilding the device
+  through an `IDeviceRebuild`. Hosts settle owed
   frames (`SettleOwedFrames`) before disposing the render root, so no capture
   reaches the disposal refusal. `WorldCaptureScheduler`
   (`Puck.World.Console`) writes every armed capture as one manifest entry: the
@@ -251,10 +260,19 @@ These are one-line cautions; the owning pages hold the derivations.
   each of them, its one cache: one set per device, `SdfWorldKernels.ContentKey`
   and brick-pipeline choice, built on the thread pool
   (`Puck.Hosting.BackgroundBuild`) by the first lease and shared by the rest.
-  A holder (`SdfWorldPipelineSource`) takes its lease off the frame thread,
-  presents nothing new until the set installs, keeps the lease across engine
-  rebuilds, and releases it on device loss and disposal; the last release
-  waits out an in-flight build and disposes the set. The cache counts the
+  A build creates up to `SdfWorldPipelines.BuildConcurrency` pipelines at once
+  on the pool, in `PipelineLayouts.BuildOrder` (the views variants last), and
+  checks its token between pipelines, never inside a driver call; its counts do
+  not depend on the order. A holder (`SdfWorldPipelineSource`) takes its lease
+  off the frame thread, presents nothing new until the set installs, keeps the
+  lease across engine rebuilds, and releases it on device loss and disposal;
+  the last release cancels an in-flight build inside the cache's gate
+  (`BackgroundBuild.Detach`), then waits outside it for only the pipelines
+  already in the driver, and disposes the set. `SdfEngineNode.IsReady` (set
+  installed and first frame produced) is the one readiness fact: the console
+  waits on it with `world.wait ready <seconds>`, and whatever reads counted
+  world passes (`puck counters`, the `world-counters` canary, `puck qualify`)
+  waits on it, never on a tick count. The cache counts the
   pipelines and shader modules it creates under `gpu.sdf-pipelines`, never in
   a node's or view's ledger, and reads each backend's deployed kernels once
   (`LoadDeployed`). A kernel reload replaces pipelines in place, so a node
@@ -263,7 +281,10 @@ These are one-line cautions; the owning pages hold the derivations.
   engine. A harness that drives a node polls `SdfEngineNode.IsReady`
   (`SdfTestPipelines.ProduceFirstFrame` in `tests/Shared`, whose `Kernels` is the one fake kernel set);
   `SdfPipelineBuildLivenessLawTests` holds the factory and proves the pump
-  still drains the console. `ShaderPipelineRenderNode` builds each candidate's
+  still drains the console, and that a device loss or the last release waits
+  for exactly the `BuildConcurrency` creations in the driver, counted through
+  the factory; `SdfWorldPipelinesLawTests` pins the concurrency bound, the
+  build order and a cancel mid-build the same way. `ShaderPipelineRenderNode` builds each candidate's
   modules, pipelines and the render passes they are created for through
   the same `BackgroundBuild`, started by the next produced frame (never by
   `Swap`, `Resize` or `SelectOutput`, so the presenter's swap-then-resize builds
@@ -326,6 +347,15 @@ These are one-line cautions; the owning pages hold the derivations.
   frames around a build with `ShaderPipelineRenderNodeBuilds`
   (`ProduceUntilInstalled`, and `ProduceBuildStart`, which holds the fake's
   pipeline gate so the starting frame's outcome never depends on pool timing).
+- **A Direct3D 12 removal is translated where it is returned.** A call a
+  removal reaches (map, command-list reset and close, queue signal, fence event)
+  goes through `DirectXCommandCalls` over `IDirectXCommandCalls`, never the
+  generated wrapper, whose `COMException` recovery never sees; a removal becomes
+  `DeviceLostException` carrying `GetDeviceRemovedReason`. A frame path waits
+  with `SignalAndWait`; a release path drains with `Drain`, which counts a
+  removed device as drained so `OnDeviceLost` never throws.
+  `DirectXCommandCallsLawTests` fakes each call's `HRESULT`. The owning
+  explanation is [Direct3D 12](../../../docs/rendering/directx.md#result-handling).
 - **Every pipeline goes through the device's persistent cache.** Vulkan's
   `VulkanLogicalDevice.PipelineCache` and Direct3D 12's
   `DirectXDeviceContext.PipelineLibrary` sit under every compute and graphics
@@ -413,6 +443,17 @@ These are one-line cautions; the owning pages hold the derivations.
   a new cadence-skipped pass its `SkipPass`. `SdfWorldEngineWorkLawTests`
   pins every pass's exact counts over `tests/Shared/FakeGpuDevice.cs`, so a
   recording change re-records those constants in the same change.
+- **Creation faults are one decorator at service creation.** Each backend wraps
+  the services it creates with its context once, through
+  `GpuCreationFaults.Wrap` (`DirectXDeviceContext.CreateServices`, the Vulkan
+  registration's `DeviceServices`), over the host's one `GpuCreationFaults`
+  read with `GetService`. So a device's own `IGpuDeviceContext.Services` does
+  pass through faults, and counting wraps above them. The World registers the
+  faults and the operator-only `gpu.faults` verb (`GpuFaultsCommandModule`) in
+  both GPU presentation shapes (`WorldBootCompositionLawTests`). A new creating
+  member of a wrapped factory joins a `GpuCreationKind`, and
+  `GpuCreationFaultsLawTests`' coverage table fails on a member it does not
+  name.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
   backends), created-object kinds `PerBackendDeterministic`, and anything
@@ -519,7 +560,7 @@ shader consumer in the same change. What a document field means belongs to
 ## Shader manifests and pipelines
 
 `docs/reference/shaders.md` owns the `puck.shader.manifest.v1` and
-`puck.shader.pipeline.v1` contracts and pipeline live development; the
+`puck.render.graph.v1` contracts and pipeline live development; the
 `pipeline.*` console verbs are defined in `WorldPipelineCommandModule` and their
 document semantics belong to `puck-world`. Post-render passes are
 `render.extensions` rows naming shader sets shipped beside the SDF kernels; the
@@ -576,30 +617,65 @@ yet; `GpuComputeBindingKind` and `ShaderSetManifestBindingKind` still carry the
 combined image sampler until the backends bind sampler tables.
 
 The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
-[frame graphs](../../../docs/reference/shaders.md#frame-graphs)): the pipeline
-document's members plus `packages`, engine passes named by
-`RenderGraphPackageCatalog` id. `RenderGraphCompiler` plans it with
-`ShaderPipelineCompiler` and never a second planner: a package pass enters the
-plan as `ShaderPipelinePassKind.Package`, whose source is its package id, through
-the planner's internal package entry, and a document's `passes` declaring that
-kind are refused with `SHADERPIPE_PACKAGE_PASS`. A package pass keeps no
-descriptor binding, has no interface-by-source check, and takes a compute pass's
-accesses in `UseOf`. A new document member goes on `RenderGraphDefinition` only when a
-pipeline document cannot say it, because every checked-in `*.pipeline.json`
-must plan identically as a graph (`RenderGraphDocumentLawTests`), and
-`puck schema` regenerates `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
+[frame graphs](../../../docs/reference/shaders.md#frame-graphs)) and the one
+pass-graph document (`RenderGraphDefinition`, files named `*.graph.json`): a
+pipeline is a graph of shader passes a world names, and a lone `.hlsl` reads
+as the one-pass graph `RenderGraphDefinition.FromShaderSource` makes. Its
+`packages` are engine passes named by `RenderGraphPackageCatalog` id.
+`RenderGraphCompiler` owns the schema-tag check (`RENDERGRAPH_SCHEMA`) and plans
+with `ShaderPipelineCompiler` and never a second planner: a package pass enters
+the plan only as a `ShaderPipelinePackagePass` through the planner's internal
+package entry, ordered in the compute shape it reaches resources by, and the
+planner's public entry refuses a graph naming packages
+(`SHADERPIPE_PACKAGE_PASS`). A package's planned pass carries
+`ShaderPipelinePassKind.Package`, and its `Declaration` is that compute shape
+with the package id as its source. Pipeline readers (the loader, the packager,
+`ShaderPipelineSource`, the `puck shaders` verbs) plan through
+`RenderGraphCompiler.ShaderPasses`, whose catalog is empty, so they see shader
+passes alone; a `CompiledShaderPipeline` holds a package pass with no compiled
+shader, which the render node records through its package's recorder (the
+runtime below). A shader pass's kind is `ShaderPipelineDocumentPassKind`, which
+has no `Package` member, so the JSON reader refuses the name at
+`$.passes[n].kind`. A package pass keeps no descriptor binding, has no
+interface-by-source check, and takes a compute pass's accesses in `UseOf`. Every
+checked-in `*.graph.json` plans alike through a pipeline host and the engine's
+catalog (`RenderGraphDocumentLawTests`), and `puck schema` regenerates
+`src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
+A package's ports are typed (`RenderGraphPackagePort`: an image, or a buffer
+with its stride and count), and a version bound to a port of another kind,
+stride or count is refused as `RENDERGRAPH_PACKAGE_INPUT` or `_OUTPUT`.
+`sdf.bricks` publishes the world's brick pool as a buffer output counted by
+`BrickPoolVoxels`; `RenderGraphBufferEdgeLawTests` plans its edges. A buffer
+edge is one mechanism with the image edge: `ShaderPipelineResourceKind` lives
+in `Puck.Hosting` so a `RenderGraphRead`, an instance's `Output` and a
+`RenderGraphReadSchedule` carry the kind a graph version declares, never a
+second enum.
 Views are instances scheduled by `RenderGraphScheduler` (`src/Puck.Hosting/Graph`),
 a pure function of the instance set, the frame's roots and footprints, and the
 previous history. It fills a caller-owned `RenderGraphSchedule`, whose `Next`
 it rewrites, so the next frame goes into another schedule; a refused frame
 leaves the schedule unchanged, and a host alternating two schedules allocates
 nothing in a steady frame. `RenderGraphSchedulerLawTests` pins demand, extent,
-refresh, self-reads, cycles, the pass-pixel budget and that zero-allocation
-steady frame. A world's instances are
+refresh, self-reads, cycles, the pass-pixel budget, buffer reads (demanded by
+every rendering reader, no extent, no pass-pixels), kind mismatches and that
+zero-allocation steady frame with a buffer edge in it. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
-priced by `WorldPresentationCost` in the cost report and `world.budget`. No
-live view renders through a graph yet; the renderer still composes views
-through `SdfEngineNode`'s children and `ViewStack` until P11b.
+priced by `WorldPresentationCost` in the cost report and `world.budget`.
+`RenderGraphRuntime` (`src/Puck.Shaders/Graph`, since `Puck.Hosting` cannot
+reach the node) runs a set: it alternates two schedules, renders each
+scheduled instance through its own `ShaderPipelineRenderNode` at the
+scheduled extent, and binds each external version to the frame of its
+producer's output the schedule names, or to a stand-in while there is none.
+A package pass records inside that node's submission through the recorder
+`RenderGraphPackageRecorders` holds for its package id; a recorder records
+into the command buffer it is handed and never submits, waits or creates a
+pipeline, and a graph naming an unserved package is refused at install. The
+root instance is the runtime's output and its capture target, with
+`UnservedCaptureReason` naming the root until it has produced.
+`RenderGraphRuntimeLawTests` pin the P11 checks on the fake, a steady frame
+at zero allocations included. No live view renders through a graph yet; the
+renderer still composes views through `SdfEngineNode`'s children and
+`ViewStack` until P11b wires the runtime in.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):
@@ -616,7 +692,8 @@ source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`) up to
 draws from a mapping until P13b.
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
-declares a language, and a one-off source is an `.hlsl` compute pass. A pass
+declares a language, and a one-off source is an `.hlsl` compute pass read as a
+one-pass graph. A pass
 reads its frame values and config only through its frame block
 ([the frame block](../../../docs/reference/shaders.md#the-frame-block)): the
 `ShaderFrameInterface` members, then its config fields in ordinal name order,
@@ -699,11 +776,11 @@ puck canary world-counters                                  # world.counters gpu
 puck canary source-conversion                               # the shipped palette and NV12 conversion kernels against their CPU reference, offscreen on both backends
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
-puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-geometry pipeline-echo no-device-compile    # shader pipelines offscreen on both backends
+puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo no-device-compile    # shader pipelines offscreen on both backends
 dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
 ```
 
-The fourteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
+The fifteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
 an arithmetic feedback oracle, the shipped ink pipeline's exposure regions, a
 broken middle-pass edit followed by a corrected one, two valid edits back to
 back (only the latest renders), compute-compute-fullscreen
@@ -715,7 +792,9 @@ override that renders after a relaunch on the saved document, a relocated packag
 a candidate refused by `SHADERPIPE_BUDGET` under a `pipeline.budget` cap with
 exact counts while the installed graph keeps running, a running instance
 whose graph is replaced and whose row is removed and reloaded three times over,
-two indexed, depth-tested geometry passes continuing one color and one depth
+an edit whose second image `gpu.faults` fails on the real device, refused with
+`GPU_CREATION_FAULT` while the instance's owned bytes return to its installed
+graph's and a clean retry installs, two indexed, depth-tested geometry passes continuing one color and one depth
 attachment, with a fullscreen pass sampling by UV the right way up,
 a generated echo pass reading back every frame-block sentinel (a hand-perturbed
 offset turns its pixels red), and, in a World with `dxc` hidden from its path,
@@ -723,15 +802,15 @@ the shipped ink pipeline rendering from its stored package and a relocated
 package from its binaries while an unpackaged source row is refused by
 `SHADERPKG_ABSENT`.
 Each proof runs once per backend, and an absent GPU or compiler is reported as
-unsupported rather than passed, except in a leg that hides the compiler. `pipeline-churn` fails on any `[vulkan-debug] validation`
+unsupported rather than passed, except in a leg that hides the compiler. `pipeline-churn` and `pipeline-fault` fail on any `[vulkan-debug] validation`
 or `[d3d12-debug]` line (the Vulkan loader's `general` notices about the
 machine's own layers do not count, nor does a Direct3D 12 pipeline-library miss, which the
-cache counts instead), so run it with `puck canary --debug-layers` for the
-validation proof. No canary injects an allocation
-failure on a real device: the device factories have no fault seam.
+cache counts instead), so run them with `puck canary --debug-layers` for the
+validation proof.
 `ShaderPipelineRenderNodeLawTests` drive the render node through its factory
 seams without a device: refusal of a candidate, a float-output candidate, a
 selection or a resize whose allocation fails partway (exact disposal counts),
+every creation of a replacement failed in turn through `GpuCreationFaults`,
 a planned steady state and replacement peak equal to the bytes the fake
 creates for every graph shape (the fake counts them independently), a candidate
 one byte over the budget refused with nothing created and the same candidate

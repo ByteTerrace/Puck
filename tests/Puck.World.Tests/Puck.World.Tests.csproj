@@ -72,6 +72,7 @@
         <Compile Include="..\Shared\TestRecords.cs" Link="TestRecords.cs" />
         <Compile Include="..\Shared\ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
         <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="..\Shared\RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
         <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
     </ItemGroup>
     <ItemGroup>

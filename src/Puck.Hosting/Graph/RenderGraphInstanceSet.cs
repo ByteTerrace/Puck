@@ -6,7 +6,8 @@ namespace Puck.Hosting;
 /// <summary>A validated set of render-graph instances and the order they render in: every producer an instance reads
 /// within a frame comes before it. A read of an instance's own output, or a read marked
 /// <see cref="RenderGraphRead.PreviousFrame"/>, takes the producer's previous completed frame, so it orders nothing
-/// and may close a loop; a loop of same-frame reads is refused with every instance in it named.</summary>
+/// and may close a loop; a loop of same-frame reads is refused with every instance in it named. Image and buffer reads
+/// order alike, and a read whose kind is not what its producer's output carries is refused naming both.</summary>
 public sealed class RenderGraphInstanceSet {
     private readonly Dictionary<string, int> m_indexByName;
 
@@ -239,8 +240,19 @@ public sealed class RenderGraphInstanceSet {
 
                     return false;
                 }
+                if (read.Kind != instances[producer].Output) {
+                    refusal = Refuse(
+                        RenderGraphInstanceRefusalCode.KindMismatch,
+                        $"Render-graph instance '{instance.Name}' reads '{read.Producer}' as {read.Kind}, but its output is {instances[producer].Output}.",
+                        instance.Name,
+                        read.Producer!
+                    );
+
+                    return false;
+                }
 
                 edges[index] = new RenderGraphEdge(
+                    Kind: read.Kind,
                     PreviousFrame: (read.PreviousFrame || (producer == consumer)),
                     Producer: producer
                 );
@@ -296,4 +308,5 @@ public sealed class RenderGraphInstanceSet {
 /// <param name="Producer">The index of the instance read.</param>
 /// <param name="PreviousFrame">Whether the read takes the producer's previous completed frame: declared so, or a read
 /// of the reader's own output.</param>
-public readonly record struct RenderGraphEdge(int Producer, bool PreviousFrame);
+/// <param name="Kind">What the read carries, which is what the producer's output carries.</param>
+public readonly record struct RenderGraphEdge(int Producer, bool PreviousFrame, ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image);

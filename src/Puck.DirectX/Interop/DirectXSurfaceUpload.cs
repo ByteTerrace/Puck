@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Presentation;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -67,7 +68,10 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
         m_commandList = ((nint)commandList);
-        ((ID3D12GraphicsCommandList*)commandList)->Close();
+        DirectXCommandCalls.Close(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
+            commandList: ((ID3D12GraphicsCommandList*)commandList)
+        );
 
         device->CreateFence(
             Flags: default,
@@ -155,14 +159,15 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             pixels: pixels
         );
 
+        var calls = DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext);
         var commandList = ((ID3D12GraphicsCommandList*)m_commandList);
         var allocator = ((ID3D12CommandAllocator*)m_commandAllocator);
         var texture = ((ID3D12Resource*)m_texture);
 
-        allocator->Reset();
-        commandList->Reset(
-            pAllocator: allocator,
-            pInitialState: null
+        DirectXCommandCalls.Reset(
+            allocator: allocator,
+            calls: calls,
+            commandList: commandList
         );
 
         if (D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST != m_textureState) {
@@ -220,7 +225,10 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             NumBarriers: 1,
             pBarriers: &toShaderResource
         );
-        commandList->Close();
+        DirectXCommandCalls.Close(
+            calls: calls,
+            commandList: commandList
+        );
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 
         var executable = ((ID3D12CommandList*)commandList);
@@ -323,13 +331,9 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     }
     private void WriteUploadBuffer(ReadOnlySpan<byte> pixels, int packedRowBytes) {
         var uploadBuffer = ((ID3D12Resource*)m_uploadBuffer);
-
-        void* mapped;
-
-        uploadBuffer->Map(
-            Subresource: 0,
-            pReadRange: ((D3D12_RANGE*)null),
-            ppData: &mapped
+        var mapped = DirectXCommandCalls.Map(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+            resource: uploadBuffer
         );
 
         try {
@@ -357,14 +361,14 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             );
         }
     }
-    private void WaitForGpu() {
-        DirectXFence.SignalAndWait(
-            deviceContext: m_deviceContext,
+    private void WaitForGpu() =>
+        DirectXCommandCalls.SignalAndWait(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+            fence: ((ID3D12Fence*)m_fence),
             fenceEvent: m_fenceEvent,
-            fenceHandle: m_fence,
-            fenceValue: ref m_fenceValue
+            fenceValue: ref m_fenceValue,
+            queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)
         );
-    }
     private void DisposeImageResources() {
         Release(pointer: ref m_uploadBuffer);
         DirectXDeviceMemory.CountReleased(
@@ -374,7 +378,8 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         Release(pointer: ref m_texture);
     }
 
-    /// <summary>Waits for the GPU, then releases the texture, upload buffer, SRV heap, and command resources. Safe to call more than once.</summary>
+    /// <summary>Drains the queue, then releases the texture, upload buffer, SRV heap, and command resources. A removed
+    /// device counts as drained (<see cref="DirectXCommandCalls.Drain"/>). Safe to call more than once.</summary>
     /// <exception cref="InvalidOperationException">The device context was disposed first, so the device has already
     /// reported these resources as leaked and the owner's teardown order is wrong.</exception>
     public void Dispose() {
@@ -393,7 +398,13 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         m_disposed = true;
 
         if (0 != m_fence) {
-            WaitForGpu();
+            _ = DirectXCommandCalls.Drain(
+                calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+                fence: ((ID3D12Fence*)m_fence),
+                fenceEvent: m_fenceEvent,
+                fenceValue: ref m_fenceValue,
+                queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)
+            );
         }
 
         DisposeImageResources();

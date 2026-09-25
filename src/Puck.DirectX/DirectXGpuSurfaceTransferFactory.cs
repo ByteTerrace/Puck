@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
@@ -10,10 +11,10 @@ namespace Puck.DirectX;
 
 /// <summary>
 /// Implements <see cref="IGpuSurfaceTransferFactory"/> for Direct3D 12 by creating adapter wrappers over
-/// <see cref="DirectXSurfaceUpload"/> and the inline readback and import helpers. Each wrapper downcasts
-/// <see cref="IGpuDeviceContext"/> to <see cref="IDirectXDeviceContext"/> at call time and converts
-/// <see cref="GpuPixelFormat"/> constants to <c>DXGI_FORMAT</c> values.
+/// <see cref="DirectXSurfaceUpload"/> and the inline readback and import helpers, each bound to the factory's device
+/// context. Each wrapper converts <see cref="GpuPixelFormat"/> constants to <c>DXGI_FORMAT</c> values.
 /// </summary>
+/// <param name="deviceContext">The device context every object the factory creates works on.</param>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuSurfaceTransferFactory(DirectXDeviceContext deviceContext) : IGpuSurfaceTransferFactory {
     /// <inheritdoc/>
@@ -36,16 +37,9 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
     private uint m_currentHeight;
     private uint m_currentBytesPerPixel;
     private byte[]? m_outputBuffer;
-    private nint m_fence;
-    private ulong m_fenceValue;
-    private ulong m_pendingFenceValue;
-    private nint m_deferredCommandAllocator;
-    private nint m_deferredCommandList;
-    private bool m_readInFlight;
     private bool m_disposed;
 
     public ReadOnlyMemory<byte> Read(
-        IGpuDeviceContext deviceContextArg,
         nint sourceImageHandle,
         GpuPixelFormat format,
         uint width,
@@ -66,122 +60,42 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             height: height,
             width: width
         );
-        RecordCopyCommandList(
-            commandAllocator: out var commandAllocator,
-            commandList: out var commandList,
-            device: device,
-            format: format,
-            height: height,
-            sourceImageHandle: sourceImageHandle,
-            sourceLayout: sourceLayout,
-            width: width
-        );
 
-        var executable = ((ID3D12CommandList*)commandList);
+        nint commandAllocator = 0;
+        nint commandList = 0;
 
-        ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(
-            NumCommandLists: 1,
-            ppCommandLists: &executable
-        );
-        ((IGpuDeviceContext)deviceContext).WaitIdle();
+        // The allocator and list live for this read alone; a failed close or a lost device on the wait still
+        // releases them.
+        try {
+            RecordCopyCommandList(
+                commandAllocator: out commandAllocator,
+                commandList: out commandList,
+                device: device,
+                format: format,
+                height: height,
+                sourceImageHandle: sourceImageHandle,
+                sourceLayout: sourceLayout,
+                width: width
+            );
 
-        _ = ((IUnknown*)commandList)->Release();
-        _ = ((IUnknown*)commandAllocator)->Release();
+            var executable = ((ID3D12CommandList*)commandList);
+
+            ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(
+                NumCommandLists: 1,
+                ppCommandLists: &executable
+            );
+            ((IGpuDeviceContext)deviceContext).WaitIdle();
+        } finally {
+            if (0 != commandList) {
+                _ = ((IUnknown*)commandList)->Release();
+            }
+
+            if (0 != commandAllocator) {
+                _ = ((IUnknown*)commandAllocator)->Release();
+            }
+        }
 
         return MapAndUnpackRows();
-    }
-    public void SubmitRead(
-        IGpuDeviceContext deviceContextArg,
-        nint sourceImageHandle,
-        GpuPixelFormat format,
-        uint width,
-        uint height,
-        uint bytesPerPixel,
-        GpuImageLayout sourceLayout
-    ) {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        if (m_readInFlight) {
-            throw new InvalidOperationException(message: "A readback is already in flight; map it with MapPixels before submitting another.");
-        }
-
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
-
-        EnsureReadbackBuffer(
-            bytesPerPixel: bytesPerPixel,
-            device: device,
-            height: height,
-            width: width
-        );
-        EnsureFence(device: device);
-        RecordCopyCommandList(
-            commandAllocator: out var commandAllocator,
-            commandList: out var commandList,
-            device: device,
-            format: format,
-            height: height,
-            sourceImageHandle: sourceImageHandle,
-            sourceLayout: sourceLayout,
-            width: width
-        );
-
-        var executable = ((ID3D12CommandList*)commandList);
-        var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
-
-        queue->ExecuteCommandLists(
-            NumCommandLists: 1,
-            ppCommandLists: &executable
-        );
-
-        // DEFER releasing the allocator/list until MapPixels — the GPU is still consuming them (there is NO WaitIdle
-        // here); releasing them now would be a use-after-free. A completion Signal makes IsReadComplete pollable.
-        m_deferredCommandAllocator = commandAllocator;
-        m_deferredCommandList = commandList;
-        m_pendingFenceValue = ++m_fenceValue;
-
-        queue->Signal(
-            Value: m_pendingFenceValue,
-            pFence: ((ID3D12Fence*)m_fence)
-        );
-
-        m_readInFlight = true;
-    }
-    public bool IsReadComplete() {
-        if (
-            m_disposed ||
-            (0 == m_fence) ||
-            !m_readInFlight
-        ) {
-            return false;
-        }
-
-        // Non-blocking poll of the deferred copy's fence. A REMOVED device returns UINT64_MAX from GetCompletedValue —
-        // never a real value (we only ever Signal small monotonic counts) — so treat it as NOT complete. That matches
-        // the Vulkan backend and the IGpuSurfaceReadback contract (a torn-down device polls false), letting the caller
-        // drain-and-drop the engine rather than mapping a dead resource. Never throws.
-        var completed = ((ID3D12Fence*)m_fence)->GetCompletedValue();
-
-        return (
-            (completed != ulong.MaxValue) &&
-            (completed >= m_pendingFenceValue)
-        );
-    }
-    public ReadOnlyMemory<byte> MapPixels() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        var pixels = MapAndUnpackRows();
-
-        // The deferred copy has completed (the caller polled IsReadComplete), so the allocator/list may now be released.
-        ReleaseDeferredCommands();
-        m_readInFlight = false;
-
-        return pixels;
     }
     public void Dispose() {
         if (m_disposed) {
@@ -189,27 +103,11 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         }
 
         m_disposed = true;
-
-        // A deferred (submitted, not-yet-mapped) copy may still be executing into the very resources ReleaseBuffer
-        // frees — a give-up path can dispose the engine with a read still in flight. Wait out that copy's own fence
-        // first (mirrors the Vulkan readback's TryWaitIdle). GetCompletedValue never throws, and a removed device
-        // returns UINT64_MAX (>= pending) so this exits immediately rather than hanging teardown.
-        if (
-            m_readInFlight &&
-            (0 != m_fence)
-        ) {
-            var fence = ((ID3D12Fence*)m_fence);
-
-            while (fence->GetCompletedValue() < m_pendingFenceValue) {
-                // Spin out the already-submitted copy; this waits only the GPU, never the sim clock.
-            }
-        }
-
         ReleaseBuffer();
     }
 
     // (Re)creates the host-visible readback buffer + its row metadata when the extent/format first appears or changes;
-    // a no-op when the current buffer already matches. Shared by the blocking Read and the pipelined SubmitRead.
+    // a no-op when the current buffer already matches.
     private void EnsureReadbackBuffer(ID3D12Device* device, uint width, uint height, uint bytesPerPixel) {
         if (
             (0 != m_readbackBuffer) &&
@@ -327,20 +225,19 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             NumBarriers: 1,
             pBarriers: &toShaderResource
         );
-        cmdList->Close();
+        DirectXCommandCalls.Close(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
+            commandList: cmdList
+        );
     }
-    // Maps the readback buffer, un-pads each row into the tightly packed output buffer, and unmaps. Shared by the
-    // blocking Read (immediately after the wait) and the pipelined MapPixels (after the fence poll reports complete).
+    // Maps the readback buffer, un-pads each row into the tightly packed output buffer, and unmaps.
     private ReadOnlyMemory<byte> MapAndUnpackRows() {
         var height = m_currentHeight;
         var packedRowBytes = (m_currentWidth * m_currentBytesPerPixel);
 
-        void* mapped;
-
-        ((ID3D12Resource*)m_readbackBuffer)->Map(
-            Subresource: 0,
-            pReadRange: ((D3D12_RANGE*)null),
-            ppData: &mapped
+        var mapped = DirectXCommandCalls.Map(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
+            resource: ((ID3D12Resource*)m_readbackBuffer)
         );
 
         try {
@@ -372,50 +269,10 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         return m_outputBuffer!;
     }
-    // Lazily creates the completion fence for the pipelined SubmitRead path (mirrors DirectXDeviceContext's idle
-    // fence, minus the event — the poll reads GetCompletedValue directly). A no-op once created; released in ReleaseBuffer.
-    private void EnsureFence(ID3D12Device* device) {
-        if (0 != m_fence) {
-            return;
-        }
-
-        // CreateFence is PreserveSig=false in these bindings (returns void, throws on failure), so a failure surfaces
-        // as an exception here — caught by BakePreviewService.Tick and degraded to the last image — rather than leaving
-        // m_fence at 0 for a later null Signal.
-        device->CreateFence(
-            Flags: default,
-            InitialValue: 0,
-            ppFence: out var fence,
-            riid: ID3D12Fence.IID_Guid
-        );
-        m_fence = ((nint)fence);
-        m_fenceValue = 0;
-    }
     private void ReleaseBuffer() {
         if (0 != m_readbackBuffer) {
             _ = ((IUnknown*)m_readbackBuffer)->Release();
             m_readbackBuffer = 0;
-        }
-
-        ReleaseDeferredCommands();
-
-        if (0 != m_fence) {
-            _ = ((IUnknown*)m_fence)->Release();
-            m_fence = 0;
-            m_fenceValue = 0;
-        }
-
-        m_readInFlight = false;
-    }
-    private void ReleaseDeferredCommands() {
-        if (0 != m_deferredCommandList) {
-            _ = ((IUnknown*)m_deferredCommandList)->Release();
-            m_deferredCommandList = 0;
-        }
-
-        if (0 != m_deferredCommandAllocator) {
-            _ = ((IUnknown*)m_deferredCommandAllocator)->Release();
-            m_deferredCommandAllocator = 0;
         }
     }
 }
@@ -424,7 +281,6 @@ file sealed class DirectXGpuSurfaceUpload(DirectXSurfaceUpload upload) : IGpuSur
     private GCHandle m_currentToken;
 
     public nint Upload(
-        IGpuDeviceContext deviceContextArg,
         ReadOnlyMemory<byte> pixels,
         GpuPixelFormat format,
         uint width,
@@ -468,7 +324,6 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
     private bool m_disposed;
 
     public GpuImportedSurface Import(
-        IGpuDeviceContext deviceContextArg,
         nint sharedHandle,
         GpuPixelFormat format,
         uint width,

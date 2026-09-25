@@ -18,7 +18,7 @@
         <PuckWorldSource Include="$(PuckWorldSourceDirectory)**\*.puck;$(PuckWorldSourceDirectory)**\*.world.json" />
         <!-- The pipeline sources the shipped worlds' rows can name, so an edited shader re-runs the tree run that packages
              it. They ship as content too: a World keys a row's package by the closure it reads beside the document. -->
-        <PuckWorldPipelineSource Include="Assets\**\*.hlsl;Assets\**\*.hlsli;Assets\**\*.pipeline.json" Exclude="Assets\worlds\**" />
+        <PuckWorldPipelineSource Include="Assets\**\*.hlsl;Assets\**\*.hlsli;Assets\**\*.graph.json" Exclude="Assets\worlds\**" />
         <!-- Every world document, compiled world and bake pack under Assets/worlds ships from the tree run's report instead. -->
         <Content Include="Assets\**" Exclude="Assets\worlds\**\*.puck;Assets\worlds\**\*.world.json;Assets\worlds\**\*.puckb;Assets\worlds\**\*.puckbake" CopyToOutputDirectory="PreserveNewest" />
         <ProjectReference Include="$(MSBuildThisFileDirectory)..\src\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />

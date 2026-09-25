@@ -1,6 +1,8 @@
+using Puck.Hosting;
+
 namespace Puck.Shaders.Tests;
 
-/// <summary>The pipeline documents the <c>pipeline-feedback</c> and <c>pipeline-edit</c> canaries boot must plan, and
+/// <summary>The graph documents the <c>pipeline-feedback</c> and <c>pipeline-edit</c> canaries boot must plan, and
 /// compile for both backends — or, for the broken edit, fail in its middle pass — wherever DXC is on the search path,
 /// before a GPU run can say anything about them.</summary>
 public sealed class PipelineCanaryFixtureTests {
@@ -14,8 +16,8 @@ public sealed class PipelineCanaryFixtureTests {
         )
     );
 
-    [InlineData("feedback.pipeline.json", "history")]
-    [InlineData("wrong-history.pipeline.json", "stale")]
+    [InlineData("feedback.graph.json", "history")]
+    [InlineData("wrong-history.graph.json", "stale")]
     [Theory]
     public void Both_feedback_documents_plan_three_passes_whose_accumulator_reads_the_named_history(string fileName, string history) {
         var plan = new ShaderPipelineCompiler().Compile(definition: ShaderPipelineLoader.ReadDefinition(
@@ -49,8 +51,8 @@ public sealed class PipelineCanaryFixtureTests {
             )
         );
     }
-    [InlineData("feedback.pipeline.json")]
-    [InlineData("wrong-history.pipeline.json")]
+    [InlineData("feedback.graph.json")]
+    [InlineData("wrong-history.graph.json")]
     [Theory]
     public void Both_feedback_documents_compile_for_both_backends(string fileName) {
         Assert.SkipWhen(
@@ -86,13 +88,13 @@ public sealed class PipelineCanaryFixtureTests {
             }
         }
     }
-    [InlineData("broken.pipeline.json", "convert-broken.hlsl")]
-    [InlineData("corrected.pipeline.json", "convert-inverted.hlsl")]
+    [InlineData("broken.graph.json", "convert-broken.hlsl")]
+    [InlineData("corrected.graph.json", "convert-inverted.hlsl")]
     [Theory]
     public void Both_edits_plan_the_feedback_graph_with_only_the_middle_pass_changed(string fileName, string convertSource) {
         var original = new ShaderPipelineCompiler().Compile(definition: ShaderPipelineLoader.ReadDefinition(
             name: "feedback",
-            path: FixturePath(fileName: "feedback.pipeline.json")
+            path: FixturePath(fileName: "feedback.graph.json")
         ));
         var edited = new ShaderPipelineCompiler().Compile(definition: ShaderPipelineLoader.ReadDefinition(
             name: "feedback",
@@ -119,14 +121,14 @@ public sealed class PipelineCanaryFixtureTests {
             actual: [edited.Passes[0].Declaration.Source, edited.Passes[2].Declaration.Source]
         );
     }
-    [InlineData("pipeline-supersede", "halved.pipeline.json")]
-    [InlineData("pipeline-shapes", "shapes.pipeline.json")]
-    [InlineData("pipeline-shapes", "misaddressed.pipeline.json")]
-    [InlineData("pipeline-resize", "resize.pipeline.json")]
-    [InlineData("pipeline-resize", "fixed-history.pipeline.json")]
-    [InlineData("pipeline-counters", "four-pass.pipeline.json")]
-    [InlineData("source-conversion", "conversion.pipeline.json")]
-    [InlineData("source-conversion", "discriminating.pipeline.json")]
+    [InlineData("pipeline-supersede", "halved.graph.json")]
+    [InlineData("pipeline-shapes", "shapes.graph.json")]
+    [InlineData("pipeline-shapes", "misaddressed.graph.json")]
+    [InlineData("pipeline-resize", "resize.graph.json")]
+    [InlineData("pipeline-resize", "fixed-history.graph.json")]
+    [InlineData("pipeline-counters", "four-pass.graph.json")]
+    [InlineData("source-conversion", "conversion.graph.json")]
+    [InlineData("source-conversion", "discriminating.graph.json")]
     [Theory]
     public void The_slice_three_documents_compile_for_both_backends(string canary, string fileName) {
         Assert.SkipWhen(
@@ -171,12 +173,12 @@ public sealed class PipelineCanaryFixtureTests {
             name: "shapes",
             path: FixturePath(
                 canary: "pipeline-shapes",
-                fileName: "shapes.pipeline.json"
+                fileName: "shapes.graph.json"
             )
         ));
 
         Assert.Equal(
-            expected: [("seed", ShaderPipelinePassKind.Compute), ("combine", ShaderPipelinePassKind.Compute), ("present", ShaderPipelinePassKind.Fullscreen)],
+            expected: [("seed", ShaderPipelineDocumentPassKind.Compute), ("combine", ShaderPipelineDocumentPassKind.Compute), ("present", ShaderPipelineDocumentPassKind.Fullscreen)],
             actual: plan.Passes.Select(selector: static pass => (pass.Name, pass.Declaration.Kind))
         );
         Assert.Equal(
@@ -210,11 +212,11 @@ public sealed class PipelineCanaryFixtureTests {
         try {
             var corrected = LoadEdit(
                 cache: cache,
-                fileName: "corrected.pipeline.json"
+                fileName: "corrected.graph.json"
             );
             var broken = LoadEdit(
                 cache: cache,
-                fileName: "broken.pipeline.json"
+                fileName: "broken.graph.json"
             );
 
             Assert.True(

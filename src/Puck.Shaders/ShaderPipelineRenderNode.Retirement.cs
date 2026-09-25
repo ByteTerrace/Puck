@@ -1,5 +1,6 @@
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 

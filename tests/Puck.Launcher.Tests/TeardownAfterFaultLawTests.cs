@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Gpu;
 using Puck.Overlays;
+using Puck.Testing;
 using Puck.Text;
 using Xunit;
 
@@ -36,7 +37,7 @@ public sealed class TeardownAfterFaultLawTests {
     }
     // The shipped overlay decorator over a producer that renders nothing, on services that must never be called: a
     // node that never produced a frame acquired nothing, so its teardown reaches none of them.
-    private static UnifiedOverlayNode Overlay(IGpuDeviceContext device, UnusedGpu unused) {
+    private static UnifiedOverlayNode Overlay(IGpuDeviceContext device, RefusingGpuDevice unused) {
         var glyphs = OverlayGlyphSdfPack.TryCreate(new FontAtlas(
             FontAtlasKind.Mtsdf,
             "test://fixed-grid",
@@ -86,7 +87,7 @@ public sealed class TeardownAfterFaultLawTests {
             height: 32U,
             inner: new WindowedHostFixture.FakeRenderNode(),
             deviceContext: device,
-            frameSources: unused,
+            frameSources: new UnusedFrameSources(gpu: unused),
             sources: new UnifiedOverlaySources(
                 BindingBar: null,
                 Console: null,
@@ -100,7 +101,7 @@ public sealed class TeardownAfterFaultLawTests {
 
     [Fact]
     public async Task ADeviceThatNeverCameUpSurfacesUnmaskedThroughTheRealOverlayTeardown() {
-        var unused = new UnusedGpu();
+        var unused = new RefusingGpuDevice();
         var device = new WindowedHostFixture.NeverInitializedDeviceContext(services: unused.Services);
         var presenter = new WindowedHostFixture.FakePresenter(failure: NoDevice());
         var host = WindowedHostFixture.Build(
@@ -162,7 +163,7 @@ public sealed class TeardownAfterFaultLawTests {
     }
     [Fact]
     public void AnOverlayThatNeverProducedReleasesNothingAndNeverAsksForTheDevice() {
-        var unused = new UnusedGpu();
+        var unused = new RefusingGpuDevice();
         var overlay = Overlay(
             device: new WindowedHostFixture.NeverInitializedDeviceContext(services: unused.Services),
             unused: unused
@@ -243,84 +244,9 @@ public sealed class TeardownAfterFaultLawTests {
     private sealed class NoDeviceService : BackgroundService {
         protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
     }
-    // Every GPU seam the overlay holds; reaching any of them from a node that never produced a frame is a failure, and
-    // is counted, because a teardown that keeps the pump's fault could otherwise swallow the throw.
-    private sealed class UnusedGpu : IGpuRecorder, IGpuBindings, IOverlayFrameSources, IGpuPipelineFactory,
-        IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuBufferFactory, IGpuSurfaceTransferFactory, IGpuImageFactory,
-        IGpuRenderPassFactory, IGpuCommandPoolFactory {
-        public UnusedGpu() =>
-            Services = new GpuDeviceServices {
-                Bindings = this,
-                BufferFactory = this,
-                CommandPoolFactory = this,
-                ImageFactory = this,
-                PipelineFactory = this,
-                QueueSubmitter = this,
-                Recorder = this,
-                RenderPassFactory = this,
-                ShaderModuleFactory = this,
-                SurfaceTransferFactory = this,
-            };
-
-        public int Reaches { get; private set; }
-        public GpuDeviceServices Services { get; }
-
-        private InvalidOperationException Reached() {
-            Reaches++;
-
-            return new(message: "A GPU seam was reached during teardown.");
-        }
-
-        public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw Reached();
-        public void BeginCommandBuffer(nint commandBufferHandle) => throw Reached();
-        public void EndCommandBuffer(nint commandBufferHandle) => throw Reached();
-        public void BeginDebugGroup(nint commandBufferHandle, string label) => throw Reached();
-        public void EndDebugGroup(nint commandBufferHandle) => throw Reached();
-        public void BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area = null) => throw Reached();
-        public void EndRenderPass(nint commandBufferHandle) => throw Reached();
-        public void BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => throw Reached();
-        public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) => throw Reached();
-        public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) => throw Reached();
-        public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => throw Reached();
-        public void BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) => throw Reached();
-        public void SetScissor(nint commandBufferHandle, GpuPixelRect rect) => throw Reached();
-        public void Draw(nint commandBufferHandle, in GpuDrawParameters parameters) => throw Reached();
-        public void DrawIndexed(nint commandBufferHandle, uint indexCount) => throw Reached();
-        public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) => throw Reached();
-        public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => throw Reached();
-        public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => throw Reached();
-        public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => throw Reached();
-        public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reached();
-        public void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reached();
-        public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reached();
-        public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => throw Reached();
-        public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => throw Reached();
-        public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => throw Reached();
-        public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => throw Reached();
-        public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) => throw Reached();
-        public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => throw Reached();
-        public IGpuRenderPass Create(GpuRenderPassDescription description) => throw Reached();
-        public IGpuCommandPool Create() => throw Reached();
-        public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => throw Reached();
-        public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => throw Reached();
-        public IGpuSurfaceImport CreateImport() => throw Reached();
-        public nint CreatePool(in GpuDescriptorPoolSizes sizes) => throw Reached();
-        public IGpuSurfaceReadback CreateReadback() => throw Reached();
-        public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) => throw Reached();
-        public IGpuSubmissionFence CreateSubmissionFence() => throw Reached();
-        public IGpuSurfaceUpload CreateUpload() => throw Reached();
-        public void DestroyPool(nint poolHandle) {
-            if (0 != poolHandle) {
-                throw Reached();
-            }
-        }
-        public void DestroySampler(nint samplerHandle) => throw Reached();
-        public void Submit(ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
-        public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw Reached();
-        public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
-        public bool TryAcquire(int key, out Puck.Hosting.GpuImageLease lease) => throw Reached();
-        public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw Reached();
-        public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => throw Reached();
-        public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reached();
+    // The overlay's frame sources over the refusing device: acquiring one from a node that never produced a frame is a
+    // failure, counted with the device's own.
+    private sealed class UnusedFrameSources(RefusingGpuDevice gpu) : IOverlayFrameSources {
+        public bool TryAcquire(int key, out Puck.Hosting.GpuImageLease lease) => throw gpu.Reach(member: "IOverlayFrameSources.TryAcquire");
     }
 }

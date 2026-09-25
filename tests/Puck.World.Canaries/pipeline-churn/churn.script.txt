@@ -4,12 +4,12 @@ pipeline.wait feedback installed 10
 pipeline.wait feedback submitted 4 10
 # Cycle 1. Two replacements while the instance runs, each retiring the replaced graph behind submissions still
 # in flight; a reset and three submissions prove each installed graph renders before the next arrives.
-pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.load feedback ../pipeline-edit/corrected.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.reset feedback
 pipeline.wait feedback submitted 3 10
-pipeline.load feedback ../pipeline-feedback/feedback.pipeline.json
+pipeline.load feedback ../pipeline-feedback/feedback.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.reset feedback
@@ -20,19 +20,19 @@ world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":
 world.row.remove views.pipelines feedback
 pipeline.inspect feedback
 # It is loaded again as a new instance, which compiles, installs and runs from its first submission.
-pipeline.load feedback ../pipeline-feedback/feedback.pipeline.json
+pipeline.load feedback ../pipeline-feedback/feedback.graph.json
 world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"pipeline":"feedback","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.wait feedback submitted 4 10
 # Cycle 2. Two replacements while the instance runs, each retiring the replaced graph behind submissions still
 # in flight; a reset and three submissions prove each installed graph renders before the next arrives.
-pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.load feedback ../pipeline-edit/corrected.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.reset feedback
 pipeline.wait feedback submitted 3 10
-pipeline.load feedback ../pipeline-feedback/feedback.pipeline.json
+pipeline.load feedback ../pipeline-feedback/feedback.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.reset feedback
@@ -43,19 +43,19 @@ world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":
 world.row.remove views.pipelines feedback
 pipeline.inspect feedback
 # It is loaded again as a new instance, which compiles, installs and runs from its first submission.
-pipeline.load feedback ../pipeline-feedback/feedback.pipeline.json
+pipeline.load feedback ../pipeline-feedback/feedback.graph.json
 world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"pipeline":"feedback","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.wait feedback submitted 4 10
 # Cycle 3. Two replacements while the instance runs, each retiring the replaced graph behind submissions still
 # in flight; a reset and three submissions prove each installed graph renders before the next arrives.
-pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.load feedback ../pipeline-edit/corrected.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.reset feedback
 pipeline.wait feedback submitted 3 10
-pipeline.load feedback ../pipeline-feedback/feedback.pipeline.json
+pipeline.load feedback ../pipeline-feedback/feedback.graph.json
 pipeline.status
 pipeline.wait feedback installed 40
 pipeline.reset feedback
@@ -66,7 +66,7 @@ world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":
 world.row.remove views.pipelines feedback
 pipeline.inspect feedback
 # It is loaded again as a new instance, which compiles, installs and runs from its first submission.
-pipeline.load feedback ../pipeline-feedback/feedback.pipeline.json
+pipeline.load feedback ../pipeline-feedback/feedback.graph.json
 world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"pipeline":"feedback","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
 pipeline.status
 pipeline.wait feedback installed 40

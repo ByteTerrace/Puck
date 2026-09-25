@@ -6,7 +6,7 @@
     "generator": "Puck.World.WorldSchema"
   },
   "title": "Puck frame graph (puck.render.graph.v1)",
-  "description": "A frame as a document: passes connected by named image and buffer versions, planned by the one pipeline planner (ShaderPipelineCompiler). Every view renders an instance of a graph, and a version declared External is an input the host binds, such as another instance\u0027s output. Its members are the pipeline document\u0027s members, with the same shapes, plus Packages: a puck.shader.pipeline.v1 document\u0027s content is a graph with no packages, so a pipeline is a graph a world names.",
+  "description": "A frame as a document: passes connected by named image and buffer versions, planned by the one pipeline planner (ShaderPipelineCompiler). It is the one document a pass graph is written in. A pipeline is a graph a world names, whose passes are all shader passes, and a lone .hlsl source reads as the one-pass graph FromShaderSource makes. Every view renders an instance of a graph, and a version declared External is an input the host binds, such as another instance\u0027s output.",
   "type": [
     "object",
     "null"
@@ -22,10 +22,10 @@
       "type": "string"
     },
     "resources": {
-      "description": "The versions, as a pipeline declares them.",
+      "description": "The versions.",
       "type": "array",
       "items": {
-        "description": "One resource version declared by a ShaderPipelineDefinition. Each version has exactly one writer. A version that names From forwards that predecessor: its writer continues the predecessor\u0027s storage and contents, so the predecessor is consumed and every pass that samples it runs before the overwrite.",
+        "description": "One resource version declared by a RenderGraphDefinition. Each version has exactly one writer. A version that names From forwards that predecessor: its writer continues the predecessor\u0027s storage and contents, so the predecessor is consumed and every pass that samples it runs before the overwrite.",
         "type": [
           "object",
           "null"
@@ -153,7 +153,8 @@
                       "Tiles",
                       "DynamicTransforms",
                       "InstanceMaskWords",
-                      "InstanceGridWords"
+                      "InstanceGridWords",
+                      "BrickPoolVoxels"
                     ],
                     "title": "ShaderPipelineCountBasis"
                   }
@@ -181,7 +182,7 @@
       }
     },
     "outputs": {
-      "description": "The public versions; the first is what a consumer reads by default.",
+      "description": "The public versions, each named by its version name; the first is what a consumer reads by default.",
       "type": "array",
       "items": {
         "type": [
@@ -191,13 +192,13 @@
       }
     },
     "passes": {
-      "description": "The shader passes, as a pipeline declares them, or null for none.",
+      "description": "The shader passes, in any order, or null for none; the planner orders them.",
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "description": "One executable pass in a shader pipeline.",
+        "description": "One shader pass of a graph.",
         "type": [
           "object",
           "null"
@@ -208,22 +209,21 @@
             "type": "string"
           },
           "source": {
-            "description": "The HLSL source\u0027s path, relative to the pipeline document; a package pass\u0027s package id.",
+            "description": "The HLSL source\u0027s path, relative to the graph document.",
             "type": "string"
           },
           "entryPoint": {
-            "description": "The entry point compiled by the shader compiler: a compute pass\u0027s kernel, or a graphics pass\u0027s fragment stage. A package pass compiles nothing and leaves it empty.",
+            "description": "The entry point compiled by the shader compiler: a compute pass\u0027s kernel, or a graphics pass\u0027s fragment stage.",
             "type": "string"
           },
           "kind": {
-            "description": "Compute, fullscreen graphics, or indexed geometry; a frame graph\u0027s package passes are Package.",
+            "description": "Compute, fullscreen graphics, or indexed geometry. A shader pass names no package work, which a graph declares as a RenderGraphPackagePass.",
             "enum": [
               "Compute",
               "Fullscreen",
-              "Geometry",
-              "Package"
+              "Geometry"
             ],
-            "title": "ShaderPipelinePassKind"
+            "title": "ShaderPipelineDocumentPassKind"
           },
           "inputs": {
             "description": "Named resource bindings. Set PreviousFrame explicitly for feedback.",
@@ -549,7 +549,7 @@
       "default": null
     },
     "packages": {
-      "description": "The engine-package passes, or null for none.",
+      "description": "The engine-package passes, or null for none. Only a host that offers packages plans them (RenderGraphCompiler); a pipeline instance runs shader passes alone.",
       "type": [
         "array",
         "null"
@@ -570,7 +570,7 @@
             "type": "string"
           },
           "inputs": {
-            "description": "The versions the package reads, one per input port in port order. A reference may read a history version\u0027s previous frame. A package binds its own descriptors, so no reference declares a binding.",
+            "description": "The versions the package reads, one per input port in port order, each carrying what its port carries (RenderGraphPackagePort). A reference may read a history version\u0027s previous frame. A package binds its own descriptors, so no reference declares a binding.",
             "type": [
               "array",
               "null"
@@ -581,7 +581,7 @@
             "default": null
           },
           "outputs": {
-            "description": "The image versions the package writes, one per output port in port order.",
+            "description": "The versions the package writes, one per output port in port order, each carrying what its port carries.",
             "type": [
               "array",
               "null"

@@ -186,6 +186,34 @@ binding would need `ALL` anyway or a split into one table per stage, which
 breaks one view table and one sampler table per group and moves the root
 indices. Narrowing returns only if a measured driver cost shows it pays.
 
+**A device's descriptor heaps are the device's own size, and a candidate is
+admitted into them or refused.** Direct3D 12 binds one shader-visible view heap
+and one sampler heap per device, and every descriptor pool is a range of them.
+The view heap takes the size the device reports,
+`GpuDeviceCapabilities.ViewHeapSize`, and the sampler heap takes the reported
+`SamplerHeapSize` as it is. A runtime that does not answer options 19 reports
+the sizes every binding tier guarantees, 1,000,000 views and 2,048 samplers. The
+heaps are created once with the device, and the device outlives every world it
+presents, so no world's demand sizes them. What varies is admission. Each pool
+owner states its pools' sizes statically, and its own pool creation reads the
+same statement, so `GpuDescriptorHeapBudget.TryAdmit` checks a candidate's
+demand against the free ranges before anything is allocated. A candidate that
+does not fit is refused by name when it would install, as a pipeline over its
+memory budget is refused with `SHADERPIPE_BUDGET`; the installed graph keeps
+presenting and nothing grows. A heap's bytes are its size times the device's
+descriptor increment, counted under `memory.directx`. At most
+`GpuDescriptorHeapBudget.MaxLivePools` pools, 1,024, are live on one device,
+which bounds the range allocator's bookkeeping; a pool past it is refused by
+name, as a pipeline past `ShaderPipelineLimits.MaxPasses` is.
+
+Two ways of sizing the heaps were rejected. A cap stated in a document has no
+basis, because nothing an author writes knows how many pipelines, views and
+previews a session will install, and a cap below the device's limit refuses work
+the device could hold. Sizing the heaps from the first world's summed demand,
+doubled so a reload can hold both graphs, ties the device's heaps to whichever
+world booted first, so a larger world loaded later on the same device is
+refused although the device has room.
+
 **HLSL compiled by the pinned DXC is the one source language, and a generated
 echo pass is what proves the layout.** One language, one compiler, one cache
 key. A second language would need its own front end, a translation back into

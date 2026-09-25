@@ -25,7 +25,6 @@ public static class SurfaceReadbackCapture {
         if (surface.IsSharedHandle) {
             captureImport ??= surfaceTransferFactory.CreateImport();
             imageHandle = captureImport.Import(
-                deviceContext: deviceContext,
                 format: format,
                 height: surface.Height,
                 sharedHandle: surface.SharedHandle,
@@ -36,7 +35,6 @@ public static class SurfaceReadbackCapture {
         captureReadback ??= surfaceTransferFactory.CreateReadback();
         var pixels = captureReadback.Read(
             bytesPerPixel: 4,
-            deviceContext: deviceContext,
             format: format,
             height: surface.Height,
             sourceImageHandle: imageHandle,

@@ -129,7 +129,6 @@ public sealed class DirectXDeviceBringUpLawTests {
 
             throw new NotSupportedException();
         }
-        public int GetDeviceRemovedReason(nint deviceHandle) => throw new NotSupportedException();
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
         public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) => throw new NotSupportedException();
@@ -157,7 +156,6 @@ public sealed class DirectXDeviceBringUpLawTests {
         public DirectXDevice CreateWarpDevice(DirectXFeatureLevel minimumFeatureLevel) => throw new NotSupportedException();
         public long GetAdapterLuid(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) => throw new ArgumentException(message: "Value does not fall within the expected range.");
-        public int GetDeviceRemovedReason(nint deviceHandle) => 0;
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
         public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) => throw new NotSupportedException();

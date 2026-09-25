@@ -8,7 +8,10 @@ public sealed partial class SdfWorldEngine {
     public int ProgramWordCapacity => m_programWordCapacity;
     /// <summary>Gets the bytes allocated for the visibility records: one record of <see cref="VisibilityRecordByteLength"/>
     /// bytes for every pixel of the full extent in every viewport the engine reserves.</summary>
-    public ulong VisibilityRecordBytes => m_visibilityRecordBytes;
+    public ulong VisibilityRecordBytes => FrameBufferBytes(
+        buffer: SdfFrameBuffer.PrimaryHits,
+        capacity: FrameCapacity
+    );
     /// <summary>Gets the bytes of one visibility record, the words <c>sdf-visibility.hlsli</c> lays out.</summary>
     public static int VisibilityRecordByteLength => PrimaryHitByteLength;
 
@@ -21,6 +24,40 @@ public sealed partial class SdfWorldEngine {
         Width: m_width
     );
 
+    /// <summary>Returns the one descriptor pool an engine creates, the statement its construction creates the pool from
+    /// and a device's heap admits it by: one cull-args set (bound once to shared device-local buffers), then per frame
+    /// ring slot the beam, instance-cull, views and composite sets and one copy set per frame upload table, which
+    /// rebind that slot's buffers; with a brick pool, one bake set per brick slot and, when bricks upload, one per ring
+    /// slot. Array bindings count every element.</summary>
+    /// <param name="brickPool">Whether the engine keeps a brick pool.</param>
+    /// <param name="brickUpload">Whether it uploads bricks, which needs a brick pool.</param>
+    /// <returns>The pool's sizes.</returns>
+    public static GpuDescriptorPoolSizes DescriptorPoolSizes(bool brickPool, bool brickUpload) {
+        var sets = new List<IReadOnlyList<GpuComputeBinding>> { PipelineLayouts.CullArgs };
+
+        for (var slot = 0; (slot < FrameRingSize); slot++) {
+            sets.Add(item: PipelineLayouts.Beam);
+            sets.Add(item: PipelineLayouts.InstanceCull);
+            sets.Add(item: PipelineLayouts.Views);
+            sets.Add(item: PipelineLayouts.Composite);
+
+            for (var table = 0; (table < FrameUploadTableCount); table++) {
+                sets.Add(item: PipelineLayouts.FrameUpload);
+            }
+        }
+        if (brickPool) {
+            for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {
+                sets.Add(item: PipelineLayouts.BrickBake);
+            }
+            if (brickUpload) {
+                for (var slot = 0; (slot < FrameRingSize); slot++) {
+                    sets.Add(item: PipelineLayouts.BrickBake);
+                }
+            }
+        }
+
+        return GpuDescriptorPoolSizes.ForSets([.. sets]);
+    }
     /// <summary>Returns the bytes the engine allocates for one of its device-local frame buffers at a capacity, the one
     /// statement of each buffer's size that construction and program growth allocate by.</summary>
     /// <param name="buffer">The buffer.</param>

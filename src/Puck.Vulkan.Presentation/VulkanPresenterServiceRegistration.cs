@@ -38,12 +38,14 @@ public static class VulkanPresenterServiceRegistration {
         services.AddSingleton<IWorkCounterSource>(implementationInstance: procedures.Work);
     }
     // How the renderer creates its neutral services (IGpuDeviceContext.Services), each bound to it as the device
-    // context: the native APIs are resolved here, once, so the provider never escapes into the renderer.
+    // context and passing through the host's GpuCreationFaults when one is registered: the native APIs are resolved
+    // here, once, so the provider never escapes into the renderer.
     private static Func<IVulkanDeviceContext, GpuDeviceServices> DeviceServices(IServiceProvider serviceProvider) {
         var bufferApi = serviceProvider.GetRequiredService<IVulkanBufferApi>();
         var commandBufferRecordingApi = serviceProvider.GetRequiredService<IVulkanCommandBufferRecordingApi>();
         var commandResourcesFactory = serviceProvider.GetRequiredService<IVulkanCommandResourcesFactory>();
         var computePipelineApi = serviceProvider.GetRequiredService<IVulkanComputePipelineApi>();
+        var creationFaults = serviceProvider.GetService<GpuCreationFaults>();
         var descriptorAllocator = serviceProvider.GetRequiredService<VulkanDescriptorAllocator>();
         var externalMemoryApi = serviceProvider.GetRequiredService<IVulkanExternalMemoryApi>();
         var framebufferSetApi = serviceProvider.GetRequiredService<IVulkanFramebufferSetApi>();
@@ -54,7 +56,7 @@ public static class VulkanPresenterServiceRegistration {
         var renderPassApi = serviceProvider.GetRequiredService<IVulkanRenderPassApi>();
         var shaderModuleFactory = serviceProvider.GetRequiredService<IVulkanShaderModuleFactory>();
 
-        return deviceContext => new GpuDeviceServices {
+        return deviceContext => GpuCreationFaults.Wrap(faults: creationFaults, services: new GpuDeviceServices {
             Bindings = new VulkanGpuBindings(
                 allocator: descriptorAllocator,
                 deviceContext: deviceContext
@@ -99,13 +101,14 @@ public static class VulkanPresenterServiceRegistration {
                 bufferApi: bufferApi,
                 commandBufferRecordingApi: commandBufferRecordingApi,
                 commandResourcesFactory: commandResourcesFactory,
+                deviceContext: deviceContext,
                 externalMemoryApi: externalMemoryApi,
                 frameSynchronizationApi: frameSynchronizationApi,
                 framebufferSetApi: framebufferSetApi,
                 offscreenImageApi: offscreenImageApi,
                 queueSubmitter: queueSubmitter
             ),
-        };
+        });
     }
 
     /// <summary>Registers the factories, command-buffer recorder, asset source, and shader loader the

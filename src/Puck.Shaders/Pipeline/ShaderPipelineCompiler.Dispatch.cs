@@ -1,3 +1,5 @@
+using Puck.Hosting;
+
 namespace Puck.Shaders;
 
 // Dispatch shapes and package storage. A pass dispatches over the frame extent, by fixed group counts, or indirectly
@@ -103,7 +105,7 @@ public sealed partial class ShaderPipelineCompiler {
             left.All(predicate: basis => right.Contains(value: basis))
         );
     }
-    private static void ValidateDispatch(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
+    private static void ValidateDispatch(ShaderPipelinePass pass, bool package, IReadOnlyDictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
         if (pass.Dispatch is not { } dispatch) {
             return;
         }
@@ -164,7 +166,7 @@ public sealed partial class ShaderPipelineCompiler {
             );
         }
         if (
-            (pass.Kind != ShaderPipelinePassKind.Package) &&
+            !package &&
             (dispatch.Kind != ShaderPipelineDispatchKind.Extent)
         ) {
             Add(
@@ -240,11 +242,9 @@ public sealed partial class ShaderPipelineCompiler {
         }
     }
     // A structured or counted buffer is a package's storage: a shader pass binding it, or a publication of it, would
-    // reach the pipeline node, which allocates and binds raw buffers of fixed size.
+    // reach the pipeline node, which allocates and binds raw buffers of fixed size. A package's own passes may bind
+    // them, so the caller checks only the document's passes.
     private static void ValidatePackageStorage(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
-        if (pass.Kind == ShaderPipelinePassKind.Package) {
-            return;
-        }
         foreach (var reference in ReadsOf(pass: pass).Concat(second: pass.OutputReferences)) {
             if (
                 resources.TryGetValue(

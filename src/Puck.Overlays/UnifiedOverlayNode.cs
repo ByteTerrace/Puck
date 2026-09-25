@@ -354,6 +354,17 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
+
+    /// <summary>Gets the one descriptor pool the overlay creates, the statement its construction creates the pool from
+    /// and a device's heap admits it by: one set of the inner world image's and every frame slot's combined image
+    /// samplers and the program storage buffer.</summary>
+    public static GpuDescriptorPoolSizes DescriptorPoolSizes { get; } = new(
+        CombinedImageSamplerCount: TextureSamplerCount,
+        MaxSets: 1,
+        StorageBufferCount: 1,
+        StorageImageCount: 0
+    );
+
     /// <summary>Gets the GPU work this node recorded for its newest completed overlay submission: the one
     /// <c>overlay</c> pass (the render pass and its draw), with the frame's uploads and descriptor writes outside it.
     /// Unavailable after a device loss until a rebuilt frame completes.</summary>
@@ -463,14 +474,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             vertexShaderModule: m_vertexShader
         );
 
-        m_descriptorPool = m_bindings.CreatePool(
-            sizes: new GpuDescriptorPoolSizes(
-                CombinedImageSamplerCount: TextureSamplerCount,
-                MaxSets: 1,
-                StorageBufferCount: 1,
-                StorageImageCount: 0
-            )
-        );
+        m_descriptorPool = m_bindings.CreatePool(sizes: DescriptorPoolSizes);
         m_descriptorSet = m_bindings.AllocateSet(
             descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle,
             poolHandle: m_descriptorPool
@@ -783,7 +787,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         var pixels = m_readback.Read(
             bytesPerPixel: 4,
-            deviceContext: m_deviceContext,
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: m_height,
             sourceImageHandle: m_renderTarget!.ImageHandle,
@@ -850,6 +853,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         // neither necessary nor safe.
         RetireForExit(exit: OverlayFrameExit.DeviceLost);
         ReleaseGpuResources();
+        m_capture.RefuseForDeviceLoss();
         m_inner.OnDeviceLost();
     }
     /// <inheritdoc/>

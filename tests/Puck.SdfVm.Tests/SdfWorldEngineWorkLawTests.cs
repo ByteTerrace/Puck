@@ -13,7 +13,7 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// Laws for the GPU work <see cref="SdfWorldEngine"/> counts, driven over <see cref="FakeGpuDevice"/> so the engine's
 /// whole CPU path runs without a device: the pass order and the passes a cadence skip marks, the exact per-pass counts
-/// of a rendered and of a cadence-skipped frame, what moves the revision, that submission identity keeps increasing
+/// of a rendered and of a cadence-skipped frame, that the descriptor pool it states is the one it creates, what moves the revision, that submission identity keeps increasing
 /// across an engine rebuild on the owner's ledger, and that a steady-state frame allocates nothing.
 /// </summary>
 public sealed class SdfWorldEngineWorkLawTests {
@@ -28,6 +28,23 @@ public sealed class SdfWorldEngineWorkLawTests {
         Assert.Equal(
             expected: ["sky", "mask", "beam", "cull-args", "primary", "surface", "ambient", "views"],
             actual: SdfWorldEngine.CadenceSkippedPassLabels.ToArray()
+        );
+    }
+    [InlineData(0)]
+    [InlineData(SdfWorldEngine.DefaultBrickPoolVoxelCapacity)]
+    [Theory]
+    public void TheDescriptorPoolAnEngineStatesIsThePoolItCreates(int brickPoolVoxelCapacity) {
+        using var rig = new Rig(
+            brickPoolVoxelCapacity: brickPoolVoxelCapacity,
+            cadence: false
+        );
+
+        Assert.Equal(
+            expected: [SdfWorldEngine.DescriptorPoolSizes(
+                brickPool: (brickPoolVoxelCapacity > 0),
+                brickUpload: (brickPoolVoxelCapacity > 0)
+            )],
+            actual: rig.Gpu.PoolsCreated
         );
     }
     [Fact]
@@ -146,8 +163,10 @@ public sealed class SdfWorldEngineWorkLawTests {
         "work submission=8 revision=1\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork sky skipped\nwork mask skipped\nwork beam skipped\nwork cull-args skipped\nwork primary skipped\nwork surface skipped\nwork ambient skipped\nwork views skipped\nwork composite executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=112 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=43 uploads.host-visible=834000 clears=0\n";
 
     private sealed class Rig : IDisposable {
-        public Rig(bool cadence, GpuWorkLedger? ledger = null) {
+        public Rig(bool cadence, GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0) {
             var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+
+            Gpu = gpu;
             var builder = new SdfProgramBuilder();
 
             builder.Sphere(
@@ -161,16 +180,28 @@ public sealed class SdfWorldEngineWorkLawTests {
                 name: "gpu.sdf-engine"
             ));
 
-            Pipelines = SdfTestPipelines.Build(
-                device: gpu,
-                kernels: SdfTestPipelines.Kernels(),
-                ledger: owned
-            );
+            // A brick pool needs its bake and upload pipelines, so its set is built with one-byte brick kernels.
+            Pipelines = ((brickPoolVoxelCapacity == 0)
+                ? SdfTestPipelines.Build(
+                    device: gpu,
+                    kernels: SdfTestPipelines.Kernels(),
+                    ledger: owned
+                )
+                : SdfWorldPipelines.Build(
+                    cancellationToken: CancellationToken.None,
+                    device: gpu,
+                    includeBrickPipelines: true,
+                    kernels: (SdfTestPipelines.Kernels() with {
+                        BrickBake = new byte[] { 1 },
+                        BrickUpload = new byte[] { 1 },
+                    }),
+                    ledger: owned
+                ));
             Engine = new SdfWorldEngine(
                 device: gpu,
                 height: Extent,
                 options: new SdfWorldEngineOptions(
-                    BrickPoolVoxelCapacity: 0,
+                    BrickPoolVoxelCapacity: brickPoolVoxelCapacity,
                     Program: program,
                     ViewportCapacity: 1,
                     WorkLedger: owned
@@ -204,6 +235,7 @@ public sealed class SdfWorldEngineWorkLawTests {
 
         public SdfWorldEngine Engine { get; }
         public SdfFrame Frame { get; }
+        public FakeGpuDevice Gpu { get; }
         public SdfWorldPipelines Pipelines { get; }
 
         public void Dispose() {

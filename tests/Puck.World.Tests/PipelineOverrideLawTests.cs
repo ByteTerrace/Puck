@@ -4,6 +4,7 @@ using Puck.Shaders;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.Testing;
 
 using Xunit;
 
@@ -29,14 +30,14 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
             destFileName: SourcePath,
             sourceFileName: Path.Combine(
                 path1: AuthoredGameFixtures.Root,
-                path2: "src/Puck.World/Assets/pipelines/ink.pipeline.json"
+                path2: "src/Puck.World/Assets/pipelines/ink.graph.json"
             )
         );
     }
 
     private string SourcePath => Path.Combine(
         path1: m_directory,
-        path2: "ink.pipeline.json"
+        path2: "ink.graph.json"
     );
 
     private static WorldDefinition Document() {
@@ -45,8 +46,8 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
         return (definition with {
             ViewsRaw = (definition.Views with {
                 Pipelines = [
-                    new WorldViewPipeline(Name: "left", Source: "ink.pipeline.json"),
-                    new WorldViewPipeline(Name: "right", Source: "ink.pipeline.json"),
+                    new WorldViewPipeline(Name: "left", Source: "ink.graph.json"),
+                    new WorldViewPipeline(Name: "right", Source: "ink.graph.json"),
                 ],
             }),
         });
@@ -349,7 +350,7 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
                 ))
             ) {
                 CreateNode = static name => new ShaderPipelineRenderNode(
-                    deviceContext: new AbsentPipelineDevice(),
+                    deviceContext: new RefusingGpuDevice(),
                     height: 4,
                     hostsOnDirectX: false,
                     name: name,

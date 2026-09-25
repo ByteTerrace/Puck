@@ -52,19 +52,26 @@ public readonly record struct RenderGraphRefresh(int Divisor, int Hertz) {
         );
     }
 }
-/// <summary>One instance's read of another instance's output.</summary>
+/// <summary>One instance's read of another instance's output: an image the consumer shows through a footprint, or a
+/// buffer it reads whenever it renders.</summary>
 /// <param name="Producer">The name of the instance read.</param>
 /// <param name="PreviousFrame">Whether the read takes the producer's previous completed frame instead of this frame's.
 /// A read of the instance's own output is always a previous-frame read, through the planner's history resource,
 /// whether or not it says so.</param>
-public readonly record struct RenderGraphRead(string Producer, bool PreviousFrame = false);
-/// <summary>One view rendered by a graph: the main camera, a pane, a game camera shown on a screen, or a nested world.
-/// Nesting is written as reads: an instance that shows another's output reads it.</summary>
+/// <param name="Kind">What the consumer's input carries, which must be what the producer's output carries. An image
+/// read demands the producer through the frame's footprints; a buffer read demands it on every frame the consumer
+/// renders.</param>
+public readonly record struct RenderGraphRead(string Producer, bool PreviousFrame = false, ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image);
+/// <summary>One view rendered by a graph: the main camera, a pane, a game camera shown on a screen, or a nested world;
+/// or world-scoped work, such as the SDF brick pool, whose output is a buffer the views read. Nesting is written as
+/// reads: an instance that shows another's output reads it.</summary>
 /// <param name="Name">The instance's unique name.</param>
 /// <param name="Refresh">How often it refreshes.</param>
 /// <param name="Passes">The passes one render of its graph records, the unit its cost is priced in. At least one.</param>
 /// <param name="Reads">The instances whose output it may read.</param>
-public sealed record RenderGraphInstance(string Name, RenderGraphRefresh Refresh, int Passes, IReadOnlyList<RenderGraphRead> Reads);
+/// <param name="Output">What the output its consumers read carries. An instance whose output is a buffer renders at no
+/// extent and costs no pass-pixels.</param>
+public sealed record RenderGraphInstance(string Name, RenderGraphRefresh Refresh, int Passes, IReadOnlyList<RenderGraphRead> Reads, ShaderPipelineResourceKind Output = ShaderPipelineResourceKind.Image);
 /// <summary>Why a set of render-graph instances was refused.</summary>
 public enum RenderGraphInstanceRefusalCode : byte {
     /// <summary>An instance has no name.</summary>
@@ -82,10 +89,14 @@ public enum RenderGraphInstanceRefusalCode : byte {
     /// <summary>Instances read each other within one frame, so no order renders every producer before its
     /// consumers.</summary>
     SameFrameCycle = 7,
+    /// <summary>A read's kind is not what its producer's output carries: an image read of a buffer output, or a buffer
+    /// read of an image output.</summary>
+    KindMismatch = 8,
 }
 /// <summary>A refused set of render-graph instances.</summary>
 /// <param name="Code">Why it was refused.</param>
 /// <param name="Message">The refusal, naming what it concerns.</param>
 /// <param name="Instances">The instances concerned; for <see cref="RenderGraphInstanceRefusalCode.SameFrameCycle"/>,
-/// every instance in the cycle in read order.</param>
+/// every instance in the cycle in read order; for <see cref="RenderGraphInstanceRefusalCode.KindMismatch"/>, the
+/// consumer, then the producer.</param>
 public sealed record RenderGraphInstanceRefusal(RenderGraphInstanceRefusalCode Code, string Message, IReadOnlyList<string> Instances);

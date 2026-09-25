@@ -252,7 +252,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuComputePipeline m_surfacePipeline;
     private readonly IGpuComputePipeline m_ambientPipeline;
     private readonly IGpuBuffer m_primaryHitBuffer;
-    private readonly ulong m_visibilityRecordBytes;
     private readonly uint m_width;
 
     private int m_currentSlot;
@@ -602,12 +601,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // One full-extent slice per viewport, like the source textures: changing regions must never overrun a
         // buffer sized for a previous layout. Shared across frame slots; Record orders primary writes before
         // shading reads and this frame's writes after the preceding frame's reads.
-        m_visibilityRecordBytes = FrameBufferBytes(
-            buffer: SdfFrameBuffer.PrimaryHits,
-            capacity: capacity
-        );
         m_primaryHitBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: m_visibilityRecordBytes,
+            sizeBytes: FrameBufferBytes(
+                buffer: SdfFrameBuffer.PrimaryHits,
+                capacity: capacity
+            ),
             usage: GpuBufferUsage.Storage
         );
         // The per-tile instance mask: same (viewport, tile) indexing as the cull buffer, GPU-written by instance
@@ -728,33 +726,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // a non-overlapping heap region per set (like a Vulkan pool), so they never clobber. The capacity is DERIVED
         // from the binding lists (an array binding contributes its full Count), so it can never drift out of sync when
         // a binding is added or MaxViewports/FrameRingSize changes.
-        var poolSetBindings = new List<IReadOnlyList<GpuComputeBinding>> { PipelineLayouts.CullArgs };
-
-        for (var slot = 0; (slot < FrameRingSize); slot++) {
-            poolSetBindings.Add(item: PipelineLayouts.Beam);
-            poolSetBindings.Add(item: PipelineLayouts.InstanceCull);
-            poolSetBindings.Add(item: PipelineLayouts.Views);
-            poolSetBindings.Add(item: PipelineLayouts.Composite);
-
-            for (var table = 0; (table < FrameUploadTableCount); table++) {
-                poolSetBindings.Add(item: PipelineLayouts.FrameUpload);
-            }
-        }
-
-        // One bake set per brick slot (all static — bound once below), when the pool is enabled.
-        if (m_brickPoolEnabled) {
-            for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {
-                poolSetBindings.Add(item: PipelineLayouts.BrickBake);
-            }
-
-            if (m_brickUploadPipeline is not null) {
-                for (var slot = 0; (slot < FrameRingSize); slot++) {
-                    poolSetBindings.Add(item: PipelineLayouts.BrickBake);
-                }
-            }
-        }
-
-        var poolSizes = GpuDescriptorPoolSizes.ForSets([.. poolSetBindings]);
+        var poolSizes = DescriptorPoolSizes(
+            brickPool: m_brickPoolEnabled,
+            brickUpload: (m_brickUploadPipeline is not null)
+        );
 
         m_pool = m_bindings.CreatePool(
             sizes: poolSizes

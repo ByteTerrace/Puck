@@ -96,7 +96,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.publish",
-            description: "silo.publish <key> <path>: composes the local world document at <path> (basis folded, validated) and publishes it through the authority root as the hosted, composed definition for the declared row named by <key> (owner/{oid}/{world} or the bare world id).",
+            description: "silo.publish <key> <path>: composes the local world document at <path> (basis folded, validated through a drawn copy) and publishes it undrawn, as a release publishes it, through the authority root as the hosted, composed definition for the declared row named by <key> (owner/{oid}/{world} or the bare world id).",
             handler: (context, args) => {
                 if (args.Count != 2) {
                     return CommandResult.Error(output: "[silo.publish: expected exactly two values — <key> <path>]");
@@ -123,9 +123,10 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
                     catalog: host.MachineCatalog
                 );
 
-                if (!origin.TryLoad(
+                // A published definition is undrawn: each instance draws its own cells when it admits the bytes, as a
+                // release's bootstrap does, so a published row and a bootstrap of the same document are byte-equal.
+                if (!origin.TryReadPublishable(
                     definition: out var definition,
-                    instanceIdentity: identity.World.Value,
                     reason: out var loadReason
                 )) {
                     return CommandResult.Error(output: $"[silo.publish: '{args[0]}' refused ({loadReason})]");

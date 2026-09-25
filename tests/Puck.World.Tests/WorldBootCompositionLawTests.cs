@@ -16,8 +16,8 @@ namespace Puck.World.Tests;
 /// CONTRACT UNDER TEST: each presentation shape's service collection, built by the same
 /// <see cref="WorldBootComposition.AddWorldBoot"/> a boot calls and resolved with no device created, carries what a GPU
 /// run of that shape needs before its first frame: the offscreen shape answers every verb the <c>puck counters</c>
-/// workload sends, and both the offscreen and the windowed shape register the persistent pipeline-cache store the
-/// backend's device creation reads. The neutral GPU services a node records through resolve to a
+/// workload sends, and both the offscreen and the windowed shape register the persistent pipeline-cache store and the
+/// creation faults the backend's device creation reads, the faults with their operator-only <c>gpu.faults</c> verb. The neutral GPU services a node records through resolve to a
 /// <see cref="FakeGpuDevice"/>, and every other service that owns or brings up a device throws when resolved, so a law
 /// that reached a device fails by name instead of creating one.
 /// </summary>
@@ -232,4 +232,39 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
     }
     [Fact]
     public void TheHeadlessShapeRegistersNoPipelineCacheStore() => Assert.False(condition: RegistersPipelineCacheStore(services: ComposeBoot(presentation: WorldHostPresentation.None).Services));
+    // Both backends read the faults with sp.GetService when they create their services, so a shape that dropped the
+    // registration would leave its device creating without them.
+    [InlineData(WorldHostPresentation.Offscreen)]
+    [InlineData(WorldHostPresentation.Windowed)]
+    [Theory]
+    public void EveryPresentationShapeRegistersItsDeviceCreationFaults(WorldHostPresentation presentation) => Assert.Contains(
+        collection: ComposeBoot(presentation: presentation).Services,
+        filter: static descriptor => (descriptor.ServiceType == typeof(GpuCreationFaults))
+    );
+    // The registry is resolvable in the offscreen shape alone without a device; the windowed shape registers the verb
+    // through the same AddGpuCreationFaults call.
+    [Fact]
+    public void TheOffscreenShapeArmsItsCreationFaultsThroughAnOperatorVerb() {
+        using var host = ComposeBoot(presentation: WorldHostPresentation.Offscreen).Build();
+
+        Assert.NotNull(@object: host.Services.GetService<GpuCreationFaults>());
+        Assert.True(condition: host.Services.GetRequiredService<CommandRegistry>().TryGetMetadata(
+            metadata: out var metadata,
+            name: "gpu.faults"
+        ));
+        Assert.Equal(
+            actual: metadata.Audience,
+            expected: CommandAudience.Operator
+        );
+    }
+    [Fact]
+    public void TheHeadlessShapeHasNoCreationFaults() {
+        using var host = ComposeBoot(presentation: WorldHostPresentation.None).Build();
+
+        Assert.Null(@object: host.Services.GetService<GpuCreationFaults>());
+        Assert.False(condition: host.Services.GetRequiredService<CommandRegistry>().TryGetId(
+            id: out _,
+            name: "gpu.faults"
+        ));
+    }
 }
