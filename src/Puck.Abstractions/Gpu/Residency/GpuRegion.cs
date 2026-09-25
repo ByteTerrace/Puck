@@ -327,6 +327,28 @@ public sealed class GpuRegion : IDisposable {
 
         m_ownedBuffers.Clear();
     }
+    /// <summary>Makes <paramref name="slot"/> owe every word of the region again, as a new buffer does, so its next flush
+    /// or copy sends the whole region whatever the slot last held. An owner that rewrites the whole region each frame
+    /// calls it so each frame's upload is the region, not the part that differs from what that slot held frames
+    /// ago.</summary>
+    /// <param name="slot">The frame slot, below <see cref="SlotCount"/>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is negative or not below
+    /// <see cref="SlotCount"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public void OweAll(int slot) {
+        RequireSlot(slot: slot);
+
+        var owed = m_owed[((Policy == GpuResidencyPolicy.Ring)
+            ? slot
+            : 0)];
+
+        owed.Clear();
+        owed.Add(
+            length: (ByteCount / sizeof(uint)),
+            start: 0
+        );
+        m_stagedSlot = -1;
+    }
     /// <summary>Writes what <paramref name="slot"/> owes into its host-visible buffer: the words changed since the slot
     /// was last flushed under the ring, since the last flush under in place, and since the last recorded copy under the
     /// staged policy, whose owed words go to the slot's staging buffer behind the run table the copy reads. A slot owing

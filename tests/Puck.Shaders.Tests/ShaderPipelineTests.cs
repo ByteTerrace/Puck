@@ -616,14 +616,18 @@ public sealed class ShaderPipelineTests {
             ["out"]
         );
 
-        var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => ShaderPipelineCompiler.PlanShaderSet(
-            definition: definition,
-            pushed: new Dictionary<string, ShaderPipelineParameterLayout>(comparer: StringComparer.Ordinal) {
-                ["draw"] = ShaderPipelineParameterLayout.Pushed(
-                    config: pass.Config,
-                    interfaceName: "draw"
-                ),
-            }
+        // A package pass pushes its block: the frame values, its extent and its config.
+        var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(
+            definition: definition with { Passes = [] },
+            packages: [new ShaderPipelinePackagePass(
+                Config: pass.Config,
+                InputAccesses: [],
+                Inputs: [],
+                Name: "draw",
+                OutputAccesses: [RenderGraphPortAccess.ComputeWrite],
+                Outputs: ["out"],
+                Package: "test.package"
+            )]
         ));
 
         Assert.Contains(

@@ -31,15 +31,6 @@ public sealed partial class ShaderPipelineRenderNode {
     /// paused or running.</summary>
     public bool IsBuildingCandidate => (m_build.IsPending && !m_build.IsCompleted);
 
-    private static GpuPushConstantBinding? PushConstantBinding(uint sizeBytes, GpuShaderStage stages) =>
-        ((sizeBytes == 0)
-            ? null
-            : new GpuPushConstantBinding(
-                data: new byte[sizeBytes],
-                offset: 0,
-                stageFlags: stages
-            )
-        );
     // Every version name mapped to the declaration of the storage that holds it, which fixes its kind, format and extent.
     private static Dictionary<string, ShaderPipelineResource> VersionSpecs(ShaderPipelinePlan plan) {
         var specs = new Dictionary<string, ShaderPipelineResource>(comparer: StringComparer.Ordinal);
@@ -347,7 +338,6 @@ public sealed partial class ShaderPipelineRenderNode {
     // the render pass it draws in, and the graphics pipeline created for that render pass; for a package pass what its
     // package's factory builds. The images it draws into are the graph's, allocated on the frame thread.
     private sealed class PassObjects : IDisposable {
-        public List<GpuComputeBinding> Bindings = [];
         public IGpuComputePipeline? Compute;
         public (uint Width, uint Height) Extent;
         public IGpuPipeline? Graphics;
@@ -389,18 +379,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 throw new InvalidDataException(message: $"Pass '{declaration.Name}' has no compiled shader.");
             }
 
-            // A document pass binds its frame and pass groups and pushes nothing; a shader set's pass pushes its one block
-            // and binds its inputs as combined samplers.
-            var grouped = !planned.Parameters.IsPushed;
-            var layout = (grouped
-                ? GroupLayoutOf(planned: planned)
-                : null);
-            var push = (grouped
-                ? null
-                : PushConstantBinding(
-                    sizeBytes: planned.Parameters.SizeBytes,
-                    stages: FrameBlockStages
-                ));
+            // A document pass binds its frame and pass groups and pushes nothing.
+            var layout = GroupLayoutOf(planned: planned);
             var device = request.Device;
             var gpu = request.Gpu;
             var primary = (request.DirectX
@@ -412,13 +392,6 @@ public sealed partial class ShaderPipelineRenderNode {
                 frameHeight: request.Key.Height,
                 frameWidth: request.Key.Width
             );
-            Bindings = (grouped
-                ? []
-                : Descriptors(
-                    pass: declaration,
-                    specs: specs
-                ));
-
             if (declaration.Kind == ShaderPipelineDocumentPassKind.Compute) {
                 if (
                     !primary.TryGetValue(
@@ -438,8 +411,8 @@ public sealed partial class ShaderPipelineRenderNode {
                     computeShaderModule: Primary,
                     description: new GpuComputePipelineDescription(
                         declaration.Name,
-                        Bindings,
-                        push,
+                        [],
+                        null,
                         Layout: layout
                     )
                 );
@@ -495,8 +468,6 @@ public sealed partial class ShaderPipelineRenderNode {
                         StrideBytes: 0
                     ))
             );
-            var sampled = ((uint)Bindings.Count(predicate: static item => (item.Kind == GpuComputeBindingKind.SampledImage)));
-
             RenderPass = gpu.RenderPassFactory.Create(
                 description: RenderPassOf(
                     planned: planned,
@@ -510,9 +481,9 @@ public sealed partial class ShaderPipelineRenderNode {
                 new GpuGraphicsPipelineDescription(
                     declaration.Name,
                     vertexInput,
-                    sampled,
+                    0,
                     false,
-                    push,
+                    null,
                     DepthCompareOf(pass: planned),
                     layout
                 )

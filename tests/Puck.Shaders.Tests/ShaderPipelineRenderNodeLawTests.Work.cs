@@ -17,14 +17,14 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     // their zeros would be unobservable and are not cleared. Convert moves history to shader-read and gray to general.
     // The fullscreen copy moves gray to shader-read and its target to render-target in its one barrier command buffer;
     // its render pass leaves the target shader-readable, and publication, outside every pass, moves it to the output
-    // layout. Every pass binds its frame group set and its pass group set and pushes nothing. Outside every pass the
-    // node flushes the words of the frame group's and the passes' blocks that changed since the slot last flushed them:
-    // here only the frame counter's four bytes.
+    // layout. Every pass binds its frame group set and its pass group set and pushes nothing, and uploads nothing: every
+    // slot has held its pass block since the graph installed. Outside every pass the node sends the frame group's whole
+    // region, one 256-byte constant-buffer view, which it rewrites every frame.
     internal static readonly string[] InitializationWork = [
         "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=3 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=1",
         "work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0",
         "work copy executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=2 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=1 uploads.host-visible=0 clears=0",
-        "work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=4 clears=0",
+        "work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=256 clears=0",
     ];
     // The next submission: nothing is cleared, the previous history is already shader-read, and the slot written next
     // was discarded by the reset, so accumulate transitions it to general.

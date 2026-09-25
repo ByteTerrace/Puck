@@ -158,7 +158,6 @@ public sealed class ShaderPipelineLoader {
                 );
 
                 if (
-                    !planned.Parameters.IsPushed &&
                     (PortTexts(
                         generated: generated,
                         source: sourceTexts[sourcePath],
@@ -226,16 +225,14 @@ public sealed class ShaderPipelineLoader {
                 }
                 // A document pass binds where its interface places it; a source that declares a binding of its own
                 // anywhere else is refused by name here, before any device sees it.
-                if (!planned.Parameters.IsPushed) {
-                    foreach (var (stage, module) in shader.SpirvByStage) {
-                        if (planned.Parameters.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: module.Span)) is { } mismatch) {
-                            return new ShaderPipelineLoadResult(
-                                Dependencies: dependencies.ToArray(),
-                                Message: $"[SHADERPIPE_INTERFACE] Pass '{pass.Name}' {stage}: {mismatch}",
-                                Pipeline: null,
-                                Status: ShaderPipelineLoadStatus.Failed
-                            );
-                        }
+                foreach (var (stage, module) in shader.SpirvByStage) {
+                    if (planned.Parameters.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: module.Span)) is { } mismatch) {
+                        return new ShaderPipelineLoadResult(
+                            Dependencies: dependencies.ToArray(),
+                            Message: $"[SHADERPIPE_INTERFACE] Pass '{pass.Name}' {stage}: {mismatch}",
+                            Pipeline: null,
+                            Status: ShaderPipelineLoadStatus.Failed
+                        );
                     }
                 }
                 shaders.Add(

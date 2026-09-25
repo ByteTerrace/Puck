@@ -187,10 +187,7 @@ public sealed class ShaderPipelinePlan {
     /// pipeline instance's parameter region, the bytes whose residency <c>pipeline.inspect</c> reports.</summary>
     public ulong ParameterBytes => Passes.Aggregate(
         func: static (total, pass) => (total + pass.Parameters.SizeBytes),
-        seed: (Passes.FirstOrDefault(predicate: static pass => (
-            (pass.Declaration is not null) &&
-            !pass.Parameters.IsPushed
-        ))?.Parameters.FrameBlockSizeBytes ?? 0UL)
+        seed: (Passes.FirstOrDefault(predicate: static pass => (pass.Declaration is not null))?.Parameters.FrameBlockSizeBytes ?? 0UL)
     );
     /// <summary>Gets the pass names in execution order.</summary>
     public IReadOnlyList<string> PassOrder => Passes.Select(selector: static pass => pass.Name).ToArray();

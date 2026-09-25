@@ -85,6 +85,12 @@ public sealed partial class ShaderPipelineRenderNode {
             slotCount: ((int)m_inFlight),
             usage: GpuBufferUsage.Uniform
         );
+        // Every slot holds the pass block from the start, so a slot's first frame uploads only what changed since, as every
+        // later one does.
+        WritePassBlock(pass: pass);
+        for (var slot = 0; (slot < m_inFlight); slot++) {
+            pass.PassRegion.Flush(slot: slot);
+        }
 
         for (var slot = 0; (slot < m_inFlight); slot++) {
             pass.FrameSets![slot] = bindings.AllocateSet(
@@ -144,8 +150,9 @@ public sealed partial class ShaderPipelineRenderNode {
             pipelineLayoutHandle: layout
         );
     }
-    // Writes this frame's frame group block into the node's frame region and sends it to the slot, or, with sentinels on,
-    // every member's echo sentinel.
+    // Writes this frame's frame group block into the node's frame region and sends the whole region to the slot, or, with
+    // sentinels on, every member's echo sentinel. The block is rewritten every frame, so each slot takes all of it rather
+    // than what differs from the frame it last held, and a frame's upload never depends on how many frames ran before.
     private void WriteFrameGroup(in FrameContext context, int slot) {
         if (m_frameRegion is not { } region) {
             return;
@@ -172,6 +179,7 @@ public sealed partial class ShaderPipelineRenderNode {
             bytes: block,
             offset: 0
         );
+        region.OweAll(slot: slot);
         region.Flush(slot: slot);
     }
     // Writes a grouped pass's block into its region each time its sets bind, so a config change or the sentinels reach it

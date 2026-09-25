@@ -371,6 +371,52 @@ public sealed class GpuResidencyLawTests {
         ));
     }
 
+    [Fact]
+    public void ASlotOwingEverythingAgainSendsTheWholeRegionWhateverItHeld() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        var alignment = ((int)IGpuBindings.ConstantBufferAlignment);
+        using var ring = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: alignment,
+            copyPipeline: null,
+            policy: GpuResidencyPolicy.Ring,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2,
+            usage: GpuBufferUsage.Uniform
+        );
+
+        _ = ring.Write(
+            bytes: [1, 2, 3, 4],
+            offset: 0
+        );
+        ring.Flush(slot: 0);
+        ring.Flush(slot: 1);
+
+        // Each slot holds the region now, so an unchanged write owes nothing and a flush sends nothing.
+        var settled = gpu.HostBytes();
+
+        _ = ring.Write(
+            bytes: [1, 2, 3, 4],
+            offset: 0
+        );
+        ring.Flush(slot: 0);
+        Assert.Equal(
+            actual: gpu.HostBytes(),
+            expected: settled
+        );
+
+        ring.OweAll(slot: 0);
+        ring.Flush(slot: 0);
+        Assert.Equal(
+            actual: (gpu.HostBytes() - settled),
+            expected: alignment
+        );
+        Assert.Equal(
+            actual: gpu.Memory(bufferHandle: ring.Buffer(slot: 0).BufferHandle)[..4],
+            expected: [1, 2, 3, 4]
+        );
+    }
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {
         using var module = gpu.Services.ShaderModuleFactory.Create(
             bytecode: new byte[] { UploadModelGpu.RegionCopyBytecode },

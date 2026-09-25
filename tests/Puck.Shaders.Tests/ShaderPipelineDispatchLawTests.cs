@@ -35,10 +35,13 @@ public sealed class ShaderPipelineDispatchLawTests {
         Outputs: outputs,
         Source: $"{name}.hlsl"
     );
+    // A package pass reaching every port through a compute dispatch.
     private static ShaderPipelinePackagePass Package(string name, ResourceReference[] inputs, ResourceReference[] outputs, ShaderPipelineDispatch? dispatch = null) => new(
         Dispatch: dispatch,
+        InputAccesses: [.. inputs.Select(selector: static _ => RenderGraphPortAccess.ComputeRead)],
         Inputs: inputs,
         Name: name,
+        OutputAccesses: [.. outputs.Select(selector: static _ => RenderGraphPortAccess.ComputeWrite)],
         Outputs: outputs,
         Package: "test.package"
     );
@@ -101,6 +104,25 @@ public sealed class ShaderPipelineDispatchLawTests {
         );
     }
 
+    [Fact]
+    public void APackagePassStatesEveryPortsAccessAndHasNoDefault() {
+        var definition = new RenderGraphDefinition(
+            name: "stated",
+            outputs: ["result"],
+            passes: [],
+            resources: [Words(name: "result")]
+        );
+        var stated = Package(
+            inputs: [],
+            name: "fill",
+            outputs: ["result"]
+        );
+
+        Assert.Single(collection: new ShaderPipelineCompiler().Compile(definition: definition, packages: [stated]).Passes);
+        foreach (var unstated in (ShaderPipelinePackagePass[])[stated with { OutputAccesses = null! }, stated with { OutputAccesses = [] }, stated with { OutputAccesses = [RenderGraphPortAccess.ComputeRead] }]) {
+            _ = Assert.Throws<ArgumentException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: definition, packages: [unstated]));
+        }
+    }
     [Fact]
     public void AnIndirectDispatchReadsItsArgumentsAfterTheirWriterInTheIndirectArgumentState() {
         var plan = PlanIndirect();

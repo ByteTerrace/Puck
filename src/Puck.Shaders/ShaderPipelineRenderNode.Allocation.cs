@@ -66,17 +66,13 @@ public sealed partial class ShaderPipelineRenderNode {
     }
 
     // The graph's one descriptor pool: a frame set and a pass set per in-flight frame for each document pass, and a set
-    // per in-flight frame for each shader set's or package pass that binds a descriptor; none when no pass binds one.
+    // per in-flight frame for each package pass that binds a descriptor; none when no pass binds one.
     private static GpuDescriptorPoolSizes? GraphDescriptorPool(ShaderPipelinePlan plan, uint inFlight, RenderGraphPackageRecorders packages) {
-        var specs = VersionSpecs(plan: plan);
         var sets = new List<IReadOnlyList<GpuComputeBinding>>();
         var groups = default(GpuDescriptorPoolSizes);
 
         foreach (var planned in plan.Passes) {
-            if (
-                (planned.Declaration is not null) &&
-                !planned.Parameters.IsPushed
-            ) {
+            if (planned.Declaration is not null) {
                 groups += GroupPoolSizes(
                     inFlight: inFlight,
                     planned: planned
@@ -86,16 +82,11 @@ public sealed partial class ShaderPipelineRenderNode {
             }
 
             // A package pass has no declaration; its recorder allocates the sets its factory states.
-            var bindings = ((planned.Declaration is { } declaration)
-                ? Descriptors(
-                    pass: declaration,
-                    specs: specs
-                )
-                : packages.FactoryFor(
-                    instance: plan.Definition.Name,
-                    package: planned.Package!.Package,
-                    pass: planned.Name
-                ).SetBindings);
+            var bindings = packages.FactoryFor(
+                instance: plan.Definition.Name,
+                package: planned.Package!.Package,
+                pass: planned.Name
+            ).SetBindings;
 
             if (bindings.Count == 0) {
                 continue;
@@ -122,13 +113,13 @@ public sealed partial class ShaderPipelineRenderNode {
     // retires, and a steady-state frame creates nothing. The graph holds one descriptor pool, owned by the pass that binds
     // a descriptor ahead of every other, and each pass allocates its sets from it. Each object is stored in
     // the pass as soon as it exists, so a failure partway leaves every created object where RuntimePass.Dispose releases
-    // it exactly once. A pass that binds no descriptor, a geometry pass with no input among them, has no descriptor set
-    // layout, so it gets no set or sampler, and its set stays zero.
+    // it exactly once. A document pass allocates its frame group and pass group sets (AllocateGroupSets); a package pass
+    // allocates its own sets through its recorder.
     private void AllocateSlotObjects(RuntimePass pass, GpuDescriptorPoolSizes? graphPool, ref nint descriptorPool) {
         var bindings = m_gpu.Bindings;
 
         if (
-            (pass.Grouped || (pass.Bindings.Count != 0) || (pass.PackageSetBindings != 0)) &&
+            (pass.Grouped || (pass.PackageSetBindings != 0)) &&
             (descriptorPool == 0)
         ) {
             descriptorPool = bindings.CreatePool(sizes: (graphPool ?? throw new InvalidOperationException(message: "The plan states no descriptor pool for a pass that binds descriptors.")));
@@ -141,16 +132,6 @@ public sealed partial class ShaderPipelineRenderNode {
             );
         }
         for (var slot = 0; (slot < m_inFlight); slot++) {
-            if (pass.Bindings.Count != 0) {
-                pass.Sets![slot] = bindings.AllocateSet(
-                    descriptorPool,
-                    ((pass.Kind == ShaderPipelinePassKind.Compute)
-                    ? pass.Compute!.DescriptorSetLayoutHandle
-                    : pass.Graphics!.DescriptorSetLayoutHandle)
-                );
-                pass.Samplers![slot] = bindings.CreateSampler();
-            }
-
             if (pass.Kind is ShaderPipelinePassKind.Compute or ShaderPipelinePassKind.Package) {
                 pass.Pools![slot] = m_gpu.CommandPoolFactory.Create();
             } else {

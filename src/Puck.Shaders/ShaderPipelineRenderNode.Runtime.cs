@@ -96,7 +96,6 @@ public sealed partial class ShaderPipelineRenderNode {
             ? values
             : throw new InvalidDataException(message: $"Invalid parameters for pass {planned.Name}.")
         );
-        public List<GpuComputeBinding> Bindings = [];
         // A grouped pass's frame set per slot, its pass block's region, and where each of its ports binds in its pass
         // group; null for a pushed or package pass.
         public nint[]? FrameSets;

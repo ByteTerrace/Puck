@@ -226,7 +226,7 @@ internal sealed class FakeGpuDevice :
         return new Resource(
             creation: Track(kind: "compute pipeline"),
             gpu: this,
-            groupLayouts: GroupLayoutsOf(layout: description.Layout)
+            groupLayouts: GroupLayoutsOf(layout: description?.Layout)
         );
     }
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
@@ -235,7 +235,7 @@ internal sealed class FakeGpuDevice :
         return new Resource(
             creation: Track(kind: "graphics pipeline"),
             gpu: this,
-            groupLayouts: GroupLayoutsOf(layout: description.Layout)
+            groupLayouts: GroupLayoutsOf(layout: description?.Layout)
         );
     }
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {

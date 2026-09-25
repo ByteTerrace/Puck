@@ -838,15 +838,20 @@ draws from a mapping until P13b.
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
 declares a language, and a one-off source is an `.hlsl` compute pass read as a
-one-pass graph. A pass
-reads its frame values and config only through its frame block
-([the frame block](../../../docs/reference/shaders.md#frame-values-extent-and-ports)): the
-`ShaderFrameInterface` members, then its config fields in ordinal name order,
+one-pass graph. A document pass reads its frame values, extent, config and ports
+only through its generated interface
+([frame values, extent and ports](../../../docs/reference/shaders.md#frame-values-extent-and-ports)):
+the frame group at set 0 (`frameGroup`), then its pass group at set 3
+(`passGroup`: extent, config in ordinal name order) followed by its ports, each
+reading as its resource's name in camel case or its `"as"`. The declarations are
 generated into `<interface>.interface.hlsli`, which the loader supplies in memory
 (`ShaderPipelineLoader.GeneratedIncludeOf`) and a shader set checks in
-(`puck shaders interface --write`). Never hand-declare a frame struct. The host
-writes the block through `ShaderPipelineParameterLayout.WriteFrame` alone, so a
-new frame member is a row in `ShaderFrameInterface.Members` and a write there,
+(`puck shaders interface --write`). Never hand-declare a frame struct or a port
+binding: a load refuses a module whose reflected bindings differ from its layout
+(`SHADERPIPE_INTERFACE`). The host writes the frame group through
+`ShaderPipelineParameterLayout.WriteFrame` and the extent through `WriteExtent`
+alone, so a new frame value is a row in `ShaderFrameInterface.FrameGroupMembers`
+(and `PushedMembers`, which a package's pushed block reads) and a write there,
 nothing else. `ShaderFrameBlockLawTests` compiles every shipped pipeline source
 and holds the offsets DXC assigned in both bytecodes to the host writer's, so a
 new shipped pass joins its data; `ShaderInterfaceEcho` generates the echo pass

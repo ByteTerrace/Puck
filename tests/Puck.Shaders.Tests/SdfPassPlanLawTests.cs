@@ -181,8 +181,10 @@ public sealed class SdfPassPlanLawTests {
                 0 => null,
                 _ => ShaderPipelineDispatch.Indirect(arguments: Assert.Single(collection: pass.Arguments)),
             }),
+            InputAccesses: [.. pass.Inputs.Select(selector: static _ => RenderGraphPortAccess.ComputeRead)],
             Inputs: pass.Inputs,
             Name: pass.Label,
+            OutputAccesses: [.. pass.Outputs.Select(selector: static _ => RenderGraphPortAccess.ComputeWrite)],
             Outputs: pass.Outputs,
             Package: RenderGraphPackageCatalog.SdfWorld
         )).ToArray();

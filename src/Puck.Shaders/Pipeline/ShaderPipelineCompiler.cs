@@ -757,7 +757,7 @@ public sealed partial class ShaderPipelineCompiler {
     // reaching the planner with its own is refused. The names they bring are the passes whose planned kind is Package.
     // Planning works on a copy whose passes are both, and the plan keeps the graph's shader passes: a package's planned
     // pass carries its step, never its compute shape.
-    internal ShaderPipelinePlan Compile(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePackagePass> packages, IReadOnlyDictionary<string, ShaderPipelineParameterLayout>? pushed = null) {
+    internal ShaderPipelinePlan Compile(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePackagePass> packages) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: packages);
         var diagnostics = new List<ShaderPipelineDiagnostic>();
@@ -920,10 +920,10 @@ public sealed partial class ShaderPipelineCompiler {
                         config: pass.Config,
                         package: pass.Source
                     )
-                    : (pushed?.GetValueOrDefault(key: pass.Name) ?? ShaderPipelineParameterLayout.Resolve(
+                    : ShaderPipelineParameterLayout.Resolve(
                         pass: pass,
                         resources: resourceByName
-                    )));
+                    ));
             } catch (InvalidDataException exception) {
                 Add(
                     diagnostics,
@@ -1048,31 +1048,6 @@ public sealed partial class ShaderPipelineCompiler {
         Package: pass.Source
     );
 
-    /// <summary>Plans a shader set's pass over bytecode built outside the graph: each pass named in
-    /// <paramref name="pushed"/> reads the pushed block given for it (a set's <see cref="ShaderSetManifest.FrameLayout"/>)
-    /// and binds its inputs as combined samplers in input order, in place of the groups a document pass binds.</summary>
-    /// <param name="definition">The graph.</param>
-    /// <param name="pushed">Each shader set pass's pushed layout, by pass name.</param>
-    /// <returns>The plan.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="pushed"/> is
-    /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">A layout in <paramref name="pushed"/> is not pushed.</exception>
-    public static ShaderPipelinePlan PlanShaderSet(RenderGraphDefinition definition, IReadOnlyDictionary<string, ShaderPipelineParameterLayout> pushed) {
-        ArgumentNullException.ThrowIfNull(argument: pushed);
-
-        if (pushed.Values.FirstOrDefault(predicate: static layout => !layout.IsPushed) is { } bound) {
-            throw new ArgumentException(
-                message: $"A shader set pass reads a pushed block; interface '{bound.Interface.Name}' binds groups.",
-                paramName: nameof(pushed)
-            );
-        }
-
-        return new ShaderPipelineCompiler().Compile(
-            definition: definition,
-            packages: [],
-            pushed: pushed
-        );
-    }
     /// <summary>Convenience static entry point for callers that do not need custom limits.</summary>
     public static ShaderPipelinePlan Plan(RenderGraphDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);
     /// <summary>Attempts to compile a definition without throwing for authored validation errors.</summary>

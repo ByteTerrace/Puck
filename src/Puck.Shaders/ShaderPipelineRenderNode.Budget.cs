@@ -124,10 +124,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // The bytes of the constant buffers a graph's document passes bind, one per frame slot: the frame group's block, which
     // every such pass shares, and each pass's own pass block, each in whole constant-buffer views.
     private static ulong ConstantBytes(ShaderPipelinePlan plan, uint inFlight) {
-        var grouped = plan.Passes.Where(predicate: static pass => (
-            (pass.Declaration is not null) &&
-            !pass.Parameters.IsPushed
-        )).ToArray();
+        var grouped = plan.Passes.Where(predicate: static pass => (pass.Declaration is not null)).ToArray();
 
         if (grouped.Length == 0) {
             return 0UL;

@@ -1,4 +1,4 @@
-# The positive script with a 4 MiB cap, which the wide edit's 1650688-byte peak fits: nothing is refused.
+# The positive script with a 4 MiB cap, which the wide edit's 1656832-byte peak fits: nothing is refused.
 pipeline.wait feedback compiled 40
 pipeline.wait feedback installed 10
 pipeline.time feedback pause
