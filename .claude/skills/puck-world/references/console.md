@@ -136,7 +136,11 @@ Three echo models — do not conflate them:
    correlation cannot register) is the line's own result, because
    `CommandResult.Settling` returns a settled settlement's verdict: it answers
    on the line and counts in `wire.errors` like any refused line, and never
-   also reaches the per-verb echo. A verb that submits through
+   also reaches the per-verb echo. An entry pushed out of the full table
+   (`WorldDeferredVerbEchoes.Capacity` pending) answers
+   `[<verb>: evicted unanswered — …]` on stderr and counts in `wire.errors`
+   (the table's `Evicted` event, which `WorldPostBuildWiring` prints and
+   counts), since no echo will name it again. A verb that submits through
    the plain `Submit(link, mutation)` overload (`world.generate`,
    `world.state.cell.set`, `world.state.cell.remove`) registers nothing, so
    its only observable answer is the universal `[world.mutation: … applied]`/

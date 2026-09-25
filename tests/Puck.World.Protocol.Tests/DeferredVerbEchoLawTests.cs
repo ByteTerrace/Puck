@@ -156,31 +156,41 @@ public sealed class DeferredVerbEchoLawTests {
         Assert.True(condition: settled!.Value.IsError);
         Assert.Contains(expectedSubstring: "no local verdict", actualString: settled.Value.Output, comparisonType: StringComparison.Ordinal);
     }
+    /// <summary>An entry pushed out of the full table settles as an unknown outcome and is reported through
+    /// <see cref="WorldDeferredVerbEchoes.Evicted"/> exactly once, saying it was evicted unanswered: no echo will
+    /// ever answer or count it, so the eviction is the stdin driver's only report of that line.</summary>
     [Fact]
-    public void AnEvictedRegistrationSettlesAsAnUnknownOutcome() {
+    public void AnEvictedRegistrationSettlesAndIsReportedAsEvictedUnanswered() {
         var echoes = new WorldDeferredVerbEchoes();
+        var evicted = new List<Puck.Commands.CommandResult>();
         Puck.Commands.CommandResult? settled = null;
 
+        echoes.Evicted += evicted.Add;
         Settled(
             observe: verdict => settled = verdict,
             result: echoes.Register(
                 correlationId: 1,
-                verb: "world.row.set"
+                verb: "world.undo"
             )
         );
-        for (var id = 2L; (id <= (WorldDeferredVerbEchoes.Capacity + 1)); id++) {
+        for (var id = 2L; (id <= WorldDeferredVerbEchoes.Capacity); id++) {
             _ = echoes.Register(
                 correlationId: id,
                 verb: "world.row.set"
             );
         }
 
-        Assert.True(condition: settled!.Value.IsError);
-        Assert.Contains(
-            actualString: settled.Value.Output,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "no verdict arrived"
+        Assert.Empty(collection: evicted);
+        _ = echoes.Register(
+            correlationId: (WorldDeferredVerbEchoes.Capacity + 1),
+            verb: "world.row.set"
         );
+
+        var report = Assert.Single(collection: evicted);
+
+        Assert.True(condition: report.IsError);
+        Assert.StartsWith(actualString: report.Output, expectedStartString: "[world.undo: evicted unanswered");
+        Assert.Equal(actual: settled, expected: report);
     }
     [Fact]
     public void TwoWorldsWithTheSameCorrelationKeepTheirOwnMutationVerdicts() {
