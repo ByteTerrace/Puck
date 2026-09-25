@@ -388,8 +388,13 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   section (armed only by `--schedule-dir`), verdict rows, and `.puck` `test`
   lowering are in [references/schedules-and-tests.md](references/schedules-and-tests.md).
 - `--state-dir <dir>` redirects the on-disk state root (profile catalog,
-  replays, compiled worlds) — use a temp dir for hermetic verification runs;
-  parallel runs each need their own. Stderr carries one `[world] compiled world:`
+  machine id, replays, pipeline caches) — use a temp dir for hermetic
+  verification runs; parallel runs each need their own. Compiled worlds and
+  bakes are per-user caches every boot shares. The root is a `WorldStateRoot`
+  the composition root registers and every consumer takes from its host; only
+  `Program.cs` names the per-user default, and `WorldStateRootIsolationLawTests`
+  holds every assembly `tests/Puck.World.Tests` links to that, so a fixture
+  hands its own temporary root. Stderr carries one `[world] compiled world:`
   line after the `[world] definition:` line.
 - **Capture BOTH streams.** Read-back answers land on stdout; refusals,
   server narration, boot origin lines, host log lines, and `[world.mutation: …]`

@@ -418,7 +418,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
     }
     [Fact]
     public void ARecordedRunAgreesWithItselfOnASecondVerifyOfTheSameRecording() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer(definition: Document(
             SaturatingRow(value: 8),
@@ -426,6 +426,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         ));
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,

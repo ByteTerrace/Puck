@@ -10,7 +10,9 @@ using Puck.Launcher;
 using Puck.World;
 using Puck.World.Machines;
 
-WorldMethodRecorder.StartIfBuiltIn(stateRoot: Puck.World.Server.WorldStateRoot.Resolve);
+// The run's state root, resolved from --state-dir once the command line parses; the method recorder reads it at exit.
+Puck.World.Server.WorldStateRoot? stateRoot = null;
+WorldMethodRecorder.StartIfBuiltIn(stateRoot: () => stateRoot);
 // The host CLI flags are a DEPLOYMENT OVERRIDE laid over the world document's presentation intent, so each is NULLABLE
 // with no DefaultValueFactory: absent means "the document decides" (WorldHostSettings.Resolve coalesces to the authored
 // host defaults). A DefaultValueFactory here would silently defeat the document on every unflagged run.
@@ -172,18 +174,12 @@ if (parseResult.GetValue(option: extensionsConfigFileOption) is { } extensionsPa
         return 1;
     }
 }
-if (parseResult.GetValue(option: stateDirOption) is { } stateDirOverride) {
-    Puck.World.Server.WorldStateRoot.Override(path: stateDirOverride);
-}
+// The per-user default is resolved here and nowhere else: every consumer below takes this root from the service
+// collection, so a host or fixture that composes World services carries its own.
+stateRoot = new Puck.World.Server.WorldStateRoot(path: (parseResult.GetValue(option: stateDirOption) ?? PuckUserDirectory.Resolve(name: "world")));
 // A world source compiles once across boots: the cache is per user rather than under the state root, since what it
 // holds is a pure function of the source files it names and the compiler that read them, never of a run's state.
 Puck.World.Transpiler.Composition.WorldCompileCache.Shared.Persist(directory: Puck.World.Transpiler.Composition.WorldCompileCache.DefaultDirectory);
-if (parseResult.GetValue(option: captureDirOption) is { } captureDirOverride) {
-    WorldCaptureRoot.Override(path: captureDirOverride);
-}
-if (parseResult.GetValue(option: scheduleDirOption) is { } scheduleDirOverride) {
-    WorldScheduleRoot.Override(path: scheduleDirOverride);
-}
 // Parse the nullable host CLI overrides at the boundary, keeping World's loud typo hard-exits for --backend / --present-
 // mode. A null override means "the document decides" (WorldHostSettings.Resolve coalesces to the authored defaults).
 WorldBackendPreference? backendOverride = null;
@@ -275,6 +271,7 @@ if (parseResult.GetValue(option: authenticationConfigFileOption) is { } authenti
 if (!PuckWorldLoader.TryResolveWorld(
     entry: parseResult.GetValue(option: entryOption),
     explicitPath: parseResult.GetValue(option: worldOption),
+    stateRoot: stateRoot,
     failure: out var worldFailure,
     source: out var worldSource,
     catalogFingerprint: machineCatalogFingerprint,
@@ -400,12 +397,15 @@ services.AddWorldBoot(inputs: new WorldBootInputs(
     Extensions: extensions,
     HostSettings: hostSettings,
     MachineCatalog: machineCatalog,
-    Source: worldSource
+    Source: worldSource,
+    StateRoot: stateRoot
 ) {
+    CaptureDirectory = parseResult.GetValue(option: captureDirOption),
     ConnectionSubject = connectionSubject,
     DebugLayers = parseResult.GetValue(option: debugLayersOption),
     ExtensionsConfiguration = extensionsConfiguration,
     FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
+    ScheduleDirectory = parseResult.GetValue(option: scheduleDirOption),
     StorageDiscoveryEndpoint = parseResult.GetValue(option: storageDiscoveryUriOption),
     StorageEndpoint = parseResult.GetValue(option: storageUriOption),
     StorageUserId = parseResult.GetValue(option: userIdOption),
@@ -417,10 +417,7 @@ services.AddWorldBoot(inputs: new WorldBootInputs(
 // puck.world.definition.v1 a player's own storage container could rewrite is not a trust anchor. It stays the refusing
 // ReleaseTrustAnchor.Placeholder until a real release-signing chain is minted for this build.
 var updateSection = worldSource.Definition.Update;
-var updateCacheRoot = (updateSection?.CacheRoot ?? Path.Combine(
-    path1: Puck.World.Server.WorldStateRoot.Resolve(),
-    path2: "updates"
-));
+var updateCacheRoot = (updateSection?.CacheRoot ?? stateRoot.PathOf(name: "updates"));
 var updateCheckInterval = ((updateSection?.CheckIntervalSeconds is { } updateCheckSeconds)
     ? ((updateCheckSeconds > 0)
         ? TimeSpan.FromSeconds(value: updateCheckSeconds)

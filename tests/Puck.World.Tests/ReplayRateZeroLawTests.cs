@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Commands;
 using Xunit;
 
@@ -111,11 +112,12 @@ public sealed class ReplayRateStampLawTests {
 
     [Fact]
     public void MidCaptureRebuildChangingRate_StopsTheRecordingAndKeepsTheRecordStartHeaderRate() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz));
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -174,7 +176,7 @@ public sealed class ReplayRateStampLawTests {
                 actual: tape.Mode
             );
 
-            using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
+            using var stream = File.OpenRead(path: tape.PathFor(name: name));
             var persisted = WorldReplaySnapshot.Read(stream: stream);
 
             // THE DISCRIMINATOR: before this fix the header stamped the LIVE rate at stop time (120, the
@@ -198,11 +200,12 @@ public sealed class ReplayRateStampLawTests {
     public void MidCaptureRebuildKeepingTheSameRate_KeepsRecording() {
         // THE CONTROL: a rebuild that does NOT change the rate must never trip the auto-stop — only a genuine rate
         // disagreement does.
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz));
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -251,7 +254,7 @@ public sealed class ReplayRateStampLawTests {
             Assert.Null(@object: result.VerifyFault);
             Assert.NotNull(value: result.Verdict);
 
-            using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
+            using var stream = File.OpenRead(path: tape.PathFor(name: name));
 
             Assert.Equal(
                 expected: 240U,
@@ -270,11 +273,12 @@ public sealed class ReplayRateStampLawTests {
 public sealed class ReplayPendingLeverFlushLawTests {
     [Fact]
     public void StopWhilePaused_FlushesThePendingPauseLeverOntoTheLastClosedTick() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -307,7 +311,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
         Assert.Null(@object: result.VerifyFault);
         Assert.NotNull(value: result.Verdict);
 
-        using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
 
         // THE DISCRIMINATOR: before this fix StopRecording persisted only the CLOSED tick groups — the pending
@@ -326,11 +330,12 @@ public sealed class ReplayPendingLeverFlushLawTests {
     // it as a documented no-op); everything else must be DISCARDED instead.
     [Fact]
     public void StopWithAPendingNonLeverGrant_DiscardsItRatherThanFoldingItOntoTheLastClosedTick() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -371,7 +376,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
         Assert.Null(@object: result.VerifyFault);
         Assert.NotNull(value: result.Verdict);
 
-        using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
 
         // THE DISCRIMINATOR: before this fix, this Grant would appear in tick 0's own authority list (folded onto
@@ -386,11 +391,12 @@ public sealed class ReplayPendingLeverFlushLawTests {
     [Fact]
     public void StopWithNoPendingLever_CarriesNoRateLeverEntry() {
         // THE CONTROL: an ordinary stop with nothing pending must not manufacture a lever entry out of nowhere.
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -416,7 +422,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
         Assert.Null(@object: result.VerifyFault);
         Assert.NotNull(value: result.Verdict);
 
-        using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
 
         Assert.Single(collection: persisted.Ticks);
@@ -431,11 +437,12 @@ public sealed class ReplayPendingLeverFlushLawTests {
     // than minting a phantom tick Drive never actually ran.
     [Fact]
     public void StopWithZeroClosedTicksAndAPendingLever_RecordsZeroTicksRatherThanMintingAPhantomOne() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -461,49 +468,55 @@ public sealed class ReplayPendingLeverFlushLawTests {
         Assert.Null(@object: result.VerifyFault);
         Assert.NotNull(value: result.Verdict);
 
-        using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
 
         Assert.Empty(collection: persisted.Ticks);
     }
 }
 /// <summary>
-/// G6's law: <c>replay.stop</c> resolving the tape's own on-disk path (<see cref="WorldReplayTape.PathFor"/>, which
-/// creates the <c>Replays</c> directory as a side effect) USED TO run BEFORE
-/// <see cref="WorldReplayTape.StopRecording"/>'s guarded try/finally — an unwritable state root threw straight out
-/// of the method, leaving the tape stuck at <see cref="WorldReplayMode.Recording"/> with its taps still attached, so
-/// a retry re-merged the same pending entries a second time and a mid-capture forced stop
-/// (<see cref="WorldReplayTape.NoteTick"/>'s own rate-change guard) could never actually complete.
+/// CONTRACT UNDER TEST: <see cref="WorldReplayTape.StopRecording"/> leaves the tape Idle, its taps detached and a fresh
+/// recording armable, whichever step of persisting the tape fails: resolving the <c>Replays</c> directory under an
+/// unwritable state root (<see cref="WorldReplayTape.PathFor"/>), or writing the tape file itself.
 /// </summary>
-/// <remarks>This law reproduces the observable CONTRACT the fix restores — any write failure during stop still
-/// leaves the tape Idle and re-armable — via a directory pre-created at the tape's OWN target path, which is
-/// deterministic and process-safe to set up. It does NOT specifically discriminate "PathFor now sits inside the
-/// try" from "PathFor sat outside it": <see cref="WorldReplaySnapshot.WriteFile"/>'s own call was ALREADY inside a
-/// try/finally before this fix, so a write failure originating there was already recoverable pre-fix too — only a
-/// failure inside <c>PathFor</c> ITSELF (its own <c>Directory.CreateDirectory</c> call) is the NEW behavior this
-/// fix adds, and reproducing that specific failure would require making the REAL, process-wide state root
-/// unwritable (<c>WorldStateRoot.Override</c> can only ever apply ONCE per process — see its own remarks — so no
-/// individual law may safely pull that lever without risking every other law that resolves a path afterward). What
-/// this law DOES prove, honestly: the guarantee "a stop failure never leaves the tape stuck" holds for at least one
-/// concrete failure shape, and — via <see cref="Fixtures.SkipIfReplayDirectoryUnwritable"/> below — every replay law
-/// in this file now tells a genuinely read-only sandbox apart from a code regression rather than reporting both as
-/// the same red.</remarks>
 public sealed class ReplayStopFailureLawTests {
+    // The state root is a file, so creating its Replays directory fails inside PathFor.
     [Fact]
-    public void StopWhenTheTapeFileCannotBeWritten_LeavesTheTapeIdleWithTapsDetachedRatherThanStuckRecording() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+    public void StopUnderAnUnwritableStateRoot_LeavesTheTapeIdleWithTapsDetached() {
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
+        AssertStopFailureLeavesTheTapeIdle(
+            obstruct: static _ => { },
+            stateRoot: new WorldStateRoot(path: stateDirectory.WriteText(
+                name: "not-a-directory",
+                text: string.Empty
+            ))
+        );
+    }
+    // A directory occupies the exact path the tape would write its file to.
+    [Fact]
+    public void StopWhenTheTapeFileCannotBeWritten_LeavesTheTapeIdleWithTapsDetached() {
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
+
+        AssertStopFailureLeavesTheTapeIdle(
+            obstruct: static path => Directory.CreateDirectory(path: path),
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath)
+        );
+    }
+
+    private static void AssertStopFailureLeavesTheTapeIdle(Action<string> obstruct, WorldStateRoot stateRoot) {
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
-            liveServer: fixture.Server,
-            profiles: fixture.Server.Profiles,
-            transport: transport,
+            addonHostFactory: static (_, _) => new NullAddonHost(),
             engines: [],
+            liveServer: fixture.Server,
             machineHostFactory: Fixtures.MachineHostFactory,
-            addonHostFactory: static (_, _) => new NullAddonHost()
+            profiles: fixture.Server.Profiles,
+            stateRoot: stateRoot,
+            transport: transport
         );
-        var name = $"g6-unwritable-{Guid.NewGuid():N}";
+        var name = $"stop-failure-{Guid.NewGuid():N}";
 
         Assert.True(
             condition: tape.TryBeginRecording(
@@ -515,45 +528,31 @@ public sealed class ReplayStopFailureLawTests {
 
         fixture.Step();
         tape.NoteTick();
+        obstruct(obj: Path.Combine(
+            path1: stateRoot.FullPath,
+            path2: "Replays",
+            path3: $"{name}.puckreplay"
+        ));
 
-        // Forces StopRecording's OWN WriteFile call to fail: a DIRECTORY already occupies the exact path the tape
-        // would write its file to. This reproduces "the state root refuses the write" deterministically and
-        // environment-independently, without touching the process-wide WorldStateRoot.Override (which this test
-        // project's OTHER laws may already have applied this run, and which throws on a SECOND application — see
-        // that type's own remarks — so it can never be safely re-applied here).
-        var path = WorldReplayTape.PathFor(name: name);
+        var thrown = Record.Exception(testCode: () => tape.StopRecording());
 
-        Directory.CreateDirectory(path: path);
+        Assert.True(
+            condition: (thrown is IOException or UnauthorizedAccessException),
+            userMessage: $"expected a write failure (IOException/UnauthorizedAccessException), got: {thrown}"
+        );
+        // Idle alone could be a flipped flag; arming a fresh recording proves the taps were detached.
+        Assert.Equal(
+            expected: WorldReplayMode.Idle,
+            actual: tape.Mode
+        );
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: $"{name}-retry",
+                refusal: out var retryRefusal
+            ),
+            userMessage: $"tape stayed stuck after the write failure: {retryRefusal}"
+        );
 
-        try {
-            var thrown = Record.Exception(testCode: () => tape.StopRecording());
-
-            Assert.True(
-                condition: (thrown is IOException or UnauthorizedAccessException),
-                userMessage: $"expected a write failure (IOException/UnauthorizedAccessException), got: {thrown}"
-            );
-
-            // THE DISCRIMINATOR (G6): the tape must be Idle, not stuck at Recording, and — the stronger proof that
-            // the taps were actually detached rather than merely the mode flag flipped — a FRESH recording must be
-            // armable immediately.
-            Assert.Equal(
-                expected: WorldReplayMode.Idle,
-                actual: tape.Mode
-            );
-            Assert.True(
-                condition: tape.TryBeginRecording(
-                    name: $"{name}-retry",
-                    refusal: out var retryRefusal
-                ),
-                userMessage: $"tape stayed stuck after the write failure: {retryRefusal}"
-            );
-
-            tape.CancelRecording();
-        } finally {
-            Directory.Delete(
-                path: path,
-                recursive: true
-            );
-        }
+        tape.CancelRecording();
     }
 }

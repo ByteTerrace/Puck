@@ -546,7 +546,8 @@ public static class WorldBootComposition {
             transport: sp.GetRequiredService<LoopbackTransport>(),
             engines: sp.GetServices<IMachineEngine>(),
             machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
-            addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
+            addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(),
+            stateRoot: sp.GetRequiredService<WorldStateRoot>()
         ));
         // The tape's read-back (replay.inspect) — walks a saved tape and, with --poses, re-drives it through the
         // same shadow drive the tape's verify uses.
@@ -586,9 +587,10 @@ public static class WorldBootComposition {
                     : () => renderProbe.Render
                 ),
                 directory: ((server.Definition.Captures is { } captures)
-                    ? WorldCaptureRoot.Resolve(
+                    ? sp.GetRequiredService<WorldCaptureRoot>().Resolve(
                         captures: captures,
-                        documentDirectory: server.Definition.DocumentDirectory
+                        documentDirectory: server.Definition.DocumentDirectory,
+                        stateRoot: sp.GetRequiredService<WorldStateRoot>()
                     )
                     : string.Empty
                 ),
@@ -604,7 +606,7 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldCaptureCommandModule>();
         // The schedule section's tick-scheduled command submission and its state export, wired at the SAME
         // publishTick call site as the wait gate and the capture scheduler. CORE, but inert unless --schedule-dir
-        // armed the boot (WorldScheduleRoot.IsArmed): the runner is always composed and submits nothing otherwise.
+        // armed the boot (the registered WorldScheduleRoot.IsArmed): the runner is always composed and submits nothing otherwise.
         // Registered as the observer too: a Simulation-routed scheduled line's own verdict arrives on the observer
         // path when its tick applies, and nothing else can correlate it back to the row.
         services.AddSingleton(implementationFactory: static sp => new WorldScheduleRunner(
@@ -612,6 +614,7 @@ public static class WorldBootComposition {
             instances: sp.GetRequiredService<WorldInstanceHost>(),
             registry: sp.GetRequiredService<Func<CommandRegistry>>(),
             router: sp.GetRequiredService<Func<InputRouter>>(),
+            scheduleRoot: sp.GetRequiredService<WorldScheduleRoot>(),
             server: sp.GetRequiredService<WorldServer>(),
             source: () => sp.GetRequiredService<TextCommandSource>()
         ));
@@ -684,7 +687,7 @@ public static class WorldBootComposition {
                 seats: sp.GetRequiredService<IWorldEmbodiedSeats>(),
                 resolver: sp.GetRequiredService<WorldSessionResolver>(),
                 machineId: sp.GetRequiredService<WorldOwnedWorlds>().MachineId,
-                stateRoot: WorldStateRoot.Resolve(),
+                stateRoot: sp.GetRequiredService<WorldStateRoot>(),
                 applicationStopping: sp.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping,
                 machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
                 admitsSpawn: true,
@@ -834,6 +837,9 @@ public static class WorldBootComposition {
 
         services.AddPuckExtensions(extensions: inputs.Extensions);
         services.AddWorldMachineCatalog(machineCatalog: inputs.MachineCatalog);
+        services.AddSingleton(implementationInstance: inputs.StateRoot);
+        services.AddSingleton(implementationInstance: new WorldCaptureRoot(path: inputs.CaptureDirectory));
+        services.AddSingleton(implementationInstance: new WorldScheduleRoot(path: inputs.ScheduleDirectory));
         services.AddSingleton(implementationInstance: worldSource);
         services.AddSingleton(implementationInstance: worldSource.Definition);
         if (worldSource.Admission is { } bootAdmission) {
@@ -842,7 +848,7 @@ public static class WorldBootComposition {
 
         services.AddSingleton(implementationInstance: inputs.Authenticator);
         services.AddSingleton(implementationFactory: _ => new WorldPeerNetwork(identityFile: (inputs.FederationKeyFile ?? Path.Combine(
-            path1: WorldStateRoot.Resolve(),
+            path1: inputs.StateRoot.FullPath,
             path2: "Network",
             path3: "peer.pk8"
         ))));
@@ -981,10 +987,7 @@ public static class WorldBootComposition {
         services.TryAddSingleton<SdfWorldPipelineCache>();
         services.TryAddSingleton(implementationFactory: static sp => new GpuPipelineCacheStore(
             contentKey: sp.GetRequiredService<SdfWorldPipelineCache>().LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)).ContentKey(),
-            directory: Path.Join(
-                path1: WorldStateRoot.Resolve(),
-                path2: "pipeline-cache"
-            )
+            directory: sp.GetRequiredService<WorldStateRoot>().PathOf(name: "pipeline-cache")
         ));
     }
     /// <summary>Registers the shader compiler every presentation shape's pipelines compile through, under the state
@@ -995,10 +998,7 @@ public static class WorldBootComposition {
     /// <param name="services">The service collection a presentation shape composes.</param>
     private static void AddWorldShaderWork(IServiceCollection services) {
         services.TryAddSingleton(implementationFactory: static sp => new ShaderCompiler(
-            cacheDirectory: Path.Combine(
-                path1: WorldStateRoot.Resolve(),
-                path2: "pipelines"
-            ),
+            cacheDirectory: sp.GetRequiredService<WorldStateRoot>().PathOf(name: "pipelines"),
             toolchainDirectory: sp.GetRequiredService<WorldDefinition>().Views.ShaderToolchain
         ));
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<ShaderCompiler>().Work);

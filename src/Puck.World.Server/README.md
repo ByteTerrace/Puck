@@ -158,7 +158,9 @@ without changing the frozen destination or throwing a stale-authority error.
 
 `WorldReleaseMetadataTransition` supplies the first isolated preservation rule:
 merge only the published author-metadata delta into the checkpoint's live definition
-and undo base. It validates both resulting documents, retains unrelated live edits,
+and undo base. It proves both package definitions through a drawn copy
+(`WorldDefinitionLoader.TryProvePublishable`, the proof a release read runs), validates both
+resulting documents, retains unrelated live edits,
 and refuses a conflict at its metadata path. Object members merge independently;
 arrays are whole values. Reintroducing a removed custom key may change JSON member
 order, while its value survives. Every other checkpoint section and every other

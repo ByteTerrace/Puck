@@ -1021,7 +1021,7 @@ public sealed class StorageCompositionLawTests {
         var deltaBytes = Encoding.UTF8.GetBytes(s: deltaText);
 
         Assert.True(
-            condition: WorldDefinitionFileSource.TryLoad(
+            condition: Fixtures.TryLoadDrawn(
                 path: deltaPath,
                 definition: out var fileComposed,
                 contentHash: out var fileHash,

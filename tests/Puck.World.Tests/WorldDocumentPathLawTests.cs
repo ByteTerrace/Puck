@@ -31,13 +31,11 @@ public sealed class WorldDocumentPathLawTests {
             userMessage: reason
         );
         Assert.Equal(expected: WorldDocumentPaths.DirectoryOf(documentPath: path), actual: loaded!.DocumentDirectory);
-        Assert.False(condition: WorldDefinitionFileSource.TryParseComposed(
+        Assert.False(condition: WorldDefinitionLoader.TryReadPublishable(
             definition: out _,
             json: File.ReadAllText(path: path),
-            neighbours: null,
             reason: out var refusal,
-            sourceName: "in-memory",
-            validateAdjacencyClaims: false
+            sourceName: "in-memory"
         ));
         Assert.Contains(actualString: refusal, expectedSubstring: $"'{Patch}' is relative, and this document has no directory");
     }

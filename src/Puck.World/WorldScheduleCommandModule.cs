@@ -8,7 +8,7 @@ namespace Puck.World;
 /// its export tick, and what each row's submission answered) and <c>world.verdicts</c> (every verdict row, its
 /// gate, its status, and the values its gate saw).
 /// </summary>
-internal sealed class WorldScheduleCommandModule(WorldServer server) : ICommandModule {
+internal sealed class WorldScheduleCommandModule(WorldServer server, WorldScheduleRoot scheduleRoot) : ICommandModule {
     private CommandResult Describe() {
         if (server.Definition.Schedule is not { } schedule) {
             return new CommandResult(Output: "[world.schedule: no schedule authored]");
@@ -16,8 +16,8 @@ internal sealed class WorldScheduleCommandModule(WorldServer server) : ICommandM
 
         var rows = schedule.Rows;
         var lines = new List<string>(capacity: (1 + rows.Count)) {
-            (WorldScheduleRoot.IsArmed
-                ? $"[world.schedule: armed directory {WorldScheduleRoot.Directory} rows {rows.Count} settle {schedule.SettleTicks} export tick {schedule.ExportTick}]"
+            (scheduleRoot.IsArmed
+                ? $"[world.schedule: armed directory {scheduleRoot.Directory} rows {rows.Count} settle {schedule.SettleTicks} export tick {schedule.ExportTick}]"
                 : $"[world.schedule: unarmed — this boot passed no --schedule-dir, so no row is submitted and no export is written; rows {rows.Count} settle {schedule.SettleTicks} export tick {schedule.ExportTick}]"),
         };
 

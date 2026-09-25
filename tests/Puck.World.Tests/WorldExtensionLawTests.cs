@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Commands;
 using Puck.Storage;
 using Puck.World.Protocol;
@@ -609,7 +610,7 @@ public sealed class WorldExtensionLawTests {
     }
     [Fact]
     public void RecordedMutationUsesTheRealTape_AndReplayNeedsNoProvider() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
         using var fixture = Fixtures.FreshServer();
         using var extension = Extension(server: fixture.Server);
         var tape = new WorldReplayTape(
@@ -622,7 +623,8 @@ public sealed class WorldExtensionLawTests {
                 Assert.Throws<InvalidOperationException>(testCode: () => Extension(server: server));
                 Assert.Throws<InvalidOperationException>(testCode: server.StartRecordedExtensionEpoch);
                 return new NullAddonHost();
-            }
+            },
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath)
         );
 
         Assert.True(

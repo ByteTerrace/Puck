@@ -249,16 +249,28 @@ public sealed partial class WorldPersistence {
 
         Host.Document.Journal.Clear();
         Host.Document.Journal.AddRange(collection: kept);
+
+        var applied = $"dropped {drop}, {Host.Document.Journal.Count} remaining";
+
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(
                 channel: "world.undo",
-                text: $"[world.undo: dropped {drop}, {Host.Document.Journal.Count} remaining]"
+                text: $"[world.undo: {applied}]"
             );
         }
 
         if (addonPlanCommitted) {
             Host.Addons!.Finish(plan: addonPlan!);
         }
+
+        // The acceptance answers the submitting line the way a refusal does (RefuseUndo), through the same tap.
+        Host.EchoTap?.Invoke(obj: new WorldEditEcho(
+            Message: applied,
+            Rejected: false,
+            Kind: WorldEditEchoKind.Mutation,
+            ConnectionId: connectionId,
+            CorrelationId: correlationId
+        ));
 
         return true;
     }

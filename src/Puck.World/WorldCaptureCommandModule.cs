@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <c>world.state.hash</c> (a named deterministic state summary, defaulting to the historical capture digest
 /// <see cref="WorldCaptureScheduler"/> stamps into a manifest entry).
 /// </summary>
-internal sealed class WorldCaptureCommandModule(WorldServer server) : ICommandModule {
+internal sealed class WorldCaptureCommandModule(WorldServer server, WorldStateRoot stateRoot, WorldCaptureRoot captureRoot) : ICommandModule {
     private CommandResult Describe() {
         var captures = server.Definition.Captures;
 
@@ -17,9 +17,10 @@ internal sealed class WorldCaptureCommandModule(WorldServer server) : ICommandMo
             return new CommandResult(Output: "[world.captures: no schedule authored]");
         }
 
-        var directory = WorldCaptureRoot.Resolve(
+        var directory = captureRoot.Resolve(
             captures: captures,
-            documentDirectory: server.Definition.DocumentDirectory
+            documentDirectory: server.Definition.DocumentDirectory,
+            stateRoot: stateRoot
         );
         var lines = new List<string>(capacity: (1 + rows.Count)) {
             $"[world.captures: directory {directory} stations {rows.Count}]",
