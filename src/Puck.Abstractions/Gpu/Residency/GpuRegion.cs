@@ -65,7 +65,7 @@ public sealed class GpuRegion : IDisposable {
 
     private readonly byte[] m_push = new byte[CopyPushByteLength];
 
-    private readonly IGpuComputeRecorder m_recorder;
+    private readonly IGpuRecorder m_recorder;
     private readonly uint[] m_runTable;
     private readonly IGpuStorageBuffer[] m_hostBuffers;
 
@@ -93,7 +93,7 @@ public sealed class GpuRegion : IDisposable {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> is not a defined policy,
     /// <paramref name="byteCount"/> is not positive or not a whole number of uints, <paramref name="slotCount"/> is not
     /// positive, or a staged region holds more than <see cref="MaxStagedWords"/> words.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuDeviceContext device, IGpuStorageBufferFactory buffers, IGpuDescriptorAllocator descriptors, IGpuComputeRecorder recorder, IGpuComputePipeline copyPipeline) {
+    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuDeviceContext device, IGpuStorageBufferFactory buffers, IGpuDescriptorAllocator descriptors, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(descriptors);
@@ -336,28 +336,27 @@ public sealed class GpuRegion : IDisposable {
         push[1] = ((uint)owed.Count);
         push[2] = ((uint)owed.Start(index: 0));
         push[3] = CopyRunTableWords;
-        m_recorder.BindComputePipeline(
+        m_recorder.BindPipeline(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             pipelineHandle: m_copyPipeline.Handle
         );
-        m_recorder.BindComputeDescriptorSet(
+        m_recorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_copySets[slot],
-            deviceHandle: m_deviceHandle,
             pipelineLayoutHandle: m_copyPipeline.LayoutHandle
         );
         m_recorder.PushConstants(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             data: m_push,
-            deviceHandle: m_deviceHandle,
             offset: 0,
             pipelineLayoutHandle: m_copyPipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
         );
         m_recorder.Dispatch(
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             groupCountX: ((count + (CopyWorkgroupSize - 1U)) / CopyWorkgroupSize),
             groupCountY: 1,
             groupCountZ: 1

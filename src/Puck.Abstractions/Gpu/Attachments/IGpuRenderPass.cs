@@ -10,7 +10,7 @@ public interface IGpuRenderPass : IDisposable {
 }
 /// <summary>
 /// A render pass bound to the images it draws into: one image per color attachment, in order, and the depth image when
-/// the pass has one, all of one extent. <see cref="IGpuCommandRecorder.BeginRenderPass"/> begins it. It owns the
+/// the pass has one, all of one extent. <see cref="IGpuRecorder.BeginRenderPass"/> begins it. It owns the
 /// backend's attachment views, never the images or the render pass.
 /// </summary>
 public interface IGpuFramebuffer : IDisposable {
@@ -46,6 +46,39 @@ public interface IGpuRenderPassFactory {
 /// The rules every render pass factory applies to a framebuffer's images.
 /// </summary>
 public static class GpuFramebuffers {
+    /// <summary>Resolves the area a render pass draws: the whole framebuffer, or a rectangle inside it.</summary>
+    /// <param name="framebuffer">The framebuffer the pass begins on.</param>
+    /// <param name="area">The requested area, or <see langword="null"/> for the whole framebuffer.</param>
+    /// <returns>The area the pass draws.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="area"/> is empty or reaches outside the
+    /// framebuffer.</exception>
+    public static GpuPixelRect ResolveArea(IGpuFramebuffer framebuffer, GpuPixelRect? area) {
+        ArgumentNullException.ThrowIfNull(framebuffer);
+
+        if (area is not { } rect) {
+            return GpuPixelRect.Covering(
+                height: framebuffer.Height,
+                width: framebuffer.Width
+            );
+        }
+
+        if (
+            (rect.Width == 0) ||
+            (rect.Height == 0) ||
+            (rect.X < 0) ||
+            (rect.Y < 0) ||
+            ((((ulong)rect.X) + rect.Width) > framebuffer.Width) ||
+            ((((ulong)rect.Y) + rect.Height) > framebuffer.Height)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: rect,
+                message: $"A render area is a non-empty rectangle inside the {framebuffer.Width}x{framebuffer.Height} framebuffer.",
+                paramName: nameof(area)
+            );
+        }
+
+        return rect;
+    }
     /// <summary>Refuses images that do not match a render pass: a color image count other than its color attachment
     /// count, a depth image where it has no depth attachment or none where it has one, an image of another format or
     /// without the attachment usage, or images of differing extents.</summary>

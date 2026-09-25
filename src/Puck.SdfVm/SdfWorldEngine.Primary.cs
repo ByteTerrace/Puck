@@ -7,7 +7,7 @@ public sealed partial class SdfWorldEngine {
     // shaded pixel reads a record written this frame. All four kernels skip hosted child views. The pass's buffer
     // transitions order the previous hit pass's record writes before this one.
     private void RecordHitPass(nint commandBuffer, IGpuComputePipeline pipeline, SdfFramePass pass, string label, int workPass) {
-        var recorder = m_gpu.ComputeRecorder;
+        var recorder = m_gpu.Recorder;
 
         m_work.EnterPass(pass: workPass);
         RecordBufferBarriers(
@@ -16,24 +16,23 @@ public sealed partial class SdfWorldEngine {
         );
         recorder.BeginDebugGroup(
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             label: label
         );
-        recorder.BindComputePipeline(
+        recorder.BindPipeline(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             pipelineHandle: pipeline.Handle
         );
-        recorder.BindComputeDescriptorSet(
+        recorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_viewsSets[m_currentSlot],
-            deviceHandle: m_deviceHandle,
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
         recorder.PushConstants(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             data: m_pushConstant,
-            deviceHandle: m_deviceHandle,
             offset: 0,
             pipelineLayoutHandle: pipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
@@ -41,12 +40,10 @@ public sealed partial class SdfWorldEngine {
         recorder.DispatchIndirect(
             argumentBufferHandle: m_viewsArgsBuffer.BufferHandle,
             argumentBufferOffset: 0,
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
         recorder.EndDebugGroup(
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
         m_work.LeavePass();
     }

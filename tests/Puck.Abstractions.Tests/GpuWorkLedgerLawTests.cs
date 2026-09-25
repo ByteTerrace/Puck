@@ -301,7 +301,7 @@ public sealed class GpuWorkLedgerLawTests {
             rig.Ledger.Poll();
             rig.Ledger.EnterPass(pass: 0);
             rig.Dispatch(count: 1);
-            rig.Services.ComputeRecorder.PushConstants(commandBufferHandle: 2, data: stackalloc byte[8], deviceHandle: 1, offset: 0, pipelineLayoutHandle: 3, stageFlags: GpuShaderStage.Compute);
+            rig.Services.Recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: 2, data: stackalloc byte[8], offset: 0, pipelineLayoutHandle: 3, stageFlags: GpuShaderStage.Compute);
             rig.Ledger.LeavePass();
             rig.Ledger.SkipPass(pass: 1);
             rig.Submit(fence: fence);
@@ -343,7 +343,7 @@ public sealed class GpuWorkLedgerLawTests {
         for (var submission = 1L; (submission <= 20_000L); submission++) {
             for (var step = 0L; (step < (submission % 16L)); step++) {
                 rig.Dispatch(count: 1);
-                rig.Services.ComputeRecorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, deviceHandle: 1, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader);
+                rig.Services.Recorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader);
             }
 
             rig.Services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [], deviceContext: rig.Gpu);
@@ -372,7 +372,7 @@ public sealed class GpuWorkLedgerLawTests {
 
         public void Dispatch(int count) {
             for (var index = 0; (index < count); index++) {
-                Services.ComputeRecorder.Dispatch(commandBufferHandle: 2, deviceHandle: 1, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
+                Services.Recorder.Dispatch(commandBufferHandle: 2, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
             }
         }
         public Fence NewFence() {

@@ -8,7 +8,7 @@ namespace Puck.World;
 /// registers exactly one backend and both draw a fullscreen graphics pass.</summary>
 internal sealed record WorldPostRenderExtensionServices : IFullscreenPassServices {
     /// <inheritdoc/>
-    public required IGpuCommandRecorder CommandRecorder { get; init; }
+    public required IGpuRecorder Recorder { get; init; }
     /// <inheritdoc/>
     public required IGpuComputeServices ComputeServices { get; init; }
     /// <inheritdoc/>
@@ -38,7 +38,7 @@ internal sealed record WorldPostRenderExtensionServices : IFullscreenPassService
 
         return new WorldPostRenderExtensionServices {
             ComputeServices = Resolve<IGpuComputeServices>(),
-            CommandRecorder = Resolve<IGpuCommandRecorder>(),
+            Recorder = Resolve<IGpuRecorder>(),
             DescriptorAllocator = Resolve<IGpuDescriptorAllocator>(),
             DeviceContext = Resolve<IGpuDeviceContext>(),
             GeometryBufferFactory = Resolve<IGpuGeometryBufferFactory>(),

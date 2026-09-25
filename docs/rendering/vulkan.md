@@ -161,14 +161,17 @@ handle is closed too. A `VulkanGpuRenderPass` is a `VkRenderPass` over the color
 optional depth attachment of a `GpuRenderPassDescription`: an attachment that loads
 begins in its attachment layout, one that clears or discards begins undefined, and a
 color attachment ends in its declared final layout. `VulkanGpuFramebuffer` binds one to
-its images' views, and the recorder begins it with one clear value per attachment.
+its images' views, and the recorder begins it with one clear value per attachment:
+opaque black for a color, the declared `GpuDepthAttachment.ClearDepth` for the depth.
 A transition into or out of the depth-attachment layout covers the image's depth aspect.
 
 `VulkanGpuPipelineFactory`, the neutral graphics path, creates opaque pipelines with one
 blend state per color attachment, a depth-stencil state that tests and writes exactly when
-the render pass has a depth attachment, and a viewport of negative height, so clip-space +y
-is the top of the attachment as on Direct3D 12. The presenter's compositor keeps its own
-alpha-over pipeline in Vulkan's convention. `BindIndexBuffer` and `DrawIndexed` record
+the render pass has a depth attachment, and a dynamic viewport and scissor. `VulkanGpuRecorder`
+begins a render pass by setting a viewport of negative height over the area the pass draws,
+so clip-space +y is the top of the attachment as on Direct3D 12, and a scissor over the same
+area. The presenter's compositor keeps its own alpha-over pipeline in Vulkan's convention,
+with a fixed viewport (`VulkanGraphicsPipelineCreateRequest.FixedViewport`). `BindIndexBuffer` and `DrawIndexed` record
 `vkCmdBindIndexBuffer` and `vkCmdDrawIndexed`.
 
 | Kind | Usage | Memory |

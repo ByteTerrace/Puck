@@ -18,8 +18,8 @@ public interface IGpuComputeServices {
     IGpuComputeCommandPoolFactory CommandPoolFactory { get; }
     /// <summary>The compute pipeline factory.</summary>
     IGpuComputePipelineFactory ComputePipelineFactory { get; }
-    /// <summary>The compute command recorder.</summary>
-    IGpuComputeRecorder ComputeRecorder { get; }
+    /// <summary>The command recorder.</summary>
+    IGpuRecorder Recorder { get; }
     /// <summary>The descriptor pool/set allocator.</summary>
     IGpuDescriptorAllocator DescriptorAllocator { get; }
     /// <summary>The queue submitter.</summary>

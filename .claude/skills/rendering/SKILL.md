@@ -284,11 +284,19 @@ These are one-line cautions; the owning pages hold the derivations.
   clears and stores are the plan's `ShaderPipelineAttachment`s, it leaves every
   attachment in its attachment layout, and the next planned access's barrier
   moves it on. Every neutral graphics pipeline (`IGpuPipelineFactory`) is opaque
-  with clip-space +y at the top on both backends (Vulkan's `ClipSpaceYUp` viewport);
+  with clip-space +y at the top on both backends (Vulkan's recorder sets a
+  negative-height viewport at `BeginRenderPass`, since neutral pipelines take a
+  dynamic viewport and scissor);
   a depth test goes in `GpuGraphicsPipelineDescription.DepthCompare` exactly
   when the render pass has a depth attachment (`ValidateAgainst`). A new
   graphics state field must be honored by both factories, and the Direct3D 12
   pipeline-library identity words must cover it.
+  One `IGpuRecorder` records compute and graphics; its `BindPipeline`,
+  `BindDescriptorSet` and `PushConstants` name a `GpuBindPoint`, `Compute` for a
+  dispatch and `Graphics` for a draw. Direct3D 12 keeps the two roots apart, so
+  a wrong bind point writes a root the bound pipeline never set. A depth clear
+  value is `GpuDepthAttachment.ClearDepth` on the render pass, never a recorder
+  argument.
   A candidate (never the device-loss rebuild) is refused in `EnsureBuild` with
   `SHADERPIPE_BUDGET` when `OwnedBytes` plus its steady state exceeds
   `BudgetBytes`, `ShaderPipelineMemoryBudget.For(profile)` lowered to the

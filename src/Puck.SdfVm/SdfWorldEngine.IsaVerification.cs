@@ -5,11 +5,10 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldEngine {
     private ReadOnlyMemory<byte> DispatchIsaReport(IGpuComputePipeline viewsPipeline, IGpuImage reportImage, IGpuImage sampledImage, IGpuSurfaceReadback readback, bool initializeImages) {
         var commandBuffer = m_commandPools[0].CommandBufferHandle;
-        var recorder = m_gpu.ComputeRecorder;
+        var recorder = m_gpu.Recorder;
 
         recorder.BeginCommandBuffer(
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
         m_bufferHazards.Reset();
 
@@ -18,7 +17,6 @@ public sealed partial class SdfWorldEngine {
                 commandBufferHandle: commandBuffer,
                 destinationAccessMask: GpuComputeAccess.ShaderRead,
                 destinationStageMask: GpuComputeStage.ComputeShader,
-                deviceHandle: m_deviceHandle,
                 imageHandle: sampledImage.ImageHandle,
                 newLayout: GpuImageLayout.ShaderReadOnly,
                 oldLayout: GpuImageLayout.Undefined,
@@ -31,7 +29,6 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuComputeAccess.ShaderWrite,
             destinationStageMask: GpuComputeStage.ComputeShader,
-            deviceHandle: m_deviceHandle,
             imageHandle: reportImage.ImageHandle,
             newLayout: GpuImageLayout.General,
             oldLayout: (initializeImages
@@ -50,28 +47,27 @@ public sealed partial class SdfWorldEngine {
                 commandBuffer: commandBuffer,
                 pass: SdfFramePass.Beam
             );
-            recorder.BindComputePipeline(
+            recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 pipelineHandle: m_beamPipeline.Handle
             );
-            recorder.BindComputeDescriptorSet(
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_beamSets[0],
-                deviceHandle: m_deviceHandle,
                 pipelineLayoutHandle: m_beamPipeline.LayoutHandle
             );
             recorder.PushConstants(
+                bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 data: m_pushConstant,
-                deviceHandle: m_deviceHandle,
                 offset: 0,
                 pipelineLayoutHandle: m_beamPipeline.LayoutHandle,
                 stageFlags: GpuShaderStage.Compute
             );
             recorder.Dispatch(
                 commandBufferHandle: commandBuffer,
-                deviceHandle: m_deviceHandle,
                 groupCountX: 1,
                 groupCountY: 1,
                 groupCountZ: 1
@@ -84,28 +80,27 @@ public sealed partial class SdfWorldEngine {
             commandBuffer: commandBuffer,
             pass: SdfFramePass.Views
         );
-        recorder.BindComputePipeline(
+        recorder.BindPipeline(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             pipelineHandle: viewsPipeline.Handle
         );
-        recorder.BindComputeDescriptorSet(
+        recorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_viewsSets[0],
-            deviceHandle: m_deviceHandle,
             pipelineLayoutHandle: viewsPipeline.LayoutHandle
         );
         recorder.PushConstants(
+            bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             data: m_pushConstant,
-            deviceHandle: m_deviceHandle,
             offset: 0,
             pipelineLayoutHandle: viewsPipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
         );
         recorder.Dispatch(
             commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle,
             groupCountX: 1,
             groupCountY: 1,
             groupCountZ: 1
@@ -114,7 +109,6 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuComputeAccess.ShaderRead,
             destinationStageMask: GpuComputeStage.ComputeShader,
-            deviceHandle: m_deviceHandle,
             imageHandle: reportImage.ImageHandle,
             newLayout: GpuImageLayout.ShaderReadOnly,
             oldLayout: GpuImageLayout.General,
@@ -122,8 +116,7 @@ public sealed partial class SdfWorldEngine {
             sourceStageMask: GpuComputeStage.ComputeShader
         );
         recorder.EndCommandBuffer(
-            commandBufferHandle: commandBuffer,
-            deviceHandle: m_deviceHandle
+            commandBufferHandle: commandBuffer
         );
         m_gpu.QueueSubmitter.SubmitAndWait(
             commandBufferHandles: [commandBuffer],

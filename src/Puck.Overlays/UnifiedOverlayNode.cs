@@ -87,7 +87,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // rides m_currentFrameRenderTicks (set once per ProduceFrame) rather than widening this delegate's shape for one
     // caller. OverlayChannel.Hud is NOT in this table — see FirstPartyChannelCount's remarks.
     private readonly Action<OverlayFrameBuilder>?[] m_channelWriters;
-    private readonly IGpuCommandRecorder m_commandRecorder;
+    private readonly IGpuRecorder m_commandRecorder;
     private readonly IGpuComputeCommandPoolFactory m_commandPoolFactory;
     private readonly ConsolePanelWriter? m_consoleWriter;
     private readonly CursorWriter? m_cursorWriter;
@@ -224,7 +224,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         );
         m_commandRecorder = GpuWorkCounting.Wrap(
             ledger: m_work,
-            recorder: services.CommandRecorder
+            recorder: services.Recorder
         );
         m_consoleWriter = ((sources.Console is { } console)
             ? new ConsolePanelWriter(
@@ -454,10 +454,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
                 )
             ),
             fragmentShaderModule: m_fragmentShader,
-            height: m_height,
             renderPass: m_renderPass,
-            vertexShaderModule: m_vertexShader,
-            width: m_width
+            vertexShaderModule: m_vertexShader
         );
 
         var deviceHandle = m_deviceContext.DeviceHandle;
@@ -618,77 +616,62 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         var commandBufferHandle = m_commandPool!.CommandBufferHandle;
 
         m_commandRecorder.BeginCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            commandBufferHandle: commandBufferHandle
         );
 
         // The counted pass spans the debug group, the render pass, and its draw.
         m_work.EnterPass(pass: 0);
         m_commandRecorder.BeginDebugGroup(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             label: "unified-overlay"
         );
         m_commandRecorder.BeginRenderPass(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             framebuffer: m_framebuffer!
         );
-        m_commandRecorder.SetScissor(
+
+        m_commandRecorder.BindPipeline(
+            bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            height: m_height,
-            width: m_width,
-            x: 0,
-            y: 0
-        );
-        m_commandRecorder.BindGraphicsPipeline(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             pipelineHandle: m_pipeline!.Handle
         );
         m_commandRecorder.BindVertexBuffer(
             bufferHandle: m_vertexBuffer!.BufferHandle,
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             sizeBytes: m_vertexBuffer.SizeBytes,
             strideBytes: VertexStrideBytes
         );
         m_commandRecorder.PushConstants(
+            bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBufferHandle,
             data: m_pushConstantData,
-            deviceHandle: deviceHandle,
             offset: 0,
             pipelineLayoutHandle: m_pipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Fragment
         );
         m_commandRecorder.BindDescriptorSet(
+            bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBufferHandle,
             descriptorSetHandle: m_descriptorSet,
-            deviceHandle: deviceHandle,
             pipelineLayoutHandle: m_pipeline.LayoutHandle
         );
         m_commandRecorder.Draw(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             parameters: new GpuDrawParameters(
                 vertexCount: VertexCount,
                 instanceCount: 1
             )
         );
         m_commandRecorder.EndRenderPass(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            commandBufferHandle: commandBufferHandle
         );
         m_commandRecorder.EndDebugGroup(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            commandBufferHandle: commandBufferHandle
         );
         m_work.LeavePass();
 
         m_commandRecorder.EndCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            commandBufferHandle: commandBufferHandle
         );
 
         return commandBufferHandle;

@@ -32,9 +32,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         IGpuRenderPass renderPass,
         IGpuShaderModule vertexShaderModule,
         IGpuShaderModule fragmentShaderModule,
-        GpuGraphicsPipelineDescription description,
-        uint width,
-        uint height
+        GpuGraphicsPipelineDescription description
     ) {
         ArgumentNullException.ThrowIfNull(description);
         description.ValidateAgainst(renderPass: renderPass);

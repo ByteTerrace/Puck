@@ -9,7 +9,7 @@ namespace Puck.DirectX;
 /// <summary>
 /// Implements <see cref="IGpuGeometryBufferFactory"/> for Direct3D 12: an upload-heap buffer, whose permanent
 /// <c>GENERIC_READ</c> state already includes the vertex and index buffer states, filled with the data. A draw binds it
-/// by its GPU virtual address (<see cref="DirectXGpuCommandRecorder.BindVertexBuffer"/>), so the buffer needs no view of
+/// by its GPU virtual address (<see cref="DirectXGpuRecorder.BindVertexBuffer"/>), so the buffer needs no view of
 /// its own.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]

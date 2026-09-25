@@ -11,7 +11,7 @@ namespace Puck.Hosting;
 public sealed record GpuComputeServices(
     IGpuComputeCommandPoolFactory CommandPoolFactory,
     IGpuComputePipelineFactory ComputePipelineFactory,
-    IGpuComputeRecorder ComputeRecorder,
+    IGpuRecorder Recorder,
     IGpuDescriptorAllocator DescriptorAllocator,
     IGpuQueueSubmitter QueueSubmitter,
     IGpuShaderModuleFactory ShaderModuleFactory,

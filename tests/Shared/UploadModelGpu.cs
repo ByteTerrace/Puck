@@ -17,7 +17,7 @@ namespace Puck.Testing;
 /// </summary>
 internal sealed class UploadModelGpu :
     IGpuComputePipelineFactory,
-    IGpuComputeRecorder,
+    IGpuRecorder,
     IGpuComputeServices,
     IGpuDescriptorAllocator,
     IGpuShaderModuleFactory,
@@ -44,8 +44,8 @@ internal sealed class UploadModelGpu :
 
     public IGpuComputeCommandPoolFactory CommandPoolFactory => m_inner.CommandPoolFactory;
     public IGpuComputePipelineFactory ComputePipelineFactory => this;
-    public IGpuComputeRecorder ComputeRecorder => this;
     public IGpuDescriptorAllocator DescriptorAllocator => this;
+    public IGpuRecorder Recorder => this;
     /// <summary>Gets the device the engine renders on.</summary>
     public IGpuDeviceContext Device => m_inner;
     public IGpuImageFactory ImageFactory => m_inner.ImageFactory;
@@ -128,11 +128,26 @@ internal sealed class UploadModelGpu :
     void IGpuDescriptorAllocator.WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
     void IGpuDescriptorAllocator.WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
     void IGpuDescriptorAllocator.WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
-    void IGpuComputeRecorder.BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) { }
-    void IGpuComputeRecorder.BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) { }
-    void IGpuComputeRecorder.BindComputeDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) => m_boundSet = descriptorSetHandle;
-    void IGpuComputeRecorder.BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) => m_boundPipeline = pipelineHandle;
-    void IGpuComputeRecorder.Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
+    void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) { }
+    void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) { }
+    void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) { }
+    void IGpuRecorder.EndDebugGroup(nint commandBufferHandle) { }
+    void IGpuRecorder.BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area) { }
+    void IGpuRecorder.EndRenderPass(nint commandBufferHandle) { }
+    void IGpuRecorder.BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) { }
+    void IGpuRecorder.BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) { }
+    void IGpuRecorder.SetScissor(nint commandBufferHandle, GpuPixelRect rect) { }
+    void IGpuRecorder.Draw(nint commandBufferHandle, in GpuDrawParameters parameters) { }
+    void IGpuRecorder.DrawIndexed(nint commandBufferHandle, uint indexCount) { }
+    void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
+    void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
+    void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
+    void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
+    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
+    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
+    void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) => m_boundSet = descriptorSetHandle;
+    void IGpuRecorder.BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => m_boundPipeline = pipelineHandle;
+    void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
         if (
             (0 == m_uploadPipeline) ||
             (m_boundPipeline != m_uploadPipeline)
@@ -164,11 +179,7 @@ internal sealed class UploadModelGpu :
 
         UploadCopies++;
     }
-    void IGpuComputeRecorder.DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
-    void IGpuComputeRecorder.EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) { }
-    void IGpuComputeRecorder.EndDebugGroup(nint deviceHandle, nint commandBufferHandle) { }
-    void IGpuComputeRecorder.MemoryBarrier(nint deviceHandle, nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
-    void IGpuComputeRecorder.PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
+    void IGpuRecorder.PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
         if (
             (0 != m_uploadPipeline) &&
             (m_boundPipeline == m_uploadPipeline)
@@ -176,8 +187,6 @@ internal sealed class UploadModelGpu :
             data.CopyTo(destination: m_push.AsSpan(start: ((int)offset)));
         }
     }
-    void IGpuComputeRecorder.TransitionBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
-    void IGpuComputeRecorder.TransitionImageLayout(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
 
     private MemoryBuffer Buffer(bool hostVisible, ulong sizeBytes) {
         var buffer = new MemoryBuffer(

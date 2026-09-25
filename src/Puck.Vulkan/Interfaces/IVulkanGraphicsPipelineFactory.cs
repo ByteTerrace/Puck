@@ -29,11 +29,10 @@ public interface IVulkanGraphicsPipelineFactory {
         bool enableStorageBuffer = true,
         GpuVertexInputLayout? vertexInput = null
     );
-    /// <summary>Creates a graphics pipeline whose viewport and scissor are sized to an explicit width and height (for offscreen targets).</summary>
+    /// <summary>Creates a graphics pipeline whose viewport and scissor are dynamic state, set by each command buffer that
+    /// draws with it, so it draws into framebuffers of any extent.</summary>
     /// <param name="logicalDevice">The logical device the pipeline is created on.</param>
     /// <param name="renderPass">The render pass the pipeline is used with.</param>
-    /// <param name="width">The viewport and scissor width, in pixels.</param>
-    /// <param name="height">The viewport and scissor height, in pixels.</param>
     /// <param name="vertexShaderModule">The vertex shader module.</param>
     /// <param name="fragmentShaderModule">The fragment shader module.</param>
     /// <param name="pushConstantBinding">The push constant range to expose, or <see langword="null"/> for none.</param>
@@ -46,8 +45,6 @@ public interface IVulkanGraphicsPipelineFactory {
     VulkanGraphicsPipeline Create(
         VulkanLogicalDevice logicalDevice,
         VulkanRenderPass renderPass,
-        uint width,
-        uint height,
         VulkanShaderModule vertexShaderModule,
         VulkanShaderModule fragmentShaderModule,
         VulkanPushConstantBinding? pushConstantBinding = null,

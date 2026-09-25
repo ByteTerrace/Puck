@@ -477,9 +477,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     false,
                     push,
                     DepthCompareOf(pass: planned)
-                ),
-                Extent.Width,
-                Extent.Height
+                )
             );
         }
 

@@ -18,7 +18,7 @@ public interface IGpuStorageBufferFactory {
     IGpuBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes);
     /// <summary>Creates a host-writable buffer (fill it with group counts through <see cref="IGpuStorageBuffer"/>)
     /// that is also a legal indirect-dispatch argument source for
-    /// <see cref="IGpuComputeRecorder.DispatchIndirect"/>. On Vulkan it is a host-visible storage buffer carrying
+    /// <see cref="IGpuRecorder.DispatchIndirect"/>. On Vulkan it is a host-visible storage buffer carrying
     /// <c>VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT</c>; on Direct3D 12 it is an upload-heap buffer (its <c>GENERIC_READ</c>
     /// state already permits indirect-argument reads, so no buffer-state transition is needed).</summary>
     /// <param name="deviceContext">The GPU device context.</param>

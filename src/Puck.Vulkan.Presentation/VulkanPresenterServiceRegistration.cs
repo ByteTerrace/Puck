@@ -177,7 +177,10 @@ public static class VulkanPresenterServiceRegistration {
 
         // Backend-neutral GPU abstractions: adapters that wrap the Vulkan-specific services above and
         // implement the IGpu* interfaces the render nodes (the compute world producer, and future nodes) drive.
-        services.TryAddSingleton<IGpuCommandRecorder>(implementationFactory: static sp => new VulkanGpuCommandRecorder(commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()));
+        services.TryAddSingleton<IGpuRecorder>(implementationFactory: static sp => new VulkanGpuRecorder(
+            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
+            recordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()
+        ));
         services.TryAddSingleton<IGpuDescriptorAllocator>(implementationFactory: static sp => new VulkanGpuDescriptorAllocator(allocator: sp.GetRequiredService<VulkanDescriptorAllocator>()));
         services.TryAddSingleton<IGpuPipelineFactory>(implementationFactory: static sp => new VulkanGpuPipelineFactory(pipelineFactory: sp.GetRequiredService<IVulkanGraphicsPipelineFactory>()));
         services.TryAddSingleton<IGpuQueueSubmitter>(implementationFactory: static sp => new VulkanGpuQueueSubmitter(

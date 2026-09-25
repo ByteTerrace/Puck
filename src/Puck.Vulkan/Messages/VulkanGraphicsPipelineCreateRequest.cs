@@ -11,8 +11,7 @@ namespace Puck.Vulkan.Messages;
 /// <param name="RenderPassHandle">The native <c>VkRenderPass</c> handle the pipeline is used with.</param>
 /// <param name="VertexShaderModuleHandle">The native <c>VkShaderModule</c> handle of the vertex shader.</param>
 /// <param name="FragmentShaderModuleHandle">The native <c>VkShaderModule</c> handle of the fragment shader.</param>
-/// <param name="Width">The viewport and scissor width, in pixels.</param>
-/// <param name="Height">The viewport and scissor height, in pixels.</param>
+
 /// <param name="PushConstantSize">The size, in bytes, of the push constant range, or zero for none.</param>
 /// <param name="PushConstantStageFlags">A bitmask of <c>VkShaderStageFlagBits</c> identifying the stages that access the push constants.</param>
 /// <param name="Topology">The primitive topology, as a <c>VkPrimitiveTopology</c> value.</param>
@@ -25,16 +24,17 @@ namespace Puck.Vulkan.Messages;
 /// <param name="Multisample">The multisample state.</param>
 /// <param name="PipelineCache">The device's pipeline cache, passed to the driver and counting the creation, or
 /// <see langword="null"/> for a device created without one.</param>
-/// <param name="ClipSpaceYUp">Whether the viewport has negative height, so clip-space +y is the top of the attachment.</param>
+
 /// <param name="DepthStencil">The depth state of a pipeline whose render pass has a depth attachment, or
 /// <see langword="null"/> for one without.</param>
+/// <param name="FixedViewport">The extent a fixed viewport and scissor cover from the origin, or
+/// <see langword="null"/> for a pipeline whose viewport and scissor are both dynamic state, set by the command buffer
+/// that draws with it; <see cref="DynamicStates"/> must then name both.</param>
 public readonly record struct VulkanGraphicsPipelineCreateRequest(
     VulkanDeviceCommands Device,
     nint RenderPassHandle,
     nint VertexShaderModuleHandle,
     nint FragmentShaderModuleHandle,
-    uint Width,
-    uint Height,
     uint PushConstantSize,
     uint PushConstantStageFlags,
     uint Topology,
@@ -47,5 +47,5 @@ public readonly record struct VulkanGraphicsPipelineCreateRequest(
     VkPipelineMultisampleStateCreateInfo Multisample,
     VulkanPipelineCache? PipelineCache,
     VkPipelineDepthStencilStateCreateInfo? DepthStencil = null,
-    bool ClipSpaceYUp = false
+    VkExtent2D? FixedViewport = null
 );

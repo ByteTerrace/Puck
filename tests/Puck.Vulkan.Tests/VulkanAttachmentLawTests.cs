@@ -117,10 +117,8 @@ public sealed class VulkanAttachmentLawTests {
                 description: description,
                 deviceContext: null!,
                 fragmentShaderModule: null!,
-                height: 8,
                 renderPass: pass,
-                vertexShaderModule: null!,
-                width: 8
+                vertexShaderModule: null!
             ));
         }
     }

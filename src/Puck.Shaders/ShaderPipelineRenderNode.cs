@@ -178,11 +178,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     // A fullscreen pass records its barriers in their own command buffer before its render pass; the render pass leaves
     // its color attachment shader-readable, which the plan already accounts for, so nothing follows it.
     private void RecordPreBarriers(RuntimePass pass, int slot, nint command, List<nint> commands) {
-        var recorder = m_gpu.ComputeRecorder;
+        var recorder = m_gpu.Recorder;
 
         recorder.BeginCommandBuffer(
-            m_device.DeviceHandle,
-            command
+            commandBufferHandle: command
         );
         InitializeResources(
             command: command,
@@ -196,8 +195,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             slot: slot
         );
         recorder.EndCommandBuffer(
-            m_device.DeviceHandle,
-            command
+            commandBufferHandle: command
         );
         commands.Add(item: command);
     }
@@ -530,11 +528,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     }
     private void FinalizeOutputs(int slot, List<nint> commands) {
         var command = m_slots[slot].Final!.CommandBufferHandle;
-        var recorder = m_gpu.ComputeRecorder;
+        var recorder = m_gpu.Recorder;
 
         recorder.BeginCommandBuffer(
-            m_device.DeviceHandle,
-            command
+            commandBufferHandle: command
         );
         RecordPresentation(
             command: command,
@@ -543,8 +540,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             slot: slot
         );
         recorder.EndCommandBuffer(
-            m_device.DeviceHandle,
-            command
+            commandBufferHandle: command
         );
         commands.Add(item: command);
     }
@@ -923,7 +919,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     }
     // Writes the pass's frame block: its bound config, then every frame member through the layout's host writer, or, with
     // sentinels on, every member's echo sentinel.
-    private void PushFrameConstants(RuntimePass pass, in FrameContext context, nint command, nint layout, uint width, uint height, IGpuComputeRecorder? compute, IGpuCommandRecorder? graphics) {
+    private void PushFrameConstants(RuntimePass pass, in FrameContext context, nint command, nint layout, uint width, uint height, IGpuRecorder recorder, GpuBindPoint bindPoint) {
         Span<byte> bytes = stackalloc byte[((int)pass.ParametersLayout.SizeBytes)];
 
         if (Sentinels) {
@@ -942,25 +938,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 width: width
             );
         }
-        if (compute is not null) {
-            compute.PushConstants(
-                m_device.DeviceHandle,
-                command,
-                layout,
-                FrameBlockStages,
-                0,
-                bytes
-            );
-        } else {
-            graphics!.PushConstants(
-                m_device.DeviceHandle,
-                command,
-                layout,
-                FrameBlockStages,
-                0,
-                bytes
-            );
-        }
+        recorder.PushConstants(
+            bindPoint: bindPoint,
+            commandBufferHandle: command,
+            data: bytes,
+            offset: 0,
+            pipelineLayoutHandle: layout,
+            stageFlags: FrameBlockStages
+        );
     }
     private void Record(RuntimePass pass, int slot, in FrameContext context, List<nint> commands) {
         var descriptor = GetDescriptor(
@@ -970,11 +955,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
         if (pass.Spec.Kind == ShaderPipelinePassKind.Compute) {
             var handle = pass.Pools![slot].CommandBufferHandle;
-            var recorder = m_gpu.ComputeRecorder;
+            var recorder = m_gpu.Recorder;
 
             recorder.BeginCommandBuffer(
-                m_device.DeviceHandle,
-                handle
+                commandBufferHandle: handle
             );
             InitializeResources(
                 command: handle,
@@ -987,16 +971,16 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 recorder: recorder,
                 slot: slot
             );
-            recorder.BindComputePipeline(
-                m_device.DeviceHandle,
-                handle,
-                pass.Compute!.Handle
+            recorder.BindPipeline(
+                bindPoint: GpuBindPoint.Compute,
+                commandBufferHandle: handle,
+                pipelineHandle: pass.Compute!.Handle
             );
-            recorder.BindComputeDescriptorSet(
-                m_device.DeviceHandle,
-                handle,
-                pass.Compute.LayoutHandle,
-                descriptor
+            recorder.BindDescriptorSet(
+                bindPoint: GpuBindPoint.Compute,
+                commandBufferHandle: handle,
+                descriptorSetHandle: descriptor,
+                pipelineLayoutHandle: pass.Compute.LayoutHandle
             );
             var extent = (pass.Width, pass.Height);
 
@@ -1008,18 +992,16 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 extent.Width,
                 extent.Height,
                 recorder,
-                null
+                GpuBindPoint.Compute
             );
             recorder.Dispatch(
-                m_device.DeviceHandle,
-                handle,
-                (((extent.Width + pass.Spec.GroupSizeX) - 1) / pass.Spec.GroupSizeX),
-                (((extent.Height + pass.Spec.GroupSizeY) - 1) / pass.Spec.GroupSizeY),
-                (((1u + pass.Spec.GroupSizeZ) - 1) / pass.Spec.GroupSizeZ)
+                commandBufferHandle: handle,
+                groupCountX: (((extent.Width + pass.Spec.GroupSizeX) - 1) / pass.Spec.GroupSizeX),
+                groupCountY: (((extent.Height + pass.Spec.GroupSizeY) - 1) / pass.Spec.GroupSizeY),
+                groupCountZ: (((1u + pass.Spec.GroupSizeZ) - 1) / pass.Spec.GroupSizeZ)
             );
             recorder.EndCommandBuffer(
-                m_device.DeviceHandle,
-                handle
+                commandBufferHandle: handle
             );
             commands.Add(item: handle);
             return;
@@ -1033,36 +1015,25 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         var framebuffer = pass.Framebuffers![slot];
         var command = pass.Draw![slot].CommandBufferHandle;
-        var recorderGraphics = m_graphics!.CommandRecorder;
+        var recorderGraphics = m_graphics!.Recorder;
         var pipeline = pass.Graphics!;
 
         recorderGraphics.BeginCommandBuffer(
-            m_device.DeviceHandle,
-            command
+            commandBufferHandle: command
         );
         recorderGraphics.BeginRenderPass(
-            m_device.DeviceHandle,
             command,
             framebuffer
         );
-        recorderGraphics.SetScissor(
-            m_device.DeviceHandle,
-            command,
-            0,
-            0,
-            framebuffer.Width,
-            framebuffer.Height
-        );
-        recorderGraphics.BindGraphicsPipeline(
-            m_device.DeviceHandle,
-            command,
-            pipeline.Handle
+        recorderGraphics.BindPipeline(
+            bindPoint: GpuBindPoint.Graphics,
+            commandBufferHandle: command,
+            pipelineHandle: pipeline.Handle
         );
         var geometry = pass.Spec.Geometry;
 
         if (pass.GeometryBuffer is { } buffer) {
             recorderGraphics.BindVertexBuffer(
-                m_device.DeviceHandle,
                 command,
                 buffer.BufferHandle,
                 (geometry?.VertexBytes ?? buffer.SizeBytes),
@@ -1070,7 +1041,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             );
             if (geometry is not null) {
                 recorderGraphics.BindIndexBuffer(
-                    m_device.DeviceHandle,
                     command,
                     buffer.BufferHandle,
                     geometry.VertexBytes,
@@ -1088,40 +1058,36 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             pipeline.LayoutHandle,
             framebuffer.Width,
             framebuffer.Height,
-            null,
-            recorderGraphics
+            recorderGraphics,
+            GpuBindPoint.Graphics
         );
         if (descriptor != 0) {
             recorderGraphics.BindDescriptorSet(
-                m_device.DeviceHandle,
-                command,
-                pipeline.LayoutHandle,
-                descriptor
+                bindPoint: GpuBindPoint.Graphics,
+                commandBufferHandle: command,
+                descriptorSetHandle: descriptor,
+                pipelineLayoutHandle: pipeline.LayoutHandle
             );
         }
         if (geometry is not null) {
             recorderGraphics.DrawIndexed(
-                m_device.DeviceHandle,
-                command,
-                ((uint)geometry.Indices.Count)
+                commandBufferHandle: command,
+                indexCount: ((uint)geometry.Indices.Count)
             );
         } else {
             recorderGraphics.Draw(
-                m_device.DeviceHandle,
-                command,
-                new GpuDrawParameters(
+                commandBufferHandle: command,
+                parameters: new GpuDrawParameters(
                     3,
                     1
                 )
             );
         }
         recorderGraphics.EndRenderPass(
-            m_device.DeviceHandle,
-            command
+            commandBufferHandle: command
         );
         recorderGraphics.EndCommandBuffer(
-            m_device.DeviceHandle,
-            command
+            commandBufferHandle: command
         );
         commands.Add(item: command);
     }

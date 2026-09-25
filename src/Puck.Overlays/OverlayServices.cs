@@ -15,7 +15,7 @@ public sealed record OverlayServices {
     /// <summary>The factory for the command buffer the overlay records its pass into.</summary>
     public required IGpuComputeCommandPoolFactory CommandPoolFactory { get; init; }
     /// <summary>The command recorder the compositor drives.</summary>
-    public required IGpuCommandRecorder CommandRecorder { get; init; }
+    public required IGpuRecorder Recorder { get; init; }
     /// <summary>The descriptor pool/set allocator.</summary>
     public required IGpuDescriptorAllocator DescriptorAllocator { get; init; }
     /// <summary>The device context to render on.</summary>
@@ -66,7 +66,7 @@ public sealed record OverlayServices {
         return new OverlayServices {
             BytecodeExtension = ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX),
             CommandPoolFactory = Resolve<IGpuComputeCommandPoolFactory>(),
-            CommandRecorder = Resolve<IGpuCommandRecorder>(),
+            Recorder = Resolve<IGpuRecorder>(),
             DescriptorAllocator = Resolve<IGpuDescriptorAllocator>(),
             DeviceContext = Resolve<IGpuDeviceContext>(),
             FrameSources = Resolve<IOverlayFrameSources>(),

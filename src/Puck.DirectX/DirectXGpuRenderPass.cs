@@ -9,7 +9,7 @@ namespace Puck.DirectX;
 /// <summary>
 /// A Direct3D 12 <see cref="IGpuRenderPass"/>. Direct3D 12 has no render-pass object, so this is the description with its
 /// formats translated: what a pipeline state object is created for (<see cref="ColorFormats"/>,
-/// <see cref="DepthFormat"/>) and what <see cref="DirectXGpuCommandRecorder.BeginRenderPass"/> begins and ends.
+/// <see cref="DepthFormat"/>) and what <see cref="DirectXGpuRecorder.BeginRenderPass"/> begins and ends.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuRenderPass : IGpuRenderPass {

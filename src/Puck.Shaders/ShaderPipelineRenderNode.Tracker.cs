@@ -28,7 +28,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // storage no pass writes, and for history a pass rewrites, the instance the first frame reads as the previous one.
     // An instance already cleared or written holds contents, including history carried from a replaced graph, and is
     // not cleared.
-    private void InitializeResources(nint command, IGpuComputeRecorder recorder, int slot) {
+    private void InitializeResources(nint command, IGpuRecorder recorder, int slot) {
         if (!m_initializationPending) {
             return;
         }
@@ -61,23 +61,15 @@ public sealed partial class ShaderPipelineRenderNode {
                     resource: resource
                 );
                 if (resource.Spec.Kind == ShaderPipelineResourceKind.Buffer) {
-                    if (recorder is not IGpuBufferInitializationRecorder buffers) {
-                        throw new InvalidOperationException(message: "The selected GPU backend cannot clear shader pipeline storage buffers.");
-                    }
                     var buffer = resource.Buffers![instance];
 
-                    buffers.ClearStorageBuffer(
-                        m_device.DeviceHandle,
+                    recorder.ClearStorageBuffer(
                         command,
                         buffer.BufferHandle,
                         buffer.SizeBytes
                     );
                 } else {
-                    if (recorder is not IGpuImageInitializationRecorder images) {
-                        throw new InvalidOperationException(message: "The selected GPU backend cannot clear shader pipeline images.");
-                    }
-                    images.ClearStorageImage(
-                        m_device.DeviceHandle,
+                    recorder.ClearStorageImage(
                         command,
                         ResolveImage(
                             resource,
@@ -97,7 +89,7 @@ public sealed partial class ShaderPipelineRenderNode {
         m_initializationPending = false;
     }
     // Records the planned barrier of every access a pass makes, in the plan's order.
-    private void RecordAccesses(RuntimePass pass, int slot, nint command, IGpuComputeRecorder recorder) {
+    private void RecordAccesses(RuntimePass pass, int slot, nint command, IGpuRecorder recorder) {
         var accesses = pass.Accesses;
 
         for (var index = 0; (index < accesses.Length); index++) {
@@ -141,11 +133,10 @@ public sealed partial class ShaderPipelineRenderNode {
             }
         }
     }
-    private void RecordBarrier(ShaderPipelineBarrier barrier, RuntimeResource resource, int instance, nint command, IGpuComputeRecorder recorder) {
+    private void RecordBarrier(ShaderPipelineBarrier barrier, RuntimeResource resource, int instance, nint command, IGpuRecorder recorder) {
         switch (barrier.Kind) {
             case ShaderPipelineBarrierKind.Image:
                 recorder.TransitionImageLayout(
-                    m_device.DeviceHandle,
                     command,
                     ResolveImage(
                         resource,
@@ -162,7 +153,6 @@ public sealed partial class ShaderPipelineRenderNode {
                 break;
             case ShaderPipelineBarrierKind.Memory:
                 recorder.MemoryBarrier(
-                    m_device.DeviceHandle,
                     command,
                     barrier.SourceAccess,
                     barrier.DestinationAccess,
@@ -172,7 +162,6 @@ public sealed partial class ShaderPipelineRenderNode {
                 break;
             case ShaderPipelineBarrierKind.Buffer:
                 recorder.TransitionBuffer(
-                    m_device.DeviceHandle,
                     command,
                     ResolveBuffer(
                         resource,
@@ -227,7 +216,7 @@ public sealed partial class ShaderPipelineRenderNode {
         return barrier;
     }
     // Records publication of the selected output and hands every host-owned image back in its host's layout.
-    private void RecordPresentation(RuntimeResource selected, int slot, nint command, IGpuComputeRecorder recorder) {
+    private void RecordPresentation(RuntimeResource selected, int slot, nint command, IGpuRecorder recorder) {
         if (!NeedsPreview(spec: selected.Spec)) {
             RecordBarrier(
                 barrier: Present(

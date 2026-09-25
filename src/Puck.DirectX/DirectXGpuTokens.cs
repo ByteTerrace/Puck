@@ -12,7 +12,7 @@ namespace Puck.DirectX;
 public sealed class DirectXCommandBufferState {
     internal List<IDisposable> RetainedResources { get; } = [];
 
-    /// <summary>Gets the buffer states explicit transitions recorded in this command list's current recording; both recorders reset it when a recording begins.</summary>
+    /// <summary>Gets the buffer states explicit transitions recorded in this command list's current recording; the recorder resets it when a recording begins.</summary>
     public DirectXBufferStates BufferStates { get; } = new();
 
     internal void ReleaseRetainedResources() {

@@ -29,14 +29,15 @@ public sealed class VulkanGpuRenderPass : IGpuRenderPass {
             red: 0f
         )).ToList();
 
-        if (description.Depth is not null) {
-            clearValues.Add(item: VkClearValue.OfDepth(depth: 1f));
+        if (description.Depth is { } depth) {
+            clearValues.Add(item: VkClearValue.OfDepth(depth: depth.ClearDepth));
         }
 
         ClearValues = clearValues;
     }
 
-    /// <summary>Gets one clear value per attachment, in attachment order: opaque black for a color, 1 for the depth.</summary>
+    /// <summary>Gets one clear value per attachment, in attachment order: opaque black for a color, the declared
+    /// <see cref="GpuDepthAttachment.ClearDepth"/> for the depth.</summary>
     public IReadOnlyList<VkClearValue> ClearValues { get; }
     /// <inheritdoc/>
     public GpuRenderPassDescription Description { get; }

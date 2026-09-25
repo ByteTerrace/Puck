@@ -42,7 +42,7 @@ public sealed class OverlayFrameSlotsLawTests {
         services: new OverlayServices {
             BytecodeExtension = ".test",
             CommandPoolFactory = Unused,
-            CommandRecorder = Unused,
+            Recorder = Unused,
             DescriptorAllocator = Unused,
             DeviceContext = new FixedDeviceContext(),
             FrameSources = new RecordingFrameSources(events: events),

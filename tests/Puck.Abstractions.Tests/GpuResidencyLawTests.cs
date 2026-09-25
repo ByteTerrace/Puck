@@ -216,7 +216,7 @@ public sealed class GpuResidencyLawTests {
                 descriptors: gpu.DescriptorAllocator,
                 device: gpu.Device,
                 policy: policy,
-                recorder: gpu.ComputeRecorder,
+                recorder: gpu.Recorder,
                 slotCount: Slots
             );
             var expected = new byte[ByteCount];
@@ -280,7 +280,7 @@ public sealed class GpuResidencyLawTests {
             descriptors: gpu.DescriptorAllocator,
             device: gpu.Device,
             policy: GpuResidencyPolicy.Staged,
-            recorder: gpu.ComputeRecorder,
+            recorder: gpu.Recorder,
             slotCount: 2
         );
 
@@ -295,7 +295,7 @@ public sealed class GpuResidencyLawTests {
             descriptors: gpu.DescriptorAllocator,
             device: gpu.Device,
             policy: GpuResidencyPolicy.Ring,
-            recorder: gpu.ComputeRecorder,
+            recorder: gpu.Recorder,
             slotCount: 2
         ));
     }

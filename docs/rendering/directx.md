@@ -22,9 +22,9 @@ buffers and images, shared-surface export, and queue submission. Swapchains and 
 
 Compute, graphics, and readback use one legacy resource-barrier model on the
 same direct queue. Texture owners register their initial state and remove it
-on disposal; command recorders share that state across compute/fullscreen
-passes. Buffer states last only for one command list, because Direct3D 12
-returns every buffer to `COMMON` after each `ExecuteCommandLists`. A buffer's
+on disposal; the one recorder, `DirectXGpuRecorder`, carries that state across
+compute and graphics passes. Buffer states last only for one command list,
+because Direct3D 12 returns every buffer to `COMMON` after each `ExecuteCommandLists`. A buffer's
 first transition in a list starts from the state its declared prior access
 implies, so callers declare the access that actually preceded it: the SDF
 engine declares each pass's buffer uses in `SdfFrameBufferPlan`, and a shader
@@ -84,11 +84,13 @@ and the surface upload's texture all go through them.
 A Direct3D 12 render pass is data: `DirectXGpuRenderPass` holds the
 description's DXGI formats, which a pipeline state object is created for, and
 `DirectXGpuFramebuffer` owns the render-target and depth-stencil views of the
-images it binds. `DirectXGpuCommandRecorder.BeginRenderPass` transitions each
+images it binds. `DirectXGpuRecorder.BeginRenderPass` transitions each
 attachment into its attachment state, clears an attachment that clears with
 `ClearRenderTargetView` or `ClearDepthStencilView` (a clear inside a render
-pass is disallowed), and begins a first-class render pass whose ending access
-stores or discards; `EndRenderPass` leaves a color attachment declared
+pass is disallowed; a depth attachment clears to its
+`GpuDepthAttachment.ClearDepth`), begins a first-class render pass whose
+ending access stores or discards, and sets the viewport and scissor to the
+area the pass draws; `EndRenderPass` leaves a color attachment declared
 shader-readable in the shader-read state and every other attachment where it
 was. A geometry buffer is an upload-heap buffer bound by its GPU virtual address,
 so it needs no view object of its own: `BindVertexBuffer` and `BindIndexBuffer`
@@ -99,6 +101,13 @@ the pass has a depth attachment, a depth test that writes; the pipeline-library
 identity covers the formats, the depth test and each attribute's format, offset
 and semantic index. A framebuffer or pipeline that does not match its render
 pass is refused before the device is touched.
+
+A command list has separate compute and graphics root signatures, so
+`BindPipeline`, `BindDescriptorSet` and `PushConstants` name their
+`GpuBindPoint`: a compute pass binds and pushes at `Compute`, a draw at
+`Graphics`. The recorder cannot tell a wrong bind point from the handle, and
+one writes to a root signature the bound pipeline never set, which is
+undefined behavior on the device.
 
 Top-level helpers: `DirectXException` (carries the failing operation + `HRESULT`) and
 `DirectXFeatureLevel` (a managed mirror of `D3D_FEATURE_LEVEL`).

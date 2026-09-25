@@ -57,16 +57,12 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             paramName: nameof(request)
         );
 
-        if (0 == request.Width) {
+        if (
+            (request.FixedViewport is { } extent) &&
+            ((0 == extent.Width) || (0 == extent.Height))
+        ) {
             throw new ArgumentOutOfRangeException(
-                message: "Vulkan graphics-pipeline width must be greater than zero.",
-                paramName: nameof(request)
-            );
-        }
-
-        if (0 == request.Height) {
-            throw new ArgumentOutOfRangeException(
-                message: "Vulkan graphics-pipeline height must be greater than zero.",
+                message: "A fixed Vulkan graphics-pipeline viewport must be larger than zero in both directions.",
                 paramName: nameof(request)
             );
         }
@@ -154,38 +150,35 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 SType = StructureTypePipelineInputAssemblyStateCreateInfo,
                 Topology = request.Topology,
             };
-            // One viewport and one scissor: the request carries a single Width and Height. A negative height with the
-            // origin at the bottom edge points clip-space +y at the top, as Direct3D does.
+            // One viewport and one scissor. A fixed pair covers the request's extent from the origin; a dynamic pair
+            // leaves both pointers null, which the dynamic state makes legal.
+            var fixedExtent = request.FixedViewport.GetValueOrDefault();
             var viewport = new VkViewport(
-                height: (request.ClipSpaceYUp
-                    ? -((float)request.Height)
-                    : request.Height),
+                height: fixedExtent.Height,
                 maxDepth: 1f,
                 minDepth: 0f,
-                width: request.Width,
+                width: fixedExtent.Width,
                 x: 0f,
-                y: (request.ClipSpaceYUp
-                    ? request.Height
-                    : 0f)
+                y: 0f
             );
             var scissor = new VkRect2D(
-                extent: new VkExtent2D(
-                    height: request.Height,
-                    width: request.Width
-                ),
+                extent: fixedExtent,
                 offset: new VkOffset2D(
                     x: 0,
                     y: 0
                 )
             );
             var viewportState = new VkPipelineViewportStateCreateInfo {
-                PScissors = ((nint)(&scissor)),
-                PViewports = ((nint)(&viewport)),
+                PScissors = ((request.FixedViewport is null)
+                    ? 0
+                    : ((nint)(&scissor))),
+                PViewports = ((request.FixedViewport is null)
+                    ? 0
+                    : ((nint)(&viewport))),
                 SType = StructureTypePipelineViewportStateCreateInfo,
                 ScissorCount = 1,
                 ViewportCount = 1,
-            };
-            var dynamicState = new VkPipelineDynamicStateCreateInfo {
+            }; var dynamicState = new VkPipelineDynamicStateCreateInfo {
                 DynamicStateCount = ((uint)dynamicStates.Count),
                 PDynamicStates = dynamicStatesPointer,
                 SType = StructureTypePipelineDynamicStateCreateInfo,

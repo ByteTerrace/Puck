@@ -8,7 +8,7 @@ namespace Puck.DirectX.Interop;
 
 /// <summary>
 /// A Direct3D 12 <see cref="IGpuComputeCommandPool"/>: a DIRECT command allocator and command list (initially
-/// closed), packed into a <see cref="DirectXCommandBufferState"/> GCHandle token the compute recorder records into.
+/// closed), packed into a <see cref="DirectXCommandBufferState"/> GCHandle token the recorder records into.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuComputeCommandPool : IGpuComputeCommandPool {

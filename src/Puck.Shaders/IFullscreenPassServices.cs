@@ -12,7 +12,7 @@ public interface IFullscreenPassServices {
     /// <summary>Gets the cohesive compute services used by the canonical shader-pipeline executor.</summary>
     IGpuComputeServices? ComputeServices => null;
     /// <summary>Gets the command recorder the pass draws through.</summary>
-    IGpuCommandRecorder CommandRecorder { get; }
+    IGpuRecorder Recorder { get; }
     /// <summary>Gets the descriptor pool/set allocator.</summary>
     IGpuDescriptorAllocator DescriptorAllocator { get; }
     /// <summary>Gets the device context to render on — the same device the inner node renders on.</summary>

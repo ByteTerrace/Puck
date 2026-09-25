@@ -7,7 +7,8 @@ namespace Puck.Vulkan;
 /// Implements <see cref="IGpuPipelineFactory"/> by forwarding to <see cref="IVulkanGraphicsPipelineFactory"/>,
 /// downcasting the device context, render pass, and shader modules to their Vulkan-specific types. The pipeline writes
 /// every color attachment of the render pass opaquely, tests and writes its depth attachment by the description's
-/// comparison, and points clip-space +y at the top of the attachment, as Direct3D 12 does.
+/// comparison, and takes its viewport and scissor dynamically: <see cref="VulkanGpuRecorder.BeginRenderPass"/> sets a
+/// negative-height viewport that points clip-space +y at the top of the attachment, as Direct3D 12 does.
 /// </summary>
 public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipelineFactory) : IGpuPipelineFactory {
     /// <summary>Converts a depth comparison to its <c>VkCompareOp</c>.</summary>
@@ -32,9 +33,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
         IGpuRenderPass renderPass,
         IGpuShaderModule vertexShaderModule,
         IGpuShaderModule fragmentShaderModule,
-        GpuGraphicsPipelineDescription description,
-        uint width,
-        uint height
+        GpuGraphicsPipelineDescription description
     ) {
         ArgumentNullException.ThrowIfNull(description);
         description.ValidateAgainst(renderPass: renderPass);
@@ -56,11 +55,9 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
         return pipelineFactory.Create(
             enableStorageBuffer: description.EnableStorageBuffer,
             fragmentShaderModule: fragmentShader,
-            height: height,
             logicalDevice: logicalDevice,
             outputs: new VulkanGraphicsOutputs(
                 AlphaBlend: false,
-                ClipSpaceYUp: true,
                 ColorAttachmentCount: ((uint)pass.Description.Colors.Count),
                 DepthCompareOp: ((description.DepthCompare is { } compare)
                     ? ToVkCompareOp(compare: compare)
@@ -70,8 +67,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
             renderPass: pass.RenderPass,
             textureSamplerCount: description.TextureSamplerCount,
             vertexInput: description.VertexInput,
-            vertexShaderModule: vertexShader,
-            width: width
+            vertexShaderModule: vertexShader
         );
     }
 }

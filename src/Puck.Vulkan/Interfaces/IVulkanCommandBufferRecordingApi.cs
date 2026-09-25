@@ -108,6 +108,11 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="width">The width, in pixels, of the scissor rectangle.</param>
     /// <param name="height">The height, in pixels, of the scissor rectangle.</param>
     void SetScissor(VulkanDeviceCommands device, nint commandBufferHandle, int x, int y, uint width, uint height);
+    /// <summary>Records a dynamic viewport 0.</summary>
+    /// <param name="device">The command table of the logical device.</param>
+    /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
+    /// <param name="viewport">The viewport; a negative height flips the y axis.</param>
+    void SetViewport(VulkanDeviceCommands device, nint commandBufferHandle, in VkViewport viewport);
     /// <summary>Begins a render pass instance for the request's framebuffer and render pass, clearing the color attachment to opaque black over the full render area, with inline subpass contents.</summary>
     /// <param name="request">The record request identifying the device, command buffer, render pass, framebuffer, and render area.</param>
     void StartRenderPass(VulkanCommandBufferRecordRequest request);

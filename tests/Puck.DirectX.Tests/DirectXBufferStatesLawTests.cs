@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Puck.DirectX.Tests;
 
-/// <summary>Pins the buffer-barrier decisions <see cref="DirectXGpuComputeRecorder.TransitionBuffer"/> records. Direct3D 12
+/// <summary>Pins the buffer-barrier decisions <see cref="DirectXGpuRecorder.TransitionBuffer"/> records. Direct3D 12
 /// decays every buffer to <c>COMMON</c> when the <c>ExecuteCommandLists</c> that used it completes, so a state recorded in
 /// one recording must not elide a transition in the next. The SDF engine's views indirect-args buffer is written as a UAV
 /// and read by <c>ExecuteIndirect</c> every frame; without its <c>UNORDERED_ACCESS</c> to <c>INDIRECT_ARGUMENT</c>
@@ -24,7 +24,7 @@ public sealed class DirectXBufferStatesLawTests {
         var transitions = 0;
 
         for (var recording = 0; (recording < 2); recording++) {
-            // What both recorders' BeginCommandBuffer does before any command is recorded.
+            // What the recorder's BeginCommandBuffer does before any command is recorded.
             commandBuffer.BufferStates.Reset();
 
             var barrier = commandBuffer.BufferStates.Plan(

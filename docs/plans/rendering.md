@@ -1041,9 +1041,10 @@ layout outside the test reference.
 **Build sequence.** The first five commits need nothing from P7b; the rest
 follow its device-bound services, its one recorder and the SDF engine's groups.
 
-1. P4-0, the depth clear value: a render pass names its depth clear value, so
-   a reversed-Z attachment clears to 0 on both backends. P7b-7's recorder
-   carries it if that lands first.
+1. P4-0, landed, the depth clear value: a depth attachment names the depth it
+   clears to in `GpuDepthAttachment.ClearDepth` (1 by default, refused outside
+   [0, 1]), and both backends clear to it, so a reversed-Z attachment clears to
+   0. The value belongs to the render pass's attachment, not to the recorder.
 2. P4-1a, landed, the shared record: `sdf-visibility.hlsli` declares visibility
    (ray parameter; identity, with its kind in bits 31 and 30 — background, SDF
    or mesh — and a source index; material; flags), coverage (terminal radius,
@@ -1194,11 +1195,8 @@ overlay's single host-written buffer all go through the selector. The service
 bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuComputeServices`, `IFullscreenPassServices` and
 `WorldPostRenderExtensionServices`, `OverlayServices`, and
-`SdfViewGpuServices` are deleted, and so is the split between
-`IGpuCommandRecorder` and `IGpuComputeRecorder`, which today makes a
-fullscreen pass record its barriers through the compute recorder. The closed
-set of binding kinds replaces `GpuComputeBindingKind`,
-`ShaderSetManifestBindingKind`, the positional
+`SdfViewGpuServices` are deleted. The closed set of binding kinds replaces
+`GpuComputeBindingKind`, `ShaderSetManifestBindingKind`, the positional
 `TextureSamplerCount` and `EnableStorageBuffer` fields of
 `GpuGraphicsPipelineDescription`, and every binding index set by hand, such as
 `OverlayServices.StorageBufferBinding` and the SDF engine's binding constants.
@@ -1270,9 +1268,17 @@ Phase 1 follows P3, which has landed:
 
 Phase 2, the services, follows the generated frame block, which has landed:
 
-7. One `IGpuRecorder`, with no device parameter, replaces `IGpuCommandRecorder`
-   and `IGpuComputeRecorder`; its render pass takes a depth clear value and a
-   viewport and scissor rectangle.
+7. Done: one `IGpuRecorder`, with no device parameter, records compute and
+   graphics work, including both storage clears. `BindPipeline`,
+   `BindDescriptorSet` and `PushConstants` name a `GpuBindPoint`, which
+   Direct3D 12 needs to reach the compute or the graphics root.
+   `BeginRenderPass` takes an optional `GpuPixelRect` area that sets the
+   viewport and scissor, and `SetScissor` narrows the scissor inside it. The
+   depth clear value is P4-0's `GpuDepthAttachment.ClearDepth`, not a recorder
+   argument. A neutral graphics pipeline takes no extent: Vulkan's has a
+   dynamic viewport and scissor, and only the presenter's compositor keeps a
+   fixed viewport. Each backend registers one recorder, bound to its device
+   context.
 8. `IGpuBindings`.
 9. The factories lose the device parameter, and `IGpuBufferFactory` creates a
    buffer by usage (storage, uniform, indirect, vertex, index) and placement

@@ -135,7 +135,7 @@ public sealed class UnifiedOverlayWorkLawTests {
                 services: new OverlayServices {
                     BytecodeExtension = ".test",
                     CommandPoolFactory = gpu,
-                    CommandRecorder = gpu,
+                    Recorder = gpu,
                     DescriptorAllocator = gpu,
                     DeviceContext = gpu,
                     FrameSources = new NoFrameSources(),

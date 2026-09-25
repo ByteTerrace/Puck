@@ -9,7 +9,7 @@ namespace Puck.Vulkan.Factories;
 /// <summary>
 /// The default <see cref="IVulkanGraphicsPipelineFactory"/>: it configures a fixed pipeline shape — a
 /// vec2-position vertex stream, N scalar combined image-sampler bindings plus an optional storage buffer, straight
-/// alpha-over blending, and a triangle-list raster with a dynamic scissor — and returns an owning
+/// alpha-over blending, and a triangle-list raster with a dynamic scissor, and a dynamic viewport unless it draws to a swapchain — and returns an owning
 /// <see cref="VulkanGraphicsPipeline"/>.
 /// </summary>
 public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFactory {
@@ -27,6 +27,7 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
     private const uint DescriptorTypeCombinedImageSampler = 1;
     private const uint DescriptorTypeStorageBuffer = 7;
     private const uint DynamicStateScissor = 1;
+    private const uint DynamicStateViewport = 0;
     private const uint False = 0;
     private const uint FormatR32G32B32A32Sfloat = 109;
     private const uint FormatR32G32B32Sfloat = 106;
@@ -143,23 +144,24 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
 
         return Create(
             enableStorageBuffer: enableStorageBuffer,
+            fixedViewport: new VkExtent2D(
+                height: swapchain.ImageExtentHeight,
+                width: swapchain.ImageExtentWidth
+            ),
             fragmentShaderModule: fragmentShaderModule,
-            height: swapchain.ImageExtentHeight,
             logicalDevice: logicalDevice,
+            outputs: null,
             pushConstantBinding: pushConstantBinding,
             renderPass: renderPass,
             textureSamplerCount: textureSamplerCount,
             vertexInput: vertexInput,
-            vertexShaderModule: vertexShaderModule,
-            width: swapchain.ImageExtentWidth
+            vertexShaderModule: vertexShaderModule
         );
     }
     /// <inheritdoc/>
     public VulkanGraphicsPipeline Create(
         VulkanLogicalDevice logicalDevice,
         VulkanRenderPass renderPass,
-        uint width,
-        uint height,
         VulkanShaderModule vertexShaderModule,
         VulkanShaderModule fragmentShaderModule,
         VulkanPushConstantBinding? pushConstantBinding = null,
@@ -167,6 +169,30 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
         bool enableStorageBuffer = true,
         GpuVertexInputLayout? vertexInput = null,
         VulkanGraphicsOutputs? outputs = null
+    ) => Create(
+        enableStorageBuffer: enableStorageBuffer,
+        fixedViewport: null,
+        fragmentShaderModule: fragmentShaderModule,
+        logicalDevice: logicalDevice,
+        outputs: outputs,
+        pushConstantBinding: pushConstantBinding,
+        renderPass: renderPass,
+        textureSamplerCount: textureSamplerCount,
+        vertexInput: vertexInput,
+        vertexShaderModule: vertexShaderModule
+    );
+
+    private VulkanGraphicsPipeline Create(
+        VulkanLogicalDevice logicalDevice,
+        VulkanRenderPass renderPass,
+        VkExtent2D? fixedViewport,
+        VulkanShaderModule vertexShaderModule,
+        VulkanShaderModule fragmentShaderModule,
+        VulkanPushConstantBinding? pushConstantBinding,
+        uint textureSamplerCount,
+        bool enableStorageBuffer,
+        GpuVertexInputLayout? vertexInput,
+        VulkanGraphicsOutputs? outputs
     ) {
         ArgumentNullException.ThrowIfNull(argument: logicalDevice);
         ArgumentNullException.ThrowIfNull(argument: renderPass);
@@ -222,7 +248,6 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
             ColorAttachmentCount: 1
         ));
         var request = new VulkanGraphicsPipelineCreateRequest(
-            ClipSpaceYUp: written.ClipSpaceYUp,
             ColorBlendAttachments: BuildBlendAttachments(outputs: written),
             DepthStencil: ((written.DepthCompareOp is { } compare)
                 ? new VkPipelineDepthStencilStateCreateInfo {
@@ -237,9 +262,11 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
                 textureSamplerCount: textureSamplerCount
             ),
             Device: logicalDevice.Commands,
-            DynamicStates: [DynamicStateScissor],
+            DynamicStates: ((fixedViewport is null)
+                ? [DynamicStateViewport, DynamicStateScissor]
+                : [DynamicStateScissor]),
+            FixedViewport: fixedViewport,
             FragmentShaderModuleHandle: fragmentShaderModule.Handle,
-            Height: height,
             Multisample: new VkPipelineMultisampleStateCreateInfo {
                 RasterizationSamples = SampleCount1Bit,
                 SType = StructureTypePipelineMultisampleStateCreateInfo,
@@ -262,8 +289,7 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
             Topology: PrimitiveTopologyTriangleList,
             VertexAttributes: vertexAttributes,
             VertexBindings: vertexBindings,
-            VertexShaderModuleHandle: vertexShaderModule.Handle,
-            Width: width
+            VertexShaderModuleHandle: vertexShaderModule.Handle
         );
         var result = m_graphicsPipelineApi.CreateGraphicsPipeline(
             descriptorSetLayoutHandle: out var descriptorSetLayoutHandle,
