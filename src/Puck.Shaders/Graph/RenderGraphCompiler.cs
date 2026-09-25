@@ -29,9 +29,9 @@ public sealed class RenderGraphPlan {
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs => Pipeline.Outputs;
     /// <summary>Gets the pipeline planner's plan. A package pass appears in it as a planned pass of kind
-    /// <see cref="ShaderPipelinePassKind.Package"/> whose declaration is the compute shape it reaches resources by, its
-    /// source the package id its step names; it is ordered, given its accesses and barriers, and kept live exactly as a
-    /// shader pass is.</summary>
+    /// <see cref="ShaderPipelinePassKind.Package"/> with no declaration and a <see cref="ShaderPipelinePackageStep"/>
+    /// naming its package, its ports' versions and its extent; it is ordered, given its accesses and barriers, and kept
+    /// live exactly as a shader pass is.</summary>
     public ShaderPipelinePlan Pipeline { get; }
     /// <summary>Gets the planned passes in execution order, parallel to the planner's passes.</summary>
     public IReadOnlyList<RenderGraphStep> Steps { get; }
@@ -171,7 +171,50 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 references: pass.InputReferences,
                 resources: resources
             );
+            if (!TryBindConfig(
+                config: out _,
+                package: package,
+                pass: pass,
+                reason: out var reason
+            )) {
+                Add(
+                    code: "RENDERGRAPH_PACKAGE_CONFIG",
+                    diagnostics: diagnostics,
+                    message: $"Package pass '{pass.Name}' config does not bind to package '{package.Id}': {reason}",
+                    name: pass.Name
+                );
+            }
         }
+    }
+    // Binds a pass's config against its package's schema: the schema with each field defaulting to the pass's value, so
+    // the planned frame block starts from it; null for a package that takes no config and a pass that gives none.
+    private static bool TryBindConfig(RenderGraphPackagePass pass, RenderGraphPackage package, out IReadOnlyDictionary<string, ShaderConfigField>? config, out string reason) {
+        config = null;
+
+        if (package.Config is not { } schema) {
+            reason = "the package takes no config";
+
+            return (pass.Config is null);
+        }
+        if (!ShaderConfigBinding.TryBind(
+            config: pass.Config,
+            ownerName: pass.Name,
+            reason: out reason,
+            schema: schema,
+            values: out var values
+        )) {
+            return false;
+        }
+
+        var json = values.ToJson();
+
+        config = schema.ToDictionary(
+            comparer: StringComparer.Ordinal,
+            elementSelector: pair => (pair.Value with { Default = json.GetProperty(propertyName: pair.Key) }),
+            keySelector: static pair => pair.Key
+        );
+
+        return true;
     }
     // Each version a pass binds must carry what its port carries: its kind, and a buffer port's stride and count. A pass
     // binding the wrong number of versions is refused by its port count instead, so only the ports both sides name are
@@ -230,7 +273,14 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 key: pass.Name,
                 value: package!
             );
+            TryBindConfig(
+                config: out var config,
+                package: package!,
+                pass: pass,
+                reason: out _
+            );
             packagePasses.Add(item: new ShaderPipelinePackagePass(
+                Config: config,
                 Inputs: pass.InputReferences,
                 Name: pass.Name,
                 Outputs: pass.OutputReferences,

@@ -29,6 +29,18 @@ public sealed class RenderGraphSchedulerLawTests {
         passes: 2,
         reads: reads
     );
+
+    // The SDF engine's pass count (SdfWorldEngine.PassLabels.Length), which prices the sdf.world producer.
+    private const int WorldPasses = 10;
+
+    // The sdf.world external producer, which renders through the engine's own ring.
+    private static RenderGraphInstance World(RenderGraphRead[]? reads = null) => Instance(
+        name: "world",
+        passes: WorldPasses,
+        reads: reads
+    ) with {
+        ExternalPackage = "sdf.world",
+    };
     private static RenderGraphRead BufferRead(string producer, bool previousFrame = false) => new(
         Kind: ShaderPipelineResourceKind.Buffer,
         PreviousFrame: previousFrame,
@@ -586,6 +598,71 @@ public sealed class RenderGraphSchedulerLawTests {
         Assert.Equal(expected: RenderGraphInstanceRefusalCode.KindMismatch, actual: bufferOfImage.Code);
         Assert.Equal(expected: ["main", "security"], actual: bufferOfImage.Instances);
         Assert.Contains(expectedSubstring: "reads 'security' as Buffer, but its output is Image", actualString: bufferOfImage.Message);
+    }
+    [Fact]
+    public void AnExternalProducerThatReadsIsRefusedByName() {
+        Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+            instances: [
+                Instance(name: "camera"),
+                World(reads: [new RenderGraphRead(Producer: "camera")]),
+            ],
+            refusal: out var refusal,
+            set: out _
+        ));
+        Assert.Equal(expected: RenderGraphInstanceRefusalCode.ExternalReads, actual: refusal.Code);
+        Assert.Equal(expected: ["world"], actual: refusal.Instances);
+        Assert.Contains(expectedSubstring: "'world' is the external producer 'sdf.world'", actualString: refusal.Message);
+    }
+    [Fact]
+    public void APreviousFrameReadOfTheWorldProducerIsRefusedByName() {
+        Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+            instances: [
+                World(),
+                Instance(
+                    name: "main",
+                    reads: [new RenderGraphRead(
+                        PreviousFrame: true,
+                        Producer: "world"
+                    )]
+                ),
+            ],
+            refusal: out var refusal,
+            set: out _
+        ));
+        Assert.Equal(expected: RenderGraphInstanceRefusalCode.ExternalPreviousFrame, actual: refusal.Code);
+        Assert.Equal(expected: ["main", "world"], actual: refusal.Instances);
+        Assert.Contains(expectedSubstring: "reads the previous frame of 'world', the external producer 'sdf.world'", actualString: refusal.Message);
+    }
+    [Fact]
+    public void AnExternalProducerIsScheduledAndPricedLikeAnyInstance() {
+        var set = Set(
+            World(),
+            Instance(
+                name: "main",
+                reads: [new RenderGraphRead(Producer: "world")]
+            )
+        );
+        var schedule = new RenderGraphSchedule(set: set);
+
+        RenderGraphScheduler.Schedule(
+            frame: Frame(
+                footprints: [new RenderGraphFootprint(Consumer: "main", Height: 0.5, Producer: "world", Width: 0.5)],
+                index: 0,
+                roots: [new RenderGraphRoot(Height: 1.0, Instance: "main", Width: 1.0)]
+            ),
+            history: RenderGraphHistory.Empty(set: set),
+            schedule: schedule,
+            set: set
+        );
+
+        var world = schedule.Instances[set.IndexOf(name: "world")];
+
+        Assert.Equal(expected: [set.IndexOf(name: "world"), set.IndexOf(name: "main")], actual: schedule.Renders);
+        Assert.Equal(expected: RenderGraphInstanceKind.External, actual: set.Instances[set.IndexOf(name: "world")].Kind);
+        Assert.Equal(
+            expected: (WorldPasses, ((((long)WorldPasses) * world.Width) * world.Height)),
+            actual: (world.Passes, world.PassPixels)
+        );
     }
     [Fact]
     public void ASameFrameBufferCycleRefusesNamingBothInstances() {

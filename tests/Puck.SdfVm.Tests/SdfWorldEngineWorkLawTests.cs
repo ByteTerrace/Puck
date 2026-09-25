@@ -13,7 +13,8 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// Laws for the GPU work <see cref="SdfWorldEngine"/> counts, driven over <see cref="FakeGpuDevice"/> so the engine's
 /// whole CPU path runs without a device: the pass order and the passes a cadence skip marks, the exact per-pass counts
-/// of a rendered and of a cadence-skipped frame, that the descriptor pool it states is the one it creates, what moves the revision, that submission identity keeps increasing
+/// of a rendered and of a cadence-skipped frame, that the descriptor pool it states is the one it creates and that a
+/// device heap that cannot hold that pool refuses the engine by name before it allocates, what moves the revision, that submission identity keeps increasing
 /// across an engine rebuild on the owner's ledger, and that a steady-state frame allocates nothing.
 /// </summary>
 public sealed class SdfWorldEngineWorkLawTests {
@@ -45,6 +46,70 @@ public sealed class SdfWorldEngineWorkLawTests {
                 brickUpload: (brickPoolVoxelCapacity > 0)
             )],
             actual: rig.Gpu.PoolsCreated
+        );
+    }
+    [Fact]
+    public void AnEngineTheDeviceHeapCannotHoldIsRefusedByNameBeforeItAllocates() {
+        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+        var pipelines = SdfTestPipelines.Build(
+            device: gpu,
+            kernels: SdfTestPipelines.Kernels(),
+            ledger: new GpuWorkLedger(
+                framesInFlight: SdfWorldEngine.FrameRingSize,
+                name: "gpu.sdf-engine"
+            )
+        );
+        var demand = SdfWorldEngine.DescriptorPoolSizes(
+            brickPool: false,
+            brickUpload: false
+        ).HeapDescriptors;
+        var builder = new SdfProgramBuilder();
+
+        builder.Sphere(
+            material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)),
+            radius: 1f
+        );
+
+        var options = new SdfWorldEngineOptions(
+            BrickPoolVoxelCapacity: 0,
+            Program: builder.Build(),
+            ViewportCapacity: 1
+        );
+
+        GpuDescriptorHeapBudget Heap(uint views) => new(capabilities: (GpuDeviceCapabilities.FromDirectX(
+            resourceBindingTier: 3,
+            rootSignatureVersion: "1.1",
+            samplerHeapSize: 0,
+            shaderModel: "6.6",
+            staticSamplerHeapSize: 0,
+            viewHeapSize: 0
+        ) with {
+            ViewHeapSize = views,
+        }));
+
+        gpu.DescriptorHeap = Heap(views: (demand - 1U));
+
+        var refusal = Assert.Throws<GpuDescriptorHeapRefusalException>(testCode: () => SdfWorldEngine.CheckAdmission(
+            device: gpu,
+            options: options,
+            pipelines: pipelines
+        ));
+
+        Assert.StartsWith(
+            actualString: refusal.Message,
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view descriptors in 1 pool(s) and is refused: "
+        );
+        Assert.Empty(collection: gpu.PoolsCreated);
+
+        gpu.DescriptorHeap = Heap(views: demand);
+        SdfWorldEngine.CheckAdmission(
+            device: gpu,
+            options: options,
+            pipelines: pipelines
+        );
+        Assert.Equal(
+            actual: (gpu.DescriptorHeap.FreeViewDescriptors, gpu.DescriptorHeap.LivePools),
+            expected: (demand, 0)
         );
     }
     [Fact]

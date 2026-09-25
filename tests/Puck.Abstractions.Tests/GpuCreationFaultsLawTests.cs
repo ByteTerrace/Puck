@@ -40,11 +40,16 @@ public sealed class GpuCreationFaultsLawTests {
     // The members of the wrapped interfaces that create nothing counted, and are forwarded without asking the faults.
     private static readonly string[] PassThroughs = [
         "IGpuBindings.AllocateSet",
+        "IGpuBindings.CanAdmit",
         "IGpuBindings.CreateSampler",
         "IGpuBindings.DestroyPool",
         "IGpuBindings.DestroySampler",
+        "IGpuBindings.HeapReleaseRevision",
         "IGpuBindings.WriteBuffer",
         "IGpuBindings.WriteCombinedImageSampler",
+        "IGpuBindings.WriteConstantBuffer",
+        "IGpuBindings.WriteSampledImage",
+        "IGpuBindings.WriteSampler",
         "IGpuBindings.WriteStorageImage",
     ];
 
@@ -307,12 +312,17 @@ public sealed class GpuCreationFaultsLawTests {
         }
 
         _ = bindings.AllocateSet(descriptorSetLayoutHandle: 1, poolHandle: 2);
+        _ = bindings.CanAdmit(owner: "candidate", pools: [], refusal: out _);
         _ = bindings.CreateSampler();
         bindings.DestroyPool(poolHandle: 2);
         bindings.DestroySampler(samplerHandle: 3);
         bindings.WriteBuffer(binding: 0, bufferHandle: 1, bufferSize: 4, descriptorSetHandle: 1, elementStride: 0, kind: GpuBindingKind.ReadOnlyBuffer);
         bindings.WriteCombinedImageSampler(arrayElement: 0, binding: 0, descriptorSetHandle: 1, imageViewHandle: 1, samplerHandle: 1);
         bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 1, imageViewHandle: 1);
+        bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: 1, bufferSize: 256, descriptorSetHandle: 1);
+        bindings.WriteSampledImage(arrayElement: 0, binding: 1, descriptorSetHandle: 1, imageViewHandle: 1);
+        bindings.WriteSampler(arrayElement: 0, binding: 2, descriptorSetHandle: 1, samplerHandle: 1);
+        _ = bindings.HeapReleaseRevision;
 
         foreach (var key in PassThroughs) {
             Assert.Equal(
@@ -334,9 +344,12 @@ public sealed class GpuCreationFaultsLawTests {
 
         foreach (var type in WrappedInterfaces) {
             foreach (var method in type.GetMethods(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
+                // A property's accessor is keyed by the property name, as the fake records it.
                 Assert.Contains(
                     collection: covered,
-                    expected: $"{type.Name}.{method.Name}"
+                    expected: $"{type.Name}.{(method.IsSpecialName
+                        ? method.Name[4..]
+                        : method.Name)}"
                 );
             }
         }

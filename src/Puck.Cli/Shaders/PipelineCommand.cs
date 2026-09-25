@@ -100,12 +100,12 @@ internal static class PipelineCommand {
                     foreach (var pass in plan.Passes) {
                         Console.WriteLine(value: $"  {pass.Name}: {pass.Kind}; inputs={string.Join(
                             separator: ",",
-                            values: pass.Declaration.InputReferences.Select(selector: input => (input.Name + (input.PreviousFrame
+                            values: pass.Inputs.Select(selector: input => (input.Name + (input.PreviousFrame
                             ? "@previous"
                             : string.Empty)))
                         )}; outputs={string.Join(
                             separator: ",",
-                            values: pass.Declaration.OutputReferences.Select(selector: output => output.Name)
+                            values: pass.Outputs.Select(selector: output => output.Name)
                         )}");
                     }
                     foreach (var output in plan.Outputs) { Console.WriteLine(value: $"  output {output}"); }

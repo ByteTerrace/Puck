@@ -20,10 +20,37 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
     /// pipeline's one requested filter — DXC's <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState
     /// pair, so a kernel with several screen-like sources declares several distinct sampler symbols at distinct
     /// registers); the input-layout flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
+    /// <para>A description with a <see cref="GpuComputePipelineDescription.Layout"/> takes none of that: its root
+    /// signature is <see cref="DirectXRootSignatures.CreateLayout"/>'s, with its samplers in sampler tables rather than
+    /// static samplers.</para>
     /// </remarks>
     public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         ArgumentNullException.ThrowIfNull(computeShaderModule);
         ArgumentNullException.ThrowIfNull(description);
+
+        if (description.Layout is not null) {
+            var grouped = DirectXRootSignatures.CreateLayout(
+                description: description.RequireLayout(),
+                device: ((ID3D12Device*)deviceContext.Device.Handle)
+            );
+            var module = ((DirectXGpuShaderModule)computeShaderModule);
+
+            try {
+                grouped.PsoHandle = BuildPso(
+                    csHandle: module.Handle,
+                    csLength: module.BytecodeLength,
+                    device: ((ID3D12Device*)deviceContext.Device.Handle),
+                    library: deviceContext.PipelineLibrary,
+                    rootSignature: grouped.RootSignatureHandle,
+                    rootSignatureBlob: grouped.RootSignatureBlob
+                );
+            } catch {
+                grouped.Dispose();
+                throw;
+            }
+
+            return new DirectXGpuPipeline(layout: grouped);
+        }
 
         var bindings = description.Bindings;
         var pushConstantBinding = description.PushConstantBinding;

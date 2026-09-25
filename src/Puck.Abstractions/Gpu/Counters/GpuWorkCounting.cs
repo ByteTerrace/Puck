@@ -237,11 +237,12 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.PipelineBindsColumn);
     }
-    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) {
+    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) {
         inner.BindDescriptorSet(
             bindPoint: bindPoint,
             commandBufferHandle: commandBufferHandle,
             descriptorSetHandle: descriptorSetHandle,
+            group: group,
             pipelineLayoutHandle: pipelineLayoutHandle
         );
         Tally(column: GpuWork.DescriptorSetBindsColumn);
@@ -371,6 +372,15 @@ file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : C
             ),
             lifetimeIndex: GpuWork.DescriptorSetsCreatedIndex
         );
+
+    public long HeapReleaseRevision => inner.HeapReleaseRevision;
+
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) =>
+        inner.CanAdmit(
+            owner: owner,
+            pools: pools,
+            refusal: out refusal
+        );
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) =>
         Created(
             created: inner.CreatePool(sizes: in sizes),
@@ -399,6 +409,34 @@ file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : C
             binding: binding,
             descriptorSetHandle: descriptorSetHandle,
             imageViewHandle: imageViewHandle,
+            samplerHandle: samplerHandle
+        );
+        Tally(column: GpuWork.DescriptorWritesColumn);
+    }
+    public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
+        inner.WriteConstantBuffer(
+            arrayElement: arrayElement,
+            binding: binding,
+            bufferHandle: bufferHandle,
+            bufferSize: bufferSize,
+            descriptorSetHandle: descriptorSetHandle
+        );
+        Tally(column: GpuWork.DescriptorWritesColumn);
+    }
+    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        inner.WriteSampledImage(
+            arrayElement: arrayElement,
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
+            imageViewHandle: imageViewHandle
+        );
+        Tally(column: GpuWork.DescriptorWritesColumn);
+    }
+    public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) {
+        inner.WriteSampler(
+            arrayElement: arrayElement,
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
             samplerHandle: samplerHandle
         );
         Tally(column: GpuWork.DescriptorWritesColumn);

@@ -150,7 +150,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
             shaders: plan.Passes.ToDictionary(
                 elementSelector: pass => new CompiledShader(
                     diagnostics: [],
-                    dxil: Stages(kind: pass.Declaration.Kind),
+                    dxil: Stages(kind: pass.Declaration!.Kind),
                     name: pass.Name,
                     sourceHash: pass.Name,
                     sourcePath: $"{pass.Name}.hlsl",
@@ -529,10 +529,11 @@ public sealed class ShaderPipelineAttachmentLawTests {
             collection: gpu.GraphicsPipelines
         );
 
-        // A geometry pass with no input binds no descriptor, so only the sampling consumer has a pool in each slot.
+        // A geometry pass with no input binds no descriptor, so the graph's one pool holds only the sampling consumer's
+        // set for each slot.
         Assert.Equal(
-            actual: gpu.CreatedObjects.Count(predicate: static created => (created.Kind == "descriptor pool")),
-            expected: 3
+            actual: (Pools: gpu.CreatedObjects.Count(predicate: static created => (created.Kind == "descriptor pool")), Sets: gpu.DescriptorPools.Single().MaxSets),
+            expected: (Pools: 1, Sets: 3U)
         );
 
         gpu.Recording = true;
@@ -659,7 +660,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
         var pass = Plan(definition: definition).Passes.Single();
 
         Assert.Equal(
-            actual: (pass.Declaration.Kind, pass.Declaration.DepthCompare, pass.Declaration.Geometry!.VertexEntryPoint, pass.Declaration.Geometry.IndexFormat, pass.Declaration.Geometry.VertexCount, pass.Declaration.Geometry.SizeBytes),
+            actual: (pass.Declaration!.Kind, pass.Declaration!.DepthCompare, pass.Declaration!.Geometry!.VertexEntryPoint, pass.Declaration!.Geometry.IndexFormat, pass.Declaration!.Geometry.VertexCount, pass.Declaration!.Geometry.SizeBytes),
             expected: (ShaderPipelineDocumentPassKind.Geometry, ((ShaderPipelineDepthCompare?)ShaderPipelineDepthCompare.LessOrEqual), "vs", ShaderPipelineIndexFormat.UInt32, 3U, ((9UL * 4UL) + (3UL * 4UL)))
         );
         Assert.Equal(

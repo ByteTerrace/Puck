@@ -5,73 +5,54 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>The host half of a <see cref="WorldDeferredVerbEchoes"/> table, shared by every composition root that
-/// registers one: prints each late answer the table raises and counts each refusal of the local console's lines once
-/// in the registry <c>wire.errors</c> reads. A late typed verdict (<see cref="WorldDeferredVerbEchoes.Completed"/>) prints on stderr
-/// when it is an error and on stdout otherwise; an eviction (<see cref="WorldDeferredVerbEchoes.Evicted"/>) is its
-/// line's only answer, so it prints on stderr and counts. A host whose authority echoes reach it passes each echo to
-/// <see cref="Answer"/>, which prints the registered line's verdict and counts a refusal unless an eviction already
-/// answered that line.</summary>
+/// registers one: prints each answer the table owes a registered console line and counts each refusal once in the
+/// registry <c>wire.errors</c> reads. <c>wire.errors</c> counts a refused registered line and a console link's codec
+/// refusal, and nothing else: an echo no console line registered (a remote peer's, a rule's or addon's, a host's own
+/// reload, a grant-table replay) is neither printed nor counted. A late typed mutation result
+/// (<see cref="WorldDeferredVerbEchoes.Completed"/>) prints on stderr when it is an error and on stdout otherwise; it
+/// never counts, since the verdict of the line it answers does.</summary>
 /// <remarks>Lines go to <see cref="Console.Out"/> and <see cref="Console.Error"/> as they are when a line is written,
 /// so a host that swaps the console writers after composing (the silo's line tagging) still frames them.</remarks>
 public sealed class WorldDeferredVerbAnswers {
     private readonly WorldDeferredVerbEchoes m_echoes;
-    private readonly CommandRegistry m_registry;
 
-    private WorldDeferredVerbAnswers(WorldDeferredVerbEchoes echoes, CommandRegistry registry) {
+    private WorldDeferredVerbAnswers(WorldDeferredVerbEchoes echoes) =>
         m_echoes = echoes;
-        m_registry = registry;
-    }
 
-    /// <summary>Subscribes a host to its table's late answers and evictions.</summary>
-    /// <param name="echoes">The host's pending-verb table.</param>
+    /// <summary>Gets the console's table these answers print and count.</summary>
+    public WorldDeferredVerbEchoes Echoes => m_echoes;
+
+    /// <summary>Subscribes a host to its table's answers.</summary>
+    /// <param name="echoes">The console's table.</param>
     /// <param name="registry">The registry whose refusal count <c>wire.errors</c> reports.</param>
-    /// <returns>The attached answers, whose <see cref="Answer"/> the host's echo tap calls.</returns>
+    /// <returns>The attached answers, whose <see cref="Answer"/> each row's echo tap calls.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="echoes"/> or <paramref name="registry"/> is
     /// <see langword="null"/>.</exception>
     public static WorldDeferredVerbAnswers Attach(WorldDeferredVerbEchoes echoes, CommandRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: echoes);
         ArgumentNullException.ThrowIfNull(argument: registry);
 
-        var answers = new WorldDeferredVerbAnswers(echoes: echoes, registry: registry);
-
         echoes.Completed += static result => Write(isError: result.IsError, line: result.Output);
-        echoes.Evicted += answers.AnswerEviction;
+        echoes.Answered += answer => {
+            if (answer.Line is { } line) {
+                Write(isError: answer.IsError, line: line);
+            }
+            if (answer.Counts) {
+                registry.NoteDeferredRejection();
+            }
+        };
 
-        return answers;
+        return new WorldDeferredVerbAnswers(echoes: echoes);
     }
-    /// <summary>Answers one authority echo: settles and prints the local line it answers, and counts a refusal no
-    /// line's own dispatch could report. Only the local console connection's submissions are this console's lines: a
-    /// remote peer's echo is neither printed nor counted, and neither is a rebuild verdict no line registered, since
-    /// every console rebuild verb registers its line and an unregistered rebuild was submitted by the host itself
-    /// (the silo's reload, answered on its own reply) or by a replay drive. A refusal answering a line the table
-    /// evicted is not counted again, since its eviction was already counted.</summary>
+    /// <summary>Answers one echo from <paramref name="row"/>'s authority
+    /// (<see cref="WorldDeferredVerbSettlement.Answer"/>).</summary>
     /// <param name="echo">The authority's echo.</param>
-    public void Answer(in WorldEditEcho echo) {
-        if (echo.ConnectionId != SubmissionEnvelope.LocalConnectionId) {
-            return;
-        }
+    /// <param name="row">The row whose authority raised it.</param>
+    public void Answer(in WorldEditEcho echo, string row) => m_echoes.Answer(
+        echo: in echo,
+        row: row
+    );
 
-        if (m_echoes.Settle(echo: in echo) is { } verdict) {
-            Write(isError: echo.Rejected, line: verdict);
-        } else if (
-            m_echoes.TakeEvicted(echo: in echo) ||
-            (echo.Kind == WorldEditEchoKind.Rebuild)
-        ) {
-            return;
-        }
-
-        // A submitted edit is accepted into the tick queue and refused a tick later, so the registry's own
-        // dispatch accounting never saw the refusal; a line refused synchronously never reaches the server and so
-        // never echoes.
-        if (echo.Rejected) {
-            m_registry.NoteDeferredRejection();
-        }
-    }
-
-    private void AnswerEviction(CommandResult result) {
-        Write(isError: true, line: result.Output);
-        m_registry.NoteDeferredRejection();
-    }
     private static void Write(bool isError, string line) {
         if (isError) {
             Console.Error.WriteLine(value: line);

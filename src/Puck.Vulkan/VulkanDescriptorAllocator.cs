@@ -79,6 +79,62 @@ public sealed class VulkanDescriptorAllocator(IVulkanDescriptorApi descriptorApi
             SamplerHandle: samplerHandle
         ));
     }
+    /// <summary>Writes a sampled image descriptor into a set, in shader-read-only layout, read through a separate
+    /// sampler.</summary>
+    /// <param name="device">The command table of the logical device.</param>
+    /// <param name="descriptorSetHandle">The native <c>VkDescriptorSet</c> handle to write into.</param>
+    /// <param name="binding">The binding index within the set.</param>
+    /// <param name="arrayElement">The array element within the binding.</param>
+    /// <param name="imageViewHandle">The native <c>VkImageView</c> handle to sample.</param>
+    public void WriteSampledImage(VulkanDeviceCommands device, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        descriptorApi.WriteImage(request: new VulkanDescriptorImageWriteRequest(
+            ArrayElement: arrayElement,
+            Binding: binding,
+            DescriptorSetHandle: descriptorSetHandle,
+            DescriptorType: VulkanDescriptorType.SampledImage,
+            Device: device,
+            ImageLayout: VulkanImageLayout.ShaderReadOnlyOptimal,
+            ImageViewHandle: imageViewHandle,
+            SamplerHandle: 0
+        ));
+    }
+    /// <summary>Writes a sampler descriptor into a set.</summary>
+    /// <param name="device">The command table of the logical device.</param>
+    /// <param name="descriptorSetHandle">The native <c>VkDescriptorSet</c> handle to write into.</param>
+    /// <param name="binding">The binding index within the set.</param>
+    /// <param name="arrayElement">The array element within the binding.</param>
+    /// <param name="samplerHandle">The native <c>VkSampler</c> handle.</param>
+    public void WriteSampler(VulkanDeviceCommands device, nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) {
+        descriptorApi.WriteImage(request: new VulkanDescriptorImageWriteRequest(
+            ArrayElement: arrayElement,
+            Binding: binding,
+            DescriptorSetHandle: descriptorSetHandle,
+            DescriptorType: VulkanDescriptorType.Sampler,
+            Device: device,
+            ImageLayout: 0,
+            ImageViewHandle: 0,
+            SamplerHandle: samplerHandle
+        ));
+    }
+    /// <summary>Writes a uniform buffer descriptor into a set, over the buffer from its first byte.</summary>
+    /// <param name="device">The command table of the logical device.</param>
+    /// <param name="descriptorSetHandle">The native <c>VkDescriptorSet</c> handle to write into.</param>
+    /// <param name="binding">The binding index within the set.</param>
+    /// <param name="arrayElement">The array element within the binding.</param>
+    /// <param name="bufferHandle">The native <c>VkBuffer</c> handle to bind.</param>
+    /// <param name="bufferSize">The size, in bytes, of the bound buffer range.</param>
+    public void WriteUniformBuffer(VulkanDeviceCommands device, nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
+        descriptorApi.WriteBuffer(request: new VulkanDescriptorBufferWriteRequest(
+            ArrayElement: arrayElement,
+            Binding: binding,
+            BufferHandle: bufferHandle,
+            BufferOffset: 0,
+            BufferRange: bufferSize,
+            DescriptorSetHandle: descriptorSetHandle,
+            DescriptorType: VulkanDescriptorType.UniformBuffer,
+            Device: device
+        ));
+    }
     /// <summary>Writes a storage buffer descriptor into a set.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="descriptorSetHandle">The native <c>VkDescriptorSet</c> handle to write into.</param>

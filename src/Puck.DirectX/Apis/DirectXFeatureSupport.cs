@@ -135,6 +135,7 @@ public static unsafe class DirectXFeatureReads {
             rootSignatureVersion: HighestRootSignatureVersion(support: support),
             samplerHeapSize: options19.MaxSamplerDescriptorHeapSize,
             shaderModel: HighestShaderModel(support: support),
+            staticSamplerHeapSize: options19.MaxSamplerDescriptorHeapSizeWithStaticSamplers,
             viewHeapSize: options19.MaxViewDescriptorHeapSize
         );
     }

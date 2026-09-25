@@ -30,12 +30,13 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the label is recorded into.</param>
     void EndDebugLabel(VulkanDeviceCommands device, nint commandBufferHandle);
-    /// <summary>Binds a single descriptor set at set number 0 for the graphics bind point.</summary>
+    /// <summary>Binds a single descriptor set at a set number for the graphics bind point.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="pipelineLayoutHandle">The native <c>VkPipelineLayout</c> handle compatible with the descriptor set.</param>
+    /// <param name="firstSet">The set number the set is bound at.</param>
     /// <param name="descriptorSetHandle">The native <c>VkDescriptorSet</c> handle to bind.</param>
-    void BindDescriptorSet(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle);
+    void BindDescriptorSet(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, uint firstSet, nint descriptorSetHandle);
     /// <summary>Binds one or more descriptor sets starting at set number 0 for the graphics bind point.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
@@ -121,12 +122,14 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="pipelineHandle">The native <c>VkPipeline</c> handle to bind.</param>
     void BindComputePipeline(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineHandle);
-    /// <summary>Binds one or more descriptor sets starting at set number 0 for the compute bind point.</summary>
+    /// <summary>Binds one or more descriptor sets starting at a set number for the compute bind point.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="pipelineLayoutHandle">The native <c>VkPipelineLayout</c> handle compatible with the descriptor sets.</param>
-    /// <param name="descriptorSetHandles">The native <c>VkDescriptorSet</c> handles to bind, in order from set 0.</param>
-    void BindComputeDescriptorSets(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, ReadOnlySpan<nint> descriptorSetHandles);
+    /// <param name="firstSet">The set number the first set is bound at.</param>
+    /// <param name="descriptorSetHandles">The native <c>VkDescriptorSet</c> handles to bind, in order from
+    /// <paramref name="firstSet"/>.</param>
+    void BindComputeDescriptorSets(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, uint firstSet, ReadOnlySpan<nint> descriptorSetHandles);
     /// <summary>Records a compute dispatch.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>

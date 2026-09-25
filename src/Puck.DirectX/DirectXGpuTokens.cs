@@ -54,6 +54,11 @@ public sealed class DirectXPipelineLayout : IDisposable {
     /// the chosen index values — the binding index is a logical id, not a heap offset. The root signature's range
     /// offsets and <see cref="DirectXGpuBindings"/>'s writes both go through this map, keeping them in lockstep.</summary>
     public uint[] SlotByBinding = [];
+    /// <summary>The <see cref="GCHandle"/> of each group's <see cref="DirectXGroupLayout"/>, indexed by the group's
+    /// ordinal and zero where the pipeline binds no group, for a pipeline created from a
+    /// <see cref="GpuPipelineLayoutDescription"/>; empty for one created without it. <see cref="Dispose"/> frees
+    /// them.</summary>
+    public nint[] GroupHandles = [];
 
     internal static DirectXPipelineLayout CreateForParameters(bool hasDescriptorTable, GpuPushConstantBinding? pushConstantBinding) {
         var hasRootConstants = (pushConstantBinding is not null);
@@ -83,37 +88,141 @@ public sealed class DirectXPipelineLayout : IDisposable {
     public void Dispose() {
         DirectXConstants.Release(pointer: ref PsoHandle);
         DirectXConstants.Release(pointer: ref RootSignatureHandle);
+
+        for (var ordinal = 0; (ordinal < GroupHandles.Length); ordinal++) {
+            if (0 != GroupHandles[ordinal]) {
+                GCHandle.FromIntPtr(value: GroupHandles[ordinal]).Free();
+                GroupHandles[ordinal] = 0;
+            }
+        }
     }
 }
 /// <summary>
-/// Encodes a shader-visible CBV_SRV_UAV descriptor heap together with the cached base addresses and
-/// descriptor increment size needed to write and bind descriptors without re-querying the device.
-/// Stored in a <see cref="GCHandle"/>.
+/// One group of a pipeline created from a <see cref="GpuPipelineLayoutDescription"/>, as its root signature lays it
+/// out (<see cref="DirectXRootLayout"/>): the view table's and the sampler table's root parameter indices, each table's
+/// length in descriptors, and each binding's first descriptor in its table. A set of the group takes a region of its
+/// pool's view range as long as the view table and a region of its sampler range as long as the sampler table. Stored in
+/// a <see cref="GCHandle"/>, the handle <c>IGpuBindings.AllocateSet</c> takes for the group.
+/// </summary>
+[SupportedOSPlatform("windows10.0.10240")]
+public sealed class DirectXGroupLayout {
+    /// <summary>Initializes a new instance of the <see cref="DirectXGroupLayout"/> class from a planned root layout.</summary>
+    /// <param name="layout">The planned root layout.</param>
+    /// <param name="group">The group.</param>
+    public DirectXGroupLayout(DirectXRootLayout layout, GpuGroupLayoutDescription group) {
+        ArgumentNullException.ThrowIfNull(argument: layout);
+        ArgumentNullException.ThrowIfNull(argument: group);
+
+        var views = layout.TableOf(
+            kind: DirectXRootParameterKind.ViewTable,
+            ordinal: group.Ordinal
+        );
+        var samplers = layout.TableOf(
+            kind: DirectXRootParameterKind.SamplerTable,
+            ordinal: group.Ordinal
+        );
+        var slots = new uint[(group.Bindings[^1].Binding + 1)];
+        var kinds = new GpuBindingKind?[slots.Length];
+
+        foreach (var binding in group.Bindings) {
+            kinds[binding.Binding] = binding.Kind;
+        }
+
+        foreach (var table in ((ReadOnlySpan<DirectXRootParameter?>)[views, samplers])) {
+            foreach (var range in (table?.Ranges ?? [])) {
+                slots[range.BaseRegister] = range.TableOffset;
+            }
+        }
+
+        KindByBinding = kinds;
+        Ordinal = group.Ordinal;
+        SamplerSlotCount = (samplers?.DescriptorCount ?? 0U);
+        SamplerTableIndex = ((samplers is null)
+            ? -1
+            : ((int)samplers.Index));
+        SlotByBinding = slots;
+        ViewSlotCount = (views?.DescriptorCount ?? 0U);
+        ViewTableIndex = ((views is null)
+            ? -1
+            : ((int)views.Index));
+    }
+
+    /// <summary>Gets each binding's kind, indexed by binding number, or <see langword="null"/> where the group declares
+    /// no binding.</summary>
+    public IReadOnlyList<GpuBindingKind?> KindByBinding { get; }
+    /// <summary>Gets the group's ordinal.</summary>
+    public uint Ordinal { get; }
+    /// <summary>Gets the sampler table's length in descriptors, or zero when the group holds no sampler.</summary>
+    public uint SamplerSlotCount { get; }
+    /// <summary>Gets the sampler table's root parameter index, or -1 when the group holds no sampler.</summary>
+    public int SamplerTableIndex { get; }
+    /// <summary>Gets each binding's first descriptor in its table, the view table or the sampler table as its kind
+    /// takes, indexed by binding number.</summary>
+    public uint[] SlotByBinding { get; }
+    /// <summary>Gets the view table's length in descriptors, or zero when the group holds only samplers.</summary>
+    public uint ViewSlotCount { get; }
+    /// <summary>Gets the view table's root parameter index, or -1 when the group holds only samplers.</summary>
+    public int ViewTableIndex { get; }
+}
+/// <summary>
+/// A descriptor pool: one range of its device's shader-visible CBV_SRV_UAV heap
+/// (<see cref="DirectXShaderVisibleHeaps"/>), with the range's base addresses and the descriptor increment needed to
+/// write descriptors without re-querying the device. Stored in a <see cref="GCHandle"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXDescriptorPool {
-    public nint HeapHandle;
+    /// <summary>The range the heap admitted, or <see langword="null"/> once returned (or for a pool of no descriptor,
+    /// which holds an empty admission).</summary>
+    public GpuDescriptorAdmission? Admission;
+    /// <summary>The device heaps the range belongs to.</summary>
+    public DirectXShaderVisibleHeaps? Heaps;
     public uint DescriptorSize;
     public uint Capacity;
     public nuint CpuBase;
     public ulong GpuBase;
     /// <summary>The next free heap slot; <c>AllocateSet</c> bump-allocates each set's region from here, so multiple
-    /// independent sets can share one pool (one shader-visible heap) without overlapping — like a Vulkan pool.</summary>
+    /// independent sets can share one pool (one range of the device's view heap) without overlapping — like a Vulkan pool.</summary>
     public uint NextOffset;
+    /// <summary>The sampler descriptors the pool's range of the device's sampler heap holds; zero for a pool of no
+    /// sampler.</summary>
+    public uint SamplerCapacity;
+    /// <summary>The CPU handle of the pool's first sampler descriptor.</summary>
+    public nuint SamplerCpuBase;
+    /// <summary>The sampler heap's descriptor increment, in bytes.</summary>
+    public uint SamplerDescriptorSize;
+    /// <summary>The GPU handle of the pool's first sampler descriptor.</summary>
+    public ulong SamplerGpuBase;
+    /// <summary>The next free sampler slot, which <c>AllocateSet</c> bump-allocates a group's sampler table from as it
+    /// does views from <see cref="NextOffset"/>.</summary>
+    public uint SamplerNextOffset;
+
+    /// <summary>The <see cref="System.Runtime.InteropServices.GCHandle"/> of every set <c>AllocateSet</c> placed in the
+    /// pool, which <c>DestroyPool</c> frees with the pool's own, so a pool's sets release with it.</summary>
+    public List<nint> SetHandles { get; } = [];
 }
 /// <summary>
-/// A range inside a <see cref="DirectXDescriptorPool"/>'s heap, allocated once via
+/// A range inside a <see cref="DirectXDescriptorPool"/>'s range of the device's view heap, allocated once via
 /// <c>IGpuBindings.AllocateSet</c>. Stored in a <see cref="GCHandle"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXDescriptorSet {
-    public nint HeapHandle;
     public uint DescriptorSize;
     public nuint CpuBase;
     public ulong GpuBase;
     /// <summary>The owning layout's <see cref="DirectXPipelineLayout.SlotByBinding"/> packing, so each descriptor write
     /// lands at the same packed heap slot the root signature's range for that binding points at.</summary>
     public uint[] SlotByBinding = [];
+    /// <summary>The group a set of a pipeline created from a <see cref="GpuPipelineLayoutDescription"/> is allocated
+    /// for, or <see langword="null"/> for a set of any other pipeline.</summary>
+    public DirectXGroupLayout? Group;
+    /// <summary>The CPU handle of the set's sampler table in the device's sampler heap, for a group holding a
+    /// sampler.</summary>
+    public nuint SamplerCpuBase;
+    /// <summary>The sampler heap's descriptor increment, in bytes.</summary>
+    public uint SamplerDescriptorSize;
+    /// <summary>The GPU handle of the set's sampler table in the device's sampler heap, for a group holding a
+    /// sampler.</summary>
+    public ulong SamplerGpuBase;
 }
 /// <summary>
 /// Pairs an <c>ID3D12Resource*</c> with its DXGI format so <see cref="DirectXGpuBindings"/> can create a typed SRV

@@ -9,7 +9,8 @@ namespace Puck.DirectX.Tests;
 /// <summary>A Direct3D 12 context's teardown ends its device's memory entries, as a Vulkan logical device's does: a
 /// device-local allocation still held when <see cref="DirectXDeviceContext.Dispose"/> or
 /// <see cref="DirectXDeviceContext.Recreate"/> releases the device refuses the teardown by name, the device is released
-/// regardless, and a teardown after every owner released its allocation refuses nothing. Each law runs on a software
+/// regardless, and a teardown after every owner released its allocation refuses nothing. The device's own descriptor
+/// heaps, counted at bring-up, end before the device does and are never among the refused. Each law runs on a software
 /// (WARP) device without the debug layer and skips when the host has none that meets the device floor.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXDeviceTeardownMemoryLawTests {
@@ -20,6 +21,7 @@ public sealed class DirectXDeviceTeardownMemoryLawTests {
         var memory = new GpuDeviceMemoryWork(backend: "directx");
         var context = WarpDevices.Context(memory: memory);
         var device = context.Device.Handle;
+        var heapBytes = checked((long)(context.DescriptorHeaps.ViewHeapBytes + context.DescriptorHeaps.SamplerHeapBytes));
         var leaked = new DirectXGpuBufferFactory(deviceContext: context).CreateDeviceLocal(
             sizeBytes: LeakedBytes,
             usage: GpuBufferUsage.Storage
@@ -37,9 +39,10 @@ public sealed class DirectXDeviceTeardownMemoryLawTests {
             leaked.Dispose();
         }
 
+        // The device's descriptor heaps are released before its teardown ends it; the leaked buffer never is.
         Assert.Equal(
             actual: memory.Read(kind: GpuDeviceMemoryWork.Released),
-            expected: 0L
+            expected: heapBytes
         );
     }
     [Fact]

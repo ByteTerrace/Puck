@@ -114,12 +114,22 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             label: label
         );
     /// <inheritdoc/>
-    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) {
+    /// <remarks>The group is the set number, <c>firstSet</c>. A set's own group is the one
+    /// <see cref="VulkanLogicalDevice.SetGroups"/> recorded when it was allocated.</remarks>
+    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) {
+        var logicalDevice = deviceContext.LogicalDevice;
+        var own = logicalDevice.SetGroups.GroupOf(setHandle: descriptorSetHandle);
+
+        if (own != group) {
+            throw new InvalidOperationException(message: $"A set of group {own} is bound at group {group}; a set binds only at its own group.");
+        }
+
         if (bindPoint == GpuBindPoint.Graphics) {
             recordingApi.BindDescriptorSet(
                 commandBufferHandle: commandBufferHandle,
                 descriptorSetHandle: descriptorSetHandle,
-                device: Device,
+                device: logicalDevice.Commands,
+                firstSet: group,
                 pipelineLayoutHandle: pipelineLayoutHandle
             );
 
@@ -133,7 +143,8 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
         recordingApi.BindComputeDescriptorSets(
             commandBufferHandle: commandBufferHandle,
             descriptorSetHandles: descriptorSetHandles,
-            device: Device,
+            device: logicalDevice.Commands,
+            firstSet: group,
             pipelineLayoutHandle: pipelineLayoutHandle
         );
     }

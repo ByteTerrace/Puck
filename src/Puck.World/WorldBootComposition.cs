@@ -157,7 +157,12 @@ public static class WorldBootComposition {
         // The participant roster (up to four players, one avatar + viewport each; player 1 always joined, seated on
         // the boot profile) and its console/keyboard verb surface, plus the real-time profile/settings verbs
         // (aggregated into the CommandRegistry with every other module).
-        services.AddSingleton<PlayerRoster>();
+        // The roster submits its seats' sessions through the bare transport: a seat is not a console line.
+        services.AddSingleton<PlayerRoster>(implementationFactory: static sp => new PlayerRoster(
+            definition: sp.GetRequiredService<WorldDefinition>(),
+            link: sp.GetRequiredService<LoopbackTransport>(),
+            seatBindings: sp.GetRequiredService<WorldSeatBindings>()
+        ));
         // The per-seat PERCEPTION ANCHOR — the one body index all seat-relative presentation (camera eye, audio
         // listener, seat.<n>.position.* HUD bindings, crowd soft-shadow centers) derives from; today always the
         // seat's bound body (pure indirection — a future route-target swap moves the anchor here, in one place).
@@ -246,7 +251,11 @@ public static class WorldBootComposition {
         // The boot server's own counters (state.arena, state.rules, state.search) for world.counters.
         services.AddWorldServerCounters();
         services.AddSingleton<LoopbackTransport>();
-        services.AddSingleton<IServerLink>(implementationFactory: static sp => sp.GetRequiredService<LoopbackTransport>());
+        // The console's handlers submit through the boot row's console link, which registers each line in the console's
+        // table so its verdict answers and counts; the client, the roster, the camera and the boot row's own tape and
+        // reloads keep the bare transport, which registers nothing.
+        services.AddSingleton<WorldConsoleServerLink>(implementationFactory: static sp => sp.GetRequiredService<LoopbackTransport>().ForConsole(row: sp.GetRequiredService<WorldDeferredVerbEchoes>().ForRow(row: WorldInstanceHost.BootInstanceName)));
+        services.AddSingleton<IServerLink>(implementationFactory: static sp => sp.GetRequiredService<WorldConsoleServerLink>());
 
         // The QUIC peer endpoint is registered in every boot shape, sharing the process's networking owner,
         // but only ever bound when host.listen/--listen names an endpoint (WorldPeerListenerService binds it while the
@@ -691,7 +700,7 @@ public static class WorldBootComposition {
                 origin: () => bootOrigin.SourcePath,
                 server: bootServer,
                 ownedMachines: null,
-                link: sp.GetRequiredService<IServerLink>(),
+                link: sp.GetRequiredService<LoopbackTransport>(),
                 federation: new WorldFederationIdentity(
                     Authenticator: sp.GetRequiredService<IAuthenticator>(),
                     Subject: bootServer.AuthorityIdentity,
@@ -703,6 +712,7 @@ public static class WorldBootComposition {
                     catalog: sp.GetRequiredService<WorldMachineCatalog>()
                 )
             ) {
+                ConsoleLink = sp.GetRequiredService<WorldConsoleServerLink>(),
                 Tape = sp.GetRequiredService<WorldReplayTape>(),
             };
 

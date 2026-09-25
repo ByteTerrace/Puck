@@ -106,6 +106,17 @@ public sealed class OverlayFrameSlots {
         fence?.Wait();
         RetireAll();
     }
+    /// <summary>Moves every lease the table holds, bound this frame or still pending retirement, into
+    /// <paramref name="destination"/> and empties the table: a recorder hands them to its instance's frame, whose slot
+    /// retires them after the submission that sampled them.</summary>
+    /// <param name="destination">The list that holds the leases from now on.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="destination"/> is <see langword="null"/>.</exception>
+    public void MoveTo(LeaseRetireList destination) {
+        ArgumentNullException.ThrowIfNull(argument: destination);
+
+        HoldBound();
+        m_pendingRetire.MoveTo(destination: destination);
+    }
     /// <summary>Retires the leases <see cref="BeginFrame"/> moved aside from the previous produced frame. Call once
     /// the node's frame fence wait proves that frame's sampling pass has retired.</summary>
     public void RetirePending() =>

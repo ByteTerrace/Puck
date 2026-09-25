@@ -1,0 +1,221 @@
+using System.Numerics;
+using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
+using Puck.Hosting;
+using Puck.SignedDistance;
+using Puck.Testing;
+using Xunit;
+
+namespace Puck.SdfVm.Tests;
+
+/// <summary>
+/// Laws for <see cref="SdfEngineNode"/> as the external producer behind <c>sdf.world</c>, over
+/// <see cref="FakeGpuDevice"/>: it hands out its engine's latest completed output as a lease on every frame, produced or
+/// not; it counts every acquisition; and an engine it replaces at a new extent is disposed only once every acquisition
+/// of that engine's output is released.
+/// </summary>
+public sealed class SdfEngineNodeLeaseLawTests {
+    private const uint Extent = 64;
+
+    [Fact]
+    public void TheLatestOutputIsHandedOutUntilTheNextFrameProducesOne() {
+        using var rig = new Rig();
+
+        Assert.False(condition: rig.Node.TryAcquireOutput(output: out _));
+
+        rig.ProduceFirst();
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var first));
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var second));
+
+        // A frame nothing produced hands out the same image again, each acquisition counted.
+        Assert.Equal(
+            actual: (second.Image.ImageViewHandle, second.Image.Width, second.Image.Height, second.Image.Format, second.Layout, rig.Node.OutputLeases),
+            expected: (first.Image.ImageViewHandle, Extent, Extent, SurfaceFormat.R8G8B8A8Unorm, GpuImageLayout.General, 2)
+        );
+        Assert.Equal(
+            actual: first.Lease.ImageViewHandle,
+            expected: first.Image.ImageViewHandle
+        );
+
+        first.Lease.Retire();
+        second.Lease.Retire();
+        Assert.Equal(
+            actual: rig.Node.OutputLeases,
+            expected: 0
+        );
+    }
+    [Fact]
+    public void AnEngineReplacedWhileLeasedIsDisposedOnlyAfterRelease() {
+        using var rig = new Rig();
+
+        rig.ProduceFirst();
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var held));
+
+        // A new extent replaces the engine; the old one is held while its output is leased.
+        Assert.True(condition: rig.Node.Produce(
+            context: rig.Context,
+            height: (Extent / 2),
+            width: (Extent / 2)
+        ));
+        Assert.Equal(
+            actual: (rig.Node.RetiringEngines, rig.Node.OutputLeases, rig.Node.IsReady),
+            expected: (1, 1, true)
+        );
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var current));
+        Assert.Equal(
+            actual: (current.Image.Width, current.Image.Height),
+            expected: ((Extent / 2), (Extent / 2))
+        );
+        held.Lease.Retire();
+        Assert.Equal(
+            actual: (rig.Node.RetiringEngines, rig.Node.OutputLeases),
+            expected: (0, 1)
+        );
+
+        current.Lease.Retire();
+        Assert.Equal(
+            actual: rig.Node.OutputLeases,
+            expected: 0
+        );
+    }
+    [Fact]
+    public void AnEngineReplacedWithNothingLeasedIsDisposedAtOnce() {
+        using var rig = new Rig();
+
+        rig.ProduceFirst();
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var released));
+        released.Lease.Retire();
+
+        Assert.True(condition: rig.Node.Produce(
+            context: rig.Context,
+            height: (Extent * 2),
+            width: Extent
+        ));
+        Assert.Equal(
+            actual: (rig.Node.RetiringEngines, rig.Node.OutputLeases),
+            expected: (0, 0)
+        );
+    }
+    [Fact]
+    public void ADeviceLossReleasesEveryHeldEngine() {
+        using var rig = new Rig();
+
+        rig.ProduceFirst();
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var old));
+        Assert.True(condition: rig.Node.Produce(
+            context: rig.Context,
+            height: (Extent / 2),
+            width: (Extent / 2)
+        ));
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var current));
+
+        rig.Node.OnDeviceLost();
+        Assert.Equal(
+            actual: (rig.Node.RetiringEngines, rig.Node.OutputLeases),
+            expected: (0, 0)
+        );
+        Assert.False(condition: rig.Node.TryAcquireOutput(output: out _));
+
+        // The consumer's list retires its leases after the loss too; neither touches the rebuilt engine's count.
+        old.Lease.Retire();
+        current.Lease.Retire();
+        rig.ProduceFirst();
+        Assert.Equal(
+            actual: rig.Node.OutputLeases,
+            expected: 0
+        );
+    }
+    [Fact]
+    public void ASteadyFrameAcquiringAndReleasingAllocatesNothing() {
+        using var rig = new Rig();
+
+        void Frame() {
+            _ = rig.Node.Produce(
+                context: rig.Context,
+                height: Extent,
+                width: Extent
+            );
+
+            if (rig.Node.TryAcquireOutput(output: out var output)) {
+                output.Lease.Retire();
+            }
+        }
+
+        rig.ProduceFirst();
+
+        for (var warm = 0; (warm < 4); warm++) {
+            Frame();
+        }
+
+        Assert.Equal(
+            actual: AllocationWindow.Least(window: Frame),
+            expected: 0L
+        );
+    }
+
+    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
+        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
+            frame;
+    }
+    private sealed class Rig : IDisposable {
+        public Rig() {
+            var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+            var builder = new SdfProgramBuilder();
+
+            builder.Sphere(
+                material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)),
+                radius: 1f
+            );
+
+            var frame = new SdfFrame(
+                Program: builder.Build(),
+                ProgramChanged: false,
+                Time: 0f,
+                Views: [new SdfViewSnapshot(
+                    Camera: CameraSnapshot.LookAt(
+                        fieldOfViewRadians: 1f,
+                        position: new Vector3(x: 0f, y: 0f, z: -5f),
+                        target: Vector3.Zero,
+                        viewportHeight: Extent,
+                        viewportWidth: Extent
+                    ),
+                    Region: new NormalizedRect(
+                        Height: 1f,
+                        Width: 1f,
+                        X: 0f,
+                        Y: 0f
+                    )
+                )]
+            );
+
+            Node = new SdfEngineNode(
+                brickPoolVoxelCapacity: 0,
+                frameSource: new FixedFrameSource(frame: frame),
+                height: Extent,
+                kernels: SdfTestPipelines.Kernels(),
+                pipelines: new SdfWorldPipelineCache(),
+                width: Extent
+            );
+            Context = new FrameContext(
+                AccumulatorTicks: 0UL,
+                DeltaTicks: 0UL,
+                ElapsedTicks: 0UL,
+                FrameDeltaTicks: 0UL,
+                Host: new HostContext(capabilities: new Dictionary<Type, object> {
+                    [typeof(IGpuDeviceContext)] = gpu,
+                }),
+                StepTicks: 0UL,
+                TargetHeight: Extent,
+                TargetWidth: Extent
+            );
+        }
+
+        public FrameContext Context { get; }
+        public SdfEngineNode Node { get; }
+
+        public void Dispose() => Node.Dispose();
+        public void ProduceFirst() => _ = Node.ProduceFirstFrame(context: Context);
+    }
+}

@@ -244,7 +244,7 @@ public sealed class SdfCapabilityMatrixLawTests {
                 "SdfWorldEngine.FrameBufferBytes", "SdfWorldEngine.TileSize", "SdfWorldEngine.MaxFrameUploadTableWords",
                 "SdfWorldEngine.RequireOneCopyDispatch", "SdfWorldEngine.VisibilityRecordBytes",
                 "SdfWorldEngine.VisibilityRecordByteLength", "SdfEngineNode.VisibilityRecordBytes",
-                "SdfWorldEngine.DescriptorPoolSizes",
+                "SdfWorldEngine.DescriptorPoolSizes", "SdfWorldEngine.CheckAdmission",
             ]
         ),
         new(
@@ -288,6 +288,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Green: false,
             Members: [
                 "SdfWorldEngine.Dispose", "SdfEngineNode.Dispose", "SdfEngineNode.OnDeviceLost", "SdfWorldRenderSpec.FrameSource",
+                "SdfEngineNode.Produce", "SdfEngineNode.TryAcquireOutput", "SdfEngineNode.OutputLeases", "SdfEngineNode.RetiringEngines",
                 "SdfWorldRenderSpec.Decorate", "SdfWorldRenderSpec.DecorateFrameSource", "SdfWorldRenderSpec.HostsOnDirectX",
             ]
         ),

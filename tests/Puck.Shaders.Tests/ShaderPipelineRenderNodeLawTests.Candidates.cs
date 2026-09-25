@@ -9,11 +9,11 @@ namespace Puck.Shaders.Tests;
 /// the installed graph retires, and a frame never creates it. A resize is a candidate replacement of the installed pipeline at the new extent.
 /// </summary>
 public sealed partial class ShaderPipelineRenderNodeLawTests {
-    // The float preview: two shader modules, a render pass and a graphics pipeline, and per slot an image, a framebuffer,
-    // a descriptor pool, a sampler and the pre-barrier, draw and post-barrier command pools.
-    private const int PreviewCreations = (4 + (7 * ((int)InFlight)));
+    // The float preview: two shader modules, a render pass, a graphics pipeline and one descriptor pool, and per slot an
+    // image, a framebuffer, a sampler and the pre-barrier, draw and post-barrier command pools.
+    private const int PreviewCreations = (5 + (6 * ((int)InFlight)));
     // The feedback graph's own objects, as the replacement law counts them.
-    private const int GraphCreations = (((3 * ((int)InFlight)) + (2 * (2 + (3 * ((int)InFlight))))) + (4 + (5 * ((int)InFlight))));
+    private const int GraphCreations = ((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + 1);
 
     private static ShaderPipelineDimensions FrameRelative => ShaderPipelineDimensions.Relative();
 

@@ -42,12 +42,19 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
         // The render pass's formats are the PSO's render-target and depth-stencil formats, as a Vulkan pipeline takes
         // them from its render pass.
         var pass = ((DirectXGpuRenderPass)renderPass);
-        var layout = BuildLayout(
-            device: device,
-            enableStorageBuffer: description.EnableStorageBuffer,
-            pushConstantBinding: description.PushConstantBinding,
-            textureSamplerCount: description.TextureSamplerCount
-        );
+        // A description with a layout binds its groups through DirectXRootSignatures.CreateLayout's root signature, with
+        // its samplers in sampler tables rather than static samplers.
+        var layout = ((description.Layout is null)
+            ? BuildLayout(
+                device: device,
+                enableStorageBuffer: description.EnableStorageBuffer,
+                pushConstantBinding: description.PushConstantBinding,
+                textureSamplerCount: description.TextureSamplerCount
+            )
+            : DirectXRootSignatures.CreateLayout(
+                description: description.RequireLayout(),
+                device: device
+            ));
         var attributes = description.VertexInput.Attributes;
         var inputElements = stackalloc D3D12_INPUT_ELEMENT_DESC[attributes.Count];
 
@@ -68,20 +75,25 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
                 };
             }
 
-            layout.PsoHandle = BuildPso(
-                depthCompare: description.DepthCompare,
-                device: device,
-                library: deviceContext.PipelineLibrary,
-                rootSignature: layout.RootSignatureHandle,
-                rootSignatureBlob: layout.RootSignatureBlob,
-                renderPass: pass,
-                inputElements: inputElements,
-                inputElementCount: ((uint)attributes.Count),
-                vsHandle: vs.Handle,
-                vsLength: vs.BytecodeLength,
-                psHandle: ps.Handle,
-                psLength: ps.BytecodeLength
-            );
+            try {
+                layout.PsoHandle = BuildPso(
+                    depthCompare: description.DepthCompare,
+                    device: device,
+                    library: deviceContext.PipelineLibrary,
+                    rootSignature: layout.RootSignatureHandle,
+                    rootSignatureBlob: layout.RootSignatureBlob,
+                    renderPass: pass,
+                    inputElements: inputElements,
+                    inputElementCount: ((uint)attributes.Count),
+                    vsHandle: vs.Handle,
+                    vsLength: vs.BytecodeLength,
+                    psHandle: ps.Handle,
+                    psLength: ps.BytecodeLength
+                );
+            } catch {
+                layout.Dispose();
+                throw;
+            }
         }
 
         return new DirectXGpuPipeline(layout: layout);

@@ -189,10 +189,11 @@ public sealed class ScheduledStepVocabularyLawTests {
     // The registry refuses an operator verb for every principal but the console before its handler runs
     // (Puck.Commands' CommandAudienceLawTests), so what a host must get right is which verbs carry the audience. The
     // evaluation diagnostics print values the rules computed, some of them from state a seat is not shown; every one
-    // of them, in whichever module the host composes it, answers the operator alone, and nothing else does. A read
-    // step a schedule admits is never one of them.
+    // of them, in whichever module the host composes it, answers the operator alone, and in the headless host this
+    // class boots nothing else does. A GPU shape adds the verb that arms its device's creation faults and nothing
+    // more (WorldBootCompositionLawTests). A read step a schedule admits is never an operator verb.
     [Fact]
-    public void TheLiveHostsOperatorVerbsAreExactlyTheEvaluationDiagnostics() {
+    public void TheHeadlessHostsOperatorVerbsAreExactlyTheEvaluationDiagnostics() {
         var registry = LiveRegistry.Value;
 
         Assert.All(

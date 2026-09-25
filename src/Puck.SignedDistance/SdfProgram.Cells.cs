@@ -24,11 +24,12 @@ public sealed partial class SdfProgram {
                     unsupported = null;
                     break;
                 case SdfOp.Scale:
+                    // A mirror (SdfProgramBuilder.MirrorX) carries its sign in the scale; the cell factor is a length.
                     factor /= MathF.Min(
-                        x: instruction.Data0.X,
+                        x: MathF.Abs(x: instruction.Data0.X),
                         y: MathF.Min(
-                            x: instruction.Data0.Y,
-                            y: instruction.Data0.Z
+                            x: MathF.Abs(x: instruction.Data0.Y),
+                            y: MathF.Abs(x: instruction.Data0.Z)
                         )
                     );
                     break;

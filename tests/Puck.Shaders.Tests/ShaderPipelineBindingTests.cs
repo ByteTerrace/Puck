@@ -40,11 +40,11 @@ public sealed class ShaderPipelineBindingTests {
 
         Assert.Equal(
             1u,
-            plan.Passes[0].Declaration.OutputReferences[0].Binding
+            plan.Passes[0].Declaration!.OutputReferences[0].Binding
         );
         Assert.Equal(
             0u,
-            plan.Passes[0].Declaration.InputReferences[0].Binding
+            plan.Passes[0].Declaration!.InputReferences[0].Binding
         );
     }
     [Fact]
@@ -69,7 +69,7 @@ public sealed class ShaderPipelineBindingTests {
             input: "input",
             output: "output"
         ) with { Kind = ShaderPipelineDocumentPassKind.Fullscreen };
-        var pass = new ShaderPipelineCompiler().Compile(definition: Definition(pass: authored)).Passes[0].Declaration;
+        var pass = new ShaderPipelineCompiler().Compile(definition: Definition(pass: authored)).Passes[0].Declaration!;
 
         Assert.Equal(
             0u,
@@ -84,7 +84,7 @@ public sealed class ShaderPipelineBindingTests {
             output: "output"
         );
         var plan = new ShaderPipelineCompiler().Compile(definition: Definition(pass: authored));
-        var pass = Assert.Single(collection: plan.Passes).Declaration;
+        var pass = Assert.Single(collection: plan.Passes).Declaration!;
 
         Assert.Equal(
             0u,

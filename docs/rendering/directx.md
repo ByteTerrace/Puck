@@ -188,6 +188,77 @@ policy is chosen from it, is described under
 
 ---
 
+## Descriptor heaps
+
+A device has two shader-visible descriptor heaps, `DirectXShaderVisibleHeaps`:
+a CBV/SRV/UAV heap of the size the device reports
+(`GpuDeviceCapabilities.ViewHeapSize`) and a sampler heap of the smaller of its
+reported `SamplerHeapSize` and `StaticSamplerHeapSize` (options 19's
+`MaxSamplerDescriptorHeapSizeWithStaticSamplers`). The sampler heap stays within
+the static-sampler limit because every recording binds the one sampler heap and
+every pipeline not created from a group plan has static samplers in its root
+signature; past that limit the debug layer rejects each draw and dispatch that
+uses one. `DirectXGpuBindings` creates them when the context brings a
+device up and releases them when the context releases it, on `Recreate` and
+`Dispose`, so a recreated device has a fresh pair. The heaps never grow.
+
+- **A pool is a range.** `CreatePool` admits one range of the view heap through
+  the device's `GpuDescriptorHeapBudget`, and a pool holding samplers one
+  range of the sampler heap too, and `DestroyPool` returns them, so the next
+  pool that fits receives them. `AllocateSet` places each set inside its
+  pool's ranges, and its handle is the pool's: `DestroyPool` frees the handles
+  of every set allocated from it. A pool no free range holds is refused with
+  `GPU_DESCRIPTOR_HEAP` (`GpuDescriptorHeapRefusalException`), and so is a
+  pool whose views fit and whose samplers do not.
+- **Owners are admitted before they allocate.** `IGpuBindings.CanAdmit` checks
+  a candidate's whole statement of pools and allocates nothing. The pipeline
+  node checks a candidate at install and a float preview when it is selected;
+  an SDF engine's construction checks through `SdfWorldEngine.CheckAdmission`
+  before it allocates, so its holder records the refusal like any other failed
+  engine build and tries again only when the build's inputs change; the unified
+  overlay checks its one pool before it creates its resources, and refuses them
+  under its resource refusal like any other failed creation. A candidate that
+  does not fit is refused by name, and whatever is installed
+  keeps presenting. Heap space is a build input for that refusal alone: the
+  heap's `GpuDescriptorHeapBudget.ReleaseRevision`, read through
+  `IGpuBindings.HeapReleaseRevision`, moves whenever a pool's ranges are
+  returned, and a holder or the overlay refused by the heap tries once more
+  when it has moved.
+- **A group's samplers are descriptors.** A pipeline created from a
+  `GpuPipelineLayoutDescription` binds through the root signature
+  `DirectXRootSignatures.CreateLayout` creates from `DirectXRootLayout.Plan`: a
+  view table per group, a sampler table for a group that holds samplers, the
+  pushed index as one root constant at `b0` in space 4, and no static sampler.
+  A set of such a group takes its view table from its pool's view range and
+  its sampler table from its pool's sampler range. `WriteConstantBuffer` and
+  `WriteSampledImage` create their views in the view table, and `WriteSampler`
+  creates the sampler descriptor in the sampler table from the filter its
+  handle names (clamp-to-edge, as the static samplers are); a write of a kind
+  the group does not declare at that binding is refused. Every other pipeline
+  still reads its samplers as static samplers in its root signature.
+- **Every command list binds the pair once.** `DirectXGpuRecorder.BeginCommandBuffer`
+  binds both heaps after the reset, so `BindDescriptorSet` sets only
+  descriptor tables: a group's set sets the view table and then the sampler
+  table the bound pipeline's plan gives its group, and any other set the one
+  table. A set bound at a group other than its own, or at a group the pipeline
+  does not have, is refused by name.
+- **A clear takes a slot, not a heap.** A storage clear needs a GPU handle in
+  the bound view heap and a CPU handle in a CPU-only heap. The device keeps
+  `DirectXShaderVisibleHeaps.ClearDescriptors` of each: a range of the view heap
+  admitted with the heaps, mirrored slot for slot by one CPU-only heap. The
+  command list that records a clear holds its slot until it is reset or
+  released.
+- **The heaps count as device memory.** Both shader-visible heaps count under
+  `memory.directx` as device-local allocations of their descriptors at the
+  device's increment, and their release ends those entries before the device's
+  teardown ends the device.
+
+The surface compositor and the surface upload in `Puck.DirectX.Presentation`
+still create shader-visible heaps of their own, which they bind on command
+lists of their own.
+
+---
+
 ## Result handling
 
 Native calls return `HRESULT`. `HResultExtensions.ThrowIfFailed(operation)`
@@ -272,7 +343,10 @@ rest when a device opens its file. See
 
 `tests/Puck.DirectX.Tests` checks the backend's device-free decisions: which
 barrier a buffer transition records, and how the lazily created device context
-reports a device the host cannot create. It creates no Direct3D 12 device.
+reports a device the host cannot create. Its device laws run on a software
+(WARP) device without the debug layer, and skip on a host without one: the
+teardown's memory entries and the shader-visible heaps
+(`DirectXShaderVisibleHeapsLawTests`).
 Driver behavior is verified by running the engine on Direct3D 12 and by
 `puck parity`, which boots the authored parity world
 (`tests/Puck.Parity/parity.world.json`) offscreen once per backend and gives

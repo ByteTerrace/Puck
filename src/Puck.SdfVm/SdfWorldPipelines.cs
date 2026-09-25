@@ -64,7 +64,8 @@ public sealed class SdfWorldPipelines : IDisposable {
     // Creates every item's pipeline, at most BuildConcurrency at once, starting them in list order: this thread is one
     // creator and pool tasks are the others. Each creator claims the next item only after checking the token and the
     // failure flag, so a cancel or a failure waits only for the creations already in the driver. Anything created is
-    // released before the cancel or the first failure is thrown.
+    // released before the cancel or the failures are thrown; a failure among the creations in the driver is never
+    // dropped (CreationRun.ThrowIfFailed names every one).
     private static PipelineVersion[] CreateAll(GpuDeviceServices gpu, List<Creation> work, SdfWorldPipelineBuildProgress? progress, CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -96,7 +97,7 @@ public sealed class SdfWorldPipelines : IDisposable {
         // A creator catches everything it throws, so the wait never faults.
         Task.WaitAll(tasks: helpers);
 
-        if ((creators.Failure is null) && (Array.IndexOf(
+        if (!creators.Failed && (Array.IndexOf(
             array: created,
             value: null
         ) < 0)) {
@@ -107,7 +108,7 @@ public sealed class SdfWorldPipelines : IDisposable {
             version?.Dispose();
         }
 
-        creators.Failure?.Throw();
+        creators.ThrowIfFailed();
         cancellationToken.ThrowIfCancellationRequested();
 
         throw new InvalidOperationException(message: "The pipeline build stopped without a cancel or a failure.");
@@ -160,6 +161,9 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="ledger"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="OperationCanceledException">The build was canceled.</exception>
+    /// <exception cref="AggregateException">A pipeline creation failed. The message names every pipeline whose creation
+    /// failed, in build order, and the inner exceptions are those failures in the same order.</exception>
+    /// <exception cref="DeviceLostException">The device was lost during a pipeline creation; thrown alone.</exception>
     public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfWorldKernels kernels, bool includeBrickPipelines, GpuWorkLedger ledger, CancellationToken cancellationToken, SdfWorldPipelineBuildProgress? progress = null) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(ledger);
@@ -237,7 +241,10 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// <returns>The prepared reload, owned by the caller until it is installed or disposed.</returns>
     /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
     /// <exception cref="OperationCanceledException">The preparation was canceled.</exception>
-    /// <exception cref="ArgumentException">Candidate bytecode is malformed or unsupported by the backend.</exception>
+    /// <exception cref="AggregateException">A replacement's creation failed, for malformed or unsupported bytecode among
+    /// other causes. The message names every pipeline whose creation failed, in the set's order, and the inner exceptions
+    /// are those failures in the same order.</exception>
+    /// <exception cref="DeviceLostException">The device was lost during a creation; thrown alone.</exception>
     public SdfWorldPipelineReload PrepareReload(SdfWorldKernels kernels, CancellationToken cancellationToken) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -325,37 +332,69 @@ public sealed class SdfWorldPipelines : IDisposable {
 
     // One pipeline a build or reload creates: the slot it fills, its description, and its kernel.
     private readonly record struct Creation(int Index, GpuComputePipelineDescription Description, ReadOnlyMemory<byte> Bytecode);
-    // The creators of one CreateAll call, sharing its next unclaimed item and its first failure.
+    // The creators of one CreateAll call, sharing its next unclaimed item and every item's failure. Each item's failure
+    // is written only by the creator that claimed it, and read once every creator has returned.
     private sealed class CreationRun(GpuDeviceServices gpu, List<Creation> work, PipelineVersion?[] created, SdfWorldPipelineBuildProgress? progress, CancellationToken cancellationToken) {
+        private readonly Exception?[] m_failures = new Exception?[work.Count];
+
         private int m_failed;
+
         private int m_next = -1;
 
-        public ExceptionDispatchInfo? Failure { get; private set; }
+        public bool Failed => (Volatile.Read(location: ref m_failed) != 0);
 
         public void Run() {
-            try {
-                while (!cancellationToken.IsCancellationRequested && (Volatile.Read(location: ref m_failed) == 0)) {
-                    var item = Interlocked.Increment(location: ref m_next);
+            while (!cancellationToken.IsCancellationRequested && !Failed) {
+                var item = Interlocked.Increment(location: ref m_next);
 
-                    if (item >= work.Count) {
-                        return;
-                    }
+                if (item >= work.Count) {
+                    return;
+                }
 
+                try {
                     created[item] = CreateVersion(
                         bytecode: work[item].Bytecode,
                         description: work[item].Description,
                         gpu: gpu
                     );
                     progress?.Advance();
-                }
-            } catch (Exception exception) {
-                if (Interlocked.Exchange(
-                    location1: ref m_failed,
-                    value: 1
-                ) == 0) {
-                    Failure = ExceptionDispatchInfo.Capture(source: exception);
+                } catch (Exception exception) {
+                    m_failures[item] = exception;
+                    Volatile.Write(
+                        location: ref m_failed,
+                        value: 1
+                    );
                 }
             }
+        }
+        // Throws the run's failures once every creator has returned. A device loss among them is thrown alone, so it
+        // reaches the host's recovery; otherwise one exception names every pipeline that failed, in the run's order, with
+        // each failure as an inner exception in the same order, whichever creator finished first.
+        public void ThrowIfFailed() {
+            if (!Failed) {
+                return;
+            }
+
+            var names = new List<string>();
+            var failures = new List<Exception>();
+
+            for (var item = 0; (item < m_failures.Length); item++) {
+                if (m_failures[item] is not { } failure) {
+                    continue;
+                }
+
+                if (failure is DeviceLostException) {
+                    ExceptionDispatchInfo.Throw(source: failure);
+                }
+
+                names.Add(item: work[item].Description.Name);
+                failures.Add(item: failure);
+            }
+
+            throw new AggregateException(
+                innerExceptions: failures,
+                message: $"The SDF pipeline set's build failed creating {string.Join(separator: ", ", values: names)}."
+            );
         }
     }
 
@@ -376,6 +415,7 @@ public sealed class SdfWorldPipelines : IDisposable {
         public GpuComputePipelineDescription Description { get; } = description;
 
         public nint DescriptorSetLayoutHandle => m_current.Native.DescriptorSetLayoutHandle;
+        public IReadOnlyList<nint> GroupLayoutHandles => m_current.Native.GroupLayoutHandles;
         public nint Handle => m_current.Native.Handle;
         public nint LayoutHandle => m_current.Native.LayoutHandle;
 

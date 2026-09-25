@@ -93,7 +93,11 @@ public sealed class ReloadDrawnReferenceLawTests {
             var echoes = new WorldDeferredVerbEchoes();
             string? verdict = null;
 
-            fixture.Server.EchoTap = echo => verdict ??= echoes.Settle(echo: in echo);
+            echoes.Answered += answer => verdict ??= answer.Line;
+            fixture.Server.EchoTap = echo => echoes.Answer(
+                echo: in echo,
+                row: WorldDeferredVerbEchoes.DefaultRow
+            );
 
             var submitted = link.SubmitRebuild(
                 echoes: echoes,

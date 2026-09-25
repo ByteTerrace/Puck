@@ -254,9 +254,11 @@ catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
 planner. Package work enters the planner only through the graph compiler; the
 planner's own document entry refuses a graph naming package passes
 (`SHADERPIPE_PACKAGE_PASS`). The planner sees a package pass as its own kind,
-`Package`, whose planned pass's declaration is the compute shape it reaches its
-versions by, with the package id as its source, and the graph plan's step names
-its package: it binds no descriptors and compiles nothing. A pipeline host
+`Package`, ordered by the versions it reaches as a compute pass would. Its
+planned pass has no declaration; it carries a `ShaderPipelinePackageStep`
+instead, naming the package, the versions bound to its ports and the extent it
+runs at, which is what the render node reads. It binds no descriptors and
+compiles nothing. A pipeline host
 offers no package, so the packager and the loader see shader passes alone; a
 pipeline candidate (`CompiledShaderPipeline`) holds a package pass without a
 compiled shader, and the render node records it through its package's recorder
@@ -325,11 +327,53 @@ for each package id, its package passes, all in the planner's order. A
 `RenderGraphRuntimeGraph` binds each external version to a producer instance;
 the runtime binds it to the frame of that producer's output the schedule
 names, and to a transparent-black stand-in while the producer has none. A
-bound image may have any extent. Captures read the root instance's output,
-and each instance counts its own passes. The live renderer does not use the
-runtime yet: `views.pipelines`, the SDF engine's child composition and
-`ViewStack` still render every view, and no host registers a package
-recorder. Moving them onto graph instances is P11b in
+bound image may have any extent, but its format must be the one its producer
+publishes, and a bound buffer may be no larger than its producer's; the
+runtime refuses a mismatch by name when it installs. A package recorder's
+resolved images carry the layout their planned access left them in.
+
+A package id is served by an `IRenderGraphPackageFactory`. Its `Build` creates
+the pass's shader modules, pipelines and render passes on the thread pool with
+the candidate graph's shader passes, and its `Create` takes them when the graph
+installs and allocates its per-slot descriptor sets from the instance's one
+pool, which states the factory's `SetBindings`. A recorder records into the
+command buffer it is handed and never submits, waits or creates a pipeline.
+Each recording carries the pass's frame block, written as a shader pass's is
+(the frame members, then the package's config), and the frame's lease list,
+which retires a lease after that frame slot's fence. A package pass may carry
+`config` values, which the graph compiler binds against the package's schema
+and refuses by name as `RENDERGRAPH_PACKAGE_CONFIG`. A package that draws
+into an output brackets its render pass with `RenderGraphPackageDraw`, since
+the planner orders it in a compute pass's shape.
+
+A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
+and each output then stands for the input at its position: the instance
+publishes that input's image with no copy, in its own layout
+(`ShaderPipelineRenderNode.PublishedLayout`), and a root capture reads it. An
+output another pass reads, that is history, or that is not an RGBA8 image
+beside an input image of its format is refused by name when its pass draws
+nothing. `PostProcessPackage` serves every `post.<id>` and `OverlayPackage`
+serves `overlay`.
+
+An instance can instead be an external producer: a `RenderGraphInstance` whose
+`ExternalPackage` names the `IRenderGraphExternalProducer` registered for that
+package (`RenderGraphPackageRecorders.RegisterProducer`). It has no graph. The
+runtime produces it at the scheduled extent before its consumers, through the
+producer's own submissions, and each consumer that renders binds the
+producer's latest completed output, whether or not the producer rendered this
+frame, under a `GpuImageLease`. The consumer's node holds the lease in its
+frame slot's `LeaseRetireList` until that slot's fence proves the sampling
+submission finished, or until a device loss or disposal. An external producer
+reads no instance and keeps no history, so the instance set refuses a read
+declared by one and a previous-frame read of one. `SdfEngineNode` is the
+`sdf.world` producer: it submits through the SDF engine's own frame ring,
+counts every acquisition of its output, and disposes an engine a new extent
+replaced only once that engine's output is released.
+
+Captures read the root instance's output, and each instance counts its own
+passes. The live renderer does not use the runtime yet: `views.pipelines`,
+the SDF engine's child composition and `ViewStack` still render every view,
+and no host registers a package factory or an external producer. Moving them onto graph instances is P11b in
 [the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
 
 ## Pass interfaces
@@ -418,7 +462,7 @@ the parity contract's tolerances.
 `ShaderInterfaceLayout.PipelineLayout` turns an interface's groups into a
 `GpuPipelineLayoutDescription`, the backend-neutral statement of what a
 pipeline binds, and each backend plans its own layout from that with no device
-call. The plans are not used to create pipelines yet.
+call.
 
 - `DirectXRootLayout.Plan` makes dense root parameters. For each group, in
   ordinal order, it adds a table of constant buffers, shader resource views
@@ -429,6 +473,15 @@ call. The plans are not used to create pipelines yet.
 - `VulkanGroupLayouts.Plan` makes one set layout for every set number up to
   the highest group. A set number with no group gets an empty layout, and a
   pushed index is a 4-byte push range.
+
+A compute or graphics pipeline description whose `Layout` holds such a
+description is created from these plans: Direct3D 12 creates the planned root
+signature, with its samplers in sampler tables rather than static samplers,
+and Vulkan creates the planned set layouts and a pipeline layout over them. The
+pipeline's `GroupLayoutHandles` give one handle per group, which a set of that
+group is allocated against, and `GpuDescriptorPoolSizes.ForGroups` sizes a
+pool for one set of each group. On Direct3D 12 a group's samplers take a range
+of the device's sampler heap. No shipped pass is created this way yet.
 
 An interface that pushes its frame block has no pipeline layout, because a
 pipeline pushes only an index.

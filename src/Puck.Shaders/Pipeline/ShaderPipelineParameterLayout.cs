@@ -127,18 +127,24 @@ public sealed class ShaderPipelineParameterLayout {
             schema: Schema,
             description: description
         );
-    /// <summary>Resolves a package's frame block: the frame members alone, under an interface named for the package
-    /// id.</summary>
+    /// <summary>Resolves a package's frame block: the frame members, then its config fields, under an interface named
+    /// for the package id.</summary>
     /// <param name="package">The package id.</param>
+    /// <param name="config">The package's config schema, or <see langword="null"/> for the frame members alone.</param>
     /// <returns>The layout.</returns>
-    /// <exception cref="InvalidDataException">The package id spells no interface name.</exception>
-    public static ShaderPipelineParameterLayout ForPackage(string package) {
+    /// <exception cref="InvalidDataException">The package id spells no interface name, or the schema is invalid or a
+    /// field repeats a frame member's name.</exception>
+    public static ShaderPipelineParameterLayout ForPackage(string package, IReadOnlyDictionary<string, ShaderConfigField>? config) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
+        ShaderConfigBinding.ValidateSchema(
+            ownerName: package,
+            schema: config
+        );
 
         // A package reads no generated declarations; its interface is named for its package id, each character an
         // interface name cannot hold, such as the period of sdf.world, spelled as a hyphen.
         return For(
-            config: null,
+            config: config,
             interfaceName: string.Concat(values: package.Select(selector: static character => ((char.IsAsciiLetterLower(c: character) || char.IsAsciiDigit(c: character))
                 ? character
                 : '-')))

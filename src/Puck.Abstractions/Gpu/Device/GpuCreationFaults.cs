@@ -322,6 +322,15 @@ file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults)
             descriptorSetLayoutHandle: descriptorSetLayoutHandle,
             poolHandle: poolHandle
         );
+
+    public long HeapReleaseRevision => inner.HeapReleaseRevision;
+
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) =>
+        inner.CanAdmit(
+            owner: owner,
+            pools: pools,
+            refusal: out refusal
+        );
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
         Enter(kind: GpuCreationKind.BindingsPool);
 
@@ -348,6 +357,28 @@ file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults)
             binding: binding,
             descriptorSetHandle: descriptorSetHandle,
             imageViewHandle: imageViewHandle,
+            samplerHandle: samplerHandle
+        );
+    public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) =>
+        inner.WriteConstantBuffer(
+            arrayElement: arrayElement,
+            binding: binding,
+            bufferHandle: bufferHandle,
+            bufferSize: bufferSize,
+            descriptorSetHandle: descriptorSetHandle
+        );
+    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) =>
+        inner.WriteSampledImage(
+            arrayElement: arrayElement,
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
+            imageViewHandle: imageViewHandle
+        );
+    public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) =>
+        inner.WriteSampler(
+            arrayElement: arrayElement,
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
             samplerHandle: samplerHandle
         );
     public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) =>

@@ -17,6 +17,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     IGpuCommandPoolFactory, IGpuPipelineFactory, IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory,
     IGpuBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuRenderPassFactory {
     private readonly Dictionary<nint, Created> m_byHandle = [];
+    private readonly Dictionary<nint, GpuDescriptorAdmission> m_poolRanges = [];
     private readonly Lock m_gate = new();
 
     private int m_gateThread;
@@ -28,6 +29,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     /// <summary>Gets every descriptor pool created so far, in creation order, as its creation sized it.</summary>
     public List<GpuDescriptorPoolSizes> DescriptorPools { get; } = [];
 
+    /// <summary>Gets or sets the device descriptor heap every pool is a range of, as on Direct3D 12: a pool is admitted
+    /// into it at creation and returns its range when destroyed, and <see cref="IGpuBindings.CanAdmit"/> checks a
+    /// candidate against it. <see langword="null"/> admits every pool, as on Vulkan.</summary>
+    public GpuDescriptorHeapBudget? DescriptorHeap { get; set; }
     /// <summary>Gets the number of creations so far.</summary>
     public int CreationCount => CreatedObjects.Count;
     /// <summary>Gets the bytes of every image and buffer created and not yet disposed: an image is its width times its
@@ -58,6 +63,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     /// <summary>Gets every descriptor write while <see cref="Recording"/> is on, in writing order: the set, the binding,
     /// and the image view or buffer handle written.</summary>
     public List<(nint Set, uint Binding, nint Handle)> DescriptorWrites { get; } = [];
+    /// <summary>Gets every readback, in reading order: the image read and the layout it was read in.</summary>
+    public List<(nint Image, GpuImageLayout Layout)> Readbacks { get; } = [];
+    /// <summary>Gets every push-constant write recorded while <see cref="Recording"/>: its bind point, stages and bytes.</summary>
+    public List<(GpuBindPoint BindPoint, GpuShaderStage Stages, byte[] Data)> PushedConstants { get; } = [];
 
     /// <summary>Gets or sets the one-based creation number that throws instead of creating; 0 never throws.</summary>
     public int FailAtCreation { get; set; }
@@ -211,7 +220,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             RenderPasses.Add(item: (fake.RenderPass.Description, fake.Colors, fake.Depth));
         }
     }
-    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) { }
+    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) { }
     public void BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) => RecordGraphics(buffer: bufferHandle, command: ((format == GpuIndexFormat.UInt16) ? "indices16" : "indices32"), count: 0, offsetBytes: offsetBytes, sizeBytes: sizeBytes);
     public void BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) { }
     public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => RecordGraphics(buffer: bufferHandle, command: "vertices", count: strideBytes, offsetBytes: 0, sizeBytes: sizeBytes);
@@ -288,10 +297,67 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         sizeBytes: sizeBytes
     );
     public IGpuSurfaceImport CreateImport() => throw new NotSupportedException();
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) {
+        lock (m_gate) {
+            if (DescriptorHeap is { } heap) {
+                return heap.CanAdmit(
+                    owner: owner,
+                    pools: pools,
+                    refusal: out refusal
+                );
+            }
+        }
+
+        refusal = string.Empty;
+
+        return true;
+    }
+
+    public long HeapReleaseRevision => (DescriptorHeap?.ReleaseRevision ?? 0L);
+
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
+        GpuDescriptorAdmission? admission = null;
+
+        lock (m_gate) {
+            if (
+                (DescriptorHeap is { } heap) &&
+                !heap.TryAdmit(
+                    admission: out admission,
+                    owner: "descriptor pool",
+                    pools: [sizes],
+                    refusal: out var refusal
+                )
+            ) {
+                throw new GpuDescriptorHeapRefusalException(message: refusal);
+            }
+        }
+
+        nint handle;
+
+        try {
+            handle = Create(kind: "descriptor pool").Handle;
+        } catch {
+            if (admission is not null) {
+                lock (m_gate) {
+                    DescriptorHeap!.Release(admission: admission);
+                }
+            }
+
+            throw;
+        }
+
         DescriptorPools.Add(item: sizes);
 
-        return Create(kind: "descriptor pool").Handle;
+        if (admission is not null) {
+            lock (m_gate) {
+                m_poolRanges.Add(
+                    key: handle,
+                    value: admission
+                );
+            }
+        }
+
+        return handle;
     }
     public IGpuSurfaceReadback CreateReadback() => (ReadbackSupported
         ? new FakeReadback(gpu: this)
@@ -303,9 +369,20 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     );
     public IGpuSurfaceUpload CreateUpload() => throw new NotSupportedException();
     public void DestroyPool(nint poolHandle) {
-        if (0 != poolHandle) {
-            Destroy(handle: poolHandle);
+        if (0 == poolHandle) {
+            return;
         }
+
+        lock (m_gate) {
+            if (m_poolRanges.Remove(
+                key: poolHandle,
+                value: out var admission
+            )) {
+                DescriptorHeap!.Release(admission: admission);
+            }
+        }
+
+        Destroy(handle: poolHandle);
     }
     public void DestroySampler(nint samplerHandle) => Destroy(handle: samplerHandle);
     public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) { }
@@ -322,7 +399,11 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             PeakLiveBytes = LiveBytes;
         }
     }
-    public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) { }
+    public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
+        if (Recording) {
+            PushedConstants.Add(item: (bindPoint, stageFlags, data.ToArray()));
+        }
+    }
     public void SetScissor(nint commandBufferHandle, GpuPixelRect rect) { }
     public void Submit(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
     public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => Submissions++;
@@ -348,6 +429,9 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             StructuredBufferWrites++;
         }
     }
+    public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) { }
+    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
+    public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
     public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
 
     /// <summary>One created object: its creation number, kind, handle, the bytes it occupies, and how often it was
@@ -427,6 +511,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     }
     private sealed class FakePipeline(Created created) : IGpuComputePipeline, IGpuPipeline {
         public nint DescriptorSetLayoutHandle => (created.Handle + 1);
+        public IReadOnlyList<nint> GroupLayoutHandles => [];
         public nint Handle => created.Handle;
         public nint LayoutHandle => (created.Handle + 2);
 
@@ -443,6 +528,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public void Dispose() => m_staging?.Dispose();
         public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
             var bytes = ((((ulong)width) * height) * bytesPerPixel);
+
+            gpu.Readbacks.Add(item: (sourceImageHandle, sourceLayout));
 
             if (StagingBytes != bytes) {
                 m_staging?.Dispose();

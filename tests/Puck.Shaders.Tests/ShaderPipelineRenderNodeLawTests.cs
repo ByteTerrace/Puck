@@ -117,7 +117,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             plan: plan,
             shaders: plan.Passes.ToDictionary(
                 elementSelector: static pass => Shader(
-                    kind: pass.Declaration.Kind,
+                    kind: pass.Declaration!.Kind,
                     name: pass.Name
                 ),
                 keySelector: static pass => pass.Name
@@ -170,7 +170,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             plan: plan,
             shaders: plan.Passes.ToDictionary(
                 elementSelector: static pass => Shader(
-                    kind: pass.Declaration.Kind,
+                    kind: pass.Declaration!.Kind,
                     name: pass.Name
                 ),
                 keySelector: static pass => pass.Name
@@ -238,12 +238,12 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var candidateCreations = ReplacementCreationCount();
 
         // Three images per slot (history, gray, and the image the fullscreen pass draws into); per compute pass a module,
-        // a pipeline, and per slot a descriptor pool, sampler and command pool; for the fullscreen pass two modules, a
-        // render pass and a graphics pipeline, and per slot a framebuffer, a descriptor pool, a sampler, the barrier
-        // command pool and the draw command pool.
+        // a pipeline, and per slot a sampler and command pool; for the fullscreen pass two modules, a render pass and a
+        // graphics pipeline, and per slot a framebuffer, a sampler, the barrier command pool and the draw command pool;
+        // and the graph's one descriptor pool.
         Assert.Equal(
             actual: candidateCreations,
-            expected: (((3 * ((int)InFlight)) + (2 * (2 + (3 * ((int)InFlight))))) + (4 + (5 * ((int)InFlight))))
+            expected: ((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + 1)
         );
 
         for (var failAt = 1; (failAt <= candidateCreations); failAt++) {

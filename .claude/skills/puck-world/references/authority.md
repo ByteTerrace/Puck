@@ -465,11 +465,17 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   coverage. Tagging is one-directional: it proves a door cannot refuse with
   an unlisted reason, not that every listed reason has a live call site.
 - `wire.errors [reset]` counts rejections: synchronous text-path errors,
-  snapshot re-parse mismatches, and deferred `WorldEditEcho` rejections of
-  the local console connection's lines (via `NoteDeferredRejection` in
-  `WorldDeferredVerbAnswers`, which the World and the silo both tap). A remote
-  peer's refusal, and a rebuild no console line registered (the silo's reload,
-  a replay drive), are NOT counted. The per-tick drive denial
+  snapshot re-parse mismatches, refused REGISTERED console lines, and a console
+  link's codec refusal. A console handler submits through its row's
+  `WorldConsoleServerLink` (`LoopbackTransport.ForConsole`), which registers
+  every line it mints in `WorldDeferredVerbEchoes` under (row, correlation)
+  before the authority applies it, so a grant refused inside its submit still
+  finds its line; `WorldDeferredVerbAnswers` counts the verdict through
+  `NoteDeferredRejection`, and the World and the silo both tap each row's
+  echoes into it under the row's name. An echo no console line registered is
+  NOT counted: a remote peer's, a rule's or addon's (correlation 0), a
+  rebuild's grant-table replay, and anything submitted through a row's bare
+  transport (the silo's reload, a replay drive). The per-tick drive denial
   in `ApplyIntentSubmission` is stderr-only and NOT counted.
 - Read-backs: `world.grants [principal]` (echoes rows with `(x)` exclusive,
   `budget:`, `channels:0x…`, per-ordinal ceilings), `world.why <principal>

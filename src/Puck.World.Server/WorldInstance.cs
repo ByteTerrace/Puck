@@ -94,6 +94,10 @@ public sealed class WorldInstance : IDisposable {
     public bool IsPaused { get; set; }
     /// <summary>This instance's own transport — see this type's constructor remarks.</summary>
     public IServerLink Link { get; }
+    /// <summary>The link a console submits this row's lines through, which registers each in the console's table so its
+    /// verdict answers and counts, or <see langword="null"/> when the host keeps no console table for the row; a
+    /// console then submits through <see cref="Link"/>, registering nothing.</summary>
+    public IConsoleServerLink? ConsoleLink { get; init; }
     /// <summary>The host-approved extension runtime acting on this row — operations, connections, observations,
     /// embeddings, and participants — or <see langword="null"/> when the host configured none. Set by
     /// <see cref="WorldConfiguredExtensions.Attach"/>; the host that attached it stops and disposes it.</summary>

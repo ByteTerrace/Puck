@@ -80,6 +80,21 @@ public sealed partial record ShaderSetManifest(
     /// a config field does not make a frame interface.</exception>
     /// <exception cref="IOException">The manifest cannot be read.</exception>
     public static ShaderInterface ReadFrameInterface(string manifestPath) {
+        var manifest = ReadDeclaration(manifestPath: manifestPath);
+
+        return ShaderFrameInterface.For(
+            config: manifest.Config,
+            name: manifest.Name
+        );
+    }
+    /// <summary>Reads a manifest's declaration without its bytecode: its stages, bindings and validated config schema,
+    /// which a package catalog offers before any set is loaded. Its <see cref="Bytecode"/> is empty and its
+    /// <see cref="FrameLayout"/> unset; <see cref="Load(string)"/> loads a set to run it.</summary>
+    /// <param name="manifestPath">The manifest file's path.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="InvalidDataException">The manifest is malformed or its config schema is invalid.</exception>
+    /// <exception cref="IOException">The manifest cannot be read.</exception>
+    public static ShaderSetManifest ReadDeclaration(string manifestPath) {
         ShaderSetManifest manifest;
 
         try {
@@ -96,10 +111,7 @@ public sealed partial record ShaderSetManifest(
 
         manifest.ValidateConfigSchema();
 
-        return ShaderFrameInterface.For(
-            config: manifest.Config,
-            name: manifest.Name
-        );
+        return manifest;
     }
     /// <summary>Reads, parses, and validates a manifest file: the <c>$schema</c> tag, the name against the file stem,
     /// the stage shape, the config schema (defaults well-typed and in range), the frame block (the set's name an

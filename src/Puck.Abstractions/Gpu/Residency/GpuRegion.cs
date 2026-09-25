@@ -357,6 +357,7 @@ public sealed class GpuRegion : IDisposable {
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_copySets[slot],
+            group: 0,
             pipelineLayoutHandle: m_copyPipeline.LayoutHandle
         );
         m_recorder.PushConstants(

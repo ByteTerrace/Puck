@@ -190,9 +190,11 @@ indices. Narrowing returns only if a measured driver cost shows it pays.
 admitted into them or refused.** Direct3D 12 binds one shader-visible view heap
 and one sampler heap per device, and every descriptor pool is a range of them.
 The view heap takes the size the device reports,
-`GpuDeviceCapabilities.ViewHeapSize`, and the sampler heap takes the reported
-`SamplerHeapSize` as it is. A runtime that does not answer options 19 reports
-the sizes every binding tier guarantees, 1,000,000 views and 2,048 samplers. The
+`GpuDeviceCapabilities.ViewHeapSize`, and the sampler heap takes the smaller of
+the reported `SamplerHeapSize` and `StaticSamplerHeapSize`, since root
+signatures with static samplers are bound beside it. A runtime that does not
+answer options 19 reports the sizes every binding tier guarantees, 1,000,000
+views and 2,048 samplers for both sampler limits. The
 heaps are created once with the device, and the device outlives every world it
 presents, so no world's demand sizes them. What varies is admission. Each pool
 owner states its pools' sizes statically, and its own pool creation reads the

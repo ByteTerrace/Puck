@@ -1,6 +1,5 @@
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
-using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
@@ -124,31 +123,8 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
         );
     }
 
-    // A context on the default adapter with the debug layer on, its device created; skips when either is unavailable.
-    private static DirectXDeviceContext DebugContext(StringWriter output) {
-        var context = new DirectXDeviceContext(
-            adapterLuid: 0,
-            deviceApi: new DirectXNativeDeviceApi(),
-            minimumFeatureLevel: DirectXFeatureLevel.Level110
-        ) {
-            DebugOutput = output,
-            EnableDebugLayer = true,
-        };
-
-        try {
-            _ = context.Device;
-        } catch (GpuDeviceUnavailableException exception) {
-            context.Dispose();
-            Assert.Skip(reason: $"no Direct3D 12 device with the debug layer on this host: {exception.Message}");
-        }
-
-        if (!context.HasDebugLayer) {
-            context.Dispose();
-            Assert.Skip(reason: "the Direct3D 12 debug layer did not load on this host");
-        }
-
-        return context;
-    }
+    private static DirectXDeviceContext DebugContext(StringWriter output) =>
+        DirectXTestDevices.Debug(output: output);
     private static List<string> DebugLines(StringWriter output) {
         using var reader = new StringReader(s: output.ToString());
         var lines = new List<string>();

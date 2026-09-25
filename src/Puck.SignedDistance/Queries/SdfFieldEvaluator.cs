@@ -107,9 +107,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <see cref="FixedQ4816"/> exactly once and is cached, never re-converted per query.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="program"/> contains an op or shape this WARP-FREE
-    /// evaluator cannot interpret, or contains a non-uniform <see cref="SdfOp.Scale"/> whose value is only a
-    /// conservative march bound — see the type remarks' excluded-op rule. <see cref="SdfOp.TransformDynamic"/> is
-    /// excluded not because a rigid dynamic transform is hard to interpret (it is the same cross/mul/add as
+    /// evaluator cannot interpret, or a <see cref="SdfOp.Scale"/> whose axes differ in magnitude (a sign is exact), whose
+    /// value is only a conservative march bound — see the type remarks' excluded-op rule. <see cref="SdfOp.TransformDynamic"/>
+    /// is excluded not because a rigid dynamic transform is hard to interpret (it is the same cross/mul/add as
     /// <see cref="SdfOp.Rotate"/> plus a translate), but because THIS constructor takes only a program, never a
     /// per-frame dynamic-transform table against which to resolve a slot.</exception>
     public SdfFieldEvaluator(SdfProgram program) {
@@ -346,7 +346,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
             if (
                 (instruction.Op == SdfOp.Scale) &&
-                ((instruction.Data0.X != instruction.Data0.Y) || (instruction.Data0.Y != instruction.Data0.Z))
+                ((MathF.Abs(x: instruction.Data0.X) != MathF.Abs(x: instruction.Data0.Y)) || (MathF.Abs(x: instruction.Data0.Y) != MathF.Abs(x: instruction.Data0.Z)))
             ) {
                 throw new ArgumentException(
                     message: $"SdfFieldEvaluator cannot interpret instruction {index}'s non-uniform Scale ({instruction.Data0.X}, {instruction.Data0.Y}, {instruction.Data0.Z}) as physical distance. The renderer's minimum-axis correction is a conservative march bound; bake anisotropy into an exact primitive spelling before constructing a query/contact field.",

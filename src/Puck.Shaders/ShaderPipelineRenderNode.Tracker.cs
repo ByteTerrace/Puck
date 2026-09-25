@@ -217,12 +217,26 @@ public sealed partial class ShaderPipelineRenderNode {
         return barrier;
     }
     // Records publication of the selected output and hands every host-owned image back in its host's layout.
+    // An output a package that drew nothing leaves standing for an input publishes that input: an owned one moved into the
+    // output layout, a host-owned one handed back in its host's layout with the rest.
     private void RecordPresentation(RuntimeResource selected, int slot, nint command, IGpuRecorder recorder) {
-        if (!NeedsPreview(spec: selected.Spec)) {
+        var (published, _, instance) = PublicationOf(
+            selected: selected,
+            slot: slot
+        );
+
+        m_publishedLayout = (published.Spec.IsExternal
+            ? m_externalImages[published.Spec.Name].Layout
+            : m_outputLayout);
+
+        if (
+            !published.Spec.IsExternal &&
+            !NeedsPreview(spec: selected.Spec)
+        ) {
             RecordBarrier(
                 barrier: Present(
-                    instance: slot,
-                    resource: selected,
+                    instance: instance,
+                    resource: published,
                     use: new ShaderPipelineAccessState(
                         Access: GpuAccess.ShaderRead,
                         Layout: m_outputLayout,
@@ -230,9 +244,9 @@ public sealed partial class ShaderPipelineRenderNode {
                     )
                 ),
                 command: command,
-                instance: slot,
+                instance: instance,
                 recorder: recorder,
-                resource: selected
+                resource: published
             );
         }
         foreach (var resource in m_resources) {

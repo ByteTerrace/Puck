@@ -88,7 +88,9 @@ public sealed record RenderGraphPackagePort(
 /// <param name="Outputs">The output ports, in port order: what each version a pass of it writes carries, at least
 /// one.</param>
 /// <param name="Summary">What the package renders.</param>
-public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, string Summary);
+/// <param name="Config">The config schema a pass of it binds its <see cref="RenderGraphPackagePass.Config"/> against,
+/// name to field, or <see langword="null"/> when it takes no config.</param>
+public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null);
 /// <summary>The engine packages a host offers graphs, by id.</summary>
 public sealed class RenderGraphPackageCatalog {
     /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
@@ -201,14 +203,22 @@ public sealed class RenderGraphPackageCatalog {
     ];
 
     /// <summary>Creates the engine's catalog extended with one <c>post.&lt;id&gt;</c> package per shipped post-process
-    /// shader set, each reading one image and writing one.</summary>
+    /// shader set, each reading one image, writing one, and taking its set's config schema. It reads each manifest's
+    /// declaration (<see cref="ShaderSetManifest.ReadDeclaration"/>) and none of its bytecode.</summary>
     /// <param name="postProcess">The shipped shader sets.</param>
     /// <returns>The catalog.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="postProcess"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">A shipped manifest is malformed or its config schema is invalid.</exception>
     public static RenderGraphPackageCatalog WithPostProcess(ShaderSetCatalog postProcess) {
         ArgumentNullException.ThrowIfNull(argument: postProcess);
 
-        return new RenderGraphPackageCatalog(packages: EnginePackages().Concat(second: postProcess.Ids.Select(selector: static id => new RenderGraphPackage(
+        return new RenderGraphPackageCatalog(packages: EnginePackages().Concat(second: postProcess.Ids.Select(selector: id => new RenderGraphPackage(
+            Config: (postProcess.TryGetPath(
+                id: id,
+                path: out var path
+            )
+                ? ShaderSetManifest.ReadDeclaration(manifestPath: path).Config
+                : null),
             Id: (PostProcessPrefix + id),
             Inputs: [RenderGraphPackagePort.Image],
             Outputs: [RenderGraphPackagePort.Image],

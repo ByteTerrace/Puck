@@ -4,9 +4,12 @@ namespace Puck.Abstractions.Tests;
 
 /// <summary>
 /// Laws for <see cref="GpuDescriptorHeapBudget"/>: each heap takes the size the device reports, the guaranteed minimum
-/// when a Direct3D 12 runtime does not answer, and a device with no shared heap is refused by name; a candidate's pools are
-/// admitted as one view range each, a pool holding no descriptor takes none, and a candidate that does not fit is refused
-/// by name with its demand and leaves the heap as it found it; a released admission's ranges serve the next candidate;
+/// when a Direct3D 12 runtime does not answer, the sampler heap no larger than the device allows beside static
+/// samplers, and a device with no shared heap is refused by name; a candidate's pools are
+/// admitted as one view range each, and one sampler range each for the pools holding samplers, a pool holding no
+/// descriptor takes none, and a candidate whose views or samplers do not fit is refused
+/// by name with its demand and leaves the heap as it found it; a check allocates nothing and refuses with
+/// <see cref="GpuDescriptorHeapBudget.RefusalCode"/>; a released admission's ranges serve the next candidate;
 /// more than <see cref="GpuDescriptorHeapBudget.MaxLivePools"/> live pools are refused by name; and a heap's bytes are
 /// its descriptors at the device's increment.
 /// </summary>
@@ -16,6 +19,7 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
         rootSignatureVersion: "1.1",
         samplerHeapSize: 0,
         shaderModel: "6.6",
+        staticSamplerHeapSize: 0,
         viewHeapSize: 0
     ) with {
         ViewHeapSize = views,
@@ -34,6 +38,7 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
             rootSignatureVersion: "1.1",
             samplerHeapSize: 0,
             shaderModel: "6.6",
+            staticSamplerHeapSize: 0,
             viewHeapSize: 0
         ));
         var reported = new GpuDescriptorHeapBudget(capabilities: GpuDeviceCapabilities.FromDirectX(
@@ -41,6 +46,7 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
             rootSignatureVersion: "1.1",
             samplerHeapSize: 4080,
             shaderModel: "6.6",
+            staticSamplerHeapSize: 4080,
             viewHeapSize: 2_000_000
         ));
 
@@ -51,6 +57,24 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
         Assert.Equal(
             actual: (reported.ViewDescriptors, reported.SamplerDescriptors),
             expected: (2_000_000u, 4080u)
+        );
+    }
+    [Fact]
+    public void TheSamplerHeapStaysWithinTheStaticSamplerLimit() {
+        // A device whose largest sampler heap is 4080 but that allows static samplers only beside 2048 gets a 2048 heap:
+        // every recording binds the one sampler heap, and pipelines not created from a group plan have static samplers.
+        var budget = new GpuDescriptorHeapBudget(capabilities: GpuDeviceCapabilities.FromDirectX(
+            resourceBindingTier: 3,
+            rootSignatureVersion: "1.1",
+            samplerHeapSize: 4080,
+            shaderModel: "6.6",
+            staticSamplerHeapSize: 2048,
+            viewHeapSize: 2_000_000
+        ));
+
+        Assert.Equal(
+            actual: (budget.ViewDescriptors, budget.SamplerDescriptors, budget.FreeSamplerDescriptors),
+            expected: (2_000_000u, 2048u, 2048u)
         );
     }
     [Fact]
@@ -122,6 +146,89 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
         Assert.Equal(
             actual: (heap.FreeViewDescriptors, heap.LivePools),
             expected: (60u, 2)
+        );
+    }
+    [Fact]
+    public void APoolsSamplersAreARangeOfTheSamplerHeapAndSamplersThatDoNotFitRefuseTheWholeCandidate() {
+        var heap = new GpuDescriptorHeapBudget(capabilities: (Heap(views: 100) with {
+            SamplerHeapSize = 8,
+        }));
+
+        GpuDescriptorPoolSizes Grouped(uint views, uint samplers) => new(
+            CombinedImageSamplerCount: 0,
+            ConstantBufferCount: views,
+            MaxSets: 1,
+            SamplerCount: samplers,
+            StorageBufferCount: 0,
+            StorageImageCount: 0
+        );
+
+        Assert.True(condition: heap.TryAdmit(
+            admission: out var first,
+            owner: "first",
+            pools: [Grouped(samplers: 3, views: 10), Grouped(samplers: 0, views: 5), Grouped(samplers: 2, views: 0)],
+            refusal: out _
+        ));
+        Assert.Equal(
+            actual: first.Ranges,
+            expected: [(0u, 10u), (10u, 5u)]
+        );
+        Assert.Equal(
+            actual: first.SamplerRanges,
+            expected: [(0u, 3u), (3u, 2u)]
+        );
+        Assert.Equal(
+            actual: (heap.FreeViewDescriptors, heap.FreeSamplerDescriptors),
+            expected: (85u, 3u)
+        );
+
+        // The views fit and the samplers do not, so the candidate takes neither.
+        Assert.False(condition: heap.TryAdmit(
+            admission: out _,
+            owner: "second",
+            pools: [Grouped(samplers: 4, views: 1)],
+            refusal: out var refusal
+        ));
+        Assert.StartsWith(
+            actualString: refusal,
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'second' needs 1 view and 4 sampler descriptors in 1 pool(s) and is refused: A range of 4 is refused"
+        );
+        Assert.Equal(
+            actual: (heap.FreeViewDescriptors, heap.FreeSamplerDescriptors, heap.LivePools),
+            expected: (85u, 3u, 2)
+        );
+
+        heap.Release(admission: first);
+        Assert.Equal(
+            actual: (heap.FreeViewDescriptors, heap.FreeSamplerDescriptors, heap.LivePools),
+            expected: (100u, 8u, 0)
+        );
+    }
+    [Fact]
+    public void ACheckAllocatesNothingAndRefusesByTheOneCode() {
+        var heap = new GpuDescriptorHeapBudget(capabilities: Heap(views: 100));
+
+        Assert.True(condition: heap.CanAdmit(
+            owner: "fits",
+            pools: [Pool(sampled: 60), Pool(sampled: 40)],
+            refusal: out var admitted
+        ));
+        Assert.Equal(
+            actual: (admitted, heap.FreeViewDescriptors, heap.LivePools),
+            expected: (string.Empty, 100u, 0)
+        );
+        Assert.False(condition: heap.CanAdmit(
+            owner: "over",
+            pools: [Pool(sampled: 60), Pool(sampled: 41)],
+            refusal: out var refusal
+        ));
+        Assert.StartsWith(
+            actualString: refusal,
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'over' needs 101 view descriptors in 2 pool(s) and is refused: "
+        );
+        Assert.Equal(
+            actual: (heap.FreeViewDescriptors, heap.LivePools),
+            expected: (100u, 0)
         );
     }
     [Fact]

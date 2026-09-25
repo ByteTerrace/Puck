@@ -38,6 +38,9 @@ public sealed class VulkanLogicalDevice : IDisposable {
     /// device passes to the driver; <see langword="null"/> for a device created without one. The device owns it: it is
     /// written to disk and destroyed just before the device.</summary>
     public VulkanPipelineCache? PipelineCache { get; init; }
+    /// <summary>Gets the group each of the device's descriptor sets belongs to, which the device's bindings, recorder and
+    /// grouped pipelines share.</summary>
+    public VulkanDescriptorSetGroups SetGroups { get; } = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanLogicalDevice"/> class, taking ownership of an existing native device.</summary>
     /// <param name="device">The command table of the native device to own.</param>

@@ -17,9 +17,10 @@ namespace Puck.World.Tests;
 /// <see cref="WorldBootComposition.AddWorldBoot"/> a boot calls and resolved with no device created, carries what a GPU
 /// run of that shape needs before its first frame: the offscreen shape answers every verb the <c>puck counters</c>
 /// workload sends, and both the offscreen and the windowed shape register the persistent pipeline-cache store and the
-/// creation faults the backend's device creation reads, the faults with their operator-only <c>gpu.faults</c> verb. The neutral GPU services a node records through resolve to a
-/// <see cref="FakeGpuDevice"/>, and every other service that owns or brings up a device throws when resolved, so a law
-/// that reached a device fails by name instead of creating one.
+/// creation faults the backend's device creation reads, the faults with their operator-only <c>gpu.faults</c> verb,
+/// which is the one operator verb the offscreen shape adds to the headless shape's. The neutral GPU services a node
+/// records through resolve to a <see cref="FakeGpuDevice"/>, and every other service that owns or brings up a device
+/// throws when resolved, so a law that reached a device fails by name instead of creating one.
 /// </summary>
 public sealed class WorldBootCompositionLawTests : IDisposable {
     private const string WorkloadScript = "tests/Puck.Counters/counters.script.txt";
@@ -257,6 +258,25 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
             expected: CommandAudience.Operator
         );
     }
+    // The headless shape's operator verbs are the evaluation diagnostics, which ScheduledStepVocabularyLawTests pins
+    // against the live executable. A GPU shape answers the operator with exactly those and the verb that arms its
+    // device's creation faults, and nothing else. The windowed shape's registry is not resolvable without a device; it
+    // registers the verb through the same AddGpuCreationFaults call as the offscreen shape.
+    [Fact]
+    public void TheOffscreenShapesOperatorVerbsAreTheHeadlessShapesAndItsCreationFaults() => Assert.Equal(
+        actual: OperatorVerbs(presentation: WorldHostPresentation.Offscreen),
+        expected: [.. OperatorVerbs(presentation: WorldHostPresentation.None).Append(element: "gpu.faults").Order(comparer: StringComparer.Ordinal)]
+    );
+
+    private string[] OperatorVerbs(WorldHostPresentation presentation) {
+        using var host = ComposeBoot(presentation: presentation).Build();
+
+        return [.. host.Services.GetRequiredService<CommandRegistry>().Definitions
+            .Where(predicate: static metadata => (metadata.Audience == CommandAudience.Operator))
+            .Select(selector: static metadata => metadata.Name)
+            .Order(comparer: StringComparer.Ordinal)];
+    }
+
     [Fact]
     public void TheHeadlessShapeHasNoCreationFaults() {
         using var host = ComposeBoot(presentation: WorldHostPresentation.None).Build();

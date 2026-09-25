@@ -40,6 +40,8 @@ namespace Puck.Abstractions.Gpu;
 /// Vulkan.</param>
 /// <param name="SamplerHeapSize">Direct3D 12's largest shader-visible sampler heap, in descriptors; zero on
 /// Vulkan.</param>
+/// <param name="StaticSamplerHeapSize">Direct3D 12's largest shader-visible sampler heap a root signature with static
+/// samplers may be used beside, in descriptors; zero on Vulkan.</param>
 public sealed record GpuDeviceCapabilities(
     string Backend,
     uint MaxBoundDescriptorSets,
@@ -55,7 +57,8 @@ public sealed record GpuDeviceCapabilities(
     string RootSignatureVersion = "",
     string ShaderModel = "",
     uint ViewHeapSize = 0U,
-    uint SamplerHeapSize = 0U
+    uint SamplerHeapSize = 0U,
+    uint StaticSamplerHeapSize = 0U
 ) {
     /// <summary>Direct3D 12's root signature cost limit in 32-bit words (<c>D3D12_MAX_ROOT_COST</c>).</summary>
     public const uint DirectXMaxRootSignatureWords = 64U;
@@ -64,7 +67,7 @@ public sealed record GpuDeviceCapabilities(
     /// 19.</summary>
     public const uint DirectXMinimumViewHeapSize = 1_000_000U;
     /// <summary>Direct3D 12's shader-visible sampler heap size (<c>D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE</c>),
-    /// reported when the runtime does not answer options 19.</summary>
+    /// reported for both sampler heap limits when the runtime does not answer options 19.</summary>
     public const uint DirectXMinimumSamplerHeapSize = 2048U;
     /// <summary>The name of the line and JSON object the capabilities form in a readout.</summary>
     public const string Section = "capabilities";
@@ -84,6 +87,7 @@ public sealed record GpuDeviceCapabilities(
     private const string StageStorageBuffersField = "stage.storage-buffers";
     private const string StageStorageImagesField = "stage.storage-images";
     private const string StageUniformBuffersField = "stage.uniform-buffers";
+    private const string StaticSamplerHeapField = "heap.samplers-static";
     private const string ViewHeapField = "heap.views";
 
     /// <summary>Fills Direct3D 12's capabilities from what the device reports. The per-stage limits follow the resource
@@ -98,9 +102,11 @@ public sealed record GpuDeviceCapabilities(
     /// answer, which reports <see cref="DirectXMinimumViewHeapSize"/>.</param>
     /// <param name="samplerHeapSize">Options 19's <c>MaxSamplerDescriptorHeapSize</c>, or zero when the runtime does not
     /// answer, which reports <see cref="DirectXMinimumSamplerHeapSize"/>.</param>
+    /// <param name="staticSamplerHeapSize">Options 19's <c>MaxSamplerDescriptorHeapSizeWithStaticSamplers</c>, or zero
+    /// when the runtime does not answer, which reports <see cref="DirectXMinimumSamplerHeapSize"/>.</param>
     /// <returns>The capabilities.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="resourceBindingTier"/> is not 1, 2 or 3.</exception>
-    public static GpuDeviceCapabilities FromDirectX(uint resourceBindingTier, string rootSignatureVersion, string shaderModel, uint viewHeapSize, uint samplerHeapSize) {
+    public static GpuDeviceCapabilities FromDirectX(uint resourceBindingTier, string rootSignatureVersion, string shaderModel, uint viewHeapSize, uint samplerHeapSize, uint staticSamplerHeapSize) {
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1U,
             value: resourceBindingTier
@@ -118,6 +124,11 @@ public sealed record GpuDeviceCapabilities(
             ? DirectXMinimumSamplerHeapSize
             : samplerHeapSize
         );
+        var staticSamplers = ((staticSamplerHeapSize == 0U)
+            ? DirectXMinimumSamplerHeapSize
+            : staticSamplerHeapSize
+        );
+
         var (stageSamplers, stageConstantBuffers, stageShaderResources, unorderedAccess) = resourceBindingTier switch {
             1U => (16U, 14U, 128U, 64U),
             2U => (samplers, 14U, views, 64U),
@@ -139,14 +150,14 @@ public sealed record GpuDeviceCapabilities(
             RootSignatureVersion: rootSignatureVersion,
             SamplerHeapSize: samplers,
             ShaderModel: shaderModel,
+            StaticSamplerHeapSize: staticSamplers,
             ViewHeapSize: views
         );
     }
-
     /// <summary>Appends the capabilities as <c>key=value</c> fields on one line, an empty or zero backend-specific
     /// field left out:
     /// <c>backend=vulkan descriptor-sets=32 push-constant-bytes=256 stage.samplers=… stage.uniform-buffers=… stage.storage-buffers=… stage.sampled-images=… stage.storage-images=… stage.resources=…</c>,
-    /// and on Direct3D 12 <c>root-signature-words=64 … binding-tier=3 root-signature=1.1 shader-model=6.8 heap.views=… heap.samplers=…</c>.</summary>
+    /// and on Direct3D 12 <c>root-signature-words=64 … binding-tier=3 root-signature=1.1 shader-model=6.8 heap.views=… heap.samplers=… heap.samplers-static=…</c>.</summary>
     /// <param name="builder">The text to append to.</param>
     /// <returns><paramref name="builder"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
@@ -224,6 +235,11 @@ public sealed record GpuDeviceCapabilities(
             name: SamplerHeapField,
             value: SamplerHeapSize
         );
+        AppendCount(
+            builder: builder,
+            name: StaticSamplerHeapField,
+            value: StaticSamplerHeapSize
+        );
 
         return builder;
     }
@@ -294,6 +310,10 @@ public sealed record GpuDeviceCapabilities(
         writer.WriteNumber(
             propertyName: SamplerHeapField,
             value: SamplerHeapSize
+        );
+        writer.WriteNumber(
+            propertyName: StaticSamplerHeapField,
+            value: StaticSamplerHeapSize
         );
         writer.WriteEndObject();
     }

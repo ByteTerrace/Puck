@@ -3,31 +3,102 @@ using System.Runtime.Versioning;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
-using Windows.Win32.System.Com;
 using static Puck.DirectX.DirectXConstants;
 
 namespace Puck.DirectX;
 
 /// <summary>
-/// Implements <see cref="IGpuBindings"/> for Direct3D 12 using shader-visible CBV_SRV_UAV descriptor
-/// heaps. Each <see cref="CreatePool"/> call allocates one heap; <see cref="AllocateSet"/> bump-allocates a
-/// region of that heap to each set (advancing a per-pool cursor by the layout's slot count and bounds-checking
-/// against the heap capacity), so multiple independent sets can share one pool like a Vulkan descriptor pool.
-/// Samplers are static in D3D12 root signatures, so <see cref="CreateSampler"/> returns a non-zero sentinel
-/// and <see cref="DestroySampler"/> is a no-op.
+/// Implements <see cref="IGpuBindings"/> for Direct3D 12 over the device's two shader-visible descriptor heaps
+/// (<see cref="DirectXShaderVisibleHeaps"/>), which it creates when its device context brings a device up
+/// (<see cref="CreateDeviceHeaps"/>) and releases when the context releases the device (<see cref="ReleaseDeviceHeaps"/>),
+/// so a recreated device gets a fresh pair. Each <see cref="CreatePool"/> admits one range of the view heap, and one of
+/// the sampler heap for a pool holding samplers, through the device's <see cref="GpuDescriptorHeapBudget"/> and
+/// <see cref="DestroyPool"/> returns them; <see cref="AllocateSet"/> bump-allocates each set's region inside its pool's
+/// ranges (advancing a per-pool cursor by the layout's slot count and bounds-checking against the range), so several
+/// sets share one pool like a Vulkan descriptor pool, and each set's handle is the pool's, freed by
+/// <see cref="DestroyPool"/>. A pipeline created without a layout description reads its samplers as static samplers in
+/// its root signature; a group's set holds its samplers as descriptors in its pool's sampler range, which
+/// <see cref="WriteSampler"/> creates from the filter the sampler's handle names. A sampler is only that filter, so
+/// <see cref="CreateSampler"/> returns a non-zero value naming it and <see cref="DestroySampler"/> is a no-op.
 /// </summary>
 /// <param name="deviceContext">The device context whose current device creates every heap and view.</param>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext) : IGpuBindings {
-    private const nint SamplerSentinel = 1;
+    private const nint LinearSampler = 1;
+    private const nint NearestSampler = 2;
 
+    private DirectXShaderVisibleHeaps? m_heaps;
+    private long m_liveHandles;
+
+    /// <summary>Gets the current device's shader-visible heaps, creating the device first when it does not exist yet.</summary>
+    /// <exception cref="GpuDeviceUnavailableException">No device could be created.</exception>
+    public DirectXShaderVisibleHeaps Heaps {
+        get {
+            _ = deviceContext.Device;
+
+            return (m_heaps ?? throw new InvalidOperationException(message: "The Direct3D 12 device was brought up without its shader-visible descriptor heaps."));
+        }
+    }
     /// <inheritdoc/>
+    /// <remarks>The current device's heaps' <see cref="GpuDescriptorHeapBudget.ReleaseRevision"/>, or zero while no device
+    /// is up.</remarks>
+    public long HeapReleaseRevision => (m_heaps?.Budget.ReleaseRevision ?? 0L);
+    /// <summary>Gets the <see cref="GCHandle"/>s this instance holds now, one per pool and one per set allocated from a
+    /// pool not yet destroyed.</summary>
+    public long LiveHandles => Interlocked.Read(location: ref m_liveHandles);
+
+    /// <summary>Creates the shader-visible heaps of a device just brought up, at the sizes its capabilities report.
+    /// Its context calls it once per device, before any pool is created on it.</summary>
+    /// <param name="device">The device.</param>
+    /// <param name="capabilities">The device's capability report.</param>
+    /// <exception cref="InvalidOperationException">The previous device's heaps were not released.</exception>
+    public void CreateDeviceHeaps(ID3D12Device* device, GpuDeviceCapabilities capabilities) {
+        if (m_heaps is not null) {
+            throw new InvalidOperationException(message: "The previous device's shader-visible descriptor heaps are still held.");
+        }
+
+        m_heaps = DirectXShaderVisibleHeaps.Create(
+            capabilities: capabilities,
+            device: device,
+            memory: deviceContext.Memory
+        );
+    }
+    /// <summary>Releases the current device's heaps and ends their memory entries, before the device itself is
+    /// released. Pools still held afterwards return nothing when destroyed. Does nothing when no heaps are held.</summary>
+    public void ReleaseDeviceHeaps() {
+        var heaps = m_heaps;
+
+        m_heaps = null;
+        heaps?.Dispose();
+    }
+    /// <inheritdoc/>
+    /// <remarks>A group's layout handle (<see cref="IGpuComputePipeline.GroupLayoutHandles"/>) takes a region of the
+    /// pool's view range as long as the group's view table and a region of its sampler range as long as its sampler
+    /// table, so a group's samplers live in the device's sampler heap.</remarks>
     public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {
         var pool = ((DirectXDescriptorPool)GCHandle.FromIntPtr(value: poolHandle).Target!);
-        var layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: descriptorSetLayoutHandle).Target!);
-        // Bump-allocate this set's own region from the pool's single shader-visible heap so multiple independent
-        // sets can share one pool (matching a Vulkan pool) instead of every set aliasing the whole heap. The first
-        // set lands at offset 0, so single-set-per-pool callers are unaffected.
+        var set = ((GCHandle.FromIntPtr(value: descriptorSetLayoutHandle).Target is DirectXGroupLayout group)
+            ? PlaceGroupSet(
+                group: group,
+                pool: pool
+            )
+            : PlaceSet(
+                layout: ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: descriptorSetLayoutHandle).Target!),
+                pool: pool
+            ));
+        var handle = GCHandle.ToIntPtr(value: GCHandle.Alloc(value: set));
+
+        lock (pool.SetHandles) {
+            pool.SetHandles.Add(item: handle);
+        }
+
+        _ = Interlocked.Increment(location: ref m_liveHandles);
+
+        return handle;
+    }
+
+    private static DirectXDescriptorSet PlaceSet(DirectXDescriptorPool pool, DirectXPipelineLayout layout) {
+
         var offset = pool.NextOffset;
         var slotCount = layout.DescriptorSlotCount;
 
@@ -37,78 +108,64 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
 
         pool.NextOffset = (offset + slotCount);
 
-        var set = new DirectXDescriptorSet {
+        return new DirectXDescriptorSet {
             CpuBase = (pool.CpuBase + (((nuint)offset) * pool.DescriptorSize)),
             DescriptorSize = pool.DescriptorSize,
             GpuBase = (pool.GpuBase + (((ulong)offset) * pool.DescriptorSize)),
-            HeapHandle = pool.HeapHandle,
             SlotByBinding = layout.SlotByBinding,
         };
-
-        return GCHandle.ToIntPtr(value: GCHandle.Alloc(value: set));
     }
-    /// <inheritdoc/>
-    public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
-        var totalDescriptors = ((sizes.CombinedImageSamplerCount + sizes.StorageBufferCount) + sizes.StorageImageCount);
-        var capacity = ((totalDescriptors > 0)
-            ? totalDescriptors
-            : 1
-        );
-        var heapPtr = DirectXDescriptorHeaps.Create(
-            count: capacity,
-            device: device,
-            shaderVisible: true,
-            type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
-        );
-        var descriptorSize = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-        var pool = new DirectXDescriptorPool {
-            HeapHandle = ((nint)heapPtr),
-            DescriptorSize = descriptorSize,
-            Capacity = capacity,
-            CpuBase = GetCpuHeapStart(heap: heapPtr).ptr,
-            GpuBase = GetGpuHeapStart(heap: heapPtr).ptr,
+    private static DirectXDescriptorSet PlaceGroupSet(DirectXDescriptorPool pool, DirectXGroupLayout group) {
+        var offset = pool.NextOffset;
+        var samplerOffset = pool.SamplerNextOffset;
+
+        if (
+            ((offset + group.ViewSlotCount) > pool.Capacity) ||
+            ((samplerOffset + group.SamplerSlotCount) > pool.SamplerCapacity)
+        ) {
+            throw new InvalidOperationException(message: $"The descriptor pool (capacity {pool.Capacity} views and {pool.SamplerCapacity} samplers) cannot fit group {group.Ordinal}'s set of {group.ViewSlotCount} views and {group.SamplerSlotCount} samplers at offsets {offset} and {samplerOffset}.");
+        }
+
+        pool.NextOffset = (offset + group.ViewSlotCount);
+        pool.SamplerNextOffset = (samplerOffset + group.SamplerSlotCount);
+
+        return new DirectXDescriptorSet {
+            CpuBase = (pool.CpuBase + (((nuint)offset) * pool.DescriptorSize)),
+            DescriptorSize = pool.DescriptorSize,
+            GpuBase = (pool.GpuBase + (((ulong)offset) * pool.DescriptorSize)),
+            Group = group,
+            SamplerCpuBase = (pool.SamplerCpuBase + (((nuint)samplerOffset) * pool.SamplerDescriptorSize)),
+            SamplerDescriptorSize = pool.SamplerDescriptorSize,
+            SamplerGpuBase = (pool.SamplerGpuBase + (((ulong)samplerOffset) * pool.SamplerDescriptorSize)),
+            SlotByBinding = group.SlotByBinding,
         };
-
-        return GCHandle.ToIntPtr(value: GCHandle.Alloc(value: pool));
     }
-    /// <inheritdoc/>
-    // The filter is ignored: Direct3D 12 samplers are static in the root signature, so the filter is baked into the
-    // compute pipeline's static sampler (via the factory's samplerFilter) rather than carried by this handle.
-    public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) => SamplerSentinel;
-    /// <inheritdoc/>
-    public void DestroyPool(nint poolHandle) {
-        if (0 == poolHandle) {
-            return;
-        }
-
-        var gcHandle = GCHandle.FromIntPtr(value: poolHandle);
-        var pool = ((DirectXDescriptorPool)gcHandle.Target!);
-
-        if (0 != pool.HeapHandle) {
-            _ = ((IUnknown*)pool.HeapHandle)->Release();
-            pool.HeapHandle = 0;
-        }
-
-        gcHandle.Free();
-    }
-    /// <inheritdoc/>
-    public void DestroySampler(nint samplerHandle) { }
-    /// <inheritdoc/>
-    public void WriteCombinedImageSampler(
-        nint descriptorSetHandle,
-        uint binding,
-        uint arrayElement,
-        nint imageViewHandle,
-        nint samplerHandle
-    ) {
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
+    // The set a group write lands in, refused by name unless it is a set of a group declaring the binding as the kind
+    // written: a view and a sampler live in different tables, so a write of the wrong kind would corrupt the other.
+    private static DirectXDescriptorSet GroupSetFor(nint descriptorSetHandle, uint binding, GpuBindingKind kind) {
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
+
+        if (set.Group is not { } group) {
+            throw new InvalidOperationException(message: $"A {kind} descriptor is written only into a group's set; this set belongs to a pipeline created without a layout description.");
+        }
+
+        if (
+            (binding >= group.KindByBinding.Count) ||
+            (group.KindByBinding[((int)binding)] != kind)
+        ) {
+            throw new InvalidOperationException(message: $"Group {group.Ordinal} declares no {kind} at binding {binding}.");
+        }
+
+        return set;
+    }
+    private static D3D12_CPU_DESCRIPTOR_HANDLE ViewSlot(DirectXDescriptorSet set, uint binding, uint arrayElement) => new() {
+        ptr = (set.CpuBase + ((nuint)((set.SlotByBinding[binding] + arrayElement) * set.DescriptorSize))),
+    };
+    // A two-dimensional texture's shader resource view: the one view a combined image sampler and a sampled image both
+    // read.
+    private void CreateTextureView(D3D12_CPU_DESCRIPTOR_HANDLE destination, nint imageViewHandle) {
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var imageView = ((DirectXImageView)GCHandle.FromIntPtr(value: imageViewHandle).Target!);
-        var slotIndex = (set.SlotByBinding[binding] + arrayElement);
-        var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
-            ptr = (set.CpuBase + ((nuint)(slotIndex * set.DescriptorSize))),
-        };
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
             Format = imageView.Format,
             Shader4ComponentMapping = DefaultShader4ComponentMapping,
@@ -123,9 +180,146 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         };
 
         device->CreateShaderResourceView(
-            DestDescriptor: cpuHandle,
+            DestDescriptor: destination,
             pDesc: &srvDesc,
             pResource: ((ID3D12Resource*)imageView.ResourceHandle)
+        );
+    }
+
+    /// <inheritdoc/>
+    public bool CanAdmit(string owner, IReadOnlyList<GpuDescriptorPoolSizes> pools, out string refusal) =>
+        Heaps.CanAdmit(
+            owner: owner,
+            pools: pools,
+            refusal: out refusal
+        );
+    /// <inheritdoc/>
+    public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
+        var handle = GCHandle.ToIntPtr(value: GCHandle.Alloc(value: Heaps.AllocatePool(sizes: in sizes)));
+
+        _ = Interlocked.Increment(location: ref m_liveHandles);
+
+        return handle;
+    }
+    /// <inheritdoc/>
+    /// <remarks>The handle names the filter and holds nothing: a pipeline created without a layout description bakes
+    /// its filter into a static sampler (the factory's <c>samplerFilter</c>), and <see cref="WriteSampler"/> creates a
+    /// group's sampler descriptor from it.</remarks>
+    public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) => ((filter == GpuSamplerFilter.Nearest)
+        ? NearestSampler
+        : LinearSampler);
+    /// <inheritdoc/>
+    public void DestroyPool(nint poolHandle) {
+        if (0 == poolHandle) {
+            return;
+        }
+
+        var gcHandle = GCHandle.FromIntPtr(value: poolHandle);
+        var pool = ((DirectXDescriptorPool)gcHandle.Target!);
+
+        pool.Heaps?.ReleasePool(pool: pool);
+
+        lock (pool.SetHandles) {
+            foreach (var set in pool.SetHandles) {
+                GCHandle.FromIntPtr(value: set).Free();
+            }
+
+            _ = Interlocked.Add(
+                location1: ref m_liveHandles,
+                value: -pool.SetHandles.Count
+            );
+            pool.SetHandles.Clear();
+        }
+
+        gcHandle.Free();
+        _ = Interlocked.Decrement(location: ref m_liveHandles);
+    }
+    /// <inheritdoc/>
+    public void DestroySampler(nint samplerHandle) { }
+    /// <inheritdoc/>
+    public void WriteCombinedImageSampler(
+        nint descriptorSetHandle,
+        uint binding,
+        uint arrayElement,
+        nint imageViewHandle,
+        nint samplerHandle
+    ) =>
+        CreateTextureView(
+            destination: ViewSlot(
+                arrayElement: arrayElement,
+                binding: binding,
+                set: ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!)
+            ),
+            imageViewHandle: imageViewHandle
+        );
+    /// <inheritdoc/>
+    public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
+        IGpuBindings.RequireConstantBufferSize(bufferSize: bufferSize);
+
+        var set = GroupSetFor(
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
+            kind: GpuBindingKind.ConstantBuffer
+        );
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
+        var cbvDesc = new D3D12_CONSTANT_BUFFER_VIEW_DESC {
+            BufferLocation = ((ID3D12Resource*)bufferHandle)->GetGPUVirtualAddress(),
+            SizeInBytes = checked(((uint)bufferSize)),
+        };
+
+        device->CreateConstantBufferView(
+            DestDescriptor: ViewSlot(
+                arrayElement: arrayElement,
+                binding: binding,
+                set: set
+            ),
+            pDesc: &cbvDesc
+        );
+    }
+    /// <inheritdoc/>
+    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) =>
+        CreateTextureView(
+            destination: ViewSlot(
+                arrayElement: arrayElement,
+                binding: binding,
+                set: GroupSetFor(
+                    binding: binding,
+                    descriptorSetHandle: descriptorSetHandle,
+                    kind: GpuBindingKind.SampledImage
+                )
+            ),
+            imageViewHandle: imageViewHandle
+        );
+    /// <inheritdoc/>
+    /// <remarks>The descriptor is created in the set's sampler table, a range of the device's sampler heap, with the
+    /// filter the handle names and clamp-to-edge addressing: the sampler a pipeline created without a layout description
+    /// states as a static sampler.</remarks>
+    public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) {
+        var set = GroupSetFor(
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
+            kind: GpuBindingKind.Sampler
+        );
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
+        var samplerDesc = new D3D12_SAMPLER_DESC {
+            AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
+            Filter = ((samplerHandle == NearestSampler)
+                ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
+                : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
+            MaxAnisotropy = 1,
+            MaxLOD = float.MaxValue,
+            MinLOD = 0f,
+            MipLODBias = 0f,
+        };
+
+        device->CreateSampler(
+            DestDescriptor: new D3D12_CPU_DESCRIPTOR_HANDLE {
+                ptr = (set.SamplerCpuBase + ((nuint)((set.SlotByBinding[binding] + arrayElement) * set.SamplerDescriptorSize))),
+            },
+            pDesc: &samplerDesc
         );
     }
     /// <inheritdoc/>

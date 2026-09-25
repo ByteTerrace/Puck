@@ -21,7 +21,7 @@ public interface IVulkanGraphicsPipelineApi {
         out nint pipelineLayoutHandle,
         out nint pipelineHandle
     );
-    /// <summary>Destroys a pipeline, skipping a zero handle; its layouts go through <see cref="VulkanPipelineLayouts.Destroy"/>.</summary>
+    /// <summary>Destroys a pipeline, skipping a zero handle; its layouts go through <see cref="VulkanPipelineLayouts.Destroy(VulkanDeviceCommands, nint, nint)"/>.</summary>
     /// <param name="device">The command table of the logical device that owns the pipeline.</param>
     /// <param name="pipelineHandle">The native <c>VkPipeline</c> handle to destroy.</param>
     void DestroyPipeline(VulkanDeviceCommands device, nint pipelineHandle);

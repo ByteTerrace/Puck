@@ -27,6 +27,7 @@ public sealed partial class SdfWorldEngine {
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_viewsSets[m_currentSlot],
+            group: 0,
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
         recorder.PushConstants(

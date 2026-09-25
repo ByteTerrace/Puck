@@ -114,24 +114,43 @@ public sealed class SurfaceCompositor : IDisposable {
             stage: ShaderStage.Fragment
         );
 
-        m_blitPipelineId = blitFragmentShaderInfo.ContentHash;
-        m_vertexShader = m_shaderModuleFactory.Create(
+        // A creation that throws releases the ones before it, newest first; the fields hold only a complete set.
+        using var scope = new GpuCreationScope();
+        var vertexShader = scope.Own(created: m_shaderModuleFactory.Create(
             logicalDevice: device,
             stageInfo: vertexShaderInfo
-        );
-        m_blitFragmentShader = m_shaderModuleFactory.Create(
+        ));
+        var blitFragmentShader = scope.Own(created: m_shaderModuleFactory.Create(
             logicalDevice: device,
             stageInfo: blitFragmentShaderInfo
-        );
-        m_vertexBuffer = VulkanBuffer.Create(
+        ));
+        var vertexBuffer = scope.Own(created: VulkanBuffer.Create(
             bufferApi: m_bufferApi,
             device: m_renderer,
             memory: VulkanBufferMemory.HostCoherent,
             sizeBytes: ((ulong)FullscreenTriangleVertexData.Length),
             usage: VulkanBufferUsageFlags.VertexBuffer
+        ));
+
+        vertexBuffer.Write<byte>(data: FullscreenTriangleVertexData);
+
+        var sampler = scope.Own(
+            handle: CreateSampler(device: device),
+            release: handle => m_descriptorAllocator.DestroySampler(
+                device: device.Commands,
+                samplerHandle: handle
+            )
         );
-        m_vertexBuffer.Write<byte>(data: FullscreenTriangleVertexData);
-        m_sampler = m_descriptorAllocator.CreateSampler(request: new VulkanSamplerCreateRequest(
+
+        scope.Complete();
+        m_blitPipelineId = blitFragmentShaderInfo.ContentHash;
+        m_vertexShader = vertexShader;
+        m_blitFragmentShader = blitFragmentShader;
+        m_vertexBuffer = vertexBuffer;
+        m_sampler = sampler;
+    }
+    private nint CreateSampler(VulkanLogicalDevice device) =>
+        m_descriptorAllocator.CreateSampler(request: new VulkanSamplerCreateRequest(
             AddressModeU: VulkanSamplerAddressMode.ClampToEdge,
             AddressModeV: VulkanSamplerAddressMode.ClampToEdge,
             AddressModeW: VulkanSamplerAddressMode.ClampToEdge,
@@ -150,7 +169,6 @@ public sealed class SurfaceCompositor : IDisposable {
             MipmapMode: VulkanSamplerMipmapMode.Linear,
             UnnormalizedCoordinates: 0
         ));
-    }
     private void DisposeDeviceResources(VulkanLogicalDevice device) {
         m_descriptorAllocator.DestroySampler(
             device: device.Commands,

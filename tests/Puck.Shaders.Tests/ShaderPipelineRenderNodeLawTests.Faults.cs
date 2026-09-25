@@ -54,7 +54,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     public void EveryCreationOfACandidateFaultedInTurnByTheDecoratorDisposesExactlyWhatItCreated() {
         // A replacement whose history cannot be carried creates, per kind: three images per slot (history, gray, and the
         // image the fullscreen pass draws into); two compute modules and the fullscreen pass's two; two compute
-        // pipelines and a graphics one; per slot a descriptor pool for each of the three passes; per slot a command pool
+        // pipelines and a graphics one; one descriptor pool for the graph's three passes; per slot a command pool
         // for each compute pass and the fullscreen pass's barrier and draw pools; one framebuffer per slot; one render
         // pass; and no buffer. Samplers are the one creation the fake counts that the decorator cannot fail.
         var expected = new Dictionary<GpuCreationKind, long> {
@@ -65,7 +65,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             [GpuCreationKind.Framebuffer] = InFlight,
             [GpuCreationKind.ShaderModule] = 4L,
             [GpuCreationKind.CommandPool] = (4L * InFlight),
-            [GpuCreationKind.BindingsPool] = (3L * InFlight),
+            [GpuCreationKind.BindingsPool] = 1L,
         };
 
         var measuredGpu = new FakePipelineGpu();

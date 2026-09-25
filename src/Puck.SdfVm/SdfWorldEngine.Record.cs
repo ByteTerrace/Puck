@@ -139,6 +139,7 @@ public sealed partial class SdfWorldEngine {
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_viewsSets[m_currentSlot],
+                group: 0,
                 pipelineLayoutHandle: m_skyPipeline.LayoutHandle
             );
             recorder.PushConstants(
@@ -191,6 +192,7 @@ public sealed partial class SdfWorldEngine {
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_instanceCullSets[m_currentSlot],
+                group: 0,
                 pipelineLayoutHandle: m_instanceCullPipeline.LayoutHandle
             );
             recorder.PushConstants(
@@ -232,6 +234,7 @@ public sealed partial class SdfWorldEngine {
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_beamSets[m_currentSlot],
+                group: 0,
                 pipelineLayoutHandle: m_beamPipeline.LayoutHandle
             );
             recorder.PushConstants(
@@ -275,6 +278,7 @@ public sealed partial class SdfWorldEngine {
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_cullArgsSet,
+                group: 0,
                 pipelineLayoutHandle: m_cullArgsPipeline.LayoutHandle
             );
             recorder.PushConstants(
@@ -353,6 +357,7 @@ public sealed partial class SdfWorldEngine {
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_viewsSets[m_currentSlot],
+                group: 0,
                 pipelineLayoutHandle: viewsPipeline.LayoutHandle
             );
             recorder.PushConstants(
@@ -425,6 +430,7 @@ public sealed partial class SdfWorldEngine {
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_compositeSets[m_currentSlot],
+            group: 0,
             pipelineLayoutHandle: m_compositePipeline.LayoutHandle
         );
         recorder.PushConstants(
@@ -507,6 +513,7 @@ public sealed partial class SdfWorldEngine {
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_frameUploadSets[((m_currentSlot * FrameUploadTableCount) + table)],
+                group: 0,
                 pipelineLayoutHandle: m_frameUploadPipeline.LayoutHandle
             );
 
@@ -579,6 +586,7 @@ public sealed partial class SdfWorldEngine {
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_brickUploadSets[m_currentSlot],
+            group: 0,
             pipelineLayoutHandle: m_brickUploadPipeline.LayoutHandle
         );
         recorder.PushConstants(
@@ -655,6 +663,7 @@ public sealed partial class SdfWorldEngine {
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
                 descriptorSetHandle: m_brickBakeSets[slot],
+                group: 0,
                 pipelineLayoutHandle: m_brickBakePipeline.LayoutHandle
             );
             recorder.PushConstants(

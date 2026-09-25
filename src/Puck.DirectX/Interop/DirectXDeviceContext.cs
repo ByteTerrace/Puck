@@ -31,6 +31,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private readonly Func<long>? m_adapterLuidProvider;
     private readonly GpuPipelineCacheStore? m_pipelineCacheStore;
     private readonly GpuPipelineCacheWork? m_pipelineCacheWork;
+    private readonly DirectXGpuBindings m_bindings;
     private readonly Lock m_dispatchSignatureLock = new();
 
     private nint m_commandQueue;
@@ -73,6 +74,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheStore = pipelineCacheStore;
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
+        m_bindings = new DirectXGpuBindings(deviceContext: this);
         Services = CreateServices(creationFaults: creationFaults);
     }
     /// <summary>Initializes a new instance whose adapter LUID is resolved lazily on first use.</summary>
@@ -96,6 +98,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheStore = pipelineCacheStore;
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
+        m_bindings = new DirectXGpuBindings(deviceContext: this);
         Services = CreateServices(creationFaults: creationFaults);
     }
 
@@ -165,6 +168,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return m_commandQueue;
         }
     }
+    /// <summary>Gets the current device's two shader-visible descriptor heaps, which every descriptor pool is a range of
+    /// and every recorded command list binds, creating the device first when it does not exist yet. They are created
+    /// with the device and released with it, so a recreated device has a fresh pair.</summary>
+    /// <exception cref="GpuDeviceUnavailableException">No device could be created.</exception>
+    public DirectXShaderVisibleHeaps DescriptorHeaps => m_bindings.Heaps;
+    /// <summary>Gets the context's own bindings, beneath any creation-fault wrapper its <c>Services</c> carry: what
+    /// counts the handles its pools and sets hold (<see cref="DirectXGpuBindings.LiveHandles"/>).</summary>
+    public DirectXGpuBindings DescriptorBindings => m_bindings;
     /// <inheritdoc />
     public DirectXDevice Device {
         get {
@@ -200,7 +211,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private GpuDeviceServices CreateServices(GpuCreationFaults? creationFaults) => GpuCreationFaults.Wrap(
         faults: creationFaults,
         services: new() {
-            Bindings = new DirectXGpuBindings(deviceContext: this),
+            Bindings = m_bindings,
             BufferFactory = new DirectXGpuBufferFactory(deviceContext: this),
             CommandPoolFactory = new DirectXGpuCommandPoolFactory(deviceContext: this),
             ImageFactory = new DirectXGpuImageFactory(deviceContext: this),
@@ -278,6 +289,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_memoryProfile = m_deviceApi.GetMemoryProfile(deviceHandle: m_device.Handle);
         m_capabilities = m_deviceApi.GetDeviceCapabilities(deviceHandle: m_device.Handle);
         EnsureShaderModelFloor(deviceHandle: m_device.Handle);
+        m_bindings.CreateDeviceHeaps(
+            capabilities: m_capabilities,
+            device: ((ID3D12Device*)m_device.Handle)
+        );
 
         // The info queue (present only when the debug layer loaded) lets DrainDebugMessages surface validation
         // messages to the console instead of only OutputDebugString.
@@ -337,8 +352,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             );
         }
     }
-    // Releases the fence, its event, the queue, the info queue, the dispatch signature, the pipeline library and the
-    // device, without a GPU drain, leaving the context with no device.
+    // Releases the fence, its event, the queue, the info queue, the dispatch signature, the pipeline library, the
+    // descriptor heaps and the device, without a GPU drain, leaving the context with no device.
     private void ReleaseDeviceObjects() {
         if (0 != m_idleFence) {
             _ = ((IUnknown*)m_idleFence)->Release();
@@ -364,6 +379,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         // Serializing a removed device's library can fail; that is reported, and the file already on disk stays.
         PipelineLibrary?.Dispose();
         PipelineLibrary = null;
+        m_bindings.ReleaseDeviceHeaps();
         m_idleFenceValue = 1;
         ReleaseDevice();
     }
@@ -561,7 +577,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         Drain(live: true);
     }
 
-    /// <summary>Recreates the device, command queue, and idle fence IN PLACE after a device removal — preserving this
+    /// <summary>Recreates the device, command queue, idle fence and descriptor heaps IN PLACE after a device removal — preserving this
     /// instance's identity so the published <c>IGpuDeviceContext</c> capability (and every node that resolved it) stays
     /// valid; they rebuild their own device-derived resources. The old objects are released WITHOUT a GPU drain (the
     /// device is removed, so a Signal/wait would never complete; a COM Release on a removed device's objects is safe). The
@@ -650,6 +666,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         ReleaseDispatchSignature();
         PipelineLibrary?.Dispose();
         PipelineLibrary = null;
+        m_bindings.ReleaseDeviceHeaps();
         ReportLiveObjects();
 
         if (0 != m_infoQueue) {

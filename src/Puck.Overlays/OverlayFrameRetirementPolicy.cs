@@ -8,6 +8,8 @@ public enum OverlayFrameExit {
     NoInnerFrame,
     /// <summary>The inner frame was live, but no writer emitted any content this produced frame.</summary>
     NoOverlayContent,
+    /// <summary>The overlay's resources were refused, so the inner frame is presented unchanged.</summary>
+    ResourcesRefused,
     /// <summary>The device was lost.</summary>
     DeviceLost,
 }
