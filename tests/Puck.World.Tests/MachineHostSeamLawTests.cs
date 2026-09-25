@@ -40,9 +40,7 @@ public sealed class MachineHostSeamLawTests {
         );
     }
     // The desktop World loads cloud providers, control surfaces, and agent extensions as dynamic plugins, never as
-    // compile-time references. Reads the built Puck.World.dll, which this suite's project builds first
-    // (ReferenceOutputAssembly="false"), out of the output directory matching the suite's own: the same configuration
-    // and target framework under src/Puck.World that this assembly runs from under tests/Puck.World.Tests.
+    // compile-time references.
     [InlineData("Puck.Mcp")]
     [InlineData("Puck.World.AgentBridge")]
     [InlineData("Puck.World.AgentHarness")]
@@ -50,19 +48,7 @@ public sealed class MachineHostSeamLawTests {
     [InlineData("Puck.World.Azure")]
     [Theory]
     public void DesktopWorldAssemblyReferencesNoExtensionProject(string extension) {
-        var output = Path.GetRelativePath(
-            path: AppContext.BaseDirectory,
-            relativeTo: Path.Combine(
-                path1: AuthoredGameFixtures.Root,
-                path2: "tests/Puck.World.Tests"
-            )
-        );
-        var assemblyPath = Path.Combine(
-            path1: AuthoredGameFixtures.Root,
-            path2: "src/Puck.World",
-            path3: output,
-            path4: "Puck.World.dll"
-        );
+        var assemblyPath = AuthoredGameFixtures.DesktopWorldAssemblyPath;
 
         Assert.True(
             condition: File.Exists(path: assemblyPath),

@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Commands;
 using Xunit;
 
@@ -105,12 +106,13 @@ public sealed class ParkedGrantReleaseLawTests {
     /// list.</summary>
     [Fact]
     public void ADisconnectSpanningRecordingReachesTheTapeAndVerifies() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer(definition: WithGrace(seconds: 3.0f));
 
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -141,7 +143,7 @@ public sealed class ParkedGrantReleaseLawTests {
 
         _ = tape.StopRecording();
 
-        using (var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name))) {
+        using (var stream = File.OpenRead(path: tape.PathFor(name: name))) {
             var snapshot = WorldReplaySnapshot.Read(stream: stream);
             var kinds = snapshot.Ticks
                 .SelectMany(selector: static tick => tick.Authority)

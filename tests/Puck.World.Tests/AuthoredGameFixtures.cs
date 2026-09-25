@@ -12,6 +12,22 @@ internal static class AuthoredGameFixtures {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<WorldDefinition>> Loaded = new(comparer: StringComparer.Ordinal);
 
     public static WorldDefinition Nexus => Load(relativePath: "src/Puck.World/Assets/worlds/puck.world.json");
+    /// <summary>Gets the path of the built desktop composition root, <c>Puck.World.dll</c>, in the output directory
+    /// matching this suite's own: the same configuration and target framework under <c>src/Puck.World</c> that this
+    /// assembly runs from under <c>tests/Puck.World.Tests</c>. The suite's project builds it first
+    /// (<c>ReferenceOutputAssembly="false"</c>) and links nothing from it.</summary>
+    public static string DesktopWorldAssemblyPath => Path.Combine(
+        path1: Root,
+        path2: "src/Puck.World",
+        path3: Path.GetRelativePath(
+            path: AppContext.BaseDirectory,
+            relativeTo: Path.Combine(
+                path1: Root,
+                path2: "tests/Puck.World.Tests"
+            )
+        ),
+        path4: "Puck.World.dll"
+    );
 
     /// <summary>Returns the world document at <paramref name="relativePath"/>, compiled when it is a <c>.puck</c> source
     /// and loaded, composed, and validated the way the host boots it. A load under the default catalog runs once per

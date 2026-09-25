@@ -28,7 +28,7 @@ surface.
 
 ## Format and development version
 
-- Extension `.puckreplay`, stored under `<WorldStateRoot.Resolve()>/Replays`
+- Extension `.puckreplay`, stored under the tape's injected `WorldStateRoot`, in `Replays`
   (so `--state-dir` isolates replays too).
 - `Magic = 0x5052_4C57` ("WLRP" in wire byte order) + `ShapeToken`.
   The current key includes authoritative state-system hashes, local flock

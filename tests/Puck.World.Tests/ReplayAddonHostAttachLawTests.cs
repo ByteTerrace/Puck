@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Commands;
 using Xunit;
 
@@ -15,7 +16,7 @@ namespace Puck.World.Tests;
 public sealed class ReplayAddonHostAttachLawTests {
     [Fact]
     public void ReplayedMutationReachesTheFactorysHostEvenWhenItDoesNotSelfAttach() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer();
 
@@ -28,6 +29,7 @@ public sealed class ReplayAddonHostAttachLawTests {
 
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,

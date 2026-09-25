@@ -1,3 +1,5 @@
+using Puck.World.Server;
+using Puck.Testing;
 using Puck.Commands;
 using Xunit;
 
@@ -46,8 +48,8 @@ public sealed class ReplayForkLawTests {
         ),
         Principal: Principal.Seat(slot: 0)
     );
-    private static WorldReplaySnapshot ReadTape(string name) {
-        using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
+    private static WorldReplaySnapshot ReadTape(WorldReplayTape tape, string name) {
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
 
         return WorldReplaySnapshot.Read(stream: stream);
     }
@@ -94,11 +96,12 @@ public sealed class ReplayForkLawTests {
 
     [Fact]
     public void Cancel_EndsTheDriveWhereItStands_AndSeatsAreLiveAgain() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -133,7 +136,10 @@ public sealed class ReplayForkLawTests {
 
         _ = tape.StopRecording();
 
-        var parentTape = ReadTape(name: parent);
+        var parentTape = ReadTape(
+            name: parent,
+            tape: tape
+        );
 
         Assert.True(
             condition: tape.TryBeginDrive(
@@ -178,7 +184,7 @@ public sealed class ReplayForkLawTests {
             actual: WorldReplaySnapshot.HashState(population: fixture.Server.Population)
         );
         // Nothing was recorded under the abandoned fork name.
-        Assert.False(condition: File.Exists(path: WorldReplayTape.PathFor(name: "never-recorded")));
+        Assert.False(condition: File.Exists(path: tape.PathFor(name: "never-recorded")));
     }
     [Fact]
     public void ForkProvenance_ClaimingMoreCopiedTicksThanTheTapeHolds_IsRefusedOnBothSides() {
@@ -260,11 +266,12 @@ public sealed class ReplayForkLawTests {
     }
     [Fact]
     public void Fork_CopiesTheParentPrefixVerbatim_ReachesTheBootImageLive_AndTheChildVerifiesStandalone() {
-        Fixtures.SkipIfReplayDirectoryUnwritable();
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
         var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
             liveServer: fixture.Server,
             profiles: fixture.Server.Profiles,
             transport: transport,
@@ -322,7 +329,10 @@ public sealed class ReplayForkLawTests {
             userMessage: parentStop.Verdict.Value.Describe()
         );
 
-        var parentTape = ReadTape(name: parent);
+        var parentTape = ReadTape(
+            name: parent,
+            tape: tape
+        );
         var movedHash = WorldReplaySnapshot.HashState(population: fixture.Server.Population);
 
         // The live server has moved on from the boot image (the body drove forward for three ticks) — the fork must
@@ -408,7 +418,10 @@ public sealed class ReplayForkLawTests {
             userMessage: childStop.Verdict.Value.Describe()
         );
 
-        var childTape = ReadTape(name: child);
+        var childTape = ReadTape(
+            name: child,
+            tape: tape
+        );
 
         Assert.Equal(
             expected: new WorldReplayForkProvenance(

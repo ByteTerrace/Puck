@@ -864,38 +864,6 @@ internal static class Fixtures {
 
         return node.ToJsonBytes();
     }
-    /// <summary>Skips the calling law, by name, when <see cref="WorldReplayTape"/>'s REAL on-disk
-    /// <c>Replays</c> directory (under <see cref="WorldStateRoot.Resolve"/> — this test project has no seam to
-    /// redirect it, and <c>WorldStateRoot.Override</c> can only ever be applied ONCE per process, so no individual
-    /// law may safely pull that lever) is not writable in the CURRENT environment. Adversarial-review G6's own
-    /// finding: four replay laws failed in the reviewer's read-only sandbox not because the fix was wrong but
-    /// because nothing distinguished "the environment cannot write here" from "the code is broken" — every law that
-    /// calls <see cref="WorldReplayTape.StopRecording"/> (which persists unconditionally) should call this FIRST so
-    /// a genuinely read-only environment reads as a skip with a named reason, never a red law.</summary>
-    public static void SkipIfReplayDirectoryUnwritable() {
-        string probePath;
-
-        try {
-            probePath = Path.Combine(
-                path1: WorldReplayTape.Directory(),
-                path2: $".write-probe-{Guid.NewGuid():N}"
-            );
-
-            File.WriteAllBytes(
-                bytes: [0],
-                path: probePath
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Assert.Skip(reason: $"the Replays directory is not writable in this environment ({exception.GetType().Name}: {exception.Message}) — this law needs a real on-disk write to prove anything");
-
-            return;
-        }
-
-        try {
-            File.Delete(path: probePath);
-        } catch (IOException) {
-        }
-    }
     /// <summary>Advances one <see cref="FieldLattice"/> a single tick with no bodies, against
     /// <paramref name="host"/> or an all-default <see cref="LambdaHost"/>.</summary>
     public static void StepLattice(FieldLattice lattice, IFieldLatticeHost? host = null) => lattice.Step(

@@ -545,7 +545,8 @@ internal static class WorldBootComposition {
             transport: sp.GetRequiredService<LoopbackTransport>(),
             engines: sp.GetServices<IMachineEngine>(),
             machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
-            addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
+            addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(),
+            stateRoot: sp.GetRequiredService<WorldStateRoot>()
         ));
         // The tape's read-back (replay.inspect) — walks a saved tape and, with --poses, re-drives it through the
         // same shadow drive the tape's verify uses.
@@ -587,7 +588,8 @@ internal static class WorldBootComposition {
                 directory: ((server.Definition.Captures is { } captures)
                     ? WorldCaptureRoot.Resolve(
                         captures: captures,
-                        documentDirectory: server.Definition.DocumentDirectory
+                        documentDirectory: server.Definition.DocumentDirectory,
+                        stateRoot: sp.GetRequiredService<WorldStateRoot>()
                     )
                     : string.Empty
                 ),
@@ -683,7 +685,7 @@ internal static class WorldBootComposition {
                 seats: sp.GetRequiredService<IWorldEmbodiedSeats>(),
                 resolver: sp.GetRequiredService<WorldSessionResolver>(),
                 machineId: sp.GetRequiredService<WorldOwnedWorlds>().MachineId,
-                stateRoot: WorldStateRoot.Resolve(),
+                stateRoot: sp.GetRequiredService<WorldStateRoot>(),
                 applicationStopping: sp.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping,
                 machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
                 admitsSpawn: true,
@@ -824,10 +826,7 @@ internal static class WorldBootComposition {
         services.TryAddSingleton<SdfWorldPipelineCache>();
         services.TryAddSingleton(implementationFactory: static sp => new GpuPipelineCacheStore(
             contentKey: sp.GetRequiredService<SdfWorldPipelineCache>().LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)).ContentKey(),
-            directory: Path.Join(
-                path1: WorldStateRoot.Resolve(),
-                path2: "pipeline-cache"
-            )
+            directory: sp.GetRequiredService<WorldStateRoot>().PathOf(name: "pipeline-cache")
         ));
     }
     /// <summary>Registers the shader compiler every presentation shape's pipelines compile through, under the state
@@ -838,10 +837,7 @@ internal static class WorldBootComposition {
     /// <param name="services">The service collection a presentation shape composes.</param>
     private static void AddWorldShaderWork(IServiceCollection services) {
         services.TryAddSingleton(implementationFactory: static sp => new ShaderCompiler(
-            cacheDirectory: Path.Combine(
-                path1: WorldStateRoot.Resolve(),
-                path2: "pipelines"
-            ),
+            cacheDirectory: sp.GetRequiredService<WorldStateRoot>().PathOf(name: "pipelines"),
             toolchainDirectory: sp.GetRequiredService<WorldDefinition>().Views.ShaderToolchain
         ));
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<ShaderCompiler>().Work);

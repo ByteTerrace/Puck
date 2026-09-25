@@ -10,7 +10,7 @@ internal sealed record WorldServiceExtensionOptions(WorldExtensionConfiguration?
 /// <summary>The every-boot-shape service-extension composition. Only an operator-selected configuration enables it; it
 /// attaches to the boot row through <see cref="WorldConfiguredExtensions.Attach"/>, the path every host shares.</summary>
 internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions options, WorldInstanceHost instances,
-    IObjectBlobStore store, PuckExtensionSet extensions) : IHostedService {
+    IObjectBlobStore store, PuckExtensionSet extensions, WorldStateRoot stateRoot) : IHostedService {
     internal void Initialize() {
         if (options.Configuration is not { } configuration) { return; }
         if (
@@ -29,10 +29,7 @@ internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions option
             row: boot,
             store: store,
             target: new DirectoryObjectStorageTarget(
-                Path.Combine(
-                    path1: WorldStateRoot.Resolve(),
-                    path2: "extensions"
-                ),
+                stateRoot.PathOf(name: "extensions"),
                 maximumBlobBytes: configuration.MaximumBytes
             )
         );
