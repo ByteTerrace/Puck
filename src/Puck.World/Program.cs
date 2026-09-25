@@ -180,12 +180,6 @@ stateRoot = new Puck.World.Server.WorldStateRoot(path: (parseResult.GetValue(opt
 // A world source compiles once across boots: the cache is per user rather than under the state root, since what it
 // holds is a pure function of the source files it names and the compiler that read them, never of a run's state.
 Puck.World.Transpiler.Composition.WorldCompileCache.Shared.Persist(directory: Puck.World.Transpiler.Composition.WorldCompileCache.DefaultDirectory);
-if (parseResult.GetValue(option: captureDirOption) is { } captureDirOverride) {
-    WorldCaptureRoot.Override(path: captureDirOverride);
-}
-if (parseResult.GetValue(option: scheduleDirOption) is { } scheduleDirOverride) {
-    WorldScheduleRoot.Override(path: scheduleDirOverride);
-}
 // Parse the nullable host CLI overrides at the boundary, keeping World's loud typo hard-exits for --backend / --present-
 // mode. A null override means "the document decides" (WorldHostSettings.Resolve coalesces to the authored defaults).
 WorldBackendPreference? backendOverride = null;
@@ -406,10 +400,12 @@ services.AddWorldBoot(inputs: new WorldBootInputs(
     Source: worldSource,
     StateRoot: stateRoot
 ) {
+    CaptureDirectory = parseResult.GetValue(option: captureDirOption),
     ConnectionSubject = connectionSubject,
     DebugLayers = parseResult.GetValue(option: debugLayersOption),
     ExtensionsConfiguration = extensionsConfiguration,
     FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
+    ScheduleDirectory = parseResult.GetValue(option: scheduleDirOption),
     StorageDiscoveryEndpoint = parseResult.GetValue(option: storageDiscoveryUriOption),
     StorageEndpoint = parseResult.GetValue(option: storageUriOption),
     StorageUserId = parseResult.GetValue(option: userIdOption),

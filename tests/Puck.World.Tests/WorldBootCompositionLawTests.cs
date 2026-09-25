@@ -118,7 +118,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
                 continue;
             }
 
-            if (IsNeutralGpuService(type: serviceType, fake: fake)) {
+            if (IsNeutralGpuService(fake: fake, type: serviceType)) {
                 services[index] = new ServiceDescriptor(
                     instance: fake,
                     serviceType: serviceType

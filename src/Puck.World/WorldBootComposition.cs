@@ -587,7 +587,7 @@ public static class WorldBootComposition {
                     : () => renderProbe.Render
                 ),
                 directory: ((server.Definition.Captures is { } captures)
-                    ? WorldCaptureRoot.Resolve(
+                    ? sp.GetRequiredService<WorldCaptureRoot>().Resolve(
                         captures: captures,
                         documentDirectory: server.Definition.DocumentDirectory,
                         stateRoot: sp.GetRequiredService<WorldStateRoot>()
@@ -606,7 +606,7 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldCaptureCommandModule>();
         // The schedule section's tick-scheduled command submission and its state export, wired at the SAME
         // publishTick call site as the wait gate and the capture scheduler. CORE, but inert unless --schedule-dir
-        // armed the boot (WorldScheduleRoot.IsArmed): the runner is always composed and submits nothing otherwise.
+        // armed the boot (the registered WorldScheduleRoot.IsArmed): the runner is always composed and submits nothing otherwise.
         // Registered as the observer too: a Simulation-routed scheduled line's own verdict arrives on the observer
         // path when its tick applies, and nothing else can correlate it back to the row.
         services.AddSingleton(implementationFactory: static sp => new WorldScheduleRunner(
@@ -614,6 +614,7 @@ public static class WorldBootComposition {
             instances: sp.GetRequiredService<WorldInstanceHost>(),
             registry: sp.GetRequiredService<Func<CommandRegistry>>(),
             router: sp.GetRequiredService<Func<InputRouter>>(),
+            scheduleRoot: sp.GetRequiredService<WorldScheduleRoot>(),
             server: sp.GetRequiredService<WorldServer>(),
             source: () => sp.GetRequiredService<TextCommandSource>()
         ));
@@ -837,6 +838,8 @@ public static class WorldBootComposition {
         services.AddPuckExtensions(extensions: inputs.Extensions);
         services.AddWorldMachineCatalog(machineCatalog: inputs.MachineCatalog);
         services.AddSingleton(implementationInstance: inputs.StateRoot);
+        services.AddSingleton(implementationInstance: new WorldCaptureRoot(path: inputs.CaptureDirectory));
+        services.AddSingleton(implementationInstance: new WorldScheduleRoot(path: inputs.ScheduleDirectory));
         services.AddSingleton(implementationInstance: worldSource);
         services.AddSingleton(implementationInstance: worldSource.Definition);
         if (worldSource.Admission is { } bootAdmission) {

@@ -26,6 +26,9 @@ public sealed record WorldBootInputs(
     IAuthenticator Authenticator,
     WorldStateRoot StateRoot
 ) {
+    /// <summary>Gets the capture output directory (<c>--capture-dir</c>) laid over the document's own, or
+    /// <see langword="null"/> to let the document decide.</summary>
+    public string? CaptureDirectory { get; init; }
     /// <summary>Gets the subject a <c>--authentication-config-file</c> connection signs as, which the boot server
     /// takes as its authority identity, or <see langword="null"/> to keep the document's own.</summary>
     public string? ConnectionSubject { get; init; }
@@ -38,6 +41,9 @@ public sealed record WorldBootInputs(
     /// <summary>Gets the peer identity key file (<c>--federation-key-file</c>), or <see langword="null"/> for the
     /// state root's own.</summary>
     public string? FederationKeyFile { get; init; }
+    /// <summary>Gets the schedule output directory (<c>--schedule-dir</c>), which also arms the document's
+    /// <c>schedule</c> section, or <see langword="null"/> for a boot that runs no schedule.</summary>
+    public string? ScheduleDirectory { get; init; }
     /// <summary>Gets the <c>--storage-discovery-uri</c> override, or <see langword="null"/> to let the document
     /// decide.</summary>
     public string? StorageDiscoveryEndpoint { get; init; }
