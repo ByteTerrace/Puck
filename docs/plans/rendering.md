@@ -1804,8 +1804,11 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
    output image branch.
 2. The HLSL module split and the upward-include refusal, with every compiled
    kernel's hash unchanged.
-3. `puck shaders generate --check` generates the instruction-set and layout
-   constants from the C# model.
+3. Landed, the generated instruction-set declarations: `puck shaders generate`
+   writes `sdf-isa.hlsli` from the C# model through `SdfIsaHlsl`, covering the
+   version handshake, every ISA enum member and the packed-layout constants,
+   and `--check` fails CI on a stale file. The frame block stays hand-written
+   until item 7.
 4. The planner's vocabulary: an indirect-argument state, dispatch shapes,
    strides, storage sized by instance or by program, and fragments. Done when
    a law plans the SDF passes in `PassLabels`' order less the composite, with
