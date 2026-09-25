@@ -311,8 +311,8 @@ The gate stays open until three legs run:
 - the capability report on the floor device. Each backend fills
   `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
   and `world.counters gpu` prints it on a `capabilities` line and in its JSON;
-  the ceiling device's reading on both backends is recorded, so only the floor
-  run remains.
+  the floor and ceiling devices' readings on both backends are recorded under
+  step 14.
 
 P8 has landed, pending its GPU canaries; the frame group's move from push
 constants to a descriptor set waits on P7's grouped binding. HLSL is the one
@@ -1667,6 +1667,13 @@ Phase 3, the groups, follows phase 2:
     1,000,000 descriptors (it refuses 1,000,001), a sampler heap of 2,048,
     and on Vulkan `maxBoundDescriptorSets` 32 and `maxPushConstantsSize` 256,
     so four groups and a 4-byte push index fit with room on both backends.
+    The ceiling device, the RTX 4070, reads on Direct3D 12 binding tier 3, root
+    signature 1.2, shader model 6.8, 64 root-signature words, a view heap of
+    1,000,000 and a sampler heap of 4,080 (so 4,080 samplers a stage and
+    1,000,000 of each view kind), and on Vulkan 32 descriptor sets, 256
+    push-constant bytes and 1,048,576 of each descriptor kind a stage, with no
+    per-stage resource limit. Its Direct3D 12 sampler heap is larger than the
+    floor's, so the floor's 2,048 bounds a group's samplers.
 
     14a, the device heap, touches Direct3D 12 alone; a Vulkan pool stays a
     `VkDescriptorPool`.
