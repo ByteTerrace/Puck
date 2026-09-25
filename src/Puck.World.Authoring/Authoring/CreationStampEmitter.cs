@@ -117,23 +117,18 @@ public static class CreationStampEmitter {
     // never calls this with a panelled shape's second material, so a solid placement's collider reads the plain
     // plate regardless of Panel.
     private static void EmitShapeChain(SdfProgramBuilder builder, ShapeDocument shape, CreationStampTransform transform, int material, float? contactMargin, bool inScope = false, int? panelMaterial = null) {
-        var (shapePosition, shapeRotation) = ReflectedShapeTransform(
-            shape: shape,
-            normal: transform.ReflectionNormal
-        );
         var shapeScale = EffectiveScale(value: shape.Scale);
 
         SdfProgramBuilder BuildTransformChain() {
             var prefix = ShapeDomainOps.Apply(
-                chain: builder
-                    .ResetPoint()
-                    .Translate(offset: transform.Origin)
-                    .Rotate(rotation: transform.Rotation)
-                    .Scale(scale: new Vector3(value: transform.Scale)),
+                chain: StampPrefix(
+                    builder: builder,
+                    transform: transform
+                ),
                 domain: shape.Domain
             )
-                .Translate(offset: shapePosition)
-                .Rotate(rotation: shapeRotation);
+                .Translate(offset: shape.Position)
+                .Rotate(rotation: shape.Rotation);
 
             // Creation-unit lengths, like the rest of this chain past the Scale(transform.Scale) op above — no
             // explicit placement-scale multiply needed here (unlike WorldStampPool.EmitShape's twist/bend/flare
@@ -271,12 +266,24 @@ public static class CreationStampEmitter {
                 if (shape.Cells is { } cells) {
                     // Relief samples the shape's rigid frame, independently of the primitive's residual
                     // scale or panel offset. Frequency and amplitude convert inversely, preserving its bound.
-                    _ = builder.ResetPoint()
+                    // A mirrored copy samples the relief through the stamp's reflection, like the shape it rides.
+                    var cellOrigin = builder.ResetPoint()
                         .Translate(offset: (transform.Origin + Vector3.Transform(
-                        (shapePosition * transform.Scale),
+                        (MirroredShapePosition(
+                            shape: shape,
+                            transform: transform
+                        ) * transform.Scale),
                         transform.Rotation
-                    )))
-                        .Rotate(rotation: Quaternion.Normalize(value: (transform.Rotation * shapeRotation)))
+                    )));
+                    var cellChain = ((transform.ReflectionNormal is { } cellNormal)
+                        ? Reflect(
+                            alignment: ReflectionAlignment(normal: cellNormal),
+                            chain: cellOrigin.Rotate(rotation: transform.Rotation)
+                        ).Rotate(rotation: shape.Rotation)
+                        : cellOrigin.Rotate(rotation: Quaternion.Normalize(value: (transform.Rotation * shape.Rotation)))
+                    );
+
+                    _ = cellChain
                         .CellDisplace(
                         (cells.Frequency / transform.Scale),
                         (cells.Amplitude * transform.Scale),
@@ -351,17 +358,12 @@ public static class CreationStampEmitter {
     // not a visible step). Both copies ride a fresh ResetPoint/Translate/Rotate prefix rather than chaining off the
     // host's own shape instruction, whose emission may leave a persistent Scale op behind.
     private static void EmitTrim(SdfProgramBuilder builder, ShapeDocument shape, ShapeDocument reference, CreationStampTransform transform, ShapeTrimDocument trim, int material) {
-        var (hostPosition, hostRotation) = ReflectedShapeTransform(
-            shape: shape,
-            normal: transform.ReflectionNormal
-        );
-        var hostChain = builder
-            .ResetPoint()
-            .Translate(offset: transform.Origin)
-            .Rotate(rotation: transform.Rotation)
-            .Scale(scale: new Vector3(value: transform.Scale))
-            .Translate(offset: hostPosition)
-            .Rotate(rotation: hostRotation);
+        var hostChain = StampPrefix(
+            builder: builder,
+            transform: transform
+        )
+            .Translate(offset: shape.Position)
+            .Rotate(rotation: shape.Rotation);
 
         var eroded = SdfSolidGeometry.AppendScaledPrimitive(
             chain: hostChain.PushField(compose: SdfBlendOp.Union),
@@ -379,17 +381,12 @@ public static class CreationStampEmitter {
             smooth: 0f
         ).Dilate(radius: (trim.Inset * transform.Scale));
 
-        var (referencePosition, referenceRotation) = ReflectedShapeTransform(
-            shape: reference,
-            normal: transform.ReflectionNormal
-        );
-        var referenceChain = eroded
-            .ResetPoint()
-            .Translate(offset: transform.Origin)
-            .Rotate(rotation: transform.Rotation)
-            .Scale(scale: new Vector3(value: transform.Scale))
-            .Translate(offset: referencePosition)
-            .Rotate(rotation: referenceRotation);
+        var referenceChain = StampPrefix(
+            builder: eroded,
+            transform: transform
+        )
+            .Translate(offset: reference.Position)
+            .Rotate(rotation: reference.Rotation);
 
         _ = SdfSolidGeometry.AppendScaledPrimitive(
             chain: referenceChain,
@@ -469,57 +466,77 @@ public static class CreationStampEmitter {
         vector1: value,
         vector2: normal
     )) * normal));
-    private static (Vector3 Position, Quaternion Rotation) ReflectedShapeTransform(ShapeDocument shape, Vector3? normal) {
-        if (normal is not { } authoredNormal) {
-            return (Position: shape.Position, Rotation: shape.Rotation);
+    // A mirrored stamp reflects the point once, across the plane through its origin with its normal, after the stamp's
+    // own scale and before anything the creation authors: every domain op, shape pose, shape-local op and primitive of
+    // the copy then reads the original's field at the mirrored point, so the copy is the original's true mirror image
+    // whatever its shapes' symmetry. The reflection is H(n) = A H(x) A^-1 with A the shortest rotation carrying local X
+    // onto the normal, spelled as that rotation, SdfProgramBuilder.MirrorX, and the rotation back. A mesh placement
+    // applies the same H(n) in the same place: after the stamp's scale, before the stamp's rotation.
+    private static SdfProgramBuilder StampPrefix(SdfProgramBuilder builder, CreationStampTransform transform) {
+        var chain = builder
+            .ResetPoint()
+            .Translate(offset: transform.Origin)
+            .Rotate(rotation: transform.Rotation)
+            .Scale(scale: new Vector3(value: transform.Scale));
+
+        return ((transform.ReflectionNormal is { } normal)
+            ? Reflect(
+                alignment: ReflectionAlignment(normal: normal),
+                chain: chain
+            )
+            : chain
+        );
+    }
+    // Where a shape's origin lands in the stamp's scaled frame: its authored position, reflected on a mirrored stamp.
+    private static Vector3 MirroredShapePosition(ShapeDocument shape, CreationStampTransform transform) {
+        Vector3 position = shape.Position;
+
+        return ((transform.ReflectionNormal is { } normal)
+            ? ReflectVector(
+                normal: Vector3.Normalize(value: normal),
+                value: position
+            )
+            : position
+        );
+    }
+    private static SdfProgramBuilder Reflect(SdfProgramBuilder chain, Quaternion alignment) => chain
+        .Rotate(rotation: alignment)
+        .MirrorX()
+        .Rotate(rotation: Quaternion.Conjugate(value: alignment));
+    private static SdfProgramBuilder Reflect(SdfProgramBuilder chain, FixedQuaternion alignment) => chain
+        .Rotate(rotation: alignment)
+        .MirrorX()
+        .Rotate(rotation: alignment.Conjugate());
+    // The shortest rotation carrying local X onto the plane's normal, (X x n, 1 + X . n) normalized. The plane's two
+    // normals name one reflection, so the one facing +X is taken and 1 + X . n never falls below one.
+    private static Quaternion ReflectionAlignment(Vector3 normal) {
+        var unitNormal = Vector3.Normalize(value: normal);
+
+        if (unitNormal.X < 0f) {
+            unitNormal = -unitNormal;
         }
 
-        var unitNormal = Vector3.Normalize(value: authoredNormal);
-        var rotation = Quaternion.Normalize(value: shape.Rotation);
-        var axisX = -ReflectVector(
-            value: Vector3.Transform(
-                value: Vector3.UnitX,
-                rotation: rotation
-            ),
-            normal: unitNormal
+        return Quaternion.Normalize(value: new Quaternion(
+            w: (1f + unitNormal.X),
+            x: 0f,
+            y: -unitNormal.Z,
+            z: unitNormal.Y
+        ));
+    }
+    // The contact field's alignment, in fixed point so a collider's program does not depend on the platform's float
+    // arithmetic.
+    private static FixedQuaternion ReflectionAlignmentFixed(FixedVector3 unitNormal) {
+        var facing = ((unitNormal.X < FixedQ4816.Zero)
+            ? -unitNormal
+            : unitNormal
         );
-        var axisY = ReflectVector(
-            value: Vector3.Transform(
-                value: Vector3.UnitY,
-                rotation: rotation
-            ),
-            normal: unitNormal
-        );
-        var axisZ = ReflectVector(
-            value: Vector3.Transform(
-                value: Vector3.UnitZ,
-                rotation: rotation
-            ),
-            normal: unitNormal
-        );
-        var reflectedRotation = Quaternion.Normalize(value: Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
-            m11: axisX.X,
-            m12: axisX.Y,
-            m13: axisX.Z,
-            m14: 0f,
-            m21: axisY.X,
-            m22: axisY.Y,
-            m23: axisY.Z,
-            m24: 0f,
-            m31: axisZ.X,
-            m32: axisZ.Y,
-            m33: axisZ.Z,
-            m34: 0f,
-            m41: 0f,
-            m42: 0f,
-            m43: 0f,
-            m44: 1f
-        )));
 
-        return (Position: ReflectVector(
-            value: shape.Position,
-            normal: unitNormal
-        ), Rotation: reflectedRotation);
+        return new FixedQuaternion(
+            W: (FixedQ4816.One + facing.X),
+            X: FixedQ4816.Zero,
+            Y: -facing.Z,
+            Z: facing.Y
+        ).Normalize();
     }
     private static (FixedVector3 Position, FixedQuaternion Rotation) ReflectedShapeTransformFixed(ShapeDocument shape, FixedVector3? normal) {
         var position = FixedVector3.FromVector3(value: shape.Position);
@@ -697,7 +714,10 @@ public static class CreationStampEmitter {
             x: FixedQ4816.Abs(value: transform.Scale),
             y: MinimumTransformExtentFixed
         );
-        var reflectionNormal = transform.ReflectionNormal?.Normalize();
+        var reflectionAlignment = ((transform.ReflectionNormal is { } normal)
+            ? ReflectionAlignmentFixed(unitNormal: normal.Normalize())
+            : (FixedQuaternion?)null
+        );
 
         foreach (var shape in (document.Shapes ?? [])) {
             // A detail shape is SHADING-ONLY — it never reaches this contact compiler at all, so it neither carves
@@ -725,11 +745,11 @@ public static class CreationStampEmitter {
             }
 
             var (shapePosition, shapeRotation) = ReflectedShapeTransformFixed(
-                normal: reflectionNormal,
+                normal: null,
                 shape: shape
             );
             var local = new SdfRigidFrame(
-                Mirrored: (reflectionNormal is not null),
+                Mirrored: false,
                 Position: shapePosition,
                 Rotation: shapeRotation
             );
@@ -739,13 +759,26 @@ public static class CreationStampEmitter {
 
             foreach (var frame in frames) {
                 var placed = frame.Compose(inner: local);
-                var chain = builder
+                var stamped = builder
                     .ResetPoint()
                     .Translate(offset: transform.Origin.ToVector3())
                     .Rotate(rotation: stampRotation)
-                    .Scale(scale: new Vector3(value: ((float)((double)stampScale))))
+                    .Scale(scale: new Vector3(value: ((float)((double)stampScale))));
+                var posed = ((reflectionAlignment is { } alignment)
+                    ? Reflect(
+                        alignment: alignment,
+                        chain: stamped
+                    )
+                    : stamped
+                )
                     .Translate(offset: placed.Position.ToVector3())
                     .Rotate(rotation: placed.Rotation.ToQuaternion());
+                // A mirrored domain copy (a symmetry plane, a polar mirror) is the proper frame followed by H(x):
+                // the frame's rotation alone would mirror only primitives symmetric in their local X.
+                var chain = (placed.Mirrored
+                    ? posed.MirrorX()
+                    : posed
+                );
 
                 if (
                     (contactMargin is not { } margin) ||
@@ -803,11 +836,10 @@ public static class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(noise);
 
-        _ = builder
-            .ResetPoint()
-            .Translate(offset: transform.Origin)
-            .Rotate(rotation: transform.Rotation)
-            .Scale(scale: new Vector3(value: transform.Scale))
+        _ = StampPrefix(
+            builder: builder,
+            transform: transform
+        )
             .NoiseDisplace(
             amplitude: noise.Amplitude,
             frequency: noise.Frequency,
@@ -1266,9 +1298,9 @@ public static class CreationStampEmitter {
 
         var shape = document.Shapes![shapeIndex];
 
-        var (shapePosition, _) = ReflectedShapeTransform(
+        var shapePosition = MirroredShapePosition(
             shape: shape,
-            normal: transform.ReflectionNormal
+            transform: transform
         );
         var panelRaise = ((shape.Panel is { Depth: < 0f } panel)
             ? -panel.Depth
