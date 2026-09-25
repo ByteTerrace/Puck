@@ -368,10 +368,23 @@ where DXC is present.
 P9's CPU half has landed; its frame-group half is open. Every presentation
 read of state goes through one state mirror, `WorldStateMirror` in
 `Puck.World.Protocol`: a flat table of slots, each a row ordinal, a key, a
-target flag, and a conversion. A binding the document authors registers its
-slot once, by the HUD resolver, camera rigs, markers, render colors, the theme,
-the binding bar, overlay predicates, the radial wheel and the binding bar's
-icon row; the wheel and the icon row both read a keyed cell through
+target flag, and a conversion. When the mirror installs a document it
+registers the document's presentation manifest, `WorldPresentationManifest`,
+compiled once per document from every section that carries a state binding: HUD
+element bindings and template placeholders, overlay `state` predicates, the
+binding bar's layout and model cells, every bindable scalar and color (camera
+program operands, markers, render lighting, sky and environment colors, the
+theme), and a render cycle's position row. The manifest finds a surface by the
+type that carries it, walking the generated model shape, so a section that gains
+a bindable member needs no new walker; re-installing a document whose manifest
+the mirror already holds registers nothing and allocates nothing. Its per-body
+half is a list of templates — the population scale row, a look's pose
+references and lane operands, a creation driver's state signal and gate tokens,
+an effector's state target — each keeping its `$body` key as authored. The
+consumers still register their own slots on first read and find the manifest's
+slot already there: the HUD resolver, camera rigs, markers, render colors, the
+theme, the binding bar, overlay predicates, the radial wheel and the binding
+bar's icon row; the wheel and the icon row both read a keyed cell through
 `WorldStateCells`, which keeps each slot it registered. A read made on behalf of a body or a seat acquires its slot through a
 `WorldStateLease`, and releases it when the body leaves, the seat's route or
 controlled body changes, or the mirror installs a document: a look's lanes, gait
@@ -1478,11 +1491,16 @@ the shipped-world state baselines unmoved and the `rim-drop` and
 change when the eased default moves a station's pixels.
 
 **Open:** filling the generated frame group's `tick` and `time` from the
-mirror's delivered tick and interpolation fraction; the manifest compiled from
-the document at install rather than
-registered by each consumer on first read, which P10's tier law needs; and the
-materials a program bakes at build, which join the mirror when the field
-lattice becomes a region kind. The `WorldStateMirrorLawTests`,
+mirror's delivered tick and interpolation fraction; the consumers reading the
+manifest's pre-registered slots rather than registering on first read, with a
+body's lease acquiring its templates when the body arrives, which P10's tier law
+needs; the reads the manifest does not yet record — a seat's binding contexts,
+whose row comes from a family resolved at run time, the radial wheel's and the
+icon row's keyed cells, whose keys are action names, and a binding bar a player
+profile authors rather than the world; retiring a manifest slot a later document
+no longer binds; and the materials a program bakes at build, which join the
+mirror when the field lattice becomes a region kind. The
+`WorldStateMirrorLawTests`, `WorldPresentationManifestLawTests`,
 `WorldStateReadRoutingLawTests`, `SeatRouteDeliveryLawTests`,
 `WorldWheelRingsLawTests` and `WorldSceneMovedTransformsLawTests` laws cover the
 landed half.

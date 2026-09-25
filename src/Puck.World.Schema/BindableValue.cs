@@ -17,6 +17,11 @@ namespace Puck.World;
 /// <param name="Target">Whether the token carried the trailing <c>.$target</c> facet: a read of the cell's stored
 /// truth rather than its eased value, which differ only while a cell carrying an easing trait is still moving.</param>
 public readonly record struct StateBinding(string Row, string? Key, bool Target) {
+    /// <summary>The cell-key token a presentation state reference spells a body's own index with:
+    /// <c>state.&lt;row&gt;.$body</c> reads the cell keyed by the reading body's 0-based index. The token is the whole
+    /// key, never a substring of one.</summary>
+    public const string BodyKey = "$body";
+
     /// <summary>Parses the state arm of the binding grammar: <c>state.&lt;row&gt;</c> (the row's slot cell) or
     /// <c>state.&lt;row&gt;.&lt;key&gt;</c>, either with an optional trailing <c>.$target</c>. Any other token —
     /// including a literal — is not a state binding.</summary>

@@ -7,7 +7,7 @@ namespace Puck.World.Client;
 /// <summary>
 /// One holder's reads of a <see cref="WorldStateMirror"/>: the slots a body, a stamp registration or a seat reads
 /// through, acquired on first read and released together. A reference's <c>$body</c> key names the body the lease is
-/// bound to (<see cref="WorldGaitDrivers.BodyKeyToken"/>), so two bodies reading one authored reference read two
+/// bound to (<see cref="StateBinding.BodyKey"/>), so two bodies reading one authored reference read two
 /// slots, and a lease bound to no body reads nothing through such a reference.
 /// <para>
 /// A slot is found by the authored object that names it — a reference or family string, compared by its text, or a
@@ -140,7 +140,7 @@ public sealed class WorldStateLease {
     /// <param name="source">The authored object naming the read: a string compared by its text, any other object by
     /// reference.</param>
     /// <param name="row">The row's name.</param>
-    /// <param name="key">The cell key, which may be <see cref="WorldGaitDrivers.BodyKeyToken"/>, or
+    /// <param name="key">The cell key, which may be <see cref="StateBinding.BodyKey"/>, or
     /// <see langword="null"/> for the slot cell.</param>
     /// <param name="target">Whether the read is of the stored truth rather than the eased follower.</param>
     /// <returns>The slot, or -1 when the lease is unbound or the key names a body the lease has none of.</returns>

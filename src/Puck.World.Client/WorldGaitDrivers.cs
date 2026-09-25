@@ -19,10 +19,6 @@ namespace Puck.World.Client;
 public static class WorldGaitDrivers {
     private const float TwoPi = (2f * MathF.PI);
 
-    /// <summary>The cell-key token a presentation state reference spells the wearing body's own index with:
-    /// <c>state.&lt;row&gt;.$body</c> reads the cell keyed by that body's 0-based index. The token is the whole key,
-    /// never a substring of one (<see cref="TryResolveBodyKey"/>).</summary>
-    public const string BodyKeyToken = "$body";
     /// <summary>The travel one frame may charge to an integrating phase, world units — clamps a teleport or an
     /// authority snap so it cannot spin a limb through dozens of cycles in one frame. Shared with the procedural
     /// catalog rig's own gait so a creation limb and a catalog limb answer a jump the same way.</summary>
@@ -422,7 +418,7 @@ public static class WorldGaitDrivers {
 
         return (reads.TryNumber(
             slot: reads.Slot(
-                key: BodyKeyToken,
+                key: StateBinding.BodyKey,
                 row: scaleRow,
                 source: scaleRow,
                 target: false
@@ -533,7 +529,7 @@ public static class WorldGaitDrivers {
         return true;
     }
     /// <summary>Resolves a reference's cell key against the body reading it: a key that is exactly
-    /// <see cref="BodyKeyToken"/> is the token and names the body's decimal index; any other key, including one that
+    /// <see cref="StateBinding.BodyKey"/> is the token and names the body's decimal index; any other key, including one that
     /// merely contains the token's text, names the cell spelled that way.</summary>
     /// <param name="key">The parsed key, or <see langword="null"/> for the slot cell.</param>
     /// <param name="bodyIndex">The reading body's 0-based index, or negative for no body.</param>
@@ -544,7 +540,7 @@ public static class WorldGaitDrivers {
 
         if (!string.Equals(
             a: key,
-            b: BodyKeyToken,
+            b: StateBinding.BodyKey,
             comparisonType: StringComparison.Ordinal
         )) {
             return true;
