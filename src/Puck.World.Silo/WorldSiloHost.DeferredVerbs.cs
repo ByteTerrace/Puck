@@ -8,7 +8,8 @@ public sealed partial class WorldSiloHost {
 
     /// <summary>Answers the silo console's deferred verbs from every row this host admits from now on: each row's
     /// echoes reach <paramref name="answers"/>, which settles and prints the line an echo answers and counts a late
-    /// refusal in <c>wire.errors</c>, as the World host counts one. Attach before any row activates.</summary>
+    /// refusal of a console line in <c>wire.errors</c>, as the World host counts one; a remote peer's refusal and the
+    /// silo's own refused reload are not console lines and are not counted. Attach before any row activates.</summary>
     /// <param name="answers">The console's attached answers (<see cref="WorldSiloApplication.AnswerDeferredVerbs"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="answers"/> is <see langword="null"/>.</exception>
     public void AnswerDeferredVerbs(WorldDeferredVerbAnswers answers) {

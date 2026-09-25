@@ -488,7 +488,11 @@ scripted driver depends on them:
   `| <n> observer faults` segment, named only when there have been some;
   `[wire.errors: 0 rejected]` stays the whole answer for a run that refused
   nothing. Three broken sinks watching one bound gamepad press, a line no
-  caller submitted at all, therefore add nothing to the refused count.
+  caller submitted at all, therefore add nothing to the refused count. The same
+  rule holds for a refusal a host reports a tick late through
+  `NoteDeferredRejection`: the World and the silo count only the refusals of
+  the local console connection's lines, never a remote peer's refused envelope
+  or a rebuild the host submitted itself, such as the silo's reload.
 
 Read-after-write ordering across submitted lines is a `TextCommandSession`
 guarantee rather than a `Submit` one: `TextCommandSource.Collect` holds that

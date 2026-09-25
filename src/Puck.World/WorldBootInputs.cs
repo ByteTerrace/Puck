@@ -18,13 +18,15 @@ namespace Puck.World;
 /// <param name="HostSettings">The resolved host settings; their presentation selects the boot shape.</param>
 /// <param name="Authenticator">The federation identity door.</param>
 /// <param name="StateRoot">The run's state root, which the peer identity and every other per-run file resolve under.</param>
+/// <param name="Caches">The device caches the boot reads and fills, which the presentation's bake schedule opens.</param>
 public sealed record WorldBootInputs(
     PuckExtensionSet Extensions,
     WorldMachineCatalog MachineCatalog,
     WorldDefinitionSource Source,
     WorldHostSettings HostSettings,
     IAuthenticator Authenticator,
-    WorldStateRoot StateRoot
+    WorldStateRoot StateRoot,
+    WorldCacheRoots Caches
 ) {
     /// <summary>Gets the capture output directory (<c>--capture-dir</c>) laid over the document's own, or
     /// <see langword="null"/> to let the document decide.</summary>

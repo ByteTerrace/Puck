@@ -838,6 +838,7 @@ public static class WorldBootComposition {
         services.AddPuckExtensions(extensions: inputs.Extensions);
         services.AddWorldMachineCatalog(machineCatalog: inputs.MachineCatalog);
         services.AddSingleton(implementationInstance: inputs.StateRoot);
+        services.AddSingleton(implementationInstance: inputs.Caches);
         services.AddSingleton(implementationInstance: new WorldCaptureRoot(path: inputs.CaptureDirectory));
         services.AddSingleton(implementationInstance: new WorldScheduleRoot(path: inputs.ScheduleDirectory));
         services.AddSingleton(implementationInstance: worldSource);
@@ -1008,11 +1009,11 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: FullscreenPassNode.LoadWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: ShaderSetManifest.LoadWork);
     }
-    /// <summary>Registers the presentation's bake schedule over the state root's bake cache, the cache a boot's compiled
-    /// world fills, and its <c>sdf.bakes</c> work source.</summary>
+    /// <summary>Registers the presentation's bake schedule over the registered <see cref="WorldCacheRoots"/>' bake
+    /// cache, the cache a boot's compiled world fills, and its <c>sdf.bakes</c> work source.</summary>
     /// <param name="services">The service collection a presentation shape composes.</param>
     private static void AddWorldBakes(IServiceCollection services) {
-        services.TryAddSingleton(implementationFactory: static _ => new WorldBakeSchedule(store: WorldBakeStore.Open(directory: PuckWorldLoader.BakeDirectory())));
+        services.TryAddSingleton(implementationFactory: static sp => new WorldBakeSchedule(store: WorldBakeStore.Open(directory: sp.GetRequiredService<WorldCacheRoots>().Bakes)));
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldBakeSchedule>());
     }
 
