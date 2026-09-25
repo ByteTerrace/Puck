@@ -3,12 +3,9 @@
 // is Catmull-Rom over the sixteen nearest, clamped to the central four texels' range so its negative lobes cannot
 // ring; a sharpness between blends the two. Every tap is a formatted load clamped to the source's edge, so no sampler
 // state decides the filter and both backends compute the same arithmetic.
-// The frame block is the pass's generated interface: the frame values and the pass's config (sharpness).
+// The generated interface declares the frame group, the pass block (extent and sharpness) and the ports, which a graph
+// names "as": "source" and "as": "destination".
 #include "resample.interface.hlsli"
-
-[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D<float4> source : register(t1);
-[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState sourceSampler : register(s1);
-[[vk::binding(0, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> destination : register(u0);
 
 float4 catmullRomWeights(float t) {
     float t2 = (t * t);
@@ -29,10 +26,9 @@ float3 tap(int2 pixel, uint2 sourceDims) {
 
 [numthreads(8, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
-    uint2 destinationDims;
+    uint2 destinationDims = passGroup.extent;
     uint2 sourceDims;
 
-    destination.GetDimensions(destinationDims.x, destinationDims.y);
     source.GetDimensions(sourceDims.x, sourceDims.y);
     if ((id.x >= destinationDims.x) || (id.y >= destinationDims.y)) {
         return;
@@ -51,7 +47,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     float3 c01 = tap((base + int2(0, 1)), sourceDims);
     float3 c11 = tap((base + int2(1, 1)), sourceDims);
     float3 bilinear = lerp(lerp(c00, c10, f.x), lerp(c01, c11, f.x), f.y);
-    float sharpness = saturate(frameGroup.sharpness);
+    float sharpness = saturate(passGroup.sharpness);
 
     if (sharpness == 0.0) {
         destination[id.xy] = float4(bilinear, 1.0);

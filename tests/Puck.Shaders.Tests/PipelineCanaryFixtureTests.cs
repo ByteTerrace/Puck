@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
@@ -7,6 +8,8 @@ namespace Puck.Shaders.Tests;
 /// before a GPU run can say anything about them.</summary>
 public sealed class PipelineCanaryFixtureTests {
     private static string FixturePath(string fileName, string canary = "pipeline-feedback") => RepositoryPaths.Resolve(relativePath: $"tests/Puck.World.Canaries/{canary}/{fileName}");
+    private static IEnumerable<(string Name, GpuBindingKind Kind)> PassResources(ShaderPipelinePlannedPass pass) =>
+        pass.Parameters.Layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)).Resources.Select(selector: static resource => (resource.Member.Name, resource.Kind));
     private static ShaderPipelineLoadResult LoadEdit(string fileName, string cache) => new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache)).Load(
         cancellationToken: TestContext.Current.CancellationToken,
         name: "feedback",
@@ -168,7 +171,7 @@ public sealed class PipelineCanaryFixtureTests {
         }
     }
     [Fact]
-    public void The_shapes_document_plans_compute_compute_fullscreen_over_sparse_bindings_a_raw_buffer_and_the_position_adapter() {
+    public void The_shapes_document_plans_compute_compute_fullscreen_over_generated_ports_a_raw_buffer_and_the_position_adapter() {
         var plan = new ShaderPipelineCompiler().Compile(definition: ShaderPipelineLoader.ReadDefinition(
             name: "shapes",
             path: FixturePath(
@@ -182,8 +185,12 @@ public sealed class PipelineCanaryFixtureTests {
             actual: plan.Passes.Select(selector: static pass => (pass.Name, pass.Declaration!.Kind))
         );
         Assert.Equal(
-            expected: [4u, 9u, 2u, 7u, 5u],
-            actual: [.. plan.Passes[0].Declaration!.OutputReferences.Select(selector: static output => output.Binding!.Value), .. plan.Passes[1].Declaration!.InputReferences.Select(selector: static input => input.Binding!.Value), .. plan.Passes[1].Declaration!.OutputReferences.Select(selector: static output => output.Binding!.Value)]
+            expected: [("field", GpuBindingKind.StorageImage), ("words", GpuBindingKind.ReadWriteBuffer)],
+            actual: PassResources(pass: plan.Passes[0])
+        );
+        Assert.Equal(
+            expected: [("field", GpuBindingKind.SampledImage), ("fieldSampler", GpuBindingKind.Sampler), ("words", GpuBindingKind.ReadOnlyBuffer), ("mixed", GpuBindingKind.StorageImage)],
+            actual: PassResources(pass: plan.Passes[1])
         );
         Assert.Equal(
             expected: ShaderPipelineVertexInput.Position,

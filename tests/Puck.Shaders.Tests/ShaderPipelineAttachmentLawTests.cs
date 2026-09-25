@@ -58,13 +58,11 @@ public sealed class ShaderPipelineAttachmentLawTests {
     private static ShaderPipelinePass Sample(string input, string output) => new(
         EntryPoint: "main",
         Inputs: [new ResourceReference(
-            Binding: 1,
             Name: input
         )],
         Kind: ShaderPipelineDocumentPassKind.Compute,
         Name: "sample",
         Outputs: [new ResourceReference(
-            Binding: 0,
             Name: output
         )],
         Source: "sample.hlsl"
@@ -387,7 +385,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
                 resources: resources
             )),
             "depth-sampled" => Layers(passes: static passes => ReplacePass(
-                change: static pass => (pass with { Inputs = [.. pass.InputReferences, new ResourceReference(Binding: 2, Name: "d1")] }),
+                change: static pass => (pass with { Inputs = [.. pass.InputReferences, new ResourceReference(Name: "d1")] }),
                 name: "sample",
                 passes: passes
             )),
@@ -407,7 +405,7 @@ public sealed class ShaderPipelineAttachmentLawTests {
                     EntryPoint: "main",
                     Kind: ShaderPipelineDocumentPassKind.Compute,
                     Name: "stamp",
-                    Outputs: [new ResourceReference(Binding: 0, Name: "stamped")],
+                    Outputs: [new ResourceReference(Name: "stamped")],
                     Source: "stamp.hlsl"
                 )],
                 resources: static resources => [.. resources, Depth(name: "stamped")]
@@ -529,11 +527,11 @@ public sealed class ShaderPipelineAttachmentLawTests {
             collection: gpu.GraphicsPipelines
         );
 
-        // A geometry pass with no input binds no descriptor, so the graph's one pool holds only the sampling consumer's
-        // set for each slot.
+        // Every pass binds its frame group set and its pass group set in each slot, a geometry pass with no input too, since
+        // its pass block holds its extent: the graph's one pool holds two sets for each of the three passes and slots.
         Assert.Equal(
             actual: (Pools: gpu.CreatedObjects.Count(predicate: static created => (created.Kind == "descriptor pool")), Sets: gpu.DescriptorPools.Single().MaxSets),
-            expected: (Pools: 1, Sets: 3U)
+            expected: (Pools: 1, Sets: 18U)
         );
 
         gpu.Recording = true;
@@ -610,15 +608,16 @@ public sealed class ShaderPipelineAttachmentLawTests {
             plan: Plan(definition: Layers())
         );
 
-        // Three slots of three 16x16 four-byte storages (the color chain, the depth chain, the image), and two 60-byte
-        // geometry buffers, exactly as the fake holds them.
+        // Three slots of three 16x16 four-byte storages (the color chain, the depth chain, the image), two 60-byte geometry
+        // buffers, and three slots of four 256-byte constant buffers (the frame group's block and each pass's), exactly as the
+        // fake holds them.
         Assert.Equal(
             actual: (Owned: node.OwnedBytes, Steady: node.InstalledAccount.SteadyBytes),
             expected: (Owned: gpu.LiveBytes, Steady: gpu.LiveBytes)
         );
         Assert.Equal(
             actual: gpu.LiveBytes,
-            expected: (((((3UL * 3UL) * 16UL) * 16UL) * 4UL) + (2UL * 60UL))
+            expected: ((((((3UL * 3UL) * 16UL) * 16UL) * 4UL) + (2UL * 60UL)) + ((3UL * 4UL) * 256UL))
         );
     }
     [Fact]

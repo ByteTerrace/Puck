@@ -72,7 +72,7 @@ public sealed partial record ShaderSetManifest(
             path2: $"{stem}{bytecodeExtension}"
         );
     /// <summary>Reads a manifest's frame interface without its bytecode: the frame interface named for the set over its
-    /// config (<see cref="ShaderFrameInterface.For"/>), which <see cref="FrameLayout"/> lays out once the set loads.
+    /// config (<see cref="ShaderFrameInterface.Pushed"/>), which <see cref="FrameLayout"/> lays out once the set loads.
     /// A set's declarations are generated from this before its bytecode can be built.</summary>
     /// <param name="manifestPath">The manifest file's path.</param>
     /// <returns>The interface.</returns>
@@ -82,7 +82,7 @@ public sealed partial record ShaderSetManifest(
     public static ShaderInterface ReadFrameInterface(string manifestPath) {
         var manifest = ReadDeclaration(manifestPath: manifestPath);
 
-        return ShaderFrameInterface.For(
+        return ShaderFrameInterface.Pushed(
             config: manifest.Config,
             name: manifest.Name
         );
@@ -218,7 +218,7 @@ public sealed partial record ShaderSetManifest(
 
         manifest.ValidateConfigSchema();
 
-        var layout = ShaderPipelineParameterLayout.For(
+        var layout = ShaderPipelineParameterLayout.Pushed(
             config: manifest.Config,
             interfaceName: manifest.Name
         );

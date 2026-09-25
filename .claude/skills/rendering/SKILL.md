@@ -795,7 +795,7 @@ HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
 declares a language, and a one-off source is an `.hlsl` compute pass read as a
 one-pass graph. A pass
 reads its frame values and config only through its frame block
-([the frame block](../../../docs/reference/shaders.md#the-frame-block)): the
+([the frame block](../../../docs/reference/shaders.md#frame-values-extent-and-ports)): the
 `ShaderFrameInterface` members, then its config fields in ordinal name order,
 generated into `<interface>.interface.hlsli`, which the loader supplies in memory
 (`ShaderPipelineLoader.GeneratedIncludeOf`) and a shader set checks in

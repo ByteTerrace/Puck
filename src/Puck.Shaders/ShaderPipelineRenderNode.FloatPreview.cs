@@ -15,20 +15,40 @@ public sealed partial class ShaderPipelineRenderNode {
     /// published meanwhile; the new one takes effect at the first frame boundary after the build finishes.</summary>
     public bool IsBuildingPreview => (m_previewBuild.IsPending && !m_previewBuild.IsCompleted);
 
-    /// <summary>Returns the float preview's one descriptor pool: a set per in-flight frame, each holding the sampled
-    /// source.</summary>
+    // The float preview's one group: the sampled source and its sampler in the pass group (pipeline-preview.frag.hlsl).
+    private static readonly GpuPipelineLayoutDescription PreviewLayout = new(
+        groups: [new GpuGroupLayoutDescription(
+            bindings: [
+                new GpuGroupBinding(
+                    binding: 0,
+                    kind: GpuBindingKind.SampledImage
+                ),
+                new GpuGroupBinding(
+                    binding: 1,
+                    kind: GpuBindingKind.Sampler
+                ),
+            ],
+            ordinal: PassGroup
+        )],
+        pushesIndex: false,
+        stages: (GpuShaderStage.Vertex | GpuShaderStage.Fragment)
+    );
+
+    /// <summary>Returns the float preview's one descriptor pool: a pass-group set per in-flight frame, each holding the
+    /// sampled source and its sampler.</summary>
     /// <param name="inFlight">The node's frames in flight.</param>
     /// <returns>The pool's sizes.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlight"/> is zero.</exception>
     public static GpuDescriptorPoolSizes PreviewDescriptorPool(uint inFlight) {
         ArgumentOutOfRangeException.ThrowIfZero(value: inFlight);
 
-        return new(
-            CombinedImageSamplerCount: inFlight,
-            MaxSets: inFlight,
-            StorageBufferCount: 0,
-            StorageImageCount: 0
-        );
+        var sizes = default(GpuDescriptorPoolSizes);
+
+        for (var slot = 0u; (slot < inFlight); slot++) {
+            sizes += GpuDescriptorPoolSizes.ForGroups(groups: PreviewLayout.Groups);
+        }
+
+        return sizes;
     }
 
     // Puts built preview objects into service with the descriptor and command objects the frame thread owns.
@@ -255,9 +275,10 @@ public sealed partial class ShaderPipelineRenderNode {
                         Attributes: [],
                         StrideBytes: 0
                     ),
-                    1,
+                    0,
                     false,
-                    null
+                    null,
+                    Layout: PreviewLayout
                 );
 
                 objects.RenderPass = gpu.RenderPassFactory.Create(
@@ -352,9 +373,15 @@ public sealed partial class ShaderPipelineRenderNode {
                 for (var i = 0; (i < inFlight); i++) {
                     m_descriptorSets[i] = bindings.AllocateSet(
                         m_descriptorPool,
-                        m_pipeline.DescriptorSetLayoutHandle
+                        m_pipeline.GroupLayoutHandles[((int)PassGroup)]
                     );
                     m_samplers[i] = bindings.CreateSampler();
+                    bindings.WriteSampler(
+                        arrayElement: 0,
+                        binding: 1,
+                        descriptorSetHandle: m_descriptorSets[i],
+                        samplerHandle: m_samplers[i]
+                    );
                     m_pre[i] = gpu.CommandPoolFactory.Create();
                     m_draw[i] = gpu.CommandPoolFactory.Create();
                     m_post[i] = gpu.CommandPoolFactory.Create();
@@ -411,12 +438,11 @@ public sealed partial class ShaderPipelineRenderNode {
             var sourceImageHandle = image.ImageHandle;
             var sourceImageView = image.ImageViewHandle;
 
-            m_gpu.Bindings.WriteCombinedImageSampler(
+            m_gpu.Bindings.WriteSampledImage(
                 arrayElement: 0,
                 binding: 0,
                 descriptorSetHandle: m_descriptorSets[slot],
-                imageViewHandle: sourceImageView,
-                samplerHandle: m_samplers[slot]
+                imageViewHandle: sourceImageView
             );
             var recorder = m_gpu.Recorder;
             var pre = m_pre[slot];
@@ -488,7 +514,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 bindPoint: GpuBindPoint.Graphics,
                 commandBufferHandle: draw,
                 descriptorSetHandle: m_descriptorSets[slot],
-                group: 0,
+                group: PassGroup,
                 pipelineLayoutHandle: m_pipeline.LayoutHandle
             );
             graphics.Draw(

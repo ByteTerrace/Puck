@@ -19,6 +19,13 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         plan: pipeline.Plan,
         preview: false
     ).Sum(selector: static pool => pool.HeapDescriptors));
+    // The sampler descriptors those pools take from the device's sampler heap.
+    private static uint SamplerDemand(CompiledShaderPipeline pipeline) => ((uint)ShaderPipelineRenderNode.DescriptorPools(
+        inFlight: InFlight,
+        packages: new RenderGraphPackageRecorders(),
+        plan: pipeline.Plan,
+        preview: false
+    ).Sum(selector: static pool => pool.SamplerHeapDescriptors));
     // A device heap of exactly this many view descriptors.
     private static GpuDescriptorHeapBudget DeviceHeap(uint views) => new(capabilities: (GpuDeviceCapabilities.FromDirectX(
         resourceBindingTier: 3,
@@ -53,7 +60,8 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         );
         Assert.Equal(
             actual: (Pools: stated.Count, GraphSets: stated[0].MaxSets),
-            expected: (Pools: (floatOutput ? 2 : 1), GraphSets: (((uint)node.Plan!.Passes.Count) * InFlight))
+            // Each pass binds a frame group set and a pass group set in each slot.
+            expected: (Pools: (floatOutput ? 2 : 1), GraphSets: ((2U * ((uint)node.Plan!.Passes.Count)) * InFlight))
         );
     }
     [Fact]
@@ -81,7 +89,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         Assert.IsType<InvalidDataException>(@object: node.LastSwapError);
         Assert.StartsWith(
             actualString: node.LastSwapError!.Message,
-            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'shader pipeline feedback' needs {HeapDemand(pipeline: candidate)} view descriptors in 1 pool(s) and is refused: "
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'shader pipeline feedback' needs {HeapDemand(pipeline: candidate)} view and {SamplerDemand(pipeline: candidate)} sampler descriptors in 1 pool(s) and is refused: "
         );
         Assert.False(condition: (node.HasPendingCandidate || node.IsBuildingCandidate));
 

@@ -65,13 +65,26 @@ public sealed partial class ShaderPipelineRenderNode {
         return pools;
     }
 
-    // The graph's one descriptor pool: a set per in-flight frame for each pass that binds a descriptor, or none when no
-    // pass does.
+    // The graph's one descriptor pool: a frame set and a pass set per in-flight frame for each document pass, and a set
+    // per in-flight frame for each shader set's or package pass that binds a descriptor; none when no pass binds one.
     private static GpuDescriptorPoolSizes? GraphDescriptorPool(ShaderPipelinePlan plan, uint inFlight, RenderGraphPackageRecorders packages) {
         var specs = VersionSpecs(plan: plan);
         var sets = new List<IReadOnlyList<GpuComputeBinding>>();
+        var groups = default(GpuDescriptorPoolSizes);
 
         foreach (var planned in plan.Passes) {
+            if (
+                (planned.Declaration is not null) &&
+                !planned.Parameters.IsPushed
+            ) {
+                groups += GroupPoolSizes(
+                    inFlight: inFlight,
+                    planned: planned
+                );
+
+                continue;
+            }
+
             // A package pass has no declaration; its recorder allocates the sets its factory states.
             var bindings = ((planned.Declaration is { } declaration)
                 ? Descriptors(
@@ -92,10 +105,16 @@ public sealed partial class ShaderPipelineRenderNode {
             }
         }
 
-        return ((sets.Count == 0)
-            ? null
-            : GpuDescriptorPoolSizes.ForSets([.. sets])
-        );
+        if (
+            (sets.Count == 0) &&
+            (groups.MaxSets == 0)
+        ) {
+            return null;
+        }
+
+        return (((sets.Count == 0)
+            ? default
+            : GpuDescriptorPoolSizes.ForSets([.. sets])) + groups);
     }
     // Allocates every per-slot object a built pass needs: its descriptor set and sampler, and its command pools (one per
     // slot for a compute pass; the pre-barrier and draw pools for a fullscreen pass). They are allocated on the frame
@@ -109,11 +128,17 @@ public sealed partial class ShaderPipelineRenderNode {
         var bindings = m_gpu.Bindings;
 
         if (
-            ((pass.Bindings.Count != 0) || (pass.PackageSetBindings != 0)) &&
+            (pass.Grouped || (pass.Bindings.Count != 0) || (pass.PackageSetBindings != 0)) &&
             (descriptorPool == 0)
         ) {
             descriptorPool = bindings.CreatePool(sizes: (graphPool ?? throw new InvalidOperationException(message: "The plan states no descriptor pool for a pass that binds descriptors.")));
             pass.DescriptorPool = descriptorPool;
+        }
+        if (pass.Grouped) {
+            AllocateGroupSets(
+                descriptorPool: descriptorPool,
+                pass: pass
+            );
         }
         for (var slot = 0; (slot < m_inFlight); slot++) {
             if (pass.Bindings.Count != 0) {

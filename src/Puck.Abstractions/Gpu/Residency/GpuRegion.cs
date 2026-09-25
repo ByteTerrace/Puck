@@ -52,7 +52,7 @@ public sealed class GpuRegion : IDisposable {
     private const int StagedMergeGapWords = 2;
 
     private readonly byte[] m_contents;
-    private readonly IGpuComputePipeline m_copyPipeline;
+    private readonly IGpuComputePipeline? m_copyPipeline;
     private readonly nint[] m_copySets;
     private readonly IGpuBindings m_bindings;
     private readonly IGpuBuffer? m_deviceLocal;
@@ -80,22 +80,28 @@ public sealed class GpuRegion : IDisposable {
     /// <param name="policy">The residency policy, normally <see cref="GpuResidency.Select"/>'s choice.</param>
     /// <param name="byteCount">The region's size in bytes; positive and a whole number of uints.</param>
     /// <param name="slotCount">The caller's frame slots; at least one.</param>
+    /// <param name="usage">How GPU work reads the buffer a slot binds: <see cref="GpuBufferUsage.Storage"/>, read as
+    /// uints, or <see cref="GpuBufferUsage.Uniform"/>, bound as a constant buffer of the whole region, which then holds
+    /// a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/> bytes and is never staged, since the staged
+    /// policy's copy kernel writes its buffer as storage.</param>
     /// <param name="buffers">The factory that creates the host-visible and device-local buffers.</param>
     /// <param name="bindings">The bindings service the staged policy's copy sets come from.</param>
     /// <param name="recorder">The recorder the staged policy's copy is recorded through.</param>
     /// <param name="copyPipeline">The copy kernel's pipeline, built from <see cref="CopyBindings"/> and a
-    /// <see cref="CopyPushByteLength"/>-byte push range; read only under the staged policy. The caller owns it.</param>
+    /// <see cref="CopyPushByteLength"/>-byte push range; required under the staged policy and read only there, so
+    /// <see langword="null"/> under any other. The caller owns it.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
-    /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
-    /// <see langword="null"/>.</exception>
+    /// <paramref name="bindings"/> or <paramref name="recorder"/> is <see langword="null"/>, or a staged region has no
+    /// <paramref name="copyPipeline"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> is not a defined policy,
     /// <paramref name="byteCount"/> is not positive or not a whole number of uints, <paramref name="slotCount"/> is not
-    /// positive, or a staged region holds more than <see cref="MaxStagedWords"/> words.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) {
+    /// positive, <paramref name="usage"/> is neither storage nor uniform, a staged region holds more than
+    /// <see cref="MaxStagedWords"/> words, or a uniform region is staged or not a multiple of
+    /// <see cref="IGpuBindings.ConstantBufferAlignment"/> bytes.</exception>
+    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, GpuBufferUsage usage, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline) {
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
-        ArgumentNullException.ThrowIfNull(copyPipeline);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: byteCount);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: slotCount);
 
@@ -112,6 +118,39 @@ public sealed class GpuRegion : IDisposable {
                 actualValue: policy,
                 message: "The residency policy is not defined.",
                 paramName: nameof(policy)
+            );
+        }
+
+        if (usage is not (GpuBufferUsage.Storage or GpuBufferUsage.Uniform)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: usage,
+                message: "A region's buffers are storage or uniform.",
+                paramName: nameof(usage)
+            );
+        }
+        if (usage == GpuBufferUsage.Uniform) {
+            if (policy == GpuResidencyPolicy.Staged) {
+                throw new ArgumentOutOfRangeException(
+                    actualValue: policy,
+                    message: "A uniform region is never staged: the copy kernel writes its buffer as storage.",
+                    paramName: nameof(policy)
+                );
+            }
+            if ((((ulong)byteCount) % IGpuBindings.ConstantBufferAlignment) != 0) {
+                throw new ArgumentOutOfRangeException(
+                    actualValue: byteCount,
+                    message: $"A uniform region holds a multiple of {IGpuBindings.ConstantBufferAlignment} bytes, the constant-buffer view it is bound as.",
+                    paramName: nameof(byteCount)
+                );
+            }
+        }
+        if (
+            (policy == GpuResidencyPolicy.Staged) &&
+            (copyPipeline is null)
+        ) {
+            throw new ArgumentNullException(
+                message: "A staged region copies through the copy kernel's pipeline.",
+                paramName: nameof(copyPipeline)
             );
         }
 
@@ -176,7 +215,7 @@ public sealed class GpuRegion : IDisposable {
             for (var index = 0; (index < m_hostBuffers.Length); index++) {
                 m_hostBuffers[index] = buffers.CreateHostVisible(
                     sizeBytes: hostBytes,
-                    usage: GpuBufferUsage.Storage
+                    usage: usage
                 );
                 m_ownedBuffers.Add(item: m_hostBuffers[index]);
             }
@@ -238,8 +277,9 @@ public sealed class GpuRegion : IDisposable {
     public int SlotCount { get; }
 
     /// <summary>Returns the buffer a slot's GPU work binds for the region: the slot's own host-visible buffer under
-    /// the ring, and the one buffer every slot shares otherwise. It is a storage buffer of <see cref="ByteCount"/> bytes
-    /// or more, read as uints from its start.</summary>
+    /// the ring, and the one buffer every slot shares otherwise. It is a buffer of the region's usage holding
+    /// <see cref="ByteCount"/> bytes or more: a storage region reads as uints from its start, and a uniform region binds
+    /// whole as a constant buffer.</summary>
     /// <param name="slot">The frame slot, below <see cref="SlotCount"/>.</param>
     /// <returns>The buffer; the region owns it.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is negative or not below
@@ -351,21 +391,21 @@ public sealed class GpuRegion : IDisposable {
         m_recorder.BindPipeline(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            pipelineHandle: m_copyPipeline.Handle
+            pipelineHandle: m_copyPipeline!.Handle
         );
         m_recorder.BindDescriptorSet(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_copySets[slot],
             group: 0,
-            pipelineLayoutHandle: m_copyPipeline.LayoutHandle
+            pipelineLayoutHandle: m_copyPipeline!.LayoutHandle
         );
         m_recorder.PushConstants(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
             data: m_push,
             offset: 0,
-            pipelineLayoutHandle: m_copyPipeline.LayoutHandle,
+            pipelineLayoutHandle: m_copyPipeline!.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
         );
         m_recorder.Dispatch(
@@ -436,7 +476,7 @@ public sealed class GpuRegion : IDisposable {
 
         for (var slot = 0; (slot < SlotCount); slot++) {
             var set = m_bindings.AllocateSet(
-                descriptorSetLayoutHandle: m_copyPipeline.DescriptorSetLayoutHandle,
+                descriptorSetLayoutHandle: m_copyPipeline!.DescriptorSetLayoutHandle,
                 poolHandle: m_copyPool
             );
 

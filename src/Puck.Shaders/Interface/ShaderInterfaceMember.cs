@@ -3,7 +3,7 @@ using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
-/// <summary>One named member of a <see cref="ShaderInterface"/>: a value, an array, an image or a sampler, in one
+/// <summary>One named member of a <see cref="ShaderInterface"/>: a value, an array, an image, a raw buffer or a sampler, in one
 /// frequency group.</summary>
 /// <param name="Name">The member's name, which is also its HLSL identifier: an ASCII letter followed by ASCII letters
 /// and digits.</param>
@@ -11,7 +11,7 @@ namespace Puck.Shaders;
 /// space.</param>
 /// <param name="Kind">What the member is.</param>
 /// <param name="Type">The value type of a <see cref="ShaderInterfaceMemberKind.Value"/>, the element type of an
-/// <see cref="ShaderInterfaceMemberKind.Array"/>, or the texel type an image reads as; <see langword="null"/> for a
+/// <see cref="ShaderInterfaceMemberKind.Array"/>, or the texel type an image reads as; <see langword="null"/> for a raw buffer or a
 /// <see cref="ShaderInterfaceMemberKind.Sampler"/>.</param>
 /// <param name="Length">The element count of an <see cref="ShaderInterfaceMemberKind.Array"/>, at least one;
 /// <see langword="null"/> for every other kind.</param>
@@ -88,6 +88,26 @@ public sealed record ShaderInterfaceMember(
             Type: type
         );
 
+    /// <summary>Creates a raw buffer member a pass reads by byte address.</summary>
+    /// <param name="name">The member's name.</param>
+    /// <param name="group">The member's frequency group.</param>
+    /// <returns>The member.</returns>
+    public static ShaderInterfaceMember ReadOnlyBuffer(string name, ShaderInterfaceGroup group) =>
+        new(
+            Group: group,
+            Kind: ShaderInterfaceMemberKind.ReadOnlyBuffer,
+            Name: name
+        );
+    /// <summary>Creates a raw buffer member a pass reads and writes by byte address.</summary>
+    /// <param name="name">The member's name.</param>
+    /// <param name="group">The member's frequency group.</param>
+    /// <returns>The member.</returns>
+    public static ShaderInterfaceMember ReadWriteBuffer(string name, ShaderInterfaceGroup group) =>
+        new(
+            Group: group,
+            Kind: ShaderInterfaceMemberKind.ReadWriteBuffer,
+            Name: name
+        );
     /// <summary>Gets a value indicating whether the member lives in its group's constant block.</summary>
     [JsonIgnore]
     public bool IsBlockMember => (Kind is ShaderInterfaceMemberKind.Value or ShaderInterfaceMemberKind.Array);

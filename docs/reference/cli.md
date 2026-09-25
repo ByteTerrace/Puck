@@ -585,7 +585,7 @@ regenerates each include in memory and exits 1 naming each file that differs
 from the model and its first differing line; CI runs it beside
 `puck schema --check`.
 
-`interface` prints the [frame-block](shaders.md#the-frame-block) declarations
+`interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
 each pass of a graph document or one-off shader reads, or those a shader-set
 manifest's stages read; `--write` writes each as `<interface>.interface.hlsli`
 beside its source instead, which a shader set, compiled at build, checks in, and

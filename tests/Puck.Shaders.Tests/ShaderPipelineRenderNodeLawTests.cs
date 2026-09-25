@@ -61,32 +61,27 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             passes: [
                 Pass(
                     inputs: [new ResourceReference(
-                        Binding: 1,
                         Name: "history",
                         PreviousFrame: true
                     )],
                     kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "accumulate",
                     outputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "history"
                     )]
                 ),
                 Pass(
                     inputs: [new ResourceReference(
-                        Binding: 1,
                         Name: "history"
                     )],
                     kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "convert",
                     outputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "gray"
                     )]
                 ),
                 Pass(
                     inputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "gray"
                     )],
                     kind: ShaderPipelineDocumentPassKind.Fullscreen,
@@ -135,19 +130,16 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                     kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "produce",
                     outputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "data"
                     )]
                 ),
                 Pass(
                     inputs: [new ResourceReference(
-                        Binding: 1,
                         Name: "data"
                     )],
                     kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "consume",
                     outputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "image"
                     )]
                 ),
@@ -240,10 +232,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         // Three images per slot (history, gray, and the image the fullscreen pass draws into); per compute pass a module,
         // a pipeline, and per slot a sampler and command pool; for the fullscreen pass two modules, a render pass and a
         // graphics pipeline, and per slot a framebuffer, a sampler, the barrier command pool and the draw command pool;
-        // and the graph's one descriptor pool.
+        // per slot a constant buffer for the frame group's block and one for each of the three passes' pass blocks; and the
+        // graph's one descriptor pool.
         Assert.Equal(
             actual: candidateCreations,
-            expected: ((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + 1)
+            expected: (((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1)
         );
 
         for (var failAt = 1; (failAt <= candidateCreations); failAt++) {

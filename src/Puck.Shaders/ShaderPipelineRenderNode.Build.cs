@@ -389,10 +389,18 @@ public sealed partial class ShaderPipelineRenderNode {
                 throw new InvalidDataException(message: $"Pass '{declaration.Name}' has no compiled shader.");
             }
 
-            var push = PushConstantBinding(
-                sizeBytes: planned.Parameters.SizeBytes,
-                stages: FrameBlockStages
-            );
+            // A document pass binds its frame and pass groups and pushes nothing; a shader set's pass pushes its one block
+            // and binds its inputs as combined samplers.
+            var grouped = !planned.Parameters.IsPushed;
+            var layout = (grouped
+                ? GroupLayoutOf(planned: planned)
+                : null);
+            var push = (grouped
+                ? null
+                : PushConstantBinding(
+                    sizeBytes: planned.Parameters.SizeBytes,
+                    stages: FrameBlockStages
+                ));
             var device = request.Device;
             var gpu = request.Gpu;
             var primary = (request.DirectX
@@ -405,10 +413,12 @@ public sealed partial class ShaderPipelineRenderNode {
                 pass: declaration,
                 specs: specs
             );
-            Bindings = Descriptors(
-                pass: declaration,
-                specs: specs
-            );
+            Bindings = (grouped
+                ? []
+                : Descriptors(
+                    pass: declaration,
+                    specs: specs
+                ));
 
             if (declaration.Kind == ShaderPipelineDocumentPassKind.Compute) {
                 if (
@@ -430,7 +440,8 @@ public sealed partial class ShaderPipelineRenderNode {
                     description: new GpuComputePipelineDescription(
                         declaration.Name,
                         Bindings,
-                        push
+                        push,
+                        Layout: layout
                     )
                 );
 
@@ -503,7 +514,8 @@ public sealed partial class ShaderPipelineRenderNode {
                     sampled,
                     false,
                     push,
-                    DepthCompareOf(pass: planned)
+                    DepthCompareOf(pass: planned),
+                    layout
                 )
             );
         }

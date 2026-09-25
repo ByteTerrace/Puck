@@ -6,7 +6,7 @@
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
-  "fixtures": ["conversion.graph.json", "discriminating.graph.json", "seed.hlsl", "seed-discriminating.hlsl"],
+  "fixtures": ["conversion.graph.json", "discriminating.graph.json", "seed.hlsl", "seed.hlsli", "seed-discriminating.hlsl"],
   "positive": {
     "world": "tests/Puck.World.Canaries/source-conversion/fixture.world.json",
     "script": "conversion.script.txt",

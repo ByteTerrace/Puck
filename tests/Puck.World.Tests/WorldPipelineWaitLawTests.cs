@@ -29,7 +29,7 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
 
         Directory.CreateDirectory(path: tools);
         File.WriteAllText(
-            contents: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }",
+            contents: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { output[id.xy] = 0; }",
             path: Path.Combine(
                 path1: m_directory,
                 path2: "pass.hlsl"

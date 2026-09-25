@@ -77,30 +77,6 @@ public sealed partial class ShaderPipelineCompiler {
             return false;
         }
     }
-    // Assign omitted descriptors once, before making the immutable plan. Explicit slots are reserved first,
-    // so a late explicit binding never collides with an earlier implicit one. Compute outputs lead inputs;
-    // graphics outputs are attachments, not descriptors. A package binds its own descriptors, so the caller leaves its
-    // passes as they are.
-    private static ShaderPipelinePass ResolveBindings(ShaderPipelinePass pass) {
-        var used = pass.InputReferences.Concat(second: ((pass.Kind == ShaderPipelineDocumentPassKind.Compute)
-            ? pass.OutputReferences
-            : []))
-            .Where(predicate: static reference => reference.Binding.HasValue).Select(selector: static reference => reference.Binding!.Value).ToHashSet();
-        var next = 0U;
-
-        ResourceReference Resolve(ResourceReference reference) {
-            if (reference.Binding.HasValue) { return reference; }
-            while (used.Contains(item: next)) { next = checked((next + 1)); }
-            used.Add(item: next);
-            return reference with { Binding = next };
-        }
-        var outputs = ((pass.Kind == ShaderPipelineDocumentPassKind.Compute)
-            ? pass.OutputReferences.Select(selector: Resolve).ToArray()
-            : pass.OutputReferences.ToArray()
-        );
-
-        return pass with { Outputs = outputs, Inputs = pass.InputReferences.Select(selector: Resolve).ToArray() };
-    }
     private static List<int> TopologicalOrder(RenderGraphDefinition definition, IReadOnlyList<HashSet<int>> dependencies, List<ShaderPipelineDiagnostic> diagnostics) {
         var remaining = dependencies.Select(selector: static set => set.Count).ToArray();
         var dependents = Enumerable.Range(
@@ -336,24 +312,11 @@ public sealed partial class ShaderPipelineCompiler {
             }
 
             if (pass.IsGraphics) {
-                for (var inputIndex = 0; (inputIndex < pass.InputReferences.Count); inputIndex++) {
-                    if (
-                        (pass.InputReferences[inputIndex].Binding is { } binding) &&
-                        (binding != ((uint)inputIndex))
-                    ) {
-                        Add(
-                            diagnostics,
-                            "SHADERPIPE_GRAPHICS_BINDING",
-                            $"Graphics pass '{pass.Name}' inputs must use consecutive descriptor bindings in input order, starting at zero.",
-                            pass.Name
-                        );
-                    }
-                }
-                if (pass.OutputReferences.Any(predicate: static output => output.Binding.HasValue)) {
+                if (pass.OutputReferences.Any(predicate: static output => (output.As is not null))) {
                     Add(
                         diagnostics,
-                        "SHADERPIPE_GRAPHICS_ATTACHMENT_BINDING",
-                        $"Graphics pass '{pass.Name}' outputs are attachments and cannot declare descriptor bindings.",
+                        "SHADERPIPE_GRAPHICS_ATTACHMENT_AS",
+                        $"Graphics pass '{pass.Name}' outputs are attachments, which its source never names, so none takes \"as\".",
                         pass.Name
                     );
                 }
@@ -385,26 +348,14 @@ public sealed partial class ShaderPipelineCompiler {
                 );
             }
             var bindings = new HashSet<(string Name, bool PreviousFrame)>();
-            var bindingNumbers = new HashSet<uint>();
             var outputs = pass.OutputReferences.Select(selector: static output => output.Name).ToHashSet(comparer: StringComparer.Ordinal);
 
             foreach (var input in pass.InputReferences) {
                 if (!bindings.Add(item: (input.Name, input.PreviousFrame))) {
                     Add(
                         diagnostics,
-                        "SHADERPIPE_DUPLICATE_BINDING",
+                        "SHADERPIPE_DUPLICATE_PORT",
                         $"Pass '{pass.Name}' binds resource '{input.Name}' more than once.",
-                        pass.Name
-                    );
-                }
-                if (
-                    (input.Binding is { } binding) &&
-                    !bindingNumbers.Add(item: binding)
-                ) {
-                    Add(
-                        diagnostics,
-                        "SHADERPIPE_DUPLICATE_BINDING",
-                        $"Pass '{pass.Name}' uses descriptor binding {binding} more than once.",
                         pass.Name
                     );
                 }
@@ -483,18 +434,6 @@ public sealed partial class ShaderPipelineCompiler {
             }
 
             foreach (var output in pass.OutputReferences) {
-                if (
-                    (pass.Kind == ShaderPipelineDocumentPassKind.Compute) &&
-                    (output.Binding is { } binding) &&
-                    !bindingNumbers.Add(item: binding)
-                ) {
-                    Add(
-                        diagnostics,
-                        "SHADERPIPE_DUPLICATE_BINDING",
-                        $"Pass '{pass.Name}' uses descriptor binding {binding} more than once.",
-                        pass.Name
-                    );
-                }
                 if (!resources.ContainsKey(key: output.Name)) {
                     Add(
                         diagnostics,
@@ -818,7 +757,7 @@ public sealed partial class ShaderPipelineCompiler {
     // reaching the planner with its own is refused. The names they bring are the passes whose planned kind is Package.
     // Planning works on a copy whose passes are both, and the plan keeps the graph's shader passes: a package's planned
     // pass carries its step, never its compute shape.
-    internal ShaderPipelinePlan Compile(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePackagePass> packages) {
+    internal ShaderPipelinePlan Compile(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePackagePass> packages, IReadOnlyDictionary<string, ShaderPipelineParameterLayout>? pushed = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: packages);
         var diagnostics = new List<ShaderPipelineDiagnostic>();
@@ -855,11 +794,6 @@ public sealed partial class ShaderPipelineCompiler {
             throw new ShaderPipelineCompilationException(diagnostics: diagnostics);
         }
 
-        definition = definition with {
-            Passes = definition.ShaderPasses.Select(selector: pass => (packageNames.Contains(item: pass.Name)
-            ? pass
-            : ResolveBindings(pass: pass))).ToArray(),
-        };
         var resourceByName = definition.Resources.ToDictionary(
             keySelector: static resource => resource.Name,
             comparer: StringComparer.Ordinal
@@ -971,22 +905,39 @@ public sealed partial class ShaderPipelineCompiler {
                         config: pass.Config,
                         package: pass.Source
                     )
-                    : ShaderPipelineParameterLayout.Resolve(pass: pass));
+                    : (pushed?.GetValueOrDefault(key: pass.Name) ?? ShaderPipelineParameterLayout.Resolve(
+                        pass: pass,
+                        resources: resourceByName
+                    )));
             } catch (InvalidDataException exception) {
                 Add(
                     diagnostics,
                     "SHADERPIPE_INTERFACE",
-                    $"Pass '{pass.Name}' has no frame interface: {exception.Message}",
+                    $"Pass '{pass.Name}' has no interface: {exception.Message}",
                     pass.Name
                 );
                 continue;
             }
 
-            if (parameters.SizeBytes > m_limits.MaxFrameBlockBytes) {
+            if (
+                parameters.IsPushed &&
+                (parameters.SizeBytes > m_limits.MaxFrameBlockBytes)
+            ) {
                 Add(
                     diagnostics,
                     "SHADERPIPE_PUSH_CONSTANT_LIMIT",
                     $"Pass '{pass.Name}' frame block is {parameters.SizeBytes} bytes with its config; the portable limit is {m_limits.MaxFrameBlockBytes} bytes.",
+                    pass.Name
+                );
+            }
+            if (
+                !parameters.IsPushed &&
+                (parameters.SizeBytes > m_limits.MaxPassBlockBytes)
+            ) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_PASS_BLOCK_LIMIT",
+                    $"Pass '{pass.Name}' pass block is {parameters.SizeBytes} bytes with its config; the portable limit is {m_limits.MaxPassBlockBytes} bytes.",
                     pass.Name
                 );
             }
@@ -1074,6 +1025,31 @@ public sealed partial class ShaderPipelineCompiler {
         Package: pass.Source
     );
 
+    /// <summary>Plans a shader set's pass over bytecode built outside the graph: each pass named in
+    /// <paramref name="pushed"/> reads the pushed block given for it (a set's <see cref="ShaderSetManifest.FrameLayout"/>)
+    /// and binds its inputs as combined samplers in input order, in place of the groups a document pass binds.</summary>
+    /// <param name="definition">The graph.</param>
+    /// <param name="pushed">Each shader set pass's pushed layout, by pass name.</param>
+    /// <returns>The plan.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="pushed"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A layout in <paramref name="pushed"/> is not pushed.</exception>
+    public static ShaderPipelinePlan PlanShaderSet(RenderGraphDefinition definition, IReadOnlyDictionary<string, ShaderPipelineParameterLayout> pushed) {
+        ArgumentNullException.ThrowIfNull(argument: pushed);
+
+        if (pushed.Values.FirstOrDefault(predicate: static layout => !layout.IsPushed) is { } bound) {
+            throw new ArgumentException(
+                message: $"A shader set pass reads a pushed block; interface '{bound.Interface.Name}' binds groups.",
+                paramName: nameof(pushed)
+            );
+        }
+
+        return new ShaderPipelineCompiler().Compile(
+            definition: definition,
+            packages: [],
+            pushed: pushed
+        );
+    }
     /// <summary>Convenience static entry point for callers that do not need custom limits.</summary>
     public static ShaderPipelinePlan Plan(RenderGraphDefinition definition) => new ShaderPipelineCompiler().Compile(definition: definition);
     /// <summary>Attempts to compile a definition without throwing for authored validation errors.</summary>

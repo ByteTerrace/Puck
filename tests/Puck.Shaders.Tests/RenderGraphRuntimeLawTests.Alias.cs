@@ -18,13 +18,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 new ShaderPipelinePass(
                     EntryPoint: "main",
                     Inputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "composed"
                     )],
                     Kind: ShaderPipelineDocumentPassKind.Compute,
                     Name: "after",
                     Outputs: [new ResourceReference(
-                        Binding: 1,
                         Name: "image"
                     )],
                     Source: "after.hlsl"

@@ -227,9 +227,25 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => ClearedImages.Add(item: imageHandle);
     public IGpuCommandPool Create() => new FakeCommandPool(created: Create(kind: "command pool"));
-    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => new FakePipeline(created: CreateCompiled(kind: "compute pipeline"));
+    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => new FakePipeline(
+        created: CreateCompiled(kind: "compute pipeline"),
+        layout: description.Layout
+    );
     public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => new FakeModule(created: CreateCompiled(kind: $"{stage} module"));
-    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => throw new NotSupportedException();
+    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) {
+        GpuBufferUsages.Validate(
+            sizeBytes: sizeBytes,
+            usage: usage
+        );
+
+        return new FakeHostBuffer(
+            created: Create(
+                bytes: sizeBytes,
+                kind: $"host {usage} buffer"
+            ),
+            sizeBytes: sizeBytes
+        );
+    }
     public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => new FakeImage(
         created: Create(
             bytes: ((((ulong)width) * height) * TexelBytes(format: format)),
@@ -249,7 +265,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             GraphicsPipelines.Add(item: (renderPass.Description, description));
         }
 
-        return new FakePipeline(created: created);
+        return new FakePipeline(
+            created: created,
+            layout: description.Layout
+        );
     }
     public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
         GpuBufferUsages.Validate(
@@ -430,9 +449,17 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
     public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) { }
-    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
+    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        if (Recording) {
+            DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));
+        }
+    }
     public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
-    public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
+    public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        if (Recording) {
+            DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));
+        }
+    }
 
     /// <summary>One created object: its creation number, kind, handle, the bytes it occupies, and how often it was
     /// disposed.</summary>
@@ -482,6 +509,20 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => throw new NotSupportedException();
         public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged => throw new NotSupportedException();
     }
+    // A host-visible buffer: the bytes a host write puts in it, which a law reads back as the GPU would.
+    private sealed class FakeHostBuffer(Created created, ulong sizeBytes) : IGpuStorageBuffer {
+        public nint BufferHandle => created.Handle;
+        public byte[] Contents { get; } = new byte[sizeBytes];
+        public ulong SizeBytes => sizeBytes;
+
+        public void Dispose() => created.Dispose();
+        public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => Write(
+            data: data,
+            destinationOffsetBytes: 0
+        );
+        public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged =>
+            System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: data).CopyTo(destination: Contents.AsSpan(start: checked((int)destinationOffsetBytes)));
+    }
     private sealed class FakeCommandPool(Created created) : IGpuCommandPool {
         public nint CommandBufferHandle => created.Handle;
 
@@ -509,9 +550,18 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
         public void Dispose() => created.Dispose();
     }
-    private sealed class FakePipeline(Created created) : IGpuComputePipeline, IGpuPipeline {
+    // A pipeline created from a layout has a set layout per group it binds, at its handle plus four plus the group's
+    // ordinal, and zero where it binds none.
+    private sealed class FakePipeline(Created created, GpuPipelineLayoutDescription? layout) : IGpuComputePipeline, IGpuPipeline {
         public nint DescriptorSetLayoutHandle => (created.Handle + 1);
-        public IReadOnlyList<nint> GroupLayoutHandles => [];
+        public IReadOnlyList<nint> GroupLayoutHandles { get; } = ((layout is null)
+            ? []
+            : [.. Enumerable.Range(
+                count: ((int)(layout.Groups.Max(selector: static group => group.Ordinal) + 1)),
+                start: 0
+            ).Select(selector: ordinal => (layout.Groups.Any(predicate: group => (group.Ordinal == ordinal))
+                ? (created.Handle + 4 + ordinal)
+                : 0))]);
         public nint Handle => created.Handle;
         public nint LayoutHandle => (created.Handle + 2);
 

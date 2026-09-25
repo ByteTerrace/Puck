@@ -19,7 +19,7 @@ public sealed class SourceConversionCanaryFixtureTests {
         2 => (126U, 128U, 168U),
         _ => (81U, 90U, 110U),
     };
-    // seed.hlsl's palette region: entry i = (i, 255 - i, 3i mod 256, 255), index 5 + 64 (x / 16) + 128 (y / 16), shifted
+    // seed.hlsli's palette region: entry i = (i, 255 - i, 3i mod 256, 255), index 5 + 64 (x / 16) + 128 (y / 16), shifted
     // by one in the discriminating leg.
     private static byte[] PaletteRegion(uint indexBase) {
         var header = ImageSourceUploadLayout.HeaderOf(
@@ -62,7 +62,7 @@ public sealed class SourceConversionCanaryFixtureTests {
 
         return region;
     }
-    // seed.hlsl's NV12 region, limited range under the matrix its header names.
+    // seed.hlsli's NV12 region, limited range under the matrix its header names.
     private static byte[] Nv12Region(ImageYuvMatrix matrix) {
         var header = ImageSourceUploadLayout.HeaderOf(
             color: ImageColorEncoding.Yuv(

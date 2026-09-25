@@ -63,7 +63,6 @@ public sealed class ShaderPipelineVersionLawTests {
         ShaderPipelinePass[] written = [
             Fullscreen(
                 inputs: [new ResourceReference(
-                    Binding: 0,
                     Name: "c2"
                 )],
                 name: "sample",
@@ -73,7 +72,6 @@ public sealed class ShaderPipelineVersionLawTests {
                 inputs: [],
                 name: "second",
                 outputs: [new ResourceReference(
-                    Binding: 0,
                     Name: "c2"
                 )]
             ),
@@ -81,18 +79,15 @@ public sealed class ShaderPipelineVersionLawTests {
                 inputs: [],
                 name: "first",
                 outputs: [new ResourceReference(
-                    Binding: 0,
                     Name: "c1"
                 )]
             ),
             Compute(
                 inputs: [new ResourceReference(
-                    Binding: 1,
                     Name: "c0"
                 )],
                 name: "peek",
                 outputs: [new ResourceReference(
-                    Binding: 0,
                     Name: "peeked"
                 )]
             ),
@@ -100,7 +95,6 @@ public sealed class ShaderPipelineVersionLawTests {
                 inputs: [],
                 name: "seed",
                 outputs: [new ResourceReference(
-                    Binding: 0,
                     Name: "c0"
                 )]
             ),
@@ -194,7 +188,7 @@ public sealed class ShaderPipelineVersionLawTests {
         // peek samples c0, which first overwrites, and also samples c1, which first writes: it can run neither before nor
         // after the overwrite.
         var diagnostics = Refusal(definition: Chain(passes: passes => [.. passes.Select(selector: static pass => ((pass.Name == "peek")
-            ? (pass with { Inputs = [new ResourceReference(Binding: 1, Name: "c0"), new ResourceReference(Binding: 2, Name: "c1")] })
+            ? (pass with { Inputs = [new ResourceReference(Name: "c0"), new ResourceReference(Name: "c1")] })
             : pass))]));
         var cycle = Assert.Single(collection: diagnostics, predicate: static diagnostic => (diagnostic.Code == "SHADERPIPE_CYCLE"));
 
@@ -243,7 +237,7 @@ public sealed class ShaderPipelineVersionLawTests {
                 resources: resources
             )),
             "branch" => Chain(
-                passes: static passes => [.. passes, Compute(inputs: [], name: "fork", outputs: [new ResourceReference(Binding: 0, Name: "fork")])],
+                passes: static passes => [.. passes, Compute(inputs: [], name: "fork", outputs: [new ResourceReference(Name: "fork")])],
                 resources: static resources => [.. resources, Image(from: "c0", name: "fork")],
                 outputs: ["image", "peeked", "fork"]
             ),
@@ -254,10 +248,10 @@ public sealed class ShaderPipelineVersionLawTests {
                 resources: resources
             )),
             "previous-frame-read-of-a-consumed-version" => Chain(passes: static passes => [.. passes.Select(selector: static pass => ((pass.Name == "peek")
-                ? (pass with { Inputs = [new ResourceReference(Binding: 1, Name: "c0"), new ResourceReference(Binding: 2, Name: "c1", PreviousFrame: true)] })
+                ? (pass with { Inputs = [new ResourceReference(Name: "c0"), new ResourceReference(Name: "c1", PreviousFrame: true)] })
                 : pass))]),
             "sampled-while-overwritten" => Chain(passes: static passes => [.. passes.Select(selector: static pass => ((pass.Name == "second")
-                ? (pass with { Inputs = [new ResourceReference(Binding: 1, Name: "c1")] })
+                ? (pass with { Inputs = [new ResourceReference(Name: "c1")] })
                 : pass))]),
             "kind" => Chain(resources: resources => Replace(
                 change: static resource => new ShaderPipelineResource(From: "c0", Kind: ShaderPipelineResourceKind.Buffer, Name: resource.Name, SizeBytes: 16),
@@ -270,7 +264,7 @@ public sealed class ShaderPipelineVersionLawTests {
                 resources: resources
             )),
             "unwritten" => Chain(
-                passes: static passes => [.. passes, Compute(inputs: [], name: "zed", outputs: [new ResourceReference(Binding: 0, Name: "z1")])],
+                passes: static passes => [.. passes, Compute(inputs: [], name: "zed", outputs: [new ResourceReference(Name: "z1")])],
                 resources: static resources => [.. resources, Image(initialization: ShaderPipelineInitialization.Zero, name: "z0"), Image(from: "z0", name: "z1")],
                 outputs: ["image", "peeked", "z1"]
             ),

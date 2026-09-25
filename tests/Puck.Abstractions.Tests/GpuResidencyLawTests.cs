@@ -216,7 +216,8 @@ public sealed class GpuResidencyLawTests {
                 copyPipeline: copy,
                 policy: policy,
                 recorder: gpu.Services.Recorder,
-                slotCount: Slots
+                slotCount: Slots,
+                usage: GpuBufferUsage.Storage
             );
             var expected = new byte[ByteCount];
             var frames = new List<byte[]>();
@@ -279,7 +280,8 @@ public sealed class GpuResidencyLawTests {
             copyPipeline: copy,
             policy: GpuResidencyPolicy.Staged,
             recorder: gpu.Services.Recorder,
-            slotCount: 2
+            slotCount: 2,
+            usage: GpuBufferUsage.Storage
         );
 
         region.Flush(slot: 0);
@@ -293,7 +295,8 @@ public sealed class GpuResidencyLawTests {
             copyPipeline: copy,
             policy: GpuResidencyPolicy.Ring,
             recorder: gpu.Services.Recorder,
-            slotCount: 2
+            slotCount: 2,
+            usage: GpuBufferUsage.Storage
         ));
     }
     [InlineData(GpuResidencyPolicy.InPlace)]
@@ -310,7 +313,8 @@ public sealed class GpuResidencyLawTests {
             copyPipeline: copy,
             policy: policy,
             recorder: gpu.Services.Recorder,
-            slotCount: 3
+            slotCount: 3,
+            usage: GpuBufferUsage.Storage
         );
 
         Assert.Equal(
@@ -319,6 +323,52 @@ public sealed class GpuResidencyLawTests {
                 ? [GpuRegion.CopyPoolSizes(slotCount: 3)]
                 : [])
         );
+    }
+
+    /// <summary>A uniform region is a constant buffer of whole 256-byte views that a host writes: under the ring and in
+    /// place it needs no copy kernel and gives each slot its buffer, and it is refused staged or at a size a
+    /// constant-buffer view cannot take. A staged region of either usage is refused without its copy kernel.</summary>
+    [Fact]
+    public void AUniformRegionIsAHostWrittenConstantBufferOfWholeViews() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        var alignment = ((int)IGpuBindings.ConstantBufferAlignment);
+
+        GpuRegion Uniform(GpuResidencyPolicy policy, int byteCount) => new(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: byteCount,
+            copyPipeline: null,
+            policy: policy,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2,
+            usage: GpuBufferUsage.Uniform
+        );
+
+        using (var ring = Uniform(policy: GpuResidencyPolicy.Ring, byteCount: alignment)) {
+            Assert.NotSame(
+                expected: ring.Buffer(slot: 0),
+                actual: ring.Buffer(slot: 1)
+            );
+        }
+        using (var inPlace = Uniform(policy: GpuResidencyPolicy.InPlace, byteCount: (alignment * 2))) {
+            Assert.Same(
+                expected: inPlace.Buffer(slot: 0),
+                actual: inPlace.Buffer(slot: 1)
+            );
+        }
+
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Uniform(policy: GpuResidencyPolicy.Staged, byteCount: alignment));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Uniform(policy: GpuResidencyPolicy.Ring, byteCount: (alignment - 4)));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: null,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2,
+            usage: GpuBufferUsage.Storage
+        ));
     }
 
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {

@@ -3,12 +3,14 @@ using System.Numerics;
 namespace Puck.Shaders;
 
 /// <summary>
-/// The pass interface a pipeline pass reads its frame data through: the frame group's members every pass shares, then
-/// the pass's config fields in ordinal name order. The engine derives it from the pass declaration, generates the
-/// declarations a source includes as <c>&lt;interface&gt;.interface.hlsli</c> (<see cref="IncludeFileName"/>), and writes
-/// the block each frame through <see cref="ShaderPipelineParameterLayout.WriteFrame"/>. The block is delivered as push
-/// constants (<see cref="ShaderInterface.PushConstants"/>), and every member is a value, so a pass reads
-/// <c>frameGroup.time</c>, <c>frameGroup.extent</c> or a config field such as <c>frameGroup.decay</c>.
+/// The pass interface a pipeline pass reads its frame data and its ports through. The engine derives it from the pass
+/// declaration, generates the declarations a source includes as <c>&lt;interface&gt;.interface.hlsli</c>
+/// (<see cref="IncludeFileName"/>), and writes the frame values each frame through
+/// <see cref="ShaderPipelineParameterLayout.WriteFrame"/>. A document pass binds two groups (<see cref="ForPass"/>): the
+/// frame group every pass of a node shares at set 0, and its own pass group at set 3, whose block holds its extent and
+/// config and whose bindings are its ports, so it reads <c>frameGroup.time</c>, <c>passGroup.extent</c> or a config
+/// field such as <c>passGroup.decay</c>. An engine package and a shader set read one pushed block instead
+/// (<see cref="Pushed"/>).
 /// </summary>
 public static class ShaderFrameInterface {
     /// <summary>The frame member holding the pass's output extent in pixels, width then height (<c>uint2</c>).</summary>
@@ -43,9 +45,9 @@ public static class ShaderFrameInterface {
     /// <summary>The frame member holding the paired camera's up direction (<c>float3</c>).</summary>
     public const string CameraUp = "cameraUp";
 
-    /// <summary>Gets the frame group's members, in declaration order. A pass's config fields follow them.</summary>
-    public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
-        Value(name: Extent, type: ShaderValueType.Uint2),
+    /// <summary>Gets the frame group's members: the values every pass of a node shares each frame, in declaration
+    /// order.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> FrameGroupMembers { get; } = [
         Value(name: Pointer, type: ShaderValueType.Float2),
         Value(name: Tick, type: ShaderValueType.Uint2),
         Value(name: Time, type: ShaderValueType.Float),
@@ -59,28 +61,71 @@ public static class ShaderFrameInterface {
         Value(name: CameraTarget, type: ShaderValueType.Float3),
         Value(name: CameraUp, type: ShaderValueType.Float3),
     ];
+    /// <summary>Gets the members a pushed frame block holds before its config: the pass's extent, then every frame group
+    /// member, in declaration order.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> PushedMembers { get; } = [
+        Value(name: Extent, type: ShaderValueType.Uint2),
+        .. FrameGroupMembers,
+    ];
 
-    /// <summary>Creates the interface of a pass: the frame members, then each config field as a frame-group value in
-    /// ordinal name order, with the frame group pushed.</summary>
+    /// <summary>Creates the interface of a document pass: the frame group (<see cref="FrameGroupMembers"/>), bound at set
+    /// 0; then the pass group at set 3, whose block holds the pass's <see cref="Extent"/> and each config field in
+    /// ordinal name order, followed by the pass's ports in the order given. Nothing is pushed, so a pass reads
+    /// <c>frameGroup.time</c>, <c>passGroup.extent</c> or a config field such as <c>passGroup.decay</c>, and its ports
+    /// by their generated names.</summary>
     /// <param name="name">The interface's name (<see cref="NameOf"/>).</param>
     /// <param name="config">The pass's config schema, or <see langword="null"/> when it has none.</param>
+    /// <param name="ports">The pass's port members, each in <see cref="ShaderInterfaceGroup.Pass"/>, in document order.</param>
+    /// <returns>The interface.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="ports"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException"><paramref name="name"/> is not an interface name, a config field's or
+    /// port's name is not an identifier or repeats another member's, or a port is not in the pass group.</exception>
+    public static ShaderInterface ForPass(string name, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> ports) {
+        ArgumentNullException.ThrowIfNull(argument: ports);
+
+        var members = new List<ShaderInterfaceMember>(collection: FrameGroupMembers) {
+            ShaderInterfaceMember.Value(
+                group: ShaderInterfaceGroup.Pass,
+                name: Extent,
+                type: ShaderValueType.Uint2
+            ),
+        };
+
+        AddConfig(
+            config: config,
+            group: ShaderInterfaceGroup.Pass,
+            members: members
+        );
+
+        foreach (var port in ports) {
+            if (port?.Group != ShaderInterfaceGroup.Pass) {
+                throw new InvalidDataException(message: $"Shader interface '{name}' port '{port?.Name}' is not in the pass group.");
+            }
+
+            members.Add(item: port);
+        }
+
+        return new ShaderInterface(
+            members: members,
+            name: name
+        );
+    }
+    /// <summary>Creates the interface of a block delivered as push constants: <see cref="PushedMembers"/>, then each
+    /// config field in ordinal name order, all in the frame group, which is pushed. An engine package and a shader set
+    /// read their frame data this way; a document pass binds groups instead (<see cref="ForPass"/>).</summary>
+    /// <param name="name">The interface's name (<see cref="NameOf"/>).</param>
+    /// <param name="config">The config schema, or <see langword="null"/> when there is none.</param>
     /// <returns>The interface.</returns>
     /// <exception cref="InvalidDataException"><paramref name="name"/> is not an interface name, or a config field's name
     /// is not an identifier or repeats a frame member's.</exception>
-    public static ShaderInterface For(string name, IReadOnlyDictionary<string, ShaderConfigField>? config) {
-        var members = new List<ShaderInterfaceMember>(collection: Members);
+    public static ShaderInterface Pushed(string name, IReadOnlyDictionary<string, ShaderConfigField>? config) {
+        var members = new List<ShaderInterfaceMember>(collection: PushedMembers);
 
-        if (config is not null) {
-            foreach (var (field, declared) in config.OrderBy(
-                comparer: StringComparer.Ordinal,
-                keySelector: static pair => pair.Key
-            )) {
-                members.Add(item: Value(
-                    name: field,
-                    type: declared.Type
-                ));
-            }
-        }
+        AddConfig(
+            config: config,
+            group: ShaderInterfaceGroup.Frame,
+            members: members
+        );
 
         return new ShaderInterface(
             members: members,
@@ -113,6 +158,23 @@ public static class ShaderFrameInterface {
             : fileName[..dot]);
     }
 
+    // Each config field as a value of the group, in ordinal name order.
+    private static void AddConfig(IReadOnlyDictionary<string, ShaderConfigField>? config, ShaderInterfaceGroup group, List<ShaderInterfaceMember> members) {
+        if (config is null) {
+            return;
+        }
+
+        foreach (var (field, declared) in config.OrderBy(
+            comparer: StringComparer.Ordinal,
+            keySelector: static pair => pair.Key
+        )) {
+            members.Add(item: ShaderInterfaceMember.Value(
+                group: group,
+                name: field,
+                type: declared.Type
+            ));
+        }
+    }
     private static ShaderInterfaceMember Value(string name, ShaderValueType type) =>
         ShaderInterfaceMember.Value(
             group: ShaderInterfaceGroup.Frame,

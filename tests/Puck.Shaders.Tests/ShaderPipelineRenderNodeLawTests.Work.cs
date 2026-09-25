@@ -17,17 +17,19 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     // their zeros would be unobservable and are not cleared. Convert moves history to shader-read and gray to general.
     // The fullscreen copy moves gray to shader-read and its target to render-target in its one barrier command buffer;
     // its render pass leaves the target shader-readable, and publication, outside every pass, moves it to the output
-    // layout. Every pass pushes its 96-byte frame block.
+    // layout. Every pass binds its frame group set and its pass group set and pushes nothing. Outside every pass the
+    // node flushes the words of the frame group's and the passes' blocks that changed since the slot last flushed them:
+    // here only the frame counter's four bytes.
     internal static readonly string[] InitializationWork = [
-        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=3 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=1",
-        "work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
-        "work copy executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=2 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=1 uploads.host-visible=0 clears=0",
-        "work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0",
+        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=3 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=1",
+        "work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0",
+        "work copy executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=2 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=1 uploads.host-visible=0 clears=0",
+        "work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=4 clears=0",
     ];
     // The next submission: nothing is cleared, the previous history is already shader-read, and the slot written next
     // was discarded by the reset, so accumulate transitions it to general.
     internal static readonly string[] SecondWork = [
-        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
+        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0",
         InitializationWork[1],
         InitializationWork[2],
         InitializationWork[3],
@@ -35,7 +37,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     // Once every slot has cycled, the slot accumulate writes was last read as shader-read, so it takes the planned
     // transition back to general.
     internal static readonly string[] SteadyWork = [
-        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
+        "work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0",
         InitializationWork[1],
         InitializationWork[2],
         InitializationWork[3],
@@ -398,8 +400,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                 source: source
             )),
             // Per compute pass a pipeline and a module, two modules and one graphics pipeline for the fullscreen pass, three
-            // slots of the history, gray and drawn images, the graph's one descriptor pool, and a set per pass and slot.
-            expected: ["work lifetime: created.pipelines=3 created.shader-modules=4 created.images=9 created.buffers=0 created.descriptor-pools=1 created.descriptor-sets=9"]
+            // slots of the history, gray and drawn images, three slots of the frame group's and each pass's constant buffer,
+            // the graph's one descriptor pool, and per pass and slot a frame group set and a pass group set.
+            expected: ["work lifetime: created.pipelines=3 created.shader-modules=4 created.images=9 created.buffers=12 created.descriptor-pools=1 created.descriptor-sets=18"]
         );
         Assert.Equal(
             actual: source.WorkKinds.ToArray(),

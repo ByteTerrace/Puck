@@ -55,6 +55,26 @@ public sealed class ShaderPipelineLoader {
         m_compiler = compiler;
     }
 
+    // The texts a pass's ports are named in: its source and every include it reaches but its generated interface. A
+    // closure the compiler would refuse has none, so the compile reports that refusal by its own name.
+    private static IEnumerable<string>? PortTexts((string Path, string Text) generated, string source, string sourcePath) {
+        try {
+            var closure = ShaderSourceClosure.Collect(
+                generated: new Dictionary<string, string>(comparer: PuckPaths.Comparer) { [generated.Path] = generated.Text },
+                limits: ShaderSourceLimits.Default,
+                sources: [(sourcePath, source)]
+            );
+
+            return [source, .. closure.Contents
+                .Where(predicate: pair => !PuckPaths.Comparer.Equals(
+                    x: pair.Key,
+                    y: generated.Path
+                ))
+                .Select(selector: static pair => pair.Value)];
+        } catch (ShaderClosureRefusedException) {
+            return null;
+        }
+    }
     private static bool SourcesMatch(IReadOnlyDictionary<string, string> hashes) {
         try {
             foreach (var (path, expected) in hashes) {
@@ -136,6 +156,26 @@ public sealed class ShaderPipelineLoader {
                     pass: planned,
                     sourcePath: sourcePath
                 );
+
+                if (
+                    !planned.Parameters.IsPushed &&
+                    (PortTexts(
+                        generated: generated,
+                        source: sourceTexts[sourcePath],
+                        sourcePath: sourcePath
+                    ) is { } texts) &&
+                    (ShaderPipelinePassPorts.UnnamedPort(
+                        pass: pass,
+                        texts: texts
+                    ) is { } unnamed)
+                ) {
+                    return new ShaderPipelineLoadResult(
+                        Dependencies: dependencies.ToArray(),
+                        Message: $"[SHADERPIPE_INTERFACE] {unnamed}",
+                        Pipeline: null,
+                        Status: ShaderPipelineLoadStatus.Failed
+                    );
+                }
                 var request = new ShaderCompilationRequest(
                     generatedIncludes: new Dictionary<string, string>(comparer: PuckPaths.Comparer) { [generated.Path] = generated.Text },
                     name: pass.Name,
@@ -183,6 +223,20 @@ public sealed class ShaderPipelineLoader {
                         Pipeline: null,
                         Status: ShaderPipelineLoadStatus.Failed
                     );
+                }
+                // A document pass binds where its interface places it; a source that declares a binding of its own
+                // anywhere else is refused by name here, before any device sees it.
+                if (!planned.Parameters.IsPushed) {
+                    foreach (var (stage, module) in shader.SpirvByStage) {
+                        if (planned.Parameters.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: module.Span)) is { } mismatch) {
+                            return new ShaderPipelineLoadResult(
+                                Dependencies: dependencies.ToArray(),
+                                Message: $"[SHADERPIPE_INTERFACE] Pass '{pass.Name}' {stage}: {mismatch}",
+                                Pipeline: null,
+                                Status: ShaderPipelineLoadStatus.Failed
+                            );
+                        }
+                    }
                 }
                 shaders.Add(
                     key: pass.Name,

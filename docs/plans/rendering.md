@@ -1711,10 +1711,11 @@ Phase 3, the groups, follows phase 2:
     `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
     planners and the spike's interfaces to the same tables. The combined image
     sampler that `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`
-    still state is not in the closed set, so their users, and the 15 sources
-    declaring `vk::combinedImageSampler` (8 under `src` and 7 canary shaders),
-    move to a separate image and sampler with 14b's sampler tables, and both
-    enums are deleted there.
+    still state is not in the closed set, so their users, and the 4 sources
+    still declaring `vk::combinedImageSampler` (the overlay, film grain and the
+    SDF engine's `sdf-vm.hlsli` and `sdf-world.hlsli`), move to a separate
+    image and sampler with 14b's sampler tables, and both enums are deleted
+    there.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
     of it (14a). Both backends then realize several groups, with sampler
     tables and one 4-byte push range (14b), the riskiest step, which lands as
@@ -1906,20 +1907,14 @@ Phase 3, the groups, follows phase 2:
       `world-seat-binding-recompose`, and the windowed `post-pass`,
       `view-screens`, `hud-frame-slots` and `device-loss-windowed`, which draw
       through the presenter.
-    - 14b-3, the pipeline node and the sources it runs, lands with step 15,
-      not before it. Every pipeline pass pushes its whole frame block, and a
-      separate sampler is stated only through a pipeline description's
-      `Layout`, which pushes nothing but a 4-byte index
-      (`RequireLayout` refuses a push-constant binding beside it); the
-      legacy binding list has no sampler kind, and adding one would patch
-      `GpuComputeBindingKind`, which 14b-7 deletes. So the node's sources
-      split their samplers when the frame block moves into the frame group:
-      `ShaderPipelineRenderNode` and its float preview
-      (`pipeline-preview.frag.hlsl`), the shipped ink pipeline
-      (`ink-simulation.hlsl`, `ink-visualize.hlsl`), the package library's
-      `resample.hlsl`, `PostProcessPackage`'s writes, and the seven canary
-      sources under `pipeline-edit`, `pipeline-feedback`, `pipeline-shapes`
-      and `pipeline-supersede`. Canaries: `no-device-compile`, every
+    - 14b-3, done with step 15: the pipeline node and the sources it runs.
+      A separate sampler is stated only through a pipeline description's
+      `Layout`, which pushes nothing but a 4-byte index, so the node's sources
+      split their samplers as their frame block moved into the frame group.
+      Every document pass reads a `Texture2D` and a `SamplerState` its
+      generated interface declares; the float preview
+      (`pipeline-preview.frag.hlsl`) reads a separate image and sampler in
+      the pass group, set 3. Canaries: `no-device-compile`, every
       `pipeline-*`, `source-conversion` and `resample-reconstruction`.
     - 14b-4, the overlay: `overlay-unified.frag.hlsl`'s nineteen combined
       declarations and `UnifiedOverlayNode`'s pool. Canaries:
@@ -1934,21 +1929,27 @@ Phase 3, the groups, follows phase 2:
       `SdfWorldEngine.Pipelines.cs`. Canaries: 20 mapped, the 14b-5 set
       without `sdf-decode-sign-refusal`, plus `sdf-visibility-fresh`, which
       the index has not recorded yet. The package library's `resample.hlsl`,
-      which took the SDF-side kernel's place, moves with the pipeline node's
-      sources in 14b-3, with step 15.
+      which took the SDF-side kernel's place, moved with the pipeline node's
+      sources in 14b-3.
     - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
       then states a `GpuBindingKind`, `ShaderSetManifestBindingKind`, and
       `GpuDescriptorPoolSizes.CombinedImageSamplerCount`, with their last
       users in `GpuRegion`, the backends' pipeline factories and the
       contract and wire-name laws. Canaries: the 19 `GpuDescriptorPoolSizes`
       and `GpuRegion` map to.
-15. Pipelines move onto groups: `WriteFrame` writes the frame group, set 0, into
-    a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
-    3; passes include their generated interface; the graph document's
-    binding fields are deleted; and a load checks `SHADERPIPE_INTERFACE`.
-    14b-3 lands here: each of the node's sources declares a separate image and
-    sampler, the sampler at the binding after its image, as the spike's film
-    grain table does.
+15. Done: pipelines are on groups. `WriteFrame` writes the frame group, set 0,
+    into a per-node frame `GpuRegion` of uniform usage, a ring of whole
+    constant-buffer views; each pass's extent and config form its pass block at
+    `b0` of set 3, in a region of its own, followed by its ports in document
+    order, each image input's sampler at the binding after its image. Every
+    pass includes its generated interface, and the graph document names no
+    binding: a port reads as its resource's name in camel case or its
+    `"as"`, and a load refuses by name, as `SHADERPIPE_INTERFACE`, a source
+    that never names a port, two ports reading as one identifier, an `"as"`
+    that is not an identifier, and a module whose reflected bindings differ
+    from its interface's layout. Each pass is created through its interface's
+    `PipelineLayout` and binds its two sets by group. 14b-3 landed here.
+    Shader sets and package passes still push one block until step 18.
 16. The gate spike's GPU half, a binding station in `tests/Puck.Parity`.
 17. The region-copy kernel leaves the SDF engine for `Puck.Shaders`.
 18. The overlay and fullscreen passes move onto groups.
@@ -2660,12 +2661,12 @@ independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
 **Contracts.** P7's memory profile and residency selector have landed, and P7b
-is under way: steps 5, 7, 8, 9 and 12 have landed. Step 6 needs nothing else;
+is under way: steps 5, 7, 8, 9, 12, 13 and 15 have landed. Step 6 needs nothing else;
 steps 10 and 11 follow step 9. The groups run in order from step 13, the
 GPU-free group contract, which the rest of phase 3 builds on; step 20, the SDF
 engine's groups, also follows P4-1. P8 has landed pending its GPU canaries, and
-its frame group moves from push constants to a descriptor set when step 15
-puts pipelines on groups. P7 and P8 do not read simulation state, so they do
+its frame group became a descriptor set when step 15 put pipelines on
+groups. P7 and P8 do not read simulation state, so they do
 not wait on the state rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have five

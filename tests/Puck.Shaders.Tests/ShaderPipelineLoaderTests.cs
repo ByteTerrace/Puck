@@ -45,7 +45,7 @@ public sealed class ShaderPipelineLoaderTests {
                 path1: fixture.Directory,
                 path2: pass.Source
             ),
-            "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }"
+            $"[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) {{ {pass.Name}[id.xy] = {string.Concat(values: pass.InputReferences.Select(selector: static input => $"{input.Name}[id.xy] + "))}0; }}"
         );
         }
         var path = Path.Combine(
@@ -105,7 +105,7 @@ public sealed class ShaderPipelineLoaderTests {
         );
 
         File.WriteAllText(
-            contents: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }",
+            contents: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { output[id.xy] = 0; }",
             path: source
         );
         var runner = new Runner {
@@ -157,7 +157,7 @@ public sealed class ShaderPipelineLoaderTests {
         );
 
         File.WriteAllText(
-            contents: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }",
+            contents: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { output[id.xy] = 0; }",
             path: source
         );
         var loader = new ShaderPipelineLoader(compiler: new ShaderCompiler(
@@ -198,7 +198,7 @@ public sealed class ShaderPipelineLoaderTests {
         );
 
         File.WriteAllText(
-            contents: "#include \"shared.hlsli\"\n[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }",
+            contents: "#include \"shared.hlsli\"\n[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { output[id.xy] = 0; }",
             path: source
         );
         File.WriteAllText(
@@ -273,9 +273,12 @@ public sealed class ShaderPipelineLoaderTests {
             }
             for (var index = 0; ((index + 1) < arguments.Count); index++) {
                 if (arguments[index] is "-Fo" or "-o" or "--output") {
+                    // A SPIR-V output is a bare module header a reader can walk and finds no binding in; a DXIL one is opaque.
                     File.WriteAllBytes(
                         arguments[(index + 1)],
-                        [1, 2, 3, 4]
+                        (arguments.Any(predicate: static argument => (argument == "-spirv"))
+                            ? [0x03, 0x02, 0x23, 0x07, 0x00, 0x06, 0x01, 0x00, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]
+                            : [1, 2, 3, 4])
                     );
                     break;
                 }

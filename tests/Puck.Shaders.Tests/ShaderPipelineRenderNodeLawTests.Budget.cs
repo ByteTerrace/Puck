@@ -39,13 +39,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                     kind: ShaderPipelineDocumentPassKind.Compute,
                     name: "fill",
                     outputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "gray"
                     )]
                 ),
                 (Pass(
                     inputs: [new ResourceReference(
-                        Binding: 0,
                         Name: "gray"
                     )],
                     kind: ShaderPipelineDocumentPassKind.Fullscreen,

@@ -76,9 +76,10 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
         if (
             (manifest.Bindings.Count != 1) ||
             (manifest.Bindings[0].Kind != ShaderSetManifestBindingKind.SampledImage) ||
-            (manifest.Bindings[0].Count != 1)
+            (manifest.Bindings[0].Count != 1) ||
+            (manifest.Bindings[0].VulkanBinding != 0)
         ) {
-            throw new InvalidDataException(message: $"'{manifest.Name}' must declare exactly one sampledImage binding (the inner surface) and nothing else to run as a fullscreen pass.");
+            throw new InvalidDataException(message: $"'{manifest.Name}' must declare exactly one sampledImage binding, the inner surface at Vulkan binding 0, and nothing else to run as a fullscreen pass.");
         }
 
         m_descriptor = new NodeDescriptor(
@@ -141,10 +142,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             ),
             EntryPoint: "PSMain",
             Kind: ShaderPipelineDocumentPassKind.Fullscreen,
-            Inputs: [new ResourceReference(
-                    "input",
-                    Binding: m_manifest.Bindings[0].VulkanBinding
-                )],
+            Inputs: [new ResourceReference("input")],
             Outputs: [new ResourceReference("output")],
             Vertex: ShaderPipelineVertexInput.Position,
             Config: ConfigDefaultingTo(values: m_config)
@@ -155,7 +153,17 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             [pass],
             ["output"]
         );
-        var plan = ShaderPipelineCompiler.Plan(definition: definition);
+        // The set's bytecode reads its pushed block and its input as a combined sampler at binding 0, the first input's,
+        // over the config the pass carries.
+        var plan = ShaderPipelineCompiler.PlanShaderSet(
+            definition: definition,
+            pushed: new Dictionary<string, ShaderPipelineParameterLayout>(comparer: StringComparer.Ordinal) {
+                [pass.Name] = ShaderPipelineParameterLayout.Pushed(
+                    config: pass.Config,
+                    interfaceName: m_manifest.FrameLayout.Interface.Name
+                ),
+            }
+        );
 
         m_loadWork.Count(kind: Loads);
 

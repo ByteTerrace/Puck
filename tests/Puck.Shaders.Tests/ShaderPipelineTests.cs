@@ -6,8 +6,10 @@ using Puck.Hosting;
 namespace Puck.Shaders.Tests;
 
 public sealed class ShaderPipelineTests {
-    // Where the frame members end and a pass's first config field can start: cameraUp, a float3 at 80.
-    private const uint FrameMembersEnd = 92;
+    // Where a pass's first config field can start in its pass block: after the extent, a uint2 at 0.
+    private const uint ExtentEnd = 8;
+    // The resources a pass of these tests writes.
+    private static readonly IReadOnlyDictionary<string, ShaderPipelineResource> OutResources = new Dictionary<string, ShaderPipelineResource>(comparer: StringComparer.Ordinal) { ["out"] = Image(name: "out") };
 
     private static ShaderPipelineResource Image(
         string name,
@@ -347,7 +349,7 @@ public sealed class ShaderPipelineTests {
         ));
     }
     [Fact]
-    public void Parameter_layout_binds_defaults_after_the_frame_members() {
+    public void Parameter_layout_binds_defaults_after_the_pass_extent() {
         var config = new Dictionary<string, ShaderConfigField> {
             ["amount"] = new ShaderConfigField(
             ShaderValueType.Float,
@@ -363,10 +365,13 @@ public sealed class ShaderPipelineTests {
             [],
             ["out"]
         ) with { Config = config };
-        var layout = ShaderPipelineParameterLayout.Resolve(pass: pass);
+        var layout = ShaderPipelineParameterLayout.Resolve(
+            pass: pass,
+            resources: OutResources
+        );
 
         Assert.Equal(
-            expected: FrameMembersEnd,
+            expected: ExtentEnd,
             actual: layout.Slots[0].Offset
         );
         Assert.True(
@@ -399,27 +404,30 @@ public sealed class ShaderPipelineTests {
             ["aScalar"] = new ShaderConfigField(ShaderValueType.Float),
             ["mVector"] = new ShaderConfigField(ShaderValueType.Float3),
         };
-        var layout = ShaderPipelineParameterLayout.Resolve(pass: Pass(
-            "configured",
-            [],
-            ["out"]
-        ) with { Config = config });
+        var layout = ShaderPipelineParameterLayout.Resolve(
+            pass: (Pass(
+                "configured",
+                [],
+                ["out"]
+            ) with { Config = config }),
+            resources: OutResources
+        );
 
         Assert.Equal(
             expected: ["aScalar", "mVector", "zVector"],
             actual: layout.Slots.Select(selector: slot => slot.Name)
         );
-        // A float3 starts a 16-byte row and a float2 an 8-byte boundary, whatever the frame members before them.
+        // A float3 starts a 16-byte row and a float2 an 8-byte boundary, whatever the extent before them.
         Assert.Equal(
-            expected: FrameMembersEnd,
+            expected: ExtentEnd,
             actual: layout.Slots[0].Offset
         );
         Assert.Equal(
-            expected: 96u,
+            expected: 16u,
             actual: layout.Slots[1].Offset
         );
         Assert.Equal(
-            expected: 112u,
+            expected: 32u,
             actual: layout.Slots[2].Offset
         );
     }
@@ -589,20 +597,59 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
-    public void Planner_rejects_config_blocks_that_exceed_portable_push_constant_budget() {
+    public void Planner_rejects_a_pushed_block_that_exceeds_the_portable_push_constant_budget() {
+        var pass = Pass(
+            "draw",
+            [],
+            ["out"]
+        ) with {
+            Config = new Dictionary<string, ShaderConfigField> {
+                ["a"] = new(ShaderValueType.Float4),
+                ["b"] = new(ShaderValueType.Float4),
+                ["c"] = new(ShaderValueType.Float),
+            },
+        };
         var definition = new RenderGraphDefinition(
             "large-config",
+            [Image("out")],
+            [pass],
+            ["out"]
+        );
+
+        var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => ShaderPipelineCompiler.PlanShaderSet(
+            definition: definition,
+            pushed: new Dictionary<string, ShaderPipelineParameterLayout>(comparer: StringComparer.Ordinal) {
+                ["draw"] = ShaderPipelineParameterLayout.Pushed(
+                    config: pass.Config,
+                    interfaceName: "draw"
+                ),
+            }
+        ));
+
+        Assert.Contains(
+            collection: error.Diagnostics,
+            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_PUSH_CONSTANT_LIMIT")
+        );
+        // The same config fits a document pass's pass block, which it binds as a constant buffer.
+        Assert.Single(collection: new ShaderPipelineCompiler().Compile(definition: definition).Passes);
+    }
+    [Fact]
+    public void Planner_rejects_a_pass_block_that_exceeds_the_portable_uniform_range() {
+        var definition = new RenderGraphDefinition(
+            "huge-config",
             [Image("out")],
             [Pass(
                     "draw",
                     [],
                     ["out"]
                 ) with {
-                Config = new Dictionary<string, ShaderConfigField> {
-                    ["a"] = new(ShaderValueType.Float4),
-                    ["b"] = new(ShaderValueType.Float4),
-                    ["c"] = new(ShaderValueType.Float),
-                },
+                Config = Enumerable.Range(
+                    count: 1024,
+                    start: 0
+                ).ToDictionary(
+                    elementSelector: static _ => new ShaderConfigField(ShaderValueType.Float4),
+                    keySelector: static index => $"field{index}"
+                ),
             }],
             ["out"]
         );
@@ -611,7 +658,7 @@ public sealed class ShaderPipelineTests {
 
         Assert.Contains(
             collection: error.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_PUSH_CONSTANT_LIMIT")
+            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_PASS_BLOCK_LIMIT")
         );
     }
     [Fact]
@@ -788,9 +835,9 @@ public sealed class ShaderPipelineTests {
             2,
             display.InputReferences.Count
         );
-        Assert.NotEqual(
-            display.InputReferences[0].Binding,
-            display.InputReferences[1].Binding
+        Assert.Equal(
+            actual: display.InputReferences.Select(selector: ShaderPipelinePassPorts.Identifier),
+            expected: ["state", "previousState"]
         );
     }
     [Fact]

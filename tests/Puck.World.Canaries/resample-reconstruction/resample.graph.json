@@ -21,15 +21,15 @@
       "source": "seed.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "outputs": [ { "name": "step", "binding": 0 } ]
+      "outputs": [ { "name": "step" } ]
     },
     {
       "name": "resample",
       "source": "../../../src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "inputs": [ { "name": "step", "binding": 1 } ],
-      "outputs": [ { "name": "resampled", "binding": 0 } ],
+      "inputs": [ { "name": "step", "as": "source" } ],
+      "outputs": [ { "name": "resampled", "as": "destination" } ],
       "config": {
         "sharpness": {
           "default": 0,

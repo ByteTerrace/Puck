@@ -219,7 +219,8 @@ internal sealed class FakeGpuDevice :
 
         return new Resource(
             creation: Track(kind: "compute pipeline"),
-            gpu: this
+            gpu: this,
+            groupLayouts: GroupLayoutsOf(layout: description.Layout)
         );
     }
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
@@ -227,7 +228,8 @@ internal sealed class FakeGpuDevice :
 
         return new Resource(
             creation: Track(kind: "graphics pipeline"),
-            gpu: this
+            gpu: this,
+            groupLayouts: GroupLayoutsOf(layout: description.Layout)
         );
     }
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {
@@ -486,7 +488,18 @@ internal sealed class FakeGpuDevice :
 
     // Every resource kind in one: a nonzero handle for each member, the requested extent, and, when the device tracks
     // objects, the creation its disposal releases.
-    private sealed class Resource(FakeGpuDevice gpu, Creation? creation = null, uint width = 1, uint height = 1, ulong sizeBytes = 0) :
+    // The set layout a pipeline created from a layout allocates each group's sets against: 20 plus the group's ordinal
+    // where it binds one, and zero where it binds none; none for a pipeline created without a layout.
+    private static IReadOnlyList<nint> GroupLayoutsOf(GpuPipelineLayoutDescription? layout) => ((layout is null)
+        ? []
+        : [.. Enumerable.Range(
+            count: ((int)(layout.Groups.Max(selector: static group => group.Ordinal) + 1)),
+            start: 0
+        ).Select(selector: ordinal => (layout.Groups.Any(predicate: group => (group.Ordinal == ordinal))
+            ? ((nint)(20 + ordinal))
+            : 0))]);
+
+    private sealed class Resource(FakeGpuDevice gpu, Creation? creation = null, uint width = 1, uint height = 1, ulong sizeBytes = 0, IReadOnlyList<nint>? groupLayouts = null) :
         IGpuCommandPool,
         IGpuComputePipeline,
         IGpuFramebuffer,
@@ -498,7 +511,7 @@ internal sealed class FakeGpuDevice :
         public nint BufferHandle => 3;
         public nint CommandBufferHandle => 2;
         public nint DescriptorSetLayoutHandle => 10;
-        public IReadOnlyList<nint> GroupLayoutHandles => [];
+        public IReadOnlyList<nint> GroupLayoutHandles => (groupLayouts ?? []);
         public GpuRenderPassDescription Description { get; } = new(Colors: [new GpuColorAttachment(FinalLayout: GpuImageLayout.ShaderReadOnly, Format: GpuPixelFormat.R8G8B8A8Unorm, Load: GpuAttachmentLoad.Clear, Store: GpuAttachmentStore.Store)]);
         public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
         public IGpuRenderPass RenderPass => this;

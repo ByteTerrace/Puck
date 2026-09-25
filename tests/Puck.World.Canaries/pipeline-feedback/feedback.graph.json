@@ -29,23 +29,23 @@
       "source": "accumulate.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "inputs": [ { "name": "history", "previousFrame": true, "binding": 1 } ],
-      "outputs": [ { "name": "history", "binding": 0 } ]
+      "inputs": [ { "name": "history", "previousFrame": true } ],
+      "outputs": [ { "name": "history" } ]
     },
     {
       "name": "convert",
       "source": "convert.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "inputs": [ { "name": "history", "binding": 1 } ],
-      "outputs": [ { "name": "gray", "binding": 0 } ]
+      "inputs": [ { "name": "history" } ],
+      "outputs": [ { "name": "gray" } ]
     },
     {
       "name": "copy",
       "source": "copy.hlsl",
       "entryPoint": "main",
       "kind": "Fullscreen",
-      "inputs": [ { "name": "gray", "binding": 0 } ],
+      "inputs": [ { "name": "gray" } ],
       "outputs": [ { "name": "image" } ]
     }
   ],

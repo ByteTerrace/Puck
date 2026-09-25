@@ -90,15 +90,18 @@ public sealed record ShaderPipelineDimensions(
     }
 }
 /// <summary>A pass's reference to one resource version: which version it reads or writes, which frame's instance, and
-/// its descriptor binding.</summary>
+/// the identifier its source reads it by. Where it binds follows from the pass's interface
+/// (<see cref="ShaderPipelinePassPorts"/>), never from the document.</summary>
 /// <param name="Name">The version name.</param>
 /// <param name="PreviousFrame">Reads the contents the previous frame left rather than this frame's. Only a pass input
 /// sets it, and only for a version declared <see cref="ShaderPipelineResource.History"/>.</param>
-/// <param name="Binding">The descriptor binding, or <see langword="null"/> for the planner to assign one.</param>
+/// <param name="As">The HLSL identifier the pass's source reads the port by, or <see langword="null"/> for the
+/// version's name in camel case (<see cref="ShaderPipelinePassPorts.Identifier"/>). A source that several passes bind to
+/// differently named versions names each port the same way with it.</param>
 public sealed record ResourceReference(
     string Name,
     bool PreviousFrame = false,
-    uint? Binding = null
+    string? As = null
 ) {
     /// <summary>Converts the convenient document spelling <c>"name"</c> to a current-frame reference.</summary>
     public static implicit operator ResourceReference(string name) => new(Name: name);
@@ -418,7 +421,7 @@ public sealed record ShaderPipelineGeometry(
 /// pass's fragment stage.</param>
 /// <param name="Kind">Compute, fullscreen graphics, or indexed geometry. A shader pass names no package work, which a
 /// graph declares as a <see cref="RenderGraphPackagePass"/>.</param>
-/// <param name="Inputs">Named resource bindings. Set <see cref="ResourceReference.PreviousFrame"/> explicitly for feedback.</param>
+/// <param name="Inputs">The versions the pass reads, each a port of its interface. Set <see cref="ResourceReference.PreviousFrame"/> explicitly for feedback.</param>
 /// <param name="Outputs">The versions the pass writes. A graphics pass writes one color image and, for a geometry pass,
 /// at most one depth version.</param>
 /// <param name="Config">Optional config fields, using the shared shader-set config vocabulary.</param>
@@ -504,14 +507,17 @@ public sealed record ShaderPipelinePackagePass(
         Source: Package
     );
 }
-/// <summary>Limits applied while compiling an execution plan. <c>MaxFrameBlockBytes</c> bounds a pass's frame block,
-/// frame members and config together: 128 bytes is the push-constant size every Vulkan device guarantees.</summary>
+/// <summary>Limits applied while compiling an execution plan. <c>MaxFrameBlockBytes</c> bounds a pushed block (a package's or
+/// a shader set's), frame members and config together: 128 bytes is the push-constant size every Vulkan device guarantees.
+/// <c>MaxPassBlockBytes</c> bounds a document pass's pass block, its extent and config, which it binds as a constant buffer:
+/// 16384 bytes is the uniform-buffer range every Vulkan device guarantees.</summary>
 public sealed record ShaderPipelineLimits(
     int MaxResources = 128,
     int MaxPasses = 128,
     int MaxInputsPerPass = 32,
     int MaxOutputsPerPass = 8,
     uint MaxFrameBlockBytes = 128,
+    uint MaxPassBlockBytes = 16384,
     uint MaxComputeWorkGroupSizeX = 128,
     uint MaxComputeWorkGroupSizeY = 128,
     uint MaxComputeWorkGroupSizeZ = 64,

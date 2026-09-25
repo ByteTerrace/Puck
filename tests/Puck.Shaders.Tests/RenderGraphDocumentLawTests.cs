@@ -91,8 +91,8 @@ public sealed class RenderGraphDocumentLawTests {
             actual: Codes(json: Edit(change: static document => Package(document: document, name: "hud")["inputs"] = Refs("graded", "scene")))
         );
         Assert.Equal(
-            expected: ["RENDERGRAPH_PACKAGE_BINDING"],
-            actual: Codes(json: Edit(change: static document => Package(document: document, name: "hud")["inputs"] = new JsonArray(new JsonObject { ["binding"] = 3, ["name"] = "graded" })))
+            expected: ["RENDERGRAPH_PACKAGE_AS"],
+            actual: Codes(json: Edit(change: static document => Package(document: document, name: "hud")["inputs"] = new JsonArray(new JsonObject { ["as"] = "graded", ["name"] = "graded" })))
         );
         Assert.Equal(
             expected: ["RENDERGRAPH_SCHEMA"],

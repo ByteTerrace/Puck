@@ -396,7 +396,7 @@ compiles in the background, which needs `dxc`; without `dxc` it is refused by
 [the build's package store](../../docs/reference/shaders.md#the-builds-package-store)).
 Every pass is HLSL; it reads its
 time, pointer, camera and config from the generated frame block the
-[shader reference](../../docs/reference/shaders.md#the-frame-block)
+[shader reference](../../docs/reference/shaders.md#frame-values-extent-and-ports)
 describes. A relative
 source resolves against the CURRENTLY LOADED document's own directory, on
 both the server's override gate and the rendering host: a `world.load` of a
