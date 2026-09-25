@@ -148,12 +148,11 @@ public sealed partial class WorldReplayTape {
             (rebuild.PathHint is { } path) &&
             (m_drive is { } drive)
         ) {
-            if (!WorldDefinitionFileSource.TryLoadLocally(
+            if (!WorldDefinitionFileSource.TryReadContentPin(
                 contentHash: out var contentHash,
-                definition: out _,
+                documents: m_liveServer.RebuildDocuments,
                 path: path,
-                reason: out var reason,
-                documents: m_liveServer.RebuildDocuments
+                reason: out var reason
             )) {
                 if (m_liveServer.Output.HasNarrationSink) {
                     m_liveServer.Output.Narrate(

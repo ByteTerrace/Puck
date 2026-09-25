@@ -81,14 +81,14 @@ public sealed class WorldOwnedWorlds {
 
         foreach (var path in paths) {
             if (
-                !WorldDefinitionFileSource.TryLoad(
-                contentHash: out _,
-                definition: out var document,
+                !TryLoadOwned(
+                catalog: m_machineCatalog,
+                catalogFingerprint: m_catalogFingerprint,
+                document: out var document,
+                id: WorldDocumentName.OfDocumentFile(path: Path.GetFileName(path: path)),
                 neighbours: neighbours,
                 path: path,
-                reason: out var reason,
-                catalog: m_machineCatalog,
-                catalogFingerprint: m_catalogFingerprint
+                reason: out var reason
             ) ||
                 (document?.Identity is null)
             ) {
@@ -534,12 +534,48 @@ public sealed class WorldOwnedWorlds {
             }
         }
     }
+
+    /// <summary>Reads one owned-world file through the admission door every document file crosses
+    /// (<see cref="WorldDefinitionLoader.TryLoadFileForAdmission"/>), drawn for the owned world's own id: the
+    /// catalog scan and the cloud-sync gate both admit through here.
+    /// <para>An owned world is persisted instance state, not a definition a boot instantiates: a seeded identity
+    /// already holds the cells its template's boot drew, and a state draw site fills only while its row holds no
+    /// cell, so such a file reads back unchanged. A draw site the file leaves empty (a hand-placed or cloud-authored
+    /// document) fills here once, reproducibly for its id, and the next save keeps the value, as
+    /// <c>world.save</c> keeps a live world's drawn cells.</para></summary>
+    /// <param name="path">The owned-world file.</param>
+    /// <param name="id">The owned world's id, the draw seed ladder's instance rung.</param>
+    /// <param name="neighbours">The resolver proving the document's cross-document claims, or
+    /// <see langword="null"/> when none is reachable.</param>
+    /// <param name="catalog">The host-selected provider metadata, or <see langword="null"/> to defer provider
+    /// checks.</param>
+    /// <param name="catalogFingerprint">The selected catalog's composition identity.</param>
+    /// <param name="document">The drawn, admitted document, or <see langword="null"/> on refusal.</param>
+    /// <param name="reason">The loader's classed refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when the file loaded, drew, and was admitted.</returns>
+    internal static bool TryLoadOwned(string path, string id, IWorldNeighbourResolver? neighbours, IMachineValidationCatalog? catalog, string catalogFingerprint, out WorldDefinition? document, out string reason) {
+        var loaded = WorldDefinitionLoader.TryLoadFileForAdmission(
+            admission: out var admission,
+            catalog: catalog,
+            catalogFingerprint: catalogFingerprint,
+            contentHash: out _,
+            instanceIdentity: id,
+            neighbours: neighbours,
+            path: path,
+            reason: out reason
+        );
+
+        document = admission?.Definition;
+
+        return loaded;
+    }
+
     // Every shipped world is a full arena, so the booted world's own template is the only base and this always
     // returns it; kept as its own method (rather than inlining `fallback` at the one call site) so a future
     // minimal template has one door to return through.
     private static WorldDefinition IdentityBase(WorldDefinition fallback) => fallback;
     // The one predicate that decides whether a refusal is a verdict on the file's BYTES or on the moment it was read
-    // in — the loader's own reason classes, matched on the wording WorldDefinitionFileSource.TryLoad documents.
+    // in — the loader's own reason classes, matched on the wording WorldDefinitionLoader.TryLoadFileForAdmission documents.
     // Quarantine is irreversible from the catalog's side (the name it frees is re-seeded), so only the byte verdict
     // earns it: a document that does not parse as puck.world.definition.v1 parses no better on the next boot.
     //

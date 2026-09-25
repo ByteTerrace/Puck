@@ -159,9 +159,9 @@ locally: `IServerLink.SubmitEnvelope` returns the minted correlation id
 registers it against its verb name in `WorldDeferredVerbEchoes` (the
 registering `Submit(link, mutation, echoes, verb)` overload), and the
 `EchoTap` subscriber (`WorldPostBuildWiring`) takes the entry back when the
-verdict fires — a LOCAL submission's rejection prints an accountable
-`[<verb>: …]` stderr line beside the verb-agnostic narration; an accepted
-verdict takes its entry silently.
+verdict fires — a LOCAL submission's verdict prints an accountable
+`[<verb>: …]` line, on stderr beside the verb-agnostic narration for a
+rejection and on stdout for an acceptance.
 
 ## The link
 

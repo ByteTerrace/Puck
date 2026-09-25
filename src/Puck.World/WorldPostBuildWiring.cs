@@ -234,6 +234,11 @@ internal static class WorldPostBuildWiring {
                 Console.WriteLine(value: result.Output);
             }
         };
+        // An evicted line has no echo left to answer or count it, so its eviction is both.
+        deferredVerbEchoes.Evicted += result => {
+            Console.Error.WriteLine(value: result.Output);
+            consoleRegistry.NoteDeferredRejection();
+        };
 
         var scheduleRunner = services.GetRequiredService<WorldScheduleRunner>();
 

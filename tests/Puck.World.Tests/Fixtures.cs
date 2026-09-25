@@ -714,6 +714,28 @@ internal static class Fixtures {
     /// exact bytes back into a <see cref="WorldDefinition"/> and constructs a live <see cref="WorldServer"/> from
     /// the result).</summary>
     public static byte[] DefaultWorldBytes() => WorldDefinitionSerialization.Serialize(definition: BuildDocument());
+    /// <summary>Loads a document file through the one admission door
+    /// (<see cref="WorldDefinitionLoader.TryLoadFileForAdmission"/>), drawn for the boot instance, keeping the
+    /// admitted definition and the content pin a law compares.</summary>
+    /// <param name="path">The document file.</param>
+    /// <param name="definition">The drawn, admitted definition, or <see langword="null"/> on refusal.</param>
+    /// <param name="contentHash">The content-address pin, or empty on refusal.</param>
+    /// <param name="reason">The loader's refusal, or empty on success.</param>
+    /// <param name="documents">The source compositions read through, or <see langword="null"/> for the local one.</param>
+    /// <returns>Whether the file loaded and was admitted.</returns>
+    public static bool TryLoadDrawn(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldDocumentSource? documents = null) {
+        var loaded = WorldDefinitionLoader.TryLoadFileForAdmission(
+            admission: out var admission,
+            contentHash: out contentHash,
+            documents: documents,
+            path: path,
+            reason: out reason
+        );
+
+        definition = admission?.Definition;
+
+        return loaded;
+    }
     /// <summary>Boots a fresh server over <paramref name="document"/>, joins one body via <paramref name="join"/>,
     /// then steps <paramref name="ticks"/> times collecting the per-tick
     /// <see cref="WorldReplaySnapshot.HashState"/> trace — the raw material for every "an identical replay

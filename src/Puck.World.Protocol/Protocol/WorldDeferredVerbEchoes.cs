@@ -14,13 +14,23 @@ namespace Puck.World.Protocol;
 /// outcome. This table belongs to one local authority. Mutations use their typed completion callback instead of
 /// this table, so multiple worlds sharing a console cannot collide on world-local correlations.
 /// Past <see cref="Capacity"/> pending entries the oldest is evicted, so a verdict that never
-/// fires cannot grow the table, and an evicted entry settles as an unknown outcome rather than holding its session.</remarks>
+/// fires cannot grow the table; an evicted entry settles as an unknown outcome rather than holding its session, and
+/// <see cref="Evicted"/> reports it, since no echo will answer it.</remarks>
 public sealed class WorldDeferredVerbEchoes {
     /// <summary>Reports a per-verb typed mutation result, independently of world-local echo correlations.</summary>
     public event Action<CommandResult>? Completed;
+    /// <summary>Reports a registered verb evicted before its verdict arrived. The error is that line's only answer:
+    /// no echo will name its correlation again, so a host prints it and counts it as a refusal, as it counts a
+    /// rejected echo.</summary>
+    public event Action<CommandResult>? Evicted;
 
-    internal void Publish(CommandResult result) {
-        if (Completed is not { } callbacks) {
+    internal void Publish(CommandResult result) => Publish(
+        callbacks: Completed,
+        result: result
+    );
+
+    private static void Publish(Action<CommandResult>? callbacks, CommandResult result) {
+        if (callbacks is null) {
             return;
         }
         foreach (var callback in Delegate.EnumerateInvocationList(d: callbacks)) {
@@ -68,7 +78,13 @@ public sealed class WorldDeferredVerbEchoes {
             // Evict oldest-first past the bound; an id whose entry was already taken dequeues as a no-op.
             while (m_verbs.Count > Capacity) {
                 if (m_verbs.Remove(key: m_order.Dequeue(), value: out var evicted)) {
-                    evicted.Settlement.Settle(result: CommandResult.Error(output: $"[{evicted.Verb}: no verdict arrived; inspect state before any retry]"));
+                    var unanswered = CommandResult.Error(output: $"[{evicted.Verb}: evicted unanswered — {Capacity} later submissions were pending before its verdict arrived; inspect state before any retry]");
+
+                    evicted.Settlement.Settle(result: unanswered);
+                    Publish(
+                        callbacks: Evicted,
+                        result: unanswered
+                    );
                 }
             }
 
