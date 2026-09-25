@@ -36,18 +36,21 @@ public readonly record struct DirectXRootConstants(
     uint RegisterSpace,
     uint ValueCount
 );
-/// <summary>One root parameter of a <see cref="DirectXRootLayout"/>, visible to every stage.</summary>
+/// <summary>One root parameter of a <see cref="DirectXRootLayout"/>.</summary>
 /// <param name="Index">The root parameter index.</param>
 /// <param name="Kind">What the parameter binds.</param>
 /// <param name="Space">The group's ordinal for a table, or <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>
 /// for the pushed index.</param>
 /// <param name="Ranges">A table's ranges in binding order; empty for the pushed index.</param>
+/// <param name="Visibility">The stages that see the parameter, in the field of <c>D3D12_ROOT_PARAMETER</c>: every
+/// parameter of one pipeline has the same visibility (<see cref="DirectXRootLayout.VisibilityOf"/>).</param>
 /// <param name="Constants">The pushed index's root constants; <see langword="null"/> for a table.</param>
 public sealed record DirectXRootParameter(
     uint Index,
     DirectXRootParameterKind Kind,
     uint Space,
     IReadOnlyList<DirectXDescriptorRange> Ranges,
+    D3D12_SHADER_VISIBILITY Visibility,
     DirectXRootConstants? Constants = null
 ) {
     /// <summary>Gets the number of descriptors a table holds, or zero for the pushed index.</summary>
@@ -61,6 +64,7 @@ public sealed record DirectXRootParameter(
 /// because a descriptor table cannot mix samplers with other views. The pushed index comes last. Each binding is one
 /// range at register space equal to its group's ordinal and base register equal to its binding number, placed at the
 /// next free descriptor of its table in binding order, so no register is remapped.</para>
+/// <para>Every root parameter has one visibility, from the pipeline's stages (<see cref="VisibilityOf"/>).</para>
 /// </summary>
 public sealed class DirectXRootLayout {
     private DirectXRootLayout(IReadOnlyList<DirectXRootParameter> parameters) {
@@ -107,6 +111,17 @@ public sealed class DirectXRootLayout {
         return ranges.AsReadOnly();
     }
 
+    /// <summary>Returns the visibility every root parameter of a pipeline with these stages takes:
+    /// <c>D3D12_SHADER_VISIBILITY_VERTEX</c> or <c>_PIXEL</c> for a graphics pipeline of that one stage, and
+    /// <c>D3D12_SHADER_VISIBILITY_ALL</c> otherwise. A compute pipeline takes <c>ALL</c> because compute ignores
+    /// visibility: its one stage sees every root parameter whatever the field says.</summary>
+    /// <param name="stages">The pipeline's stages (<see cref="GpuPipelineLayoutDescription.Stages"/>).</param>
+    /// <returns>The visibility.</returns>
+    public static D3D12_SHADER_VISIBILITY VisibilityOf(GpuShaderStage stages) => stages switch {
+        GpuShaderStage.Vertex => D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_VERTEX,
+        GpuShaderStage.Fragment => D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL,
+        _ => D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL,
+    };
     /// <summary>Plans the root signature a pipeline layout needs.</summary>
     /// <param name="description">The neutral pipeline layout.</param>
     /// <returns>The planned root layout.</returns>
@@ -115,6 +130,7 @@ public sealed class DirectXRootLayout {
         ArgumentNullException.ThrowIfNull(argument: description);
 
         var parameters = new List<DirectXRootParameter>();
+        var visibility = VisibilityOf(stages: description.Stages);
 
         foreach (var group in description.Groups) {
             if (group.HoldsViews) {
@@ -125,7 +141,8 @@ public sealed class DirectXRootLayout {
                         group: group,
                         samplers: false
                     ),
-                    Space: group.Ordinal
+                    Space: group.Ordinal,
+                    Visibility: visibility
                 ));
             }
             if (group.HoldsSamplers) {
@@ -136,7 +153,8 @@ public sealed class DirectXRootLayout {
                         group: group,
                         samplers: true
                     ),
-                    Space: group.Ordinal
+                    Space: group.Ordinal,
+                    Visibility: visibility
                 ));
             }
         }
@@ -151,7 +169,8 @@ public sealed class DirectXRootLayout {
                 Index: ((uint)parameters.Count),
                 Kind: DirectXRootParameterKind.PushIndex,
                 Ranges: [],
-                Space: GpuPipelineLayoutDescription.PushIndexSpace
+                Space: GpuPipelineLayoutDescription.PushIndexSpace,
+                Visibility: visibility
             ));
         }
 
