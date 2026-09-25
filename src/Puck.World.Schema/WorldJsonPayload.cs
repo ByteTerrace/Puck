@@ -48,7 +48,22 @@ public static class WorldJsonPayload {
     public static string Describe(Exception exception, string json) {
         ArgumentNullException.ThrowIfNull(argument: exception);
 
-        return $"{exception.Message.ReplaceLineEndings(replacementText: " ")} (payload: {Elide(json: json)})";
+        return $"{Reason(exception: exception)} (payload: {Elide(json: json)})";
+    }
+    /// <summary>Returns a parse failure's message on one line, naming the member it was refused at: a converter's
+    /// own message carries no JSON path, so the path the serializer recorded is appended where the message does not
+    /// already name it.</summary>
+    /// <param name="exception">The parse failure.</param>
+    /// <returns>The single-line reason.</returns>
+    public static string Reason(Exception exception) {
+        ArgumentNullException.ThrowIfNull(argument: exception);
+
+        var message = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+        return (((exception is JsonException { Path: { Length: > 0 } path }) && !message.Contains(comparisonType: StringComparison.Ordinal, value: path))
+            ? $"{message} (at {path})"
+            : message
+        );
     }
     /// <summary>Reports whether an exception is a JSON payload rejection rather than a host fault — the complete set
     /// <see cref="JsonSerializer"/> raises for author-supplied text, polymorphic payloads included.</summary>

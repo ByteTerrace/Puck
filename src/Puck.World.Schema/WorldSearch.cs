@@ -117,8 +117,8 @@ public sealed record WorldSearchChance(string Row, int AtDepth);
 /// <param name="Depth">How many plies the job searches ahead; the depth-one walk this section always ran. A depth
 /// past one asks what the position is worth after the ply, not merely whether it is legal, and requires
 /// <paramref name="Score"/>.</param>
-/// <param name="Score">An infix expression, in the rule expression grammar, evaluated over the frame after a ply from
-/// the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies —
+/// <param name="Score">A value expression, stored as its program like every other expression a world document holds,
+/// evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies —
 /// the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and <paramref name="Scores"/> is
 /// authored when a score is needed; required when <paramref name="Depth"/> exceeds one, or <paramref name="Best"/>
 /// is authored, and refused with <see cref="SearchMethod.MonteCarlo"/> unauthored alongside it.</param>
@@ -151,7 +151,7 @@ public sealed record WorldSearchRow(
     string? Counts = null,
     int? Nodes = null,
     int Depth = 1,
-    string? Score = null,
+    ExpressionProgram? Score = null,
     string? Best = null,
     SearchMethod Method = SearchMethod.Negamax,
     int Iterations = 256,
@@ -696,15 +696,7 @@ public static class WorldSearchCompilation {
             Reach(name: zone);
         }
 
-        if (row.Score is { } scoreText) {
-            if (!ExpressionSpelling.TryParse(
-                error: out _,
-                program: out var scoreProgram,
-                text: scoreText
-            )) {
-                return judge;
-            }
-
+        if (row.Score is { } scoreProgram) {
             try {
                 RuleDataflow.CollectExpression(
                     into: accesses,
@@ -1094,17 +1086,7 @@ public static class WorldSearchCompilation {
             return false;
         }
 
-        if (row.Score is { } scoreText) {
-            if (!ExpressionSpelling.TryParse(
-                error: out var parseError,
-                program: out var scoreProgram,
-                text: scoreText
-            )) {
-                reason = $"search '{row.Name}' score '{scoreText}' does not parse: {parseError}";
-
-                return false;
-            }
-
+        if (row.Score is { } scoreProgram) {
             try {
                 score = RuleCompiler.CompileExpression(
                     expression: scoreProgram,

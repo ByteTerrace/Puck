@@ -4701,7 +4701,7 @@ public static partial class WorldModelShape {
                 M("counts", typeof(global::System.String), typeof(global::Puck.World.WorldSearchRow), "Counts", Read | Write),
                 M("nodes", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldSearchRow), "Nodes", Read | Write),
                 M("depth", typeof(global::System.Int32), typeof(global::Puck.World.WorldSearchRow), "Depth", Read | Write),
-                M("score", typeof(global::System.String), typeof(global::Puck.World.WorldSearchRow), "Score", Read | Write),
+                M("score", typeof(global::Puck.State.ExpressionProgram), typeof(global::Puck.World.WorldSearchRow), "Score", Read | Write),
                 M("best", typeof(global::System.String), typeof(global::Puck.World.WorldSearchRow), "Best", Read | Write),
                 M("method", typeof(global::Puck.State.SearchMethod), typeof(global::Puck.World.WorldSearchRow), "Method", Read | Write),
                 M("iterations", typeof(global::System.Int32), typeof(global::Puck.World.WorldSearchRow), "Iterations", Read | Write),

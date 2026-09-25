@@ -122,6 +122,11 @@ While `aiEnabled` is 1, the job works like this:
 The score is read from the perspective of the side that just moved. After red
 moves, `turn` is 1, so the expression reads red's lead over blue.
 
+A `.puck` source writes `score` as an expression, like every other expression.
+The compiled document stores it the way it stores all of them, as the
+program's `{ "instructions": [...] }` list, and a document that carries the
+score as text is refused by name when it loads.
+
 ## What a candidate is
 
 A **candidate** is one proposed change: a shape, a token, and a target cell or
