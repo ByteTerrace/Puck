@@ -628,12 +628,13 @@ the plan only as a `ShaderPipelinePackagePass` through the planner's internal
 package entry, ordered in the compute shape it reaches resources by, and the
 planner's public entry refuses a graph naming packages
 (`SHADERPIPE_PACKAGE_PASS`). A package's planned pass carries
-`ShaderPipelinePassKind.Package` and no `Declaration`, so every plan consumer
-reads the planned kind first. Pipeline readers (the loader, the packager,
+`ShaderPipelinePassKind.Package`, and its `Declaration` is that compute shape
+with the package id as its source. Pipeline readers (the loader, the packager,
 `ShaderPipelineSource`, the `puck shaders` verbs) plan through
-`RenderGraphCompiler.ShaderPasses`, whose catalog is empty, and
-`CompiledShaderPipeline` refuses a package pass, so the render node sees shader
-passes alone. A shader pass's kind is `ShaderPipelineDocumentPassKind`, which
+`RenderGraphCompiler.ShaderPasses`, whose catalog is empty, so they see shader
+passes alone; a `CompiledShaderPipeline` holds a package pass with no compiled
+shader, which the render node records through its package's recorder (the
+runtime below). A shader pass's kind is `ShaderPipelineDocumentPassKind`, which
 has no `Package` member, so the JSON reader refuses the name at
 `$.passes[n].kind`. A package pass keeps no descriptor binding, has no
 interface-by-source check, and takes a compute pass's accesses in `UseOf`. Every
