@@ -236,9 +236,126 @@ public sealed partial class RenderGraphRuntimeLawTests {
             expected: $"External instance 'world' of package '{World}' names a package no external producer serves."
         );
         Assert.Equal(
-            actual: Refusal(gpu, served, set, "world", null!, main).Code,
+            actual: Refusal(gpu, served, set, "nowhere", null!, main).Code,
             expected: RenderGraphRuntimeRefusalCode.Root
         );
+    }
+    [Fact]
+    public void AnExternalRootShowsItsLatestOutputAndServesItsCaptures() {
+        var gpu = new FakePipelineGpu();
+        var producers = new Producers(gpu: gpu);
+        var recorders = new Recorders();
+
+        producers.Register(registry: recorders.Registry);
+
+        var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(External(name: "world")),
+            "world",
+            [null!]
+        );
+        var frames = new Frames(
+            footprints: [],
+            roots: [new RenderGraphRoot(Height: 1.0, Instance: "world", Width: 1.0)],
+            runtime: runtime
+        );
+
+        using (runtime) {
+            var world = producers.Only;
+
+            world.Holding = true;
+            Assert.True(condition: frames.Next().IsEmpty);
+            Assert.Equal(
+                actual: runtime.UnservedCaptureReason,
+                expected: "the instance 'world' has produced no output: the fake world has not produced"
+            );
+
+            world.Holding = false;
+
+            var shown = frames.Next();
+
+            // The runtime shows the producer's image and holds no acquisition of it past the frame.
+            Assert.Equal(
+                actual: (shown.ImageViewHandle, (world.Acquired - world.Released)),
+                expected: (world.ImageView, 0)
+            );
+            Assert.Null(@object: runtime.UnservedCaptureReason);
+
+            var request = CaptureRequest();
+
+            runtime.RequestCapture(request: request);
+            _ = frames.Next();
+            Assert.Equal(
+                actual: (request.Completion.IsCompleted, Assert.Single(collection: world.Captured)),
+                expected: (true, request.Path)
+            );
+            Assert.Null(@object: runtime.PendingCapturePath);
+        }
+    }
+    [Fact]
+    public void ACaptureTargetReadsTheInstanceItNamesAndARootCaptureWaitsForItsInputs() {
+        var gpu = new FakePipelineGpu { ReadbackSupported = true };
+
+        var (runtime, frames, producers) = WorldScene(gpu: gpu);
+
+        using (runtime) {
+            var world = producers.Only;
+            var main = runtime.Node(instance: runtime.Instances.IndexOf(name: "main"));
+
+            // The view renders over the stand-in while the world holds, so a capture of it waits and names why.
+            world.Holding = true;
+            Assert.True(
+                condition: SpinWait.SpinUntil(
+                    condition: () => {
+                        _ = frames.Next();
+
+                        return main.IsReady;
+                    },
+                    timeout: TimeSpan.FromSeconds(value: 30)
+                ),
+                userMessage: "The view never installed its graph."
+            );
+            _ = frames.Next();
+
+            var waiting = CaptureRequest();
+
+            runtime.RequestCapture(request: waiting);
+            frames.Next(count: 2);
+            Assert.False(condition: waiting.Completion.IsCompleted);
+            Assert.Equal(
+                actual: runtime.UnservedCaptureReason,
+                expected: "the instance 'main' has rendered only over a stand-in for 'world', which has produced no output"
+            );
+
+            // Once the world produces, the next frame the view renders over it serves the capture.
+            world.Holding = false;
+            frames.Settle();
+            Assert.Null(@object: Outcome(request: waiting).Error);
+            Assert.Empty(collection: world.Captured);
+
+            // A capture naming the world reads the producer, not the root; an unknown instance is refused.
+            var target = runtime.CaptureTarget(instance: "world");
+            var named = CaptureRequest();
+
+            Assert.Same(
+                actual: runtime.CaptureTarget(instance: "world"),
+                expected: target
+            );
+            target.RequestCapture(request: named);
+            Assert.Equal(
+                actual: target.PendingCapturePath,
+                expected: named.Path
+            );
+            Assert.Throws<InvalidOperationException>(testCode: () => runtime.RequestCapture(request: CaptureRequest()));
+            _ = frames.Next();
+            Assert.Equal(
+                actual: (named.Completion.IsCompleted, Assert.Single(collection: world.Captured)),
+                expected: (true, named.Path)
+            );
+            Assert.Null(@object: runtime.UnservedCaptureReasonOf(instance: "world"));
+            Assert.Throws<ArgumentException>(testCode: () => runtime.CaptureTarget(instance: "nowhere"));
+        }
     }
     [Fact]
     public void AnInputOfAnotherFormatOrALargerBufferIsRefusedByName() {
@@ -371,25 +488,38 @@ public sealed partial class RenderGraphRuntimeLawTests {
     /// <summary>A producer standing in for the SDF engine: one image, written in place, left in General, and every
     /// acquisition and release counted.</summary>
     private sealed class FakeProducer : IRenderGraphExternalProducer {
+        private readonly CaptureRequestSlot m_capture = new();
+
         private readonly FakePipelineGpu m_gpu;
         private readonly Action<int> m_release;
+        private readonly Action<string> m_write;
 
         private IGpuImage? m_image;
 
         public FakeProducer(FakePipelineGpu gpu) {
             m_gpu = gpu;
             m_release = Release;
+            m_write = Captured.Add;
         }
 
         public int Acquired { get; private set; }
+
+        // The paths of the captures served, each by the frame produced after it was forwarded.
+        public List<string> Captured { get; } = [];
+
         public int DeviceLosses { get; private set; }
         public int Disposals { get; private set; }
         public (uint Width, uint Height) Extent { get; private set; }
         public SurfaceFormat Format => SurfaceFormat.R8G8B8A8Unorm;
         public bool Holding { get; set; }
         public nint ImageView => m_image!.ImageViewHandle;
+        public string? NotReadyReason => ((Produced == 0)
+            ? "the fake world has not produced"
+            : null);
+        public string? PendingCapturePath => m_capture.PendingPath;
         public int Produced { get; private set; }
         public int Released { get; private set; }
+
         public IGpuWorkSource Work { get; } = new GpuWorkLedger(
             framesInFlight: 3,
             name: "test.world"
@@ -418,9 +548,17 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
             Extent = (width, height);
             Produced++;
+            m_capture.Serve(
+                failureLabel: "[test] capture failed",
+                writer: m_write
+            );
 
             return true;
         }
+        public void RequestCapture(FrameCaptureRequest request) => m_capture.Arm(
+            pendingPath: PendingCapturePath,
+            request: request
+        );
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
             if (
                 (Produced == 0) ||

@@ -15,10 +15,15 @@ public readonly record struct RenderGraphExternalOutput(Surface Image, GpuImageL
 /// <summary>Renders a render-graph instance through its own submissions rather than a graph of its own: the SDF engine
 /// behind <c>sdf.world</c>, which submits through its own frame ring. The graph runtime produces it before its
 /// consumers when the schedule renders it, at the scheduled extent, and each consumer acquires its latest completed
-/// output, on frames the schedule skips or defers as well. Every member runs on the thread that produces frames.</summary>
-public interface IRenderGraphExternalProducer : IDisposable {
+/// output, on frames the schedule skips or defers as well. A capture the runtime forwards to it is served by the next
+/// frame it produces, from the image that frame completes. Every member runs on the thread that produces frames.</summary>
+public interface IRenderGraphExternalProducer : ICaptureRequestTarget, IDisposable {
     /// <summary>Gets the format of every image the producer hands out.</summary>
     SurfaceFormat Format { get; }
+    /// <summary>Gets why the producer has no completed output to hand out or capture, phrased as the refusal of a
+    /// capture that waited on it reads, or <see langword="null"/> once it has one. A caller polls it only to
+    /// report.</summary>
+    string? NotReadyReason { get; }
     /// <summary>Gets the producer's counted GPU work, per pass of its submissions.</summary>
     IGpuWorkSource Work { get; }
 
