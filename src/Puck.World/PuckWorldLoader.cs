@@ -31,7 +31,7 @@ internal static class PuckWorldLoader {
     // entry from there. The directory is the source's alone and is restaged whole on every boot, so a world the
     // source no longer declares cannot be reached.
     private static bool TryBootComposition(string path, IReadOnlyList<WorldCompiledWorld> worlds, string? named, out WorldDefinitionSource source, out string failure, string catalogFingerprint,
-        IMachineValidationCatalog? catalog, Func<WorldDefinition, WorldDefinition>? overrides) {
+        IMachineValidationCatalog? catalog, Func<WorldDefinition, WorldDefinition>? overrides, WorldStateRoot stateRoot) {
         source = null!;
 
         var declared = string.Join(
@@ -61,7 +61,7 @@ internal static class PuckWorldLoader {
         }
 
         var directory = Path.Combine(
-            path1: WorldStateRoot.Resolve(),
+            path1: stateRoot.FullPath,
             path2: "compositions",
             path3: Path.GetFileNameWithoutExtension(path: path)
         );
@@ -150,13 +150,15 @@ internal static class PuckWorldLoader {
     /// <param name="explicitPath">The authored world path, or null for the shipped default.</param>
     /// <param name="source">The loaded definition and source path.</param>
     /// <param name="failure">The named refusal reason, or empty on success.</param>
+    /// <param name="stateRoot">The run's state root, under which a composition source stages its declared
+    /// worlds.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
     /// <param name="catalog">The selected host machine catalog used for provider composition and validation.</param>
     /// <param name="overrides">Rewrites the loaded document before its one admission, or null when the host
     /// overrides nothing the document carries.</param>
     /// <param name="entry">The declared world of a composition source to boot in place of its <c>entry world</c>, or
     /// null for the declared entry.</param>
-    public static bool TryResolveWorld(string? explicitPath, out WorldDefinitionSource source, out string failure, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
+    public static bool TryResolveWorld(string? explicitPath, out WorldDefinitionSource source, out string failure, WorldStateRoot stateRoot, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
         Func<WorldDefinition, WorldDefinition>? overrides = null, string? entry = null) {
         var explicitly = !string.IsNullOrWhiteSpace(value: explicitPath);
         string path;
@@ -227,6 +229,7 @@ internal static class PuckWorldLoader {
 
         if (compiled!.Worlds.Count > 0) {
             return TryBootComposition(
+                stateRoot: stateRoot,
                 catalog: catalog,
                 catalogFingerprint: catalogFingerprint,
                 failure: out failure,

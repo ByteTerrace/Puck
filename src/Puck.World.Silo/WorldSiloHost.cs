@@ -62,6 +62,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private readonly string m_catalogFingerprint;
     private readonly Guid m_machineId;
     private readonly SiloConsoleRouting m_routing;
+    private readonly WorldStateRoot m_stateRoot;
 
     private readonly Dictionary<string, RowBookkeeping> m_rows = new(comparer: StringComparer.Ordinal);
 
@@ -140,7 +141,14 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             )
             : null
         );
-        m_machineId = ResolveMachineId(stateDir: definition.StateDir);
+        m_stateRoot = new WorldStateRoot(path: definition.StateDir);
+        m_machineId = m_stateRoot.MachineId(
+            failure: out var machineIdFailure,
+            fileName: "silo-machine.id"
+        );
+        if (machineIdFailure is not null) {
+            Console.Error.WriteLine(value: $"[silo] machine id is session-only ({machineIdFailure})");
+        }
         Instances = new WorldInstanceHost(
             admitsSpawn: false,
             applicationStopping: CancellationToken.None,
@@ -148,7 +156,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             machineId: m_machineId,
             resolver: new WorldSessionResolver(),
             seats: WorldEmbodiedSeats.None,
-            stateRoot: definition.StateDir,
+            stateRoot: m_stateRoot,
             machineCatalog: m_machineCatalog,
             catalogFingerprint: m_catalogFingerprint
         );
@@ -643,40 +651,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         }
     }
 
-    private static Guid ResolveMachineId(string stateDir) {
-        Directory.CreateDirectory(path: stateDir);
-
-        var path = Path.Combine(
-            path1: stateDir,
-            path2: "silo-machine.id"
-        );
-
-        try {
-            if (
-                File.Exists(path: path) &&
-                Guid.TryParse(
-                input: File.ReadAllText(path: path).Trim(),
-                result: out var stored
-            ) &&
-                (stored != Guid.Empty)
-            ) {
-                return stored;
-            }
-
-            var created = Guid.NewGuid();
-
-            File.WriteAllText(
-                contents: created.ToString(format: "D"),
-                path: path
-            );
-
-            return created;
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[silo] machine id is session-only ({exception.Message})");
-
-            return Guid.NewGuid();
-        }
-    }
     private static string RowKey(WorldAuthorityIdentity identity) => $"owner/{identity.Owner:D}/{identity.World}";
     private bool AllAdjacenciesPrimed(WorldInstance row) {
         if (!m_rows.TryGetValue(
@@ -1672,6 +1646,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 liveServer: server,
                 machineHostFactory: MachineHostFactory,
                 profiles: profiles,
+                stateRoot: m_stateRoot,
                 transport: link
             );
             var door = new WorldPeerHost(

@@ -7,6 +7,7 @@ using Puck.Hosting;
 using Puck.Testing;
 using Puck.World.Machines;
 using Puck.World.Protocol;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -20,7 +21,7 @@ namespace Puck.World.Tests;
 /// <see cref="FakeGpuDevice"/>, and every other service that owns or brings up a device throws when resolved, so a law
 /// that reached a device fails by name instead of creating one.
 /// </summary>
-public sealed class WorldBootCompositionLawTests {
+public sealed class WorldBootCompositionLawTests : IDisposable {
     private const string WorkloadScript = "tests/Puck.Counters/counters.script.txt";
     private const string WorkloadWorld = "tests/Puck.Counters/counters.world.json";
 
@@ -31,7 +32,10 @@ public sealed class WorldBootCompositionLawTests {
         "quit",
     ];
 
-    private static HostApplicationBuilder ComposeBoot(WorldHostPresentation presentation) {
+    // Each law's boot resolves its per-run files under a root of its own, never the per-user one.
+    private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-boot-");
+
+    private HostApplicationBuilder ComposeBoot(WorldHostPresentation presentation) {
         var extensions = WorldBootComposition.ComposeExtensions(directories: []);
         var machineCatalog = WorldMachineCatalog.From(extensions: extensions);
 
@@ -69,7 +73,8 @@ public sealed class WorldBootCompositionLawTests {
                 widthOverride: null
             ),
             MachineCatalog: machineCatalog,
-            Source: source
+            Source: source,
+            StateRoot: new WorldStateRoot(path: m_stateDirectory.RootPath)
         ));
         SealDevice(services: builder.Services);
 
@@ -177,6 +182,7 @@ public sealed class WorldBootCompositionLawTests {
     // registration silently keeps the pipeline cache in memory).
     private static bool RegistersPipelineCacheStore(IServiceCollection services) => services.Any(predicate: static descriptor => (descriptor.ServiceType == typeof(GpuPipelineCacheStore)));
 
+    public void Dispose() => m_stateDirectory.Dispose();
     [Fact]
     public void TheOffscreenShapeAnswersEveryVerbTheCountersWorkloadSends() => Assert.Empty(collection: UnansweredWorkloadVerbs(builder: ComposeBoot(presentation: WorldHostPresentation.Offscreen)));
     [Fact]

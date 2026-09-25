@@ -26,10 +26,11 @@ internal static class WorldCaptureRoot {
     /// under the run's state root unless the document names one beside itself.</summary>
     /// <param name="captures">The document's <c>captures</c> section.</param>
     /// <param name="documentDirectory">The document's directory.</param>
+    /// <param name="stateRoot">The run's state root.</param>
     /// <returns>The rooted capture directory.</returns>
-    public static string Resolve(WorldCapturesSection captures, string? documentDirectory) =>
+    public static string Resolve(WorldCapturesSection captures, string? documentDirectory, Server.WorldStateRoot stateRoot) =>
         (OverridePath ?? captures.ResolveDirectory(
             documentDirectory: documentDirectory,
-            stateRoot: Path.GetFullPath(path: Server.WorldStateRoot.Resolve())
+            stateRoot: stateRoot.FullPath
         ));
 }

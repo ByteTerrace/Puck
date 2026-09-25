@@ -99,7 +99,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // The local seats this host embodies — the ONE seam into a desktop's client/roster/seat-router/input-router.
     // WorldEmbodiedSeats.None for a host with no local seats.
     private readonly IWorldEmbodiedSeats m_seats;
-    private readonly string m_stateRoot;
+    private readonly WorldStateRoot m_stateRoot;
 
     private readonly Dictionary<string, WorldInstance> m_instances = new(comparer: StringComparer.Ordinal);
     // Whether the instance's own document came from a composed image this process already held when the instance
@@ -248,10 +248,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     }
     // The directory every non-boot instance's store hangs under, separator-terminated so a prefix test is a containment
     // test rather than a sibling-name test ("…/instances-other" must not read as inside "…/instances").
-    private string InstancesRoot() => (Path.GetFullPath(path: Path.Combine(
-        path1: m_stateRoot,
-        path2: "instances"
-    )).TrimEnd(trimChar: Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
+    private string InstancesRoot() => (m_stateRoot.PathOf(name: "instances").TrimEnd(trimChar: Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
     // The ONE local-roster departure transaction. PlayerRoster routes both explicit leaves and device-orphan
     // dissolves here after its ordinary slot/occupancy guard. The authoritative body leaves the CURRENT routed
     // instance first; only an accepted reply clears held input, vacates the local participant, and resets the
@@ -389,10 +386,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             b: BootInstanceName,
             comparisonType: StringComparison.Ordinal
         )
-            ? Path.Combine(
-                path1: m_stateRoot,
-                path2: "owned-worlds"
-            )
+            ? m_stateRoot.PathOf(name: "owned-worlds")
             : Path.Combine(
                 path1: InstancesRoot(),
                 path2: name,
@@ -1215,10 +1209,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <param name="catalogFingerprint">The stable fingerprint of the selected host machine catalog.</param>
     /// <param name="machineCatalog">The selected host machine catalog, or null for structural-only test hosts.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, string stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null) {
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null) {
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: stateRoot);
+        ArgumentNullException.ThrowIfNull(argument: stateRoot);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
 
         m_seats = seats;

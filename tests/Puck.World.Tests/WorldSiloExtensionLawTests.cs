@@ -348,7 +348,7 @@ public sealed class WorldSiloExtensionLawTests {
             machineId: Guid.NewGuid(),
             resolver: new WorldSessionResolver(),
             seats: WorldEmbodiedSeats.None,
-            stateRoot: state.RootPath
+            stateRoot: new WorldStateRoot(path: state.RootPath)
         );
 
         instances.AdmitBoot(row: boot.Instance);

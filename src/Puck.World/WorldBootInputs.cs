@@ -17,12 +17,14 @@ namespace Puck.World;
 /// <param name="Source">The loaded world and the path it loaded from, with its admission receipt when it has one.</param>
 /// <param name="HostSettings">The resolved host settings; their presentation selects the boot shape.</param>
 /// <param name="Authenticator">The federation identity door.</param>
+/// <param name="StateRoot">The run's state root, which the peer identity and every other per-run file resolve under.</param>
 public sealed record WorldBootInputs(
     PuckExtensionSet Extensions,
     WorldMachineCatalog MachineCatalog,
     WorldDefinitionSource Source,
     WorldHostSettings HostSettings,
-    IAuthenticator Authenticator
+    IAuthenticator Authenticator,
+    WorldStateRoot StateRoot
 ) {
     /// <summary>Gets the subject a <c>--authentication-config-file</c> connection signs as, which the boot server
     /// takes as its authority identity, or <see langword="null"/> to keep the document's own.</summary>
