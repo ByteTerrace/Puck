@@ -43,7 +43,10 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
         );
         Assert.Equal(
             actual: (first.Budget.ViewDescriptors, first.Budget.SamplerDescriptors),
-            expected: (capabilities.ViewHeapSize, capabilities.SamplerHeapSize)
+            expected: (capabilities.ViewHeapSize, Math.Min(
+                val1: capabilities.SamplerHeapSize,
+                val2: capabilities.StaticSamplerHeapSize
+            ))
         );
         Assert.NotEqual(
             actual: first.ViewHeap,

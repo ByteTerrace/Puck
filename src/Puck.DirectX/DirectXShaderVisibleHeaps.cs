@@ -5,8 +5,9 @@ namespace Puck.DirectX;
 
 /// <summary>
 /// One Direct3D 12 device's two shader-visible descriptor heaps: a CBV/SRV/UAV heap of the device's reported
-/// <see cref="GpuDeviceCapabilities.ViewHeapSize"/> and a sampler heap of its reported
-/// <see cref="GpuDeviceCapabilities.SamplerHeapSize"/>, created once with the device and released with it. Every
+/// <see cref="GpuDeviceCapabilities.ViewHeapSize"/> and a sampler heap of the budget's
+/// <see cref="GpuDescriptorHeapBudget.SamplerDescriptors"/> (the reported <see cref="GpuDeviceCapabilities.SamplerHeapSize"/>
+/// held within <see cref="GpuDeviceCapabilities.StaticSamplerHeapSize"/>), created once with the device and released with it. Every
 /// descriptor pool is a range of the view heap, and a pool holding samplers also a range of the sampler heap, admitted
 /// through the device's <see cref="GpuDescriptorHeapBudget"/>, so a pool that does not fit is refused by name and the
 /// heaps never grow; every command list binds both heaps once (<see cref="Bind"/>).

@@ -2,10 +2,13 @@ namespace Puck.Abstractions.Gpu;
 
 /// <summary>
 /// One device's shader-visible descriptor heaps and what is admitted into them. The heaps are the device's own:
-/// the view heap takes the device's reported <see cref="GpuDeviceCapabilities.ViewHeapSize"/> and the sampler heap its
-/// reported <see cref="GpuDeviceCapabilities.SamplerHeapSize"/>, each the device's own limit (a Direct3D 12 runtime that
+/// the view heap takes the device's reported <see cref="GpuDeviceCapabilities.ViewHeapSize"/> and the sampler heap the
+/// smaller of its reported <see cref="GpuDeviceCapabilities.SamplerHeapSize"/> and
+/// <see cref="GpuDeviceCapabilities.StaticSamplerHeapSize"/>, each the device's own limit (a Direct3D 12 runtime that
 /// does not answer options 19 reports the limits every binding tier guarantees), because the device outlives every world and a heap sized by the first world would refuse a larger one later on a device
-/// with room.
+/// with room. The sampler heap stays within the static-sampler limit because every recording binds the one sampler
+/// heap and a pipeline not created from a group plan still has static samplers in its root signature, which a device
+/// may use only beside a sampler heap within that limit.
 /// <para>What varies is admission. Each pool owner states its pools' <see cref="GpuDescriptorPoolSizes"/> from the same
 /// statement its pool creation uses, and <see cref="TryAdmit"/> checks a candidate's pools against the free ranges
 /// before anything is allocated: a candidate that does not fit is refused by name, whatever is installed keeps
@@ -48,7 +51,13 @@ public sealed class GpuDescriptorHeapBudget {
             );
         }
 
-        SamplerDescriptors = capabilities.SamplerHeapSize;
+        SamplerDescriptors = ((capabilities.StaticSamplerHeapSize == 0)
+            ? capabilities.SamplerHeapSize
+            : Math.Min(
+                val1: capabilities.SamplerHeapSize,
+                val2: capabilities.StaticSamplerHeapSize
+            )
+        );
         ViewDescriptors = capabilities.ViewHeapSize;
         m_samplers = new GpuRangeAllocator(
             maxRanges: MaxLivePools,

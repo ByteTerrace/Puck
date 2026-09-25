@@ -4,7 +4,8 @@ namespace Puck.Abstractions.Tests;
 
 /// <summary>
 /// Laws for <see cref="GpuDescriptorHeapBudget"/>: each heap takes the size the device reports, the guaranteed minimum
-/// when a Direct3D 12 runtime does not answer, and a device with no shared heap is refused by name; a candidate's pools are
+/// when a Direct3D 12 runtime does not answer, the sampler heap no larger than the device allows beside static
+/// samplers, and a device with no shared heap is refused by name; a candidate's pools are
 /// admitted as one view range each, and one sampler range each for the pools holding samplers, a pool holding no
 /// descriptor takes none, and a candidate whose views or samplers do not fit is refused
 /// by name with its demand and leaves the heap as it found it; a check allocates nothing and refuses with
@@ -18,6 +19,7 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
         rootSignatureVersion: "1.1",
         samplerHeapSize: 0,
         shaderModel: "6.6",
+        staticSamplerHeapSize: 0,
         viewHeapSize: 0
     ) with {
         ViewHeapSize = views,
@@ -36,6 +38,7 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
             rootSignatureVersion: "1.1",
             samplerHeapSize: 0,
             shaderModel: "6.6",
+            staticSamplerHeapSize: 0,
             viewHeapSize: 0
         ));
         var reported = new GpuDescriptorHeapBudget(capabilities: GpuDeviceCapabilities.FromDirectX(
@@ -43,6 +46,7 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
             rootSignatureVersion: "1.1",
             samplerHeapSize: 4080,
             shaderModel: "6.6",
+            staticSamplerHeapSize: 4080,
             viewHeapSize: 2_000_000
         ));
 
@@ -53,6 +57,24 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
         Assert.Equal(
             actual: (reported.ViewDescriptors, reported.SamplerDescriptors),
             expected: (2_000_000u, 4080u)
+        );
+    }
+    [Fact]
+    public void TheSamplerHeapStaysWithinTheStaticSamplerLimit() {
+        // A device whose largest sampler heap is 4080 but that allows static samplers only beside 2048 gets a 2048 heap:
+        // every recording binds the one sampler heap, and pipelines not created from a group plan have static samplers.
+        var budget = new GpuDescriptorHeapBudget(capabilities: GpuDeviceCapabilities.FromDirectX(
+            resourceBindingTier: 3,
+            rootSignatureVersion: "1.1",
+            samplerHeapSize: 4080,
+            shaderModel: "6.6",
+            staticSamplerHeapSize: 2048,
+            viewHeapSize: 2_000_000
+        ));
+
+        Assert.Equal(
+            actual: (budget.ViewDescriptors, budget.SamplerDescriptors, budget.FreeSamplerDescriptors),
+            expected: (2_000_000u, 2048u, 2048u)
         );
     }
     [Fact]

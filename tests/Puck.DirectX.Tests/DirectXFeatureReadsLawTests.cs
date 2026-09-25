@@ -48,6 +48,10 @@ public sealed unsafe class DirectXFeatureReadsLawTests {
             expected: GpuDeviceCapabilities.DirectXMinimumSamplerHeapSize
         );
         Assert.Equal(
+            actual: capabilities.StaticSamplerHeapSize,
+            expected: GpuDeviceCapabilities.DirectXMinimumSamplerHeapSize
+        );
+        Assert.Equal(
             actual: capabilities.ResourceBindingTier,
             expected: 3U
         );
@@ -222,14 +226,14 @@ public sealed unsafe class DirectXFeatureReadsLawTests {
 
                     return Answered;
                 case D3D12_FEATURE.D3D12_FEATURE_ROOT_SIGNATURE:
-                    var signature = (D3D12_FEATURE_DATA_ROOT_SIGNATURE*)data;
+                    var signature = ((D3D12_FEATURE_DATA_ROOT_SIGNATURE*)data);
 
                     return ((signature->HighestVersion > highestRootSignature)
                         ? InvalidArgument
                         : Answered
                     );
                 case D3D12_FEATURE.D3D12_FEATURE_SHADER_MODEL:
-                    var model = (D3D12_FEATURE_DATA_SHADER_MODEL*)data;
+                    var model = ((D3D12_FEATURE_DATA_SHADER_MODEL*)data);
 
                     return ((model->HighestShaderModel > highestShaderModel)
                         ? InvalidArgument

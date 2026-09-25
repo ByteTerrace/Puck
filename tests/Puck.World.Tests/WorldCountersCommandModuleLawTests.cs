@@ -248,19 +248,20 @@ public sealed class WorldCountersCommandModuleLawTests {
                 rootSignatureVersion: "1.1",
                 samplerHeapSize: 0U,
                 shaderModel: "6.8",
+                staticSamplerHeapSize: 0U,
                 viewHeapSize: 0U
             ),
         };
 
         Assert.Equal(
-            expected: "[world.counters: gpu backend=directx adapter=\"Example GPU\" vendor=0x10de device=0x2786 driver=32.0.15.6636 driver.raw=0x1 api=12_2\ncapabilities backend=directx root-signature-words=64 push-constant-bytes=256 stage.samplers=2048 stage.uniform-buffers=1000000 stage.storage-buffers=1000000 stage.sampled-images=1000000 stage.storage-images=1000000 binding-tier=3 root-signature=1.1 shader-model=6.8 heap.views=1000000 heap.samplers=2048\nnodes none: the renderer is not built yet\n]",
+            expected: "[world.counters: gpu backend=directx adapter=\"Example GPU\" vendor=0x10de device=0x2786 driver=32.0.15.6636 driver.raw=0x1 api=12_2\ncapabilities backend=directx root-signature-words=64 push-constant-bytes=256 stage.samplers=2048 stage.uniform-buffers=1000000 stage.storage-buffers=1000000 stage.sampled-images=1000000 stage.storage-images=1000000 binding-tier=3 root-signature=1.1 shader-model=6.8 heap.views=1000000 heap.samplers=2048 heap.samplers-static=2048\nnodes none: the renderer is not built yet\n]",
             actual: Run(
                 gpu: registry,
                 line: "world.counters gpu"
             ).Output
         );
         Assert.Equal(
-            expected: (("""[world.counters: {"sources":[],"gpu":{"device":{"backend":"directx","adapter":"Example GPU","vendor":4318,"device":10118,"driver":"32.0.15.6636","driver.raw":1,"api":"12_2","driver.name":"","driver.id":0,"conformance":"","pipeline-cache.uuid":""},"capabilities":{"backend":"directx","descriptor-sets":0,"root-signature-words":64,"push-constant-bytes":256,"stage.samplers":2048,"stage.uniform-buffers":1000000,"stage.storage-buffers":1000000,"stage.sampled-images":1000000,"stage.storage-images":1000000,"stage.resources":0,"binding-tier":3,"root-signature":"1.1","shader-model":"6.8","heap.views":1000000,"heap.samplers":2048},"nodes":[]},"kinds":{""" + GpuLegend) + "}}]"),
+            expected: (("""[world.counters: {"sources":[],"gpu":{"device":{"backend":"directx","adapter":"Example GPU","vendor":4318,"device":10118,"driver":"32.0.15.6636","driver.raw":1,"api":"12_2","driver.name":"","driver.id":0,"conformance":"","pipeline-cache.uuid":""},"capabilities":{"backend":"directx","descriptor-sets":0,"root-signature-words":64,"push-constant-bytes":256,"stage.samplers":2048,"stage.uniform-buffers":1000000,"stage.storage-buffers":1000000,"stage.sampled-images":1000000,"stage.storage-images":1000000,"stage.resources":0,"binding-tier":3,"root-signature":"1.1","shader-model":"6.8","heap.views":1000000,"heap.samplers":2048,"heap.samplers-static":2048},"nodes":[]},"kinds":{""" + GpuLegend) + "}}]"),
             actual: Run(
                 gpu: registry,
                 line: "world.counters gpu --json"

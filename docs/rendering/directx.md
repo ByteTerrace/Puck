@@ -192,8 +192,13 @@ policy is chosen from it, is described under
 
 A device has two shader-visible descriptor heaps, `DirectXShaderVisibleHeaps`:
 a CBV/SRV/UAV heap of the size the device reports
-(`GpuDeviceCapabilities.ViewHeapSize`) and a sampler heap of its reported
-`SamplerHeapSize`. `DirectXGpuBindings` creates them when the context brings a
+(`GpuDeviceCapabilities.ViewHeapSize`) and a sampler heap of the smaller of its
+reported `SamplerHeapSize` and `StaticSamplerHeapSize` (options 19's
+`MaxSamplerDescriptorHeapSizeWithStaticSamplers`). The sampler heap stays within
+the static-sampler limit because every recording binds the one sampler heap and
+every pipeline not created from a group plan has static samplers in its root
+signature; past that limit the debug layer rejects each draw and dispatch that
+uses one. `DirectXGpuBindings` creates them when the context brings a
 device up and releases them when the context releases it, on `Recreate` and
 `Dispose`, so a recreated device has a fresh pair. The heaps never grow.
 

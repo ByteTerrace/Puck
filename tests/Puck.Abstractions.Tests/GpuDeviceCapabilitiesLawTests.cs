@@ -6,20 +6,21 @@ namespace Puck.Abstractions.Tests;
 
 /// <summary>
 /// Laws for <see cref="GpuDeviceCapabilities"/>: Direct3D 12's per-stage limits follow its resource binding tier's
-/// documented table, a runtime that reports no heap sizes reports the sizes every tier guarantees, and the one-line
-/// fields leave out what a backend does not report.
+/// documented table, a runtime that reports no heap sizes reports the sizes every tier guarantees for both sampler heap
+/// limits, and the one-line fields leave out what a backend does not report.
 /// </summary>
 public sealed class GpuDeviceCapabilitiesLawTests {
-    [Theory]
     [InlineData(1U, 16U, 14U, 128U, 64U)]
     [InlineData(2U, 4096U, 14U, 2000000U, 64U)]
     [InlineData(3U, 4096U, 2000000U, 2000000U, 2000000U)]
+    [Theory]
     public void DirectXStageLimitsFollowTheBindingTier(uint tier, uint samplers, uint constantBuffers, uint shaderResources, uint unorderedAccess) {
         var capabilities = GpuDeviceCapabilities.FromDirectX(
             resourceBindingTier: tier,
             rootSignatureVersion: "1.1",
             samplerHeapSize: 4096U,
             shaderModel: "6.6",
+            staticSamplerHeapSize: 0U,
             viewHeapSize: 2000000U
         );
 
@@ -39,23 +40,25 @@ public sealed class GpuDeviceCapabilitiesLawTests {
             rootSignatureVersion: "1.1",
             samplerHeapSize: 0U,
             shaderModel: "6.6",
+            staticSamplerHeapSize: 0U,
             viewHeapSize: 0U
         );
 
         Assert.Equal(
-            expected: (GpuDeviceCapabilities.DirectXMinimumViewHeapSize, GpuDeviceCapabilities.DirectXMinimumSamplerHeapSize),
-            actual: (capabilities.ViewHeapSize, capabilities.SamplerHeapSize)
+            expected: (GpuDeviceCapabilities.DirectXMinimumViewHeapSize, GpuDeviceCapabilities.DirectXMinimumSamplerHeapSize, GpuDeviceCapabilities.DirectXMinimumSamplerHeapSize),
+            actual: (capabilities.ViewHeapSize, capabilities.SamplerHeapSize, capabilities.StaticSamplerHeapSize)
         );
     }
-    [Theory]
     [InlineData(0U)]
     [InlineData(4U)]
+    [Theory]
     public void AnUnknownBindingTierIsRefused(uint tier) =>
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuDeviceCapabilities.FromDirectX(
             resourceBindingTier: tier,
             rootSignatureVersion: "1.1",
             samplerHeapSize: 0U,
             shaderModel: "6.6",
+            staticSamplerHeapSize: 0U,
             viewHeapSize: 0U
         ));
     [Fact]

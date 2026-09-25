@@ -389,7 +389,10 @@ These are one-line cautions; the owning pages hold the derivations.
   explanation is [Direct3D 12](../../../docs/rendering/directx.md#result-handling).
 - **A Direct3D 12 descriptor pool is a range of the device's heap.** Each
   device has one shader-visible view heap and one sampler heap
-  (`DirectXShaderVisibleHeaps`), created and released with the device; a pool
+  (`DirectXShaderVisibleHeaps`), created and released with the device, the
+  sampler heap held within `GpuDeviceCapabilities.StaticSamplerHeapSize` while
+  any root signature has static samplers (past it the debug layer rejects every
+  draw and dispatch using one); a pool
   is admitted into the view heap, and a pool holding samplers into the sampler
   heap too, through its `GpuDescriptorHeapBudget`, every
   recording binds both heaps once at `BeginCommandBuffer`, and a clear takes one

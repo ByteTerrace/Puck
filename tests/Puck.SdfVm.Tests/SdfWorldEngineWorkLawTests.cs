@@ -81,6 +81,7 @@ public sealed class SdfWorldEngineWorkLawTests {
             rootSignatureVersion: "1.1",
             samplerHeapSize: 0,
             shaderModel: "6.6",
+            staticSamplerHeapSize: 0,
             viewHeapSize: 0
         ) with {
             ViewHeapSize = views,
