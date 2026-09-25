@@ -16,7 +16,7 @@ pipeline.reset feedback
 pipeline.wait feedback submitted 3 10
 # The running instance is unloaded: its slot stops showing it, its row is removed, and the render tree releases it,
 # which the refused inspection proves.
-world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"pipeline":null,"width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
+world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"instance":null,"width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
 world.row.remove views.graphs feedback
 pipeline.inspect feedback
 # It is loaded again as a new instance, which compiles, installs and runs from its first submission.
@@ -39,7 +39,7 @@ pipeline.reset feedback
 pipeline.wait feedback submitted 3 10
 # The running instance is unloaded: its slot stops showing it, its row is removed, and the render tree releases it,
 # which the refused inspection proves.
-world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"pipeline":null,"width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
+world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"instance":null,"width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
 world.row.remove views.graphs feedback
 pipeline.inspect feedback
 # It is loaded again as a new instance, which compiles, installs and runs from its first submission.
@@ -62,7 +62,7 @@ pipeline.reset feedback
 pipeline.wait feedback submitted 3 10
 # The running instance is unloaded: its slot stops showing it, its row is removed, and the render tree releases it,
 # which the refused inspection proves.
-world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"pipeline":null,"width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
+world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"instance":null,"width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
 world.row.remove views.graphs feedback
 pipeline.inspect feedback
 # It is loaded again as a new instance, which compiles, installs and runs from its first submission.

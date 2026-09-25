@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Puck.Abstractions.Gpu;
 using Puck.Commands;
 using Puck.Launcher;
 using Puck.Overlays;
@@ -222,6 +223,13 @@ internal static class WorldPostBuildWiring {
         // terminal-session proxy exists in both shapes and mirrors edit outcomes when a windowed bank is attached.
         var toasts = services.GetService<OverlayToastStore>();
         var graphHost = services.GetService<WorldViewGraphHost>();
+
+        // A GPU shape resolves its device context here, before any presenter that creates objects on the device, so
+        // the container, which disposes singletons in reverse creation order, releases every presenter before it.
+        if (graphHost is not null) {
+            _ = services.GetRequiredService<IGpuDeviceContext>();
+        }
+
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();

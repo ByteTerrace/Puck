@@ -151,6 +151,9 @@ internal static class WorldRenderRoot {
             runtime: runtime,
             width: width
         ) {
+            // The host rewrites its footprint list in place every frame, so the node reads that list rather than the
+            // copy its constructor takes.
+            Footprints = host.Footprints,
             Prepare = frameSource.PrepareGraph,
         };
         var probe = sp.GetRequiredService<WorldRenderProbe>();
