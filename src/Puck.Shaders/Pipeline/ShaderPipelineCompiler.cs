@@ -1042,7 +1042,8 @@ public sealed partial class ShaderPipelineCompiler {
                 Attachments: [],
                 Kind: (package
                     ? ShaderPipelinePassKind.Package
-                    : pass.Kind.PlanKind())
+                    : pass.Kind.PlanKind()),
+                Extent: null
             ));
         }
         if (diagnostics.Count != 0) {
@@ -1071,12 +1072,13 @@ public sealed partial class ShaderPipelineCompiler {
                     pass: shapes[index],
                     resources: plannedResources
                 ),
+                Extent = ExtentOf(
+                    pass: shapes[index],
+                    resources: plannedResources,
+                    storages: versions.Storages
+                ),
                 Package = ((pass.Kind == ShaderPipelinePassKind.Package)
-                    ? StepOf(
-                        pass: shapes[index],
-                        resources: plannedResources,
-                        storages: versions.Storages
-                    )
+                    ? StepOf(pass: shapes[index])
                     : null),
             }).ToArray(),
             resources: versions.Resources,
@@ -1084,10 +1086,12 @@ public sealed partial class ShaderPipelineCompiler {
         );
     }
 
-    // A package pass's step: its package, its ports' versions, and the dimensions of the first port whose storage declares
-    // them, outputs before inputs.
-    private static ShaderPipelinePackageStep StepOf(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelinePlannedResource> resources, IReadOnlyList<ShaderPipelinePlannedStorage> storages) => new(
-        Extent: pass.OutputReferences.Concat(second: pass.InputReferences).Select(selector: reference => storages[resources[reference.Name].Storage].Declaration.Dimensions).FirstOrDefault(predicate: static dimensions => (dimensions is not null)),
+    // The one pass-extent rule, for every pass kind: the dimensions of the first reference whose storage declares them,
+    // outputs before inputs, or none, so the pass runs at the frame's extent.
+    private static ShaderPipelineDimensions? ExtentOf(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelinePlannedResource> resources, IReadOnlyList<ShaderPipelinePlannedStorage> storages) =>
+        pass.OutputReferences.Concat(second: pass.InputReferences).Select(selector: reference => storages[resources[reference.Name].Storage].Declaration.Dimensions).FirstOrDefault(predicate: static dimensions => (dimensions is not null));
+    // A package pass's step: its package and its ports' versions.
+    private static ShaderPipelinePackageStep StepOf(ShaderPipelinePass pass) => new(
         Inputs: new ReadOnlyCollection<ResourceReference>(list: pass.InputReferences.ToArray()),
         Outputs: new ReadOnlyCollection<ResourceReference>(list: pass.OutputReferences.ToArray()),
         Package: pass.Source
