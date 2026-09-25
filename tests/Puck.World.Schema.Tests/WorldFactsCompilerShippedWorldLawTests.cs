@@ -143,18 +143,19 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
             key: path,
             valueFactory: static key => new Lazy<LoadOutcome>(valueFactory: () => LoadUncached(path: key))
         ).Value;
-    // The door the game itself loads a world through: composition, migration, and document-local validation.
+    // The door the game itself loads a world through: composition, the boot draw, and document-local validation.
     private static LoadOutcome LoadUncached(string path) {
-        var loaded = WorldDefinitionFileSource.TryLoadLocally(
+        var loaded = WorldDefinitionLoader.TryLoadFileForAdmission(
+            admission: out var admission,
             contentHash: out _,
-            definition: out var definition,
             documents: PuckDocumentComposer.Instance,
             path: path,
+            proveNeighbours: false,
             reason: out var reason
         );
 
         return new LoadOutcome(
-            Definition: (loaded ? definition : null),
+            Definition: (loaded ? admission!.Definition : null),
             Reason: reason
         );
     }

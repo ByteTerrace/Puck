@@ -39,4 +39,19 @@ public static class WorldDeferredVerbSettlement {
 
         return verdict;
     }
+    /// <summary>Takes the eviction this verdict arrives after: the table evicted the local line it answers, and the
+    /// eviction was that line's answer and its count, so the verdict adds neither.</summary>
+    /// <param name="echoes">The pending-verb table.</param>
+    /// <param name="echo">The verdict, which <see cref="Settle"/> matched to no registered line.</param>
+    /// <returns><see langword="true"/> when the verdict answers a remembered eviction
+    /// (<see cref="WorldDeferredVerbEchoes.TryTakeEvicted"/>).</returns>
+    public static bool TakeEvicted(this WorldDeferredVerbEchoes echoes, in WorldEditEcho echo) {
+        ArgumentNullException.ThrowIfNull(argument: echoes);
+
+        return (
+            (echo.ConnectionId == SubmissionEnvelope.LocalConnectionId) &&
+            (echo.Kind != WorldEditEchoKind.GrantTable) &&
+            echoes.TryTakeEvicted(correlationId: echo.CorrelationId)
+        );
+    }
 }

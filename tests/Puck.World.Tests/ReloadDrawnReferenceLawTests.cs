@@ -133,14 +133,22 @@ public sealed class ReloadDrawnReferenceLawTests {
                 ),
                 userMessage: drawnReason
             );
-            // The file source admits a document without drawing it, so the driver's reference still names an empty
-            // cell: exactly the document the codec's strict parse must refuse.
+            // The parsed, undrawn shape: the driver's reference still names an empty cell, exactly the document the
+            // codec's strict parse must refuse. No load door returns it, so the law parses it itself.
             Assert.True(
-                condition: WorldDefinitionFileSource.TryLoad(
+                condition: WorldDefinitionFileSource.TryReadContentPin(
                     contentHash: out var contentHash,
-                    definition: out var undrawn,
                     path: path,
-                    reason: out var undrawnReason
+                    reason: out var pinReason
+                ),
+                userMessage: pinReason
+            );
+            Assert.True(
+                condition: WorldDefinitionFileSource.TryParseDocument(
+                    definition: out var undrawn,
+                    json: File.ReadAllText(path: path),
+                    reason: out var undrawnReason,
+                    sourceName: path
                 ),
                 userMessage: undrawnReason
             );
