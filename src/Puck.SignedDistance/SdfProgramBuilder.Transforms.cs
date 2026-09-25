@@ -737,6 +737,20 @@ public sealed partial class SdfProgramBuilder {
             op: SdfOp.Rotate
         );
     }
+    /// <summary>Mirrors subsequent point evaluation across the chain's local plane x = 0. The mirror is an isometry, so
+    /// the field stays exact and its distance is not rescaled: it is a <see cref="SdfOp.Scale"/> whose X component
+    /// carries the sign and whose distance correction is one. <see cref="Scale"/> takes magnitudes, so this is the
+    /// one way a chain mirrors.</summary>
+    /// <returns>This builder.</returns>
+    public SdfProgramBuilder MirrorX() => Transform(
+        data0: new Vector4(
+            w: 1f,
+            x: -1f,
+            y: 1f,
+            z: 1f
+        ),
+        op: SdfOp.Scale
+    );
     /// <summary>Scales subsequent point evaluation and applies the conservative minimum-axis distance correction.</summary>
     /// <param name="scale">The local-space scale. Components are converted to positive nonzero magnitudes.</param>
     /// <returns>This builder.</returns>
