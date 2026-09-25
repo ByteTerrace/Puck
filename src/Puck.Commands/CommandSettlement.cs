@@ -26,6 +26,24 @@ public sealed class CommandSettlement {
         }
     }
 
+    // Decides under the gate who reports the verdict: a verdict already known is returned for the handler to report
+    // as its own result, and late is never invoked; otherwise late (when given) receives the verdict when it arrives.
+    // Exactly one of the two reports it, whatever thread settles.
+    internal bool TryTakeVerdict(Action<CommandResult>? late, out CommandResult verdict) {
+        lock (m_gate) {
+            if (m_result is { } result) {
+                verdict = result;
+
+                return true;
+            }
+
+            m_continuation += late;
+        }
+
+        verdict = default;
+
+        return false;
+    }
     // Runs the continuation with the verdict: inline when it is already known, otherwise when it arrives.
     internal void OnSettled(Action<CommandResult> continuation) {
         CommandResult settled;

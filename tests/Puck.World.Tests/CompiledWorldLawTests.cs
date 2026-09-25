@@ -127,6 +127,7 @@ public sealed class CompiledWorldLawTests {
             Assert.True(
                 condition: WorldDefinitionLoader.TryLoadFileForAdmission(
                     admission: out var admission,
+                    contentHash: out _,
                     catalog: Catalog,
                     catalogFingerprint: Catalog.CompositionFingerprint,
                     compiled: request,

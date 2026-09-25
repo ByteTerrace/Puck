@@ -131,7 +131,12 @@ Three echo models — do not conflate them:
    `[<verb>: …]` line the tick-boundary drain settles — stderr on rejection
    (beside the verb-agnostic `[world.mutation rejected: …]`), stdout on
    acceptance — so a canary can account either outcome against the
-   submitting verb rather than only a refusal. A verb that submits through
+   submitting verb rather than only a refusal. A verdict already known when
+   the handler returns (an ingress or codec refusal, a rebuild or undo whose
+   correlation cannot register) is the line's own result, because
+   `CommandResult.Settling` returns a settled settlement's verdict: it answers
+   on the line and counts in `wire.errors` like any refused line, and never
+   also reaches the per-verb echo. A verb that submits through
    the plain `Submit(link, mutation)` overload (`world.generate`,
    `world.state.cell.set`, `world.state.cell.remove`) registers nothing, so
    its only observable answer is the universal `[world.mutation: … applied]`/
@@ -344,7 +349,11 @@ loadable asset, and leaves simulation and rendering unchanged.
 A world booted from `.puck` source (`--world <x>.puck`, compiled by
 `src/Puck.World/PuckWorldLoader.cs`) reloads from that source: `world.reload`
 re-reads the current origin and recompiles it, CAS-pinning the document it
-lowers to, so an edit that lowers identically keeps the pin. `world.save` with
+lowers to, so an edit that lowers identically keeps the pin. `world.load` and
+`world.reload` read through the boot's own door,
+`WorldDefinitionLoader.TryLoadFileForAdmission`, with the host's machine
+catalog and the running instance's identity, so the document's boot draws
+refill exactly as the boot drew them before it is admitted and embedded. `world.save` with
 no argument, or to any `.puck` target, is refused by name because canonical
 JSON would overwrite the source; name a JSON path instead. The artist loop for
 a `.puck`-booted world is: edit the `.puck` file, then `world.reload`.

@@ -1793,8 +1793,8 @@ checkpoint loads use `DeserializeForAdmission` to carry this proof into construc
 and restoration; a distinct journal base still needs its own validation.
 
 File and composed-byte loaders expose `TryLoadForAdmission` and
-`TryLoadFileForAdmission` to retain the final document's programs through boot and
-local instance construction; the asynchronous entry returns the same receipt to a
+`TryLoadFileForAdmission` to retain the final document's programs through boot, local
+instance construction, and `world.load`/`world.reload` with the replay drive's re-read; the asynchronous entry returns the same receipt to a
 hosted read. Bytes, files, and asynchronous loads resolve boot draws, state-backed
 document values, a caller's `overrides` rewrite of the loaded document, and state-row
 settlement before full admission, in that order. A preflight uses the existing
