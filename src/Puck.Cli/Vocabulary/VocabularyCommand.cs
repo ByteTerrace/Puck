@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Text;
 
 using Puck.World.Transpiler.Vocabulary;
 
@@ -18,67 +17,19 @@ internal static class VocabularyCommand {
             return 2;
         }
 
-        var path = Path.Combine(
-            path1: repositoryRoot,
-            path2: RelativePath
-        );
         var table = WorldConstructs.Table;
-        var text = table.Render();
 
-        if (!check) {
-            File.WriteAllText(
-                contents: text,
-                encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-                path: path
-            );
-            Console.Out.WriteLine(value: $"vocabulary: wrote {RelativePath} ({table.Constructs.Count} constructs).");
-
-            return 0;
-        }
-
-        if (!File.Exists(path: path)) {
-            Console.Error.WriteLine(value: $"vocabulary: {RelativePath} is missing; run `puck vocabulary` to write it.");
-
-            return 1;
-        }
-
-        var onDisk = File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n");
-
-        if (string.Equals(
-            a: onDisk,
-            b: text,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            Console.Out.WriteLine(value: $"vocabulary: {RelativePath} matches the table ({table.Constructs.Count} constructs).");
-
-            return 0;
-        }
-
-        var expected = text.Split(separator: '\n');
-        var actual = onDisk.Split(separator: '\n');
-        var line = 0;
-
-        while (
-            (line < expected.Length) &&
-            (line < actual.Length) &&
-            string.Equals(
-            a: expected[line],
-            b: actual[line],
-            comparisonType: StringComparison.Ordinal
+        return (CliGeneratedFile.WriteOrCheck(
+            check: check,
+            detail: $" ({table.Constructs.Count} constructs)",
+            relativePath: RelativePath,
+            repositoryRoot: repositoryRoot,
+            source: "the table",
+            text: table.Render(),
+            verb: "vocabulary"
         )
-        ) {
-            line++;
-        }
-
-        Console.Error.WriteLine(value: $"vocabulary: {RelativePath} disagrees with the table at line {(line + 1)}; run `puck vocabulary` to rewrite it.");
-        Console.Error.WriteLine(value: $"  on disk:   {((line < actual.Length)
-            ? actual[line]
-            : "(end of file)")}");
-        Console.Error.WriteLine(value: $"  generated: {((line < expected.Length)
-            ? expected[line]
-            : "(end of file)")}");
-
-        return 1;
+            ? 0
+            : 1);
     }
 
     public static Command Create() => CliOptions.CheckVerb(

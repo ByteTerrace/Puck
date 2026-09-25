@@ -684,7 +684,7 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Resets the local evaluation point for the next instruction chain without clearing the accumulated field.</summary>
     /// <returns>This builder.</returns>
     public SdfProgramBuilder ResetPoint() {
-        // Mirrors the shader's SDF_OP_RESET clearing parityMaterialDelta — see m_positionalFold's remarks. Both mirrors
+        // Mirrors the shader's SDF_OP_RESET_POINT clearing parityMaterialDelta — see m_positionalFold's remarks. Both mirrors
         // of that slot clear together; they differ in what they track, never in when the GPU forgets it.
         m_positionalFold = null;
         m_materialRecolor = null;

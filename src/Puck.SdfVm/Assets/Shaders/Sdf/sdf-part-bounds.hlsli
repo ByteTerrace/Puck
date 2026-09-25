@@ -48,7 +48,7 @@ bool sdfPartShapeBox(uint type, float4 d0, float4 d1, float level, out float3 bo
         box = abs(d0.xyz) + level + abs(d0.w);
     } else if (type == SDF_SHAPE_CYLINDER) {
         box = float3(abs(d0.x), abs(d0.y), abs(d0.x)) + level + abs(d1.w);
-    } else if (type == SDF_SHAPE_ELLIPSE || type == SDF_SHAPE_CONVEX_POLYGON || type == SDF_SHAPE_ROUNDED_RECT) {
+    } else if (type == SDF_SHAPE_ELLIPSE || type == SDF_SHAPE_CONVEX_POLYGON || type == SDF_SHAPE_ROUNDED_RECTANGLE) {
         float2 profile = abs(d0.xy);
         if (type == SDF_SHAPE_CONVEX_POLYGON) {
             uint packed = asuint(d0.x), count = packed & 15u, offset = packed >> 4u;
@@ -118,7 +118,7 @@ bool sdfPartLeafBox(uint shapeIndex, uint domainCode, uint poseBinding, float le
 
 bool sdfChainSublevelBox(uint cursor, uint end, float level, bool requireUnion, out float3 lower, out float3 upper) {
     lower = -1e20; upper = 1e20;
-    if (cursor >= end || sdfWords[1u + cursor++].x != SDF_OP_RESET) return false;
+    if (cursor >= end || sdfWords[1u + cursor++].x != SDF_OP_RESET_POINT) return false;
     uint poseBinding = 0u, domainCode = 0u;
     if (cursor < end && sdfWords[1u + cursor].x == SDF_OP_TRANSFORM_DYNAMIC) {
         poseBinding = (uint)asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * cursor]).x + 1u;
@@ -140,7 +140,7 @@ bool sdfChainSublevelBox(uint cursor, uint end, float level, bool requireUnion, 
     }
     if (cursor + 1u != end) return false;
     uint4 shape = sdfWords[1u + cursor];
-    if (shape.x != SDF_OP_SHAPE || (requireUnion && shape.z != SDF_BLEND_UNION)) return false;
+    if (shape.x != SDF_OP_SHAPE_BLEND || (requireUnion && shape.z != SDF_BLEND_UNION)) return false;
     if (!sdfPartLeafBox(cursor, domainCode, 0u, level, lower, upper)) return false;
     if (any(lower > upper)) return true;
     float3 center = (lower + upper) * 0.5, box = (upper - lower) * 0.5;
@@ -178,7 +178,7 @@ bool sdfFlatSublevelBox(uint instance, float level, out float3 lower, out float3
     float slack = 0.0;
     [loop] for (uint instruction = first + 1u; instruction < end - 1u; instruction++) {
         uint4 code = sdfWords[1u + instruction];
-        if (code.x != SDF_OP_SHAPE || !sdfShapeEnabled(code.y)) continue;
+        if (code.x != SDF_OP_SHAPE_BLEND || !sdfShapeEnabled(code.y)) continue;
         if (code.z == SDF_BLEND_SMOOTH_UNION) slack += max(asfloat(sdfWords[sdfProgramLayout.dataOffset + 2u * instruction + 1u]).x, SDF_SMOOTH_RADIUS_MIN) * 0.25;
         else if (!(code.z == SDF_BLEND_UNION || code.z == SDF_BLEND_SUBTRACTION || code.z == SDF_BLEND_INTERSECTION || code.z == SDF_BLEND_SMOOTH_INTERSECTION || code.z == SDF_BLEND_SMOOTH_SUBTRACTION)) return false;
     }
@@ -186,7 +186,7 @@ bool sdfFlatSublevelBox(uint instance, float level, out float3 lower, out float3
     uint cursor = first + 1u;
     [loop] while (cursor < end - 1u) {
         uint chainEnd = cursor + 1u;
-        [loop] while (chainEnd < end - 1u && sdfWords[1u + chainEnd].x != SDF_OP_RESET) chainEnd++;
+        [loop] while (chainEnd < end - 1u && sdfWords[1u + chainEnd].x != SDF_OP_RESET_POINT) chainEnd++;
         float3 chainLower, chainUpper;
         if (!sdfChainSublevelBox(cursor, chainEnd, level + slack, false, chainLower, chainUpper)) return false;
         lower = min(lower, chainLower); upper = max(upper, chainUpper);

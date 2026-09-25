@@ -3,9 +3,9 @@ namespace Puck.SignedDistance;
 /// <summary>How a 2D-primitive family shape (<see cref="SdfShapeType.RoundedRectangle"/>,
 /// <see cref="SdfShapeType.RegularPolygon"/>, <see cref="SdfShapeType.Star"/>, <see cref="SdfShapeType.Trapezoid"/>,
 /// <see cref="SdfShapeType.Ellipse"/>, <see cref="SdfShapeType.ChamferedRectangle"/>) is lifted from its 2D
-/// signed-distance field into a 3D solid. Values MUST
-/// match the <c>SDF_LIFT_*</c> lift-mode lane in Assets/Shaders/Sdf/sdf-vm.hlsli (packed into the shape instruction's
-/// Data1.y and decoded as <c>&gt; 0.5</c>).</summary>
+/// signed-distance field into a 3D solid. The kernels read each member as <c>SDF_LIFT_*</c> from the generated
+/// <c>sdf-isa.hlsli</c>; the mode is packed into the shape instruction's Data1.y and decoded as
+/// <c>&gt; 0.5</c>.</summary>
 public enum SdfLift : uint {
     /// <summary>Revolve the 2D profile around the local Y axis (the revolve lift operator): the profile sits in the (radial, Y)
     /// half-plane at a radial offset (the shape's <c>liftAmount</c>). Exact when the offset clears the profile's radial

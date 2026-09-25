@@ -1,7 +1,8 @@
 // The SDF virtual machine — single-source HLSL, compiled by DXC to both SPIR-V (Vulkan) and DXIL (Direct3D 12).
 // A program is a flat uint4 word stream that map() interprets per sample point: transform opcodes mutate the
 // evaluation point, SHAPE opcodes evaluate a primitive and blend it into the running nearest-surface result.
-// KEEP IN SYNC with Puck.SdfVm (SdfOp/SdfShapeType/SdfBlendOp and the SdfProgram word layout).
+// The opcode, shape, blend and packed-layout constants come from sdf-isa.hlsli, generated from Puck.SignedDistance by
+// `puck shaders generate`; the word layout below and every decoder are written against Puck.SignedDistance.SdfProgram.
 #ifndef SDF_VM_HLSLI
 #define SDF_VM_HLSLI
 
@@ -37,28 +38,20 @@
 //                           IN SYNC — while the authored instruction range stays intact for every non-rigid segment and the CPU SdfFieldEvaluator.
 [[vk::binding(1, 0)]] StructuredBuffer<uint4> sdfWords : register(t0);
 
-// The instance CEILING — the most instances one program may declare. The per-tile mask is a DERIVED
-// ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 2048
-// words. KEEP IN SYNC with SdfProgramBuilder.MaxInstances.
-#define SDF_MAX_INSTANCES 65536u
-// Material float4 stride; paired with SdfProgram.Materials.cs.
-#define SDF_MATERIAL_VECTORS_PER_ENTRY 20u
+// The per-tile instance mask is a DERIVED ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the instance
+// ceiling SDF_MAX_INSTANCES caps it at SDF_MAX_INSTANCES/32 = 2048 words.
 // Sentinel instance-mask BASE meaning "every instance visible" (sdfInstanceMaskWord then reads no buffer and
 // returns all-ones words). Every map() CONSUMER that cannot reach the beam-computed per-tile mask (the debug frag
 // view, the beam prepass's own cone march) passes this, so an instanced program still
 // renders its complete picture through them; only sdf-world-views.comp narrows it to a real per-tile mask base.
 #define SDF_INSTANCE_MASK_ALL 0xFFFFFFFFu
 
-// A per-instance SHADOW-OCCLUSION classification bit, packed HOST-SIDE (SdfProgram.PackInstances) into the HIGH bit of
-// the instance meta's segmentEnd lane (i1.w): set => the instance is SHADOW-TRANSPARENT — its compose only REMOVES
-// material (a Subtraction-family carve), so omitting it from a shadow march can only make the field MORE solid
-// (darker / never light-leak). Read ONLY by sdf-world.hlsli's sdfShadowGather under the sdf.shadow-proxy lever
-// (sdfInstanceShadowTransparent); mapCore's segment-range enumeration MASKS it off (SDF_INSTANCE_SEGMENT_END_MASK) so
-// segmentEnd stays the true directory range and every rendered pixel is byte-identical whether the bit is set or not.
-// Segment-directory indices are far below 2^31, so this high bit is genuinely free. KEEP IN SYNC with
-// SdfProgram.ShadowTransparentInstanceFlag / SegmentEndMask.
-#define SDF_INSTANCE_SHADOW_TRANSPARENT_BIT 0x80000000u
-#define SDF_INSTANCE_SEGMENT_END_MASK 0x7FFFFFFFu
+// SDF_INSTANCE_SHADOW_TRANSPARENT_BIT, the high bit of the instance meta's segmentEnd lane (i1.w), marks an instance
+// whose compose only REMOVES material (a Subtraction-family carve), so omitting it from a shadow march can only make
+// the field MORE solid (darker / never light-leak). Read ONLY by sdf-world.hlsli's sdfShadowGather under the
+// sdf.shadow-proxy lever (sdfInstanceShadowTransparent); mapCore's segment-range enumeration MASKS it off
+// (SDF_INSTANCE_SEGMENT_END_MASK) so segmentEnd stays the true directory range and every rendered pixel is
+// byte-identical whether the bit is set or not.
 
 #ifdef SDF_INSTANCE_MASKS
 // The per-tile instance mask sdf-instance-cull.comp wrote (world render path): a flat uint buffer,
@@ -219,10 +212,8 @@ uint sdfInstanceCountClamped() {
 // The world-space UNIFORM-GRID instance cull (world render path, the beam prepass ONLY): a uint-granular block appended
 // after the world-segment list, so mapCore — which stops at that list — never reads it and every rendered pixel is
 // unchanged by its presence. The beam walks it instead of testing every instance in every tile, so its cost tracks the
-// instances NEAR a tile's cone. KEEP IN SYNC with Puck.SignedDistance.SdfInstanceGrid (the host packer) — the header layout,
+// instances NEAR a tile's cone. Puck.SignedDistance.SdfInstanceGrid packs it: the header layout,
 // SDF_GRID_HEADER_WORDS, and SDF_GRID_MAX_DIM.
-#define SDF_GRID_HEADER_WORDS 16u
-#define SDF_GRID_MAX_DIM 64u     // per-axis cell-count cap (KEEP IN SYNC with SdfInstanceGrid.MaxDimension)
 #define SDF_GRID_SLAB_CELLS 2.0  // cone-march slab length in cell edges (fewer iterations + fewer slab-boundary re-tests than 1)
 // The cone-march slab budget. The walk clamps to the ray∩grid interval (at most sqrt(3)*SDF_GRID_MAX_DIM ≈ 111 cells,
 // ~56 slabs at SDF_GRID_SLAB_CELLS = 2) plus the query inflation's few extra slabs, so 128 comfortably covers every
@@ -355,56 +346,23 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 [[vk::binding(46, 0)]] StructuredBuffer<float> sdfBrickPool : register(SDF_BRICK_POOL_REGISTER);
 #endif
 
-// --- opcodes (mirror Puck.SignedDistance.SdfOp) ---
-#define SDF_OP_RESET             0u
-#define SDF_OP_TRANSLATE         1u
-#define SDF_OP_ROTATE            2u
-#define SDF_OP_SCALE             3u
-#define SDF_OP_TRANSFORM_DYNAMIC 4u
-#define SDF_OP_ROTATE_PLANE      5u
-#define SDF_OP_ELONGATE          8u
-#define SDF_OP_SHAPE             9u
-// A SDF_OP_SHAPE instruction's high shape-type-lane bit: SHADING-ONLY (Puck.SignedDistance.SdfInstruction.Detail).
-// Skipped by mapCore/mapGradCore's default (march) mode and included only under sdfDetailShadingActive (the hit-only
-// shade re-evaluation in sdf-world.hlsli's renderView). Shape-type ids are far below 2^31, so the bit is free.
-#define SDF_SHAPE_DETAIL_FLAG 0x80000000u
-// The next-highest shape-type-lane bit: SECONDARY-EXCLUDED (Puck.SignedDistance.SdfInstruction.Secondary == false).
-// Unlike SDF_SHAPE_DETAIL_FLAG (skipped by every march), this shape marches for the camera/beam/fine march and the
-// hit-only shade re-evaluations like any ordinary shape — it drops out ONLY under sdfSecondaryMarchActive, the
-// soft-shadow and ambient-occlusion field walks in sdf-world.hlsli (the study's secondaryScene posture: eyelids and
-// other small parts still shade and collide, they just cast no shadow and cost no AO tap).
-#define SDF_SHAPE_NO_SECONDARY_FLAG 0x40000000u
-#define SDF_SHAPE_TYPE_MASK   0x3FFFFFFFu
-#define SDF_OP_REPEAT          11u
-#define SDF_OP_REPEAT_LIMITED  12u
-// Opcode values 13–15 are reserved. SDF_OP_SYMMETRY_PLANE reproduces the axis-aligned folds with an axis normal.
-#define SDF_OP_ONION           16u
-#define SDF_OP_DILATE          17u
-#define SDF_OP_WALLPAPER_FOLD  18u
-#define SDF_OP_LOG_SPHERE      21u
-#define SDF_OP_CELL_JITTER     22u
-#define SDF_OP_REPEAT_POLAR    23u
-#define SDF_OP_DISPLACE        24u
-#define SDF_OP_DOMAIN_WARP     25u
-#define SDF_OP_SYMMETRY_PLANE  26u
-// Scoped field accumulator (KEEP IN SYNC with Puck.SignedDistance.SdfOp.PushField/PopField). PUSH saves the running accumulator
-// into a one-deep slot and reseeds a fresh scope; POP composes the scope's field back into the saved parent as a
-// candidate (reusing SHAPE's blend tail). SDF_MAX_FIELD_SCOPE_DEPTH is DOCUMENTATION ONLY — no shader expression reads
-// it; the real capacity is the single non-indexed (savedFieldDistance, savedFieldMaterial) scalar pair in mapCore, which
-// holds exactly ONE parent. Raising the depth means making that pair an indexed array with push/pop-by-depth stack
-// semantics HERE, not just bumping this #define. KEEP IN SYNC with SdfProgramBuilder.MaxFieldScopeDepth.
-#define SDF_OP_PUSH_FIELD      27u
-#define SDF_OP_POP_FIELD       28u
-#define SDF_OP_NOISE_DISPLACE  29u
-#define SDF_OP_AXIAL_PROFILE         30u
-#define SDF_OP_SHEAR            31u
+// --- instruction lanes ---
+// SDF_SHAPE_DETAIL_FLAG (Puck.SignedDistance.SdfInstruction.Detail) marks a SHADING-ONLY shape: skipped by
+// mapCore/mapGradCore's default (march) mode and included only under sdfDetailShadingActive (the hit-only shade
+// re-evaluation in sdf-world.hlsli's renderView). SDF_SHAPE_NO_SECONDARY_FLAG (SdfInstruction.Secondary == false) marks
+// a SECONDARY-EXCLUDED shape: unlike a Detail shape it marches for the camera/beam/fine march and the hit-only shade
+// re-evaluations like any ordinary shape, and drops out ONLY under sdfSecondaryMarchActive, the soft-shadow and
+// ambient-occlusion field walks in sdf-world.hlsli (eyelids and other small parts still shade and collide, they just
+// cast no shadow and cost no AO tap).
+// SDF_OP_SYMMETRY_PLANE reproduces the axis-aligned folds with an axis normal.
+// Scoped field accumulator (SdfOp.PushField/PopField). PUSH saves the running accumulator into a one-deep slot and
+// reseeds a fresh scope; POP composes the scope's field back into the saved parent as a candidate (reusing SHAPE's
+// blend tail). SDF_MAX_FIELD_SCOPE_DEPTH is DOCUMENTATION ONLY — no shader expression reads it; the real capacity is
+// the single non-indexed (savedFieldDistance, savedFieldMaterial) scalar pair in mapCore, which holds exactly ONE
+// parent. Raising the depth means making that pair an indexed array with push/pop-by-depth stack semantics HERE, not
+// just raising SdfProgramBuilder.MaxFieldScopeDepth.
 // Gaussian push: Data0=center/push.x, Data1=radii/push.y, header.y=push.z bits.
-#define SDF_OP_GAUSSIAN_PUSH      32u
-// Per-shape lane-driven erosion (KEEP IN SYNC with Puck.SignedDistance.SdfOp.LaneErode): ordered immediately before
-// the SdfOp.ShapeBlend it targets.
-#define SDF_OP_LANE_ERODE 34u
-#define SDF_OP_CELL_DISPLACE 35u
-#define SDF_MAX_FIELD_SCOPE_DEPTH 1u
+// Per-shape lane-driven erosion (SdfOp.LaneErode): ordered immediately before the SdfOp.ShapeBlend it targets.
 // SDF_CORE_OPS — the CORE-OPS compiled variant of the tape interpreters (defined by sdf-world-views-core.comp.hlsl,
 // the second compiled flavor of the Stage 1 views kernel; every other kernel compiles the FULL ISA). Compiles out every
 // EXOTIC op case — everything beyond Reset/Translate/Rotate/Scale/TransformDynamic/Shape — and the exotic shape bodies,
@@ -429,35 +387,11 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #ifdef SDF_FOLD_OPS
 #define SDF_STRIP_HEAVY
 #endif
-// SDF_OP_CELL_JITTER Blend-lane (instructionHeader.z) noise flavor: how the per-cell POSITION offset is distributed
-// (KEEP IN SYNC with Puck.SignedDistance.SdfNoiseFlavor). Reshapes ONLY r0 — tumble and material variant are unaffected.
-#define SDF_NOISE_WHITE          0u
-#define SDF_NOISE_BLUE           1u
-#define SDF_NOISE_GAUSSIAN       2u
-// SDF_OP_REPEAT_POLAR Shape-lane (instructionHeader.y) rotation axis (KEEP IN SYNC with Puck.SignedDistance.SdfPolarAxis): the
-// angular fold acts in the plane PERPENDICULAR to it (the axial coordinate is untouched).
-#define SDF_POLAR_AXIS_X         0u
-#define SDF_POLAR_AXIS_Y         1u
-#define SDF_POLAR_AXIS_Z         2u
-
-// --- wallpaper symmetry groups, IUC order (mirror Puck.SignedDistance.SdfWallpaperGroup) ---
-#define SDF_WPG_P1    0u
-#define SDF_WPG_P2    1u
-#define SDF_WPG_PM    2u
-#define SDF_WPG_PG    3u
-#define SDF_WPG_CM    4u
-#define SDF_WPG_PMM   5u
-#define SDF_WPG_PMG   6u
-#define SDF_WPG_PGG   7u
-#define SDF_WPG_CMM   8u
-#define SDF_WPG_P4    9u
-#define SDF_WPG_P4M  10u
-#define SDF_WPG_P4G  11u
-#define SDF_WPG_P3   12u
-#define SDF_WPG_P3M1 13u
-#define SDF_WPG_P31M 14u
-#define SDF_WPG_P6   15u
-#define SDF_WPG_P6M  16u
+// SDF_OP_CELL_JITTER's Blend lane (instructionHeader.z) is an SDF_NOISE_* flavor: how the per-cell POSITION offset is
+// distributed. It reshapes ONLY r0 — tumble and material variant are unaffected.
+// SDF_OP_REPEAT_POLAR's Shape lane (instructionHeader.y) is an SDF_POLAR_AXIS_* rotation axis: the angular fold acts in
+// the plane PERPENDICULAR to it (the axial coordinate is untouched).
+// SDF_OP_WALLPAPER_FOLD's group is an SDF_WPG_* wallpaper group in IUC order, and its plane an SDF_WPG_PLANE_* pair.
 
 // === Shared numeric constants ========================================================================================
 // Written at full double precision: each rounds to the SAME float32 the shorter literal did, so naming them is
@@ -487,13 +421,11 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // cannot stall the march: a step of up to 0.1% of the local radius may cross the boundary, an overestimate window far
 // below visible scale (a shell band is ~w/2 of the radius). Host-contracted literal.
 #define SDF_LOGSPHERE_GAP_FLOOR 1.0e-3
-// Floors SDF_OP_AXIAL_PROFILE's scale profile s(t) so an authored amount/bulge combination that drives it non-positive
-// still yields a finite warp rather than a divide-by-zero or a sign flip. KEEP IN SYNC with
-// Puck.SignedDistance.SdfProgramBuilder.FlareMinScale.
-#define SDF_FLARE_MIN_SCALE 0.05
-// SDF_OP_LANE_ERODE's ragged-front noise weight: how far the noise sample (centered, [-0.5, 0.5]) perturbs the
-// saturated lane fraction before it scales the target shape's reach — 0 would erode a uniform, noise-free front.
-#define SDF_LANE_ERODE_RAGGED_AMOUNT 0.35
+// SDF_FLARE_MIN_SCALE floors SDF_OP_AXIAL_PROFILE's scale profile s(t) so an authored amount/bulge combination that
+// drives it non-positive still yields a finite warp rather than a divide-by-zero or a sign flip.
+// SDF_LANE_ERODE_RAGGED_AMOUNT is SDF_OP_LANE_ERODE's ragged-front noise weight: how far the noise sample (centered,
+// [-0.5, 0.5]) perturbs the saturated lane fraction before it scales the target shape's reach — 0 would erode a
+// uniform, noise-free front.
 // The hash-stream triple SDF_OP_LANE_ERODE folds into sdfValueNoise3 — the op carries no seed lane of its own
 // (data0/data1 are fully spent on lane index/from/to/noiseScale/reach), so every erode instruction shares one fixed,
 // still-decorrelated-per-axis stream (reusing the existing hash-stream separators, never a fresh magic constant).
@@ -506,95 +438,53 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // backends instead of "one compile-time constant, one driver rsqrt". Every kernel that lights a surface uses it.
 static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201);
 
-// --- primitives ---
-#define SDF_SHAPE_BOX          0u
-#define SDF_SHAPE_CAPSULE      1u
-#define SDF_SHAPE_SPHERE       2u
-#define SDF_SHAPE_TORUS        3u
-#define SDF_SHAPE_CYLINDER     4u
-#define SDF_SHAPE_PLANE        5u
-// 6 is retired (the approximate iq ellipsoid): every ellipsoid is SDF_SHAPE_SUPERELLIPSOID at exponent 2.
-#define SDF_SHAPE_VESICA       7u
-// The 2D-primitive family: an exact 2D SDF lifted to 3D. KEEP IN SYNC with SdfShapeType. Shared lane layout —
-// data0.xyz = 2D params, data0.w = lift amount (revolve offset o OR extrude half-height h), data1.x = smooth,
-// data1.y = lift mode (see SDF_LIFT_*), data1.zw = per-shape host-baked constants.
-#define SDF_SHAPE_ROUNDED_RECT     8u
-#define SDF_SHAPE_REGULAR_POLYGON  9u
-#define SDF_SHAPE_STAR            10u
-#define SDF_SHAPE_ROUND_CONE      11u
-#define SDF_SHAPE_TRAPEZOID       12u
-#define SDF_SHAPE_ELLIPSE         13u
-#define SDF_SHAPE_SCREEN_SLAB     14u
-// A glyph SAMPLED FROM A FONT ATLAS as a DISTANCE-level field (KEEP IN SYNC with SdfShapeType.Glyph). data0 =
+// --- primitive lane layouts (Puck.SignedDistance.SdfShapeType) ---
+// Every ellipsoid is SDF_SHAPE_SUPERELLIPSOID at exponent 2.
+// The 2D-primitive family: an exact 2D SDF lifted to 3D. Shared lane layout — data0.xyz = 2D params, data0.w = lift
+// amount (revolve offset o OR extrude half-height h), data1.x = smooth, data1.y = lift mode (an SDF_LIFT_* value,
+// decoded as `> 0.5` so a float lane carries it cleanly on both backends), data1.zw = per-shape host-baked constants.
+// A glyph SAMPLED FROM A FONT ATLAS as a DISTANCE-level field (SdfShapeType.Glyph). data0 =
 // (packedUvMin, packedUvMax [each host-baked unorm2x16 of an atlas UV], distanceScale, extrudeHalfDepth); data1 =
 // (smooth [ISA-wide], halfWidth, halfHeight, _). Only the world-views kernel binds the atlas (SDF_GLYPH_ATLAS); every
 // other kernel evaluates the conservative extruded-quad fallback (the glyph is strictly inside its cell). See sdfGlyph.
-#define SDF_SHAPE_GLYPH           15u
-// A SAMPLED distance-field brick (KEEP IN SYNC with SdfShapeType.SampledRegion). data0 = (boxMin.xyz, cellSize); data1 =
-// (smooth [ISA-wide], packedDims [3x10-bit dims, unpacked with 0x3FFu], brickWordOffset [pool base word], boundaryFloor
+// A SAMPLED distance-field brick (SdfShapeType.SampledRegion). data0 = (boxMin.xyz, cellSize); data1 =
+// (smooth [ISA-wide], packedDims [3x10-bit dims, unpacked with SDF_SAMPLED_REGION_DIM_MASK], brickWordOffset [pool base word], boundaryFloor
 // [outside-box lower-bound offset = margin/lambda]). Evaluated by manual trilinear ONLY where the pool is bound
 // (SDF_SAMPLED_REGIONS); every other kernel returns the conservative union-hull fallback (SDF_FAR_DISTANCE, so a
 // Subtraction compose never bites). See sdfSampledRegion.
-#define SDF_SHAPE_SAMPLED_REGION  16u
-// A 45-degree-chamfered rectangle (KEEP IN SYNC with SdfShapeType.ChamferedRectangle) — the family's shared lane
+// A 45-degree-chamfered rectangle (SdfShapeType.ChamferedRectangle) — the family's shared lane
 // layout: data0 = (halfX, halfY, chamfer c, lift); data1 = (smooth, lift mode, UNUSED, edge-rounding radius r).
 // The extrude lift additionally bevels the cap edges at the same c via sdfExtrudeChamfer2D. c = 0 reduces both the 2D
 // core and the extrude join to the plain rectangle/box forms exactly.
-#define SDF_SHAPE_CHAMFERED_RECT  17u
-// A generalized ellipsoid (KEEP IN SYNC with SdfShapeType.Superellipsoid). data0 = (radiusX, radiusY, radiusZ,
+// A generalized ellipsoid (SdfShapeType.Superellipsoid). data0 = (radiusX, radiusY, radiusZ,
 // exponent e in [2, 8]); data1 = (smooth [ISA-wide], 1/radiusX, 1/radiusY, 1/radiusZ [host-baked]). e = 2 is the
 // ellipsoid — the ISA's one ellipsoid spelling — and runs a pow-free fast path (sdfEllipsoidGauge) that stays compiled
 // in the fold tier; the general exponent path is SDF_STRIP_HEAVY. KEEP IN SYNC with SdfViewsKernelVariants, which
 // sends an e != 2 instance to the full variant.
-#define SDF_SHAPE_SUPERELLIPSOID  18u
-// A validated convex polygon (KEEP IN SYNC with SdfShapeType.ConvexPolygon) — the 2D-primitive family's lane layout,
+// A validated convex polygon (SdfShapeType.ConvexPolygon) — the 2D-primitive family's lane layout,
 // but its profile is a vertex list too large to pack inline: data0.x = asfloat(packed uint (tableOffset << 4) |
 // vertexCount), data0.w = lift amount; data1 = (smooth [ISA-wide], lift mode, cap chamfer, edge-rounding radius). The
 // vertices live in sdfWords itself, right after every other table this program packs (see sdfPolygonVertex).
-#define SDF_SHAPE_CONVEX_POLYGON  19u
-#define SDF_SHAPE_PATH            21u
-// A quadratic Bezier curve (KEEP IN SYNC with SdfShapeType.Sweep) swept with a tapering, bulging radius, optionally
+// A quadratic Bezier curve (SdfShapeType.Sweep) swept with a tapering, bulging radius, optionally
 // as helical strands. data0 = (asfloat(uint table offset), strands, twist, strandOffset); data1 = (smooth
 // [ISA-wide], reserved, reserved, reserved). The control points (A, B, C) and radius endpoints
 // (radiusStart, radiusEnd, bulge) live in sdfWords, 3 fixed uvec4 words at the table offset (see sdfSweepCurve).
-#define SDF_SHAPE_SWEEP           20u
 
-// Lift mode for the 2D-primitive family (data1.y). Decoded as `> 0.5` so a float lane carries it cleanly on both
-// backends. KEEP IN SYNC with Puck.SignedDistance.SdfLift.
-#define SDF_LIFT_REVOLVE 0u
-#define SDF_LIFT_EXTRUDE 1u
-
-// --- bounding-sphere entry modes (mirror Puck.SignedDistance.SdfProgram's PackBounds) ---
-#define SDF_BOUND_NONE    0u
-#define SDF_BOUND_STATIC  1u
-#define SDF_BOUND_DYNAMIC 2u
-// Segment metadata overlays a plan-present flag on the high bit of its bound mode. The low byte remains SDF_BOUND_*;
-// shape and instance bound records never carry this flag. KEEP IN SYNC with SdfProgram's packing constants.
-#define SDF_SEGMENT_RIGID_PLAN 0x80000000u
-#define SDF_SEGMENT_BOUND_MASK 0x000000FFu
-#define SDF_RIGID_LEAF_IDENTITY_ROTATION 0x80000000u
-// The leaf rides a fold run; the slot after it holds (pose before the run.xyz, first fold | identity bit), that
-// pose's quaternion, and (run length in instructions, 0, 0, 0). KEEP IN SYNC with SdfProgram.RigidLeafFoldedFlag and
-// SdfProgram.RigidLeafMaxFoldRun.
-#define SDF_RIGID_LEAF_FOLDED            0x40000000u
-#define SDF_RIGID_LEAF_SHAPE_MASK        0x3FFFFFFFu
-#define SDF_RIGID_LEAF_MAX_FOLD_RUN      8u
+// --- bound records (Puck.SignedDistance.SdfProgram's PackBounds) ---
+// Segment metadata overlays SDF_SEGMENT_RIGID_PLAN on the high bit of its bound mode. The low byte remains
+// SDF_BOUND_*; shape and instance bound records never carry this flag.
+// A leaf flagged SDF_RIGID_LEAF_FOLDED rides a fold run of at most SDF_RIGID_LEAF_MAX_FOLD_RUN instructions; the slot
+// after it holds (pose before the run.xyz, first fold | identity bit), that pose's quaternion, and (run length in
+// instructions, 0, 0, 0).
 
 // --- blend operators ---
-// THE ACCUMULATOR RULE (KEEP IN SYNC with Puck.SignedDistance.SdfBlendOp's summary). mapCore carries ONE running nearest-surface
-// distance across the WHOLE program; SDF_OP_RESET resets the evaluation POINT, never result.distance. So a blend never
+// THE ACCUMULATOR RULE (Puck.SignedDistance.SdfBlendOp's summary). mapCore carries ONE running nearest-surface
+// distance across the WHOLE program; SDF_OP_RESET_POINT resets the evaluation POINT, never result.distance. So a blend never
 // sees a subtree - it sees every shape emitted before it. Union (a min) and subtraction (a max against the NEGATED
 // candidate, which only bites inside the subtrahend) are therefore LOCAL and may appear anywhere. The INTERSECTION
 // family is not: max(accumulator, candidate) returns the candidate wherever the candidate is farther, i.e. everywhere
 // outside its own shape, so it annihilates every earlier shape it does not overlap. Author an intersection pair FIRST.
 // That unbounded influence region is also why an INSTANCE carrying one cannot be culled (SdfProgram.UnmaskableBoundRadius).
-#define SDF_BLEND_UNION               0u
-#define SDF_BLEND_SMOOTH_UNION        1u
-#define SDF_BLEND_SUBTRACTION         2u
-#define SDF_BLEND_INTERSECTION        3u
-#define SDF_BLEND_XOR                 4u
-#define SDF_BLEND_SMOOTH_INTERSECTION 5u
-#define SDF_BLEND_SMOOTH_SUBTRACTION  6u
 // Chamfered (45° beveled) seams — the mechanical/CAD counterpart to the smooth (round) blends; bevel size = Data1.x.
 // For unit outward gradients meeting at angle φ, |∇((a + b - r)·√½)| = √2·cos(φ/2): the bevel plane's gradient reaches
 // √2 at a FLAT / near-parallel seam (two tangent surfaces, φ → 0), is exactly 1 at a perpendicular seam, and falls to 0
@@ -603,24 +493,13 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // 1-Lipschitz, and the only arm that can exceed BOTH operands, so SdfProgram.AnalyzeLipschitz folds it once per
 // COMPOSITION in this switch's own order rather than once per program. The recurrence's fixed point is 1 + √2, and the
 // accumulator starts at the SDF_FAR_DISTANCE constant, which is what makes the first chamfer composition the identity.
-// (KEEP IN SYNC with Puck.SignedDistance.SdfBlendOp.)
-#define SDF_BLEND_CHAMFER_UNION        7u
-#define SDF_BLEND_CHAMFER_INTERSECTION 8u
-#define SDF_BLEND_CHAMFER_SUBTRACTION  9u
-#define SDF_BLEND_GROOVE_UNION       10u
-#define SDF_BLEND_PIPE_UNION         11u
-#define SDF_BLEND_MORPH              12u
-#define SDF_BLEND_GROOVE_SUBTRACTION 13u
-#define SDF_BLEND_PIPE_SUBTRACTION   14u
-#define SDF_BLEND_STAIRS_UNION       15u
-#define SDF_BLEND_STAIRS_SUBTRACTION 16u
+// (Puck.SignedDistance.SdfBlendOp.)
 
 // Material sentinel range: a SCREEN_SLAB shades as a "screen" rather than a table albedo. The plain sentinel
 // (SdfProgramBuilder.ScreenSlab with no screen index) shades the procedural test-card. SDF_SCREEN_MATERIAL + 1 +
 // screenIndex (SdfProgramBuilder's screen-surface overload) additionally identifies WHICH declared screen surface —
 // and so which screen source slot (0..31) — the hit belongs to, decoded as (material - SDF_SCREEN_MATERIAL - 1).
 // Every material id in this range is screen shading; test with >= SDF_SCREEN_MATERIAL, never ==.
-#define SDF_SCREEN_MATERIAL 65535
 #define SDF_ISA_ERROR_MATERIAL (-1) // sdfMaterialLoad decodes this as emissive diagnostic magenta.
 
 // The winning candidate's anonymous values and dynamic frame travel with its material.
@@ -1573,7 +1452,7 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 
     float cellSize = data0.w;
     uint packedDims = asuint(data1.y);
-    uint3 dims = uint3((packedDims & 0x3FFu), ((packedDims >> 10) & 0x3FFu), ((packedDims >> 20) & 0x3FFu));
+    uint3 dims = uint3((packedDims & SDF_SAMPLED_REGION_DIM_MASK), ((packedDims >> 10) & SDF_SAMPLED_REGION_DIM_MASK), ((packedDims >> 20) & SDF_SAMPLED_REGION_DIM_MASK));
     uint baseWord = asuint(data1.z);
     float3 boxMin = data0.xyz;
     float3 extent = (float3(dims) * cellSize);
@@ -1794,8 +1673,8 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         // The 2D-primitive family: each lifted wrapper reads its lift mode (data1.y) and lift amount (data0.w) itself.
         // A regular polygon is sdfStar2D's m = 2 case, so it shares the star's body verbatim. RoundedRectangle is a
         // CORE shape (the room's cabinetry is built from it); the rest of the family is exotic.
-        case SDF_SHAPE_ROUNDED_RECT:    result = sdfRoundedRect(p, data0, data1); break;
-        case SDF_SHAPE_CHAMFERED_RECT:  result = sdfChamferedRect(p, data0, data1); break;
+        case SDF_SHAPE_ROUNDED_RECTANGLE:    result = sdfRoundedRect(p, data0, data1); break;
+        case SDF_SHAPE_CHAMFERED_RECTANGLE:  result = sdfChamferedRect(p, data0, data1); break;
 #ifndef SDF_STRIP_HEAVY
         case SDF_SHAPE_REGULAR_POLYGON:
         case SDF_SHAPE_STAR:            result = sdfPolyStar(p, data0, data1); break;
@@ -2380,7 +2259,7 @@ SdfProgramLayout sdfLoadProgramLayout() {
     layout.segmentCount = segmentCount;
     layout.rigidPlanOffset = segmentHeader.z;
     layout.partProgramOffset = sdfWords[instanceOffset].y;
-    layout.noDetailShapes = (sdfWords[instanceOffset].z & 1u) != 0u; // SdfProgram.NoDetailShapesFlag
+    layout.noDetailShapes = (sdfWords[instanceOffset].z & SDF_NO_DETAIL_SHAPES_FLAG) != 0u;
     layout.stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
     layout.instanceOffset = instanceOffset;
     layout.instanceCount = instanceCount;
@@ -2545,7 +2424,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // TRANSFORM_DYNAMIC, exactly like localPosition; zero under no dynamic slot.
     float4 currentLanes = float4(0.0, 0.0, 0.0, 0.0);
     int currentSlot = -1;
-    // SDF_OP_LANE_ERODE's pending effect on the NEXT SDF_OP_SHAPE: a cheap early-out skip (no field cost) or,
+    // SDF_OP_LANE_ERODE's pending effect on the NEXT SDF_OP_SHAPE_BLEND: a cheap early-out skip (no field cost) or,
     // otherwise, a world-unit additive erosion. Consumed and cleared there; reset with the chain.
     bool laneErodeSkipShape = false;
     float laneErodeAmount = 0.0;
@@ -2773,7 +2652,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             float composeSmooth = 0.0;
 
             switch (op) {
-                case SDF_OP_RESET: {
+                case SDF_OP_RESET_POINT: {
                     localPosition = worldPosition;
                     distanceScale = 1.0;
                     currentLanes = float4(0.0, 0.0, 0.0, 0.0);
@@ -2959,7 +2838,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     }
 
                     // Per-cell material variant (same channel WallpaperFold recolors through): a hashed palette row in
-                    // 0..variants-1, added to a later shape's material by the SDF_OP_SHAPE parityMaterialDelta apply.
+                    // 0..variants-1, added to a later shape's material by the SDF_OP_SHAPE_BLEND parityMaterialDelta apply.
                     if (trackMaterial && (instructionHeader.w != 0u)) {
                         parityMaterialDelta = (int)(h0.z % instructionHeader.w);
                     }
@@ -3114,9 +2993,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // Per-shape lane-driven erosion (KEEP IN SYNC with SdfProgramBuilder.LaneErode): data0 = (lane index
                 // 0..3, from, to, noiseScale), data1.x = the target shape's HOST-BAKED reach (its bound radius).
                 // t = saturate((lane - from) / (to - from)) (a reversed from > to range runs the fold the other way);
-                // t >= 1 sets the cheap early-out (SDF_OP_SHAPE skips its own evaluation entirely — no field cost);
+                // t >= 1 sets the cheap early-out (SDF_OP_SHAPE_BLEND skips its own evaluation entirely — no field cost);
                 // otherwise a 3D noise sample ragged-fronts t before it scales the reach into a world-unit candidate
-                // erosion, consumed by the immediately-following SDF_OP_SHAPE (whatever ordinary point ops the
+                // erosion, consumed by the immediately-following SDF_OP_SHAPE_BLEND (whatever ordinary point ops the
                 // shape's own chain still applies in between) and cleared there.
 #ifndef SDF_STRIP_HEAVY
                 case SDF_OP_LANE_ERODE: {
@@ -3224,8 +3103,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // parity-material stride. The fold is an isometry, so distanceScale is untouched.
                     uint group = instructionHeader.y;
                     uint plane = instructionHeader.z;
-                    int axisA = ((plane == 2u) ? 1 : 0);
-                    int axisB = ((plane == 1u) ? 1 : 2);
+                    int axisA = ((plane == SDF_WPG_PLANE_YZ) ? 1 : 0);
+                    int axisB = ((plane == SDF_WPG_PLANE_XY) ? 1 : 2);
                     // The symmetry LOD is PER SAMPLE (not per ray): every map() consumer — beam cone-march, pixel march,
                     // the normal probe, the shadow marches — samples the identical field, so cull and march can never disagree.
                     bool lodSimplify = ((data1.z > 0.0) && (distance(worldPosition, sdfLodOrigin) > data1.z));
@@ -3244,7 +3123,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     break;
                 }
 #endif
-                case SDF_OP_SHAPE: {
+                case SDF_OP_SHAPE_BLEND: {
                     // Consume the pending SDF_OP_LANE_ERODE effect (if any) FIRST, before every other skip path below,
                     // so it never leaks onto a later, unrelated shape (a bound-culled or Detail/Secondary-skipped
                     // shape still clears it here).
@@ -3794,7 +3673,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             float composeSmooth = 0.0;
 
             switch (op) {
-                case SDF_OP_RESET: {
+                case SDF_OP_RESET_POINT: {
                     localPosition = worldPosition;
                     distanceScale = 1.0;
                     jx = float3(1.0, 0.0, 0.0);
@@ -4175,8 +4054,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 case SDF_OP_WALLPAPER_FOLD: {
                     uint group = instructionHeader.y;
                     uint plane = instructionHeader.z;
-                    int axisA = ((plane == 2u) ? 1 : 0);
-                    int axisB = ((plane == 1u) ? 1 : 2);
+                    int axisA = ((plane == SDF_WPG_PLANE_YZ) ? 1 : 0);
+                    int axisB = ((plane == SDF_WPG_PLANE_XY) ? 1 : 2);
                     bool lodSimplify = ((data1.z > 0.0) && (distance(worldPosition, sdfLodOrigin) > data1.z));
                     float2 cellIndex;
                     float2 in2 = float2(localPosition[axisA], localPosition[axisB]);
@@ -4198,8 +4077,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     break;
                 }
 #endif
-                case SDF_OP_SHAPE: {
-                    // KEEP IN SYNC with mapCore's SDF_OP_SHAPE lane-erode/detail/secondary skips — the dual twin must
+                case SDF_OP_SHAPE_BLEND: {
+                    // KEEP IN SYNC with mapCore's SDF_OP_SHAPE_BLEND lane-erode/detail/secondary skips — the dual twin must
                     // agree on which shapes are visible, and a pending lane-erode effect must clear here exactly like
                     // mapCore's, whichever skip path (if any) consumes it.
                     bool laneEroded = laneErodeSkipShape;

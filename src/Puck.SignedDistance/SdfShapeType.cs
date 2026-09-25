@@ -1,7 +1,8 @@
 namespace Puck.SignedDistance;
 
-/// <summary>Identifies an SDF primitive. Values and data layouts must match the <c>SDF_SHAPE_*</c> definitions and
-/// shape decoders in <c>Assets/Shaders/Sdf/sdf-vm.hlsli</c>.</summary>
+/// <summary>Identifies an SDF primitive. The kernels read each member as <c>SDF_SHAPE_*</c> from the generated
+/// <c>sdf-isa.hlsli</c> (<c>Puck.SdfVm.SdfIsaHlsl</c>); each data layout must match its shape decoder in
+/// <c>Assets/Shaders/Sdf/sdf-vm.hlsli</c>.</summary>
 public enum SdfShapeType : uint {
     Box = 0, // Data0 = (halfX, halfY, halfZ, roundingRadius)
     Capsule = 1, // Data0 = (endX, endY, endZ, radius); the segment runs from the local origin to the endpoint
@@ -34,7 +35,7 @@ public enum SdfShapeType : uint {
     // (packedUvMin, packedUvMax [each unorm2x16-packed atlas UV, host-baked], distanceScale, extrudeHalfDepth); Data1 =
     // (smooth [ISA-wide, header/Data1.x], halfWidth, halfHeight, samplingCorrection in (0,1]). Evaluated only where the glyph atlas is bound (the
     // world-views kernel, SDF_GLYPH_ATLAS); every other kernel falls back to the exact 2D quad's extruded box — a
-    // conservative underestimate, since the glyph is strictly inside its cell. KEEP IN SYNC with SDF_SHAPE_GLYPH.
+    // conservative underestimate, since the glyph is strictly inside its cell.
     Glyph = 15,
     // A SAMPLED distance-field brick: the settled-carve UNION field (min_i(|p-c_i|-r_i)), baked once into a cubic-voxel
     // lattice the kernels sample O(1) with manual trilinear interpolation, composed into the analytic program as ONE
@@ -47,7 +48,7 @@ public enum SdfShapeType : uint {
     // an unchanged zero set. Evaluated only where the brick pool is bound (SDF_SAMPLED_REGIONS - the world-views + beam
     // kernels); every other kernel falls back to the conservative UNION
     // HULL - SDF_FAR_DISTANCE, so the subtraction never bites and the region renders uncarved (the Glyph quad-fallback
-    // precedent: solid, never a hole). KEEP IN SYNC with SDF_SHAPE_SAMPLED_REGION.
+    // precedent: solid, never a hole).
     SampledRegion = 16,
     // A member of the 2D-primitive family (SAME lane layout as RoundedRectangle): a 45-degree-beveled rectangle (the
     // box field intersected with a diagonal bevel half-plane per corner) lifted to 3D by revolve/extrude. Data0 =
@@ -57,8 +58,7 @@ public enum SdfShapeType : uint {
     // 2D profile itself cuts. c = 0 is the identity — the 2D core and the extrude join both reduce to the plain
     // rectangle/box forms to the bit — so an unchamfered program stays byte-identical. The field is exact inside and
     // on the surface and a conservative lower bound outside in the wedge past each bevel vertex (like the chamfer
-    // blend); 1-Lipschitz (no AnalyzeLipschitz step clamp), like the rest of the family. KEEP IN SYNC with
-    // SDF_SHAPE_CHAMFERED_RECT.
+    // blend); 1-Lipschitz (no AnalyzeLipschitz step clamp), like the rest of the family.
     ChamferedRectangle = 17,
     // Superellipsoid = 18: NOT a member of the 2D-primitive family above (it lifts nothing — a solid 3D formula
     // directly). Data0 = (radiusX, radiusY, radiusZ, exponent e in [2, 8]); Data1 = (smooth [ISA-wide], 1/radiusX,
