@@ -38,8 +38,9 @@ internal sealed record QualificationWait(string Phase, string Outcome);
 /// <param name="Inspections">The <c>pipeline.inspect</c> responses, in order.</param>
 /// <param name="Releases">The inspections refused because the instance is no longer rendered.</param>
 /// <param name="Waits">The <c>pipeline.wait</c> outcomes, in order.</param>
-/// <param name="ValidationMessages">Every validation-layer line: a <c>[vulkan-debug] validation</c> message or any
-/// <c>[d3d12-debug]</c> message.</param>
+/// <param name="ValidationMessages">Every line that fails a validation-layer run: a <c>[vulkan-debug] validation</c>
+/// message, any <c>[d3d12-debug]</c> message, or the statement that the Direct3D 12 layer never loaded, so nothing was
+/// validated.</param>
 /// <param name="CandidateRefusals">Every pipeline candidate the instance refused.</param>
 /// <param name="CompilerAbsent">The line saying a pipeline could not compile because a shader tool is absent, or
 /// <see langword="null"/>.</param>
@@ -164,7 +165,7 @@ internal static partial class QualificationJudge {
                     Phase: wait.Groups["phase"].Value
                 ));
             }
-            if (DebugLayerOutput.IsValidationMessage(line: line)) {
+            if (DebugLayerOutput.IsValidationMessage(line: line) || DebugLayerOutput.IsBlind(line: line)) {
                 validation.Add(item: line);
             }
             if (line.StartsWith(
