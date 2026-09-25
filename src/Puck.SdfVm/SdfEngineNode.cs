@@ -514,6 +514,9 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             child.OnDeviceLost();
         }
 
+        // The lost submissions will never sample the leased screen sources, so the leases retire before the frame
+        // source is told: a producer retiring its images then releases them at once, on the device that made them.
+        RetireAllScreenSourceFrames();
         m_frameSource.NotifyDeviceLost();
         m_engine?.Dispose();
         m_engine = null;
@@ -522,7 +525,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         CancelShaderReload(reason: "the device was lost");
         m_pipelines.Release();
         m_work.Invalidate();
-        RetireAllScreenSourceFrames();
         m_glyphAtlasInitialized = false;
         m_uploadedGlyphAtlas = null;
         m_deviceContext = null;

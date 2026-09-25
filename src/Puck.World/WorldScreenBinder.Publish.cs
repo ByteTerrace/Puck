@@ -138,11 +138,13 @@ internal sealed partial class WorldScreenBinder {
                 ) is { } machine) &&
                     m_publishedMachineOutputs.Add(item: (source.Instance, source.Output))
                 ) {
-                    machine.PublishFrame(
+                    m_presentedMachineOutputs.Publish(
                         deviceContext: deviceContext,
-                        gpu: gpu
+                        gpu: gpu,
+                        instance: source.Instance,
+                        machine: machine,
+                        output: source.Output
                     );
-                    _ = m_presentedMachineOutputs.Add(item: (source.Instance, source.Output));
                 }
 
                 // A named output is one producer shared by every display that references it. Once the first
