@@ -783,7 +783,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         var pixels = m_readback.Read(
             bytesPerPixel: 4,
-            deviceContext: m_deviceContext,
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: m_height,
             sourceImageHandle: m_renderTarget!.ImageHandle,

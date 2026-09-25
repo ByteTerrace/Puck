@@ -280,7 +280,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         } else if (surface.IsSharedHandle) {
             m_surfaceImport ??= deviceContext.Services.SurfaceTransferFactory.CreateImport();
             var imported = m_surfaceImport.Import(
-                deviceContext: deviceContext,
                 sharedHandle: surface.SharedHandle,
                 format: GpuPixelFormats.FromSurfaceFormat(format: surface.Format),
                 width: surface.Width,

@@ -416,10 +416,6 @@ public static class WorldBootComposition {
                 machines: sp.GetRequiredService<WorldMachineHost>(),
                 cameraCapture: sp.GetRequiredService<ICameraCaptureService>(),
                 windowCapture: sp.GetRequiredService<INativeImageCaptureService>(),
-                // The backend-neutral surface-transfer seam the Vulkan host's camera GPU tier imports its shared
-                // targets through: the services of whichever presenter's device context composes. A headless boot has
-                // no device context (null) and never publishes, so nothing reaches for it.
-                surfaceTransfers: sp.GetService<IGpuDeviceContext>()?.Services.SurfaceTransferFactory,
                 cameras: definition.Cameras,
                 anchors: sp.GetRequiredService<WorldClient>(),
                 stamps: sp.GetRequiredService<WorldStampPool>(),

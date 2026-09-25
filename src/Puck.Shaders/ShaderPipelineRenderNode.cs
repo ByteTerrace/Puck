@@ -302,7 +302,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     width: m_lastSurface.Width
                 );
                 var pixels = m_readback.Read(
-                    m_device,
                     m_lastSurface.ImageHandle,
                     format,
                     m_lastSurface.Width,

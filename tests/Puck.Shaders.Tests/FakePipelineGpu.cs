@@ -425,22 +425,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             : 0UL);
 
         public void Dispose() => m_staging?.Dispose();
-        public bool IsReadComplete() => true;
-        public ReadOnlyMemory<byte> MapPixels() => m_pixels;
-        public ReadOnlyMemory<byte> Read(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
-            SubmitRead(
-                bytesPerPixel: bytesPerPixel,
-                deviceContext: deviceContext,
-                format: format,
-                height: height,
-                sourceImageHandle: sourceImageHandle,
-                sourceLayout: sourceLayout,
-                width: width
-            );
-
-            return m_pixels;
-        }
-        public void SubmitRead(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
+        public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
             var bytes = ((((ulong)width) * height) * bytesPerPixel);
 
             if (StagingBytes != bytes) {
@@ -451,6 +436,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
                 );
                 m_pixels = new byte[bytes];
             }
+
+            return m_pixels;
         }
     }
     private sealed class FakeFramebuffer(Created created, IGpuRenderPass renderPass, uint width, uint height, nint[] colors, nint depth) : IGpuFramebuffer {

@@ -1361,9 +1361,13 @@ Phase 2, the services, follows the generated frame block, which has landed:
    placement: `CreateHostVisible` returns a host-writable buffer, with or without
    initial data, and `CreateDeviceLocal` one only the GPU writes.
    `DirectXBufferStatesLawTests` holds each placement's way into Direct3D 12's
-   indirect-argument state. The surface transfer objects the factory creates still
-   take a device context on each call; binding them to it is open work beside
-   the device-loss changes to the upload and import objects.
+   indirect-argument state. The surface readback, upload and import objects
+   `IGpuSurfaceTransferFactory` creates are bound to its device context too, and
+   none of their calls takes a device. Each holds its resources on the device of
+   its first use and is released before that device goes; on Vulkan a
+   readback, upload or import refuses a replaced device and a release after its
+   device is destroyed (`VulkanDeviceOwnership`), and a creation that fails part
+   way releases what it made. A readback only reads synchronously.
 10. Done: `IGpuDeviceContext.Services` (`GpuDeviceServices`) holds the recorder,
     bindings, queue submitter and every factory, and is the one way a consumer
     reaches a device-bound service. Direct3D 12's context creates the set in its
