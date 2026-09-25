@@ -53,6 +53,9 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public List<(GpuRenderPassDescription Pass, GpuGraphicsPipelineDescription Description)> GraphicsPipelines { get; } = [];
     /// <summary>Gets the ordered creations, fence waits, device drains and disposals, while <see cref="Recording"/> is on.</summary>
     public List<string> Events { get; } = [];
+    /// <summary>Gets every descriptor write while <see cref="Recording"/> is on, in writing order: the set, the binding,
+    /// and the image view or buffer handle written.</summary>
+    public List<(nint Set, uint Binding, nint Handle)> DescriptorWrites { get; } = [];
 
     /// <summary>Gets or sets the one-based creation number that throws instead of creating; 0 never throws.</summary>
     public int FailAtCreation { get; set; }
@@ -324,8 +327,15 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         WaitIdleCount++;
         Record(text: "device drain");
     }
-    public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) { }
+    public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) {
+        if (Recording) {
+            DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));
+        }
+    }
     public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
+        if (Recording) {
+            DescriptorWrites.Add(item: (descriptorSetHandle, binding, bufferHandle));
+        }
         if (0 == elementStride) {
             RawBufferWrites++;
         } else {

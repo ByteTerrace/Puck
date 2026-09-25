@@ -68,8 +68,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private readonly List<nint> m_commands = [];
 
     /// <summary>Creates an initially empty node that records through <paramref name="deviceContext"/>'s services. The
-    /// first valid <see cref="Swap"/> installs a graph.</summary>
-    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General) {
+    /// first valid <see cref="Swap"/> installs a graph. A graph's package passes are recorded by
+    /// <paramref name="packages"/>' recorders, one per pass, created when the graph installs and disposed with it; a
+    /// node without recorders refuses a graph that has any.</summary>
+    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General, RenderGraphPackageRecorders? packages = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentOutOfRangeException.ThrowIfZero(width);
@@ -98,6 +100,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             );
         }
         m_outputLayout = outputLayout;
+        m_packages = (packages ?? new RenderGraphPackageRecorders());
         m_slots = new FrameSlot[inFlightFrames];
         for (var i = 0; (i < m_slots.Length); i++) { m_slots[i] = new FrameSlot(); }
         m_width = width;
@@ -202,7 +205,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         var declaration = planned.Declaration;
         var runtime = new RuntimePass(
             declaration,
-            m_pipeline!.Shaders[planned.Name],
+            m_pipeline!.Shaders.GetValueOrDefault(key: planned.Name),
             planned.Parameters,
             ((int)m_inFlight),
             built.Passes[planned.Index]!.Extent,
@@ -210,6 +213,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
 
         m_passes[planned.Index] = runtime;
+        InstallPackage(
+            planned: planned,
+            runtime: runtime
+        );
 
         var objects = built.TakePass(index: planned.Index);
 
@@ -740,6 +747,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         var selectedName = (m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput);
         var selectedResource = m_resourceLookup[selectedName];
 
+        // A buffer output publishes no image; a graph instance's consumers bind the buffer itself (LatestOutputBuffer).
+        if (selectedResource.Spec.Kind == ShaderPipelineResourceKind.Buffer) {
+            return default;
+        }
         if (NeedsPreview(spec: selectedResource.Spec)) {
             var target = (m_preview?.GetTarget(slot: slot) ?? throw new InvalidOperationException(message: "The float preview target is not ready."));
 
@@ -783,7 +794,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
         throw new InvalidDataException(message: "The selected output must use an RGBA8 format.");
     }
-    private static GpuPixelFormat ParseFormat(string? format) {
+
+    internal static GpuPixelFormat ParseFormat(string? format) {
         if (Enum.TryParse<GpuPixelFormat>(
             ignoreCase: true,
             result: out var parsed,
@@ -793,6 +805,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
         throw new InvalidDataException(message: $"Unknown shader pipeline format '{format}'.");
     }
+
     private void PresentSelectedOutput() {
         WaitAll();
         var slot = ((int)((m_frame - 1) % m_inFlight));
@@ -940,6 +953,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
     }
     private void Record(RuntimePass pass, int slot, in FrameContext context, List<nint> commands) {
+        if (pass.Package is not null) {
+            RecordPackage(
+                commands: commands,
+                pass: pass,
+                slot: slot
+            );
+            return;
+        }
         var descriptor = GetDescriptor(
             pass: pass,
             slot: slot
@@ -1194,15 +1215,33 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private void ValidateExternalBinding(string name, ShaderPipelineResourceKind kind) {
         var plan = (m_pending?.Plan ?? m_pipeline?.Plan);
 
-        if (
-            (plan is not null) &&
-            !plan.Resources.Any(predicate: resource => ((resource.Name == name) && resource.Declaration.IsExternal && (resource.Declaration.Kind == kind)))
-        ) {
-            throw new ArgumentException(
-                message: $"Resource '{name}' is not a declared external {kind} in the candidate graph.",
-                paramName: nameof(name)
-            );
+        if (plan is null) {
+            return;
         }
+        // An indexed loop, not a predicate or an interface enumerator: a graph instance binds its inputs on every frame,
+        // and either would allocate.
+        var resources = plan.Resources;
+
+        for (var index = 0; (index < resources.Count); index++) {
+            var resource = resources[index];
+
+            if (
+                string.Equals(
+                    a: resource.Name,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                ) &&
+                resource.Declaration.IsExternal &&
+                (resource.Declaration.Kind == kind)
+            ) {
+                return;
+            }
+        }
+
+        throw new ArgumentException(
+            message: $"Resource '{name}' is not a declared external {kind} in the candidate graph.",
+            paramName: nameof(name)
+        );
     }
     private void ValidateExternalResources() {
         foreach (var resource in m_resources) {
@@ -1218,17 +1257,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 )) {
                     throw new InvalidDataException(message: $"External image '{declaration.Name}' has not been bound.");
                 }
-                var extent = (declaration.Dimensions?.Resolve(
-                    frameHeight: m_height,
-                    frameWidth: m_width
-                ) ?? (m_width, m_height));
-
-                if (
-                    (image.Width != extent.Width) ||
-                    (image.Height != extent.Height)
-                ) {
-                    throw new InvalidDataException(message: $"External image '{declaration.Name}' is {image.Width}x{image.Height}; expected {extent.Width}x{extent.Height}.");
-                }
+                // A bound image carries its binder's extent, such as another graph instance's output rendered at its own
+                // footprint's extent: a pass samples it whole, and its declared dimensions only size the passes that
+                // resolve their extent from it.
                 if (image.Format != ParseFormat(format: declaration.Format)) {
                     throw new InvalidDataException(message: $"External image '{declaration.Name}' has format {image.Format}; expected {declaration.Format}.");
                 }
@@ -1280,7 +1311,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         m_externalBuffers[name] = buffer;
     }
-    /// <summary>Binds a host-owned image for a named external resource. The node never disposes it.</summary>
+    /// <summary>Binds a host-owned image for a named external resource. The node never disposes it. The image must have
+    /// the declared format and may have any extent: a pass samples it whole.</summary>
     public void BindImage(string name, ShaderPipelineExternalImage image) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -1569,6 +1601,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             throw new InvalidDataException(message: "A failed shader compilation cannot be installed.");
         }
         ValidatePlan(plan: pipeline.Plan);
+        ValidatePackages(plan: pipeline.Plan);
         if (
             (m_inFlight < 2) &&
             pipeline.Plan.Resources.Any(predicate: static resource => resource.Declaration.History)
@@ -1679,13 +1712,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             }
         }
     }
-    private sealed class RuntimePass(ShaderPipelinePass spec, CompiledShader compiled, ShaderPipelineParameterLayout parameterLayout, int count, (uint Width, uint Height) extent, ShaderPipelineAccess[] accesses) {
+    // A package pass has no compiled shader; its recorder and its ports' resolved versions stand in for one.
+    private sealed class RuntimePass(ShaderPipelinePass spec, CompiledShader? compiled, ShaderPipelineParameterLayout parameterLayout, int count, (uint Width, uint Height) extent, ShaderPipelineAccess[] accesses) {
         public readonly ShaderPipelinePass Spec = spec;
         // Arrays, so the per-frame walks over a pass's bindings and accesses enumerate without allocating.
         public readonly ResourceReference[] Inputs = [.. spec.InputReferences];
         public readonly ResourceReference[] Outputs = [.. spec.OutputReferences];
         public readonly ShaderPipelineAccess[] Accesses = accesses;
-        public readonly CompiledShader Compiled = compiled;
+        public readonly CompiledShader? Compiled = compiled;
         public readonly int Count = count;
         public readonly uint Width = extent.Width;
         public readonly uint Height = extent.Height;
@@ -1713,8 +1747,13 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         public IGpuShaderModule? Secondary;
         public nint[]? Sets;
         public IGpuBuffer? GeometryBuffer;
+        public IRenderGraphPackageRecorder? Package;
+        public RenderGraphPackageResource[]? PackageInputs;
+        public RenderGraphPackageResource[]? PackageOutputs;
 
         public void Dispose(GpuDeviceServices gpu, IGpuDeviceContext device) {
+            Package?.Dispose();
+            Package = null;
             Compute?.Dispose();
             GeometryBuffer?.Dispose();
             if (Framebuffers is not null) {

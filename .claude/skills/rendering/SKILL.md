@@ -636,9 +636,22 @@ refresh, self-reads, cycles, the pass-pixel budget, buffer reads (demanded by
 every rendering reader, no extent, no pass-pixels), kind mismatches and that
 zero-allocation steady frame with a buffer edge in it. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
-priced by `WorldPresentationCost` in the cost report and `world.budget`. No
-live view renders through a graph yet; the renderer still composes views
-through `SdfEngineNode`'s children and `ViewStack` until P11b.
+priced by `WorldPresentationCost` in the cost report and `world.budget`.
+`RenderGraphRuntime` (`src/Puck.Shaders/Graph`, since `Puck.Hosting` cannot
+reach the node) runs a set: it alternates two schedules, renders each
+scheduled instance through its own `ShaderPipelineRenderNode` at the
+scheduled extent, and binds each external version to the frame of its
+producer's output the schedule names, or to a stand-in while there is none.
+A package pass records inside that node's submission through the recorder
+`RenderGraphPackageRecorders` holds for its package id; a recorder records
+into the command buffer it is handed and never submits, waits or creates a
+pipeline, and a graph naming an unserved package is refused at install. The
+root instance is the runtime's output and its capture target, with
+`UnservedCaptureReason` naming the root until it has produced.
+`RenderGraphRuntimeLawTests` pin the P11 checks on the fake, a steady frame
+at zero allocations included. No live view renders through a graph yet; the
+renderer still composes views through `SdfEngineNode`'s children and
+`ViewStack` until P11b wires the runtime in.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):
