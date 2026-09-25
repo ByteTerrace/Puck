@@ -244,7 +244,7 @@ public sealed class SdfCapabilityMatrixLawTests {
                 "SdfWorldEngine.FrameBufferBytes", "SdfWorldEngine.TileSize", "SdfWorldEngine.MaxFrameUploadTableWords",
                 "SdfWorldEngine.RequireOneCopyDispatch", "SdfWorldEngine.VisibilityRecordBytes",
                 "SdfWorldEngine.VisibilityRecordByteLength", "SdfEngineNode.VisibilityRecordBytes",
-                "SdfWorldEngine.DescriptorPoolSizes",
+                "SdfWorldEngine.DescriptorPoolSizes", "SdfWorldEngine.CheckAdmission",
             ]
         ),
         new(

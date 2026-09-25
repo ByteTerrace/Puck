@@ -242,24 +242,31 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             throw new ArgumentException(message: $"The world compositor supports at most {SdfWorldEngine.MaxViewports} viewports; the frame/floor asks for {viewportCount}.");
         }
 
+        var engineOptions = new SdfWorldEngineOptions(
+            BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
+            DynamicTransformCapacity: Math.Max(
+                val1: Math.Max(
+                    val1: 1,
+                    val2: m_dynamicTransformCapacity
+                ),
+                val2: frame.DynamicTransforms.Count
+            ),
+            InstanceCapacity: m_instanceCapacity,
+            Program: frame.Program,
+            ProgramWordCapacity: m_programWordCapacity,
+            ViewportCapacity: viewportCount,
+            WorkLedger: m_work
+        );
+
+        SdfWorldEngine.CheckAdmission(
+            device: gpuDevice,
+            options: engineOptions,
+            pipelines: pipelines
+        );
         m_engine = new SdfWorldEngine(
             device: gpuDevice,
             height: m_height,
-            options: new SdfWorldEngineOptions(
-                BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
-                DynamicTransformCapacity: Math.Max(
-                    val1: Math.Max(
-                        val1: 1,
-                        val2: m_dynamicTransformCapacity
-                    ),
-                    val2: frame.DynamicTransforms.Count
-                ),
-                InstanceCapacity: m_instanceCapacity,
-                Program: frame.Program,
-                ProgramWordCapacity: m_programWordCapacity,
-                ViewportCapacity: viewportCount,
-                WorkLedger: m_work
-            ),
+            options: engineOptions,
             pipelines: pipelines,
             width: m_width
         );

@@ -175,23 +175,30 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
 
         m_currentProgram ??= program;
 
+        var engineOptions = new SdfWorldEngineOptions(
+            // A filming view never bakes carves (it renders the host world's program, and RequestBrickBake is never
+            // called on it), so provisioning the default 64 MB brick pool would waste ~64 MB per view — ~4 GB at the
+            // 64-view cap. Capacity 0 gives a 1-float filler; a filmed SampledRegion renders via the shader's
+            // conservative uncarved-hull fallback (never a box-shaped hole).
+            BrickPoolVoxelCapacity: 0,
+            CreateOutputImage: m_exportFactory,
+            DynamicTransformCapacity: m_dynamicTransformCapacity,
+            InstanceCapacity: m_instanceCapacity,
+            Program: m_currentProgram,
+            ProgramWordCapacity: m_programWordCapacity,
+            ViewportCapacity: 1,
+            WorkLedger: m_work
+        );
+
+        SdfWorldEngine.CheckAdmission(
+            device: device,
+            options: engineOptions,
+            pipelines: pipelines
+        );
         m_engine = new SdfWorldEngine(
             device: device,
             height: m_height,
-            options: new SdfWorldEngineOptions(
-                // A filming view never bakes carves (it renders the host world's program, and RequestBrickBake is never
-                // called on it), so provisioning the default 64 MB brick pool would waste ~64 MB per view — ~4 GB at the
-                // 64-view cap. Capacity 0 gives a 1-float filler; a filmed SampledRegion renders via the shader's
-                // conservative uncarved-hull fallback (never a box-shaped hole).
-                BrickPoolVoxelCapacity: 0,
-                CreateOutputImage: m_exportFactory,
-                DynamicTransformCapacity: m_dynamicTransformCapacity,
-                InstanceCapacity: m_instanceCapacity,
-                Program: m_currentProgram,
-                ProgramWordCapacity: m_programWordCapacity,
-                ViewportCapacity: 1,
-                WorkLedger: m_work
-            ),
+            options: engineOptions,
             pipelines: pipelines,
             width: m_width
         );

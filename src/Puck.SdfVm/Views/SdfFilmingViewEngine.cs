@@ -50,21 +50,28 @@ internal static class SdfFilmingViewEngine {
             : frame.DynamicTransforms.Count
         );
 
+        var engineOptions = new SdfWorldEngineOptions(
+            BrickPoolVoxelCapacity: 0,
+            DynamicTransformCapacity: dynamicCapacity,
+            InstanceCapacity: instanceCapacity,
+            Program: frame.Program,
+            ProgramWordCapacity: wordCapacity,
+            ViewportCapacity: ((uint)Math.Max(
+                val1: 1,
+                val2: frame.Views.Count
+            )),
+            WorkLedger: work
+        );
+
+        SdfWorldEngine.CheckAdmission(
+            device: device,
+            options: engineOptions,
+            pipelines: ready
+        );
         engine = new SdfWorldEngine(
             device: device,
             height: height,
-            options: new SdfWorldEngineOptions(
-                BrickPoolVoxelCapacity: 0,
-                DynamicTransformCapacity: dynamicCapacity,
-                InstanceCapacity: instanceCapacity,
-                Program: frame.Program,
-                ProgramWordCapacity: wordCapacity,
-                ViewportCapacity: ((uint)Math.Max(
-                    val1: 1,
-                    val2: frame.Views.Count
-                )),
-                WorkLedger: work
-            ),
+            options: engineOptions,
             pipelines: ready,
             width: width
         );
