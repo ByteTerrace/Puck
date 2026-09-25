@@ -554,17 +554,15 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                     {"id":"draw-actor","document":{"schema":"puck.creation.v1","name":"actor","shapes":[],"drivers":[{"name":"stride","signal":"planarTravel","cadence":"state.cadence"}]}}
                     """));
                 Assert.True(
-                    condition: WorldDefinitionFileSource.TryParseComposed(
-                        tree.ToJsonString(),
-                        "published draw",
-                        null,
-                        false,
-                        out var parsed,
-                        out var drawReason
+                    condition: WorldDefinitionLoader.TryReadPublishable(
+                        definition: out var parsed,
+                        json: tree.ToJsonString(),
+                        reason: out var drawReason,
+                        sourceName: "published draw"
                     ),
                     userMessage: drawReason
                 );
-                a = parsed!;
+                a = parsed;
                 Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: a)));
             }
             scenario.Source = await scenario.PackageAsync(

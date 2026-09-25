@@ -147,7 +147,7 @@ public sealed class CompiledWorldLawTests {
     }
     internal static byte[] Compile(string path, string? instanceIdentity = null, string? catalogFingerprint = null, CompiledWorldChunks? chunks = null) {
         Assert.True(
-            condition: WorldSourceLoader.TryParseComposed(
+            condition: WorldSourceLoader.TryReadAuthored(
                 authored: out var authored,
                 catalog: Catalog,
                 catalogFingerprint: Catalog.CompositionFingerprint,

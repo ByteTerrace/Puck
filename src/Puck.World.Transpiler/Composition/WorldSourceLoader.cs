@@ -81,7 +81,7 @@ public static class WorldSourceLoader {
     /// <returns><see langword="true"/> when the document composed and parsed.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
-    public static bool TryParseComposed(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? authored, out string reason,
+    public static bool TryReadAuthored(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? authored, out string reason,
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
         ArgumentNullException.ThrowIfNull(argument: document);
@@ -107,7 +107,7 @@ public static class WorldSourceLoader {
         authored = (parsed! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) });
         return true;
     }
-    /// <summary>Composes and parses <paramref name="document"/> (<see cref="TryParseComposed"/>) and derives its
+    /// <summary>Composes and parses <paramref name="document"/> (<see cref="TryReadAuthored"/>) and derives its
     /// compiled world fresh for the boot instance (<see cref="CompiledWorld.TryCompile"/>): the file <c>puck compile</c>
     /// and the build write beside a document. It carries the standard chunks and the <c>BAKE</c> chunk
     /// (<see cref="WorldBakeChunk"/>), whose outcomes the derivation leaves in <see cref="Bakes"/> for the caller's bake
@@ -128,7 +128,7 @@ public static class WorldSourceLoader {
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, string? bakePack = null) {
         compiledWorld = null;
 
-        return (TryParseComposed(
+        return (TryReadAuthored(
             authored: out var authored,
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,

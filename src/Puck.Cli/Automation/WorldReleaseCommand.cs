@@ -76,26 +76,17 @@ internal static class WorldReleaseCommand {
                 oldChar: Path.DirectorySeparatorChar
             );
 
-            if (
-                !WorldDefinitionFileSource.TryParseComposed(
-                json: File.ReadAllText(path: definitionPath),
-                sourceName: definitionPath,
-                neighbours: null,
-                validateAdjacencyClaims: false,
-                definition: out var definition,
-                reason: out var definitionReason,
+            if (!WorldDefinitionLoader.TryReadPublishable(
                 catalog: machines,
-                documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: definitionPath)
-            ) ||
-                !WorldDefinitionValidator.TryValidateLocally(
-                definition: definition!,
-                machines: machines,
-                reason: out definitionReason
-            )
-            ) {
+                definition: out var definition,
+                documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: definitionPath),
+                json: File.ReadAllText(path: definitionPath),
+                reason: out var definitionReason,
+                sourceName: definitionPath
+            )) {
                 throw new InvalidDataException(message: $"composed definition '{relative}' is invalid: {definitionReason}");
             }
-            var canonical = WorldDefinitionSerialization.Serialize(definition: definition!);
+            var canonical = WorldDefinitionSerialization.Serialize(definition: definition);
 
             if (!canonical.AsSpan().SequenceEqual(other: File.ReadAllBytes(path: definitionPath))) {
                 throw new InvalidDataException(message: $"definition '{relative}' is not a canonical composed world output; run 'puck world prepare' first");
