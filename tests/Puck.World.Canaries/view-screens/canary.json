@@ -1,0 +1,82 @@
+{
+  "id": "view-screens",
+  "title": "One camera shown on two screens registers one view that renders once per refreshed frame, and both screens show its image",
+  "binding": "The positive leg boots a windowed 256x144 world whose two screen placements both show the view of camera 'eye', which looks at a red ball so the ball fills its frame. It sets world.view-refresh to 1, so every produced frame refreshes the views. world.view-refresh then reports one camera view registered, not one per screen, and two reads of world.counters gpu thirty ticks apart show the view:eye node's submission advancing by exactly as many submissions as the world node's: the view renders once per world frame, never once per screen. A captured frame shows the red ball at the centre of both screens. The discriminating leg boots the same world with the right screen showing camera 'sky', which looks up at nothing: two camera views register and the right screen's centre is not red, so both observations turn red, while the eye view still renders once per world frame.",
+  "bootShape": "windowed",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/view-screens/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view-refresh", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.view-refresh", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "one-camera-view-registered", "stream": "stdout", "match": "exact", "text": "[world.view-refresh: every 1 produced frame(s); 1 camera view(s) registered]", "present": true },
+      {
+        "type": "response", "name": "first-read", "stream": "stdout", "verb": "world.counters", "occurrence": 1, "count": 2,
+        "extract": [
+          { "name": "world-first", "field": "submission", "line": "node world work" },
+          { "name": "eye-first", "field": "submission", "line": "node view:eye work" }
+        ]
+      },
+      {
+        "type": "response", "name": "second-read", "stream": "stdout", "verb": "world.counters", "occurrence": 2, "count": 2,
+        "extract": [
+          { "name": "world-second", "field": "submission", "line": "node world work" },
+          { "name": "eye-second", "field": "submission", "line": "node view:eye work" }
+        ]
+      },
+      { "type": "relation", "name": "the-world-rendered-between-the-reads", "operator": "greater", "left": { "value": "world-second" }, "right": { "value": "world-first" } },
+      { "type": "relation", "name": "the-eye-renders-once-per-world-frame", "operator": "equal", "left": { "value": "eye-second", "minus": "eye-first" }, "right": { "value": "world-second", "minus": "world-first" } },
+      { "type": "imageRegion", "name": "the-left-screen-shows-the-eye", "capture": "frame.png", "extent": [256, 144], "region": [0.36, 0.46, 0.39, 0.52], "reduce": "every", "minimum": [0.25, 0, 0, 1], "maximum": [1, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "the-right-screen-shows-the-eye", "capture": "frame.png", "extent": [256, 144], "region": [0.61, 0.46, 0.64, 0.52], "reduce": "every", "minimum": [0.25, 0, 0, 1], "maximum": [1, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/view-screens/two-cameras.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view-refresh", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.view-refresh", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "two-camera-views-registered", "stream": "stdout", "match": "exact", "text": "[world.view-refresh: every 1 produced frame(s); 2 camera view(s) registered]", "present": true },
+      {
+        "type": "response", "name": "first-read", "stream": "stdout", "verb": "world.counters", "occurrence": 1, "count": 2,
+        "extract": [
+          { "name": "world-first", "field": "submission", "line": "node world work" },
+          { "name": "eye-first", "field": "submission", "line": "node view:eye work" }
+        ]
+      },
+      {
+        "type": "response", "name": "second-read", "stream": "stdout", "verb": "world.counters", "occurrence": 2, "count": 2,
+        "extract": [
+          { "name": "world-second", "field": "submission", "line": "node world work" },
+          { "name": "eye-second", "field": "submission", "line": "node view:eye work" }
+        ]
+      },
+      { "type": "relation", "name": "the-eye-still-renders-once-per-world-frame", "operator": "equal", "left": { "value": "eye-second", "minus": "eye-first" }, "right": { "value": "world-second", "minus": "world-first" } },
+      { "type": "imageRegion", "name": "the-left-screen-shows-the-eye", "capture": "frame.png", "extent": [256, 144], "region": [0.36, 0.46, 0.39, 0.52], "reduce": "every", "minimum": [0.25, 0, 0, 1], "maximum": [1, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "the-right-screen-shows-the-sky", "capture": "frame.png", "extent": [256, 144], "region": [0.61, 0.46, 0.64, 0.52], "reduce": "every", "minimum": [0.25, 0, 0, 1], "maximum": [1, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": false }
+    ]
+  }
+}

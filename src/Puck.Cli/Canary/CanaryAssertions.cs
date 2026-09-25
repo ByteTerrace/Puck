@@ -665,17 +665,49 @@ internal static partial class CanaryAssertions {
         error = string.Empty;
 
         if (operand.ValueName is { } valueName) {
-            if (values.TryGetValue(
+            if (!values.TryGetValue(
                 key: valueName,
                 value: out value!
             )) {
+                value = string.Empty;
+                error = $"extracted value '{valueName}' is unavailable because its response assertion failed";
+
+                return false;
+            }
+            if (operand.Minus is not { } minus) {
                 return true;
             }
+            if (!values.TryGetValue(
+                key: minus,
+                value: out var subtrahend
+            )) {
+                value = string.Empty;
+                error = $"extracted value '{minus}' is unavailable because its response assertion failed";
 
-            value = string.Empty;
-            error = $"extracted value '{valueName}' is unavailable because its response assertion failed";
+                return false;
+            }
+            if (
+                !TryNumber(
+                number: out var minuend,
+                value: value
+            ) ||
+                !TryNumber(
+                number: out var subtracted,
+                value: subtrahend
+            )
+            ) {
+                error = $"'{valueName}' minus '{minus}' needs two finite numbers, got '{value}' and '{subtrahend}'";
+                value = string.Empty;
 
-            return false;
+                return false;
+            }
+
+            value = (minuend - subtracted).ToString(
+                format: "R",
+                provider: CultureInfo.InvariantCulture
+            );
+
+            return true;
         }
 
         if (operand.StringLiteral is { } literal) {

@@ -11,7 +11,7 @@ internal static partial class CanaryCommand {
 
     private static readonly string WorldUnsupportedPrefix = Puck.Launcher.LauncherHostRun.UnsupportedLinePrefix(label: "world");
 
-    // One proof as the runner executes it: an offscreen manifest runs once per declared backend, every other shape once
+    // One proof as the runner executes it: a manifest that declares backends runs once per backend, every other one once
     // with no backend named.
     internal sealed record CanaryProof(CanaryManifest Manifest, string? Backend) {
         public string Label => ((Backend is null)
@@ -20,7 +20,7 @@ internal static partial class CanaryCommand {
     }
 
     internal static IReadOnlyList<CanaryProof> ExpandProofs(IReadOnlyList<CanaryManifest> manifests) =>
-        manifests.SelectMany(selector: static manifest => ((manifest.BootShape == CanaryBootShape.Offscreen)
+        manifests.SelectMany(selector: static manifest => ((manifest.Backends.Count != 0)
             ? manifest.Backends.Select(selector: backend => new CanaryProof(
                 Backend: backend,
                 Manifest: manifest
@@ -32,12 +32,22 @@ internal static partial class CanaryCommand {
 
     // The boot-shape arguments of one leg process. An offscreen leg lets its world's host.presentation decide the shape
     // (a --headless value would force windowed or none over it), names the backend explicitly, and carries the run's
-    // validation-layer choice for that backend.
+    // validation-layer choice for that backend. A windowed leg forces a window, and when its proof declares backends it
+    // names the backend and carries the validation-layer choice the same way.
     private static string[] BootShapeArguments(CanaryManifest manifest, string? backend, bool debugLayers) => manifest.BootShape switch {
-        CanaryBootShape.Offscreen => ["--backend", backend!, .. (debugLayers ? [WorldOffscreenLeg.DebugLayersFlag] : Array.Empty<string>())],
+        CanaryBootShape.Offscreen => BackendArguments(
+            backend: backend!,
+            debugLayers: debugLayers
+        ),
         CanaryBootShape.Headless => ["--headless", "true"],
-        _ => ["--headless", "false"],
+        _ => ["--headless", "false", .. ((backend is null)
+            ? []
+            : BackendArguments(
+                backend: backend,
+                debugLayers: debugLayers
+            ))],
     };
+    private static string[] BackendArguments(string backend, bool debugLayers) => ["--backend", backend, .. (debugLayers ? [WorldOffscreenLeg.DebugLayersFlag] : Array.Empty<string>())];
 
     // A pipeline.wait outcome narrated through the World's pipeline report: "[pipeline: <name> wait <phase> <outcome>".
     [GeneratedRegex(pattern: @"^\[pipeline: (?<name>\S+) wait (?<phase>compiled|installed|captured|submitted \d+|counted \d+|resized \d+ \d+) (?<outcome>reached|failed|unsupported|timed out)")]

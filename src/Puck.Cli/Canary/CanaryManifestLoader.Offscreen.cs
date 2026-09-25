@@ -3,12 +3,9 @@ using System.Text.Json;
 namespace Puck.Cli.Canary;
 
 internal static partial class CanaryManifestLoader {
-    /// <summary>The backends an offscreen proof must exercise, in the order its legs run. A proof exercising fewer
-    /// cannot claim a cross-backend result, so the list is exact rather than a minimum.</summary>
-    internal static readonly IReadOnlyList<string> OffscreenBackends = ["vulkan", "directx"];
-
-    // backends belongs to the offscreen shape alone: every other shape keeps the one boot per leg it always had, and an
-    // offscreen proof names both backends so neither can silently go unexercised.
+    // backends belongs to the two GPU shapes. An offscreen proof must name them; a windowed proof may, and then runs each
+    // leg once per backend like an offscreen one. Every other shape keeps its one boot per leg. A proof that names
+    // backends names every backend a leg boots (WorldOffscreenLeg.Backends), so none can silently go unexercised.
     private static IReadOnlyList<string> ReadBackends(JsonElement element, string id, CanaryBootShape bootShape, IReadOnlyList<string> requirements, CanaryLeg positive, CanaryLeg discriminating) {
         if (!element.TryGetProperty(
             propertyName: "backends",
@@ -17,15 +14,15 @@ internal static partial class CanaryManifestLoader {
             if (bootShape == CanaryBootShape.Offscreen) {
                 throw new CanaryManifestRefusal(message: $"canary '{id}' bootShape 'offscreen' requires backends, exactly {string.Join(
                     separator: " and ",
-                    values: OffscreenBackends
+                    values: WorldOffscreenLeg.Backends
                 )}.");
             }
 
             return [];
         }
 
-        if (bootShape != CanaryBootShape.Offscreen) {
-            throw new CanaryManifestRefusal(message: $"canary '{id}' declares backends, which only bootShape 'offscreen' reads.");
+        if (bootShape is not (CanaryBootShape.Offscreen or CanaryBootShape.Windowed)) {
+            throw new CanaryManifestRefusal(message: $"canary '{id}' declares backends, which only bootShape 'offscreen' and 'windowed' read.");
         }
         if (backendsElement.ValueKind != JsonValueKind.Array) {
             throw new CanaryManifestRefusal(message: $"canary '{id}' backends must be an array.");
@@ -40,7 +37,7 @@ internal static partial class CanaryManifestLoader {
 
             if (
                 (backend is null) ||
-                !OffscreenBackends.Contains(
+                !WorldOffscreenLeg.Backends.Contains(
                 value: backend,
                 comparer: StringComparer.Ordinal
             ) ||
@@ -51,24 +48,24 @@ internal static partial class CanaryManifestLoader {
             ) {
                 throw new CanaryManifestRefusal(message: $"canary '{id}' backends entry '{item}' is invalid; list each of {string.Join(
                     separator: " and ",
-                    values: OffscreenBackends
+                    values: WorldOffscreenLeg.Backends
                 )} exactly once.");
             }
 
             backends.Add(item: backend);
         }
 
-        if (backends.Count != OffscreenBackends.Count) {
+        if (backends.Count != WorldOffscreenLeg.Backends.Count) {
             throw new CanaryManifestRefusal(message: $"canary '{id}' backends must list {string.Join(
                 separator: " and ",
-                values: OffscreenBackends
+                values: WorldOffscreenLeg.Backends
             )}; a proof that skips a backend cannot pass the two-backend gate.");
         }
         if (!requirements.Contains(
             value: "gpu",
             comparer: StringComparer.Ordinal
         )) {
-            throw new CanaryManifestRefusal(message: $"canary '{id}' bootShape 'offscreen' needs a GPU and must declare the 'gpu' requirement.");
+            throw new CanaryManifestRefusal(message: $"canary '{id}' declares backends, so it needs a GPU and must declare the 'gpu' requirement.");
         }
         foreach (var leg in ((CanaryLeg[])[positive, discriminating])) {
             if (
@@ -76,7 +73,7 @@ internal static partial class CanaryManifestLoader {
                 (leg.AuthorityWorldPath is not null) ||
                 (leg.Authorities.Count != 0)
             ) {
-                throw new CanaryManifestRefusal(message: $"canary '{id}' {leg.Name} leg: bootShape 'offscreen' runs one local process per backend; authorities, authorityWorld, and connect are refused.");
+                throw new CanaryManifestRefusal(message: $"canary '{id}' {leg.Name} leg: a proof with backends runs one local process per backend; authorities, authorityWorld, and connect are refused.");
             }
         }
 

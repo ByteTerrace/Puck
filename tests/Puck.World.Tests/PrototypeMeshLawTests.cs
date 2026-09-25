@@ -3,6 +3,7 @@ using System.Text;
 using Puck.Assets.Documents;
 using Puck.SdfVm;
 using Puck.SignedDistance;
+using Puck.World.Authoring;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Xunit;
@@ -115,6 +116,45 @@ public sealed class PrototypeMeshLawTests {
 
         Laws.Refuses(definition: With(inhabit: inhabit, mesh: Quad()), locally: true, needle: "placements.rows[0] inhabits prototype 'slab', whose mesh only a static placement draws");
         Laws.Validates(definition: With(inhabit: inhabit, mesh: null), locally: true);
+    }
+    /// <summary>DENIAL: a mesh on a creation with a timeline frame, whose placements ride the stamp pool that draws no
+    /// mesh. CONTROL: the same animated creation without a mesh validates.</summary>
+    [Fact]
+    public void AnAnimatedCreationRefusesAMesh() {
+        static WorldDefinition Animated(WorldPrototypeMesh? mesh) => (With(mesh: mesh) with {
+            CreationsRaw = [(CreationFixtures.Prototype(document: (CreationFixtures.Document(
+                name: PrototypeId,
+                palette: CreationFixtures.GreyAndBlue,
+                shapes: [CreationFixtures.UnitSphereShape]
+            ) with { Frames = [new FrameDocument(Name: "idle", Transforms: [])] })) with { Mesh = mesh })],
+        });
+
+        Laws.Refuses(definition: Animated(mesh: Quad()), locally: true, needle: "prototypes[0].mesh is refused on an animated creation");
+        Laws.Validates(definition: Animated(mesh: null), locally: true);
+    }
+    /// <summary>DENIAL: an attached placement of a mesh prototype, which rides a body's pose through the stamp pool
+    /// that draws no mesh. CONTROL: the same attached placement of the prototype without a mesh validates.</summary>
+    [Fact]
+    public void AnAttachedPlacementRefusesAMeshPrototype() {
+        static WorldDefinition Attached(WorldPrototypeMesh? mesh) {
+            var definition = With(mesh: mesh);
+
+            return (definition with {
+                PlacementRowsRaw = [definition.Placements.Single() with {
+                    Attach = new WorldPlacementAttach(
+                        BodyIndex: 0,
+                        LocalOffset: new DocumentVector3(value: new Vector3(
+                            x: 0f,
+                            y: 1f,
+                            z: 0f
+                        ))
+                    ),
+                }],
+            });
+        }
+
+        Laws.Refuses(definition: Attached(mesh: Quad()), locally: true, needle: "placements.rows[0] attaches prototype 'slab', whose mesh only a static placement draws");
+        Laws.Validates(definition: Attached(mesh: null), locally: true);
     }
     /// <summary>A static placement reaches the mesh draws once, as the prototype's triangles turned into the engine
     /// frame (X and Z negated) under the placement's scale 2, yaw 90° and position (2, 0, -3), derived here from the

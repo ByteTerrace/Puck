@@ -39,7 +39,8 @@ internal enum CanaryRelationOperator {
     MinimumMargin,
 }
 internal sealed record CanaryManifest(
-    // The graphics backends an offscreen proof runs every leg on, in authored order; empty for every other shape.
+    // The graphics backends the proof runs every leg on, in authored order: always both for an offscreen proof,
+    // optionally both for a windowed one, and empty otherwise.
     IReadOnlyList<string> Backends,
     string Binding,
     CanaryBootShape BootShape,
@@ -174,4 +175,6 @@ internal sealed record CanaryResponseSelector(string Verb, int Occurrence, int C
 // Line, when set, reads the field from the first continuation line of the selected response that starts with it
 // (after the transcript's indent) instead of from the response's own first line.
 internal sealed record CanaryValueExtraction(string Field, int? Component, string Name, string? Line = null);
-internal sealed record CanaryOperand(string? ValueName, string? StringLiteral, double? NumberLiteral);
+// Minus, when set, names a second extracted value subtracted from ValueName's: the operand is then the numeric
+// difference, so a relation can hold the change between two reads of one counter against another's.
+internal sealed record CanaryOperand(string? ValueName, string? StringLiteral, double? NumberLiteral, string? Minus = null);
