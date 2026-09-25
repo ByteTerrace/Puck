@@ -5,17 +5,28 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// One backend's device-local memory over the process's life, <c>memory.&lt;backend&gt;</c>: the bytes allocated and
 /// released, each at the allocation's actual size as the driver sized it (Vulkan's <c>VkMemoryRequirements.size</c>,
-/// Direct3D 12's <c>GetResourceAllocationInfo</c>), and the most bytes held at once. The backends count at their
-/// allocation sites — buffers, images, and exported and imported memory — and never count swapchain images, which the
-/// presentation engine allocates. Memory the host can map but that is not device-local is not counted. The allocated
-/// and released counts are per-backend-deterministic; the peak depends on when retired objects are released, which
-/// follows GPU completion, so it is pacing. The counts survive device loss, because a recreated device counts into the
-/// same instance; a device lost with memory still counted keeps it counted as held. Every count is written under one
-/// lock, since allocation happens on build threads as well as the frame thread.
+/// Direct3D 12's <c>GetResourceAllocationInfo</c>), and the most bytes held at once.
+/// <para>
+/// An allocation counts by its <see cref="GpuMemoryRole"/>, never by the memory type the driver chose, and
+/// <see cref="IsCounted"/> is the one statement of that rule for both backends: images, device-local buffers, exportable
+/// images and imported memory count; host-visible, staging, upload and readback buffers never do, even on a
+/// unified-memory device where every memory type is device-local. Swapchain images, which the presentation engine
+/// allocates, never reach here.
+/// </para>
+/// <para>
+/// Each allocation is keyed by the device that made it and the native object whose release frees it, so a driver that
+/// reuses a handle value on a recreated device never collides with an entry leaked from the old one. A device's
+/// teardown ends its entries (<see cref="EndDevice"/>), and one still held there is refused by name: the leak is a
+/// visible defect, never a silent count. The allocated and released counts are per-backend-deterministic; the peak
+/// depends on when retired objects are released, which follows GPU completion, so it is pacing. The counts survive
+/// device loss, because a recreated device counts into the same instance. Every count is written under one lock, since
+/// allocation happens on build threads as well as the frame thread.
+/// </para>
 /// </summary>
 public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     private readonly Lock m_gate = new();
-    private readonly Dictionary<nint, long> m_live = [];
+    private readonly Dictionary<(nint Device, nint Allocation), long> m_live = [];
+
     private readonly WorkCounterSet m_counts;
 
     private long m_held;
@@ -44,7 +55,8 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
 
     /// <summary>Gets the backend's name.</summary>
     public string Backend { get; }
-    /// <summary>Gets the device-local bytes held now: allocated and not yet released.</summary>
+    /// <summary>Gets the device-local bytes held now: allocated and not yet released, including any a device's teardown
+    /// refused as leaked.</summary>
     public long Held {
         get {
             lock (m_gate) {
@@ -57,13 +69,40 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     /// <inheritdoc/>
     public ReadOnlySpan<WorkKind> WorkKinds => Counts.Kinds;
 
-    /// <summary>Counts one device-local allocation, keyed by the native object whose release frees it.</summary>
+    /// <summary>Returns whether an allocation of <paramref name="role"/> is counted: only
+    /// <see cref="GpuMemoryRole.DeviceLocal"/> is.</summary>
+    /// <param name="role">The allocation's role.</param>
+    /// <returns>Whether the role counts.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="role"/> is not a defined value.</exception>
+    public static bool IsCounted(GpuMemoryRole role) => role switch {
+        GpuMemoryRole.DeviceLocal => true,
+        GpuMemoryRole.HostVisible => false,
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: role,
+            message: "The memory role is not a defined value.",
+            paramName: nameof(role)
+        ),
+    };
+    /// <summary>Counts one allocation when its role counts (<see cref="IsCounted"/>), keyed by its device and the native
+    /// object whose release frees it.</summary>
+    /// <param name="device">The native device that made the allocation: a <c>VkDevice</c> or an
+    /// <c>ID3D12Device</c>; must be non-zero.</param>
     /// <param name="allocation">The native object the allocation is released through: a <c>VkDeviceMemory</c> or an
-    /// <c>ID3D12Resource</c>; must be non-zero and not already counted.</param>
+    /// <c>ID3D12Resource</c>; must be non-zero and not already counted on <paramref name="device"/>.</param>
     /// <param name="bytes">The allocation's actual size, in bytes.</param>
-    /// <exception cref="ArgumentException"><paramref name="allocation"/> is zero or already counted.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative.</exception>
-    public void CountAllocated(nint allocation, long bytes) {
+    /// <param name="role">What the allocation is for.</param>
+    /// <returns>Whether the allocation was counted.</returns>
+    /// <exception cref="ArgumentException"><paramref name="device"/> or <paramref name="allocation"/> is zero, or the
+    /// allocation is already counted on the device.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative, or <paramref name="role"/> is
+    /// not a defined value.</exception>
+    public bool CountAllocated(nint device, nint allocation, long bytes, GpuMemoryRole role) {
+        if (0 == device) {
+            throw new ArgumentException(
+                message: "A counted allocation needs the device that made it.",
+                paramName: nameof(device)
+            );
+        }
         if (0 == allocation) {
             throw new ArgumentException(
                 message: "A counted allocation needs its native object.",
@@ -73,13 +112,17 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
 
         ArgumentOutOfRangeException.ThrowIfNegative(value: bytes);
 
+        if (!IsCounted(role: role)) {
+            return false;
+        }
+
         lock (m_gate) {
             if (!m_live.TryAdd(
-                key: allocation,
+                key: (device, allocation),
                 value: bytes
             )) {
                 throw new ArgumentException(
-                    message: $"The allocation 0x{allocation:X} is already counted.",
+                    message: $"The allocation 0x{allocation:X} is already counted on device 0x{device:X}.",
                     paramName: nameof(allocation)
                 );
             }
@@ -98,15 +141,18 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                 m_peak = m_held;
             }
         }
+
+        return true;
     }
     /// <summary>Counts the release of an allocation <see cref="CountAllocated"/> counted, at the size it was counted
-    /// with; an object never counted (zero, host memory, or a swapchain image) counts nothing.</summary>
+    /// with; an object never counted on the device (zero, host memory, or a swapchain image) counts nothing.</summary>
+    /// <param name="device">The native device that made the allocation.</param>
     /// <param name="allocation">The native object being released.</param>
-    /// <returns>Whether the object was a counted allocation.</returns>
-    public bool CountReleased(nint allocation) {
+    /// <returns>Whether the object was a counted allocation of the device.</returns>
+    public bool CountReleased(nint device, nint allocation) {
         lock (m_gate) {
             if (!m_live.Remove(
-                key: allocation,
+                key: (device, allocation),
                 value: out var bytes
             )) {
                 return false;
@@ -120,6 +166,35 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
 
             return true;
         }
+    }
+    /// <summary>Ends a device's entries at its teardown. Every allocation still counted on it was leaked by an owner
+    /// that never released it: the entries are dropped, their bytes stay counted as held, and the teardown is refused
+    /// with each one named.</summary>
+    /// <param name="device">The native device being torn down.</param>
+    /// <exception cref="InvalidOperationException">An allocation is still counted on <paramref name="device"/>; the
+    /// message lists each one and its size.</exception>
+    public void EndDevice(nint device) {
+        List<(nint Allocation, long Bytes)>? leaked = null;
+
+        lock (m_gate) {
+            foreach (var ((owner, allocation), bytes) in m_live) {
+                if (owner == device) {
+                    (leaked ??= []).Add(item: (allocation, bytes));
+                }
+            }
+
+            if (leaked is null) {
+                return;
+            }
+
+            foreach (var (allocation, _) in leaked) {
+                _ = m_live.Remove(key: (device, allocation));
+            }
+        }
+
+        leaked.Sort(comparison: static (left, right) => left.Allocation.CompareTo(value: right.Allocation));
+
+        throw new InvalidOperationException(message: $"{Name}: device 0x{device:X} was torn down holding {leaked.Count} counted allocation(s) their owners never released: {string.Join(separator: ", ", values: leaked.Select(selector: static entry => $"0x{entry.Allocation:X} ({entry.Bytes} bytes)"))}.");
     }
     /// <summary>Reads one of this source's kinds.</summary>
     /// <param name="kind">One of <see cref="Allocated"/>, <see cref="Released"/> or <see cref="Peak"/>.</param>

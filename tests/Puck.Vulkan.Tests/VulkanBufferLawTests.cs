@@ -118,15 +118,15 @@ public sealed class VulkanBufferLawTests {
     public void EachMemoryKindSelectsItsPropertiesAndWhetherTheyAreRequired() {
         Assert.Equal(
             actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.HostCoherent),
-            expected: (HostVisibleCoherentProperties, true)
+            expected: (HostVisibleCoherentProperties, true, GpuMemoryRole.HostVisible)
         );
         Assert.Equal(
             actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.DeviceLocal),
-            expected: (DeviceLocalProperty, true)
+            expected: (DeviceLocalProperty, true, GpuMemoryRole.DeviceLocal)
         );
         Assert.Equal(
             actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.PreferDeviceLocal),
-            expected: (DeviceLocalProperty, false)
+            expected: (DeviceLocalProperty, false, GpuMemoryRole.DeviceLocal)
         );
     }
     [Fact]
@@ -223,9 +223,9 @@ public sealed class VulkanBufferLawTests {
     /// context to its buffer API fails the law.</summary>
     private sealed class UntouchableDeviceContext : IVulkanDeviceContext, IGpuDeviceContext {
         public long AdapterLuid => throw new NotSupportedException();
+        public GpuDeviceCapabilities? Capabilities => throw new NotSupportedException();
         public nint DeviceHandle => throw new NotSupportedException();
         public GpuDeviceIdentity? Identity => throw new NotSupportedException();
-        public GpuDeviceCapabilities? Capabilities => throw new NotSupportedException();
         public VulkanInstance Instance => throw new NotSupportedException();
         public VulkanLogicalDevice LogicalDevice => throw new NotSupportedException();
         public GpuMemoryProfile MemoryProfile => throw new NotSupportedException();

@@ -980,8 +980,9 @@ Still open:
   when the definition is decoded, and the refusal produces no `world.reload`
   answer and no `wire.errors` count. The cells' teardown is clean on both
   backends: the screen binder retires every machine output it published before
-  the device goes, and a surface upload released after its device throws, with
-  its owner's release on the stack, rather than leaking.
+  the device goes, and a surface upload, a Vulkan shared-surface import or a
+  Direct3D 12 exportable image released after its device throws, with its
+  owner's release on the stack, rather than leaking.
 - The runs on the RTX 4070 and the AMD devices. Direct3D 12 cells are blocked
   on a machine whose debug layer stops device creation.
 
@@ -1298,7 +1299,14 @@ Phase 1 follows P3, which has landed, and all of it has landed:
    device-local bytes allocated and released (per-backend-deterministic) at
    their actual allocation size, and the peak held (pacing), where each backend
    allocates buffers, images and exported or imported memory; swapchain images
-   are never counted. `QualificationJudge` judges a cell's
+   are never counted. An allocation counts by its role (`GpuMemoryRole`), never
+   by the memory type the driver chose, and `GpuDeviceMemoryWork.IsCounted` is
+   the one statement of the rule: images, device-local buffers, exportable
+   images and imports count; host-visible, staging, upload and readback buffers
+   never do, even on a unified-memory device where every Vulkan memory type is
+   device-local. Entries are keyed per device, and a Vulkan device's teardown
+   refuses by name any allocation still held on it; the Direct3D 12 context's
+   teardown does not end its entries yet. `QualificationJudge` judges a cell's
    `peakDeviceLocalBytes`, which every cell leaves null until a
    reference-device reading sets it.
 

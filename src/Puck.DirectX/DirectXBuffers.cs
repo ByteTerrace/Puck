@@ -50,13 +50,15 @@ public static unsafe class DirectXBuffers {
             riidResource: in resourceIid
         );
 
-        if (heapType == D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT) {
-            DirectXDeviceMemory.CountAllocated(
-                device: device,
-                memory: memory,
-                resource: ((ID3D12Resource*)buffer)
-            );
-        }
+        DirectXDeviceMemory.CountAllocated(
+            device: device,
+            memory: memory,
+            resource: ((ID3D12Resource*)buffer),
+            role: ((heapType == D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT)
+                ? GpuMemoryRole.DeviceLocal
+                : GpuMemoryRole.HostVisible
+            )
+        );
 
         return ((ID3D12Resource*)buffer);
     }
