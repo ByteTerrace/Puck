@@ -1434,7 +1434,8 @@ Phase 3, the groups, follows phase 2:
 
     14a, the device heap, touches Direct3D 12 alone; a Vulkan pool stays a
     `VkDescriptorPool`.
-    - 14a-1, the range allocator, GPU-free: a free list over `[0, size)`
+    - 14a-1, done: the range allocator, `GpuRangeAllocator` in
+      `Puck.Abstractions/Gpu`, GPU-free: a free list over `[0, size)`
       that allocates a pool's contiguous range first-fit, returns it on free,
       and coalesces neighbours. A request no free range can hold is refused
       by name, stating the request, the largest free range and the heap's
@@ -1444,7 +1445,9 @@ Phase 3, the groups, follows phase 2:
       but smaller than the total free count is refused until its neighbours
       free and coalesce (fragmentation); a freed range is the one the next
       equal request receives, and a thousand allocate-free cycles leave the
-      free list as it began (reuse).
+      free list as it began and allocate nothing (reuse). A double free and a
+      free of a range never allocated are refused by name
+      (`GpuRangeAllocatorLawTests`).
     - 14a-2, the heap's size, GPU-free: the composition sums the descriptor
       demand every pool owner declares before it creates a pool, from the
       same `GpuDescriptorPoolSizes` its pool is created with, times the sets
