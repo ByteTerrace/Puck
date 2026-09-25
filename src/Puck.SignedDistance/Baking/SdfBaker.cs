@@ -42,7 +42,7 @@ public sealed record SdfBake(SdfBakedMesh Mesh, IReadOnlyList<SdfBakedTexture> T
 public static class SdfBaker {
     /// <summary>The baker's version. It moves whenever a change to the baker changes the bytes a bake produces, and it is
     /// part of every bake's key and the version of the compiled-world chunk that names bakes.</summary>
-    public const uint Version = 5;
+    public const uint Version = 6;
 
     /// <summary>Bakes <paramref name="program"/> at <paramref name="tier"/>.</summary>
     /// <param name="program">The program.</param>
@@ -85,6 +85,7 @@ public static class SdfBaker {
         var impostor = SdfBakedImpostor.Bake(
             center: center,
             field: field,
+            glow: SdfSurfaceTextures.Emission(materials: materials),
             palette: SdfSurfaceTextures.Palette(materials: materials),
             radius: reach,
             views: tier.ImpostorViews,

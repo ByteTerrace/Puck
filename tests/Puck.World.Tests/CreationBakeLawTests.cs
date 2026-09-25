@@ -31,8 +31,8 @@ public sealed class CreationBakeLawTests {
         """;
     // The bake pack of this file's world at the baker's current version. A change to what the baker produces moves
     // SdfBaker.Version and re-records this pin.
-    private const uint PinnedVersion = 5;
-    private const string PinnedProduct = "sha256-64/3ed4ed39dfe2980f";
+    private const uint PinnedVersion = 6;
+    private const string PinnedProduct = "sha256-64/2c5936bc1cb17fda";
 
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 
@@ -138,6 +138,16 @@ public sealed class CreationBakeLawTests {
         Assert.True(condition: (work.FieldEvaluations > 0L));
         Assert.True(condition: CreationBakeCodec.TryDecode(bake: out var decoded, content: first, refusal: out _));
         Assert.Equal(expected: first, actual: CreationBakeCodec.Encode(bake: decoded));
+    }
+    [Fact]
+    public void TheCodecRefusesAnImpostorTextureInAnotherUsagesSlot() {
+        var request = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[0];
+
+        Assert.True(condition: CreationBakeCodec.TryDecode(bake: out var bake, content: WorldBakeStore.Bake(request: request, work: out _), refusal: out _));
+
+        var swapped = CreationBakeCodec.Encode(bake: (bake with { Impostor = (bake.Impostor with { Depth = bake.Impostor.Emission, Emission = bake.Impostor.Depth }) }));
+
+        _ = Assert.Throws<InvalidDataException>(testCode: () => CreationBakeCodec.Decode(bake: out _, content: swapped, refusal: out _));
     }
     [Fact]
     public void TheKeyMovesWithTheCreationTheBakerAndTheTier() {

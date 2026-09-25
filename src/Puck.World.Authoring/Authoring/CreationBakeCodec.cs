@@ -14,9 +14,9 @@ namespace Puck.World.Authoring;
 /// the creation again. The layout opens with a byte, <c>1</c> for a bake and <c>0</c> for a refusal; a refusal follows
 /// with its reason as text. A bake follows with its work counts, then its mesh (cell size, tile columns, the vertices as
 /// eight little-endian 32-bit floats each, the 32-bit indices), then its surface textures, then its impostor (center,
-/// radius, views, view texels, and its albedo, normal and depth textures). A texture is its usage, format and color space
-/// bytes, its first level's width and height, its tile side, its level count, and each level's bytes in its format, the
-/// first level first. A texture's format and color space are its usage's (<see cref="SdfBakedTexture.PlanFor"/>) and its
+/// radius, views, view texels, and its albedo, normal, depth and emission textures, each refused under any other usage).
+/// A texture is its usage, format and color space bytes, its first level's width and height, its tile side, its level
+/// count, and each level's bytes in its format, the first level first. A texture's format and color space are its usage's (<see cref="SdfBakedTexture.PlanFor"/>) and its
 /// level count is its tile's (<see cref="TextureMipChain.LevelCount"/>), so a decoder refuses any other. Counts and
 /// dimensions are the canonical variable-length integers of
 /// <see cref="CanonicalBinaryWriterExtensions"/>. A change to this layout is a change to what a bake produces, so it
@@ -88,6 +88,7 @@ public static class CreationBakeCodec {
         WriteTexture(texture: impostor.Albedo, writer: writer);
         WriteTexture(texture: impostor.Normal, writer: writer);
         WriteTexture(texture: impostor.Depth, writer: writer);
+        WriteTexture(texture: impostor.Emission, writer: writer);
 
         return writer.WrittenSpan.ToArray();
     }
@@ -185,9 +186,10 @@ public static class CreationBakeCodec {
         var radius = ReadFloat(reader: ref reader);
         var views = reader.ReadBoundedInt(maximum: MaximumDimension);
         var viewTexels = reader.ReadBoundedInt(maximum: MaximumDimension);
-        var albedo = ReadTexture(reader: ref reader);
-        var normal = ReadTexture(reader: ref reader);
-        var depth = ReadTexture(reader: ref reader);
+        var albedo = ReadImpostorTexture(reader: ref reader, usage: SdfBakeTextureUsage.Albedo);
+        var normal = ReadImpostorTexture(reader: ref reader, usage: SdfBakeTextureUsage.Normal);
+        var depth = ReadImpostorTexture(reader: ref reader, usage: SdfBakeTextureUsage.Depth);
+        var emission = ReadImpostorTexture(reader: ref reader, usage: SdfBakeTextureUsage.Emission);
 
         reader.ExpectEnd();
 
@@ -203,6 +205,7 @@ public static class CreationBakeCodec {
                 Albedo: albedo,
                 Center: center,
                 Depth: depth,
+                Emission: emission,
                 Normal: normal,
                 Radius: radius,
                 ViewTexels: viewTexels,
@@ -256,6 +259,16 @@ public static class CreationBakeCodec {
         foreach (var level in texture.Levels) {
             writer.WriteBytes(value: level);
         }
+    }
+    // An impostor's texture sits in a slot of one usage; a texture of any other usage there is not an impostor's.
+    private static SdfBakedTexture ReadImpostorTexture(ref CanonicalBinaryReader reader, SdfBakeTextureUsage usage) {
+        var texture = ReadTexture(reader: ref reader);
+
+        if (texture.Usage != usage) {
+            throw new InvalidDataException(message: $"a bake's impostor holds a {texture.Usage} texture where its {usage} belongs");
+        }
+
+        return texture;
     }
     private static SdfBakedTexture ReadTexture(ref CanonicalBinaryReader reader) {
         var usage = ((SdfBakeTextureUsage)reader.ReadByte());

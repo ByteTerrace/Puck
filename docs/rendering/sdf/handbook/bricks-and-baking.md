@@ -281,11 +281,13 @@ endpoints, so compression error there is shared within those bounds.
 ray per texel through the evaluator's own march, covering every direction with +Y
 as the octahedron's pole, so a camera below a flying body is covered as well as
 one above a prop. It stores albedo with coverage in alpha (BC7), the normal as an
-octahedral pair (BC5; a miss holds the direction toward the view's camera), and
-the hit's depth across the bounding sphere (BC4; a miss is the far side). Each
-view is a tile of its chains, and the normal and depth mips are weighted by the
-albedo's coverage, so empty texels never bend a silhouette's normals or pull its
-depth. A single billboard is right from one direction only, which no orbiting or
+octahedral pair (BC5; a miss holds the direction toward the view's camera), the
+hit's depth across the bounding sphere (BC4; a miss is the far side), and the
+light the hit's material emits, in the surface textures' linear half-precision
+form (BC6H; a miss emits none), so a placement drawn as its impostor keeps its
+glow. Each view is a tile of its chains, and the normal, depth and emission mips
+are weighted by the albedo's coverage, so empty texels never bend a silhouette's
+normals, pull its depth or dim its glow. A single billboard is right from one direction only, which no orbiting or
 overhead camera satisfies.
 | Tier | Cells a side | Impostor |
 |---|---|---|

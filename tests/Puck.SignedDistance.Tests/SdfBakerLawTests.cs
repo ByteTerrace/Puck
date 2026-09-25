@@ -108,6 +108,7 @@ public sealed class SdfBakerLawTests {
         AssertSameTexture(actual: second.Impostor.Albedo, expected: first.Impostor.Albedo);
         AssertSameTexture(actual: second.Impostor.Normal, expected: first.Impostor.Normal);
         AssertSameTexture(actual: second.Impostor.Depth, expected: first.Impostor.Depth);
+        AssertSameTexture(actual: second.Impostor.Emission, expected: first.Impostor.Emission);
     }
     [MemberData(memberName: nameof(SceneNames))]
     [Theory]
@@ -118,10 +119,11 @@ public sealed class SdfBakerLawTests {
 
         Assert.Equal(expected: [SdfBakeTextureUsage.Albedo, SdfBakeTextureUsage.Normal, SdfBakeTextureUsage.Occlusion, SdfBakeTextureUsage.Material, SdfBakeTextureUsage.Emission], actual: bake.Textures.Select(selector: static texture => texture.Usage));
         Assert.All(collection: bake.Textures, action: texture => AssertChain(texture: texture, tileTexels: Tile));
-        Assert.Equal(expected: [SdfBakeTextureUsage.Albedo, SdfBakeTextureUsage.Normal, SdfBakeTextureUsage.Depth], actual: ((SdfBakedTexture[])[bake.Impostor.Albedo, bake.Impostor.Normal, bake.Impostor.Depth]).Select(selector: static texture => texture.Usage));
+        Assert.Equal(expected: [SdfBakeTextureUsage.Albedo, SdfBakeTextureUsage.Normal, SdfBakeTextureUsage.Depth, SdfBakeTextureUsage.Emission], actual: ((SdfBakedTexture[])[bake.Impostor.Albedo, bake.Impostor.Normal, bake.Impostor.Depth, bake.Impostor.Emission]).Select(selector: static texture => texture.Usage));
         AssertChain(texture: bake.Impostor.Albedo, tileTexels: bake.Impostor.ViewTexels);
         AssertChain(texture: bake.Impostor.Normal, tileTexels: bake.Impostor.ViewTexels);
         AssertChain(texture: bake.Impostor.Depth, tileTexels: bake.Impostor.ViewTexels);
+        AssertChain(texture: bake.Impostor.Emission, tileTexels: bake.Impostor.ViewTexels);
 
         var albedo = bake.Textures[0].Decode(level: 0);
         var materials = bake.Textures[3];
@@ -269,6 +271,62 @@ public sealed class SdfBakerLawTests {
         }
 
         Assert.Equal(expected: bake.Work.Rays, actual: ((long)(side * side)));
+    }
+    [Fact]
+    public void TheImpostorCarriesTheLightItsSurfaceEmits() {
+        // The torus is all material 1, which emits its linear albedo three times over. Each view texel whose ray hit it
+        // (its albedo's coverage) holds that light, and each texel whose ray missed holds none, within BC6H's stated
+        // bound: 30% of the value (TextureCodecLawTests' figure over any block).
+        const double Bound = 0.3;
+        var bake = Bake(name: "torus", quality: SdfBakeQuality.Standard);
+        var impostor = bake.Impostor;
+        var side = (impostor.Views * impostor.ViewTexels);
+        var albedo = impostor.Albedo.Decode(level: 0);
+        var emission = impostor.Emission.Decode(level: 0);
+        var strength = ((double)Materials[1].Emissive);
+        double[] light = [((double)((Half)(Materials[1].Albedo.X * strength))), ((double)((Half)(Materials[1].Albedo.Y * strength))), ((double)((Half)(Materials[1].Albedo.Z * strength)))];
+
+        var (hits, misses) = (0, 0);
+
+        Assert.Equal(expected: (side, side), actual: (impostor.Emission.Width, impostor.Emission.Height));
+
+        for (var texel = 0; (texel < (side * side)); texel++) {
+            var hit = (albedo[((texel * 4) + 3)] >= 128);
+
+            (hits, misses) = (hit ? ((hits + 1), misses) : (hits, (misses + 1)));
+
+            for (var channel = 0; (channel < 3); channel++) {
+                var value = ((double)BitConverter.UInt16BitsToHalf(value: BinaryPrimitives.ReadUInt16LittleEndian(source: emission.AsSpan(start: ((texel * 8) + (channel * 2))))));
+                var expected = (hit ? light[channel] : 0.0);
+
+                Assert.True(
+                    condition: (Math.Abs(value: (value - expected)) <= (Bound * light[channel])),
+                    userMessage: $"texel {texel} channel {channel}: {value} where the field emits {expected}"
+                );
+            }
+        }
+
+        Assert.True(condition: ((hits > 0) && (misses > 0)), userMessage: $"{hits} hits and {misses} misses");
+    }
+    [Fact]
+    public void AnImpostorOfNothingEmissiveStoresTheConstantDarkBlock() {
+        // The sphere is all material 0, which emits nothing: every level decodes to zero light, and every block is the
+        // one block the encoder writes for a uniform dark block.
+        var impostor = Bake(name: "sphere", quality: SdfBakeQuality.Standard).Impostor;
+        var constant = impostor.Emission.Levels[0].AsSpan(length: Bc6hCodec.BlockBytes, start: 0).ToArray();
+
+        for (var level = 0; (level < impostor.Emission.Levels.Count); level++) {
+            var blocks = impostor.Emission.Levels[level];
+            var decoded = impostor.Emission.Decode(level: level);
+
+            for (var at = 0; (at < blocks.Length); at += Bc6hCodec.BlockBytes) {
+                Assert.Equal(expected: constant, actual: blocks.AsSpan(length: Bc6hCodec.BlockBytes, start: at).ToArray());
+            }
+
+            for (var texel = 0; (texel < (decoded.Length / 8)); texel++) {
+                Assert.Equal(expected: 0UL, actual: BinaryPrimitives.ReadUInt64LittleEndian(source: decoded.AsSpan(start: (texel * 8))) & 0x0000FFFFFFFFFFFFUL);
+            }
+        }
     }
     [Fact]
     public void AProgramTheInterpreterRefusesOrWithoutAFieldShapeHasNoBake() {
