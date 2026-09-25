@@ -301,11 +301,16 @@ public sealed class ShaderPipelineTests {
             expected: ["RENDERGRAPH_PACKAGE_UNKNOWN"],
             actual: pipelineHost.Diagnostics.Select(selector: static diagnostic => diagnostic.Code)
         );
+        var planned = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: definition).Pipeline.Passes.Single();
+
         Assert.Equal(
             expected: ShaderPipelinePassKind.Package,
-            actual: new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: definition).Pipeline.Passes.Single().Kind
+            actual: planned.Kind
         );
-        Assert.Null(@object: new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: definition).Pipeline.Passes.Single().Declaration);
+        Assert.Equal(
+            expected: (ShaderPipelineDocumentPassKind.Compute, RenderGraphPackageCatalog.SdfWorld),
+            actual: (planned.Declaration.Kind, planned.Declaration.Source)
+        );
     }
     [Fact]
     public void A_one_off_source_is_an_hlsl_compute_pass_unless_its_kind_is_given() {
