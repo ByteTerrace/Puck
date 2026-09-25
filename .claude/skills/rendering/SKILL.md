@@ -205,17 +205,23 @@ These are one-line cautions; the owning pages hold the derivations.
   stress test for handle reuse must render a frame between image swaps
   (`world.wait`); swaps inside one frame never publish the retired handle.
 - **Screens.** `SetScreenSource(i, 0)` unbinds to the procedural test card, not
-  black. Inside view V's own render, any screen wired to V binds 0. An image
-  another producer keeps writing reaches a node as a `Puck.Hosting.GpuImageLease`
-  and stays in a `LeaseRetireList` until the submission that sampled it
-  retires: `SdfEngineNode` keeps one list per frame-ring slot, and a
-  `ShaderPipelineRenderNode` one per frame slot, which the overlay package moves
-  its HUD frames' leases into (`OverlayFrameSlots.MoveTo`). A lease retires only
-  at its slot's next fence wait, so one source can have as many leases
-  outstanding as the node has frames in flight
-  (`RenderGraphRuntime.DefaultInFlightFrames`); a source that counts its
-  outstanding leases (`WorldOverlayFrameSources`) is sized by it. A new
-  sampled-lease path holds its leases in that list rather than its own array.
+  black. Inside view V's own render, any screen wired to V binds 0. A leased
+  image (`Puck.Hosting.GpuImageLease`) stays in a `LeaseRetireList` until the
+  submission that sampled it retires: `SdfEngineNode` keeps one list per
+  frame-ring slot, and a `ShaderPipelineRenderNode` one per frame slot, which
+  the overlay package moves its HUD frames' leases into
+  (`OverlayFrameSlots.MoveTo`). A lease retires only at its slot's next fence
+  wait, so one source can have as many leases outstanding as the node has
+  frames in flight (`RenderGraphRuntime.DefaultInFlightFrames`); a source that
+  counts its outstanding leases (`WorldOverlayFrameSources`) is sized by it. A
+  new sampled-lease path holds its leases in that list rather than its own
+  array. Not every image another producer keeps writing is leased yet: the
+  desktop capture's GPU route (`CaptureFeed.Handle`) and the offscreen views'
+  renders (`ScreenSlot.Handle`) bind a shared slot's bare handle, so nothing
+  stops the producer overwriting a slot a submission still samples. Rendering
+  plan P12b-2 leases them. Nothing orders two devices on the GPU either: a
+  producer's CPU wait before it publishes is the only ordering until P12b-4's
+  shared fence.
 - **Image sources.** An image from outside a pass is described once, by
   `ImageSourceDescriptor`, and a world names its producer by id
   (`WorldScreenSource.Producer`). A new producer registers a
@@ -947,11 +953,15 @@ the shipped ink pipeline rendering from its stored package and a relocated
 package from its binaries while an unpackaged source row is refused by
 `SHADERPKG_ABSENT`.
 Each proof runs once per backend, and an absent GPU or compiler is reported as
-unsupported rather than passed, except in a leg that hides the compiler. `pipeline-churn` and `pipeline-fault` fail on any `[vulkan-debug] validation`
-or `[d3d12-debug]` line (the Vulkan loader's `general` notices about the
-machine's own layers do not count, nor does a Direct3D 12 pipeline-library miss, which the
-cache counts instead), so run them with `puck canary --debug-layers` for the
-validation proof.
+unsupported rather than passed, except in a leg that hides the compiler. Under
+`puck canary --debug-layers` the runner fails every leg on any
+`[vulkan-debug] validation` or `[d3d12-debug]` line, and on
+`[d3d12] debug layer requested but not loaded` (`DebugLayerOutput` in
+`Puck.Cli`). The Vulkan loader's `general` notices about the machine's own
+layers do not count, and the Direct3D 12 drain never prints a pipeline-library
+miss, which the cache counts instead. No manifest asserts validation lines
+itself; run `pipeline-churn` and `pipeline-fault` with `--debug-layers` for
+the validation proof.
 `ShaderPipelineRenderNodeLawTests` drive the render node through its factory
 seams without a device: refusal of a candidate, a float-output candidate, a
 selection or a resize whose allocation fails partway (exact disposal counts),

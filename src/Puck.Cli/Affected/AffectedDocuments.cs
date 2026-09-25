@@ -10,7 +10,8 @@ namespace Puck.Cli.Affected;
 /// adjacencies name and the graph documents its <c>views.pipelines</c> and <c>views.graphs</c> rows name, each
 /// resolved as the host resolves it (<see cref="WorldDocumentPaths.TryResolve"/>); a graph document reaches every shader
 /// pass source it declares (<see cref="ShaderPipelineLoader.ReadDefinition"/>, resolved beside the document as the
-/// loader resolves it). A document a reader refuses reaches nothing beyond itself.
+/// loader resolves it) and every include each of those sources reaches (<see cref="ShaderSourceClosure.Collect"/>). A
+/// document a reader refuses reaches nothing beyond itself.
 /// </summary>
 internal static class AffectedDocuments {
     private const string GraphSuffix = ".graph.json";
@@ -26,6 +27,22 @@ internal static class AffectedDocuments {
             return [.. ShaderPipelineLoader.ReadDefinition(name: Path.GetFileName(path: graphPath), path: graphPath).ShaderPasses
                 .Select(selector: pass => Path.GetFullPath(path: pass.Source, basePath: directory))];
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException or ArgumentException or ShaderPipelineCompilationException)) {
+            return [];
+        }
+    }
+    /// <summary>The files a shader source's include closure reaches (<see cref="ShaderSourceClosure.Collect"/>), as full
+    /// paths.</summary>
+    /// <param name="sourcePath">The shader source's full path.</param>
+    /// <returns>The includes, or none when the source cannot be read or the closure refuses it.</returns>
+    internal static IReadOnlyList<string> Includes(string sourcePath) {
+        try {
+            var closure = ShaderSourceClosure.Collect(
+                limits: ShaderSourceLimits.Default,
+                sources: [(sourcePath, File.ReadAllText(path: sourcePath))]
+            );
+
+            return [.. closure.Includes.Select(selector: static include => Path.GetFullPath(path: include.Path))];
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ShaderClosureRefusedException)) {
             return [];
         }
     }
@@ -53,6 +70,10 @@ internal static class AffectedDocuments {
             if (file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: GraphSuffix)) {
                 foreach (var source in PassSources(graphPath: file)) {
                     Enqueue(file: source);
+
+                    foreach (var include in Includes(sourcePath: source)) {
+                        Enqueue(file: include);
+                    }
                 }
 
                 continue;
