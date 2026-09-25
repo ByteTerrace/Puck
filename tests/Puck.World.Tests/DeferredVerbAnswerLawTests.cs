@@ -6,11 +6,24 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Laws for how a deferred verb answers over the loopback against a real server: an applied
-/// <c>world.undo</c> settles its registered line with its own verdict at the tick boundary, like a refused one, and a
-/// submission the loopback codec refuses is reported once, by its answer, never again on stderr beside it.</summary>
+/// <summary>Laws for how a console line answers over a console link against a real server: an applied
+/// <c>world.undo</c> settles its registered line with its own verdict at the tick boundary, like a refused one, and only
+/// the refusal counts; a grant refused inside its submit counts once through the console link and not at all through
+/// the bare transport; and a submission the loopback codec refuses is reported once, by its answer, never again on
+/// stderr beside it.</summary>
 [Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class DeferredVerbAnswerLawTests {
+    private const string Row = "boot";
+
+    // The console's link to the fixture's row and the row's echo tap into the console's table, as a host wires them.
+    private static IServerLink ConsoleLink(WorldFixture fixture, WorldDeferredVerbEchoes echoes) {
+        fixture.Server.EchoTap = echo => echoes.Answer(
+            echo: in echo,
+            row: Row
+        );
+
+        return new LoopbackTransport(server: fixture.Server).ForConsole(row: echoes.ForRow(row: Row));
+    }
     private static void JournalOneEdit(WorldFixture fixture) {
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
             Principal: Principal.Console,
@@ -26,12 +39,12 @@ public sealed class DeferredVerbAnswerLawTests {
     [Fact]
     public void AnAppliedUndoSettlesItsLineWithItsVerdict() {
         using var fixture = Fixtures.FreshServer();
-        var link = new LoopbackTransport(server: fixture.Server);
         var echoes = new WorldDeferredVerbEchoes();
+        var link = ConsoleLink(echoes: echoes, fixture: fixture);
         string? verdict = null;
 
         JournalOneEdit(fixture: fixture);
-        fixture.Server.EchoTap = echo => verdict ??= echoes.Settle(echo: in echo);
+        echoes.Answered += answer => verdict ??= answer.Line;
 
         var submitted = link.SubmitUndo(
             count: 1,
@@ -56,19 +69,15 @@ public sealed class DeferredVerbAnswerLawTests {
     [Fact]
     public void AnAppliedAndARefusedUndoEachReportOneLine() {
         using var fixture = Fixtures.FreshServer();
-        var link = new LoopbackTransport(server: fixture.Server);
         var echoes = new WorldDeferredVerbEchoes();
+        var link = ConsoleLink(echoes: echoes, fixture: fixture);
         var narration = new RecordingNarrationSink();
-        var verdicts = new List<string>();
+        var verdicts = new List<WorldDeferredVerbAnswer>();
 
         using var attached = fixture.Server.AttachNarrationSink(sink: narration);
 
         JournalOneEdit(fixture: fixture);
-        fixture.Server.EchoTap = echo => {
-            if (echoes.Settle(echo: in echo) is { } verdict) {
-                verdicts.Add(item: verdict);
-            }
-        };
+        echoes.Answered += verdicts.Add;
 
         // The first undo drops the one edit; the second finds nothing to undo and is refused.
         for (var line = 0; (line < 2); line++) {
@@ -83,7 +92,10 @@ public sealed class DeferredVerbAnswerLawTests {
 
         Assert.Equal(
             actual: verdicts,
-            expected: ["[world.undo: dropped 1, 0 remaining]", "[world.undo: undo refused: nothing to undo]"]
+            expected: [
+                new WorldDeferredVerbAnswer(Counts: false, IsError: false, Line: "[world.undo: dropped 1, 0 remaining]"),
+                new WorldDeferredVerbAnswer(Counts: true, IsError: true, Line: "[world.undo: undo refused: nothing to undo]"),
+            ]
         );
         Assert.DoesNotContain(
             collection: narration.Lines,
@@ -92,6 +104,36 @@ public sealed class DeferredVerbAnswerLawTests {
                 value: "[world.undo:"
             )
         );
+    }
+    /// <summary>A seat granting over another seat's body is refused inside its submit: through the console link the
+    /// refusal counts once and leaves nothing pending, and the control, a grant over its own body, counts nothing;
+    /// the same refusal through the bare transport is no console line and counts nothing.</summary>
+    [InlineData(true, 0, 1)]
+    [InlineData(true, 1, 0)]
+    [InlineData(false, 0, 0)]
+    [Theory]
+    public void AGrantRefusedInsideItsSubmitCountsOnceThroughTheConsoleLink(bool console, int body, int counted) {
+        using var fixture = Fixtures.FreshServer();
+        var echoes = new WorldDeferredVerbEchoes();
+        var consoleLink = ConsoleLink(echoes: echoes, fixture: fixture);
+        var link = (console
+            ? consoleLink
+            : new LoopbackTransport(server: fixture.Server));
+        var answers = new List<WorldDeferredVerbAnswer>();
+
+        echoes.Answered += answers.Add;
+        link.SubmitGrant(
+            actor: Principal.Seat(slot: 1),
+            grant: new WorldGrant(
+                Capability: WorldCapability.Drive,
+                Exclusive: false,
+                Grantee: Principal.Seat(slot: 2),
+                Subject: GrantSubject.Body(index: body)
+            )
+        );
+
+        Assert.Equal(actual: answers.Count(predicate: static answer => answer.Counts), expected: counted);
+        Assert.Equal(actual: echoes.PendingCount, expected: 0);
     }
     [Fact]
     public void ACodecRefusalWithAnAnswerIsReportedOnlyByThatAnswer() {

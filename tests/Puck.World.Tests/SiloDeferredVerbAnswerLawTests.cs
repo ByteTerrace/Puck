@@ -12,20 +12,32 @@ using static Puck.World.Tests.DeferredVerbEvictionAnswerLawTests;
 namespace Puck.World.Tests;
 
 /// <summary>Laws for the silo's console: it attaches the same deferred-verb answers the World host does
-/// (<see cref="WorldSiloApplication.AnswerDeferredVerbs"/>) and taps each admitted row's echoes into them
-/// (<see cref="WorldSiloHost.TapEchoes"/>), so a late verdict prints, and a late refusal of a console line and an
-/// eviction print and count, while a remote peer's refusal and the silo's own refused reload do not count.</summary>
+/// (<see cref="WorldSiloApplication.AnswerDeferredVerbs"/>) and taps each admitted row's echoes into them under the row's
+/// name (<see cref="WorldSiloHost.TapEchoes"/>), so a late verdict prints and a late refusal of a console line counts,
+/// while a remote peer's refusal, the silo's own refused reload through the bare transport, an eviction, and another
+/// row's echo with the same correlation count nothing.</summary>
 [Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class SiloDeferredVerbAnswerLawTests {
-    // What the silo does with each row it admits.
-    private static void TapRow(WorldDeferredVerbAnswers answers, WorldFixture fixture) => WorldSiloHost.TapEchoes(answers: answers, server: fixture.Server);
+    private const string Row = "row";
+
+    // What the silo does with each row it admits: taps its echoes under its name, and gives the console a link to it.
+    private static (LoopbackTransport Bare, IServerLink Console) TapRow(WorldDeferredVerbAnswers answers, WorldFixture fixture, string row = Row) {
+        var bare = new LoopbackTransport(server: fixture.Server);
+
+        WorldSiloHost.TapEchoes(
+            answers: answers,
+            row: row,
+            server: fixture.Server
+        );
+
+        return (bare, bare.ForConsole(row: answers.Echoes.ForRow(row: row)));
+    }
 
     // A typed verb's refusal arrives a tick after its line returned, so its dispatch never counted it: the silo counts
     // it through the same answers the World host taps its server's echoes into.
     [Fact]
     public void TheSiloCountsALateRefusal() {
         using var fixture = Fixtures.FreshServer();
-        var link = new LoopbackTransport(server: fixture.Server);
         using var services = new ServiceCollection()
             .AddSingleton<WorldDeferredVerbEchoes>()
             .AddSingleton(implementationInstance: new CommandRegistry(modules: []))
@@ -34,7 +46,7 @@ public sealed class SiloDeferredVerbAnswerLawTests {
         var registry = services.GetRequiredService<CommandRegistry>();
         var answers = WorldSiloApplication.AnswerDeferredVerbs(services: services);
 
-        TapRow(answers: answers, fixture: fixture);
+        var (bare, link) = TapRow(answers: answers, fixture: fixture);
 
         var late = Captured(action: () => {
             var submitted = link.Submit(
@@ -57,7 +69,6 @@ public sealed class SiloDeferredVerbAnswerLawTests {
         const int RemoteConnection = 7;
 
         using var fixture = Fixtures.FreshServer();
-        var link = new LoopbackTransport(server: fixture.Server);
         using var services = new ServiceCollection()
             .AddSingleton<WorldDeferredVerbEchoes>()
             .AddSingleton(implementationInstance: new CommandRegistry(modules: []))
@@ -67,7 +78,7 @@ public sealed class SiloDeferredVerbAnswerLawTests {
         var answers = WorldSiloApplication.AnswerDeferredVerbs(services: services);
         var remoteRefusals = 0;
 
-        TapRow(answers: answers, fixture: fixture);
+        var (bare, link) = TapRow(answers: answers, fixture: fixture);
         fixture.Server.EchoTap += echo => {
             if (
                 echo.Rejected &&
@@ -101,13 +112,12 @@ public sealed class SiloDeferredVerbAnswerLawTests {
 
         Assert.Equal(actual: WireErrors(registry: registry), expected: "[wire.errors: 1 rejected]");
     }
-    // The silo's reload submits its rebuild on the local connection without registering a line, as
+    // The silo's reload submits its rebuild on the row's bare transport, which registers no line, as
     // WorldSiloHost.ReloadAsync does, and answers its refusal on the reload's own reply, so wire.errors does not count
     // it. The control, the same refused rebuild submitted as a console line, counts once.
     [Fact]
     public void TheSiloCountsNoRefusedReload() {
         using var fixture = Fixtures.FreshServer();
-        var link = new LoopbackTransport(server: fixture.Server);
         using var services = new ServiceCollection()
             .AddSingleton<WorldDeferredVerbEchoes>()
             .AddSingleton(implementationInstance: new CommandRegistry(modules: []))
@@ -126,7 +136,7 @@ public sealed class SiloDeferredVerbAnswerLawTests {
             PathHint: "hosted/row"
         );
 
-        TapRow(answers: answers, fixture: fixture);
+        var (bare, link) = TapRow(answers: answers, fixture: fixture);
         fixture.Server.EchoTap += echo => {
             if (
                 echo.Rejected &&
@@ -140,7 +150,7 @@ public sealed class SiloDeferredVerbAnswerLawTests {
             string? transport = null;
 
             Assert.True(
-                condition: (link.SubmitEnvelope(
+                condition: (bare.SubmitEnvelope(
                     completion: result => transport = result.ToString(),
                     operationId: Guid.Empty,
                     payload: new WorldSubmissionPayload.Rebuild(Value: reloadRequest),
@@ -170,9 +180,8 @@ public sealed class SiloDeferredVerbAnswerLawTests {
         Assert.Equal(actual: WireErrors(registry: registry), expected: "[wire.errors: 1 rejected]");
     }
     [Fact]
-    public void TheSiloPrintsLateVerdictsAndCountsEvictions() {
+    public void TheSiloPrintsLateVerdictsAndCountsNoEviction() {
         using var fixture = Fixtures.FreshServer();
-        var link = new LoopbackTransport(server: fixture.Server);
         using var services = new ServiceCollection()
             .AddSingleton<WorldDeferredVerbEchoes>()
             .AddSingleton(implementationInstance: new CommandRegistry(modules: []))
@@ -180,7 +189,7 @@ public sealed class SiloDeferredVerbAnswerLawTests {
         var echoes = services.GetRequiredService<WorldDeferredVerbEchoes>();
         var registry = services.GetRequiredService<CommandRegistry>();
 
-        _ = WorldSiloApplication.AnswerDeferredVerbs(services: services);
+        var (_, link) = TapRow(answers: WorldSiloApplication.AnswerDeferredVerbs(services: services), fixture: fixture);
 
         var late = Captured(action: () => {
             var submitted = link.Submit(
@@ -200,7 +209,40 @@ public sealed class SiloDeferredVerbAnswerLawTests {
 
         var evicted = Captured(action: () => EvictTheFirst(echoes: echoes));
 
-        Assert.StartsWith(actualString: evicted.Error, expectedStartString: $"[{EvictedVerb}: evicted unanswered");
-        Assert.Equal(actual: WireErrors(registry: registry), expected: "[wire.errors: 1 rejected]");
+        Assert.Equal(actual: (evicted.Out, evicted.Error), expected: (string.Empty, string.Empty));
+        Assert.Equal(actual: WireErrors(registry: registry), expected: "[wire.errors: 0 rejected]");
+    }
+    // One table serves every row, but correlations are per-row link: two rows mint the same correlation for their own
+    // console lines, and one row's verdict answers only its own line, however the other row's tick falls.
+    [Fact]
+    public void AnotherRowsEchoWithTheSameCorrelationAnswersNoLine() {
+        using var first = Fixtures.FreshServer();
+        using var second = Fixtures.FreshServer();
+        using var services = new ServiceCollection()
+            .AddSingleton<WorldDeferredVerbEchoes>()
+            .AddSingleton(implementationInstance: new CommandRegistry(modules: []))
+            .BuildServiceProvider();
+        var echoes = services.GetRequiredService<WorldDeferredVerbEchoes>();
+        var registry = services.GetRequiredService<CommandRegistry>();
+        var answers = WorldSiloApplication.AnswerDeferredVerbs(services: services);
+
+        var (_, firstLink) = TapRow(answers: answers, fixture: first, row: "first");
+        var (_, secondLink) = TapRow(answers: answers, fixture: second, row: "second");
+
+        _ = Captured(action: () => {
+            _ = firstLink.SubmitUndo(count: 1, echoes: echoes, principal: Principal.Console, verb: "world.undo");
+            _ = secondLink.SubmitUndo(count: 1, echoes: echoes, principal: Principal.Console, verb: "world.undo");
+        });
+
+        Assert.Equal(actual: echoes.PendingCount, expected: 2);
+
+        var secondVerdict = Captured(action: () => second.Step());
+
+        Assert.StartsWith(actualString: secondVerdict.Error, expectedStartString: "[world.undo: undo refused: nothing to undo]");
+        Assert.Equal(actual: (echoes.PendingCount, WireErrors(registry: registry)), expected: (1, "[wire.errors: 1 rejected]"));
+
+        _ = Captured(action: () => first.Step());
+
+        Assert.Equal(actual: (echoes.PendingCount, WireErrors(registry: registry)), expected: (0, "[wire.errors: 2 rejected]"));
     }
 }

@@ -107,7 +107,7 @@ internal static class WorldPostBuildWiring {
         // exactly the authority PrincipalOf reports. Unconditional — Disengage on an already-clear route is the
         // ordinary NotEngaged no-op.
         var cameraRoster = services.GetRequiredService<PlayerRoster>();
-        var cameraLink = services.GetRequiredService<IServerLink>();
+        var cameraLink = services.GetRequiredService<LoopbackTransport>();
 
         services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => {
             for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
@@ -252,7 +252,10 @@ internal static class WorldPostBuildWiring {
             // rather than only the reason it was refused.
             // The same verdict settles the submitting line, for a session that reports settled results, and a
             // refusal is counted so `wire.errors` reports it like a synchronous one, in every boot shape.
-            deferredVerbAnswers.Answer(echo: in echo);
+            deferredVerbAnswers.Answer(
+                echo: in echo,
+                row: WorldInstanceHost.BootInstanceName
+            );
 
             // world.load/world.reload move what the console considers "the current origin" — but only once the
             // SERVER's own echo confirms the rebuild actually applied (this tap fires from the tick boundary, after

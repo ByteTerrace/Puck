@@ -491,8 +491,10 @@ scripted driver depends on them:
   caller submitted at all, therefore add nothing to the refused count. The same
   rule holds for a refusal a host reports a tick late through
   `NoteDeferredRejection`: the World and the silo count only the refusals of
-  the local console connection's lines, never a remote peer's refused envelope
-  or a rebuild the host submitted itself, such as the silo's reload.
+  lines the console registered through its row's console link, never a remote
+  peer's refused envelope, a rule's or addon's refusal, a rebuild's grant
+  replay, or anything the host submitted through the row's bare transport,
+  such as the silo's reload. A codec refusal on a console link counts once.
 
 Read-after-write ordering across submitted lines is a `TextCommandSession`
 guarantee rather than a `Submit` one: `TextCommandSource.Collect` holds that
