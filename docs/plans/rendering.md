@@ -1855,7 +1855,7 @@ Phase 3, the groups, follows phase 2:
       `SdfWorldEngine.DescriptorPoolSizes`, `UnifiedOverlayNode.DescriptorPoolSizes`,
       `ShaderPipelineRenderNode.DescriptorPools` (one pool for the graph, then
       `PreviewDescriptorPool` for a float preview) and
-      `GpuRegion.CopyPoolSizes`. `TryAdmit` takes a candidate's statement
+      `GpuRegionCopyPool.SizesOf`. `TryAdmit` takes a candidate's statement
       and either allocates one view range per pool that holds a descriptor or
       refuses the whole candidate by name with its demand, allocating
       nothing; `Release` returns an admission's ranges. At most
@@ -1885,8 +1885,9 @@ Phase 3, the groups, follows phase 2:
       A refusal carries `GPU_DESCRIPTOR_HEAP` and names the owner, and the
       installed graph keeps presenting. `UnifiedOverlayNode` checks its one
       pool before it creates its resources. A standalone `GpuRegion` is not admitted
-      beforehand; the SDF engine admits every region's copy pool with its own and
-      reserves them at construction (`GpuRegionCopySets`). The pipeline node
+      beforehand; the SDF engine admits one copy pool for all its regions with
+      its own and reserves every region's sets in it at construction
+      (`GpuRegionCopyPool`), so an engine holds two pools. The pipeline node
       holds one pool for all its passes and in-flight slots and one for its
       float preview, rather than one per pass and slot: a node at
       `ShaderPipelineLimits.MaxPasses` with three frames in flight would
@@ -2067,9 +2068,10 @@ Phase 3, the groups, follows phase 2:
     indices once), created by the first frame that draws a mesh, repacked only
     when the draw list changes, owing only the words that differ, grown by half
     again after the frame ring retires, and read by nothing until P4-2c. The
-    engine admits every region's copy pool with its own and reserves each at
-    construction as `GpuRegionCopySets`, whatever policy the device selects,
-    whose sets the region and every replacement of it write, so no frame takes a
+    engine admits one copy pool for all its regions with its own and reserves
+    every region's sets in it at construction (`GpuRegionCopyPool`, a
+    `GpuRegionCopySets` a region), whatever policy the device selects, whose
+    sets the region and every replacement of it write, so no frame takes a
     descriptor range. `world.budget`'s mesh
     line reads the region's allocated bytes. Laws:
     `GpuRegionCopyPipelineCacheLawTests` (one pipeline a device, created and

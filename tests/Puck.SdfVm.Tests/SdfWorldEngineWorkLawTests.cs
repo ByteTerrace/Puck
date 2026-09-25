@@ -41,24 +41,23 @@ public sealed class SdfWorldEngineWorkLawTests {
             cadence: false
         );
 
-        // The engine reserves every region's copy sets first, the mesh region's and, with a brick pool, the brick
-        // staging's included, then creates its own pool; no region creates one.
+        // The engine reserves every region's copy sets first, in one pool, the mesh region's and, with a brick pool, the
+        // brick staging's included, then creates its own pool; no region creates one. The two pools are the ones it
+        // states, in the other order.
         var brickPool = (brickPoolVoxelCapacity > 0);
-        var copyPools = (brickPool ? 10 : 9);
+        var copyRegions = (brickPool ? 10 : 9);
+        var copyPool = GpuRegionCopyPool.SizesOf(
+            regionCount: copyRegions,
+            slotCount: SdfWorldEngine.FrameRingSize
+        );
 
         Assert.Equal(
-            expected: [
-                .. Enumerable.Repeat(
-                    count: copyPools,
-                    element: GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize)
-                ),
-                SdfWorldEngine.DescriptorPoolSizes(brickPool: brickPool),
-            ],
+            expected: [copyPool, SdfWorldEngine.DescriptorPoolSizes(brickPool: brickPool)],
             actual: rig.Gpu.PoolsCreated
         );
         Assert.Equal(
-            expected: (copyPools + 1),
-            actual: SdfWorldEngine.DescriptorPools(brickPool: brickPool).Length
+            expected: [SdfWorldEngine.DescriptorPoolSizes(brickPool: brickPool), copyPool],
+            actual: SdfWorldEngine.DescriptorPools(brickPool: brickPool)
         );
     }
     [Fact]
@@ -101,7 +100,7 @@ public sealed class SdfWorldEngineWorkLawTests {
 
         Assert.StartsWith(
             actualString: refusal.Message,
-            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view descriptors in 10 pool(s) and is refused: "
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view descriptors in 2 pool(s) and is refused: "
         );
         Assert.Empty(collection: gpu.PoolsCreated);
 

@@ -50,16 +50,16 @@ public sealed partial class SdfWorldEngine {
         }
     }
     /// <summary>Returns every descriptor pool an engine creates, which a device's heap admits it by: its own
-    /// (<see cref="DescriptorPoolSizes"/>), then the pool of the copy sets it reserves for each of its regions
-    /// (<see cref="GpuRegionCopySets"/>, sized by <see cref="GpuRegion.CopyPoolSizes"/>), whatever policy the device
+    /// (<see cref="DescriptorPoolSizes"/>), then the one pool holding the copy sets it reserves for all its regions
+    /// (<see cref="GpuRegionCopyPool"/>, sized by <see cref="GpuRegionCopyPool.SizesOf"/>), whatever policy the device
     /// selects: the eight per-frame tables, the mesh region, and with a brick pool the brick staging. Construction creates
-    /// all of them, so no later frame, the first to draw a mesh or a growing program included, takes a descriptor
+    /// both, so no later frame, the first to draw a mesh or a growing program included, takes a descriptor
     /// range.</summary>
     /// <param name="brickPool">Whether the engine keeps a brick pool.</param>
     /// <returns>The pools' sizes, the engine's own first.</returns>
     public static GpuDescriptorPoolSizes[] DescriptorPools(bool brickPool) => [
         DescriptorPoolSizes(brickPool: brickPool),
-        .. RegionPoolSizes(brickPool: brickPool),
+        RegionCopyPoolSizes(brickPool: brickPool),
     ];
     /// <summary>Returns the one descriptor pool an engine creates itself, the statement its construction creates the
     /// pool from: one cull-args set (bound once to shared device-local buffers), then per frame ring slot the beam,

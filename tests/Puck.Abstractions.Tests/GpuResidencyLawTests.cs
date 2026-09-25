@@ -348,30 +348,32 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(
             actual: gpu.PoolsCreated,
             expected: ((policy == GpuResidencyPolicy.Staged)
-                ? [GpuRegion.CopyPoolSizes(slotCount: 3)]
+                ? [GpuRegionCopyPool.SizesOf(regionCount: 1, slotCount: 3)]
                 : [])
         );
     }
-    /// <summary>Regions created with reserved copy sets create no pool, and a region whose set another region wrote since
-    /// (a replacement its owner abandoned) rewrites it before it records that slot's copy, so the copy lands in its own
-    /// destination.</summary>
+    /// <summary>Regions created on their shares of one reserved copy pool create no pool of their own, whatever number
+    /// of regions the pool serves, and a region whose set another region wrote since (a replacement its owner abandoned)
+    /// rewrites it before it records that slot's copy, so the copy lands in its own destination; a region writing its
+    /// own share never disturbs another region's.</summary>
     [Fact]
     public void RegionsOnReservedCopySetsCreateNoPoolAndACopyRewritesASetAnotherRegionWrote() {
         var gpu = new UploadModelGpu(reportVersion: 0);
         using var copy = CopyPipeline(gpu: gpu);
-        using var sets = new GpuRegionCopySets(
+        using var pool = new GpuRegionCopyPool(
             bindings: gpu.Services.Bindings,
             copyPipeline: copy,
             name: default,
+            regions: [default, default, default],
             slotCount: 2
         );
 
-        GpuRegion Region(int byteCount) => new(
+        GpuRegion Region(int byteCount, int share) => new(
             bindings: gpu.Services.Bindings,
             buffers: gpu.Services.BufferFactory,
             byteCount: byteCount,
             copyPipeline: copy,
-            copySets: sets,
+            copySets: pool.Region(index: share),
             memory: GpuHostVisibleMemory.Host,
             name: default,
             policy: GpuResidencyPolicy.Staged,
@@ -379,28 +381,43 @@ public sealed class GpuResidencyLawTests {
             slotCount: 2
         );
 
-        using var kept = Region(byteCount: 64);
+        using var kept = Region(byteCount: 64, share: 0);
+        using var beside = Region(byteCount: 32, share: 2);
 
-        Region(byteCount: 128).Dispose();
+        Region(byteCount: 128, share: 0).Dispose();
         Assert.Equal(
             actual: gpu.PoolsCreated,
-            expected: [GpuRegion.CopyPoolSizes(slotCount: 2)]
+            expected: [GpuRegionCopyPool.SizesOf(regionCount: 3, slotCount: 2)]
+        );
+        Assert.Equal(
+            actual: gpu.PoolsCreated[0],
+            expected: GpuDescriptorPoolSizes.ForSets(sets: [.. Enumerable.Repeat(count: 6, element: GpuRegion.CopyBindings)])
         );
 
         _ = kept.Write(bytes: [1, 2, 3, 4, 5, 6, 7, 8], offset: 12);
+        _ = beside.Write(bytes: [9, 10, 11, 12], offset: 4);
 
         for (var slot = 0; (slot < 2); slot++) {
             kept.Flush(slot: slot);
             kept.RecordCopy(commandBuffer: 2, slot: slot);
+            beside.Flush(slot: slot);
+            beside.RecordCopy(commandBuffer: 2, slot: slot);
             Assert.Equal(expected: kept.Contents.ToArray(), actual: gpu.Memory(bufferHandle: kept.Buffer(slot: slot).BufferHandle));
+            Assert.Equal(expected: beside.Contents.ToArray(), actual: gpu.Memory(bufferHandle: beside.Buffer(slot: slot).BufferHandle));
         }
 
+        // Each region's set of a slot is its own: the shares name distinct sets.
+        Assert.Equal(
+            actual: new[] { pool.Region(index: 0).SetOf(slot: 0), pool.Region(index: 0).SetOf(slot: 1), pool.Region(index: 1).SetOf(slot: 0), pool.Region(index: 2).SetOf(slot: 1) }.Distinct().Count(),
+            expected: 4
+        );
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => pool.Region(index: 3));
         _ = Assert.Throws<ArgumentException>(testCode: () => new GpuRegion(
             bindings: gpu.Services.Bindings,
             buffers: gpu.Services.BufferFactory,
             byteCount: 64,
             copyPipeline: copy,
-            copySets: sets,
+            copySets: pool.Region(index: 1),
             memory: GpuHostVisibleMemory.Host,
             name: default,
             policy: GpuResidencyPolicy.Staged,

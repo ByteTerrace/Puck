@@ -231,10 +231,11 @@ whose creations fail releases everything it created and names every pipeline
 that failed, in build order, in one refusal.
 
 An engine's construction first asks the device's descriptor heap to admit its
-pool and the copy pool of each of its regions (`SdfWorldEngine.CheckAdmission`),
+pool and one copy pool for all its regions (`SdfWorldEngine.CheckAdmission`),
 and refuses with `GPU_DESCRIPTOR_HEAP` before it allocates anything. It creates
-every one of those pools itself, reserving each region's copy sets
-(`GpuRegionCopySets`) whatever residency policy the device selects, so no later
+both pools itself, reserving every region's copy sets in the one copy pool
+(`GpuRegionCopyPool`, which hands each region its `GpuRegionCopySets`) whatever
+residency policy the device selects, so no later
 frame takes a descriptor range: not the first to draw a mesh, and not one that
 grows the program, the instance grid or the mesh region. It releases every object it created, newest
 first, when a later step throws: a creation, the ISA handshake, or the program

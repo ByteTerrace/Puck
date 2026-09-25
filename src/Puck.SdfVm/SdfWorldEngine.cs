@@ -507,8 +507,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // of megabytes, which a ring holds once per slot. A larger program grows the region by half again.
         m_programWordReserve = options.ProgramWordCapacity;
         m_programWordCapacity = options.Program.Words.Length;
-        // Every region's copy sets, before any region writes them: the copy pools the admission states.
-        m_regionCopySets = ReserveRegionCopySets(scope: scope);
+        // Every region's copy sets, before any region writes them: the copy pool the admission states.
+        m_regionCopyPool = ReserveRegionCopyPool(scope: scope);
         // The host-written tables, each a region the kernels bind through its slot's buffer (SdfWorldEngine.Regions.cs).
         // The screen-surface table is always MaxScreenSurfaces entries, indexed directly by screen index, so Stage 1's
         // binding stays valid for a program with none: an all-zero undeclared entry is never addressed.
@@ -611,7 +611,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                     val2: m_brickPoolVoxelCapacity
                 ) * sizeof(float)),
                 copyPipeline: m_regionCopyPipeline,
-                copySets: m_regionCopySets[BrickStagingRegionIndex],
+                copySets: m_regionCopyPool.Region(index: BrickStagingRegionIndex),
                 destination: m_brickPoolBuffer,
                 name: RegionName(region: BrickStagingRegionIndex),
                 recorder: gpu.Recorder,

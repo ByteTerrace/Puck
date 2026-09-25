@@ -449,10 +449,11 @@ These are one-line cautions; the owning pages hold the derivations.
   `CreateRegion` under `GpuResidency.Select` with the frame ring's reader in
   flight), and brick staging is a staged region whose destination is the brick
   pool (`Target` names the brick's slot). Each region, brick staging included,
-  writes copy sets the engine reserved for it at construction
-  (`GpuRegionCopySets`, whatever policy the device selects), so the admitted
-  pools are exactly the created ones and no region the frame thread creates or
-  grows takes a descriptor range; a new region takes a reserved set too. Change a table only through its
+  writes copy sets the engine reserved for it at construction, its
+  `GpuRegionCopySets` slice of the engine's one `GpuRegionCopyPool` (whatever
+  policy the device selects), so the engine creates and admits two pools, its
+  own and the copy pool, and no region the frame thread creates or grows takes
+  a descriptor range; a new region takes a slice of that pool too. Change a table only through its
   region's `Write`, which owes each run of words that differs; a direct buffer
   write is lost or overwritten. The upload pass flushes the slot's share, records
   each staged copy, then one buffer transition per copied buffer; the region
@@ -560,7 +561,8 @@ These are one-line cautions; the owning pages hold the derivations.
   `SdfWorldEngine.NameOf`, its pipelines by kernel pipeline name; a
   `GpuRegion` takes its owner's name and names each slot's buffer and copy set
   at the slot's index, its own destination and copy pool bare, and copy sets
-  an owner reserves (`GpuRegionCopySets`) take the region's name the same way),
+  an owner reserves in one `GpuRegionCopyPool` take each region's name the same
+  way, and the pool bare under a part of the owner's, `sdf.world/region-copies`),
   `<instance>/<pass or resource>[slot]` for a shader pipeline or graph package,
   `overlay/pass`, `render-graph/stand-in`, `gpu.region-copy/<pipeline>`.
   `GpuObjectName.ToString` is the one place a name becomes text; a site never

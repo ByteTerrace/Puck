@@ -109,7 +109,7 @@
           "  work views skipped",
           "  work composite executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=112 descriptor-writes=0 uploads.host-visible=0 clears=0",
           "  work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0",
-          "  work lifetime: created.pipelines=0 created.shader-modules=0 created.images=8 created.buffers=33 created.descriptor-pools=11 created.descriptor-sets=37"
+          "  work lifetime: created.pipelines=0 created.shader-modules=0 created.images=8 created.buffers=33 created.descriptor-pools=2 created.descriptor-sets=37"
         ]
       },
       {

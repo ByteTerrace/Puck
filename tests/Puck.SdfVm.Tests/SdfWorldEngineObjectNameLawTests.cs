@@ -92,15 +92,25 @@ public sealed class SdfWorldEngineObjectNameLawTests {
     public void EveryRegionIsNamedByItsTable() {
         var names = NamesOfOneConstruction(naming: true);
 
-        // The fake's default memory profile stages every region: one staging buffer and copy set per ring slot, a copy
-        // pool, and a device-local destination except where the region stages into the brick pool.
+        // The fake's default memory profile stages every region: one staging buffer and copy set per ring slot, and a
+        // device-local destination except where the region stages into the brick pool. Every region's copy sets, the
+        // mesh region's before any frame draws a mesh, come from the engine's one copy pool, named bare beside its own.
+        Assert.Equal(
+            actual: names.Where(predicate: static name => name.StartsWith(comparisonType: StringComparison.Ordinal, value: "DescriptorPool ")),
+            expected: ["DescriptorPool sdf.world/descriptors", "DescriptorPool sdf.world/region-copies"]
+        );
+
+        for (var slot = 0; (slot < SdfWorldEngine.FrameRingSize); slot++) {
+            Assert.Contains(collection: names, expected: $"DescriptorSet sdf.world/mesh-region[{slot}]");
+        }
+
         foreach (var part in RegionParts) {
             for (var slot = 0; (slot < SdfWorldEngine.FrameRingSize); slot++) {
                 Assert.Contains(collection: names, expected: $"Buffer sdf.world/{part}[{slot}]");
                 Assert.Contains(collection: names, expected: $"DescriptorSet sdf.world/{part}[{slot}]");
             }
 
-            Assert.Contains(collection: names, expected: $"DescriptorPool sdf.world/{part}");
+            Assert.DoesNotContain(collection: names, expected: $"DescriptorPool sdf.world/{part}");
 
             if (part == "brick-staging") {
                 Assert.DoesNotContain(collection: names, expected: $"Buffer sdf.world/{part}");

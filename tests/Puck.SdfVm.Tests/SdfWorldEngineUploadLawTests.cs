@@ -500,7 +500,11 @@ public sealed class SdfWorldEngineUploadLawTests {
             slots: 1
         );
 
-        // The engine created exactly the pools its admission states, every region's copy pool among them.
+        // The engine created exactly the pools its admission states: its own and the one copy pool of every region.
+        Assert.Equal(
+            actual: rig.Gpu.PoolsCreated.Count,
+            expected: 2
+        );
         Assert.Equal(
             actual: rig.Gpu.PoolsCreated.CountBy(keySelector: static pool => pool).ToDictionary(),
             expected: SdfWorldEngine.DescriptorPools(brickPool: false).CountBy(keySelector: static pool => pool).ToDictionary()

@@ -32,8 +32,9 @@ namespace Puck.Abstractions.Gpu;
 /// <c>i</c>, takes <c>word</c> as that run's block offset plus <c>i</c> minus its first thread, and copies
 /// <c>destination[destinationBase + word] = source[blockBase + word]</c>. That kernel is <c>Puck.Shaders</c>'
 /// <c>region-copy.comp</c>, created from <see cref="CopyPipeline"/> once per device and leased by every owner
-/// (<c>GpuRegionCopyPipelineCache</c>). Its copy sets are a <see cref="GpuRegionCopySets"/> the region creates, or one
-/// its owner reserved when it was admitted, so a region the owner creates at a later frame takes no descriptor range.
+/// (<c>GpuRegionCopyPipelineCache</c>). Its copy sets are its share of a <see cref="GpuRegionCopyPool"/>: one the region
+/// creates for itself alone, or its owner's, reserved for all its regions when the owner was admitted, so a region the
+/// owner creates at a later frame takes no descriptor range.
 /// </para>
 /// </summary>
 public sealed class GpuRegion : IDisposable {
@@ -67,13 +68,14 @@ public sealed class GpuRegion : IDisposable {
 
     private readonly byte[] m_contents;
     private readonly IGpuComputePipeline m_copyPipeline;
-    // The staged policy's copy sets: its owner's reserved sets, or its own; null under the other policies.
+    // The staged policy's copy sets: its share of its owner's reserved pool, or of its own; null under the other
+    // policies.
     private readonly GpuRegionCopySets? m_copySets;
     private readonly IGpuBindings m_bindings;
     private readonly IGpuBuffer? m_destination;
     private readonly bool m_external;
-    // Whether the region created its copy sets itself, and so destroys them with it.
-    private readonly bool m_ownsCopySets;
+    // The copy pool the region created for itself, which it destroys with it; null when its owner reserved its sets.
+    private readonly GpuRegionCopyPool? m_ownedCopyPool;
     private readonly List<IGpuBuffer> m_ownedBuffers = [];
     // The ranges each host-visible buffer still owes: one list under InPlace and Staged, one per slot under Ring.
     private readonly GpuUploadRuns[] m_owed;
@@ -92,8 +94,9 @@ public sealed class GpuRegion : IDisposable {
     private int m_stagedSlot = -1;
 
     /// <summary>Initializes a new instance of the <see cref="GpuRegion"/> class, creating its buffers and, under the
-    /// staged policy, its device-local buffer and one copy descriptor set per slot. Every buffer starts owing the whole
-    /// region, since a new buffer's contents are undefined, and <see cref="Contents"/> starts zeroed.</summary>
+    /// staged policy, its device-local buffer and, unless its owner reserved them, a copy pool of one set per slot.
+    /// Every buffer starts owing the whole region, since a new buffer's contents are undefined, and
+    /// <see cref="Contents"/> starts zeroed.</summary>
     /// <param name="policy">The residency policy, normally <see cref="GpuResidency.Select"/>'s choice.</param>
     /// <param name="memory">Where the ring's or in-place buffer lives, normally <see cref="GpuResidency.RingMemory"/>'s
     /// choice; a staged region's staging buffers are host memory whatever it says.</param>
@@ -106,9 +109,10 @@ public sealed class GpuRegion : IDisposable {
     /// staged policy. The caller owns it and keeps it alive while the region records copies.</param>
     /// <param name="name">The region's debug name, from its creator's identity: each slot's host-visible buffer and copy
     /// set is named at its slot's index, and the device-local buffer and the copy pool bare.</param>
-    /// <param name="copySets">The copy sets its owner reserved for the region, which a staged region writes in place of
-    /// creating its own, or <see langword="null"/> to create them (named by <paramref name="name"/>); read only under the
-    /// staged policy. The owner keeps them after the region is disposed.</param>
+    /// <param name="copySets">The region's share of the copy pool its owner reserved (<see cref="GpuRegionCopyPool.Region"/>),
+    /// which a staged region writes in place of creating a pool of its own, or <see langword="null"/> to create one
+    /// (named by <paramref name="name"/>); read only under the staged policy. The owner keeps the pool after the region
+    /// is disposed.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
@@ -145,9 +149,9 @@ public sealed class GpuRegion : IDisposable {
     /// it and keeps it alive while the region records copies.</param>
     /// <param name="name">The region's debug name, from its creator's identity: each slot's staging buffer and copy set
     /// is named at its slot's index, and the copy pool bare; the destination keeps its owner's name.</param>
-    /// <param name="copySets">The copy sets its owner reserved for the region, which it writes in place of creating its
-    /// own, or <see langword="null"/> to create them (named by <paramref name="name"/>). The owner keeps them after the
-    /// region is disposed.</param>
+    /// <param name="copySets">The region's share of the copy pool its owner reserved (<see cref="GpuRegionCopyPool.Region"/>),
+    /// which it writes in place of creating a pool of its own, or <see langword="null"/> to create one (named by
+    /// <paramref name="name"/>). The owner keeps the pool after the region is disposed.</param>
     /// <exception cref="ArgumentNullException"><paramref name="destination"/>, <paramref name="buffers"/>,
     /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
@@ -292,13 +296,18 @@ public sealed class GpuRegion : IDisposable {
                     m_ownedBuffers.Add(item: m_destination);
                 }
 
-                m_ownsCopySets = (copySets is null);
-                m_copySets = (copySets ?? new GpuRegionCopySets(
-                    bindings: bindings,
-                    copyPipeline: copyPipeline,
-                    name: in name,
-                    slotCount: slotCount
-                ));
+                if (copySets is null) {
+                    m_ownedCopyPool = new GpuRegionCopyPool(
+                        bindings: bindings,
+                        copyPipeline: copyPipeline,
+                        name: in name,
+                        regions: [name],
+                        slotCount: slotCount
+                    );
+                    copySets = m_ownedCopyPool.Region(index: 0);
+                }
+
+                m_copySets = copySets;
 
                 for (var slot = 0; (slot < slotCount); slot++) {
                     WriteCopySet(slot: slot);
@@ -347,24 +356,6 @@ public sealed class GpuRegion : IDisposable {
             : (CopyMaxGroupsPerDimension, ((uint)((groups + (CopyMaxGroupsPerDimension - 1UL)) / CopyMaxGroupsPerDimension)))
         );
     }
-    /// <summary>Returns the descriptor pool of a <see cref="GpuResidencyPolicy.Staged"/> region's copy sets
-    /// (<see cref="GpuRegionCopySets"/>), which the region creates unless its owner reserved them: one
-    /// <see cref="CopyBindings"/> set per frame slot. A region under any other policy creates none.</summary>
-    /// <param name="slotCount">The frame slots the region serves.</param>
-    /// <returns>The copy pool's sizes.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slotCount"/> is not positive.</exception>
-    public static GpuDescriptorPoolSizes CopyPoolSizes(int slotCount) {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: slotCount);
-
-        var sets = new IReadOnlyList<GpuComputeBinding>[slotCount];
-
-        Array.Fill(
-            array: sets,
-            value: CopyBindings
-        );
-
-        return GpuDescriptorPoolSizes.ForSets(sets: sets);
-    }
 
     /// <summary>Gets the region's size in bytes.</summary>
     public int ByteCount { get; }
@@ -403,8 +394,8 @@ public sealed class GpuRegion : IDisposable {
             _ => m_hostBuffers[0],
         };
     }
-    /// <summary>Releases the region's buffers and, under the staged policy, the copy descriptor sets it created; an
-    /// external destination and reserved copy sets stay their owner's. The caller retires every submission that reads the region first. Disposing twice
+    /// <summary>Releases the region's buffers and, under the staged policy, the copy pool it created; an external
+    /// destination and a reserved copy pool stay their owner's. The caller retires every submission that reads the region first. Disposing twice
     /// does nothing.</summary>
     public void Dispose() {
         if (m_disposed) {
@@ -413,9 +404,7 @@ public sealed class GpuRegion : IDisposable {
 
         m_disposed = true;
 
-        if (m_ownsCopySets) {
-            m_copySets?.Dispose();
-        }
+        m_ownedCopyPool?.Dispose();
 
         foreach (var buffer in m_ownedBuffers) {
             buffer.Dispose();
