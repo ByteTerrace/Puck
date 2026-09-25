@@ -834,7 +834,7 @@ command list from its declared prior access. The buffer has in fact decayed to
 promotion. The debug layer fails device creation on the reference RTX 4070, so
 the check runs on a machine where it works: `puck qualify` runs every
 Direct3D 12 cell under the debug layer when the release profile asks for it,
-and any debug-layer message fails the cell. On the NVIDIA floor card the
+and any debug-layer message fails the cell. On the NVIDIA floor card, an RTX 2060, the
 functional canaries and every matrix cell report no debug-layer message before
 teardown, so implicit promotion draws no complaint on those workloads.
 

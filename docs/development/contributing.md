@@ -369,7 +369,7 @@ their inputs on the command line.
 
 ## GPU support and shader builds
 
-The supported GPU floor covers RTX 2070, RTX 4070, the RDNA3 Steam Machine,
+The supported GPU floor covers RTX 2060, RTX 4070, the RDNA3 Steam Machine,
 and the RDNA2 Steam Deck. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader
 Model 6.6. Do not raise that floor without evidence for every supported GPU.
 
