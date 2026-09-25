@@ -247,8 +247,8 @@ These are one-line cautions; the owning pages hold the derivations.
   [references/kernels.md](references/kernels.md#buffer-hazards).
 - **Pipelines are never created on the frame thread.** `SdfWorldEngine`'s
   constructor takes a built `SdfWorldPipelines` and creates none. Nodes and
-  views lease that set from `SdfViewGpuServices.Pipelines`, the composition's
-  one `SdfWorldPipelineCache`: one set per device, `SdfWorldKernels.ContentKey`
+  views lease that set from the `SdfWorldPipelineCache` the composition hands
+  each of them, its one cache: one set per device, `SdfWorldKernels.ContentKey`
   and brick-pipeline choice, built on the thread pool
   (`Puck.Hosting.BackgroundBuild`) by the first lease and shared by the rest.
   A holder (`SdfWorldPipelineSource`) takes its lease off the frame thread,
@@ -304,8 +304,11 @@ These are one-line cautions; the owning pages hold the derivations.
   value is `GpuDepthAttachment.ClearDepth` on the render pass, never a recorder
   argument.
   The recorder, `IGpuBindings`, every `IGpu*Factory` and the queue submitter are
-  bound to their backend's device context when they are registered and take no
-  device argument; a new service follows them. `IGpuBufferFactory` creates by
+  `IGpuDeviceContext.Services` (`GpuDeviceServices`), which the backend creates
+  with its context, bound to it and taking no device argument; a consumer takes
+  the device context and reads them there, never a bundle of its own or a DI
+  registration of one service, and a new device-bound service joins that set.
+  The optional `IGpuSurfaceExportFactory` is registered on its own. `IGpuBufferFactory` creates by
   `GpuBufferUsage` and placement (`CreateHostVisible`, `CreateDeviceLocal`), and a
   geometry buffer is a host-visible one created with its data.
   A candidate (never the device-loss rebuild) is refused in `EnsureBuild` with
@@ -401,11 +404,12 @@ These are one-line cautions; the owning pages hold the derivations.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
-- **GPU work is counted through wrapped services.** `SdfWorldEngine` wraps the
-  services it is handed with `GpuWorkCounting` over its `GpuWorkLedger` (the
+- **GPU work is counted through wrapped services.** `SdfWorldEngine` wraps its
+  device context's services with `GpuWorkCounting` over its `GpuWorkLedger` (the
   owner's, through `SdfWorldEngineOptions.WorkLedger`, so submission identity
-  survives a rebuild); hand it unwrapped services, since wrapping twice is
-  refused. A new pass needs its `EnterPass`/`LeavePass` where it submits, and
+  survives a rebuild). A counting set is never a device's own
+  `IGpuDeviceContext.Services`, and wrapping a counting member again is refused.
+  A new pass needs its `EnterPass`/`LeavePass` where it submits, and
   a new cadence-skipped pass its `SkipPass`. `SdfWorldEngineWorkLawTests`
   pins every pass's exact counts over `tests/Shared/FakeGpuDevice.cs`, so a
   recording change re-records those constants in the same change.
