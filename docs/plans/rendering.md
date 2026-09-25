@@ -1074,7 +1074,7 @@ follow its device-bound services, its one recorder and the SDF engine's groups.
    primary writes every active pixel it dispatches, misses included. It is the
    one freshness test: it replaced the `TileEmpty` neighbour test in the
    silhouette sky blend, the `visibility` debug view (mode 11,
-   `debug.view.visibility`) colors each pixel by its current record's kind, and
+   `world.debug-view visibility`) colors each pixel by its current record's kind, and
    P4-2c's mesh resolve reads through it rather than a second test. For SDF-only
    frames it answers exactly as the `TileEmpty` test did, since every tile
    outside the box is empty and every record inside it is current, so parity is
@@ -1084,8 +1084,19 @@ follow its device-bound services, its one recorder and the SDF engine's groups.
    background records and the block to an SDF record where it went, with a
    no-move leg as the negative control; it proves current-kind reads after a
    move, not a difference between the two tests.
-4. P4-1c, the compact-record trial: a smaller encoding, measured in counted
-   work and bytes against the full record, kept only within the limit below.
+4. P4-1c, landed, the compact record: fifteen words instead of twenty, 60
+   bytes a pixel of each viewport's full extent instead of 80. V stays exact;
+   the seam weight packs as a 15-bit fraction beside its partner material plus
+   one, the geometric normal is a 16-bit octahedral pair, curvature and ambient
+   occlusion are halves, and the surface flags share a word with the saturated
+   query count. The lanes stay authored floats, because they are anonymous
+   state no station exercises. `world.budget` prints the allocated bytes: the
+   counters workload's 256×144 extent reads 8,847,360 bytes on both backends,
+   against 11,796,480 for the full record, and 1920×1080 saves 41,472,000 bytes
+   per reserved viewport. `puck counters compare` shows no counted-work change
+   beyond the kernels' bytecode. Each backend's parity captures move by at most
+   one code in any tile against the full record's (mean tile delta at most
+   0.012), and every state hash is unchanged.
 5. P4-2a, landed, the GPU-free contracts: `ViewProjection` in
    `Puck.Abstractions/Cameras`, `SdfMesh`, `SdfMeshDraw` and
    `SdfFrame.MeshDraws`, with laws that include the fixed-point raycast bounded
@@ -1120,8 +1131,7 @@ beside analytic triangles. `SDF_MONOLITHIC_VIEWS` is deleted.
 which follows P4-1. `sdf-world.hlsli` changes in P4 first; the views and
 cull-args kernels and `SdfWorldEngine`'s partials change in P7b first. Whichever
 lands second re-records the work laws and counter baselines, and rebuilds
-compiled shaders rather than merging them. Open: whether the compact record
-survives its trial.
+compiled shaders rather than merging them.
 
 ### P5 — Reproducible authoring and packaged dependencies
 

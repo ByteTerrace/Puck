@@ -86,7 +86,8 @@ rendered image beyond `puck parity`, so a kernel change is judged by running
 | `Sdf/sdf-tile.hlsli` | The per-tile cull grid's binding-free vocabulary: tile size, the no-hit sentinel, and the `(viewport, tile)` flat index, shared by kernels with incompatible push-constant layouts. | `SdfWorldEngine` tile buffers |
 | `Sdf/sdf-parts.hlsli` | Root composition admission for independent part tracing, shared by the beam and primary traversal. | `SdfProgram.PartPrograms.cs` |
 | `Sdf/sdf-part-bounds.hlsli` | The primary-acceptance and AO part-bound bands the beam writes after the tile planes. | `SdfWorldEngine`'s `PartBoundFloatCount` |
-| `Sdf/sdf-visibility.hlsli` | The visibility record: its five rows, the identity encoding, the read-write and read-only bindings, and the typed load and store functions every hit pass and views use. | `SdfWorldEngine`'s `PrimaryHitByteLength` and visibility bindings |
+| `Sdf/sdf-octahedral.hlsli` | Octahedral encoding and decoding of a unit direction, shared by the star field and the visibility record's normal. | None |
+| `Sdf/sdf-visibility.hlsli` | The visibility record: its fifteen words in five rows and how the packed fields round, the identity encoding, the read-write and read-only bindings, and the typed load and store functions every hit pass and views use. | `SdfWorldEngine`'s `PrimaryHitByteLength` and visibility bindings |
 | `Sdf/sdf-primary.hlsli` | The marcher that full-scene and independent whole-part queries share, and the hit it returns. | `SdfWorldEngine` visibility buffer |
 | `Sdf/sdf-surface.hlsli` | The surface and ambient passes' writers of the visibility record's normal and surface rows. | `SdfWorldEngine` visibility buffer |
 | `Sdf/sdf-occlusion.hlsli` | Soft-shadow visibility toward the light direction. | None |

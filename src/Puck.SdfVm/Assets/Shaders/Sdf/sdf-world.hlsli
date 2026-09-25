@@ -761,7 +761,7 @@ static const float ScreenCardSunTint = 0.15;
 static const float ScreenLightMinDistanceSquared = 1.0e-4;
 // The 8-bit dither quantum: +-0.5 LSB of R2 noise before the store (see sdfR2Dither).
 static const float DitherQuantum = (1.0 / 255.0);
-// debug.view.evals calibration: the ramp saturates at this many tallied field evaluations. Worst case for a single
+// world.debug-view evals calibration: the ramp saturates at this many tallied field evaluations. Worst case for a single
 // lit pixel is bounded by MaxSteps (128, primary march) + ShadowSteps (40, the soft-shadow march) + 3 (calcAO) + 4
 // (the 4-tap normal fallback, worse than the 1-eval analytic default) + 1 (the coverage-AA probe) ~= 176, so 256
 // leaves margin
@@ -813,7 +813,7 @@ static const float NormalProbeEpsilon = 0.0006;
 // estimate up; it mirrors the reference study's own clamp lower bound (src/Puck.World/Assets/pipelines/moth.hlsl, clamp(magnitude,.12,1.5)).
 static const float GradientMagnitudeFloor = 0.12;
 
-// Per-pixel query tally for debug.view.evals, including primary local-part marches and shading probes.
+// Per-pixel query tally for world.debug-view evals, including primary local-part marches and shading probes.
 // Call sites here and in sdf-primary.hlsli count their queries; the interpreter does not. This per-thread
 // scalar follows the material-seam channel's pattern and resets at renderView entry. Counting stays active
 // for every view so selecting the evaluation heatmap does not change the work being measured.
@@ -906,28 +906,8 @@ float3 screenContent(float3 p, float time) {
 
     return (baseColor + (0.35 * float3(0.95, 0.45, 0.12) * sweep));
 }
-// Octahedral encoding of a unit direction into [-1, 1]^2 (Meyer et al., "On Floating-Point Normal Vectors") — the
-// star field's cell-grid domain. No texture, no per-pixel trig; area-preserving enough for a uniform-reading star
-// density across the sky.
-float2 sdfOctEncode(float3 n) {
-    float2 p = (n.xy * (1.0 / ((abs(n.x) + abs(n.y)) + abs(n.z))));
-
-    if (n.z < 0.0) {
-        p = ((1.0 - abs(p.yx)) * float2(((p.x >= 0.0) ? 1.0 : -1.0), ((p.y >= 0.0) ? 1.0 : -1.0)));
-    }
-
-    return p;
-}
-// The inverse of sdfOctEncode: a [-1, 1]^2 octahedral point back to a unit direction.
-float3 sdfOctDecode(float2 p) {
-    float3 n = float3(p.x, p.y, (1.0 - (abs(p.x) + abs(p.y))));
-
-    if (n.z < 0.0) {
-        n.xy = ((1.0 - abs(n.yx)) * float2(((n.x >= 0.0) ? 1.0 : -1.0), ((n.y >= 0.0) ? 1.0 : -1.0)));
-    }
-
-    return normalize(n);
-}
+// The star field's cell-grid domain is the octahedral sky projection (sdf-octahedral.hlsli).
+#include "sdf-octahedral.hlsli"
 // The procedural star field: a per-cell PCG3D hash (seed folded in) over the octahedral sky projection picks
 // StarSparsity of the cells to carry a star; two hash channels place the star inside its cell (kept StarInset from
 // the walls so a disc never straddles a cell it is not tested in). A second hash of the first, paid only by the
@@ -1530,7 +1510,7 @@ static const int DebugViewModeVisibility = 11;
 
 // The analytic-normal A/B toggle (the forward-mode dual's debug lever). Rides a reserved lane of the grid-object-params
 // screen-light row (SdfGridObjParams.z): 0 (the DEFAULT) selects the analytic dual normal (calculateNormalAnalytic),
-// 1 selects the 4-tap finite-difference probe (calculateNormal) for comparison under debug.view.normals.
+// 1 selects the 4-tap finite-difference probe (calculateNormal) for comparison under world.debug-view normals.
 // Decoded only under SDF_SCREEN_SOURCES — the world-views kernel is the sole SDF-hit shader; every other config keeps
 // analytic. KEEP IN SYNC with SdfFrame.UseFiniteDifferenceNormals and SdfWorldEngine.PackScreenLights.
 bool worldUseTapNormals() {
@@ -1981,7 +1961,7 @@ float3 applyObjectGrid(float3 color, float3 surfacePoint, float3 rayDirection, f
 // terminal depth for a footprint-adaptive sphere trace of the tile-masked field, stepping by (radius * stepMultiplier):
 // stepMultiplier = 1 marches the PRODUCTION Lipschitz-clamped field (mapMasked already bakes stepScale, so radius is the
 // safe clamped distance), while 1/stepScale FORCES the clamp back to 1.0 — the step then rides the raw, possibly-non-1-
-// Lipschitz field, so a twisted/warped program TUNNELS the thin geometry the clamp exists to hold. debug.view.overshoot
+// Lipschitz field, so a twisted/warped program TUNNELS the thin geometry the clamp exists to hold. world.debug-view overshoot
 // colors the two terminals' disagreement. Plain omega=1 (no auto-relaxation) so the ONLY variable between the two
 // marches is the clamp; the four-bound teleport rides both (bound-proven on either). The hit ACCEPT compares the clamped
 // radius against the same footprint threshold the production march uses — only the STEP is enlarged, so the enlarged
@@ -2043,7 +2023,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     float time = view.position.w;
     float farDistance = worldFarDistance(view);
 
-    sdfEvalCount = 0.0; // fresh tally for this pixel — see debug.view.evals (case 10 below)
+    sdfEvalCount = 0.0; // fresh tally for this pixel — see world.debug-view evals (case 10 below)
 
     float traveled = max(marchStart, 0.0);
     bool hitSurface = false;
