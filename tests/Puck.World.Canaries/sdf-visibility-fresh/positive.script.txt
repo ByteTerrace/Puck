@@ -1,0 +1,11 @@
+# Every frame renders every pass, and the visibility view colors each pixel by the kind of its visibility record.
+world.cadence off
+world.debug-view visibility
+world.wait 30
+world.screenshot {run}/before.png
+world.wait 10
+# The mover leaves the centre for the right; the anchor on the left keeps the centre inside the dispatch box.
+world.row.set placements mover position [2.5,0,0]
+world.wait 30
+world.screenshot {run}/after.png
+world.wait 10

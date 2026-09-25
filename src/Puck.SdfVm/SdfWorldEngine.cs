@@ -51,7 +51,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const int CompositePushByteLength = ((16 + ((sizeof(float) * 4) * MaxViewports)) + (sizeof(uint) * 4)); // CompositeParams2: uint2 extent + uint count + 4 bytes padding (16) + float4 rects[5] + uint2 scaleQPacked + uint2 sharpnessQPacked
     private const uint CompositeSourceBindingIndex = 1; // sdf-world-composite.comp: sources[] at binding 1
     private const uint CullArgsBindingIndex = 5; // sdf-cull-args.comp: views indirect dispatch args (register u0)
-    private const uint CullBoundsBindingIndex = 6; // sdf-cull-args.comp: bbox group origin (register u1); read by sdf-world-views.comp at binding 8
+    private const uint CullBoundsBindingIndex = 6; // sdf-cull-args.comp: bbox group origin and exclusive end (register u1); read by sdf-world-views.comp at binding 8
     private const int DecalBufferCells = (DecalDescriptorCount + (MaxScreenSurfaces * MaxScreenDecalCells));
     // The decal buffer's leading DESCRIPTOR band (one uint4 per screen slot) precedes the shared cell region; a screen's
     // cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells (KEEP IN SYNC with sdfSampleGlyphDecal).
@@ -693,7 +693,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
         );
         m_cullBoundsBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: (sizeof(uint) * 2),
+            sizeBytes: (sizeof(uint) * 4),
             usage: GpuBufferUsage.Storage
         );
 
