@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 using Puck.Commands;
 using Puck.Launcher;
-using Puck.SdfVm;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -285,40 +284,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 screens.SetViewRefreshDivisor(divisor: divisor);
 
                 return new CommandResult(Output: $"[world.view-refresh: every {divisor} produced frame(s)]");
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.debug-view",
-            description: $"Selects the live SDF diagnostic output for every World camera: world.debug-view [{string.Join(
-                separator: '|',
-                value: DebugViewModes.Names
-            )}]. Depth is the primary-march-only performance probe; off restores final shading.",
-            handler: (_, args) => {
-                if (renderProbe.Node is not { } node) {
-                    return CommandResult.Error(output: "[world.debug-view: renderer not built yet]");
-                }
-
-                if (args.Count == 0) {
-                    return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: node.DebugMode)}]");
-                }
-
-                if (
-                    (args.Count != 1) ||
-                    !DebugViewModes.TryParse(
-                    name: args[0].ToString(),
-                    mode: out var mode
-                )
-                ) {
-                    return CommandResult.Error(output: $"[world.debug-view: unknown mode '{args.Tail(start: 0)}' — {string.Join(
-                        separator: '|',
-                        value: DebugViewModes.Names
-                    )}]");
-                }
-
-                node.DebugMode = mode;
-
-                return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: mode)}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

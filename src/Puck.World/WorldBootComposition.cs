@@ -1036,8 +1036,9 @@ public static class WorldBootComposition {
         AddWorldPipelineCache(services: services);
         AddWorldShaderWork(services: services);
         AddWorldBakes(services: services);
-        // The render levers need only the render settings and the session-lever submit, so an offscreen boot honors
-        // the same engine-wide options a windowed one does (the presentation-only console modules stay unregistered).
+        // The render levers need only the render settings, the session-lever submit and the render probe registered
+        // below, so an offscreen boot honors the same engine-wide options and debug views a windowed one does (the
+        // presentation-only console modules stay unregistered).
         services.AddSingleton<ICommandModule, WorldRenderLeverCommandModule>();
 
         services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings, WorldDefinitionSource>(configureOptions: static (options, hostSettings, source) => {

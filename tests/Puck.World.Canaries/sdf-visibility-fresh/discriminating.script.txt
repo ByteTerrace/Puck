@@ -1,0 +1,9 @@
+# The same frames, but the mover never leaves the centre.
+world.cadence off
+world.debug-view visibility
+world.wait 30
+world.screenshot {run}/before.png
+world.wait 10
+world.wait 30
+world.screenshot {run}/after.png
+world.wait 10

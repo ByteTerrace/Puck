@@ -33,6 +33,14 @@
 // primary traversal can read the appended part bounds. register(t44): the engine appends it after the bounded
 // volumes (t43) in the views binding order.
 [[vk::binding(3, 0)]] StructuredBuffer<float> tiles : register(t44);
+// The surviving-tile bbox from the cull-args pass (sdf-cull-args.comp): its group origin, then its exclusive group end.
+// The dispatch is origin-anchored, so the origin offsets each invocation onto the bbox's pixels, and the all-empty
+// margins outside the bbox are never dispatched; the whole box is where this frame wrote visibility records, which
+// worldVisibilityCurrent reads. Declared before the shared world include for that reader. register(t3): the SRVs are
+// program t0, viewport t1, dynamicTransforms t2, then this. The screen-surface table (binding 10, t4) and screen
+// sources (binding 12..43, t5..t36, with the static nearest sampler at s0..s31) are declared by sdf-world.hlsli under
+// SDF_SCREEN_SOURCES.
+[[vk::binding(8, 0)]] StructuredBuffer<uint> cullBounds : register(t3);
 #include "sdf-world.hlsli"
 
 // The program is at binding 1 (sdf-vm.hlsli, register t0), the viewport table at binding 2 (sdf-world.hlsli,
@@ -41,12 +49,6 @@
 // packed per binding, so the array never overlaps a fixed binding. Stage 1 writes view N into sources[N] at its
 // view-local pixel.
 [[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[5] : register(u0);
-// The surviving-tile bbox group origin from the cull-args pass (sdf-cull-args.comp): the dispatch is origin-anchored,
-// so this offsets each invocation onto the bbox's pixels. The all-empty margins outside the bbox are never dispatched.
-// register(t3): the SRVs are program t0, viewport t1, dynamicTransforms t2, then this. The screen-surface table
-// (binding 10, t4) and screen sources (binding 12..43, t5..t36, with the static nearest sampler at s0..s31) are
-// declared by sdf-world.hlsli under SDF_SCREEN_SOURCES.
-[[vk::binding(8, 0)]] StructuredBuffer<uint> cullBounds : register(t3);
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
