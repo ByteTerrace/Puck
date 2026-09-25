@@ -11,7 +11,7 @@ namespace Puck.DirectX;
 /// </summary>
 /// <remarks>
 /// The descriptor table holds one range per binding, with each range's slot in the heap fixed at its binding
-/// index (<c>OffsetInDescriptorsFromTableStart = binding</c>, matching how the descriptor allocator writes a
+/// index (<c>OffsetInDescriptorsFromTableStart = binding</c>, matching how <see cref="DirectXGpuBindings"/> writes a
 /// descriptor at <c>CpuBase + binding * size</c>). Shader registers are assigned per type in binding order: each
 /// UAV binding (a storage image or a read-write buffer) takes the next <c>u#</c>, each SRV binding (a read-only
 /// buffer) takes the next <c>t#</c>, and an array binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes

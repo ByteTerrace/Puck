@@ -87,9 +87,9 @@ public sealed class TeardownAfterFaultLawTests {
             height: 32U,
             inner: new WindowedHostFixture.FakeRenderNode(),
             services: new OverlayServices {
+                Bindings = unused,
                 BytecodeExtension = ".spv",
                 CommandPoolFactory = unused,
-                DescriptorAllocator = unused,
                 DeviceContext = device,
                 FrameSources = unused,
                 GeometryBufferFactory = unused,
@@ -253,12 +253,12 @@ public sealed class TeardownAfterFaultLawTests {
         protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
     }
     // Every GPU seam the overlay holds; reaching any of them from a node that never produced a frame is a failure.
-    private sealed class UnusedGpu : IGpuRecorder, IGpuDescriptorAllocator, IOverlayFrameSources, IGpuPipelineFactory,
+    private sealed class UnusedGpu : IGpuRecorder, IGpuBindings, IOverlayFrameSources, IGpuPipelineFactory,
         IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuStorageBufferFactory, IGpuSurfaceTransferFactory, IGpuGeometryBufferFactory, IGpuImageFactory,
         IGpuRenderPassFactory, IGpuComputeCommandPoolFactory {
         private static InvalidOperationException Reached() => new(message: "A GPU seam was reached during teardown.");
 
-        public nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) => throw Reached();
+        public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw Reached();
         public void BeginCommandBuffer(nint commandBufferHandle) => throw Reached();
         public void EndCommandBuffer(nint commandBufferHandle) => throw Reached();
         public void BeginDebugGroup(nint commandBufferHandle, string label) => throw Reached();
@@ -292,22 +292,19 @@ public sealed class TeardownAfterFaultLawTests {
         public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw Reached();
         public IGpuSurfaceImport CreateImport(IGpuDeviceContext deviceContext) => throw Reached();
         public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw Reached();
-        public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) => throw Reached();
+        public nint CreatePool(in GpuDescriptorPoolSizes sizes) => throw Reached();
         public IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext) => throw Reached();
-        public nint CreateSampler(nint deviceHandle, GpuSamplerFilter filter = GpuSamplerFilter.Linear) => throw Reached();
+        public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) => throw Reached();
         public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) => throw Reached();
         public IGpuSurfaceUpload CreateUpload(IGpuDeviceContext deviceContext) => throw Reached();
-        public void DestroyPool(nint deviceHandle, nint poolHandle) => throw Reached();
-        public void DestroySampler(nint deviceHandle, nint samplerHandle) => throw Reached();
+        public void DestroyPool(nint poolHandle) => throw Reached();
+        public void DestroySampler(nint samplerHandle) => throw Reached();
         public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
         public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw Reached();
         public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => throw Reached();
         public bool TryAcquire(int key, out Puck.Hosting.GpuImageLease lease) => throw Reached();
-        public void WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw Reached();
-        public void WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable) => throw Reached();
-        public void WriteStorageBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => throw Reached();
-        public void WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => throw Reached();
-        public void WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => throw Reached();
-        public void WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reached();
+        public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw Reached();
+        public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => throw Reached();
+        public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reached();
     }
 }

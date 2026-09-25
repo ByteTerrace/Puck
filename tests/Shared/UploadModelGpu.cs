@@ -19,7 +19,7 @@ internal sealed class UploadModelGpu :
     IGpuComputePipelineFactory,
     IGpuRecorder,
     IGpuComputeServices,
-    IGpuDescriptorAllocator,
+    IGpuBindings,
     IGpuShaderModuleFactory,
     IGpuStorageBufferFactory {
     /// <summary>The first bytecode byte that marks the frame-upload kernel.</summary>
@@ -42,9 +42,9 @@ internal sealed class UploadModelGpu :
         m_inner = new FakeGpuDevice(reportVersion: reportVersion);
     }
 
+    public IGpuBindings Bindings => this;
     public IGpuComputeCommandPoolFactory CommandPoolFactory => m_inner.CommandPoolFactory;
     public IGpuComputePipelineFactory ComputePipelineFactory => this;
-    public IGpuDescriptorAllocator DescriptorAllocator => this;
     public IGpuRecorder Recorder => this;
     /// <summary>Gets the device the engine renders on.</summary>
     public IGpuDeviceContext Device => m_inner;
@@ -117,17 +117,14 @@ internal sealed class UploadModelGpu :
     IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
     IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
     IGpuStorageBuffer IGpuStorageBufferFactory.CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
-    nint IGpuDescriptorAllocator.AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) => NextHandle();
-    nint IGpuDescriptorAllocator.CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) => m_inner.DescriptorAllocator.CreatePool(deviceHandle: deviceHandle, sizes: sizes);
-    nint IGpuDescriptorAllocator.CreateSampler(nint deviceHandle, GpuSamplerFilter filter) => m_inner.DescriptorAllocator.CreateSampler(deviceHandle: deviceHandle, filter: filter);
-    void IGpuDescriptorAllocator.DestroyPool(nint deviceHandle, nint poolHandle) { }
-    void IGpuDescriptorAllocator.DestroySampler(nint deviceHandle, nint samplerHandle) { }
-    void IGpuDescriptorAllocator.WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) { }
-    void IGpuDescriptorAllocator.WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
-    void IGpuDescriptorAllocator.WriteStorageBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
-    void IGpuDescriptorAllocator.WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
-    void IGpuDescriptorAllocator.WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
-    void IGpuDescriptorAllocator.WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
+    nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => NextHandle();
+    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => m_inner.Bindings.CreatePool(sizes: sizes);
+    nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => m_inner.Bindings.CreateSampler(filter: filter);
+    void IGpuBindings.DestroyPool(nint poolHandle) { }
+    void IGpuBindings.DestroySampler(nint samplerHandle) { }
+    void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) { }
+    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+    void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) { }
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) { }
     void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) { }

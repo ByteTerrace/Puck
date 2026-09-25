@@ -152,31 +152,28 @@ public sealed partial class SdfWorldEngine {
         var viewsSet = m_viewsSets[0];
 
         for (var element = 0u; (element < MaxViewports); element++) {
-            m_descriptorAllocator.WriteStorageImage(
+            m_bindings.WriteStorageImage(
                 arrayElement: element,
                 binding: ViewSourceBindingIndex,
                 descriptorSetHandle: viewsSet,
-                deviceHandle: m_deviceHandle,
                 imageViewHandle: reportImage.ImageViewHandle
             );
         }
 
         for (var element = 0; (element < ScreenSourceBindingIndices.Length); element++) {
-            m_descriptorAllocator.WriteCombinedImageSampler(
+            m_bindings.WriteCombinedImageSampler(
                 arrayElement: 0,
                 binding: ScreenSourceBindingIndices[element],
                 descriptorSetHandle: viewsSet,
-                deviceHandle: m_deviceHandle,
                 imageViewHandle: sampledImage.ImageViewHandle,
                 samplerHandle: m_screenSampler
             );
         }
 
-        m_descriptorAllocator.WriteCombinedImageSampler(
+        m_bindings.WriteCombinedImageSampler(
             arrayElement: 0,
             binding: GlyphAtlasBindingIndex,
             descriptorSetHandle: viewsSet,
-            deviceHandle: m_deviceHandle,
             imageViewHandle: sampledImage.ImageViewHandle,
             samplerHandle: m_screenSampler
         );

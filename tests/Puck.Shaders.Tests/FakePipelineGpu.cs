@@ -14,7 +14,7 @@ namespace Puck.Shaders.Tests;
 /// <see cref="PipelineGate"/> holds that compiler work and <see cref="QueueHeld"/> holds the queue unfinished.
 /// </summary>
 internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServices, IGpuDeviceContext,
-    IGpuComputeCommandPoolFactory, IGpuComputePipelineFactory, IGpuRecorder, IGpuDescriptorAllocator, IGpuQueueSubmitter, IGpuShaderModuleFactory,
+    IGpuComputeCommandPoolFactory, IGpuComputePipelineFactory, IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory,
     IGpuStorageBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuPipelineFactory,
     IGpuGeometryBufferFactory, IGpuRenderPassFactory {
     private readonly Dictionary<nint, Created> m_byHandle = [];
@@ -89,10 +89,10 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
     /// <summary>Gets the number of whole-device drains.</summary>
     public int WaitIdleCount { get; private set; }
     public long AdapterLuid => 1L;
+    public IGpuBindings Bindings => this;
     public IGpuComputeCommandPoolFactory CommandPoolFactory => this;
     public IGpuComputePipelineFactory ComputePipelineFactory => this;
     public IGpuComputeServices? ComputeServices => this;
-    public IGpuDescriptorAllocator DescriptorAllocator => this;
     public IGpuDeviceContext DeviceContext => this;
     public nint DeviceHandle {
         get {
@@ -197,7 +197,7 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
         }
     }
 
-    public nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) => (poolHandle + 1);
+    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => (poolHandle + 1);
     public void BeginCommandBuffer(nint commandBufferHandle) {
         lock (m_gate) {
             if (m_byHandle.TryGetValue(
@@ -295,18 +295,18 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
     public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw new NotSupportedException();
     public IGpuSurfaceImport CreateImport(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
     public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw new NotSupportedException();
-    public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) => Create(kind: "descriptor pool").Handle;
+    public nint CreatePool(in GpuDescriptorPoolSizes sizes) => Create(kind: "descriptor pool").Handle;
     public IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext) => (ReadbackSupported
         ? new FakeReadback(gpu: this)
         : throw new NotSupportedException());
-    public nint CreateSampler(nint deviceHandle, GpuSamplerFilter filter = GpuSamplerFilter.Linear) => Create(kind: "sampler").Handle;
+    public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) => Create(kind: "sampler").Handle;
     public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) => new FakeFence(
         created: Create(kind: "fence"),
         gpu: this
     );
     public IGpuSurfaceUpload CreateUpload(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-    public void DestroyPool(nint deviceHandle, nint poolHandle) => Destroy(handle: poolHandle);
-    public void DestroySampler(nint deviceHandle, nint samplerHandle) => Destroy(handle: samplerHandle);
+    public void DestroyPool(nint poolHandle) => Destroy(handle: poolHandle);
+    public void DestroySampler(nint samplerHandle) => Destroy(handle: samplerHandle);
     public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) { }
     public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
     public void Draw(nint commandBufferHandle, in GpuDrawParameters parameters) => RecordGraphics(command: "draw", buffer: 0, offsetBytes: 0, sizeBytes: 0, count: parameters.VertexCount);
@@ -332,12 +332,15 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
         WaitIdleCount++;
         Record(text: "device drain");
     }
-    public void WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) { }
-    public void WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable) => RawBufferWrites++;
-    public void WriteStorageBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => StructuredBufferWrites++;
-    public void WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => StructuredBufferWrites++;
-    public void WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => StructuredBufferWrites++;
-    public void WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
+    public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) { }
+    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) {
+        if (0 == elementStride) {
+            RawBufferWrites++;
+        } else {
+            StructuredBufferWrites++;
+        }
+    }
+    public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
 
     /// <summary>One created object: its creation number, kind, handle, the bytes it occupies, and how often it was
     /// disposed.</summary>

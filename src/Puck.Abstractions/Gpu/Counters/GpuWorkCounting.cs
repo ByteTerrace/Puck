@@ -46,16 +46,16 @@ public static class GpuWorkCounting {
             ),
             ledger: ledger
         );
-    /// <summary>Wraps a descriptor allocator. Counts every descriptor write, and the descriptor pools and sets created.</summary>
-    /// <param name="allocator">The allocator to forward to.</param>
+    /// <summary>Wraps a bindings service. Counts every descriptor write, and the descriptor pools and sets created.</summary>
+    /// <param name="bindings">The bindings service to forward to.</param>
     /// <param name="ledger">The ledger the counts go to.</param>
-    /// <returns>The counting allocator.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="allocator"/> is already counting.</exception>
-    public static IGpuDescriptorAllocator Wrap(IGpuDescriptorAllocator allocator, GpuWorkLedger ledger) =>
-        new CountingDescriptorAllocator(
+    /// <returns>The counting bindings service.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="bindings"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="bindings"/> is already counting.</exception>
+    public static IGpuBindings Wrap(IGpuBindings bindings, GpuWorkLedger ledger) =>
+        new CountingBindings(
             inner: Guard(
-                instance: allocator,
+                instance: bindings,
                 ledger: ledger
             ),
             ledger: ledger
@@ -201,8 +201,8 @@ file sealed class CountingComputeServices(IGpuComputeServices services, GpuWorkL
         ledger: ledger,
         recorder: services.Recorder
     );
-    public IGpuDescriptorAllocator DescriptorAllocator { get; } = GpuWorkCounting.Wrap(
-        allocator: services.DescriptorAllocator,
+    public IGpuBindings Bindings { get; } = GpuWorkCounting.Wrap(
+        bindings: services.Bindings,
         ledger: ledger
     );
     public IGpuQueueSubmitter QueueSubmitter { get; } = GpuWorkCounting.Wrap(
@@ -391,104 +391,56 @@ file sealed class CountingComputePipelineFactory(IGpuComputePipelineFactory inne
             lifetimeIndex: GpuWork.PipelinesCreatedIndex
         );
 }
-file sealed class CountingDescriptorAllocator(IGpuDescriptorAllocator inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuDescriptorAllocator {
-    public nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) =>
+file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuBindings {
+    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) =>
         Created(
             created: inner.AllocateSet(
                 descriptorSetLayoutHandle: descriptorSetLayoutHandle,
-                deviceHandle: deviceHandle,
                 poolHandle: poolHandle
             ),
             lifetimeIndex: GpuWork.DescriptorSetsCreatedIndex
         );
-    public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) =>
+    public nint CreatePool(in GpuDescriptorPoolSizes sizes) =>
         Created(
-            created: inner.CreatePool(
-                deviceHandle: deviceHandle,
-                sizes: in sizes
-            ),
+            created: inner.CreatePool(sizes: in sizes),
             lifetimeIndex: GpuWork.DescriptorPoolsCreatedIndex
         );
-    public nint CreateSampler(nint deviceHandle, GpuSamplerFilter filter = GpuSamplerFilter.Linear) =>
-        inner.CreateSampler(
-            deviceHandle: deviceHandle,
-            filter: filter
+    public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) =>
+        inner.CreateSampler(filter: filter);
+    public void DestroyPool(nint poolHandle) =>
+        inner.DestroyPool(poolHandle: poolHandle);
+    public void DestroySampler(nint samplerHandle) =>
+        inner.DestroySampler(samplerHandle: samplerHandle);
+    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) {
+        inner.WriteBuffer(
+            access: access,
+            binding: binding,
+            bufferHandle: bufferHandle,
+            bufferSize: bufferSize,
+            descriptorSetHandle: descriptorSetHandle,
+            elementStride: elementStride
         );
-    public void DestroyPool(nint deviceHandle, nint poolHandle) =>
-        inner.DestroyPool(
-            deviceHandle: deviceHandle,
-            poolHandle: poolHandle
-        );
-    public void DestroySampler(nint deviceHandle, nint samplerHandle) =>
-        inner.DestroySampler(
-            deviceHandle: deviceHandle,
-            samplerHandle: samplerHandle
-        );
-    public void WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) {
+        Tally(column: GpuWork.DescriptorWritesColumn);
+    }
+    public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) {
         inner.WriteCombinedImageSampler(
             arrayElement: arrayElement,
             binding: binding,
             descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle,
             imageViewHandle: imageViewHandle,
             samplerHandle: samplerHandle
         );
         Tally(column: GpuWork.DescriptorWritesColumn);
     }
-    public void WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable) {
-        inner.WriteRawBuffer(
-            binding: binding,
-            bufferHandle: bufferHandle,
-            bufferSize: bufferSize,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle,
-            writable: writable
-        );
-        Tally(column: GpuWork.DescriptorWritesColumn);
-    }
-    public void WriteStorageBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) {
-        inner.WriteStorageBuffer(
-            binding: binding,
-            bufferHandle: bufferHandle,
-            bufferSize: bufferSize,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle
-        );
-        Tally(column: GpuWork.DescriptorWritesColumn);
-    }
-    public void WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) {
-        inner.WriteStorageBufferReadOnly(
-            binding: binding,
-            bufferHandle: bufferHandle,
-            bufferSize: bufferSize,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle
-        );
-        Tally(column: GpuWork.DescriptorWritesColumn);
-    }
-    public void WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) {
-        inner.WriteStorageBufferReadWrite(
-            binding: binding,
-            bufferHandle: bufferHandle,
-            bufferSize: bufferSize,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle
-        );
-        Tally(column: GpuWork.DescriptorWritesColumn);
-    }
-    public void WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+    public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
         inner.WriteStorageImage(
             arrayElement: arrayElement,
             binding: binding,
             descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle,
             imageViewHandle: imageViewHandle
         );
         Tally(column: GpuWork.DescriptorWritesColumn);
     }
-
-    private void CountWrite() =>
-        Tally(column: GpuWork.DescriptorWritesColumn);
 }
 file sealed class CountingPipelineFactory(IGpuPipelineFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuPipelineFactory {
     public IGpuPipeline Create(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) =>

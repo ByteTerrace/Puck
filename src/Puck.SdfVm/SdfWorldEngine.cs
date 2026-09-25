@@ -200,7 +200,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuComputePipeline m_cullArgsPipeline;
     private readonly nint m_cullArgsSet;
     private readonly IGpuBuffer m_cullBoundsBuffer;
-    private readonly IGpuDescriptorAllocator m_descriptorAllocator;
+    private readonly IGpuBindings m_bindings;
     private readonly IGpuDeviceContext m_deviceContext;
     private readonly nint m_deviceHandle;
     private readonly int m_dynamicTransformCapacity;
@@ -459,7 +459,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             ledger: m_work,
             services: gpu
         );
-        m_descriptorAllocator = gpu.DescriptorAllocator;
+        m_bindings = gpu.Bindings;
         m_deviceContext = device;
         m_deviceHandle = device.DeviceHandle;
         m_dynamicTransformCapacity = Math.Max(
@@ -750,15 +750,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         var poolSizes = GpuDescriptorPoolSizes.ForSets([.. poolSetBindings]);
 
-        m_pool = m_descriptorAllocator.CreatePool(
-            deviceHandle: m_deviceHandle,
+        m_pool = m_bindings.CreatePool(
             sizes: poolSizes
         );
 
         // The cull buffer is read-only here (a stride-4 SRV on Direct3D 12); the args + bounds are written (UAVs).
-        m_cullArgsSet = m_descriptorAllocator.AllocateSet(
+        m_cullArgsSet = m_bindings.AllocateSet(
             descriptorSetLayoutHandle: m_cullArgsPipeline.DescriptorSetLayoutHandle,
-            deviceHandle: m_deviceHandle,
             poolHandle: m_pool
         );
         WriteStorageBufferReadOnly(
@@ -779,15 +777,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         // The screen sources (bindings 12..43) are (re)bound per frame by BindScreenSources, mirroring the source array —
         // a filler view isn't known until the first frame's SDF source texture (or child surface) exists.
-        m_screenSampler = m_descriptorAllocator.CreateSampler(
-            deviceHandle: m_deviceHandle,
+        m_screenSampler = m_bindings.CreateSampler(
             filter: GpuSamplerFilter.Nearest
         );
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {
-            var beamSet = m_descriptorAllocator.AllocateSet(
+            var beamSet = m_bindings.AllocateSet(
                 descriptorSetLayoutHandle: m_beamPipeline.DescriptorSetLayoutHandle,
-                deviceHandle: m_deviceHandle,
                 poolHandle: m_pool
             );
 
@@ -825,9 +821,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             );
 
             // The instance-cull set: the mask buffer written (the frame's first pass — the beam then reads it).
-            var instanceCullSet = m_descriptorAllocator.AllocateSet(
+            var instanceCullSet = m_bindings.AllocateSet(
                 descriptorSetLayoutHandle: m_instanceCullPipeline.DescriptorSetLayoutHandle,
-                deviceHandle: m_deviceHandle,
                 poolHandle: m_pool
             );
 
@@ -858,9 +853,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 set: instanceCullSet
             );
 
-            var viewsSet = m_descriptorAllocator.AllocateSet(
+            var viewsSet = m_bindings.AllocateSet(
                 descriptorSetLayoutHandle: m_viewsPipeline.DescriptorSetLayoutHandle,
-                deviceHandle: m_deviceHandle,
                 poolHandle: m_pool
             );
 
@@ -941,18 +935,16 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 set: viewsSet
             );
 
-            var compositeSet = m_descriptorAllocator.AllocateSet(
+            var compositeSet = m_bindings.AllocateSet(
                 descriptorSetLayoutHandle: m_compositePipeline.DescriptorSetLayoutHandle,
-                deviceHandle: m_deviceHandle,
                 poolHandle: m_pool
             );
 
             m_compositeSets[slot] = compositeSet;
-            m_descriptorAllocator.WriteStorageImage(
+            m_bindings.WriteStorageImage(
                 arrayElement: 0,
                 binding: CompositeOutputBindingIndex,
                 descriptorSetHandle: compositeSet,
-                deviceHandle: m_deviceHandle,
                 imageViewHandle: m_storageImage.ImageViewHandle
             );
 
@@ -975,9 +967,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
                 m_brickRequestBuffers[brick] = requestBuffer;
 
-                var bakeSet = m_descriptorAllocator.AllocateSet(
+                var bakeSet = m_bindings.AllocateSet(
                     descriptorSetLayoutHandle: m_brickBakePipeline!.DescriptorSetLayoutHandle,
-                    deviceHandle: m_deviceHandle,
                     poolHandle: m_pool
                 );
 
@@ -1004,9 +995,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
                     m_brickUploadStaging[slot] = staging;
 
-                    var uploadSet = m_descriptorAllocator.AllocateSet(
+                    var uploadSet = m_bindings.AllocateSet(
                         descriptorSetLayoutHandle: m_brickUploadPipeline.DescriptorSetLayoutHandle,
-                        deviceHandle: m_deviceHandle,
                         poolHandle: m_pool
                     );
 
@@ -1032,9 +1022,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             IGpuBuffer[] uploadDestinations = [m_viewportDeviceBuffer, m_dynamicTransformDeviceBuffer, m_instanceGridDeviceBuffer];
 
             for (var table = 0; (table < FrameUploadTableCount); table++) {
-                var uploadSet = m_descriptorAllocator.AllocateSet(
+                var uploadSet = m_bindings.AllocateSet(
                     descriptorSetLayoutHandle: m_frameUploadPipeline.DescriptorSetLayoutHandle,
-                    deviceHandle: m_deviceHandle,
                     poolHandle: m_pool
                 );
 
@@ -1100,36 +1089,37 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         return bindings;
     }
-    private void WriteStorageBuffer(nint set, uint binding, IGpuBuffer buffer) {
-        m_descriptorAllocator.WriteStorageBuffer(
+    // The program words: a read-only StructuredBuffer<uint4>.
+    private void WriteStorageBuffer(nint set, uint binding, IGpuBuffer buffer) =>
+        m_bindings.WriteBuffer(
+            access: GpuBufferAccess.Read,
             binding: binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            deviceHandle: m_deviceHandle
+            elementStride: (4 * sizeof(uint))
         );
-    }
-    // For 4-byte-element read-only structured buffers (the float cull buffer, the uint cull-bounds) — NOT the 16-byte
-    // (uint4) program-word stride WriteStorageBuffer assumes; a stride-16 SRV over the 8-byte bounds buffer is a
-    // zero-element view the indirect views dispatch page-faults reading on Direct3D 12.
-    private void WriteStorageBufferReadOnly(nint set, uint binding, IGpuBuffer buffer) {
-        m_descriptorAllocator.WriteStorageBufferReadOnly(
+    // A read-only StructuredBuffer of 4-byte elements (the float cull buffer, the uint cull bounds). The program words'
+    // 16-byte stride over the 8-byte bounds buffer is a zero-element view on Direct3D 12.
+    private void WriteStorageBufferReadOnly(nint set, uint binding, IGpuBuffer buffer) =>
+        m_bindings.WriteBuffer(
+            access: GpuBufferAccess.Read,
             binding: binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            deviceHandle: m_deviceHandle
+            elementStride: sizeof(uint)
         );
-    }
-    private void WriteStorageBufferReadWrite(nint set, uint binding, IGpuBuffer buffer) {
-        m_descriptorAllocator.WriteStorageBufferReadWrite(
+    // A RWStructuredBuffer of 4-byte elements.
+    private void WriteStorageBufferReadWrite(nint set, uint binding, IGpuBuffer buffer) =>
+        m_bindings.WriteBuffer(
+            access: GpuBufferAccess.ReadWrite,
             binding: binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            deviceHandle: m_deviceHandle
+            elementStride: sizeof(uint)
         );
-    }
 
     /// <inheritdoc/>
     public void Dispose() {
@@ -1180,12 +1170,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_viewportDeviceBuffer.Dispose();
         m_dynamicTransformDeviceBuffer.Dispose();
         m_instanceGridDeviceBuffer.Dispose();
-        m_descriptorAllocator.DestroySampler(
-            deviceHandle: m_deviceHandle,
+        m_bindings.DestroySampler(
             samplerHandle: m_screenSampler
         );
-        m_descriptorAllocator.DestroyPool(
-            deviceHandle: m_deviceHandle,
+        m_bindings.DestroyPool(
             poolHandle: m_pool
         );
 

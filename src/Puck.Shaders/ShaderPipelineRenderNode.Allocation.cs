@@ -37,23 +37,18 @@ public sealed partial class ShaderPipelineRenderNode {
     // geometry pass with no input among them, has no descriptor set layout, so it gets no pool, set or sampler, and its
     // set stays zero.
     private void AllocateSlotObjects(RuntimePass pass) {
-        var device = m_device.DeviceHandle;
-        var allocator = m_gpu.DescriptorAllocator;
+        var bindings = m_gpu.Bindings;
 
         for (var slot = 0; (slot < m_inFlight); slot++) {
             if (pass.Bindings.Count != 0) {
-                pass.PoolsDescriptors![slot] = allocator.CreatePool(
-                    deviceHandle: device,
-                    sizes: GpuDescriptorPoolSizes.ForSets(pass.Bindings)
-                );
-                pass.Sets![slot] = allocator.AllocateSet(
-                    device,
+                pass.PoolsDescriptors![slot] = bindings.CreatePool(sizes: GpuDescriptorPoolSizes.ForSets(pass.Bindings));
+                pass.Sets![slot] = bindings.AllocateSet(
                     pass.PoolsDescriptors[slot],
                     ((pass.Spec.Kind == ShaderPipelinePassKind.Compute)
                     ? pass.Compute!.DescriptorSetLayoutHandle
                     : pass.Graphics!.DescriptorSetLayoutHandle)
                 );
-                pass.Samplers![slot] = allocator.CreateSampler(deviceHandle: device);
+                pass.Samplers![slot] = bindings.CreateSampler();
             }
 
             if (pass.Spec.Kind == ShaderPipelinePassKind.Compute) {

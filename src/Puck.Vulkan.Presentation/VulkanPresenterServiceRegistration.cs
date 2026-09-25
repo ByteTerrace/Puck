@@ -181,7 +181,10 @@ public static class VulkanPresenterServiceRegistration {
             deviceContext: sp.GetRequiredService<IVulkanDeviceContext>(),
             recordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>()
         ));
-        services.TryAddSingleton<IGpuDescriptorAllocator>(implementationFactory: static sp => new VulkanGpuDescriptorAllocator(allocator: sp.GetRequiredService<VulkanDescriptorAllocator>()));
+        services.TryAddSingleton<IGpuBindings>(implementationFactory: static sp => new VulkanGpuBindings(
+            allocator: sp.GetRequiredService<VulkanDescriptorAllocator>(),
+            deviceContext: sp.GetRequiredService<IVulkanDeviceContext>()
+        ));
         services.TryAddSingleton<IGpuPipelineFactory>(implementationFactory: static sp => new VulkanGpuPipelineFactory(pipelineFactory: sp.GetRequiredService<IVulkanGraphicsPipelineFactory>()));
         services.TryAddSingleton<IGpuQueueSubmitter>(implementationFactory: static sp => new VulkanGpuQueueSubmitter(
             frameSynchronizationApi: sp.GetRequiredService<IVulkanFrameSynchronizationApi>(),

@@ -43,7 +43,7 @@ public sealed class OverlayFrameSlotsLawTests {
             BytecodeExtension = ".test",
             CommandPoolFactory = Unused,
             Recorder = Unused,
-            DescriptorAllocator = Unused,
+            Bindings = Unused,
             DeviceContext = new FixedDeviceContext(),
             FrameSources = new RecordingFrameSources(events: events),
             GeometryBufferFactory = Unused,

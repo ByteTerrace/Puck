@@ -42,11 +42,10 @@ public sealed partial class SdfWorldEngine {
                 continue;
             }
 
-            m_descriptorAllocator.WriteCombinedImageSampler(
+            m_bindings.WriteCombinedImageSampler(
                 arrayElement: 0,
                 binding: ScreenSourceBindingIndices[((int)element)],
                 descriptorSetHandle: viewsSet,
-                deviceHandle: m_deviceHandle,
                 imageViewHandle: view,
                 samplerHandle: m_screenSampler
             );
@@ -62,11 +61,10 @@ public sealed partial class SdfWorldEngine {
         );
 
         if (glyphView != m_boundGlyphAtlasViews[m_currentSlot]) {
-            m_descriptorAllocator.WriteCombinedImageSampler(
+            m_bindings.WriteCombinedImageSampler(
                 arrayElement: 0,
                 binding: GlyphAtlasBindingIndex,
                 descriptorSetHandle: viewsSet,
-                deviceHandle: m_deviceHandle,
                 imageViewHandle: glyphView,
                 samplerHandle: m_screenSampler
             );
@@ -104,18 +102,16 @@ public sealed partial class SdfWorldEngine {
                 continue;
             }
 
-            m_descriptorAllocator.WriteStorageImage(
+            m_bindings.WriteStorageImage(
                 arrayElement: element,
                 binding: ViewSourceBindingIndex,
                 descriptorSetHandle: m_viewsSets[m_currentSlot],
-                deviceHandle: m_deviceHandle,
                 imageViewHandle: view
             );
-            m_descriptorAllocator.WriteStorageImage(
+            m_bindings.WriteStorageImage(
                 arrayElement: element,
                 binding: CompositeSourceBindingIndex,
                 descriptorSetHandle: m_compositeSets[m_currentSlot],
-                deviceHandle: m_deviceHandle,
                 imageViewHandle: view
             );
             boundViews[element] = view;

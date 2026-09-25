@@ -12,7 +12,7 @@ public sealed class GpuWorkCountingLawTests {
     private static readonly Type[] WrappedInterfaces = [
         typeof(IGpuRecorder),
         typeof(IGpuComputePipelineFactory),
-        typeof(IGpuDescriptorAllocator),
+        typeof(IGpuBindings),
         typeof(IGpuPipelineFactory),
         typeof(IGpuQueueSubmitter),
         typeof(IGpuShaderModuleFactory),
@@ -118,7 +118,7 @@ public sealed class GpuWorkCountingLawTests {
 
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(ledger: rig.Ledger, services: rig.Services));
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(ledger: rig.Ledger, recorder: rig.Services.Recorder));
-        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(allocator: rig.Services.DescriptorAllocator, ledger: rig.Ledger));
+        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(bindings: rig.Services.Bindings, ledger: rig.Ledger));
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(ledger: rig.Ledger, submitter: rig.Services.QueueSubmitter));
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(factory: rig.Services.StorageBufferFactory, ledger: rig.Ledger));
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(factory: rig.Pipelines, ledger: rig.Ledger));
@@ -150,17 +150,14 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuRecorder.MemoryBarrier"] = (rig => rig.Services.Recorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader), [(GpuWork.MemoryBarriers, 1L)]),
             ["IGpuRecorder.TransitionBuffer"] = (rig => rig.Services.Recorder.TransitionBuffer(bufferHandle: 3, commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader), [(GpuWork.BufferBarriers, 1L)]),
             ["IGpuComputePipelineFactory.Create"] = (rig => rig.Services.ComputePipelineFactory.Create(computeShaderModule: null!, description: null!, deviceContext: rig.Gpu).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
-            ["IGpuDescriptorAllocator.AllocateSet"] = (rig => rig.Services.DescriptorAllocator.AllocateSet(descriptorSetLayoutHandle: 3, deviceHandle: 1, poolHandle: 2), [(GpuWork.DescriptorSetsCreated, 1L)]),
-            ["IGpuDescriptorAllocator.CreatePool"] = (rig => rig.Services.DescriptorAllocator.CreatePool(deviceHandle: 1, sizes: new GpuDescriptorPoolSizes(CombinedImageSamplerCount: 0, MaxSets: 1, StorageBufferCount: 1, StorageImageCount: 0)), [(GpuWork.DescriptorPoolsCreated, 1L)]),
-            ["IGpuDescriptorAllocator.CreateSampler"] = (rig => rig.Services.DescriptorAllocator.CreateSampler(deviceHandle: 1, filter: GpuSamplerFilter.Nearest), none),
-            ["IGpuDescriptorAllocator.DestroyPool"] = (rig => rig.Services.DescriptorAllocator.DestroyPool(deviceHandle: 1, poolHandle: 2), none),
-            ["IGpuDescriptorAllocator.DestroySampler"] = (rig => rig.Services.DescriptorAllocator.DestroySampler(deviceHandle: 1, samplerHandle: 2), none),
-            ["IGpuDescriptorAllocator.WriteCombinedImageSampler"] = (rig => rig.Services.DescriptorAllocator.WriteCombinedImageSampler(arrayElement: 0, binding: 0, descriptorSetHandle: 4, deviceHandle: 1, imageViewHandle: 5, samplerHandle: 6), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuDescriptorAllocator.WriteRawBuffer"] = (rig => rig.Services.DescriptorAllocator.WriteRawBuffer(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, deviceHandle: 1, writable: true), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuDescriptorAllocator.WriteStorageBuffer"] = (rig => rig.Services.DescriptorAllocator.WriteStorageBuffer(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, deviceHandle: 1), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuDescriptorAllocator.WriteStorageBufferReadOnly"] = (rig => rig.Services.DescriptorAllocator.WriteStorageBufferReadOnly(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, deviceHandle: 1), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuDescriptorAllocator.WriteStorageBufferReadWrite"] = (rig => rig.Services.DescriptorAllocator.WriteStorageBufferReadWrite(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, deviceHandle: 1), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuDescriptorAllocator.WriteStorageImage"] = (rig => rig.Services.DescriptorAllocator.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, deviceHandle: 1, imageViewHandle: 5), [(GpuWork.DescriptorWrites, 1L)]),
+            ["IGpuBindings.AllocateSet"] = (rig => rig.Services.Bindings.AllocateSet(descriptorSetLayoutHandle: 3, poolHandle: 2), [(GpuWork.DescriptorSetsCreated, 1L)]),
+            ["IGpuBindings.CreatePool"] = (rig => rig.Services.Bindings.CreatePool(sizes: new GpuDescriptorPoolSizes(CombinedImageSamplerCount: 0, MaxSets: 1, StorageBufferCount: 1, StorageImageCount: 0)), [(GpuWork.DescriptorPoolsCreated, 1L)]),
+            ["IGpuBindings.CreateSampler"] = (rig => rig.Services.Bindings.CreateSampler(filter: GpuSamplerFilter.Nearest), none),
+            ["IGpuBindings.DestroyPool"] = (rig => rig.Services.Bindings.DestroyPool(poolHandle: 2), none),
+            ["IGpuBindings.DestroySampler"] = (rig => rig.Services.Bindings.DestroySampler(samplerHandle: 2), none),
+            ["IGpuBindings.WriteCombinedImageSampler"] = (rig => rig.Services.Bindings.WriteCombinedImageSampler(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5, samplerHandle: 6), [(GpuWork.DescriptorWrites, 1L)]),
+            ["IGpuBindings.WriteBuffer"] = (rig => rig.Services.Bindings.WriteBuffer(access: GpuBufferAccess.ReadWrite, binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, elementStride: 0), [(GpuWork.DescriptorWrites, 1L)]),
+            ["IGpuBindings.WriteStorageImage"] = (rig => rig.Services.Bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuPipelineFactory.Create"] = (rig => rig.Pipelines.Create(description: null!, deviceContext: rig.Gpu, fragmentShaderModule: null!, renderPass: null!, vertexShaderModule: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
             ["IGpuQueueSubmitter.CreateSubmissionFence"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu), none),
             ["IGpuQueueSubmitter.Submit"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: [], deviceContext: rig.Gpu), none),

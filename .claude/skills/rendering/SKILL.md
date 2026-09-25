@@ -687,7 +687,7 @@ the sample until a newer submission completes, and checks the
 `pipeline-counters` canary's expected lines against its own fixtures, so a
 change that moves a count updates the law and the canary together.
 Pipeline buffers are raw (`ByteAddressBuffer`), bound through
-`IGpuDescriptorAllocator.WriteRawBuffer`.
+`IGpuBindings.WriteBuffer` with a zero element stride.
 `puck parity` checks a content gate, the exact `stateHash`, and per-tile pixels
 under `tests/Puck.Parity/parity.contract.json`; a station's thresholds are
 recalibrated by hand in the change that moves them, never tightened unasked.

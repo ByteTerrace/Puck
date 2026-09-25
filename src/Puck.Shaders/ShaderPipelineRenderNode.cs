@@ -546,7 +546,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     }
     private nint GetDescriptor(RuntimePass pass, int slot) {
         // The set, its pool and its sampler were allocated with the graph (AllocateSlotObjects).
-        var device = m_device.DeviceHandle;
         var descriptorIndex = 0;
 
         foreach (var input in pass.Inputs) {
@@ -565,13 +564,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     index
                 );
 
-                m_gpu.DescriptorAllocator.WriteCombinedImageSampler(
-                    device,
-                    pass.Sets![slot],
-                    binding.Binding,
-                    0,
-                    image.ImageViewHandle,
-                    pass.Samplers![slot]
+                m_gpu.Bindings.WriteCombinedImageSampler(
+                    arrayElement: 0,
+                    binding: binding.Binding,
+                    descriptorSetHandle: pass.Sets![slot],
+                    imageViewHandle: image.ImageViewHandle,
+                    samplerHandle: pass.Samplers![slot]
                 );
             } else {
                 var buffer = ResolveBuffer(
@@ -580,13 +578,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     index
                 );
 
-                m_gpu.DescriptorAllocator.WriteRawBuffer(
-                    device,
-                    pass.Sets![slot],
-                    binding.Binding,
-                    buffer.BufferHandle,
-                    (resource.Spec.SizeBytes ?? 0),
-                    false
+                // Pipeline buffers are raw (ByteAddressBuffer), so the element stride is zero.
+                m_gpu.Bindings.WriteBuffer(
+                    access: GpuBufferAccess.Read,
+                    binding: binding.Binding,
+                    bufferHandle: buffer.BufferHandle,
+                    bufferSize: (resource.Spec.SizeBytes ?? 0),
+                    descriptorSetHandle: pass.Sets![slot],
+                    elementStride: 0
                 );
             }
         }
@@ -602,12 +601,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                         slot
                     );
 
-                    m_gpu.DescriptorAllocator.WriteStorageImage(
-                        device,
-                        pass.Sets![slot],
-                        binding.Binding,
-                        0,
-                        image.ImageViewHandle
+                    m_gpu.Bindings.WriteStorageImage(
+                        arrayElement: 0,
+                        binding: binding.Binding,
+                        descriptorSetHandle: pass.Sets![slot],
+                        imageViewHandle: image.ImageViewHandle
                     );
                 } else {
                     var buffer = ResolveBuffer(
@@ -616,13 +614,13 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                         slot
                     );
 
-                    m_gpu.DescriptorAllocator.WriteRawBuffer(
-                        device,
-                        pass.Sets![slot],
-                        binding.Binding,
-                        buffer.BufferHandle,
-                        (resource.Spec.SizeBytes ?? 0),
-                        true
+                    m_gpu.Bindings.WriteBuffer(
+                        access: GpuBufferAccess.ReadWrite,
+                        binding: binding.Binding,
+                        bufferHandle: buffer.BufferHandle,
+                        bufferSize: (resource.Spec.SizeBytes ?? 0),
+                        descriptorSetHandle: pass.Sets![slot],
+                        elementStride: 0
                     );
                 }
             }
@@ -1761,8 +1759,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             if (PoolsDescriptors is not null) {
                 foreach (var pool in PoolsDescriptors) {
                     if (pool != 0) {
-                        gpu.DescriptorAllocator.DestroyPool(
-                            deviceHandle: device.DeviceHandle,
+                        gpu.Bindings.DestroyPool(
                             poolHandle: pool
                         );
                     }
@@ -1771,8 +1768,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             if (Samplers is not null) {
                 foreach (var sampler in Samplers) {
                     if (sampler != 0) {
-                        gpu.DescriptorAllocator.DestroySampler(
-                            deviceHandle: device.DeviceHandle,
+                        gpu.Bindings.DestroySampler(
                             samplerHandle: sampler
                         );
                     }

@@ -12,7 +12,7 @@ internal sealed record WorldPostRenderExtensionServices : IFullscreenPassService
     /// <inheritdoc/>
     public required IGpuComputeServices ComputeServices { get; init; }
     /// <inheritdoc/>
-    public required IGpuDescriptorAllocator DescriptorAllocator { get; init; }
+    public required IGpuBindings Bindings { get; init; }
     /// <inheritdoc/>
     public required IGpuDeviceContext DeviceContext { get; init; }
     /// <inheritdoc/>
@@ -39,7 +39,7 @@ internal sealed record WorldPostRenderExtensionServices : IFullscreenPassService
         return new WorldPostRenderExtensionServices {
             ComputeServices = Resolve<IGpuComputeServices>(),
             Recorder = Resolve<IGpuRecorder>(),
-            DescriptorAllocator = Resolve<IGpuDescriptorAllocator>(),
+            Bindings = Resolve<IGpuBindings>(),
             DeviceContext = Resolve<IGpuDeviceContext>(),
             GeometryBufferFactory = Resolve<IGpuGeometryBufferFactory>(),
             PipelineFactory = Resolve<IGpuPipelineFactory>(),

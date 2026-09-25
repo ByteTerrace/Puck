@@ -23,7 +23,7 @@ public static class VulkanComputeServiceRegistration {
             offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>()
         ));
         // The compute-services bundle composes the nine granular compute factories/services a compute node drives
-        // (the three above plus the recorder, the descriptor allocator, queue submitter, shader-module, storage-buffer, and
+        // (the three above plus the recorder, the bindings, queue submitter, shader-module, storage-buffer, and
         // surface-transfer factories the presenter registers). Resolved lazily, so order with those is immaterial.
         services.TryAddSingleton<IGpuComputeServices, GpuComputeServices>();
 

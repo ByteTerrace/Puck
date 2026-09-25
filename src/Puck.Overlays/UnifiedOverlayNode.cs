@@ -92,7 +92,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private readonly ConsolePanelWriter? m_consoleWriter;
     private readonly CursorWriter? m_cursorWriter;
     private readonly NodeDescriptor m_descriptor;
-    private readonly IGpuDescriptorAllocator m_descriptorAllocator;
+    private readonly IGpuBindings m_bindings;
     private readonly IGpuDeviceContext m_deviceContext;
     private readonly ReadOnlyMemory<byte> m_fragmentBytecode;
     // The node-owned per-frame frame-slot table (see FrameSlotFirstBinding's remarks) — always constructed, even
@@ -252,8 +252,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             Name: "unified-overlay",
             SurfaceId: SurfaceId.New()
         );
-        m_descriptorAllocator = GpuWorkCounting.Wrap(
-            allocator: services.DescriptorAllocator,
+        m_bindings = GpuWorkCounting.Wrap(
+            bindings: services.Bindings,
             ledger: m_work
         );
         m_deviceContext = services.DeviceContext;
@@ -458,10 +458,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             vertexShaderModule: m_vertexShader
         );
 
-        var deviceHandle = m_deviceContext.DeviceHandle;
-
-        m_descriptorPool = m_descriptorAllocator.CreatePool(
-            deviceHandle: deviceHandle,
+        m_descriptorPool = m_bindings.CreatePool(
             sizes: new GpuDescriptorPoolSizes(
                 CombinedImageSamplerCount: TextureSamplerCount,
                 MaxSets: 1,
@@ -469,18 +466,18 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
                 StorageImageCount: 0
             )
         );
-        m_descriptorSet = m_descriptorAllocator.AllocateSet(
+        m_descriptorSet = m_bindings.AllocateSet(
             descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle,
-            deviceHandle: deviceHandle,
             poolHandle: m_descriptorPool
         );
-        m_sampler = m_descriptorAllocator.CreateSampler(deviceHandle: deviceHandle);
-        m_descriptorAllocator.WriteStorageBuffer(
+        m_sampler = m_bindings.CreateSampler();
+        m_bindings.WriteBuffer(
+            access: GpuBufferAccess.Read,
             binding: m_storageBufferBinding,
             bufferHandle: m_dataBuffer.BufferHandle,
             bufferSize: (((uint)m_builder.WordCount) * sizeof(uint)),
             descriptorSetHandle: m_descriptorSet,
-            deviceHandle: deviceHandle
+            elementStride: (4 * sizeof(uint))
         );
         // The token slab + glyph atlas are static — upload them ONCE now (the front PanelBaseWords uints); each
         // produced frame rewrites only the dynamic slice after them. A device-loss rebuild re-seeds them here.
@@ -612,7 +609,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // Records the node's single fullscreen pass into its command buffer. Returns the recorded command buffer handle,
     // ready to submit.
     private nint RecordOverlayPass() {
-        var deviceHandle = m_deviceContext.DeviceHandle;
         var commandBufferHandle = m_commandPool!.CommandBufferHandle;
 
         m_commandRecorder.BeginCommandBuffer(
@@ -676,21 +672,19 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         return commandBufferHandle;
     }
-    // Releases only what this node acquired: the device handle is read solely to destroy a native handle the node
-    // holds, so a node that never produced a frame touches no device context — including one whose device never came
-    // up, where reading the handle would throw or retry the failed bring-up.
+    // Releases only what this node acquired: the device is reached solely to destroy a native handle the node holds,
+    // so a node that never produced a frame touches no device context — including one whose device never came up,
+    // where reaching it would throw or retry the failed bring-up.
     private void ReleaseGpuResources() {
         if (0 != m_sampler) {
-            m_descriptorAllocator.DestroySampler(
-                deviceHandle: m_deviceContext.DeviceHandle,
+            m_bindings.DestroySampler(
                 samplerHandle: m_sampler
             );
             m_sampler = 0;
         }
 
         if (0 != m_descriptorPool) {
-            m_descriptorAllocator.DestroyPool(
-                deviceHandle: m_deviceContext.DeviceHandle,
+            m_bindings.DestroyPool(
                 poolHandle: m_descriptorPool
             );
             m_descriptorPool = 0;
@@ -812,7 +806,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // binding the shader's slot-selecting switch can reach is always a valid, sampleable image.
     private void WriteFrameSlotDescriptors(nint fallbackImageViewHandle) {
         var boundCount = m_frameSlots.BoundCount;
-        var deviceHandle = m_deviceContext.DeviceHandle;
 
         for (var slot = 0; (slot < OverlayFrameSlots.SlotCount); slot++) {
             var imageViewHandle = ((slot < boundCount)
@@ -820,11 +813,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
                 : fallbackImageViewHandle
             );
 
-            m_descriptorAllocator.WriteCombinedImageSampler(
+            m_bindings.WriteCombinedImageSampler(
                 arrayElement: 0,
                 binding: (FrameSlotFirstBinding + ((uint)slot)),
                 descriptorSetHandle: m_descriptorSet,
-                deviceHandle: deviceHandle,
                 imageViewHandle: imageViewHandle,
                 samplerHandle: m_sampler
             );
@@ -977,11 +969,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         m_frameSlots.RetirePending();
 
         if (inner.ImageViewHandle != m_lastImageViewHandle) {
-            m_descriptorAllocator.WriteCombinedImageSampler(
+            m_bindings.WriteCombinedImageSampler(
                 arrayElement: 0,
                 binding: SamplerBinding,
                 descriptorSetHandle: m_descriptorSet,
-                deviceHandle: m_deviceContext.DeviceHandle,
                 imageViewHandle: inner.ImageViewHandle,
                 samplerHandle: m_sampler
             );

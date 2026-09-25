@@ -385,7 +385,7 @@ IRenderNode pass = new FullscreenPassNode(
 ```
 
 `IFullscreenPassServices` is the GPU seam a composition root resolves from
-its one registered backend (command recorder, descriptor allocator, device
+its one registered backend (command recorder, bindings, device
 context, geometry-buffer factory, graphics pipeline factory, queue submitter,
 render-pass factory, shader-module factory, surface-transfer factory, and
 cohesive compute services, whose image factory creates the images a pass

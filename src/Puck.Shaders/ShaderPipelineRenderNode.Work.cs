@@ -119,8 +119,8 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         public IGpuComputeServices? ComputeServices =>
             compute;
 
-        public IGpuDescriptorAllocator DescriptorAllocator { get; } = GpuWorkCounting.Wrap(
-            allocator: inner.DescriptorAllocator,
+        public IGpuBindings Bindings { get; } = GpuWorkCounting.Wrap(
+            bindings: inner.Bindings,
             ledger: ledger
         );
 

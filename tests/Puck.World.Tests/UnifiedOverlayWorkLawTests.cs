@@ -136,7 +136,7 @@ public sealed class UnifiedOverlayWorkLawTests {
                     BytecodeExtension = ".test",
                     CommandPoolFactory = gpu,
                     Recorder = gpu,
-                    DescriptorAllocator = gpu,
+                    Bindings = gpu,
                     DeviceContext = gpu,
                     FrameSources = new NoFrameSources(),
                     GeometryBufferFactory = gpu,

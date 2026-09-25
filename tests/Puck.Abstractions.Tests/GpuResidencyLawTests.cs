@@ -210,10 +210,10 @@ public sealed class GpuResidencyLawTests {
             var gpu = new UploadModelGpu(reportVersion: 0);
             using var copy = CopyPipeline(gpu: gpu);
             using var region = new GpuRegion(
+                bindings: gpu.Bindings,
                 buffers: gpu.StorageBufferFactory,
                 byteCount: ByteCount,
                 copyPipeline: copy,
-                descriptors: gpu.DescriptorAllocator,
                 device: gpu.Device,
                 policy: policy,
                 recorder: gpu.Recorder,
@@ -274,10 +274,10 @@ public sealed class GpuResidencyLawTests {
         var gpu = new UploadModelGpu(reportVersion: 0);
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
+            bindings: gpu.Bindings,
             buffers: gpu.StorageBufferFactory,
             byteCount: 64,
             copyPipeline: copy,
-            descriptors: gpu.DescriptorAllocator,
             device: gpu.Device,
             policy: GpuResidencyPolicy.Staged,
             recorder: gpu.Recorder,
@@ -289,10 +289,10 @@ public sealed class GpuResidencyLawTests {
         _ = region.Write(bytes: [1, 2, 3], offset: 5);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => region.RecordCopy(commandBuffer: 2, slot: 0));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new GpuRegion(
+            bindings: gpu.Bindings,
             buffers: gpu.StorageBufferFactory,
             byteCount: 6,
             copyPipeline: copy,
-            descriptors: gpu.DescriptorAllocator,
             device: gpu.Device,
             policy: GpuResidencyPolicy.Ring,
             recorder: gpu.Recorder,

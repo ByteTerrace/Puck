@@ -196,7 +196,7 @@ public sealed class FullscreenPassNodeConfigTests {
     private sealed class UnusedGpuServices :
         IFullscreenPassServices,
         IGpuRecorder,
-        IGpuDescriptorAllocator,
+        IGpuBindings,
         IGpuDeviceContext,
         IGpuPipelineFactory,
         IGpuQueueSubmitter,
@@ -209,7 +209,7 @@ public sealed class FullscreenPassNodeConfigTests {
         GpuDeviceIdentity? IGpuDeviceContext.Identity => null;
         GpuMemoryProfile IGpuDeviceContext.MemoryProfile => default;
 
-        public IGpuDescriptorAllocator DescriptorAllocator => this;
+        public IGpuBindings Bindings => this;
         public IGpuDeviceContext DeviceContext => this;
         public IGpuGeometryBufferFactory GeometryBufferFactory => this;
         public IGpuPipelineFactory PipelineFactory => this;
@@ -219,7 +219,7 @@ public sealed class FullscreenPassNodeConfigTests {
         public IGpuShaderModuleFactory ShaderModuleFactory => this;
         public IGpuSurfaceTransferFactory SurfaceTransferFactory => this;
 
-        nint IGpuDescriptorAllocator.AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) => throw new NotSupportedException();
+        nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => throw new NotSupportedException();
         void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) => throw new NotSupportedException();
         void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) => throw new NotSupportedException();
         void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) => throw new NotSupportedException();
@@ -247,22 +247,19 @@ public sealed class FullscreenPassNodeConfigTests {
         IGpuRenderPass IGpuRenderPassFactory.Create(IGpuDeviceContext deviceContext, GpuRenderPassDescription description) => throw new NotSupportedException();
         IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => throw new NotSupportedException();
         IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-        nint IGpuDescriptorAllocator.CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) => throw new NotSupportedException();
+        nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => throw new NotSupportedException();
         IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-        nint IGpuDescriptorAllocator.CreateSampler(nint deviceHandle, GpuSamplerFilter filter) => throw new NotSupportedException();
+        nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => throw new NotSupportedException();
         IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
         IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-        void IGpuDescriptorAllocator.DestroyPool(nint deviceHandle, nint poolHandle) => throw new NotSupportedException();
-        void IGpuDescriptorAllocator.DestroySampler(nint deviceHandle, nint samplerHandle) => throw new NotSupportedException();
+        void IGpuBindings.DestroyPool(nint poolHandle) => throw new NotSupportedException();
+        void IGpuBindings.DestroySampler(nint samplerHandle) => throw new NotSupportedException();
         void IGpuQueueSubmitter.Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => throw new NotSupportedException();
         void IGpuQueueSubmitter.Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw new NotSupportedException();
         void IGpuQueueSubmitter.SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => throw new NotSupportedException();
         void IGpuDeviceContext.WaitIdle() => throw new NotSupportedException();
-        void IGpuDescriptorAllocator.WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw new NotSupportedException();
-        void IGpuDescriptorAllocator.WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable) => throw new NotSupportedException();
-        void IGpuDescriptorAllocator.WriteStorageBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => throw new NotSupportedException();
-        void IGpuDescriptorAllocator.WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => throw new NotSupportedException();
-        void IGpuDescriptorAllocator.WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => throw new NotSupportedException();
-        void IGpuDescriptorAllocator.WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw new NotSupportedException();
+        void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw new NotSupportedException();
+        void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => throw new NotSupportedException();
+        void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw new NotSupportedException();
     }
 }

@@ -14,7 +14,7 @@ public interface IFullscreenPassServices {
     /// <summary>Gets the command recorder the pass draws through.</summary>
     IGpuRecorder Recorder { get; }
     /// <summary>Gets the descriptor pool/set allocator.</summary>
-    IGpuDescriptorAllocator DescriptorAllocator { get; }
+    IGpuBindings Bindings { get; }
     /// <summary>Gets the device context to render on — the same device the inner node renders on.</summary>
     IGpuDeviceContext DeviceContext { get; }
     /// <summary>Gets the factory for the geometry buffers a pass reads its vertices and indices from.</summary>

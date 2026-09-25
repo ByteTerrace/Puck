@@ -333,7 +333,7 @@ public sealed partial class ShaderPipelineRenderNode {
             m_samplers = new nint[inFlight];
             m_targetInitialized = new bool[inFlight];
             try {
-                var allocator = gpu.DescriptorAllocator;
+                var bindings = gpu.Bindings;
                 var poolSizes = new GpuDescriptorPoolSizes(
                     CombinedImageSamplerCount: 1,
                     MaxSets: 1,
@@ -342,16 +342,12 @@ public sealed partial class ShaderPipelineRenderNode {
                 );
 
                 for (var i = 0; (i < inFlight); i++) {
-                    m_descriptorPools[i] = allocator.CreatePool(
-                        deviceHandle: device.DeviceHandle,
-                        sizes: poolSizes
-                    );
-                    m_descriptorSets[i] = allocator.AllocateSet(
-                        device.DeviceHandle,
+                    m_descriptorPools[i] = bindings.CreatePool(sizes: poolSizes);
+                    m_descriptorSets[i] = bindings.AllocateSet(
                         m_descriptorPools[i],
                         m_pipeline.DescriptorSetLayoutHandle
                     );
-                    m_samplers[i] = allocator.CreateSampler(deviceHandle: device.DeviceHandle);
+                    m_samplers[i] = bindings.CreateSampler();
                     m_pre[i] = gpu.CommandPoolFactory.Create(deviceContext: device);
                     m_draw[i] = gpu.CommandPoolFactory.Create(deviceContext: device);
                     m_post[i] = gpu.CommandPoolFactory.Create(deviceContext: device);
@@ -369,16 +365,14 @@ public sealed partial class ShaderPipelineRenderNode {
             foreach (var pool in m_post) { pool?.Dispose(); }
             foreach (var sampler in m_samplers) {
                 if (sampler != 0) {
-                    m_gpu.DescriptorAllocator.DestroySampler(
-                        deviceHandle: m_device.DeviceHandle,
+                    m_gpu.Bindings.DestroySampler(
                         samplerHandle: sampler
                     );
                 }
             }
             foreach (var pool in m_descriptorPools) {
                 if (pool != 0) {
-                    m_gpu.DescriptorAllocator.DestroyPool(
-                        deviceHandle: m_device.DeviceHandle,
+                    m_gpu.Bindings.DestroyPool(
                         poolHandle: pool
                     );
                 }
@@ -415,13 +409,12 @@ public sealed partial class ShaderPipelineRenderNode {
             var sourceImageHandle = image.ImageHandle;
             var sourceImageView = image.ImageViewHandle;
 
-            m_gpu.DescriptorAllocator.WriteCombinedImageSampler(
-                m_device.DeviceHandle,
-                m_descriptorSets[slot],
-                0,
-                0,
-                sourceImageView,
-                m_samplers[slot]
+            m_gpu.Bindings.WriteCombinedImageSampler(
+                arrayElement: 0,
+                binding: 0,
+                descriptorSetHandle: m_descriptorSets[slot],
+                imageViewHandle: sourceImageView,
+                samplerHandle: m_samplers[slot]
             );
             var recorder = m_gpu.Recorder;
             var pre = m_pre[slot];

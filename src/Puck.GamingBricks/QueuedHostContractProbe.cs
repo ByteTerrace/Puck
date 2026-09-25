@@ -1435,9 +1435,9 @@ public static class QueuedHostContractProbe {
         public bool WaitUntilEntered(TimeSpan timeout) => m_entered.Wait(timeout: timeout);
     }
     private sealed class TestGpuComputeServices(IGpuSurfaceTransferFactory factory) : IGpuComputeServices {
+        public IGpuBindings Bindings => null!;
         public IGpuComputeCommandPoolFactory CommandPoolFactory => null!;
         public IGpuComputePipelineFactory ComputePipelineFactory => null!;
-        public IGpuDescriptorAllocator DescriptorAllocator => null!;
         public IGpuImageFactory ImageFactory => null!;
         public IGpuQueueSubmitter QueueSubmitter => null!;
         public IGpuRecorder Recorder => null!;

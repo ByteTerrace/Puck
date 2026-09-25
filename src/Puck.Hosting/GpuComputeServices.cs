@@ -12,7 +12,7 @@ public sealed record GpuComputeServices(
     IGpuComputeCommandPoolFactory CommandPoolFactory,
     IGpuComputePipelineFactory ComputePipelineFactory,
     IGpuRecorder Recorder,
-    IGpuDescriptorAllocator DescriptorAllocator,
+    IGpuBindings Bindings,
     IGpuQueueSubmitter QueueSubmitter,
     IGpuShaderModuleFactory ShaderModuleFactory,
     IGpuStorageBufferFactory StorageBufferFactory,

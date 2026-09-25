@@ -48,7 +48,7 @@ public static class DirectXPresenterServiceRegistration {
 
 
         services.TryAddSingleton<IGpuRecorder>(implementationFactory: static sp => new DirectXGpuRecorder(deviceContext: sp.GetRequiredService<DirectXDeviceContext>()));
-        services.TryAddSingleton<IGpuDescriptorAllocator>(implementationFactory: static _ => new DirectXGpuDescriptorAllocator());
+        services.TryAddSingleton<IGpuBindings>(implementationFactory: static sp => new DirectXGpuBindings(deviceContext: sp.GetRequiredService<DirectXDeviceContext>()));
         services.TryAddSingleton<IGpuPipelineFactory>(implementationFactory: static _ => new DirectXGpuPipelineFactory());
         services.TryAddSingleton<IGpuQueueSubmitter>(implementationFactory: static _ => new DirectXGpuQueueSubmitter());
         services.TryAddSingleton<IGpuRenderPassFactory>(implementationFactory: static _ => new DirectXGpuRenderPassFactory());

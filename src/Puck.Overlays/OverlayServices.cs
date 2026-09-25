@@ -17,7 +17,7 @@ public sealed record OverlayServices {
     /// <summary>The command recorder the compositor drives.</summary>
     public required IGpuRecorder Recorder { get; init; }
     /// <summary>The descriptor pool/set allocator.</summary>
-    public required IGpuDescriptorAllocator DescriptorAllocator { get; init; }
+    public required IGpuBindings Bindings { get; init; }
     /// <summary>The device context to render on.</summary>
     public required IGpuDeviceContext DeviceContext { get; init; }
     /// <summary>The host's <see cref="OverlayHudElementKind.Frame"/> content seam — every produced frame's
@@ -67,7 +67,7 @@ public sealed record OverlayServices {
             BytecodeExtension = ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX),
             CommandPoolFactory = Resolve<IGpuComputeCommandPoolFactory>(),
             Recorder = Resolve<IGpuRecorder>(),
-            DescriptorAllocator = Resolve<IGpuDescriptorAllocator>(),
+            Bindings = Resolve<IGpuBindings>(),
             DeviceContext = Resolve<IGpuDeviceContext>(),
             FrameSources = Resolve<IOverlayFrameSources>(),
             GeometryBufferFactory = Resolve<IGpuGeometryBufferFactory>(),

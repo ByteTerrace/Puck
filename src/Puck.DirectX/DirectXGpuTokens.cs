@@ -52,7 +52,7 @@ public sealed class DirectXPipelineLayout : IDisposable {
     /// an array binding occupies <c>Count</c> consecutive slots from there). Heap slots are packed in binding-list order
     /// rather than equated to the binding index, so an array binding never collides with a later binding regardless of
     /// the chosen index values — the binding index is a logical id, not a heap offset. The root signature's range
-    /// offsets and the descriptor allocator's writes both go through this map, keeping them in lockstep.</summary>
+    /// offsets and <see cref="DirectXGpuBindings"/>'s writes both go through this map, keeping them in lockstep.</summary>
     public uint[] SlotByBinding = [];
 
     internal static DirectXPipelineLayout CreateForParameters(bool hasDescriptorTable, GpuPushConstantBinding? pushConstantBinding) {
@@ -103,7 +103,7 @@ public sealed class DirectXDescriptorPool {
 }
 /// <summary>
 /// A range inside a <see cref="DirectXDescriptorPool"/>'s heap, allocated once via
-/// <c>IGpuDescriptorAllocator.AllocateSet</c>. Stored in a <see cref="GCHandle"/>.
+/// <c>IGpuBindings.AllocateSet</c>. Stored in a <see cref="GCHandle"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXDescriptorSet {
@@ -116,7 +116,7 @@ public sealed class DirectXDescriptorSet {
     public uint[] SlotByBinding = [];
 }
 /// <summary>
-/// Pairs an <c>ID3D12Resource*</c> with its DXGI format so the descriptor allocator can create a typed SRV
+/// Pairs an <c>ID3D12Resource*</c> with its DXGI format so <see cref="DirectXGpuBindings"/> can create a typed SRV
 /// without calling the problematic <c>GetDesc</c> vtable slot. Stored in a <see cref="GCHandle"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]

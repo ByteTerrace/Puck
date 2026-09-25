@@ -1296,7 +1296,11 @@ Phase 2, the services, follows the generated frame block, which has landed:
    dynamic viewport and scissor, and only the presenter's compositor keeps a
    fixed viewport. Each backend registers one recorder, bound to its device
    context.
-8. `IGpuBindings`.
+8. Done: `IGpuBindings` creates pools, sets and samplers and writes descriptors,
+   with no device parameter; each backend registers one, bound to its device
+   context. One `WriteBuffer` names the binding's `GpuBufferAccess` and element
+   stride (zero for a raw view), which chooses a Direct3D 12 raw or structured
+   view, read-only or read-write; Vulkan writes one storage-buffer descriptor.
 9. The factories lose the device parameter, and `IGpuBufferFactory` creates a
    buffer by usage (storage, uniform, indirect, vertex, index) and placement
    (host-visible, device-local), with a law over Direct3D 12's transition into

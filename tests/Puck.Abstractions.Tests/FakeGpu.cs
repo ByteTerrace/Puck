@@ -14,7 +14,7 @@ internal sealed class FakeGpu :
     IGpuComputeCommandPoolFactory,
     IGpuComputePipelineFactory,
     IGpuComputeServices,
-    IGpuDescriptorAllocator,
+    IGpuBindings,
     IGpuDeviceContext,
     IGpuPipelineFactory,
     IGpuQueueSubmitter,
@@ -31,7 +31,7 @@ internal sealed class FakeGpu :
     public IGpuComputeCommandPoolFactory CommandPoolFactory => this;
     public IGpuComputePipelineFactory ComputePipelineFactory => this;
     public IGpuRecorder Recorder => this;
-    public IGpuDescriptorAllocator DescriptorAllocator => this;
+    public IGpuBindings Bindings => this;
     public nint DeviceHandle => 1;
     public IGpuQueueSubmitter QueueSubmitter => this;
     public IGpuShaderModuleFactory ShaderModuleFactory => this;
@@ -75,29 +75,26 @@ internal sealed class FakeGpu :
 
         return new FakePipeline();
     }
-    nint IGpuDescriptorAllocator.AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) {
-        Hit(key: "IGpuDescriptorAllocator.AllocateSet");
+    nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {
+        Hit(key: "IGpuBindings.AllocateSet");
 
         return 7;
     }
-    nint IGpuDescriptorAllocator.CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) {
-        Hit(key: "IGpuDescriptorAllocator.CreatePool");
+    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) {
+        Hit(key: "IGpuBindings.CreatePool");
 
         return 8;
     }
-    nint IGpuDescriptorAllocator.CreateSampler(nint deviceHandle, GpuSamplerFilter filter) {
-        Hit(key: "IGpuDescriptorAllocator.CreateSampler");
+    nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) {
+        Hit(key: "IGpuBindings.CreateSampler");
 
         return 9;
     }
-    void IGpuDescriptorAllocator.DestroyPool(nint deviceHandle, nint poolHandle) => Hit(key: "IGpuDescriptorAllocator.DestroyPool");
-    void IGpuDescriptorAllocator.DestroySampler(nint deviceHandle, nint samplerHandle) => Hit(key: "IGpuDescriptorAllocator.DestroySampler");
-    void IGpuDescriptorAllocator.WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => Hit(key: "IGpuDescriptorAllocator.WriteCombinedImageSampler");
-    void IGpuDescriptorAllocator.WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable) => Hit(key: "IGpuDescriptorAllocator.WriteRawBuffer");
-    void IGpuDescriptorAllocator.WriteStorageBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => Hit(key: "IGpuDescriptorAllocator.WriteStorageBuffer");
-    void IGpuDescriptorAllocator.WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => Hit(key: "IGpuDescriptorAllocator.WriteStorageBufferReadOnly");
-    void IGpuDescriptorAllocator.WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => Hit(key: "IGpuDescriptorAllocator.WriteStorageBufferReadWrite");
-    void IGpuDescriptorAllocator.WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => Hit(key: "IGpuDescriptorAllocator.WriteStorageImage");
+    void IGpuBindings.DestroyPool(nint poolHandle) => Hit(key: "IGpuBindings.DestroyPool");
+    void IGpuBindings.DestroySampler(nint samplerHandle) => Hit(key: "IGpuBindings.DestroySampler");
+    void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => Hit(key: "IGpuBindings.WriteCombinedImageSampler");
+    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => Hit(key: "IGpuBindings.WriteBuffer");
+    void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => Hit(key: "IGpuBindings.WriteStorageImage");
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence(IGpuDeviceContext deviceContext) {
         Hit(key: "IGpuQueueSubmitter.CreateSubmissionFence");
         LastCreatedFence = new FakeFence(gpu: this);

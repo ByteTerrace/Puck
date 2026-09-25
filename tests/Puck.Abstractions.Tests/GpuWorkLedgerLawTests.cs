@@ -240,7 +240,7 @@ public sealed class GpuWorkLedgerLawTests {
         var rig = new Rig(framesInFlight: 2);
         var fence = rig.NewFence();
 
-        rig.Services.DescriptorAllocator.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, deviceHandle: 1, imageViewHandle: 5);
+        rig.Services.Bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5);
         rig.Ledger.Configure(passLabels: ["a"], revision: 1L);
         rig.Dispatch(count: 1);
         rig.Ledger.EnterPass(pass: 0);

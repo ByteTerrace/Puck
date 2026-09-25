@@ -2,7 +2,7 @@ namespace Puck.Abstractions.Gpu;
 
 /// <summary>
 /// A cohesive bundle of the backend-neutral GPU services a compute render node drives — the compute pipeline,
-/// image, storage-buffer, shader-module, and command-pool factories plus the recorder, descriptor allocator, queue
+/// image, storage-buffer, shader-module, and command-pool factories plus the recorder, bindings, queue
 /// submitter, and surface-transfer factory. A node injects (or resolves) this ONE service instead of the nine
 /// individual factories, folding the per-node constructor/resolution sprawl. The granular <c>IGpu*Factory</c>
 /// interfaces remain registered and injectable on their own — this is an additive convenience over them, not a
@@ -21,7 +21,7 @@ public interface IGpuComputeServices {
     /// <summary>The command recorder.</summary>
     IGpuRecorder Recorder { get; }
     /// <summary>The descriptor pool/set allocator.</summary>
-    IGpuDescriptorAllocator DescriptorAllocator { get; }
+    IGpuBindings Bindings { get; }
     /// <summary>The queue submitter.</summary>
     IGpuQueueSubmitter QueueSubmitter { get; }
     /// <summary>The shader-module factory.</summary>
