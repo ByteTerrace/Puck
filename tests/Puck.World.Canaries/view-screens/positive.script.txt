@@ -1,0 +1,15 @@
+# Every frame renders every pass, and every produced frame refreshes the diegetic views.
+# The engine ready first: its pipeline set installed and its first frame produced, however long a cold driver
+# cache takes.
+world.wait ready 45
+world.cadence off
+world.view-refresh 1
+world.wait 30
+# Both screens show camera 'eye': one camera view is registered.
+world.view-refresh
+world.counters gpu
+world.wait 30
+# Thirty ticks later the eye view has rendered once for every world frame, not once per screen.
+world.counters gpu
+world.screenshot {run}/frame.png
+world.wait 10

@@ -31,7 +31,7 @@ internal static partial class CanaryCommand {
         };
         var planOption = new Option<bool>(name: "--plan") { Description = "Print what the selection would run — proofs, legs, World boots, process spawns, builds, and the summed leg budget against its ceiling — without building or running." };
         var worldArtifactOption = new Option<string?>(name: "--world-artifact") { Description = "Run every leg on this Puck.World entry assembly, such as a producer-built package's, instead of the build of the checkout's sources. Never builds." };
-        var debugLayersOption = new Option<bool>(name: WorldOffscreenLeg.DebugLayersFlag) { Description = "Boot every offscreen leg's World with --debug-layers, the validation layer of its backend." };
+        var debugLayersOption = new Option<bool>(name: WorldOffscreenLeg.DebugLayersFlag) { Description = "Boot every leg that names a backend with --debug-layers, the validation layer of that backend." };
         var command = new Command(
             description: "Run bounded, two-leg behavioral proofs against the real Puck.World executable.",
             name: "canary"

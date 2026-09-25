@@ -749,7 +749,9 @@ passes no `--headless` value, which would override that shape, and runs every
 leg once per backend with `--backend`. The manifest must list `backends` as
 exactly `vulkan` and `directx` and declare the `gpu` requirement, so it is never
 automatic. It reports one proof per backend, as `<id> on <backend>`, and the
-manifest holds only when both did. No other shape reads `backends`.
+manifest holds only when both did. A `bootShape: "windowed"` manifest may list
+the same `backends`, under the same rules: it then boots each leg windowed once per
+backend with `--backend`. No other shape reads `backends`.
 The `pipeline-feedback`, `pipeline-ink`, `pipeline-edit`, `pipeline-supersede`,
 `pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault` and `pipeline-geometry` canaries use this shape to test shader
 pipelines, and `source-conversion` uses it to run the shipped image-source

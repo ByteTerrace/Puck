@@ -23,10 +23,13 @@ namespace Puck.World;
 /// <param name="HashRaw">The SHA-256 hex64 of the document's canonical bytes (<see cref="Puck.Assets.Documents.CanonicalDocument{TDocument}.Hash"/>
 /// on the canonical result the compose boundary produces). ABSENT resolves to the hash computed from
 /// <paramref name="Document"/> at load — an author never writes a content hash by hand; see <see cref="Hash"/>.</param>
+/// <param name="Mesh">Opaque triangles every static placement of the prototype draws beside its field, or
+/// <see langword="null"/> for none.</param>
 public sealed record WorldPrototype(
     DocumentIdentifier Id,
     CreationDocument Document,
-    [property: JsonPropertyName("hash"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HashRaw = null
+    [property: JsonPropertyName("hash"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HashRaw = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPrototypeMesh? Mesh = null
 ) {
     private CreationDocument? m_engineDocument;
 
@@ -45,6 +48,24 @@ public sealed record WorldPrototype(
         document: Document,
         source: Id
     ).Hash);
+}
+/// <summary>A prototype's mesh: an indexed triangle list in its creation's author frame, the frame
+/// <see cref="WorldPrototype.Document"/>'s shapes are authored in. Each triangle is three entries of
+/// <see cref="Indices"/> naming <see cref="Vertices"/>, counter-clockwise seen from its front. The triangles shade with
+/// the creation's palette entry <see cref="Material"/>, and a placement draws them with its position, yaw, scale and
+/// mirror, as it places the creation's shapes.</summary>
+/// <param name="Vertices">The vertex positions, in the author frame.</param>
+/// <param name="Indices">Three vertex indices per triangle.</param>
+/// <param name="Material">The index of the creation palette entry the triangles shade with.</param>
+public sealed record WorldPrototypeMesh(
+    IReadOnlyList<Vector3> Vertices,
+    IReadOnlyList<uint> Indices,
+    int Material = 0
+) {
+    /// <summary>Gets <see cref="Vertices"/> converted to the engine frame
+    /// (<see cref="Puck.World.Authoring.CreationFrame.PointToEngine"/>), which every consumer reads.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<Vector3> EngineVertices => [.. Vertices.Select(selector: Puck.World.Authoring.CreationFrame.PointToEngine)];
 }
 /// <summary>A reflection plane in a placement's local frame.</summary>
 /// <param name="Normal">The plane normal.</param>

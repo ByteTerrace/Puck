@@ -1,0 +1,13 @@
+# The same frames of a world whose right screen shows camera 'sky' instead of 'eye'.
+# The engine ready first: its pipeline set installed and its first frame produced, however long a cold driver
+# cache takes.
+world.wait ready 45
+world.cadence off
+world.view-refresh 1
+world.wait 30
+world.view-refresh
+world.counters gpu
+world.wait 30
+world.counters gpu
+world.screenshot {run}/frame.png
+world.wait 10

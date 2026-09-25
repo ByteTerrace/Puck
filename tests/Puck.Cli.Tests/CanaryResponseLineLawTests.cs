@@ -60,6 +60,76 @@ public sealed class CanaryResponseLineLawTests {
             occurrence: 1
         ));
 
+    /// <summary>An operand with <c>minus</c> is the numeric difference of its two extracted values: the world node moved
+    /// from submission 5 to 8 between the two reads, a change of 3 and not their sum or either read.</summary>
+    [InlineData(3, true)]
+    [InlineData(13, false)]
+    [InlineData(8, false)]
+    [Theory]
+    public void AMinusOperandIsTheChangeBetweenTwoReads(double expected, bool passes) =>
+        Assert.Equal(
+            expected: passes,
+            actual: CanaryAssertions.Evaluate(
+                leg: Leg(
+                    Read(
+                        name: "first",
+                        occurrence: 1
+                    ),
+                    Read(
+                        name: "second",
+                        occurrence: 2
+                    ),
+                    new CanaryRelationAssertion(
+                        Left: new CanaryOperand(
+                            Minus: "first",
+                            NumberLiteral: null,
+                            StringLiteral: null,
+                            ValueName: "second"
+                        ),
+                        Margin: null,
+                        Maximum: null,
+                        Minimum: null,
+                        Name: "change",
+                        Operator: CanaryRelationOperator.Equal,
+                        Right: new CanaryOperand(
+                            NumberLiteral: expected,
+                            StringLiteral: null,
+                            ValueName: null
+                        )
+                    )
+                ),
+                primaryTranscript: new CanaryTranscript(
+                    RunDirectory: ".",
+                    Stderr: [],
+                    Stdout: Transcript
+                )
+            ).Passed
+        );
+
+    private static CanaryResponseAssertion Read(string name, int occurrence) => new(
+        Authority: null,
+        Count: 2,
+        Extractions: [new CanaryValueExtraction(
+            Component: null,
+            Field: "submission",
+            Line: "node world work",
+            Name: name
+        )],
+        Name: $"read-{name}",
+        Occurrence: occurrence,
+        Stream: CanaryStream.Stdout,
+        Verb: "world.counters"
+    );
+    private static CanaryLeg Leg(params CanaryAssertion[] assertions) => new(
+        Assertions: assertions,
+        Authorities: [],
+        AuthorityWorldPath: null,
+        Commands: [],
+        Connect: false,
+        Name: "positive",
+        ScriptPath: "script.txt",
+        WorldPath: "world.json"
+    );
     private static bool Evaluate(string? line, int occurrence, double expected) =>
         CanaryAssertions.Evaluate(
             leg: new CanaryLeg(

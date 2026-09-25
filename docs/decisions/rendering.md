@@ -411,9 +411,9 @@ Every build host already needs DXC.
 bytecode that no code loaded, so each build paid for them and each reader had
 to discover that they did nothing. Keeping them until P14's final sweep was
 rejected: dead source is not a reference anyone needs, and history keeps it.
-`resample.comp.hlsl` stays, although nothing dispatches it either, because
-P11b ports it into the graph's package library as the one resample pass. The
-pixelate interface fixture under `tests/Puck.Shaders.Tests` is its own copy
+The same rule removed the SDF-side `resample.comp.hlsl` once the graph's package
+library held the one resample pass, the `resample` package. The pixelate
+interface fixture under `tests/Puck.Shaders.Tests` is its own copy
 and stays with the spike.
 
 **`SdfEnvironment` folds into the generated frame block.** A separate

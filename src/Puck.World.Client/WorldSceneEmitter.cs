@@ -89,6 +89,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The bounded volumes the latest live build's static placements baked (WorldPlacementStamper.EmitStatic);
     // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
     private readonly List<SdfVolume> m_staticVolumes = new(capacity: SdfProgramBuilder.MaxVolumes);
+    // Replaced, never cleared, on a static rebuild: a consumer that keys work on the list (the engine's mesh region
+    // count) sees a new list exactly when the placements it came from moved.
+    private IReadOnlyList<SdfMeshDraw> m_staticMeshDraws = [];
     // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
     private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
@@ -201,6 +204,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 )
             );
         } else {
+            var meshDraws = new List<SdfMeshDraw>();
+
             m_staticVolumes.Clear();
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
@@ -209,8 +214,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 placements: placements,
                 textCatalog: m_text.Catalog,
                 tintFor: null,
-                volumes: m_staticVolumes
+                volumes: m_staticVolumes,
+                meshDraws: meshDraws
             );
+            m_staticMeshDraws = meshDraws;
         }
 
         m_animator.Emit(
@@ -928,4 +935,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 1);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
+    /// <summary>Gets one mesh draw per static placement instance of a prototype that carries a mesh, from the last
+    /// static rebuild.</summary>
+    public IReadOnlyList<SdfMeshDraw> StaticMeshDraws => m_staticMeshDraws;
 }

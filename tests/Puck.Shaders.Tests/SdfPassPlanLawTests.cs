@@ -56,7 +56,7 @@ public sealed class SdfPassPlanLawTests {
         SdfFrameBuffer.ViewsArgs => (4, ShaderPipelineDispatch.ArgumentBytes, null),
         // The dispatch box: the group origin, then the exclusive group end, four uints.
         SdfFrameBuffer.CullBounds => (4, (4 * sizeof(uint)), null),
-        SdfFrameBuffer.PrimaryHits => (60, null, [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)]),
+        SdfFrameBuffer.PrimaryHits => ((uint)SdfWorldEngine.VisibilityRecordByteLength, null, [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)]),
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(buffer)),
     };
     // The counts a host resolves for an engine of this capacity, each derived as the engine derives it.

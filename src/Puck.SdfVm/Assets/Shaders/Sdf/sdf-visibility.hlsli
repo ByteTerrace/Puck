@@ -124,11 +124,13 @@ uint sdfVisibilityQueries(SdfVisibility visibility) {
 uint4 sdfVisibilityLoadRow(uint word) {
     return uint4(sdfVisibilityRecords[word], sdfVisibilityRecords[word + 1u], sdfVisibilityRecords[word + 2u], sdfVisibilityRecords[word + 3u]);
 }
-// The seam word: the blend weight's 15-bit fraction, then the other material plus one.
+// The seam word: the blend weight's 15-bit fraction, then the other material plus one. Each field is masked to its
+// bits, so a NaN weight cannot write into the material's.
 uint sdfVisibilityPackBlend(float weight, int other) {
-    return (((uint)round(saturate(weight) * SdfVisibilityBlendScale)) | (((uint)(other + 1)) << SdfVisibilityBlendOtherShift));
+    return ((((uint)round(saturate(weight) * SdfVisibilityBlendScale)) & SdfVisibilityBlendMask) | (((uint)(other + 1)) << SdfVisibilityBlendOtherShift));
 }
-// A normal as a 16-bit signed octahedral pair; the zero normal a miss carries is a sentinel no unit normal encodes to.
+// A normal as a 16-bit signed octahedral pair, each half masked to its bits so a NaN component cannot write into the
+// other; the zero normal a miss carries is a sentinel no unit normal encodes to.
 uint sdfVisibilityPackNormal(float3 normal) {
     if (dot(normal, normal) == 0.0) {
         return SdfVisibilityZeroNormal;
@@ -214,7 +216,7 @@ void sdfStoreVisibilityNormal(uint record, SdfVisibilityNormal normal) {
 }
 void sdfStoreVisibilitySurface(uint record, SdfVisibilitySurface surface) {
     uint word = (record + SdfVisibilityRowS);
-    sdfVisibilityRecords[word] = (f32tof16(clamp(surface.curvature, -SdfVisibilityHalfMax, SdfVisibilityHalfMax)) | (f32tof16(surface.ambient) << 16u));
+    sdfVisibilityRecords[word] = ((f32tof16(clamp(surface.curvature, -SdfVisibilityHalfMax, SdfVisibilityHalfMax)) & 0xFFFFu) | ((f32tof16(surface.ambient) & 0xFFFFu) << 16u));
     sdfVisibilityRecords[word + 1u] = ((surface.flags & SdfVisibilitySurfaceFlagMask) | (min((uint)surface.queries, SdfVisibilitySurfaceQueryMask) << SdfVisibilitySurfaceQueryShift));
 }
 #endif

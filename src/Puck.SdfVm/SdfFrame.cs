@@ -67,8 +67,8 @@ public sealed record SdfFrame(
     /// one call site at the end of <c>renderView</c>, after the surface color is final. Empty (the default) uploads an
     /// all-zero table whose first bound ends the shader's scan.</summary>
     public IReadOnlyList<SdfVolume> Volumes { get; init; } = [];
-    /// <summary>The frame's opaque triangle meshes. Empty by default; no producer fills it and no pass draws it
-    /// yet.</summary>
+    /// <summary>The frame's opaque triangle meshes: every static placement of a prototype that carries a mesh. Empty by
+    /// default; no pass draws it yet.</summary>
     public IReadOnlyList<SdfMeshDraw> MeshDraws { get; init; } = [];
     /// <summary>A per-frame scale on the world path's ambient term (default 1 = unchanged). Below 1 dims the room so
     /// the diegetic screen glow dominates — the overworld sets it low for mood; other scenes leave the default.</summary>

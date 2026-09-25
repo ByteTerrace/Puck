@@ -399,8 +399,11 @@ internal sealed partial class WorldScreenBinder {
         // The reference viewer: a screen surface renders ONE shared image per slot today, so a window necessarily
         // fits against ONE eye — the primary local seat's (body index 0 — player.* is 1-based, body:<n> is 0-based),
         // the same single-perspective simplification an ordinary camera-projection session already makes (it has no
-        // per-viewer image either).
-        if (boot.Server.Population.EntryBody(index: 0) is not { } localBody) {
+        // per-viewer image either). A world with no population has no body 0 to read.
+        if (
+            (boot.Server.Population.Capacity == 0) ||
+            (boot.Server.Population.EntryBody(index: 0) is not { } localBody)
+        ) {
             return;
         }
 

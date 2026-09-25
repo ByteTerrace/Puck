@@ -1,0 +1,39 @@
+{
+  "id": "post-pass",
+  "title": "A render.extensions pass composes over the windowed world's output: film grain lifts the dark background's mean and breaks its flatness",
+  "binding": "The positive leg boots a windowed 256x144 world whose render.extensions chain is sdf-film-grain at intensity 1, and captures a frame. The grain adds a per-pixel offset spread across [-1, 1] to every channel and saturates, so over the dark background above the blocks about half the pixels clamp to black and the rest rise by up to a whole code range: the region's mean rises well above the background's own value, and the region stops being flat. The discriminating leg boots the same world with no render.extensions, so the background keeps its own dark, flat value: the mean observation turns red and the flatness observation holds.",
+  "bootShape": "windowed",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/post-pass/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "grain-lifts-the-background-mean", "capture": "frame.png", "extent": [256, 144], "region": [0.05, 0.05, 0.95, 0.3], "reduce": "mean", "minimum": [0.2, 0.2, 0.2, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "the-background-is-flat", "capture": "frame.png", "extent": [256, 144], "region": [0.05, 0.05, 0.95, 0.3], "reduce": "every", "maximum": [0.25, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/post-pass/plain.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "no-grain-leaves-the-background-mean", "capture": "frame.png", "extent": [256, 144], "region": [0.05, 0.05, 0.95, 0.3], "reduce": "mean", "minimum": [0.2, 0.2, 0.2, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "imageRegion", "name": "the-background-is-flat", "capture": "frame.png", "extent": [256, 144], "region": [0.05, 0.05, 0.95, 0.3], "reduce": "every", "maximum": [0.25, 0.25, 0.25, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  }
+}

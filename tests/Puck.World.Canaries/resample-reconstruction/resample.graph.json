@@ -6,13 +6,13 @@
       "name": "step",
       "kind": "Image",
       "format": "R8G8B8A8Unorm",
-      "dimensions": { "mode": "Absolute", "width": 16, "height": 16 }
+      "dimensions": { "mode": "Absolute", "width": 16, "height": 48 }
     },
     {
       "name": "resampled",
       "kind": "Image",
       "format": "R8G8B8A8Unorm",
-      "dimensions": { "mode": "Absolute", "width": 64, "height": 64 }
+      "dimensions": { "mode": "Absolute", "width": 64, "height": 192 }
     }
   ],
   "passes": [

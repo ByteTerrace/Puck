@@ -302,7 +302,7 @@ through DXC:
 
 The same build showed that a group holding a sampler needs a second table on
 Direct3D 12, because a descriptor table cannot mix samplers with other views.
-The gate stays open until three legs run:
+The gate stays open until two legs run:
 
 - one build on Linux compared byte for byte, which needs the pinned DXC that
   `setup-dxc` installs;
@@ -1378,10 +1378,25 @@ follow its device-bound services, its one recorder and the SDF engine's groups.
    `SdfFrame.MeshDraws`, with laws that include the fixed-point raycast bounded
    at a distance agreeing with the unbounded one whenever its hit is nearer. A
    pipeline `Geometry` pass takes its camera as a `ViewProjection` here.
-6. P4-2b, the mesh source: a prototype carries its mesh as inline indexed
-   triangles (`prototypes.<name>.mesh`), and placements place it, so a mesh
-   has the one placement path P17's bakes also reach. Placed meshes reach
-   `SdfFrame.MeshDraws` through a `GpuRegion`.
+6. P4-2b, landed, the mesh source: a prototype row carries an optional
+   `mesh` of inline indexed triangles (`WorldPrototypeMesh`: `vertices` in the
+   creation's author frame, `indices`, and a palette `material`). The
+   validator refuses an empty mesh, a partial triangle, an index past the
+   vertices, a non-finite vertex, a degenerate triangle (a repeated index or
+   zero area) and a material outside the palette, each by name, and refuses a
+   mesh on an animated creation or under an inhabited or attached placement,
+   because only a static stamp draws one. `WorldPlacementStamper.EmitPlacement`,
+   the static placement path P17's bakes also reach, adds one `SdfMeshDraw` per
+   placement instance (the engine-frame triangles under the instance's scale,
+   mirror, yaw and position), and `WorldFramePresenter` hands them to
+   `SdfFrame.MeshDraws`. `world.budget` prints the bytes the mesh region needs
+   (`SdfMeshRegion`: each distinct mesh's positions and indices once, and a
+   matrix and material a draw) and the draws they cover. `PrototypeMeshLawTests`
+   hold the round trip, the refusals and the placement's draw. Open: the
+   `GpuRegion` those bytes upload through, which rides P7b-17 and P7b-19 with
+   the region-copy kernel; meshes on animated and attached stamps, which follow
+   when a reader needs them (P4-2c's motion canary or P6-3); and meshes in
+   session views and neighbour worlds, whose static emitters pass no draw list.
 7. P4-2c, the raster pass and the bounded primary. Done when parity holds and
    the mesh fixtures of the check above pass.
 8. P4-2d, the canaries: `sdf-mesh-visibility` and `sdf-mesh-motion` on both
@@ -1530,13 +1545,12 @@ engine's binding constants.
 
 **Gate:** the spike over two passes, `sdf-film-grain.frag.hlsl` and a pixelate
 compute pass, each with two frequency groups, has passed its build-time half,
-as the [implementation status](#implementation-status) records. Three legs
+as the [implementation status](#implementation-status) records. Two legs
 remain. One build on Linux is compared byte for byte with the two on one host.
 The two-group layout runs on Direct3D 12 and Vulkan inside
 `tests/Puck.Parity/parity.contract.json`'s tolerances, with one parity station.
-Both backends' capability reports are read on the floor and ceiling devices to
-establish that neither lacks what the grouped contract assumes, which is a
-real-hardware run rather than a remote session. The gate still fails toward
+Both backends' capability reports, read on the floor and ceiling devices, show that
+neither lacks what the grouped contract assumes. The gate still fails toward
 Slang when DXC output is not byte-stable across hosts, or when the second group
 cannot run identically on both backends from generated annotations; anything
 resembling a register remap surviving into the new design is that failure.
@@ -1932,8 +1946,8 @@ takes the nearest free spelling. `GpuResidency.Select` also takes whether
 readers are in flight, and brick staging is a region with an external
 destination. The SDF engine's groups are P14's; its 32 screens bind as 32
 bindings and one sampler until P14 makes them an array. The test fakes
-consolidate as the surface shrinks. Open: the gate's Linux build and the floor
-device's capability report.
+consolidate as the surface shrinks. Open: the gate's Linux build and its two-group
+parity station.
 
 ### P8 — The shader package, and one source language
 
@@ -2458,7 +2472,9 @@ package, whose kernel `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`
 holds the SDF composite's reconstruction: an exact copy at equal extent, bilinear at sharpness
 0, clamped Catmull-Rom at sharpness 1 and a blend between, all through formatted
 loads with no sampler state. The `resample-reconstruction` canary holds it to the
-analytic bilinear and Catmull-Rom values of a known step on both backends. Render
+analytic bilinear and Catmull-Rom values of known steps on both backends,
+including a column where only the neighbourhood clamp and one where only the edge
+clamp decides the value. Render
 scale moving onto it, which deletes the `RenderScaleQ` lanes, is a later P11b
 commit; cropping a source is P13's mapping, not a resample config. The pixelate
 interface fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,

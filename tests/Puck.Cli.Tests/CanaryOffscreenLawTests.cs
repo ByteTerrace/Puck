@@ -235,7 +235,9 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
     [InlineData("offscreen", "\"backends\": [\"vulkan\"],", "[\"gpu\"]", "cannot pass the two-backend gate")]
     [InlineData("offscreen", "\"backends\": [\"vulkan\", \"vulkan\"],", "[\"gpu\"]", "exactly once")]
     [InlineData("offscreen", "\"backends\": [\"vulkan\", \"directx\"],", "[]", "'gpu' requirement")]
-    [InlineData("headless", "\"backends\": [\"vulkan\", \"directx\"],", "[]", "only bootShape 'offscreen'")]
+    [InlineData("headless", "\"backends\": [\"vulkan\", \"directx\"],", "[]", "only bootShape 'offscreen' and 'windowed'")]
+    [InlineData("windowed", "\"backends\": [\"directx\"],", "[\"gpu\"]", "cannot pass the two-backend gate")]
+    [InlineData("windowed", "\"backends\": [\"vulkan\", \"directx\"],", "[]", "'gpu' requirement")]
     [Theory]
     public void AnOffscreenManifestThatCouldSkipABackendIsRefused(string bootShape, string backends, string requirements, string reason) {
         WriteManifestTree(
@@ -256,22 +258,63 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             expectedSubstring: reason
         );
     }
-    [Fact]
-    public void AnOffscreenManifestNamingBothBackendsLoads() {
+    [InlineData("offscreen")]
+    [InlineData("windowed")]
+    [Theory]
+    public void AManifestNamingBothBackendsLoadsAndRunsOnEach(string bootShape) {
         WriteManifestTree(
             id: "synthetic",
             manifestBody: Manifest(
                 backends: "\"backends\": [\"directx\", \"vulkan\"],",
-                bootShape: "offscreen",
+                bootShape: bootShape,
                 id: "synthetic",
                 requirements: "[\"gpu\"]"
             )
         );
-        var (loaded, error) = Load();
+        var loaded = CanaryManifestLoader.TryLoadAll(
+            error: out var error,
+            manifests: out var manifests,
+            refused: out _,
+            repositoryRoot: m_root,
+            strict: true
+        );
 
         Assert.True(
             condition: loaded,
             userMessage: error
+        );
+        Assert.Equal(
+            expected: ["synthetic on directx", "synthetic on vulkan"],
+            actual: CanaryCommand.ExpandProofs(manifests: manifests).Select(selector: static proof => proof.Label)
+        );
+    }
+    /// <summary>A windowed manifest without backends keeps its one boot per leg, naming no backend.</summary>
+    [Fact]
+    public void AWindowedManifestWithoutBackendsRunsOnce() {
+        WriteManifestTree(
+            id: "synthetic",
+            manifestBody: Manifest(
+                backends: "",
+                bootShape: "windowed",
+                id: "synthetic",
+                requirements: "[\"gpu\"]"
+            )
+        );
+        var loaded = CanaryManifestLoader.TryLoadAll(
+            error: out var error,
+            manifests: out var manifests,
+            refused: out _,
+            repositoryRoot: m_root,
+            strict: true
+        );
+
+        Assert.True(
+            condition: loaded,
+            userMessage: error
+        );
+        Assert.Equal(
+            expected: ["synthetic"],
+            actual: CanaryCommand.ExpandProofs(manifests: manifests).Select(selector: static proof => proof.Label)
         );
     }
     [Fact]
