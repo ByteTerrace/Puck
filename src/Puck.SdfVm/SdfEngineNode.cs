@@ -174,6 +174,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     private IGpuDeviceContext? m_deviceContext;
     private bool m_disposed;
     private SdfWorldEngine? m_engine;
+    // Whether the current engine has submitted a frame: IsReady. Cleared wherever the engine is.
+    private bool m_engineProduced;
     private bool m_glyphAtlasInitialized;
 
     // The lease on the pipeline set the engine records with, shared through the composition's pipeline cache, built off
@@ -489,6 +491,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         m_engine?.Dispose();
         m_engine = null;
+        m_engineProduced = false;
         CancelShaderReload(reason: "the node was disposed");
         m_pipelines.Release();
         RetireAllScreenSourceFrames();
@@ -510,6 +513,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         m_frameSource.NotifyDeviceLost();
         m_engine?.Dispose();
         m_engine = null;
+        m_engineProduced = false;
         // A pipeline build or kernel reload still in flight is waited out and discarded before the host recreates the
         // device; the rebuilt engine builds its pipelines anew on the recreated one.
         CancelShaderReload(reason: "the device was lost");
@@ -695,6 +699,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         LiveVolumes = frame.Volumes.Count;
 
         ++m_produceFrameIndex;
+        m_engineProduced = true;
 
         // A debug verb (world.screenshot) arms a one-shot capture of whatever frame is produced next.
         m_debugCapture.Serve(
@@ -855,16 +860,22 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     public IReadOnlyDictionary<string, IRenderNode> Children => m_children;
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
-    /// <summary>Gets whether the node's engine is built and producing frames. It is false until the pipeline build that
-    /// the first produced frame starts has completed, and again after a device loss until the rebuild completes; a
-    /// produced frame meanwhile returns an empty surface.</summary>
-    public bool IsReady => (m_engine is not null);
-    /// <summary>Gets why a capture armed on this node would not be served by the frame it produces now, phrased as the
-    /// refusal of a capture that waited on it reads: <c>the engine's pipelines never installed</c> until
-    /// <see cref="IsReady"/>, and <see langword="null"/> once it is.</summary>
-    public string? UnservedCaptureReason => ((m_engine is null)
-        ? "the engine's pipelines never installed"
-        : null
+    /// <summary>Gets whether the node's engine is ready: its pipeline set is installed and the engine built from it has
+    /// produced its first frame. It is false until the pipeline build that the first produced frame starts has completed
+    /// and a frame has been submitted, and again after a device loss until the rebuilt engine has submitted one; a
+    /// produced frame meanwhile returns an empty surface. It is the one readiness fact the console waits on and a
+    /// capture's hold reads.</summary>
+    public bool IsReady => m_engineProduced;
+    /// <summary>Gets why the node is not <see cref="IsReady"/>, naming its pipeline build and how far it has come (for
+    /// example <c>the engine's pipeline set is building (5 of 14 pipelines created)</c>), or <see langword="null"/> once
+    /// it is ready. It builds a new string on each read, so a caller polls <see cref="IsReady"/> and reads this only to
+    /// report.</summary>
+    public string? NotReadyReason => (m_engineProduced
+        ? null
+        : ((m_engine is null)
+            ? m_pipelines.Describe()
+            : "the engine has not produced its first frame"
+        )
     );
     /// <summary>Gets the GPU work this node's engine recorded, per pass, for its newest completed submission (see
     /// <see cref="SdfWorldEngine.Work"/>). Unavailable before the first frame completes and again after a device loss

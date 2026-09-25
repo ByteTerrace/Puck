@@ -19,7 +19,9 @@ namespace Puck.World.Tests;
 /// its clock, stepping a real <see cref="WorldServer"/> whose <see cref="WorldCaptureScheduler"/> is published after
 /// every step, and a real <see cref="SdfEngineNode"/> over <c>FakeGpuDevice</c> producing one frame after every pump
 /// call. The node's pipeline factory blocks every creation on a gate the law holds, which is how a cold driver shader
-/// cache behaves: the node presents nothing and serves no capture until the gate opens and its build installs.
+/// cache behaves: the node presents nothing and serves no capture until the gate opens and its build installs. The
+/// scheduler reads the node's readiness, so the host time held while the build is held is spent from the
+/// pipeline-build budget, never from the capture hold budget.
 /// </summary>
 public sealed class WorldCaptureHoldLawTests : IDisposable {
     private const uint Extent = 32;
@@ -58,6 +60,11 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             Requests.Add(item: request);
         }
     }
+    // The node's readiness as the World's render probe presents it.
+    private sealed class NodeReadiness(SdfEngineNode node) : IWorldEngineReadiness {
+        public bool IsReady => node.IsReady;
+        public string? NotReadyReason => node.NotReadyReason;
+    }
     private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
             frame;
@@ -71,6 +78,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
     private sealed class Run : IDisposable {
         private readonly FrameContext m_context;
 
+        private readonly ManualResetEventSlim m_entered = new(initialState: false);
         private readonly ManualResetEventSlim m_gate = new(initialState: false);
 
         private readonly FixedStepPump m_pump;
@@ -80,7 +88,10 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
 
         public Run(string directory, bool holdsClock) {
             var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
-                BeforeComputePipeline = _ => m_gate.Wait(),
+                BeforeComputePipeline = _ => {
+                    m_entered.Set();
+                    m_gate.Wait();
+                },
             };
 
             m_row = HostRow.Build(
@@ -114,8 +125,8 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 backend: "vulkan",
                 captureTarget: () => Target,
                 directory: directory,
+                readiness: new NodeReadiness(node: Node),
                 server: m_row.Server,
-                unservedReason: () => Node.UnservedCaptureReason,
                 worldFile: "fixture.world.json"
             );
             Simulation = new CaptureStepSimulation(
@@ -187,6 +198,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             m_router.Dispose();
             m_row.Dispose();
             m_gate.Dispose();
+            m_entered.Dispose();
         }
         // One offscreen host iteration: host time through the pump (one step's worth unless given), then one produced
         // frame.
@@ -229,6 +241,26 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             userMessage: $"Only {Scheduler.Entries.Count} of {captures} captures were decided."
         );
         public void Release() => m_gate.Set();
+        // Iterates until the node's build is held in the driver and the node names it, so a refusal's reason reads the
+        // same on every run; the bound is liveness, and decides nothing.
+        public void IterateUntilBuilding() {
+            Iterate();
+            Assert.True(condition: m_entered.Wait(
+                cancellationToken: TestContext.Current.CancellationToken,
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ));
+            Assert.True(condition: SpinWait.SpinUntil(
+                condition: () => {
+                    Iterate();
+
+                    return (Node.NotReadyReason?.StartsWith(
+                        comparisonType: StringComparison.Ordinal,
+                        value: "the engine's pipeline set is building"
+                    ) ?? false);
+                },
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ));
+        }
         // The offscreen host's teardown order: settle what is owed a frame, then dispose the render root. The gate
         // opens first only because the node's disposal waits out its build.
         public void EndRun() {
@@ -327,9 +359,43 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         );
         Assert.True(condition: (run.Tick > FirstTick));
     }
-    /// <summary>Law 2: with the build held past the hold budget, the capture is refused by name and withdrawn, the run
-    /// steps on and refuses the next unservable capture at once, a frame produced after the install writes neither,
-    /// and the node's disposal finds nothing owed.</summary>
+    /// <summary>Law 1b: the capture hold counts from readiness. A build held for longer than the capture hold budget but
+    /// inside the pipeline-build budget spends none of the capture hold, so its install still serves the capture.</summary>
+    [Fact]
+    public void ABuildHeldPastTheCaptureHoldBudgetStillServesTheCaptureOnceItInstalls() {
+        using var run = new Run(
+            directory: m_directory.RootPath,
+            holdsClock: true
+        );
+
+        run.IterateUntilBuilding();
+
+        // One second of host time per iteration: twice the capture hold budget, well inside the build budget.
+        for (var iteration = 0; (iteration < (2 * WorldCaptureScheduler.HoldBudgetSeconds)); iteration++) {
+            run.Iterate(hostTicks: EngineTicks.PerSecond);
+        }
+
+        Assert.False(condition: run.Node.IsReady);
+        Assert.Equal(
+            expected: FirstTick,
+            actual: run.Tick
+        );
+        Assert.Empty(collection: run.Scheduler.Entries);
+
+        run.Release();
+        run.IterateUntilDecided(captures: 1);
+
+        var entry = Assert.Single(collection: run.Scheduler.Entries);
+
+        Assert.Null(@object: entry.Refusal);
+        Assert.Equal(
+            expected: "first~10.png",
+            actual: entry.Frame
+        );
+    }
+    /// <summary>Law 2: with the build held past the pipeline-build budget, the capture is refused by name, the reason
+    /// naming the build and its progress, and withdrawn; the run steps on and refuses the next unservable capture at
+    /// once, a frame produced after the install writes neither, and the node's disposal finds nothing owed.</summary>
     [Fact]
     public void ABuildHeldPastTheBudgetRefusesByNameAndTheRunEndsWithNothingReachingDisposal() {
         using var run = new Run(
@@ -337,7 +403,10 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             holdsClock: true
         );
 
-        // One second of host time per iteration, so the sixty-second budget is spent in about sixty iterations.
+        run.IterateUntilBuilding();
+
+        // One second of host time per iteration, so the build budget is spent in about as many iterations as it has
+        // seconds.
         run.IterateUntilDecided(
             captures: 2,
             hostTicks: EngineTicks.PerSecond
@@ -346,8 +415,8 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         Assert.False(condition: run.Node.IsReady);
         Assert.Equal(
             expected: [
-                "first:10:Unserved:the engine's pipelines never installed (the host held its clock at tick 10 until its 60-second capture hold budget was spent)",
-                "second:30:Unserved:the engine's pipelines never installed (the host held its clock at tick 30 until its 60-second capture hold budget was spent)",
+                "first:10:Unserved:the engine's pipeline set is building (0 of 12 pipelines created) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
+                "second:30:Unserved:the engine's pipeline set is building (0 of 12 pipelines created) (the host held its clock at tick 30 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
             ],
             actual: run.Scheduler.Entries.Select(selector: static entry => $"{entry.Station}:{entry.Tick}:{entry.Refusal}:{entry.Detail}")
         );
@@ -389,6 +458,8 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             holdsClock: true
         );
 
+        run.IterateUntilBuilding();
+
         for (var iteration = 0; (iteration < HeldIterations); iteration++) {
             run.Iterate();
         }
@@ -398,7 +469,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         var entry = Assert.Single(collection: run.Scheduler.Entries);
 
         Assert.Equal(
-            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10)"),
+            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of 12 pipelines created)"),
             actual: (entry.Refusal!.Value, entry.Detail!)
         );
         run.AssertNothingReachedDisposal();

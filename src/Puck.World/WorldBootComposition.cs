@@ -591,11 +591,8 @@ public static class WorldBootComposition {
                     )
                     : string.Empty
                 ),
+                readiness: sp.GetService<IWorldEngineReadiness>(),
                 server: server,
-                unservedReason: ((renderProbe is null)
-                    ? null
-                    : () => renderProbe.Node?.UnservedCaptureReason
-                ),
                 worldFile: Path.GetFileName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath)
             );
         });
@@ -1074,6 +1071,8 @@ public static class WorldBootComposition {
         // and the SDF document intake itself. None of these touch a window or the GPU.
         services.AddSingleton<WorldRenderProbe>();
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
+        // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
+        services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<WorldSeatViewports>();
         services.AddSingleton<MarkerStore>();
@@ -1413,6 +1412,8 @@ public static class WorldBootComposition {
         // through — a mutable holder the render-root factory below fills in once the engine node exists.
         services.AddSingleton<WorldRenderProbe>();
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
+        // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
+        services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
 
         // The first-party puck.sdf.v1 geometry-document emitter (world.sdf.load) — a singleton so the command

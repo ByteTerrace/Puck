@@ -1,3 +1,6 @@
+# The engine ready first: its pipeline set installed and its first frame produced, however many ticks a cold driver
+# cache takes, within the leg's 60-second ceiling; a build still running at the deadline is named on stderr.
+world.wait ready 45
 # Sixty completed ticks, then a read: the newest completed submission is a still frame the cadence gate re-composited.
 world.wait 60
 world.counters gpu
