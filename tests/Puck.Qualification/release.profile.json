@@ -100,28 +100,28 @@
       "backend": "vulkan",
       "width": 1280,
       "height": 800,
-      "peakOwnedPipelineBytes": 155648000
+      "peakOwnedPipelineBytes": 98304000
     },
     {
       "workload": "ink-pipeline",
       "backend": "vulkan",
       "width": 1920,
       "height": 1080,
-      "peakOwnedPipelineBytes": 315187200
+      "peakOwnedPipelineBytes": 199065600
     },
     {
       "workload": "ink-pipeline",
       "backend": "directx",
       "width": 1280,
       "height": 800,
-      "peakOwnedPipelineBytes": 155648000
+      "peakOwnedPipelineBytes": 98304000
     },
     {
       "workload": "ink-pipeline",
       "backend": "directx",
       "width": 1920,
       "height": 1080,
-      "peakOwnedPipelineBytes": 315187200
+      "peakOwnedPipelineBytes": 199065600
     }
   ],
   "deferred": [
