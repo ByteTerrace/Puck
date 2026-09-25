@@ -5,9 +5,6 @@ public static partial class Bc7Codec {
     /// exact sum of each subset's per-channel variance, the lower partition number winning a tie.</summary>
     public const int PartitionCandidates = 4;
 
-    // The least common multiple of 1 to 16: a subset's variance times it is an integer for any member count.
-    private const long VarianceScale = 720720L;
-
     // The format's two-subset partitions: bit t is texel t's subset.
     private static readonly ushort[] Partitions2 = [
         0xCCCC, 0x8888, 0xEEEE, 0xECC8, 0xC880, 0xFEEC, 0xFEC8, 0xEC80, 0xC800, 0xFFEC, 0xFE80, 0xE800, 0xFFE8, 0xFF00, 0xFFF0, 0xF000,
@@ -238,7 +235,7 @@ public static partial class Bc7Codec {
                 continue;
             }
 
-            var count = RankPartitions(mode: mode, ranked: ranked, values: values);
+            var count = PartitionRanking.Rank(channels: mode.Channels, partitions: mode.Partitions, ranked: ranked, stride: 4, subsets: mode.Subsets, values: values);
 
             for (var rank = 0; (rank < count); rank++) {
                 EncodePartition(block: candidate, mode: mode, partition: ranked[rank], rgba: rgba, values: values);
@@ -251,67 +248,6 @@ public static partial class Bc7Codec {
                 }
             }
         }
-    }
-    // Writes into `ranked` the partitions of `mode` whose subsets vary least over the mode's channels, least first, the
-    // lower partition number first among equals, and returns how many it wrote. A subset's variation is n Σ x² - (Σ x)²
-    // summed over channels, times 720720 / n: its variance times 720720, exactly.
-    private static int RankPartitions(PartitionedMode mode, ReadOnlySpan<int> values, Span<int> ranked) {
-        Span<long> scores = stackalloc long[ranked.Length];
-        var count = 0;
-
-        for (var partition = 0; (partition < mode.Partitions); partition++) {
-            var score = 0L;
-
-            for (var subset = 0; (subset < mode.Subsets); subset++) {
-                var members = 0L;
-                var residual = 0L;
-
-                for (var channel = 0; (channel < mode.Channels); channel++) {
-                    var sum = 0L;
-                    var squares = 0L;
-
-                    members = 0L;
-
-                    for (var texel = 0; (texel < 16); texel++) {
-                        if (SubsetOf(partition: partition, subsets: mode.Subsets, texel: texel) == subset) {
-                            var value = values[((texel * 4) + channel)];
-
-                            members++;
-                            sum += value;
-                            squares += (((long)value) * value);
-                        }
-                    }
-
-                    residual += ((members * squares) - (sum * sum));
-                }
-
-                score += ((VarianceScale / members) * residual);
-            }
-
-            var at = count;
-
-            while (
-                (at > 0) &&
-                (score < scores[(at - 1)])
-            ) {
-                at--;
-            }
-
-            if (at >= ranked.Length) {
-                continue;
-            }
-
-            for (var slot = (Math.Min(val1: count, val2: (ranked.Length - 1)) - 1); (slot >= at); slot--) {
-                scores[(slot + 1)] = scores[slot];
-                ranked[(slot + 1)] = ranked[slot];
-            }
-
-            scores[at] = score;
-            ranked[at] = partition;
-            count = Math.Min(val1: (count + 1), val2: ranked.Length);
-        }
-
-        return count;
     }
     private static void EncodePartition(ReadOnlySpan<byte> rgba, ReadOnlySpan<int> values, PartitionedMode mode, int partition, Span<byte> block) {
         // Subset s's endpoint channels at 4 s + c; its parity bits at s.

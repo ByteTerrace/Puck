@@ -264,14 +264,15 @@ BC7 writes whichever of its modes decodes nearest: mode 6, mode 5 when a block's
 alpha runs independently of its color, or a partitioned mode, which splits the
 block into two or three subsets with their own endpoints, when the block holds
 colors no one line does. It stores a one-color block exactly. BC5 is two BC4
-blocks, and BC4 keeps the better of its two palettes. BC6H writes the one-region
-modes 11 to 14 and stores a one-value block exactly; it does not write a
-two-region mode yet, and its decoder refuses one. On the codec laws' natural
+blocks, and BC4 keeps the better of its two palettes. BC6H writes whichever of
+its one-region modes 11 to 14 or two-region modes 1 to 10 decodes nearest, the
+two-region modes splitting the block by one of the first 32 of BC7's two-subset
+partitions, and stores a one-value block exactly. On the codec laws' natural
 test image (gradients, noise and a hard-edged disc), BC4 decodes within 2 codes
 of the source (root-mean-square 0.63), BC5 within 8 (0.88), and BC7 within 10
-(2.2); BC6H
-stays within 8% of each value in smooth blocks and 23% in a block across a hard
-edge between two colors, which a one-region mode cannot hold both of. From the
+(2.2); BC6H stays within 8% of each value in smooth blocks and 23% in a corner
+block that ramps from about 0.001 to 1.24, a thousandfold range whose half bits
+bend away from any line two endpoints interpolate. From the
 second level down a block holds four
 or sixteen tiles; the filter never mixes them, but they share the block's
 endpoints, so compression error there is shared within those bounds.

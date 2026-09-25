@@ -24,7 +24,10 @@ public static partial class Bc7Codec {
     public const int BlockBytes = 16;
 
     private static readonly byte[] Weights2 = [0, 21, 43, 64];
-    private static readonly byte[] Weights3 = [0, 9, 18, 27, 37, 46, 55, 64];
+
+    // The three-bit index weights, which BC6H's two-region modes share.
+    internal static readonly byte[] Weights3 = [0, 9, 18, 27, 37, 46, 55, 64];
+
     private static readonly byte[] Weights4 = [0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64];
 
     /// <summary>Returns the mode of a block: the index of the lowest set bit of its first byte, or 8 when that byte is
