@@ -479,14 +479,142 @@ public sealed class TextureCodecLawTests {
         Assert.Equal(expected: ((ushort)(((Base + 1) * 31) >> 6)), actual: decoded[3]);
         Assert.Equal(expected: ((ushort)(((Base - 1) * 31) >> 6)), actual: decoded[4]);
 
-        // A reserved mode decodes to zero; a two-region mode is refused.
+        // A reserved mode decodes to zero.
         var reserved = new BitWriter();
 
         reserved.Write(count: 5, value: 0x13);
         Bc6hCodec.DecodeBlock(block: reserved.Bytes, rgb: decoded);
+        Assert.Equal(expected: 0, actual: Bc6hCodec.ModeOf(block: reserved.Bytes));
         Assert.All(collection: decoded.ToArray(), action: value => Assert.Equal(actual: value, expected: 0));
-        Assert.Throws<NotSupportedException>(testCode: () => Bc6hCodec.DecodeBlock(block: new byte[16], rgb: new ushort[48]));
-        Assert.Throws<NotSupportedException>(testCode: () => Bc6hCodec.DecodeBlock(block: [0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], rgb: new ushort[48]));
+
+        // Mode 1 (code 00), partition 13 (the bottom two rows are region 1, whose anchor is texel 15), each bit set at its
+        // place in the format's bit table: 10-bit E0 = (512, 512, 512); 5-bit deltas R1 = +3, G2 = B2 = -16, G3 = +1 and
+        // B3 = -1, whose bits the table scatters (B3's at 50, 60, 70, 76 and 4).
+        var mode1 = new byte[16];
+
+        foreach (var position in ((int[])[14, 24, 34, 35, 36, 2, 3, 51, 4, 50, 60, 70, 76, 77, 79, 80, 84, 85, 86, 126, 127])) {
+            mode1[(position >> 3)] |= ((byte)(1 << (position & 7)));
+        }
+
+        static int Unquantized(int e, int bits) =>
+            ((e == 0) ? 0 : ((e == ((1 << bits) - 1)) ? 0xFFFF : (((e << 16) + 0x8000) >> bits)));
+        static ushort Finish(int u) =>
+            ((ushort)((u * 31) >> 6));
+
+        Bc6hCodec.DecodeBlock(block: mode1, rgb: decoded);
+        Assert.Equal(expected: 1, actual: Bc6hCodec.ModeOf(block: mode1));
+        // Texel 0 at index 0 is E0; texel 1 at index 7 is E1 = (515, 512, 512); texel 8 at index 0 is E2 = (512, 496, 496).
+        Assert.Equal(expected: [Finish(u: Unquantized(bits: 10, e: 512)), Finish(u: Unquantized(bits: 10, e: 512)), Finish(u: Unquantized(bits: 10, e: 512))], actual: decoded[..3].ToArray());
+        Assert.Equal(expected: [Finish(u: Unquantized(bits: 10, e: 515)), Finish(u: Unquantized(bits: 10, e: 512)), Finish(u: Unquantized(bits: 10, e: 512))], actual: decoded[3..6].ToArray());
+        Assert.Equal(expected: [Finish(u: Unquantized(bits: 10, e: 512)), Finish(u: Unquantized(bits: 10, e: 496)), Finish(u: Unquantized(bits: 10, e: 496))], actual: decoded[24..27].ToArray());
+
+        // Texel 15, the anchor, at its two-bit index 3 (weight 27) between E2 and E3 = (512, 513, 511).
+        static int Between(int e2, int e3) =>
+            Finish(u: ((((37 * Unquantized(bits: 10, e: e2)) + (27 * Unquantized(bits: 10, e: e3))) + 32) >> 6));
+
+        Assert.Equal(expected: [((ushort)Between(e2: 512, e3: 512)), ((ushort)Between(e2: 496, e3: 513)), ((ushort)Between(e2: 496, e3: 511))], actual: decoded[45..48].ToArray());
+    }
+    [Fact]
+    public void Bc6hTwoRegionModesRoundTripRepresentableBlocksExactly() {
+        // Per mode: endpoint bits, then each channel's delta bits (0 for mode 10's four absolute endpoints).
+        (int Mode, int Bits, int DeltaR, int DeltaG, int DeltaB)[] modes = [
+            (1, 10, 5, 5, 5),
+            (2, 7, 6, 6, 6),
+            (3, 11, 5, 4, 4),
+            (4, 11, 4, 5, 4),
+            (5, 11, 4, 4, 5),
+            (6, 9, 5, 5, 5),
+            (7, 8, 6, 5, 5),
+            (8, 8, 5, 6, 5),
+            (9, 8, 5, 5, 6),
+            (10, 6, 0, 0, 0),
+        ];
+        byte[] weights = [0, 9, 18, 27, 37, 46, 55, 64];
+        Span<byte> block = stackalloc byte[Bc6hCodec.BlockBytes];
+        Span<ushort> decoded = stackalloc ushort[48];
+        var rgb = new ushort[48];
+        var ends = new int[4, 3];
+        Span<int> seen = stackalloc int[2];
+        var random = new Seeded(seed: 37);
+
+        static int Unquantized(int e, int bits) =>
+            ((e == 0) ? 0 : ((e == ((1 << bits) - 1)) ? 0xFFFF : (((e << 16) + 0x8000) >> bits)));
+
+        foreach (var mode in modes) {
+            var top = ((1 << mode.Bits) - 1);
+
+            for (var trial = 0; (trial < 400); trial++) {
+                var partition = random.Next(bound: 32);
+
+                // Endpoint 0 anywhere; each other endpoint a delta the mode holds from it that stays in range, or anywhere
+                // when the mode stores all four.
+                for (var channel = 0; (channel < 3); channel++) {
+                    var delta = ((channel == 0) ? mode.DeltaR : ((channel == 1) ? mode.DeltaG : mode.DeltaB));
+
+                    ends[0, channel] = random.Next(bound: (top + 1));
+
+                    for (var end = 1; (end < 4); end++) {
+                        ends[end, channel] = ((delta == 0) ? random.Next(bound: (top + 1)) : Math.Clamp(max: top, min: 0, value: ((ends[0, channel] + random.Next(bound: (1 << delta))) - (1 << (delta - 1)))));
+                    }
+                }
+
+                // Each region's first member sits on its first endpoint and its second on its other; the rest anywhere.
+                seen.Clear();
+
+                for (var texel = 0; (texel < 16); texel++) {
+                    var region = Bc7Codec.SubsetOf(partition: partition, subsets: 2, texel: texel);
+                    var index = ((seen[region] == 0) ? 0 : ((seen[region] == 1) ? 7 : random.Next(bound: 8)));
+
+                    seen[region]++;
+
+                    for (var channel = 0; (channel < 3); channel++) {
+                        var u0 = Unquantized(bits: mode.Bits, e: ends[(region * 2), channel]);
+                        var u1 = Unquantized(bits: mode.Bits, e: ends[((region * 2) + 1), channel]);
+
+                        var interpolated = (((((64 - weights[index]) * u0) + (weights[index] * u1)) + 32) >> 6);
+
+                        rgb[((texel * 3) + channel)] = ((ushort)((interpolated * 31) >> 6));
+                    }
+                }
+
+                Bc6hCodec.EncodePartitionedBlock(block: block, mode: mode.Mode, partition: partition, rgb: rgb);
+                Assert.Equal(expected: mode.Mode, actual: Bc6hCodec.ModeOf(block: block));
+                Bc6hCodec.DecodeBlock(block: block, rgb: decoded);
+                Assert.True(condition: decoded.SequenceEqual(other: rgb), userMessage: $"mode {mode.Mode} partition {partition} trial {trial}");
+            }
+        }
+    }
+    [Fact]
+    public void Bc6hChoosesATwoRegionModeForBlocksNoOneRegionHolds() {
+        Span<byte> block = stackalloc byte[Bc6hCodec.BlockBytes];
+        Span<byte> again = stackalloc byte[Bc6hCodec.BlockBytes];
+        Span<ushort> decoded = stackalloc ushort[48];
+        var rgb = new ushort[48];
+
+        // Two reds in one region and two blues in the other, each channel a value mode 10's 6-bit endpoints finish to
+        // exactly: four colors on no one line, so no one-region mode holds them.
+        static ushort Finished6(int q) =>
+            ((ushort)(((((q << 16) + 0x8000) >> 6) * 31) >> 6));
+
+        for (var partition = 0; (partition < 32); partition++) {
+            for (var texel = 0; (texel < 16); texel++) {
+                var strong = Finished6(q: (((texel & 1) == 0) ? 50 : 30));
+                var blue = (Bc7Codec.SubsetOf(partition: partition, subsets: 2, texel: texel) == 1);
+
+                rgb[(texel * 3)] = (blue ? ((ushort)0) : strong);
+                rgb[((texel * 3) + 1)] = 0;
+                rgb[((texel * 3) + 2)] = (blue ? strong : ((ushort)0));
+            }
+
+            Bc6hCodec.EncodeBlock(block: block, rgb: rgb);
+            Bc6hCodec.DecodeBlock(block: block, rgb: decoded);
+            Assert.True(condition: decoded.SequenceEqual(other: rgb), userMessage: $"partition {partition}: mode {Bc6hCodec.ModeOf(block: block)}");
+            Assert.InRange(actual: Bc6hCodec.ModeOf(block: block), high: 10, low: 1);
+
+            // The same source encodes to the same bytes.
+            Bc6hCodec.EncodeBlock(block: again, rgb: rgb);
+            Assert.True(condition: again.SequenceEqual(other: block), userMessage: $"partition {partition}");
+        }
     }
     [Fact]
     public void NaturalContentDecodesWithinTheStatedBounds() {
@@ -543,9 +671,9 @@ public sealed class TextureCodecLawTests {
 
         var figures = $"BC4: max {bc4.Maximum}, rms {bc4.Rms:F3}; BC5: max {bc5.Maximum}, rms {bc5.Rms:F3}; BC7: max {bc7.Maximum}, rms {bc7.Rms:F3}; BC6H: worst relative {smooth:F4} in smooth blocks, {all:F4} in all";
 
-        // The figures these bounds hold, with margin: BC4 2 and 0.63, BC5 8 and 0.88, BC7 10 and 2.23, BC6H 0.078 and
-        // 0.233. BC6H's larger figure is a block across the disc's edge, two colors off one line that a one-region mode
-        // cannot hold both of.
+        // The figures these bounds hold, with margin: BC4 2 and 0.63, BC5 8 and 0.88, BC7 10 and 2.23, BC6H 0.076 and
+        // 0.231. BC6H's larger figure is the corner block, a ramp from about 0.001 to 1.24: over a thousandfold range the
+        // half bits bend away from any line two endpoints interpolate, even split into two regions.
         Assert.True(condition: ((bc4.Maximum <= 3) && (bc4.Rms <= 0.8)), userMessage: figures);
         Assert.True(condition: ((bc5.Maximum <= 10) && (bc5.Rms <= 1.0)), userMessage: figures);
         Assert.True(condition: ((bc7.Maximum <= 16) && (bc7.Rms <= 2.6)), userMessage: figures);
@@ -578,7 +706,7 @@ public sealed class TextureCodecLawTests {
     // and moves SdfBaker.Version, since every bake's textures are these encoders' bytes.
     private const string PinnedBc4 = "57808ae1feae7b5e01d78d2bc225e447b62dbcebca2f5cbd494a60bb688d813f";
     private const string PinnedBc5 = "d1b9dfff4236b5b78d3bb3b6af70151346eafd5a99f578aea6f5f41e64e9e816";
-    private const string PinnedBc6h = "2dd7cc2f50cb071801f8474d4065bfb4c38c222ab97c90b2b8cd8d13b3ce245c";
+    private const string PinnedBc6h = "b0df78800f41d301dd9ef1b949ac7ab913e02cda8310b0e73eea3100981000c2";
     private const string PinnedBc7 = "b4ea56456ed9a9176a745e31d22e244b7fbda22514434699536306b934d73009";
 
     [Fact]
