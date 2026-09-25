@@ -568,12 +568,18 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// debug layer is NOT re-enabled here (it cannot be toggled per-process and can poison creation on some configs);
     /// <see cref="EnsureCreated"/> applies the same opt-in gate it always does. A device that cannot be created yet is
     /// still the loss being recovered from: a real removal leaves no capable adapter for seconds, so the host's recovery
-    /// waits and calls again.</summary>
+    /// waits and calls again.
+    /// <para>The one retry rule every Direct3D 12 host follows: a rebuild that fails in Direct3D 12 itself, whether the
+    /// device's creation or the <paramref name="reinitialize"/> that rebinds the host's own objects to it (a windowed
+    /// host's swap chain), has not got its device back yet, and answers <see cref="DeviceLostException"/> so the host's
+    /// recovery waits and calls again within its budget. Any other failure ends the recovery.</para></summary>
+    /// <param name="reinitialize">Rebinds the host's own device objects once the device exists, or
+    /// <see langword="null"/> when the host has none.</param>
     /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
     /// the old device; the message names each one, the old device is released, and no new device is created.</exception>
-    /// <exception cref="DeviceLostException">No device could be created yet; the context stays without one, and the next
-    /// call tries again.</exception>
-    public void Recreate() {
+    /// <exception cref="DeviceLostException">No device could be created yet, or <paramref name="reinitialize"/> failed in
+    /// Direct3D 12; the next call tries again.</exception>
+    public void Recreate(Action? reinitialize = null) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -584,11 +590,18 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         // m_device is now null, so this rebuilds a fresh device + queue + fence + event.
         try {
             EnsureCreated();
+            reinitialize?.Invoke();
         } catch (GpuDeviceUnavailableException exception) {
             throw new DeviceLostException(
                 innerException: exception,
                 message: "The Direct3D 12 device could not be recreated yet (the adapter is unavailable).",
                 reasonCode: ((exception.InnerException as DirectXException)?.Result ?? 0)
+            );
+        } catch (DirectXException exception) {
+            throw new DeviceLostException(
+                innerException: exception,
+                message: $"The Direct3D 12 device's objects could not be recreated yet ({exception.Operation} failed).",
+                reasonCode: exception.Result
             );
         }
     }

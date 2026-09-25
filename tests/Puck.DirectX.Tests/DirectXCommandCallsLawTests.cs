@@ -21,10 +21,15 @@ public sealed unsafe class DirectXCommandCallsLawTests {
     private static readonly HRESULT DriverInternalError = new(value: unchecked((int)0x887A0020));
     private static readonly HRESULT Failure = new(value: unchecked((int)0x80004005));
 
-    /// <summary>The translated calls, each named by the operation its failure reports: the surface upload's map,
-    /// reset pair and close; the buffer factory's and the readback's map; the recorder's reset pair and close; the
-    /// queue submitter's, the device context's and the compositor's signal; and the fence wait's event.</summary>
+    /// <summary>The translated calls, each named by the operation its failure reports: the command pool's, the surface
+    /// upload's and the readback's allocator and list creates; every committed buffer and texture create; the surface
+    /// upload's map, reset pair and close; the buffer factory's and the readback's map; the recorder's reset pair and
+    /// close; the queue submitter's, the device context's and the compositor's signal; and the fence wait's
+    /// event.</summary>
     public static TheoryData<string, string> Sites => new() {
+        { nameof(IDirectXCommandCalls.CreateCommandAllocator), "ID3D12Device::CreateCommandAllocator" },
+        { nameof(IDirectXCommandCalls.CreateCommandList), "ID3D12Device::CreateCommandList" },
+        { nameof(IDirectXCommandCalls.CreateCommittedResource), "ID3D12Device::CreateCommittedResource" },
         { nameof(IDirectXCommandCalls.Map), "ID3D12Resource::Map" },
         { nameof(IDirectXCommandCalls.ResetAllocator), "ID3D12CommandAllocator::Reset" },
         { nameof(IDirectXCommandCalls.ResetList), "ID3D12GraphicsCommandList::Reset" },
@@ -175,6 +180,24 @@ public sealed unsafe class DirectXCommandCallsLawTests {
         var fenceValue = 1UL;
 
         switch (call) {
+            case nameof(IDirectXCommandCalls.CreateCommandAllocator):
+            case nameof(IDirectXCommandCalls.CreateCommandList):
+                _ = DirectXCommandCalls.CreateCommandList(
+                    allocator: out _,
+                    calls: calls,
+                    type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
+                );
+                break;
+            case nameof(IDirectXCommandCalls.CreateCommittedResource):
+                _ = DirectXCommandCalls.CreateCommittedResource(
+                    calls: calls,
+                    clearValue: null,
+                    description: default,
+                    heapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+                    heapProperties: default,
+                    initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON
+                );
+                break;
             case nameof(IDirectXCommandCalls.Map):
                 _ = DirectXCommandCalls.Map(
                     calls: calls,
@@ -228,6 +251,9 @@ public sealed unsafe class DirectXCommandCallsLawTests {
             : new HRESULT(value: 0)
         );
 
+        public HRESULT CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator** allocator) => Answer(call: nameof(CreateCommandAllocator));
+        public HRESULT CreateCommandList(D3D12_COMMAND_LIST_TYPE type, ID3D12CommandAllocator* allocator, ID3D12GraphicsCommandList** commandList) => Answer(call: nameof(CreateCommandList));
+        public HRESULT CreateCommittedResource(D3D12_HEAP_PROPERTIES* heapProperties, D3D12_HEAP_FLAGS heapFlags, D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE* clearValue, ID3D12Resource** resource) => Answer(call: nameof(CreateCommittedResource));
         public HRESULT Map(ID3D12Resource* resource, void** data) => Answer(call: nameof(Map));
         public HRESULT ResetAllocator(ID3D12CommandAllocator* allocator) => Answer(call: nameof(ResetAllocator));
         public HRESULT ResetList(ID3D12GraphicsCommandList* commandList, ID3D12CommandAllocator* allocator) => Answer(call: nameof(ResetList));

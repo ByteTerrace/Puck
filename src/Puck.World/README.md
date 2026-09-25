@@ -475,11 +475,15 @@ be refused partway through its allocation on real hardware. The kinds are
 `command-pool` and `bindings-pool`. The refusal is `GPU_CREATION_FAULT`, naming
 the kind and the creation's number; the node releases what the candidate
 created and the installed graph keeps running. A fault fires once.
-`gpu.faults disarm` clears every fault and restarts the counts, and
-`gpu.faults list` prints `armed=<kind>:<n>,…` (or `armed=none`) and one
-`<kind>=<count>` field per kind: the creations since the last disarm. Only the
-operator's console runs it; a seat, binding, schedule step or world document
-cannot.
+`gpu.faults lose [<n>]` loses the device on the nth frame from now, or the next
+one, on a healthy GPU; the host recovers through its
+[device-loss policy](../../docs/reference/hosting.md), and a capture armed at
+the loss is refused as `[capture] refused <path>: <reason>`.
+`gpu.faults disarm` clears every fault, the armed loss and every count, and
+`gpu.faults list` prints `armed=<kind>:<n>,…,lose:<n>` (or `armed=none`), one
+`<kind>=<count>` field per kind, the creations since the last disarm, and
+`frames=<count>`, the frames counted since then. Only the operator's console
+runs it; a seat, binding, schedule step or world document cannot.
 `pipeline.capture` queues a PNG of the selected output, including while paused.
 The completion report says when the file has been written.
 

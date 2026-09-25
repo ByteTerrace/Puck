@@ -1,0 +1,56 @@
+{
+  "id": "device-loss",
+  "title": "gpu.faults lose loses the offscreen device on its frame, refuses the capture armed at the loss by name, and the host renders on a rebuilt device",
+  "binding": "The positive leg boots an offscreen 256x144 world of two blocks and waits for the engine to be ready. gpu.faults lose 1 arms a device loss on the next frame and world.screenshot arms a capture with it: that frame throws the device loss inside the host's frame body on a healthy GPU, the host writes [device-lost] reason 0x00000000 for its first recovery attempt, releases the render tree, which refuses the armed capture as [capture] refused with the device-loss reason, and rebuilds the device in place. gpu.faults list then counts more pipelines created than it did when the loss was armed, because the rebuilt device created its pipelines again, and a second capture on the rebuilt device lands with the scene's dark sky across its top. The discriminating leg arms no loss: no [device-lost] line and no refusal appear, the first capture lands, and no pipeline is created again, so the positive leg's loss, refusal and rebuild observations turn red.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sdf-visibility-fresh/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "gpu.faults", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "gpu.faults", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the-device-is-lost-once", "stream": "stderr", "match": "exact", "text": "[device-lost] reason 0x00000000; recovering (attempt 1/8)", "present": true },
+      { "type": "line", "name": "the-armed-capture-is-refused-by-the-loss", "stream": "stderr", "match": "contains", "text": "lost.png: the graphics device was lost before a frame served the capture", "present": true },
+      { "type": "response", "name": "the-faults-at-the-loss", "stream": "stdout", "verb": "gpu.faults", "occurrence": 1, "count": 2, "extract": [ { "name": "pipelinesAtLoss", "field": "pipeline" } ] },
+      { "type": "response", "name": "the-faults-after-recovery", "stream": "stdout", "verb": "gpu.faults", "occurrence": 2, "count": 2, "extract": [ { "name": "armedAfter", "field": "armed" }, { "name": "pipelinesAfter", "field": "pipeline" } ] },
+      { "type": "relation", "name": "the-loss-fired-and-cleared", "operator": "equal", "left": { "value": "armedAfter" }, "right": { "literal": "none" } },
+      { "type": "relation", "name": "the-rebuilt-device-created-its-pipelines-again", "operator": "greater", "left": { "value": "pipelinesAfter" }, "right": { "value": "pipelinesAtLoss" } },
+      { "type": "imageRegion", "name": "the-rebuilt-device-renders-the-sky", "capture": "after.png", "extent": [256, 144], "region": [0.05, 0.05, 0.95, 0.3], "reduce": "mean", "minimum": [0.04, 0.06, 0.1, 1], "maximum": [0.2, 0.2, 0.3, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sdf-visibility-fresh/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "gpu.faults", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "gpu.faults", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "no-device-is-lost", "stream": "stderr", "match": "contains", "text": "[device-lost]", "present": false },
+      { "type": "line", "name": "no-capture-is-refused", "stream": "stderr", "match": "contains", "text": "[capture] refused ", "present": false },
+      { "type": "response", "name": "the-faults-at-the-first-list", "stream": "stdout", "verb": "gpu.faults", "occurrence": 1, "count": 2, "extract": [ { "name": "pipelinesAtLoss", "field": "pipeline" } ] },
+      { "type": "response", "name": "the-faults-at-the-second-list", "stream": "stdout", "verb": "gpu.faults", "occurrence": 2, "count": 2, "extract": [ { "name": "pipelinesAfter", "field": "pipeline" } ] },
+      { "type": "relation", "name": "no-pipeline-is-created-again", "operator": "equal", "left": { "value": "pipelinesAfter" }, "right": { "value": "pipelinesAtLoss" } },
+      { "type": "imageRegion", "name": "the-first-capture-lands", "capture": "lost.png", "extent": [256, 144], "region": [0.05, 0.05, 0.95, 0.3], "reduce": "mean", "minimum": [0.04, 0.06, 0.1, 1], "maximum": [0.2, 0.2, 0.3, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  }
+}

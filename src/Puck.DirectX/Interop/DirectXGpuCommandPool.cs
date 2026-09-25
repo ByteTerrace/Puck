@@ -21,25 +21,16 @@ public sealed unsafe class DirectXGpuCommandPool : IGpuCommandPool {
     public DirectXGpuCommandPool(IDirectXDeviceContext deviceContext) {
         ArgumentNullException.ThrowIfNull(deviceContext);
 
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
-
-        device->CreateCommandAllocator(
-            ppCommandAllocator: out var commandAllocator,
-            riid: ID3D12CommandAllocator.IID_Guid,
+        var calls = DirectXDeviceCommandCalls.Of(deviceContext: deviceContext);
+        var commandList = DirectXCommandCalls.CreateCommandList(
+            allocator: out var commandAllocator,
+            calls: calls,
             type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
 
-        device->CreateCommandList(
-            nodeMask: 0,
-            pCommandAllocator: ((ID3D12CommandAllocator*)commandAllocator),
-            pInitialState: null,
-            ppCommandList: out var commandList,
-            riid: ID3D12GraphicsCommandList.IID_Guid,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
-        );
         DirectXCommandCalls.Close(
-            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
-            commandList: ((ID3D12GraphicsCommandList*)commandList)
+            calls: calls,
+            commandList: commandList
         );
 
         m_token = GCHandle.Alloc(value: new DirectXCommandBufferState {

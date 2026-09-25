@@ -1,0 +1,13 @@
+# The engine ready first: its pipeline set installed and its first frame produced, however long a cold driver
+# cache takes.
+world.wait ready 45
+world.cadence off
+world.wait 10
+# The next frame loses the device on a healthy GPU; the capture armed with it is refused by name.
+gpu.faults lose 1
+world.screenshot {run}/lost.png
+world.wait 30
+# Recovered: the device's pipelines were created again, and a capture on the rebuilt device lands.
+gpu.faults list
+world.screenshot {run}/after.png
+world.wait 10

@@ -24,6 +24,8 @@ namespace Puck.DirectX.Interop;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     private readonly IDirectXDeviceContext m_deviceContext;
+    // The device every object below lives on, from construction (DirectXDeviceOwnership).
+    private readonly DirectXDevice m_heldDevice;
 
     private nint m_commandAllocator;
     private nint m_commandList;
@@ -49,28 +51,22 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         ArgumentNullException.ThrowIfNull(deviceContext);
 
         m_deviceContext = deviceContext;
+        m_heldDevice = deviceContext.Device;
 
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
+        var device = ((ID3D12Device*)m_heldDevice.Handle);
 
-        device->CreateCommandAllocator(
-            ppCommandAllocator: out var commandAllocator,
-            riid: ID3D12CommandAllocator.IID_Guid,
+        var calls = DirectXDeviceCommandCalls.Of(deviceContext: deviceContext);
+        var commandList = DirectXCommandCalls.CreateCommandList(
+            allocator: out var commandAllocator,
+            calls: calls,
             type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
+
         m_commandAllocator = ((nint)commandAllocator);
-
-        device->CreateCommandList(
-            nodeMask: 0,
-            pCommandAllocator: ((ID3D12CommandAllocator*)commandAllocator),
-            pInitialState: null,
-            ppCommandList: out var commandList,
-            riid: ID3D12GraphicsCommandList.IID_Guid,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
-        );
         m_commandList = ((nint)commandList);
         DirectXCommandCalls.Close(
-            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
-            commandList: ((ID3D12GraphicsCommandList*)commandList)
+            calls: calls,
+            commandList: commandList
         );
 
         device->CreateFence(
@@ -112,11 +108,18 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     /// <param name="format">The byte layout of the pixels, so the texture samples with correct channels.</param>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     /// <exception cref="ArgumentException"><paramref name="pixels"/> does not exactly match the tightly packed extent, or a dimension is zero.</exception>
+    /// <exception cref="InvalidOperationException">The context's device is not the one this upload was created on: its owner
+    /// did not release it on a device loss.</exception>
     /// <exception cref="DirectXException">A Direct3D 12 call failed.</exception>
     public void Upload(ReadOnlySpan<byte> pixels, uint width, uint height, GpuPixelFormat format) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
+        );
+        DirectXDeviceOwnership.ThrowIfOtherDevice(
+            held: m_heldDevice,
+            holder: nameof(DirectXSurfaceUpload),
+            offered: m_deviceContext.Device
         );
         ArgumentOutOfRangeException.ThrowIfZero(value: width);
         ArgumentOutOfRangeException.ThrowIfZero(value: height);
@@ -273,7 +276,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
 
         DisposeImageResources();
 
-        var device = ((ID3D12Device*)m_deviceContext.Device.Handle);
+        var device = ((ID3D12Device*)m_heldDevice.Handle);
 
         m_texture = ((nint)DirectXTextures.CreateCommitted(
             device: device,
@@ -380,20 +383,21 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
 
     /// <summary>Drains the queue, then releases the texture, upload buffer, SRV heap, and command resources. A removed
     /// device counts as drained (<see cref="DirectXCommandCalls.Drain"/>). Safe to call more than once.</summary>
-    /// <exception cref="InvalidOperationException">The device context was disposed first, so the device has already
-    /// reported these resources as leaked and the owner's teardown order is wrong.</exception>
+    /// <exception cref="InvalidOperationException">The device went first, disposed with its context or replaced on a loss, so
+    /// it has already reported these resources as leaked and the owner's teardown order is wrong.</exception>
     public void Dispose() {
         if (m_disposed) {
             return;
         }
 
         // Every object below is a child of the device, and the device's teardown reports each one still alive as a
-        // leak. An owner that releases this upload after its device context is gone has its teardown in the wrong
-        // order, and the caller disposing this upload is that owner. A refused release changes nothing: the texture
-        // stays counted as held on its device, whose teardown names it.
-        if (!m_deviceContext.IsInitialized) {
-            throw new InvalidOperationException(message: $"A {nameof(DirectXSurfaceUpload)} was released after its device context was disposed; the owner disposing it must release it before the device goes.");
-        }
+        // leak. An owner that releases this upload after its device is gone, disposed with its context or replaced on a
+        // loss, has its teardown in the wrong order, and the caller disposing this upload is that owner. A refused
+        // release changes nothing: the texture stays counted as held on its device, whose teardown names it.
+        DirectXDeviceOwnership.ThrowIfDestroyed(
+            held: m_heldDevice,
+            holder: nameof(DirectXSurfaceUpload)
+        );
 
         m_disposed = true;
 

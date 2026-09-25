@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 
@@ -22,6 +23,8 @@ public static unsafe class DirectXBuffers {
     /// <param name="memory">The device-local counts a <c>DEFAULT</c>-heap buffer joins, or <see langword="null"/>; the
     /// owner counts its release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
     /// <returns>The buffer, owned by the caller.</returns>
+    /// <exception cref="Puck.Abstractions.Gpu.DeviceLostException">The device was removed.</exception>
+    /// <exception cref="DirectXException">The creation failed for another reason.</exception>
     public static ID3D12Resource* CreateCommitted(ID3D12Device* device, ulong sizeBytes, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, GpuDeviceMemoryWork? memory = null) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = heapType,
@@ -37,29 +40,25 @@ public static unsafe class DirectXBuffers {
             SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
             Width = sizeBytes,
         };
-        var resourceIid = ID3D12Resource.IID_Guid;
-        void* buffer;
-
-        device->CreateCommittedResource(
-            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            InitialResourceState: initialState,
-            pDesc: in description,
-            pHeapProperties: in heapProperties,
-            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
-            ppvResource: &buffer,
-            riidResource: in resourceIid
+        var buffer = DirectXCommandCalls.CreateCommittedResource(
+            calls: new DirectXDeviceCommandCalls(device: device),
+            clearValue: null,
+            description: in description,
+            heapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            heapProperties: in heapProperties,
+            initialState: initialState
         );
 
         DirectXDeviceMemory.CountAllocated(
             device: device,
             memory: memory,
-            resource: ((ID3D12Resource*)buffer),
+            resource: buffer,
             role: ((heapType == D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT)
                 ? GpuMemoryRole.DeviceLocal
                 : GpuMemoryRole.HostVisible
             )
         );
 
-        return ((ID3D12Resource*)buffer);
+        return buffer;
     }
 }

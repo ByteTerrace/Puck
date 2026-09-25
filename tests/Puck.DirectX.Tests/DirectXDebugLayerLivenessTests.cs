@@ -102,8 +102,9 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
             if (texture is not null) {
                 _ = ((IUnknown*)texture)->Release();
             }
-        } catch (Exception exception) when ((exception is ArgumentException or System.Runtime.InteropServices.COMException)) {
-            // The refusal is the expected outcome; the stored message is what the test reads.
+        } catch (DirectXException) {
+            // The refusal (E_INVALIDARG, through the checked create) is the expected outcome; the stored message is what the
+            // test reads.
         }
 
         context.DrainDebugMessages();

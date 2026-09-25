@@ -23,6 +23,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private readonly BufferedConsoleOutput m_bufferedOutput;
     private readonly FrameCaptureController? m_capture;
     private readonly ExternalClockRegistry m_externalClocks;
+    private readonly GpuCreationFaults? m_faults;
     private readonly IInputClock m_inputClock;
     private readonly StandardInputBacklog m_inputBacklog;
     private readonly InputRouter? m_inputRouter;
@@ -59,12 +60,14 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         TextCommandSource textSource,
         TerminalControl terminal,
         StandardInputBacklog inputBacklog,
-        INativeWindowFactory windowFactory
+        INativeWindowFactory windowFactory,
+        IEnumerable<GpuCreationFaults> faults
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
         ArgumentNullException.ThrowIfNull(captureControllers);
         ArgumentNullException.ThrowIfNull(externalClocks);
+        ArgumentNullException.ThrowIfNull(faults);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(inputRouters);
         ArgumentNullException.ThrowIfNull(logger);
@@ -87,6 +90,11 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             hostDescription: "windowed host"
         );
         m_externalClocks = externalClocks;
+        m_faults = LauncherHostLoop.SingleOrDefault(
+            items: faults,
+            name: nameof(GpuCreationFaults),
+            hostDescription: "windowed host"
+        );
         m_inputClock = inputClock;
         m_inputRouter = LauncherHostLoop.SingleOrDefault(
             items: inputRouters,
@@ -172,14 +180,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         }
 
         return decision.ToPeriodTicks(frequency: frequency);
-    }
-    // Resolves the one-shot synthetic-device-loss injection time from LauncherOptions.SyntheticDeviceLossSeconds,
-    // or null when the test hook is off. Render/test only.
-    private static long? ResolveSyntheticDeviceLossTimestamp(double? seconds, long startTimestamp, long frequency) {
-        return (((seconds is { } value) && (value > 0.0))
-            ? (long?)(startTimestamp + ((long)(value * frequency)))
-            : null
-        );
     }
     private void RunWindowLoop(CancellationToken stoppingToken) {
         try {
@@ -306,13 +306,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     rootHostContext: m_rootHostContext,
                     writeLine: m_bufferedOutput.WriteErrorLine
                 );
-                // Test hook: a one-shot synthetic device loss N seconds in, to exercise recovery without real GPU churn.
-                var syntheticDeviceLossAt = ResolveSyntheticDeviceLossTimestamp(
-                    seconds: m_options.SyntheticDeviceLossSeconds,
-                    startTimestamp: startTimestamp,
-                    frequency: frequency
-                );
-                var syntheticDeviceLossFired = false;
 
                 // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
                 // (console pump alone) and the fallback while the registered simulation reports 0 (an authored
@@ -535,14 +528,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // not touched — a recovery that burns several wall-clock frames is absorbed by the maxFrameTicks
                     // clamp, so a recorded run produces identical sim ticks regardless of recovery hitches.
                     try {
-                        // Test hook (PUCK_TEST_DEVICE_LOSS=<seconds>): inject ONE synthetic device loss to exercise the
-                        // full recovery path (catch -> node reset -> device recreate -> resume) on a HEALTHY GPU — no
-                        // driver reset, no black-screen risk. Validates the rebuild machinery; the real native-detection
-                        // path is exercised separately by a true loss (e.g. Win+Ctrl+Shift+B).
-                        ThrowIfSyntheticDeviceLossDue(
-                            at: syntheticDeviceLossAt,
-                            fired: ref syntheticDeviceLossFired
-                        );
+                        // The operator's gpu.faults lose: the armed frame loses the device here, on a healthy GPU, and
+                        // recovers through the same policy a real loss does.
+                        m_faults?.ThrowIfLossDue();
 
                         // BeginFrame recreates presentation resources when the size changed and waits for the
                         // previous frame's GPU work, so the node tree can safely reuse its per-frame resources.
@@ -719,19 +707,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             }
         } finally {
             m_applicationLifetime.StopApplication();
-        }
-    }
-    // Throws a synthetic DeviceLostException once the configured time has elapsed (test hook only); flips the one-shot
-    // flag so it fires exactly once.
-    private static void ThrowIfSyntheticDeviceLossDue(long? at, ref bool fired) {
-        if (
-            (at is { } dueTimestamp) &&
-            !fired &&
-            (Stopwatch.GetTimestamp() >= dueTimestamp)
-        ) {
-            fired = true;
-
-            throw new DeviceLostException(message: "Synthetic device-loss test injection (PUCK_TEST_DEVICE_LOSS).");
         }
     }
 

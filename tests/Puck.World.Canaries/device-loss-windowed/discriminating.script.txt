@@ -1,0 +1,10 @@
+# The same frames with no loss armed: the first capture lands, and nothing is created again.
+world.wait ready 45
+world.cadence off
+world.wait 10
+gpu.faults list
+world.screenshot {run}/lost.png
+world.wait 30
+gpu.faults list
+world.screenshot {run}/after.png
+world.wait 10

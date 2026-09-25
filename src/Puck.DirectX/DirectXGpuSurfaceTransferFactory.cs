@@ -38,6 +38,8 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
     private uint m_currentBytesPerPixel;
     private byte[]? m_outputBuffer;
     private bool m_disposed;
+    // The device the readback buffer lives on, from the first read (DirectXDeviceOwnership).
+    private DirectXDevice? m_heldDevice;
 
     public ReadOnlyMemory<byte> Read(
         nint sourceImageHandle,
@@ -52,7 +54,16 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             instance: this
         );
 
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
+        var offered = deviceContext.Device;
+
+        DirectXDeviceOwnership.ThrowIfOtherDevice(
+            held: m_heldDevice,
+            holder: nameof(DirectXGpuSurfaceReadback),
+            offered: offered
+        );
+        m_heldDevice = offered;
+
+        var device = ((ID3D12Device*)offered.Handle);
 
         EnsureReadbackBuffer(
             bytesPerPixel: bytesPerPixel,
@@ -100,6 +111,14 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
     public void Dispose() {
         if (m_disposed) {
             return;
+        }
+
+        // A refused release changes nothing: the buffer stays counted on its device, whose teardown names it.
+        if (m_heldDevice is not null) {
+            DirectXDeviceOwnership.ThrowIfDestroyed(
+                held: m_heldDevice,
+                holder: nameof(DirectXGpuSurfaceReadback)
+            );
         }
 
         m_disposed = true;
@@ -153,22 +172,14 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             )
         );
 
-        device->CreateCommandAllocator(
-            ppCommandAllocator: out var ca,
-            riid: ID3D12CommandAllocator.IID_Guid,
+        // Per read, on the frame's own path: a removed device's quiet wait leaves this create as the first call to see the
+        // removal, so it answers through the checked calls rather than throwing a COMException past the recovery.
+        commandList = ((nint)DirectXCommandCalls.CreateCommandList(
+            allocator: out var allocator,
+            calls: new DirectXDeviceCommandCalls(device: device),
             type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
-        );
-        commandAllocator = ((nint)ca);
-
-        device->CreateCommandList(
-            nodeMask: 0,
-            pCommandAllocator: ((ID3D12CommandAllocator*)commandAllocator),
-            pInitialState: null,
-            ppCommandList: out var cl,
-            riid: ID3D12GraphicsCommandList.IID_Guid,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
-        );
-        commandList = ((nint)cl);
+        ));
+        commandAllocator = ((nint)allocator);
 
         var cmdList = ((ID3D12GraphicsCommandList*)commandList);
         var sourceResource = ((ID3D12Resource*)sourceImageHandle);
@@ -322,6 +333,8 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
     private readonly Dictionary<nint, (nint Resource, GCHandle Token)> m_imports = [];
 
     private bool m_disposed;
+    // The device the opened resources live on, from the first import (DirectXDeviceOwnership).
+    private DirectXDevice? m_heldDevice;
 
     public GpuImportedSurface Import(
         nint sharedHandle,
@@ -334,6 +347,16 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
             instance: this
         );
 
+        // Before the cache: a cached resource belongs to the device it was opened on.
+        var offered = deviceContext.Device;
+
+        DirectXDeviceOwnership.ThrowIfOtherDevice(
+            held: m_heldDevice,
+            holder: nameof(DirectXGpuSurfaceImport),
+            offered: offered
+        );
+        m_heldDevice = offered;
+
         if (m_imports.TryGetValue(
             key: sharedHandle,
             value: out var cached
@@ -344,7 +367,7 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
             );
         }
 
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
+        var device = ((ID3D12Device*)offered.Handle);
 
         void* resource;
         var resourceIid = ID3D12Resource.IID_Guid;
@@ -378,6 +401,15 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
     public void Dispose() {
         if (m_disposed) {
             return;
+        }
+
+        // A refused release changes nothing: the opened resources stay counted on their device, whose teardown names
+        // them.
+        if (m_heldDevice is not null) {
+            DirectXDeviceOwnership.ThrowIfDestroyed(
+                held: m_heldDevice,
+                holder: nameof(DirectXGpuSurfaceImport)
+            );
         }
 
         m_disposed = true;
