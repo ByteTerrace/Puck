@@ -24,7 +24,8 @@ public static class WorldSiloApplication {
         directories: directories
     );
     /// <summary>Attaches the silo console to its pending-verb table the way the World host does: a late verdict and
-    /// an evicted line print, and an eviction counts in <c>wire.errors</c>.</summary>
+    /// an evicted line print, and an eviction counts in <c>wire.errors</c>. The silo hands the result to
+    /// <see cref="WorldSiloHost.AnswerDeferredVerbs"/>, whose rows' echoes count a late refusal there too.</summary>
     /// <param name="services">The built silo's services, holding its <see cref="Puck.World.Protocol.WorldDeferredVerbEchoes"/>
     /// and <see cref="CommandRegistry"/>.</param>
     /// <returns>The attached answers.</returns>
@@ -221,8 +222,9 @@ public static class WorldSiloApplication {
 
             return 1;
         }
-        _ = AnswerDeferredVerbs(services: host.Services);
         var silo = host.Services.GetRequiredService<WorldSiloHost>();
+
+        silo.AnswerDeferredVerbs(answers: AnswerDeferredVerbs(services: host.Services));
         HostResourceUnavailableException? unavailable = null;
 
         try {

@@ -1685,6 +1685,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
                     row.PublishTick = gate.PublishTick;
                     Instances.Admit(row: row);
+                    if (Volatile.Read(location: ref m_deferredVerbAnswers) is { } answers) {
+                        TapEchoes(answers: answers, server: server);
+                    }
 
                     if (slice is { } restoreSlice) {
                         Instances.RestoreRow(
