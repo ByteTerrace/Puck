@@ -109,13 +109,10 @@ public sealed class WorldCompileCache {
     }
 
     /// <summary>Gets the process's cache, the one the boot loader and the document composer compile through. It
-    /// holds compiles in memory until a host names a directory through <see cref="Persist"/>.</summary>
+    /// holds compiles in memory until a host names a directory through <see cref="Persist"/>; only an executable's
+    /// entry point names one, so a test composing World services never persists to the per-user cache.</summary>
     public static WorldCompileCache Shared { get; } = new();
 
-    /// <summary>Gets the per-user directory a host persists held compiles in: the <c>compilations</c> subdirectory
-    /// of the per-user Puck directory (<see cref="Puck.Abstractions.PuckUserDirectory"/>).</summary>
-    public static string DefaultDirectory =>
-        Puck.Abstractions.PuckUserDirectory.Resolve(name: "compilations");
     /// <summary>Gets the directory held compiles persist in, or <see langword="null"/> when they are held in memory
     /// only.</summary>
     public string? Directory => Volatile.Read(location: ref m_directory);

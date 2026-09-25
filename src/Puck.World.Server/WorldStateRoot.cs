@@ -2,8 +2,8 @@ namespace Puck.World.Server;
 
 /// <summary>
 /// A host's on-disk state root: the directory its owned-world catalog, machine id, replay tapes, instance stores and
-/// the other files one run keeps persist under. Compiled worlds and bakes are not state: they live in per-user caches
-/// every boot shares. Every consumer takes the root it is handed, so each host, service collection or test fixture
+/// the other files one run keeps persist under. Compiled worlds, bakes and compiles are not state: they live in the
+/// device caches the boot is handed beside its root (<c>WorldCacheRoots</c>). Every consumer takes the root it is handed, so each host, service collection or test fixture
 /// carries its own and two of them in one process never share one. The World executable resolves its root from
 /// <c>--state-dir</c>, falling back to the <c>world</c> subdirectory of the per-user Puck directory
 /// (<see cref="Puck.Abstractions.PuckUserDirectory"/>) only in its own composition root; a hosted silo takes its

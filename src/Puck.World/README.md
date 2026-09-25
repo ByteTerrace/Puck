@@ -131,7 +131,10 @@ leaving out the creation bakes: those a
 compiled world names fill the bake cache from the build's bake pack
 (`Assets/worlds/bakes.puckbake`), and a presentation bakes any that are
 missing in the background and keeps them in the per-user `bakes` cache
-([creation bakes](../../docs/architecture/worlds.md#creation-bakes)).
+([creation bakes](../../docs/architecture/worlds.md#creation-bakes)). The
+entry point names these three per-user caches and hands them to the boot as
+`WorldCacheRoots`, so a host or test that composes World services uses
+directories of its own.
 
 Boot prints one line naming the world-definition file it loaded (an explicit
 `--world <path>` or the shipped `Assets/worlds/puck.world.json`), one

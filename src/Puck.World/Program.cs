@@ -177,9 +177,15 @@ if (parseResult.GetValue(option: extensionsConfigFileOption) is { } extensionsPa
 // The per-user default is resolved here and nowhere else: every consumer below takes this root from the service
 // collection, so a host or fixture that composes World services carries its own.
 stateRoot = new Puck.World.Server.WorldStateRoot(path: (parseResult.GetValue(option: stateDirOption) ?? PuckUserDirectory.Resolve(name: "world")));
-// A world source compiles once across boots: the cache is per user rather than under the state root, since what it
-// holds is a pure function of the source files it names and the compiler that read them, never of a run's state.
-Puck.World.Transpiler.Composition.WorldCompileCache.Shared.Persist(directory: Puck.World.Transpiler.Composition.WorldCompileCache.DefaultDirectory);
+// The device caches are per user rather than under the state root, since each holds a pure function of its inputs and
+// the build, never of a run's state. Their per-user defaults are named here and nowhere else, like the state root's.
+var caches = new WorldCacheRoots(
+    bakes: PuckUserDirectory.Resolve(name: "bakes"),
+    compilations: PuckUserDirectory.Resolve(name: "compilations"),
+    compiledWorlds: PuckUserDirectory.Resolve(name: "compiled-worlds")
+);
+// A world source compiles once across boots.
+Puck.World.Transpiler.Composition.WorldCompileCache.Shared.Persist(directory: caches.Compilations);
 // Parse the nullable host CLI overrides at the boundary, keeping World's loud typo hard-exits for --backend / --present-
 // mode. A null override means "the document decides" (WorldHostSettings.Resolve coalesces to the authored defaults).
 WorldBackendPreference? backendOverride = null;
@@ -269,6 +275,7 @@ if (parseResult.GetValue(option: authenticationConfigFileOption) is { } authenti
 // registered so world.save knows its default target. Any path that will not load ends the boot here — a typo or missing
 // shipped document must never quietly run a different world.
 if (!PuckWorldLoader.TryResolveWorld(
+    caches: caches,
     entry: parseResult.GetValue(option: entryOption),
     explicitPath: parseResult.GetValue(option: worldOption),
     stateRoot: stateRoot,
@@ -394,6 +401,7 @@ if (hostSettings.Presentation == WorldHostPresentation.Windowed) {
 // the same collection through the same method.
 services.AddWorldBoot(inputs: new WorldBootInputs(
     Authenticator: authenticator,
+    Caches: caches,
     Extensions: extensions,
     HostSettings: hostSettings,
     MachineCatalog: machineCatalog,

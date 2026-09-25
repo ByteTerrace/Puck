@@ -8,25 +8,33 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: no test in this suite can resolve the per-user world state root, and no run's roots are
-/// process-global. The default root, <c>PuckUserDirectory.Resolve("world")</c>, is named in exactly one place, the
-/// desktop World's entry point (the top-level statements of <c>Program</c> in <c>Puck.World.dll</c>), which no test
-/// runs; every other consumer takes the <see cref="WorldStateRoot"/> its host or fixture hands it. The capture and
-/// schedule roots, which resolve under that state root or where <c>--capture-dir</c> and <c>--schedule-dir</c> point,
-/// are built from the command line in one place, <see cref="WorldBootComposition.AddWorldBoot"/>, and injected from
-/// there. The laws read the IL of every assembly in this suite's output directory: for a <c>ldstr "world"</c> fed
-/// straight into <see cref="PuckUserDirectory.Resolve"/>, and for a <c>newobj</c> of either boot-built root outside
-/// the boot. No root type carries static state, so none can hold an override one composition leaks into the next. The
-/// desktop assembly is the control that proves each scan finds the one site that exists.
+/// CONTRACT UNDER TEST: no test in this suite can resolve the per-user world state root or the per-user device caches,
+/// and no run's roots are process-global. The per-user defaults, <c>PuckUserDirectory.Resolve</c> of <c>world</c>,
+/// <c>bakes</c>, <c>compiled-worlds</c> and <c>compilations</c>, are each named in exactly one place, the desktop
+/// World's entry point (the top-level statements of <c>Program</c> in <c>Puck.World.dll</c>), which no test runs;
+/// every other consumer takes the <see cref="WorldStateRoot"/> and <see cref="WorldCacheRoots"/> its host or fixture
+/// hands it. The capture and schedule roots, which resolve under that state root or where <c>--capture-dir</c> and
+/// <c>--schedule-dir</c> point, are built from the command line in one place, <see cref="WorldBootComposition.AddWorldBoot"/>,
+/// and injected from there. The laws read the IL of every assembly in this suite's output directory: for a
+/// <c>ldstr</c> of one of those names fed straight into <see cref="PuckUserDirectory.Resolve"/>, and for a
+/// <c>newobj</c> of either boot-built root outside the boot. No root type carries static state, so none can hold an
+/// override one composition leaks into the next. The desktop assembly is the control that proves each scan finds the
+/// one site per name that exists.
 /// </summary>
 public sealed class WorldStateRootIsolationLawTests {
     private const byte CallOpcode = 0x28;
     private const byte LoadStringOpcode = 0x72;
     private const byte NewObjectOpcode = 0x73;
-    private const string StateRootName = "world";
     // The metadata table of a ldstr operand: the user-string heap.
     private const int UserStringTable = 0x70;
 
+    // The per-user subdirectories only the desktop entry point may name: the state root and the three device caches.
+    private static readonly string[] PerUserNames = [
+        "bakes",
+        "compilations",
+        "compiled-worlds",
+        "world",
+    ];
     // The roots the boot builds from its command line and nothing else constructs.
     private static readonly Type[] BootBuiltRoots = [
         typeof(WorldCaptureRoot),
@@ -103,8 +111,9 @@ public sealed class WorldStateRootIsolationLawTests {
             }
         }
     }
-    // Every method in the assembly that loads the state root's name and passes it straight to the per-user resolver.
-    private static IEnumerable<string> PerUserStateRootSites(Assembly assembly) {
+    // Every method in the assembly that loads one of the per-user names and passes it straight to the per-user
+    // resolver, with the name it resolves.
+    private static IEnumerable<(string Site, string Name)> PerUserSites(Assembly assembly) {
         foreach (var (site, method, il) in MethodBodies(assembly: assembly)) {
             for (var offset = 0; ((offset + 10) <= il.Length); offset++) {
                 if ((il[offset] != LoadStringOpcode) || (il[(offset + 5)] != CallOpcode)) {
@@ -117,41 +126,52 @@ public sealed class WorldStateRootIsolationLawTests {
                     continue;
                 }
 
-                bool resolvesStateRoot;
+                string? resolved;
 
                 try {
-                    resolvesStateRoot = (
-                        (method.Module.ResolveString(metadataToken: stringToken) == StateRootName) &&
+                    resolved = ((
+                        (method.Module.ResolveString(metadataToken: stringToken) is { } name) &&
+                        PerUserNames.Contains(value: name) &&
                         (OperandMethod(il: il, method: method, offset: (offset + 6)) is { } target) &&
                         (target.DeclaringType?.FullName == typeof(PuckUserDirectory).FullName) &&
                         (target.Name == nameof(PuckUserDirectory.Resolve))
-                    );
+                    )
+                        ? name
+                        : null);
                 } catch (ArgumentException) {
-                    resolvesStateRoot = false;
+                    resolved = null;
                 }
 
-                if (resolvesStateRoot) {
-                    yield return site;
+                if (resolved is not null) {
+                    yield return (site, resolved);
                 }
             }
         }
     }
 
     [Fact]
-    public void NoAssemblyThisSuiteLinksResolvesThePerUserStateRootOutsideTheDesktopEntryPoint() {
+    public void NoAssemblyThisSuiteLinksResolvesAPerUserRootOutsideTheDesktopEntryPoint() {
         var desktop = Path.GetFileName(path: typeof(WorldBootComposition).Assembly.Location);
-        var sites = OutputAssemblies().SelectMany(selector: path => PerUserStateRootSites(assembly: Assembly.LoadFrom(assemblyFile: path)).Select(selector: site => (Assembly: Path.GetFileName(path: path), Site: site)))
+        var sites = OutputAssemblies().SelectMany(selector: path => PerUserSites(assembly: Assembly.LoadFrom(assemblyFile: path)).Select(selector: site => (Assembly: Path.GetFileName(path: path), site.Site, site.Name)))
             .Where(predicate: site => !(string.Equals(a: site.Assembly, b: desktop, comparisonType: StringComparison.Ordinal) && IsEntryPoint(site: site.Site)))
-            .Select(selector: static site => $"{site.Assembly}: {site.Site}")
+            .Select(selector: static site => $"{site.Assembly}: {site.Site} ({site.Name})")
             .ToArray();
 
         Assert.True(
             condition: (sites.Length == 0),
-            userMessage: $"the per-user world state root is resolved outside the desktop entry point — take the WorldStateRoot the host hands you instead: {string.Join(separator: ", ", values: sites)}"
+            userMessage: $"a per-user root is resolved outside the desktop entry point — take the WorldStateRoot or WorldCacheRoots the host hands you instead: {string.Join(separator: ", ", values: sites)}"
         );
     }
     [Fact]
-    public void TheDesktopCompositionRootIsTheOneSiteThatResolvesIt() => Assert.True(condition: IsEntryPoint(site: Assert.Single(collection: PerUserStateRootSites(assembly: typeof(WorldBootComposition).Assembly))));
+    public void TheDesktopCompositionRootIsTheOneSiteThatResolvesEach() {
+        var sites = PerUserSites(assembly: typeof(WorldBootComposition).Assembly).ToArray();
+
+        Assert.All(collection: sites, action: static site => Assert.True(condition: IsEntryPoint(site: site.Site), userMessage: site.Site));
+        Assert.Equal(
+            actual: sites.Select(selector: static site => site.Name).Order(comparer: StringComparer.Ordinal),
+            expected: PerUserNames.Order(comparer: StringComparer.Ordinal)
+        );
+    }
     // A fixture builds its own capture and schedule roots, so this suite's own assembly is not scanned; every engine
     // assembly takes the ones the boot registered.
     [Fact]
@@ -168,6 +188,7 @@ public sealed class WorldStateRootIsolationLawTests {
             expected: BootBuiltRoots.Select(selector: type => $"{Path.GetFileName(path: typeof(WorldBootComposition).Assembly.Location)}: {boot} ({type.FullName})").Order(comparer: StringComparer.Ordinal)
         );
     }
+    [InlineData(typeof(WorldCacheRoots))]
     [InlineData(typeof(WorldCaptureRoot))]
     [InlineData(typeof(WorldScheduleRoot))]
     [InlineData(typeof(WorldStateRoot))]
