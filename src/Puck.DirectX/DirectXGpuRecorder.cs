@@ -355,7 +355,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
     /// <c>ClearRenderTargetView</c> or <c>ClearDepthStencilView</c> before the pass, which then preserves it: a clear
     /// inside a render pass is disallowed. Requires <c>ID3D12GraphicsCommandList4</c> (Windows 10 1809+) for a first-class
     /// render pass with explicit ending access; older runtimes bind the views with <c>OMSetRenderTargets</c>. The
-    /// viewport and scissor cover the area; a clear covers the whole attachment.</remarks>
+    /// viewport, the scissor and each clear cover the area, as Vulkan's render area bounds its clear loads.</remarks>
     public void BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area = null) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
@@ -364,6 +364,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
             area: area,
             framebuffer: framebuffer
         );
+        var cleared = ToRect(rect: drawn);
         var description = target.Pass.Description;
         var colorCount = description.Colors.Count;
         var renderTargets = stackalloc D3D12_RENDER_PASS_RENDER_TARGET_DESC[Math.Max(
@@ -389,9 +390,9 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
             if (color.Load == GpuAttachmentLoad.Clear) {
                 commandList->ClearRenderTargetView(
                     ColorRGBA: clearColor,
-                    NumRects: 0,
+                    NumRects: 1,
                     RenderTargetView: view,
-                    pRects: null
+                    pRects: &cleared
                 );
             }
 
@@ -418,9 +419,9 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
                     ClearFlags: D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_DEPTH,
                     Depth: depth.ClearDepth,
                     DepthStencilView: depthView,
-                    NumRects: 0,
+                    NumRects: 1,
                     Stencil: 0,
-                    pRects: null
+                    pRects: &cleared
                 );
             }
 
@@ -564,18 +565,24 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
     /// <inheritdoc/>
     public void SetScissor(nint commandBufferHandle, GpuPixelRect rect) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
-        var scissor = new RECT {
-            bottom = (rect.Y + ((int)rect.Height)),
-            left = rect.X,
-            right = (rect.X + ((int)rect.Width)),
-            top = rect.Y,
-        };
+        var scissor = ToRect(rect: rect);
 
         ((ID3D12GraphicsCommandList*)state.CommandList)->RSSetScissorRects(
             NumRects: 1,
             pRects: &scissor
         );
     }
+    /// <summary>Returns the Direct3D 12 rectangle covering exactly a pixel rectangle's pixels: its left and top edges
+    /// inclusive, its right and bottom edges exclusive, as a scissor and a clear rectangle both read it.</summary>
+    /// <param name="rect">The pixel rectangle.</param>
+    /// <returns>The rectangle.</returns>
+    /// <exception cref="OverflowException">An edge of <paramref name="rect"/> lies past <see cref="int.MaxValue"/>.</exception>
+    public static RECT ToRect(GpuPixelRect rect) => new() {
+        bottom = checked((rect.Y + ((int)rect.Height))),
+        left = rect.X,
+        right = checked((rect.X + ((int)rect.Width))),
+        top = rect.Y,
+    };
     /// <inheritdoc/>
     public void Draw(
         nint commandBufferHandle,
