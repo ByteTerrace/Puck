@@ -21,7 +21,7 @@ public sealed class AffectedSelectionLawTests {
     ];
     private static readonly HashSet<string> WorldClosure = new(collection: ["World", "Core"], comparer: StringComparer.OrdinalIgnoreCase);
 
-    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null) => AffectedSelection.Select(
+    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null) => AffectedSelection.Select(
         canaries: Canaries,
         changed: changed,
         consumersOf: (consumersOf ?? (static _ => [])),
@@ -29,6 +29,7 @@ public sealed class AffectedSelectionLawTests {
         declaresTests: static path => path.Contains(comparisonType: StringComparison.Ordinal, value: "tested"),
         catalogInputs: static (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/World/Assets/worlds/") || (owner == "Core")),
         projects: Projects,
+        canariesReaching: (canariesReaching ?? (static _ => new HashSet<string>())),
         standInsFor: (standInsFor ?? (static _ => [])),
         worldClosure: WorldClosure
     );
