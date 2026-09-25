@@ -211,10 +211,9 @@ public sealed class GpuResidencyLawTests {
             using var copy = CopyPipeline(gpu: gpu);
             using var region = new GpuRegion(
                 bindings: gpu.Bindings,
-                buffers: gpu.StorageBufferFactory,
+                buffers: gpu.BufferFactory,
                 byteCount: ByteCount,
                 copyPipeline: copy,
-                device: gpu.Device,
                 policy: policy,
                 recorder: gpu.Recorder,
                 slotCount: Slots
@@ -275,10 +274,9 @@ public sealed class GpuResidencyLawTests {
         using var copy = CopyPipeline(gpu: gpu);
         using var region = new GpuRegion(
             bindings: gpu.Bindings,
-            buffers: gpu.StorageBufferFactory,
+            buffers: gpu.BufferFactory,
             byteCount: 64,
             copyPipeline: copy,
-            device: gpu.Device,
             policy: GpuResidencyPolicy.Staged,
             recorder: gpu.Recorder,
             slotCount: 2
@@ -290,10 +288,9 @@ public sealed class GpuResidencyLawTests {
         _ = Assert.Throws<InvalidOperationException>(testCode: () => region.RecordCopy(commandBuffer: 2, slot: 0));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new GpuRegion(
             bindings: gpu.Bindings,
-            buffers: gpu.StorageBufferFactory,
+            buffers: gpu.BufferFactory,
             byteCount: 6,
             copyPipeline: copy,
-            device: gpu.Device,
             policy: GpuResidencyPolicy.Ring,
             recorder: gpu.Recorder,
             slotCount: 2
@@ -303,11 +300,10 @@ public sealed class GpuResidencyLawTests {
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {
         using var module = gpu.ShaderModuleFactory.Create(
             bytecode: new byte[] { UploadModelGpu.FrameUploadBytecode },
-            deviceContext: gpu.Device,
             stage: GpuShaderStage.Compute
         );
 
-        return gpu.ComputePipelineFactory.Create(
+        return gpu.PipelineFactory.Create(
             computeShaderModule: module,
             description: new GpuComputePipelineDescription(
                 Bindings: GpuRegion.CopyBindings,
@@ -317,8 +313,7 @@ public sealed class GpuResidencyLawTests {
                     offset: 0,
                     stageFlags: GpuShaderStage.Compute
                 )
-            ),
-            deviceContext: gpu.Device
+            )
         );
     }
     // A frame's writes: none on the first frame, one straddling words, more separate ranges than a host buffer keeps

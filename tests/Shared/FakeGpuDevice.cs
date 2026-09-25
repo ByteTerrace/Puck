@@ -15,16 +15,14 @@ namespace Puck.Testing;
 internal sealed class FakeGpuDevice :
     IGpuRecorder,
     IGpuComputeCommandPoolFactory,
-    IGpuComputePipelineFactory,
+    IGpuPipelineFactory,
     IGpuComputeServices,
     IGpuBindings,
     IGpuDeviceContext,
-    IGpuPipelineFactory,
     IGpuQueueSubmitter,
     IGpuShaderModuleFactory,
-    IGpuStorageBufferFactory,
+    IGpuBufferFactory,
     IGpuImageFactory,
-    IGpuGeometryBufferFactory,
     IGpuRenderPassFactory,
     IGpuSurfaceTransferFactory {
     private readonly byte m_reportVersion;
@@ -40,16 +38,16 @@ internal sealed class FakeGpuDevice :
     /// holds a pipeline build by blocking here.</summary>
     public Action? BeforeComputePipeline { get; set; }
     public IGpuBindings Bindings => this;
+    public IGpuBufferFactory BufferFactory => this;
     public IGpuComputeCommandPoolFactory CommandPoolFactory => this;
-    public IGpuComputePipelineFactory ComputePipelineFactory => this;
     public nint DeviceHandle => 1;
     public GpuDeviceIdentity? Identity => null;
     public IGpuImageFactory ImageFactory => this;
     public GpuMemoryProfile MemoryProfile => default;
+    public IGpuPipelineFactory PipelineFactory => this;
     public IGpuQueueSubmitter QueueSubmitter => this;
     public IGpuRecorder Recorder => this;
     public IGpuShaderModuleFactory ShaderModuleFactory => this;
-    public IGpuStorageBufferFactory StorageBufferFactory => this;
     public IGpuSurfaceTransferFactory SurfaceTransferFactory => this;
     /// <summary>Gets the number of submissions made, fenced or not.</summary>
     public int Submissions { get; private set; }
@@ -77,8 +75,8 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
-    IGpuComputeCommandPool IGpuComputeCommandPoolFactory.Create(IGpuDeviceContext deviceContext) => new Resource();
-    IGpuComputePipeline IGpuComputePipelineFactory.Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
+    IGpuComputeCommandPool IGpuComputeCommandPoolFactory.Create() => new Resource();
+    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         BeforeComputePipeline?.Invoke();
 
         return new Resource();
@@ -91,27 +89,25 @@ internal sealed class FakeGpuDevice :
     void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) { }
     void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) { }
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
-    IGpuPipeline IGpuPipelineFactory.Create(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => new Resource();
-    IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence(IGpuDeviceContext deviceContext) => new Fence();
-    void IGpuQueueSubmitter.Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
-    void IGpuQueueSubmitter.Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => new Resource();
+    IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => new Fence();
+    void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
+    void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
         // A backend accepts only its own fence type; a counting fence reaching here is a missed unwrap.
         ((Fence)fence).Armed = true;
         Submissions++;
     }
-    void IGpuQueueSubmitter.SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
-    IGpuRenderPass IGpuRenderPassFactory.Create(IGpuDeviceContext deviceContext, GpuRenderPassDescription description) => new Resource();
-    IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => new Resource(width: colors[0].Width, height: colors[0].Height);
-    IGpuShaderModule IGpuShaderModuleFactory.Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => new Resource();
-    IGpuStorageBuffer IGpuStorageBufferFactory.Create(IGpuDeviceContext deviceContext, ulong sizeBytes) => new Resource(sizeBytes: sizeBytes);
-    IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) => new Resource(sizeBytes: sizeBytes);
-    IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => new Resource(sizeBytes: sizeBytes);
-    IGpuStorageBuffer IGpuStorageBufferFactory.CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => new Resource(sizeBytes: sizeBytes);
-    IGpuImage IGpuImageFactory.Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => new Resource(width: width, height: height);
-    IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-    IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback(IGpuDeviceContext deviceContext) => new Readback(reportVersion: m_reportVersion);
-    IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload(IGpuDeviceContext deviceContext) => new SurfaceUpload();
-    IGpuBuffer IGpuGeometryBufferFactory.Create(IGpuDeviceContext deviceContext, ReadOnlySpan<byte> data, GpuBufferUsage usage) => new Resource(sizeBytes: ((ulong)data.Length));
+    void IGpuQueueSubmitter.SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
+    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description) => new Resource();
+    IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => new Resource(width: colors[0].Width, height: colors[0].Height);
+    IGpuShaderModule IGpuShaderModuleFactory.Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => new Resource();
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => new Resource(sizeBytes: sizeBytes);
+    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => new Resource(sizeBytes: sizeBytes);
+    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => new Resource(width: width, height: height);
+    IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport() => throw new NotSupportedException();
+    IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => new Readback(reportVersion: m_reportVersion);
+    IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => new SurfaceUpload();
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) => new Resource(sizeBytes: ((ulong)data.Length));
 
     private sealed class Fence : IGpuSubmissionFence {
         public bool Armed { get; set; }

@@ -221,12 +221,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
             try {
                 objects.Vertex = gpu.ShaderModuleFactory.Create(
-                    device,
                     GpuShaderStage.Vertex,
                     File.ReadAllBytes(path: ((root + ".vert") + extension))
                 );
                 objects.Fragment = gpu.ShaderModuleFactory.Create(
-                    device,
                     GpuShaderStage.Fragment,
                     File.ReadAllBytes(path: ((root + ".frag") + extension))
                 );
@@ -242,7 +240,6 @@ public sealed partial class ShaderPipelineRenderNode {
                 );
 
                 objects.RenderPass = graphics.RenderPassFactory.Create(
-                    deviceContext: device,
                     description: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
                         FinalLayout: GpuImageLayout.ShaderReadOnly,
                         Format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -251,7 +248,6 @@ public sealed partial class ShaderPipelineRenderNode {
                     )])
                 );
                 objects.Pipeline = graphics.PipelineFactory.Create(
-                    device,
                     objects.RenderPass,
                     objects.Vertex,
                     objects.Fragment,
@@ -260,14 +256,12 @@ public sealed partial class ShaderPipelineRenderNode {
 
                 for (var i = 0; (i < inFlight); i++) {
                     objects.Targets[i] = gpu.ImageFactory.Create(
-                        deviceContext: device,
                         format: GpuPixelFormat.R8G8B8A8Unorm,
                         height: height,
                         usage: TargetUsage,
                         width: width
                     );
                     objects.Framebuffers[i] = graphics.RenderPassFactory.CreateFramebuffer(
-                        device,
                         objects.RenderPass,
                         [objects.Targets[i]],
                         null
@@ -348,9 +342,9 @@ public sealed partial class ShaderPipelineRenderNode {
                         m_pipeline.DescriptorSetLayoutHandle
                     );
                     m_samplers[i] = bindings.CreateSampler();
-                    m_pre[i] = gpu.CommandPoolFactory.Create(deviceContext: device);
-                    m_draw[i] = gpu.CommandPoolFactory.Create(deviceContext: device);
-                    m_post[i] = gpu.CommandPoolFactory.Create(deviceContext: device);
+                    m_pre[i] = gpu.CommandPoolFactory.Create();
+                    m_draw[i] = gpu.CommandPoolFactory.Create();
+                    m_post[i] = gpu.CommandPoolFactory.Create();
                 }
             } catch { Dispose(); throw; }
         }

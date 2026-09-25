@@ -133,7 +133,6 @@ public sealed partial class VulkanGpuExportableImage : IGpuExportableImage {
     /// <param name="usage">The declared usages.</param>
     /// <returns>The image, owned by the caller.</returns>
     public static VulkanGpuExportableImage Create(IVulkanExternalMemoryApi externalMemoryApi, IVulkanFramebufferSetApi framebufferSetApi, IVulkanDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
-        ArgumentNullException.ThrowIfNull(deviceContext);
 
         var logicalDevice = deviceContext.LogicalDevice;
 
@@ -209,11 +208,11 @@ public sealed partial class VulkanGpuExportableImage : IGpuExportableImage {
 /// Implements <see cref="IGpuSurfaceExportFactory"/> for Vulkan by creating <see cref="VulkanGpuExportableImage"/>
 /// instances.
 /// </summary>
-public sealed class VulkanGpuSurfaceExportFactory(IVulkanExternalMemoryApi externalMemoryApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuSurfaceExportFactory {
+public sealed class VulkanGpuSurfaceExportFactory(IVulkanDeviceContext deviceContext, IVulkanExternalMemoryApi externalMemoryApi, IVulkanFramebufferSetApi framebufferSetApi) : IGpuSurfaceExportFactory {
     /// <inheritdoc/>
-    public IGpuExportableImage CreateExportableImage(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) =>
+    public IGpuExportableImage CreateExportableImage(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) =>
         VulkanGpuExportableImage.Create(
-            deviceContext: ((IVulkanDeviceContext)deviceContext),
+            deviceContext: deviceContext,
             externalMemoryApi: externalMemoryApi,
             format: format,
             framebufferSetApi: framebufferSetApi,

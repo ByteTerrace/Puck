@@ -346,7 +346,7 @@ public sealed class GpuWorkLedgerLawTests {
                 rig.Services.Recorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader);
             }
 
-            rig.Services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [], deviceContext: rig.Gpu);
+            rig.Services.QueueSubmitter.SubmitAndWait(commandBufferHandles: []);
         }
 
         Volatile.Write(location: ref done, value: 1);
@@ -376,7 +376,7 @@ public sealed class GpuWorkLedgerLawTests {
             }
         }
         public Fence NewFence() {
-            var counted = Services.QueueSubmitter.CreateSubmissionFence(deviceContext: Gpu);
+            var counted = Services.QueueSubmitter.CreateSubmissionFence();
 
             return new Fence(Counted: counted, Raw: Gpu.LastCreatedFence!);
         }
@@ -386,6 +386,6 @@ public sealed class GpuWorkLedgerLawTests {
             return (Ledger.TryReadCompleted(sample: sample) ? sample : null);
         }
         public void Submit(Fence fence) =>
-            Services.QueueSubmitter.Submit(commandBufferHandles: [], deviceContext: Gpu, fence: fence.Counted);
+            Services.QueueSubmitter.Submit(commandBufferHandles: [], fence: fence.Counted);
     }
 }

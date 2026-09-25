@@ -386,7 +386,7 @@ IRenderNode pass = new FullscreenPassNode(
 
 `IFullscreenPassServices` is the GPU seam a composition root resolves from
 its one registered backend (command recorder, bindings, device
-context, geometry-buffer factory, graphics pipeline factory, queue submitter,
+context, buffer factory, pipeline factory, queue submitter,
 render-pass factory, shader-module factory, surface-transfer factory, and
 cohesive compute services, whose image factory creates the images a pass
 draws into). The adapter delegates GPU recording, resource allocation, and synchronization to `ShaderPipelineRenderNode`. The pass is an `ICaptureRequestTarget`: an armed capture reads

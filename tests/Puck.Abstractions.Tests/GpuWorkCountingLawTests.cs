@@ -11,13 +11,12 @@ namespace Puck.Abstractions.Tests;
 public sealed class GpuWorkCountingLawTests {
     private static readonly Type[] WrappedInterfaces = [
         typeof(IGpuRecorder),
-        typeof(IGpuComputePipelineFactory),
-        typeof(IGpuBindings),
         typeof(IGpuPipelineFactory),
+        typeof(IGpuBindings),
         typeof(IGpuQueueSubmitter),
         typeof(IGpuShaderModuleFactory),
         typeof(IGpuStorageBuffer),
-        typeof(IGpuStorageBufferFactory),
+        typeof(IGpuBufferFactory),
         typeof(IGpuImageFactory),
         typeof(IGpuSubmissionFence),
     ];
@@ -39,8 +38,7 @@ public sealed class GpuWorkCountingLawTests {
 
         act(obj: rig);
         rig.Services.QueueSubmitter.SubmitAndWait(
-            commandBufferHandles: [],
-            deviceContext: rig.Gpu
+            commandBufferHandles: []
         );
 
         Assert.Equal(
@@ -88,12 +86,11 @@ public sealed class GpuWorkCountingLawTests {
     [Fact]
     public void FenceIsUnwrappedBeforeItReachesTheBackend() {
         var rig = Rig.Create();
-        var fence = rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu);
+        var fence = rig.Services.QueueSubmitter.CreateSubmissionFence();
 
         Assert.IsNotType<FakeGpu.FakeFence>(@object: fence);
         rig.Services.QueueSubmitter.Submit(
             commandBufferHandles: [],
-            deviceContext: rig.Gpu,
             fence: fence
         );
         Assert.IsType<FakeGpu.FakeFence>(@object: rig.Gpu.LastSubmittedFence);
@@ -120,7 +117,7 @@ public sealed class GpuWorkCountingLawTests {
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(ledger: rig.Ledger, recorder: rig.Services.Recorder));
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(bindings: rig.Services.Bindings, ledger: rig.Ledger));
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(ledger: rig.Ledger, submitter: rig.Services.QueueSubmitter));
-        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(factory: rig.Services.StorageBufferFactory, ledger: rig.Ledger));
+        _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(factory: rig.Services.BufferFactory, ledger: rig.Ledger));
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuWorkCounting.Wrap(factory: rig.Pipelines, ledger: rig.Ledger));
     }
 
@@ -149,7 +146,7 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuRecorder.TransitionImageLayout"] = (rig => rig.Services.Recorder.TransitionImageLayout(commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, imageHandle: 3, newLayout: GpuImageLayout.General, oldLayout: GpuImageLayout.Undefined, sourceAccessMask: GpuComputeAccess.None, sourceStageMask: GpuComputeStage.TopOfPipe), [(GpuWork.ImageBarriers, 1L)]),
             ["IGpuRecorder.MemoryBarrier"] = (rig => rig.Services.Recorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader), [(GpuWork.MemoryBarriers, 1L)]),
             ["IGpuRecorder.TransitionBuffer"] = (rig => rig.Services.Recorder.TransitionBuffer(bufferHandle: 3, commandBufferHandle: 2, destinationAccessMask: GpuComputeAccess.ShaderRead, destinationStageMask: GpuComputeStage.ComputeShader, sourceAccessMask: GpuComputeAccess.ShaderWrite, sourceStageMask: GpuComputeStage.ComputeShader), [(GpuWork.BufferBarriers, 1L)]),
-            ["IGpuComputePipelineFactory.Create"] = (rig => rig.Services.ComputePipelineFactory.Create(computeShaderModule: null!, description: null!, deviceContext: rig.Gpu).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
+            ["IGpuPipelineFactory.Create(compute)"] = (rig => rig.Services.PipelineFactory.Create(computeShaderModule: null!, description: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
             ["IGpuBindings.AllocateSet"] = (rig => rig.Services.Bindings.AllocateSet(descriptorSetLayoutHandle: 3, poolHandle: 2), [(GpuWork.DescriptorSetsCreated, 1L)]),
             ["IGpuBindings.CreatePool"] = (rig => rig.Services.Bindings.CreatePool(sizes: new GpuDescriptorPoolSizes(CombinedImageSamplerCount: 0, MaxSets: 1, StorageBufferCount: 1, StorageImageCount: 0)), [(GpuWork.DescriptorPoolsCreated, 1L)]),
             ["IGpuBindings.CreateSampler"] = (rig => rig.Services.Bindings.CreateSampler(filter: GpuSamplerFilter.Nearest), none),
@@ -158,22 +155,21 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuBindings.WriteCombinedImageSampler"] = (rig => rig.Services.Bindings.WriteCombinedImageSampler(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5, samplerHandle: 6), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuBindings.WriteBuffer"] = (rig => rig.Services.Bindings.WriteBuffer(access: GpuBufferAccess.ReadWrite, binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, elementStride: 0), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuBindings.WriteStorageImage"] = (rig => rig.Services.Bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5), [(GpuWork.DescriptorWrites, 1L)]),
-            ["IGpuPipelineFactory.Create"] = (rig => rig.Pipelines.Create(description: null!, deviceContext: rig.Gpu, fragmentShaderModule: null!, renderPass: null!, vertexShaderModule: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
-            ["IGpuQueueSubmitter.CreateSubmissionFence"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu), none),
-            ["IGpuQueueSubmitter.Submit"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: [], deviceContext: rig.Gpu), none),
-            ["IGpuQueueSubmitter.Submit(fence)"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: [], deviceContext: rig.Gpu, fence: rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu)), none),
+            ["IGpuPipelineFactory.Create(graphics)"] = (rig => rig.Pipelines.Create(description: null!, fragmentShaderModule: null!, renderPass: null!, vertexShaderModule: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
+            ["IGpuQueueSubmitter.CreateSubmissionFence"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(), none),
+            ["IGpuQueueSubmitter.Submit"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: []), none),
+            ["IGpuQueueSubmitter.Submit(fence)"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: [], fence: rig.Services.QueueSubmitter.CreateSubmissionFence()), none),
             ["IGpuQueueSubmitter.SubmitAndWait"] = (_ => { }, none),
-            ["IGpuShaderModuleFactory.Create"] = (rig => rig.Services.ShaderModuleFactory.Create(bytecode: ReadOnlyMemory<byte>.Empty, deviceContext: rig.Gpu, stage: GpuShaderStage.Compute).Dispose(), [(GpuWork.ShaderModulesCreated, 1L)]),
-            ["IGpuStorageBuffer.Write"] = (rig => rig.Services.StorageBufferFactory.Create(deviceContext: rig.Gpu, sizeBytes: 64UL).Write<float>(data: [1f, 2f, 3f]), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 12L)]),
-            ["IGpuStorageBuffer.Write(offset)"] = (rig => rig.Services.StorageBufferFactory.CreateIndirectArgs(deviceContext: rig.Gpu, sizeBytes: 64UL).Write<uint>(data: [1u, 2u], destinationOffsetBytes: 8UL), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 8L)]),
-            ["IGpuStorageBufferFactory.Create"] = (rig => rig.Services.StorageBufferFactory.Create(deviceContext: rig.Gpu, sizeBytes: 64UL), [(GpuWork.BuffersCreated, 1L)]),
-            ["IGpuStorageBufferFactory.CreateDeviceLocal"] = (rig => rig.Services.StorageBufferFactory.CreateDeviceLocal(deviceContext: rig.Gpu, sizeBytes: 64UL), [(GpuWork.BuffersCreated, 1L)]),
-            ["IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs"] = (rig => rig.Services.StorageBufferFactory.CreateDeviceLocalIndirectArgs(deviceContext: rig.Gpu, sizeBytes: 64UL), [(GpuWork.BuffersCreated, 1L)]),
-            ["IGpuStorageBufferFactory.CreateIndirectArgs"] = (rig => rig.Services.StorageBufferFactory.CreateIndirectArgs(deviceContext: rig.Gpu, sizeBytes: 64UL), [(GpuWork.BuffersCreated, 1L)]),
-            ["IGpuImageFactory.Create"] = (rig => rig.Services.ImageFactory.Create(deviceContext: rig.Gpu, format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, usage: GpuImageUsage.Storage, width: 4), [(GpuWork.ImagesCreated, 1L)]),
-            ["IGpuSubmissionFence.Dispose"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu).Dispose(), none),
-            ["IGpuSubmissionFence.IsSignaled"] = (rig => _ = rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu).IsSignaled, none),
-            ["IGpuSubmissionFence.Wait"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(deviceContext: rig.Gpu).Wait(), none),
+            ["IGpuShaderModuleFactory.Create"] = (rig => rig.Services.ShaderModuleFactory.Create(bytecode: ReadOnlyMemory<byte>.Empty, stage: GpuShaderStage.Compute).Dispose(), [(GpuWork.ShaderModulesCreated, 1L)]),
+            ["IGpuStorageBuffer.Write"] = (rig => rig.Services.BufferFactory.CreateHostVisible(sizeBytes: 64UL, usage: GpuBufferUsage.Storage).Write<float>(data: [1f, 2f, 3f]), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 12L)]),
+            ["IGpuStorageBuffer.Write(offset)"] = (rig => rig.Services.BufferFactory.CreateHostVisible(sizeBytes: 64UL, usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect).Write<uint>(data: [1u, 2u], destinationOffsetBytes: 8UL), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 8L)]),
+            ["IGpuBufferFactory.CreateHostVisible"] = (rig => rig.Services.BufferFactory.CreateHostVisible(sizeBytes: 64UL, usage: GpuBufferUsage.Storage), [(GpuWork.BuffersCreated, 1L)]),
+            ["IGpuBufferFactory.CreateHostVisible(data)"] = (rig => rig.Services.BufferFactory.CreateHostVisible(data: [1, 2, 3, 4], usage: GpuBufferUsage.Vertex), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 4L)]),
+            ["IGpuBufferFactory.CreateDeviceLocal"] = (rig => rig.Services.BufferFactory.CreateDeviceLocal(sizeBytes: 64UL, usage: GpuBufferUsage.Storage), [(GpuWork.BuffersCreated, 1L)]),
+            ["IGpuImageFactory.Create"] = (rig => rig.Services.ImageFactory.Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, usage: GpuImageUsage.Storage, width: 4), [(GpuWork.ImagesCreated, 1L)]),
+            ["IGpuSubmissionFence.Dispose"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Dispose(), none),
+            ["IGpuSubmissionFence.IsSignaled"] = (rig => _ = rig.Services.QueueSubmitter.CreateSubmissionFence().IsSignaled, none),
+            ["IGpuSubmissionFence.Wait"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Wait(), none),
         };
     }
     private static long Expected((WorkKind Kind, long Amount)[] expected, WorkKind kind) {

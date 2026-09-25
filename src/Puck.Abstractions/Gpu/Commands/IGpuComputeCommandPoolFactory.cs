@@ -5,7 +5,6 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public interface IGpuComputeCommandPoolFactory {
     /// <summary>Creates a compute command pool with a single command buffer.</summary>
-    /// <param name="deviceContext">The device to create the pool on.</param>
     /// <returns>The created command pool.</returns>
-    IGpuComputeCommandPool Create(IGpuDeviceContext deviceContext);
+    IGpuComputeCommandPool Create();
 }

@@ -297,6 +297,11 @@ These are one-line cautions; the owning pages hold the derivations.
   a wrong bind point writes a root the bound pipeline never set. A depth clear
   value is `GpuDepthAttachment.ClearDepth` on the render pass, never a recorder
   argument.
+  The recorder, `IGpuBindings`, every `IGpu*Factory` and the queue submitter are
+  bound to their backend's device context when they are registered and take no
+  device argument; a new service follows them. `IGpuBufferFactory` creates by
+  `GpuBufferUsage` and placement (`CreateHostVisible`, `CreateDeviceLocal`), and a
+  geometry buffer is a host-visible one created with its data.
   A candidate (never the device-loss rebuild) is refused in `EnsureBuild` with
   `SHADERPIPE_BUDGET` when `OwnedBytes` plus its steady state exceeds
   `BudgetBytes`, `ShaderPipelineMemoryBudget.For(profile)` lowered to the

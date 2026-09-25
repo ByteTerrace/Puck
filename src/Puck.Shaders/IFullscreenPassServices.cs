@@ -18,7 +18,7 @@ public interface IFullscreenPassServices {
     /// <summary>Gets the device context to render on — the same device the inner node renders on.</summary>
     IGpuDeviceContext DeviceContext { get; }
     /// <summary>Gets the factory for the geometry buffers a pass reads its vertices and indices from.</summary>
-    IGpuGeometryBufferFactory GeometryBufferFactory { get; }
+    IGpuBufferFactory BufferFactory { get; }
     /// <summary>Gets the graphics pipeline factory.</summary>
     IGpuPipelineFactory PipelineFactory { get; }
     /// <summary>Gets the queue submitter.</summary>

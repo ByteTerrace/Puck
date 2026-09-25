@@ -95,9 +95,7 @@ public interface IGpuRecorder {
     /// <see langword="uint"/>s of an argument buffer, the layout of both Vulkan's <c>VkDispatchIndirectCommand</c> and
     /// Direct3D 12's <c>D3D12_DISPATCH_ARGUMENTS</c>.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
-    /// <param name="argumentBufferHandle">The argument buffer, from
-    /// <see cref="IGpuStorageBufferFactory.CreateIndirectArgs"/> or
-    /// <see cref="IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs"/>.</param>
+    /// <param name="argumentBufferHandle">The argument buffer, created with <see cref="GpuBufferUsage.Indirect"/>.</param>
     /// <param name="argumentBufferOffset">The byte offset of the three group counts.</param>
     void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset);
     /// <summary>Records a zero clear of a color image in <see cref="GpuImageLayout.General"/>.</summary>

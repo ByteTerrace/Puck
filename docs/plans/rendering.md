@@ -1301,10 +1301,15 @@ Phase 2, the services, follows the generated frame block, which has landed:
    context. One `WriteBuffer` names the binding's `GpuBufferAccess` and element
    stride (zero for a raw view), which chooses a Direct3D 12 raw or structured
    view, read-only or read-write; Vulkan writes one storage-buffer descriptor.
-9. The factories lose the device parameter, and `IGpuBufferFactory` creates a
-   buffer by usage (storage, uniform, indirect, vertex, index) and placement
-   (host-visible, device-local), with a law over Direct3D 12's transition into
-   the indirect-argument state.
+9. Done: every factory and the queue submitter take no device parameter; each
+   backend registers one of each, bound to its device context. `IGpuPipelineFactory`
+   creates compute and graphics pipelines. `IGpuBufferFactory` creates a buffer by
+   `GpuBufferUsage` flags (storage, uniform, indirect, vertex, index) and by
+   placement: `CreateHostVisible` returns a host-writable buffer, with or without
+   initial data, and `CreateDeviceLocal` one only the GPU writes.
+   `DirectXBufferStatesLawTests` holds each placement's way into Direct3D 12's
+   indirect-argument state. The surface transfer objects the factory creates still
+   take a device context on each call.
 10. The bundles under **Deletes** collapse into `IGpuDeviceContext.Services`
     and its bring-up; `DeviceHandle`, `VulkanDeviceCommands.Token` and
     `FromToken` go.

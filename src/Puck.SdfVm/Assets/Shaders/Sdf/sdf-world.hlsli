@@ -156,7 +156,7 @@ static const uint SdfScreenSurfaceCount = 32u;
 // sampler declarations aliased onto one register — so Direct3D 12 bakes in THIRTY-TWO static samplers, one per
 // SampledImage binding, ALL with the identical requested filter (NEAREST): logically one shared sampler, materialized
 // as thirty-two registers because the shading language has no array-of-combined-image-sampler here. Direct3D 12 assigns
-// t#/s# registers in the C# binding-array order (DirectXGpuComputePipelineFactory), so these register(tN)/register(sN)
+// t#/s# registers in the C# binding-array order (DirectXGpuPipelineFactory), so these register(tN)/register(sN)
 // annotations must mirror SdfWorldEngine's viewsBindings order exactly — currently t5..t36 / s0..s31. Slots with no
 // source bound this frame (params.screenMask bit clear) duplicate a valid filler view; the shader never samples an
 // unbound slot (screenSourceBound gates it), so the filler's content never reaches the image. (params.screenMask is a

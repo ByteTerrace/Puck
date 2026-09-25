@@ -16,12 +16,12 @@ namespace Puck.Testing;
 /// the barriers the caller records. A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
 /// </summary>
 internal sealed class UploadModelGpu :
-    IGpuComputePipelineFactory,
+    IGpuPipelineFactory,
     IGpuRecorder,
     IGpuComputeServices,
     IGpuBindings,
     IGpuShaderModuleFactory,
-    IGpuStorageBufferFactory {
+    IGpuBufferFactory {
     /// <summary>The first bytecode byte that marks the frame-upload kernel.</summary>
     public const byte FrameUploadBytecode = 0xF7;
 
@@ -44,14 +44,14 @@ internal sealed class UploadModelGpu :
 
     public IGpuBindings Bindings => this;
     public IGpuComputeCommandPoolFactory CommandPoolFactory => m_inner.CommandPoolFactory;
-    public IGpuComputePipelineFactory ComputePipelineFactory => this;
+    public IGpuPipelineFactory PipelineFactory => this;
     public IGpuRecorder Recorder => this;
     /// <summary>Gets the device the engine renders on.</summary>
     public IGpuDeviceContext Device => m_inner;
+    public IGpuBufferFactory BufferFactory => this;
     public IGpuImageFactory ImageFactory => m_inner.ImageFactory;
     public IGpuQueueSubmitter QueueSubmitter => m_inner.QueueSubmitter;
     public IGpuShaderModuleFactory ShaderModuleFactory => this;
-    public IGpuStorageBufferFactory StorageBufferFactory => this;
     public IGpuSurfaceTransferFactory SurfaceTransferFactory => m_inner.SurfaceTransferFactory;
     /// <summary>Gets the table-upload copies recorded since the last <see cref="ResetTallies"/>.</summary>
     public int UploadCopies { get; private set; }
@@ -92,7 +92,7 @@ internal sealed class UploadModelGpu :
         UploadCopies = 0;
     }
 
-    IGpuComputePipeline IGpuComputePipelineFactory.Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
+    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         var pipeline = new Handles(handle: NextHandle(), layout: NextHandle(), setLayout: NextHandle());
 
         if (computeShaderModule.Handle == m_uploadModule) {
@@ -101,7 +101,7 @@ internal sealed class UploadModelGpu :
 
         return pipeline;
     }
-    IGpuShaderModule IGpuShaderModuleFactory.Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
+    IGpuShaderModule IGpuShaderModuleFactory.Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
         var module = new Handles(handle: NextHandle(), layout: 0, setLayout: 0);
 
         if (
@@ -113,10 +113,10 @@ internal sealed class UploadModelGpu :
 
         return module;
     }
-    IGpuStorageBuffer IGpuStorageBufferFactory.Create(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
-    IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
-    IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
-    IGpuStorageBuffer IGpuStorageBufferFactory.CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
+    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) => throw new NotSupportedException();
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => throw new NotSupportedException();
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => NextHandle();
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => m_inner.Bindings.CreatePool(sizes: sizes);
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => m_inner.Bindings.CreateSampler(filter: filter);

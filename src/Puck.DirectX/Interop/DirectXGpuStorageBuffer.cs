@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Win32.System.Com;
-using Windows.Win32.Graphics.Direct3D12;
 
 namespace Puck.DirectX.Interop;
 
@@ -29,7 +28,7 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
         m_buffer = bufferHandle;
         DirectXResourceStates.Register(
             resource: m_buffer,
-            state: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ
+            state: DirectXGpuBufferFactory.HostVisibleState
         );
         m_mapped = mapped;
         SizeBytes = sizeBytes;

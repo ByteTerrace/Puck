@@ -389,13 +389,11 @@ public sealed partial class ShaderPipelineRenderNode {
 
                 Primary = gpu.ShaderModuleFactory.Create(
                     bytecode: bytes,
-                    deviceContext: device,
                     stage: GpuShaderStage.Compute
                 );
-                Compute = gpu.ComputePipelineFactory.Create(
-                    device,
-                    Primary,
-                    new GpuComputePipelineDescription(
+                Compute = gpu.PipelineFactory.Create(
+                    computeShaderModule: Primary,
+                    description: new GpuComputePipelineDescription(
                         declaration.Name,
                         Bindings,
                         push
@@ -421,12 +419,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
             Primary = gpu.ShaderModuleFactory.Create(
                 bytecode: vertex,
-                deviceContext: device,
                 stage: GpuShaderStage.Vertex
             );
             Secondary = gpu.ShaderModuleFactory.Create(
                 bytecode: fragment,
-                deviceContext: device,
                 stage: GpuShaderStage.Fragment
             );
 
@@ -459,14 +455,12 @@ public sealed partial class ShaderPipelineRenderNode {
             var sampled = ((uint)Bindings.Count(predicate: static item => (item.Kind == GpuComputeBindingKind.SampledImage)));
 
             RenderPass = graphics.RenderPassFactory.Create(
-                deviceContext: device,
                 description: RenderPassOf(
                     planned: planned,
                     specs: specs
                 )
             );
             Graphics = graphics.PipelineFactory.Create(
-                device,
                 RenderPass,
                 Primary,
                 Secondary,

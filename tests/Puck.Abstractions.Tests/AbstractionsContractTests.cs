@@ -50,15 +50,11 @@ public sealed class AbstractionsContractTests {
     }
     [Fact]
     public void DeviceLocalFactoryMethodsDoNotReturnHostWritableType() {
-        var factoryType = typeof(IGpuStorageBufferFactory);
+        var factoryType = typeof(IGpuBufferFactory);
 
         Assert.Equal(
             typeof(IGpuBuffer),
-            factoryType.GetMethod(name: nameof(IGpuStorageBufferFactory.CreateDeviceLocal))!.ReturnType
-        );
-        Assert.Equal(
-            typeof(IGpuBuffer),
-            factoryType.GetMethod(name: nameof(IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs))!.ReturnType
+            factoryType.GetMethod(name: nameof(IGpuBufferFactory.CreateDeviceLocal))!.ReturnType
         );
     }
     [Fact]

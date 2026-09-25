@@ -228,16 +228,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             runtime.Pools = new IGpuComputeCommandPool[m_inFlight];
         } else {
             if (declaration.Geometry is { } geometry) {
-                runtime.GeometryBuffer = m_graphics!.GeometryBufferFactory.Create(
-                    m_device,
-                    geometry.BufferData(),
-                    GpuBufferUsage.Vertex | GpuBufferUsage.Index
+                runtime.GeometryBuffer = m_graphics!.BufferFactory.CreateHostVisible(
+                    data: geometry.BufferData(),
+                    usage: GpuBufferUsage.Vertex | GpuBufferUsage.Index
                 );
             } else if (declaration.Vertex == ShaderPipelineVertexInput.Position) {
-                runtime.GeometryBuffer = m_graphics!.GeometryBufferFactory.Create(
-                    m_device,
-                    FullscreenTriangle.CreateVertexData(),
-                    GpuBufferUsage.Vertex
+                runtime.GeometryBuffer = m_graphics!.BufferFactory.CreateHostVisible(
+                    data: FullscreenTriangle.CreateVertexData(),
+                    usage: GpuBufferUsage.Vertex
                 );
             }
             runtime.Pre = new IGpuComputeCommandPool[m_inFlight];
@@ -263,7 +261,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
             for (var slot = 0; (slot < m_inFlight); slot++) {
                 runtime.Framebuffers[slot] = m_graphics!.RenderPassFactory.CreateFramebuffer(
-                    m_device,
                     runtime.RenderPass!,
                     [.. colors.Select(selector: images => images[slot])],
                     depth?[slot]
@@ -298,7 +295,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     _ => throw new NotSupportedException(message: $"Capture does not support surface format {m_lastSurface.Format}.")
                 };
 
-                m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_device);
+                m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback();
                 var sourceLayout = m_outputLayout;
 
                 // The readback sizes its staging buffer to the surface it reads, replacing one of another size.
@@ -439,7 +436,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
                     for (var i = 0; (i < m_inFlight); i++) {
                         resource.Images[i] = m_gpu.ImageFactory.Create(
-                            m_device,
                             ParseFormat(format: declaration.Format),
                             extent.Width,
                             extent.Height,
@@ -460,9 +456,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
                     resource.Buffers = new IGpuBuffer[m_inFlight];
                     for (var i = 0; (i < m_inFlight); i++) {
-                        resource.Buffers[i] = m_gpu.StorageBufferFactory.CreateDeviceLocal(
-                            deviceContext: m_device,
-                            sizeBytes: sizeBytes
+                        resource.Buffers[i] = m_gpu.BufferFactory.CreateDeviceLocal(
+                            sizeBytes: sizeBytes,
+                            usage: GpuBufferUsage.Storage
                         );
                     }
                 }
@@ -502,8 +498,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 preview = CreatePreview(objects: objects);
             }
             foreach (var slot in m_slots) {
-                slot.Fence ??= m_gpu.QueueSubmitter.CreateSubmissionFence(deviceContext: m_device);
-                slot.Final ??= m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
+                slot.Fence ??= m_gpu.QueueSubmitter.CreateSubmissionFence();
+                slot.Final ??= m_gpu.CommandPoolFactory.Create();
             }
             m_preview = preview;
             m_initializationPending = true;

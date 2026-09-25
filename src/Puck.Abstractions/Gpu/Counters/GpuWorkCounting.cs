@@ -60,23 +60,8 @@ public static class GpuWorkCounting {
             ),
             ledger: ledger
         );
-    /// <summary>Wraps a compute pipeline factory. Counts the pipelines created; the pipelines themselves are the
-    /// backend's, unwrapped.</summary>
-    /// <param name="factory">The factory to forward to.</param>
-    /// <param name="ledger">The ledger the counts go to.</param>
-    /// <returns>The counting factory.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="factory"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="factory"/> is already counting.</exception>
-    public static IGpuComputePipelineFactory Wrap(IGpuComputePipelineFactory factory, GpuWorkLedger ledger) =>
-        new CountingComputePipelineFactory(
-            inner: Guard(
-                instance: factory,
-                ledger: ledger
-            ),
-            ledger: ledger
-        );
-    /// <summary>Wraps a graphics pipeline factory. Counts the pipelines created; the pipelines themselves are the
-    /// backend's, unwrapped.</summary>
+    /// <summary>Wraps a pipeline factory. Counts the compute and graphics pipelines created; the pipelines themselves
+    /// are the backend's, unwrapped.</summary>
     /// <param name="factory">The factory to forward to.</param>
     /// <param name="ledger">The ledger the counts go to.</param>
     /// <returns>The counting factory.</returns>
@@ -123,16 +108,16 @@ public static class GpuWorkCounting {
             ),
             ledger: ledger
         );
-    /// <summary>Wraps a storage-buffer factory. Counts every buffer created. A host-writable buffer comes back
-    /// wrapped, and each <see cref="IGpuStorageBuffer.Write{T}(ReadOnlySpan{T})"/> counts the bytes written; a
-    /// device-local buffer comes back unwrapped.</summary>
+    /// <summary>Wraps a buffer factory. Counts every buffer created. A host-visible buffer comes back wrapped, and each
+    /// <see cref="IGpuStorageBuffer.Write{T}(ReadOnlySpan{T})"/> counts the bytes written, as does the initial data
+    /// one is created with; a device-local buffer comes back unwrapped.</summary>
     /// <param name="factory">The factory to forward to.</param>
     /// <param name="ledger">The ledger the counts go to.</param>
     /// <returns>The counting factory.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="factory"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="factory"/> is already counting.</exception>
-    public static IGpuStorageBufferFactory Wrap(IGpuStorageBufferFactory factory, GpuWorkLedger ledger) =>
-        new CountingStorageBufferFactory(
+    public static IGpuBufferFactory Wrap(IGpuBufferFactory factory, GpuWorkLedger ledger) =>
+        new CountingBufferFactory(
             inner: Guard(
                 instance: factory,
                 ledger: ledger
@@ -193,8 +178,8 @@ file abstract class CountingWrapper(GpuWorkLedger ledger) {
 }
 file sealed class CountingComputeServices(IGpuComputeServices services, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuComputeServices {
     public IGpuComputeCommandPoolFactory CommandPoolFactory { get; } = services.CommandPoolFactory;
-    public IGpuComputePipelineFactory ComputePipelineFactory { get; } = GpuWorkCounting.Wrap(
-        factory: services.ComputePipelineFactory,
+    public IGpuPipelineFactory PipelineFactory { get; } = GpuWorkCounting.Wrap(
+        factory: services.PipelineFactory,
         ledger: ledger
     );
     public IGpuRecorder Recorder { get; } = GpuWorkCounting.Wrap(
@@ -213,8 +198,8 @@ file sealed class CountingComputeServices(IGpuComputeServices services, GpuWorkL
         factory: services.ShaderModuleFactory,
         ledger: ledger
     );
-    public IGpuStorageBufferFactory StorageBufferFactory { get; } = GpuWorkCounting.Wrap(
-        factory: services.StorageBufferFactory,
+    public IGpuBufferFactory BufferFactory { get; } = GpuWorkCounting.Wrap(
+        factory: services.BufferFactory,
         ledger: ledger
     );
     public IGpuImageFactory ImageFactory { get; } = GpuWorkCounting.Wrap(
@@ -380,17 +365,6 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         Tally(column: GpuWork.BufferBarriersColumn);
     }
 }
-file sealed class CountingComputePipelineFactory(IGpuComputePipelineFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuComputePipelineFactory {
-    public IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) =>
-        Created(
-            created: inner.Create(
-                computeShaderModule: computeShaderModule,
-                description: description,
-                deviceContext: deviceContext
-            ),
-            lifetimeIndex: GpuWork.PipelinesCreatedIndex
-        );
-}
 file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuBindings {
     public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) =>
         Created(
@@ -443,11 +417,18 @@ file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : C
     }
 }
 file sealed class CountingPipelineFactory(IGpuPipelineFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuPipelineFactory {
-    public IGpuPipeline Create(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) =>
+    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) =>
+        Created(
+            created: inner.Create(
+                computeShaderModule: computeShaderModule,
+                description: description
+            ),
+            lifetimeIndex: GpuWork.PipelinesCreatedIndex
+        );
+    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) =>
         Created(
             created: inner.Create(
                 description: description,
-                deviceContext: deviceContext,
                 fragmentShaderModule: fragmentShaderModule,
                 renderPass: renderPass,
                 vertexShaderModule: vertexShaderModule
@@ -456,24 +437,20 @@ file sealed class CountingPipelineFactory(IGpuPipelineFactory inner, GpuWorkLedg
         );
 }
 file sealed class CountingQueueSubmitter(IGpuQueueSubmitter inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuQueueSubmitter {
-    public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) =>
+    public IGpuSubmissionFence CreateSubmissionFence() =>
         new GpuWorkCountingFence(
-            inner: inner.CreateSubmissionFence(deviceContext: deviceContext),
+            inner: inner.CreateSubmissionFence(),
             ledger: Ledger
         );
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        inner.Submit(
-            commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext
-        );
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles) {
+        inner.Submit(commandBufferHandles: commandBufferHandles);
         _ = Ledger.Seal(fence: null);
     }
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
         var counting = (fence as GpuWorkCountingFence);
 
         inner.Submit(
             commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext,
             fence: (counting?.Inner ?? fence)
         );
 
@@ -486,20 +463,16 @@ file sealed class CountingQueueSubmitter(IGpuQueueSubmitter inner, GpuWorkLedger
 
         owned?.ArmedSubmission = submission;
     }
-    public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        inner.SubmitAndWait(
-            commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext
-        );
+    public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
+        inner.SubmitAndWait(commandBufferHandles: commandBufferHandles);
         Ledger.Complete(submission: Ledger.Seal(fence: null));
     }
 }
 file sealed class CountingShaderModuleFactory(IGpuShaderModuleFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuShaderModuleFactory {
-    public IGpuShaderModule Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) =>
+    public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) =>
         Created(
             created: inner.Create(
                 bytecode: bytecode,
-                deviceContext: deviceContext,
                 stage: stage
             ),
             lifetimeIndex: GpuWork.ShaderModulesCreatedIndex
@@ -531,35 +504,35 @@ file sealed class CountingStorageBuffer(IGpuStorageBuffer inner, GpuWorkLedger l
             column: GpuWork.HostVisibleUploadBytesColumn
         );
 }
-file sealed class CountingStorageBufferFactory(IGpuStorageBufferFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuStorageBufferFactory {
-    public IGpuStorageBuffer Create(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
-        WrapHostWritable(buffer: inner.Create(
-            deviceContext: deviceContext,
-            sizeBytes: sizeBytes
-        ));
-    public IGpuBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
+file sealed class CountingBufferFactory(IGpuBufferFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuBufferFactory {
+    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) =>
         Created(
             created: inner.CreateDeviceLocal(
-                deviceContext: deviceContext,
-                sizeBytes: sizeBytes
+                sizeBytes: sizeBytes,
+                usage: usage
             ),
             lifetimeIndex: GpuWork.BuffersCreatedIndex
         );
-    public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
-        Created(
-            created: inner.CreateDeviceLocalIndirectArgs(
-                deviceContext: deviceContext,
-                sizeBytes: sizeBytes
-            ),
-            lifetimeIndex: GpuWork.BuffersCreatedIndex
-        );
-    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
-        WrapHostWritable(buffer: inner.CreateIndirectArgs(
-            deviceContext: deviceContext,
-            sizeBytes: sizeBytes
+    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) =>
+        WrapHostVisible(buffer: inner.CreateHostVisible(
+            sizeBytes: sizeBytes,
+            usage: usage
+        ));
+    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
+        var buffer = WrapHostVisible(buffer: inner.CreateHostVisible(
+            data: data,
+            usage: usage
         ));
 
-    private CountingStorageBuffer WrapHostWritable(IGpuStorageBuffer buffer) =>
+        Tally(
+            amount: data.Length,
+            column: GpuWork.HostVisibleUploadBytesColumn
+        );
+
+        return buffer;
+    }
+
+    private CountingStorageBuffer WrapHostVisible(IGpuStorageBuffer buffer) =>
         Created(
             created: new CountingStorageBuffer(
                 inner: buffer,
@@ -569,10 +542,9 @@ file sealed class CountingStorageBufferFactory(IGpuStorageBufferFactory inner, G
         );
 }
 file sealed class CountingImageFactory(IGpuImageFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuImageFactory {
-    public IGpuImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) =>
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) =>
         Created(
             created: inner.Create(
-                deviceContext: deviceContext,
                 format: format,
                 height: height,
                 usage: usage,

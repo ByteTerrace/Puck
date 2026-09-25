@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Puck.DirectX.Interfaces;
+using Puck.DirectX.Interop;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
@@ -17,38 +17,27 @@ namespace Puck.DirectX;
 /// <c>ID3D12Fence</c> + event pair signaled on the queue right after the fenced execute.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
+public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceContext) : IGpuQueueSubmitter {
     /// <inheritdoc/>
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) =>
-        Execute(
-            commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext
-        );
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles) =>
+        Execute(commandBufferHandles: commandBufferHandles);
     /// <inheritdoc/>
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
-        var dxContext = ((IDirectXDeviceContext)deviceContext);
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
 
-        Execute(
-            commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext
-        );
-        ((DirectXGpuSubmissionFence)fence).Arm(commandQueue: ((ID3D12CommandQueue*)dxContext.CommandQueueHandle));
+        Execute(commandBufferHandles: commandBufferHandles);
+        ((DirectXGpuSubmissionFence)fence).Arm(commandQueue: ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle));
     }
     /// <inheritdoc/>
-    public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        Execute(
-            commandBufferHandles: commandBufferHandles,
-            deviceContext: deviceContext
-        );
+    public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
+        Execute(commandBufferHandles: commandBufferHandles);
         deviceContext.WaitIdle();
     }
     /// <inheritdoc/>
-    public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) =>
+    public IGpuSubmissionFence CreateSubmissionFence() =>
         new DirectXGpuSubmissionFence(device: ((ID3D12Device*)deviceContext.DeviceHandle));
 
-    private static void Execute(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        var dxContext = ((IDirectXDeviceContext)deviceContext);
-        var queue = ((ID3D12CommandQueue*)dxContext.CommandQueueHandle);
+    private void Execute(ReadOnlySpan<nint> commandBufferHandles) {
+        var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
         var lists = stackalloc ID3D12CommandList*[commandBufferHandles.Length];
 
         for (var i = 0; (i < commandBufferHandles.Length); i++) {

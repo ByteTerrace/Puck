@@ -45,7 +45,7 @@ public sealed partial class SdfWorldEngine {
     /// is the readback's reusable staging view — copy it before the next frame if it must outlive one.</summary>
     /// <returns>The composited output pixels.</returns>
     public ReadOnlyMemory<byte> ReadPixels() {
-        m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
+        m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback();
 
         return m_readback.Read(
             bytesPerPixel: 4,
@@ -73,8 +73,7 @@ public sealed partial class SdfWorldEngine {
 
         Record(viewportCount: viewportCount);
         m_gpu.QueueSubmitter.SubmitAndWait(
-            commandBufferHandles: [m_commandPools[m_currentSlot].CommandBufferHandle],
-            deviceContext: m_deviceContext
+            commandBufferHandles: [m_commandPools[m_currentSlot].CommandBufferHandle]
         );
 
         return ReadPixels().ToArray();
@@ -115,7 +114,6 @@ public sealed partial class SdfWorldEngine {
         Record(viewportCount: viewportCount);
         m_gpu.QueueSubmitter.Submit(
             commandBufferHandles: [m_commandPools[m_currentSlot].CommandBufferHandle],
-            deviceContext: m_deviceContext,
             fence: m_frameFences[m_currentSlot]
         );
         m_exportableImage?.FinalizeForExport();
@@ -143,10 +141,9 @@ public sealed partial class SdfWorldEngine {
         // readback copy. The readback lives on this engine and tracks its own single outstanding fence.
         m_gpu.QueueSubmitter.Submit(
             commandBufferHandles: [m_commandPools[m_currentSlot].CommandBufferHandle],
-            deviceContext: m_deviceContext,
             fence: m_frameFences[m_currentSlot]
         );
-        m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
+        m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback();
         m_readback.SubmitRead(
             bytesPerPixel: 4,
             deviceContext: m_deviceContext,

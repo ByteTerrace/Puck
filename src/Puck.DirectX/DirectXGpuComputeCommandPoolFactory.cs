@@ -1,5 +1,4 @@
 using System.Runtime.Versioning;
-using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 
 namespace Puck.DirectX;
@@ -9,8 +8,8 @@ namespace Puck.DirectX;
 /// <see cref="DirectXGpuComputeCommandPool"/> instances.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXGpuComputeCommandPoolFactory : IGpuComputeCommandPoolFactory {
+public sealed class DirectXGpuComputeCommandPoolFactory(DirectXDeviceContext deviceContext) : IGpuComputeCommandPoolFactory {
     /// <inheritdoc/>
-    public IGpuComputeCommandPool Create(IGpuDeviceContext deviceContext) =>
-        new DirectXGpuComputeCommandPool(deviceContext: ((IDirectXDeviceContext)deviceContext));
+    public IGpuComputeCommandPool Create() =>
+        new DirectXGpuComputeCommandPool(deviceContext: deviceContext);
 }

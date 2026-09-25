@@ -52,10 +52,10 @@ public sealed partial class ShaderPipelineRenderNode {
             }
 
             if (pass.Spec.Kind == ShaderPipelinePassKind.Compute) {
-                pass.Pools![slot] = m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
+                pass.Pools![slot] = m_gpu.CommandPoolFactory.Create();
             } else {
-                pass.Pre![slot] = m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
-                pass.Draw![slot] = m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
+                pass.Pre![slot] = m_gpu.CommandPoolFactory.Create();
+                pass.Draw![slot] = m_gpu.CommandPoolFactory.Create();
             }
         }
     }

@@ -24,7 +24,7 @@
         "src/Puck.Commands/CommandRegistry.cs": 1,
         "src/Puck.Commands/CompiledBindingProfile.cs": 1,
         "src/Puck.Commands/InputRouter.Capture.cs": 1,
-        "src/Puck.DirectX/DirectXGpuComputePipelineFactory.cs": 1,
+        "src/Puck.DirectX/DirectXGpuPipelineFactory.Compute.cs": 1,
         "src/Puck.GamingBricks/MachineInstance.cs": 1,
         "src/Puck.GamingBricks/MachineTimeTravel.cs": 4,
         "src/Puck.Hosting/BackgroundBuild.cs": 1,

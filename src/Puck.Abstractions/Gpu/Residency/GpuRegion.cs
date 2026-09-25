@@ -80,20 +80,18 @@ public sealed class GpuRegion : IDisposable {
     /// <param name="policy">The residency policy, normally <see cref="GpuResidency.Select"/>'s choice.</param>
     /// <param name="byteCount">The region's size in bytes; positive and a whole number of uints.</param>
     /// <param name="slotCount">The caller's frame slots; at least one.</param>
-    /// <param name="device">The device the buffers live on.</param>
     /// <param name="buffers">The factory that creates the host-visible and device-local buffers.</param>
     /// <param name="bindings">The bindings service the staged policy's copy sets come from.</param>
     /// <param name="recorder">The recorder the staged policy's copy is recorded through.</param>
     /// <param name="copyPipeline">The copy kernel's pipeline, built from <see cref="CopyBindings"/> and a
     /// <see cref="CopyPushByteLength"/>-byte push range; read only under the staged policy. The caller owns it.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="device"/>, <paramref name="buffers"/>,
+    /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> is not a defined policy,
     /// <paramref name="byteCount"/> is not positive or not a whole number of uints, <paramref name="slotCount"/> is not
     /// positive, or a staged region holds more than <see cref="MaxStagedWords"/> words.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuDeviceContext device, IGpuStorageBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) {
-        ArgumentNullException.ThrowIfNull(device);
+    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) {
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
@@ -176,17 +174,17 @@ public sealed class GpuRegion : IDisposable {
             );
 
             for (var index = 0; (index < m_hostBuffers.Length); index++) {
-                m_hostBuffers[index] = buffers.Create(
-                    deviceContext: device,
-                    sizeBytes: hostBytes
+                m_hostBuffers[index] = buffers.CreateHostVisible(
+                    sizeBytes: hostBytes,
+                    usage: GpuBufferUsage.Storage
                 );
                 m_ownedBuffers.Add(item: m_hostBuffers[index]);
             }
 
             if (policy == GpuResidencyPolicy.Staged) {
                 m_deviceLocal = buffers.CreateDeviceLocal(
-                    deviceContext: device,
-                    sizeBytes: ((ulong)byteCount)
+                    sizeBytes: ((ulong)byteCount),
+                    usage: GpuBufferUsage.Storage
                 );
                 m_ownedBuffers.Add(item: m_deviceLocal);
                 CreateCopySets();

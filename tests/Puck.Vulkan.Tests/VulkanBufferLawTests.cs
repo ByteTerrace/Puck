@@ -18,41 +18,37 @@ public sealed class VulkanBufferLawTests {
     private const uint HostVisibleCoherentProperties = 0x00000006;
     private const uint IndirectStorageUsage = 0x00000123;
     private const uint StorageUsage = 0x00000023;
+    private const uint UniformUsage = 0x00000010;
 
-    public static TheoryData<string, uint, VulkanBufferMemory> StorageKinds() => new() {
-        { nameof(IGpuStorageBufferFactory.Create), StorageUsage, VulkanBufferMemory.HostCoherent },
-        { nameof(IGpuStorageBufferFactory.CreateDeviceLocal), StorageUsage, VulkanBufferMemory.DeviceLocal },
-        { nameof(IGpuStorageBufferFactory.CreateIndirectArgs), IndirectStorageUsage, VulkanBufferMemory.HostCoherent },
-        { nameof(IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs), IndirectStorageUsage, VulkanBufferMemory.DeviceLocal },
+    public static TheoryData<bool, GpuBufferUsage, uint, VulkanBufferMemory> StorageKinds() => new() {
+        { true, GpuBufferUsage.Storage, StorageUsage, VulkanBufferMemory.HostCoherent },
+        { false, GpuBufferUsage.Storage, StorageUsage, VulkanBufferMemory.DeviceLocal },
+        { true, GpuBufferUsage.Storage | GpuBufferUsage.Indirect, IndirectStorageUsage, VulkanBufferMemory.HostCoherent },
+        { false, GpuBufferUsage.Storage | GpuBufferUsage.Indirect, IndirectStorageUsage, VulkanBufferMemory.DeviceLocal },
+        { true, GpuBufferUsage.Uniform, UniformUsage, VulkanBufferMemory.HostCoherent },
     };
     [MemberData(nameof(StorageKinds))]
     [Theory]
-    public void EveryStorageKindIsCreatedWithItsUsageAndMemory(string method, uint usage, VulkanBufferMemory memory) {
+    public void EveryPlacementIsCreatedWithItsUsageAndMemoryOnTheBoundDevice(bool hostVisible, GpuBufferUsage usage, uint vulkanUsage, VulkanBufferMemory memory) {
         var bufferApi = new RecordingBufferApi();
-        var factory = new VulkanGpuStorageBufferFactory(bufferApi: bufferApi);
         var device = new UntouchableDeviceContext();
-        using var buffer = method switch {
-            nameof(IGpuStorageBufferFactory.Create) => factory.Create(
-                deviceContext: device,
-                sizeBytes: 64
-            ),
-            nameof(IGpuStorageBufferFactory.CreateDeviceLocal) => factory.CreateDeviceLocal(
-                deviceContext: device,
-                sizeBytes: 64
-            ),
-            nameof(IGpuStorageBufferFactory.CreateIndirectArgs) => factory.CreateIndirectArgs(
-                deviceContext: device,
-                sizeBytes: 64
-            ),
-            _ => factory.CreateDeviceLocalIndirectArgs(
-                deviceContext: device,
-                sizeBytes: 64
-            ),
-        };
+        var factory = new VulkanGpuBufferFactory(
+            bufferApi: bufferApi,
+            deviceContext: device
+        );
+        using var buffer = (hostVisible
+            ? factory.CreateHostVisible(
+                sizeBytes: 64,
+                usage: usage
+            )
+            : factory.CreateDeviceLocal(
+                sizeBytes: 64,
+                usage: usage
+            ));
 
         Assert.Equal(
             actual: bufferApi.Created,
-            expected: [(usage, memory, 64UL)]
+            expected: [(vulkanUsage, memory, 64UL)]
         );
         Assert.Same(
             actual: bufferApi.Devices.Single(),
@@ -67,9 +63,11 @@ public sealed class VulkanBufferLawTests {
         var bufferApi = new RecordingBufferApi();
         byte[] data = [1, 2, 3, 4, 5, 6, 7, 8];
 
-        using var buffer = ((VulkanBuffer)new VulkanGpuGeometryBufferFactory(bufferApi: bufferApi).Create(
+        using var buffer = ((VulkanBuffer)new VulkanGpuBufferFactory(
+            bufferApi: bufferApi,
+            deviceContext: new UntouchableDeviceContext()
+        ).CreateHostVisible(
             data: data,
-            deviceContext: new UntouchableDeviceContext(),
             usage: usage
         ));
 
@@ -83,19 +81,24 @@ public sealed class VulkanBufferLawTests {
         );
     }
     [Fact]
-    public void AGeometryBufferWithoutAUsageOrBytesIsRefusedBeforeItIsCreated() {
+    public void ABufferWithoutAUsageOrBytesIsRefusedBeforeItIsCreated() {
         var bufferApi = new RecordingBufferApi();
-        var factory = new VulkanGpuGeometryBufferFactory(bufferApi: bufferApi);
+        var factory = new VulkanGpuBufferFactory(
+            bufferApi: bufferApi,
+            deviceContext: new UntouchableDeviceContext()
+        );
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => factory.Create(
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => factory.CreateHostVisible(
             data: [1, 2, 3, 4],
-            deviceContext: new UntouchableDeviceContext(),
             usage: GpuBufferUsage.None
         ));
-        _ = Assert.Throws<ArgumentException>(testCode: () => factory.Create(
+        _ = Assert.Throws<ArgumentException>(testCode: () => factory.CreateHostVisible(
             data: [],
-            deviceContext: new UntouchableDeviceContext(),
             usage: GpuBufferUsage.Vertex
+        ));
+        _ = Assert.Throws<ArgumentException>(testCode: () => factory.CreateDeviceLocal(
+            sizeBytes: 0,
+            usage: GpuBufferUsage.Storage
         ));
         Assert.Empty(collection: bufferApi.Created);
     }

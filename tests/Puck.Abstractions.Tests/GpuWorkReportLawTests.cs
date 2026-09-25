@@ -126,14 +126,14 @@ public sealed class GpuWorkReportLawTests {
             var services = GpuWorkCounting.Wrap(ledger: ledger, services: ((IGpuComputeServices)gpu));
 
             ledger.Configure(passLabels: ["alpha", "beta", "gamma"], revision: 7L);
-            services.ShaderModuleFactory.Create(bytecode: ReadOnlyMemory<byte>.Empty, deviceContext: gpu, stage: GpuShaderStage.Compute).Dispose();
+            services.ShaderModuleFactory.Create(bytecode: ReadOnlyMemory<byte>.Empty, stage: GpuShaderStage.Compute).Dispose();
             services.Recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: 2, data: new byte[8], offset: 0, pipelineLayoutHandle: 3, stageFlags: GpuShaderStage.Compute);
             ledger.EnterPass(pass: 0);
             services.Recorder.Dispatch(commandBufferHandle: 2, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
             services.Recorder.Dispatch(commandBufferHandle: 2, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
             ledger.LeavePass();
             ledger.SkipPass(pass: 1);
-            services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [], deviceContext: gpu);
+            services.QueueSubmitter.SubmitAndWait(commandBufferHandles: []);
 
             return new Rig(Ledger: ledger);
         }

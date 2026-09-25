@@ -99,7 +99,6 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
     private void SubmitCounted(List<nint> commands, IGpuSubmissionFence fence) {
         m_gpu.QueueSubmitter.Submit(
             commandBufferHandles: CollectionsMarshal.AsSpan(list: commands),
-            deviceContext: m_device,
             fence: fence
         );
         m_submissions++;
@@ -124,10 +123,10 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
             ledger: ledger
         );
 
+        public IGpuBufferFactory BufferFactory =>
+            inner.BufferFactory;
         public IGpuDeviceContext DeviceContext =>
             inner.DeviceContext;
-        public IGpuGeometryBufferFactory GeometryBufferFactory =>
-            inner.GeometryBufferFactory;
 
         public IGpuPipelineFactory PipelineFactory { get; } = GpuWorkCounting.Wrap(
             factory: inner.PipelineFactory,

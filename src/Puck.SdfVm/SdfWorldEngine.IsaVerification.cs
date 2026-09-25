@@ -119,8 +119,7 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer
         );
         m_gpu.QueueSubmitter.SubmitAndWait(
-            commandBufferHandles: [commandBuffer],
-            deviceContext: m_deviceContext
+            commandBufferHandles: [commandBuffer]
         );
 
         return readback.Read(
@@ -135,20 +134,18 @@ public sealed partial class SdfWorldEngine {
     }
     private void VerifyIsaVersion() {
         using var reportImage = m_gpu.ImageFactory.Create(
-            deviceContext: m_deviceContext,
             format: Format,
             height: 1,
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: 1
         );
         using var sampledImage = m_gpu.ImageFactory.Create(
-            deviceContext: m_deviceContext,
             format: Format,
             height: 1,
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: 1
         );
-        using var readback = m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
+        using var readback = m_gpu.SurfaceTransferFactory.CreateReadback();
         var viewsSet = m_viewsSets[0];
 
         for (var element = 0u; (element < MaxViewports); element++) {

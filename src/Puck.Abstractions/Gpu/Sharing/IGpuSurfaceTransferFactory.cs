@@ -7,9 +7,9 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public interface IGpuSurfaceTransferFactory {
     /// <summary>Creates a surface readback object; the caller owns and disposes it.</summary>
-    IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext);
+    IGpuSurfaceReadback CreateReadback();
     /// <summary>Creates a surface upload object; the caller owns and disposes it.</summary>
-    IGpuSurfaceUpload CreateUpload(IGpuDeviceContext deviceContext);
+    IGpuSurfaceUpload CreateUpload();
     /// <summary>Creates a surface import object; the caller owns and disposes it.</summary>
-    IGpuSurfaceImport CreateImport(IGpuDeviceContext deviceContext);
+    IGpuSurfaceImport CreateImport();
 }

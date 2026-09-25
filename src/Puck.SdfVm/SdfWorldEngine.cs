@@ -512,7 +512,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         for (var index = 0; (index < ((int)m_viewportCapacity)); index++) {
             m_sourceTextures[index] = gpu.ImageFactory.Create(
-                deviceContext: device,
                 format: Format,
                 height: height,
                 usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
@@ -525,7 +524,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // while a combined-image-sampler binding requires ShaderReadOnly, so aliasing it trips Vulkan validation the
         // moment any viewport-source dispatch runs. This image is transitioned ONCE, below, and never written again.
         m_screenSourceFiller = gpu.ImageFactory.Create(
-            deviceContext: device,
             format: Format,
             height: 1,
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
@@ -537,7 +535,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // per-view sources are always internal.
         m_storageImage = ((options.CreateOutputImage is null)
             ? gpu.ImageFactory.Create(
-                deviceContext: device,
                 format: Format,
                 height: height,
                 usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
@@ -552,67 +549,67 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             val1: options.Program.Words.Length,
             val2: options.ProgramWordCapacity
         );
-        m_programBuffer = gpu.StorageBufferFactory.Create(
-            deviceContext: device,
-            sizeBytes: (((ulong)m_programWordCapacity) * sizeof(uint))
+        m_programBuffer = gpu.BufferFactory.CreateHostVisible(
+            sizeBytes: (((ulong)m_programWordCapacity) * sizeof(uint)),
+            usage: GpuBufferUsage.Storage
         );
         // The HOST-VISIBLE per-frame buffers are duplicated per ring slot (see FrameRingSize): slot k's copies are
         // only rewritten after slot k's fence proves frame k − FrameRingSize retired, so a frame's in-place upload
         // can never race the previous frame's in-flight reads. The three staging buffers the table upload copies from
         // lead with the run-table reserve (SdfWorldEngine.Uploads.cs).
         for (var slot = 0; (slot < FrameRingSize); slot++) {
-            m_viewportBuffers[slot] = gpu.StorageBufferFactory.Create(
-                deviceContext: device,
-                sizeBytes: FrameUploadStagingBytes(tableBytes: m_viewportScratch.Length)
+            m_viewportBuffers[slot] = gpu.BufferFactory.CreateHostVisible(
+                sizeBytes: FrameUploadStagingBytes(tableBytes: m_viewportScratch.Length),
+                usage: GpuBufferUsage.Storage
             );
-            m_dynamicTransformBuffers[slot] = gpu.StorageBufferFactory.Create(
-                deviceContext: device,
-                sizeBytes: FrameUploadStagingBytes(tableBytes: m_dynamicTransformScratch.Length)
+            m_dynamicTransformBuffers[slot] = gpu.BufferFactory.CreateHostVisible(
+                sizeBytes: FrameUploadStagingBytes(tableBytes: m_dynamicTransformScratch.Length),
+                usage: GpuBufferUsage.Storage
             );
-            m_instanceGridBuffers[slot] = gpu.StorageBufferFactory.Create(
-                deviceContext: device,
-                sizeBytes: FrameUploadStagingBytes(tableBytes: checked((m_instanceGridWordCapacity * sizeof(uint))))
+            m_instanceGridBuffers[slot] = gpu.BufferFactory.CreateHostVisible(
+                sizeBytes: FrameUploadStagingBytes(tableBytes: checked((m_instanceGridWordCapacity * sizeof(uint)))),
+                usage: GpuBufferUsage.Storage
             );
             // The screen-surface table: always allocated at MaxScreenSurfaces capacity, indexed directly by screen index
             // (like the always-bound dynamic-transform slot), so Stage 1's binding stays valid for a program with none —
             // an all-zero undeclared slot is never addressed (no material id in a consistent program points at it).
-            m_screenSurfaceBuffers[slot] = gpu.StorageBufferFactory.Create(
-                deviceContext: device,
-                sizeBytes: (MaxScreenSurfaces * ((ulong)ScreenSurfaceByteLength))
+            m_screenSurfaceBuffers[slot] = gpu.BufferFactory.CreateHostVisible(
+                sizeBytes: (MaxScreenSurfaces * ((ulong)ScreenSurfaceByteLength)),
+                usage: GpuBufferUsage.Storage
             );
             // The screen-light buffer: the screen colors + environment float4s. Bound to the views set only (Stage 1
             // shades; the beam prepass does not).
-            m_screenLightBuffers[slot] = gpu.StorageBufferFactory.Create(
-                deviceContext: device,
-                sizeBytes: ((ulong)m_screenLightScratch.Length)
+            m_screenLightBuffers[slot] = gpu.BufferFactory.CreateHostVisible(
+                sizeBytes: ((ulong)m_screenLightScratch.Length),
+                usage: GpuBufferUsage.Storage
             );
             // The glyph-decal buffer: descriptor band + cell region.
-            m_decalBuffers[slot] = gpu.StorageBufferFactory.Create(
-                deviceContext: device,
-                sizeBytes: ((ulong)m_decals.Current.Length)
+            m_decalBuffers[slot] = gpu.BufferFactory.CreateHostVisible(
+                sizeBytes: ((ulong)m_decals.Current.Length),
+                usage: GpuBufferUsage.Storage
             );
             // The bounded-volume buffer: bound to the views descriptor set shared with the sky pass — the beam prepass
             // never shades.
-            m_volumeBuffers[slot] = gpu.StorageBufferFactory.Create(
-                deviceContext: device,
-                sizeBytes: ((ulong)m_volumeScratch.Length)
+            m_volumeBuffers[slot] = gpu.BufferFactory.CreateHostVisible(
+                sizeBytes: ((ulong)m_volumeScratch.Length),
+                usage: GpuBufferUsage.Storage
             );
         }
         // The cull buffer is GPU-written by the beam prepass (a UAV), so it is device-local (a Direct3D 12 default heap).
         // Four tile planes followed by two world-space bound corners per instance per viewport. The beam refits
         // those bounds from this frame's poses and camera; primary reads them after the existing compute barrier.
         // Reserve the construction envelope, but index with live viewport/instance counts, as the masks do.
-        m_tileBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
-            deviceContext: device,
+        m_tileBuffer = gpu.BufferFactory.CreateDeviceLocal(
             sizeBytes: checked(((((ulong)m_viewportCapacity) *
-                (((((ulong)TilePlaneCount) * m_tileGridX) * m_tileGridY) + (((ulong)PartBoundFloatCount) * ((uint)m_instanceCapacity)))) * sizeof(float)))
+                (((((ulong)TilePlaneCount) * m_tileGridX) * m_tileGridY) + (((ulong)PartBoundFloatCount) * ((uint)m_instanceCapacity)))) * sizeof(float))),
+            usage: GpuBufferUsage.Storage
         );
         // One full-extent slice per viewport, like the source textures: changing regions must never overrun a
         // buffer sized for a previous layout. Shared across frame slots; Record orders primary writes before
         // shading reads and this frame's writes after the preceding frame's reads.
-        m_primaryHitBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
-            deviceContext: device,
-            sizeBytes: checked((((((ulong)width) * height) * m_viewportCapacity) * PrimaryHitByteLength))
+        m_primaryHitBuffer = gpu.BufferFactory.CreateDeviceLocal(
+            sizeBytes: checked((((((ulong)width) * height) * m_viewportCapacity) * PrimaryHitByteLength)),
+            usage: GpuBufferUsage.Storage
         );
         // The per-tile instance mask: same (viewport, tile) indexing as the cull buffer, GPU-written by instance
         // cull before the beam (a UAV, so device-local too), read by Stage 1 to gate its masked map() calls. The
@@ -625,9 +622,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         );
         var instanceMaskStorageWordCount = (m_instanceMaskWordCount + ((m_instanceMaskWordCount + 31) / 32));
 
-        m_instanceMaskBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
-            deviceContext: device,
-            sizeBytes: ((((((ulong)m_viewportCapacity) * m_tileGridX) * m_tileGridY) * ((uint)instanceMaskStorageWordCount)) * sizeof(uint))
+        m_instanceMaskBuffer = gpu.BufferFactory.CreateDeviceLocal(
+            sizeBytes: ((((((ulong)m_viewportCapacity) * m_tileGridX) * m_tileGridY) * ((uint)instanceMaskStorageWordCount)) * sizeof(uint)),
+            usage: GpuBufferUsage.Storage
         );
 
         // The device-local tables (see m_frameUploadPipeline): sized exactly like the ring-slot staging buffers they are
@@ -647,17 +644,17 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             byteLength: (((ulong)m_instanceGridWordCapacity) * sizeof(uint)),
             table: "instance-grid"
         );
-        m_viewportDeviceBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
-            deviceContext: device,
-            sizeBytes: ((ulong)m_viewportScratch.Length)
+        m_viewportDeviceBuffer = gpu.BufferFactory.CreateDeviceLocal(
+            sizeBytes: ((ulong)m_viewportScratch.Length),
+            usage: GpuBufferUsage.Storage
         );
-        m_dynamicTransformDeviceBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
-            deviceContext: device,
-            sizeBytes: ((ulong)m_dynamicTransformScratch.Length)
+        m_dynamicTransformDeviceBuffer = gpu.BufferFactory.CreateDeviceLocal(
+            sizeBytes: ((ulong)m_dynamicTransformScratch.Length),
+            usage: GpuBufferUsage.Storage
         );
-        m_instanceGridDeviceBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
-            deviceContext: device,
-            sizeBytes: (((ulong)m_instanceGridWordCapacity) * sizeof(uint))
+        m_instanceGridDeviceBuffer = gpu.BufferFactory.CreateDeviceLocal(
+            sizeBytes: (((ulong)m_instanceGridWordCapacity) * sizeof(uint)),
+            usage: GpuBufferUsage.Storage
         );
 
         // The carve-bake brick pool: one persistent DEVICE-LOCAL f32 buffer — device-local so the
@@ -671,11 +668,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             val2: options.BrickPoolVoxelCapacity
         );
         m_brickPoolEnabled = (m_brickPoolVoxelCapacity > 0);
-        m_brickPoolBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
-            deviceContext: device,
+        m_brickPoolBuffer = gpu.BufferFactory.CreateDeviceLocal(
             sizeBytes: (((ulong)(m_brickPoolEnabled
             ? m_brickPoolVoxelCapacity
-            : 1)) * sizeof(float))
+            : 1)) * sizeof(float)),
+            usage: GpuBufferUsage.Storage
         );
         // The carve-bake baker and uploader run only when the pool is enabled (nothing bakes into a filler).
         m_brickBakePipeline = (m_brickPoolEnabled
@@ -691,13 +688,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // surviving-tile bbox, 3 group counts) and the bbox group origin (2 uints). Both are device-local — the GPU
         // writes them as UAVs, then a barrier orders the indirect read; the views dispatch reads the args (the
         // dispatch grid) and the bounds (its pixel offset). The all-empty margins are never dispatched.
-        m_viewsArgsBuffer = gpu.StorageBufferFactory.CreateDeviceLocalIndirectArgs(
-            deviceContext: device,
-            sizeBytes: (sizeof(uint) * 3)
+        m_viewsArgsBuffer = gpu.BufferFactory.CreateDeviceLocal(
+            sizeBytes: (sizeof(uint) * 3),
+            usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
         );
-        m_cullBoundsBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
-            deviceContext: device,
-            sizeBytes: (sizeof(uint) * 2)
+        m_cullBoundsBuffer = gpu.BufferFactory.CreateDeviceLocal(
+            sizeBytes: (sizeof(uint) * 2),
+            usage: GpuBufferUsage.Storage
         );
 
         // Stage 2's full-frame composite grid is constant for the run, so its dispatch is driven INDIRECTLY: the GPU
@@ -705,9 +702,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // instead of the CPU supplying them. The counts equal the equivalent direct dispatch, so it is pixel-neutral
         // (the `world` parity gate is the guard). Host-written once + host-coherent, so the queue-submit host-write
         // visibility covers it with no indirect-read barrier.
-        m_compositeArgsBuffer = gpu.StorageBufferFactory.CreateIndirectArgs(
-            deviceContext: device,
-            sizeBytes: (sizeof(uint) * 3)
+        m_compositeArgsBuffer = gpu.BufferFactory.CreateHostVisible(
+            sizeBytes: (sizeof(uint) * 3),
+            usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
         );
         m_compositeArgsBuffer.Write<uint>(data: [
             ((width + (WorkgroupEdge - 1)) / WorkgroupEdge),
@@ -950,8 +947,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
             // The source array (binding the SDF view textures and any hosted child surfaces) is (re)bound per frame by
             // BindSources — child image-views aren't known until their nodes have produced.
-            m_commandPools[slot] = gpu.CommandPoolFactory.Create(deviceContext: device);
-            m_frameFences[slot] = gpu.QueueSubmitter.CreateSubmissionFence(deviceContext: device);
+            m_commandPools[slot] = gpu.CommandPoolFactory.Create();
+            m_frameFences[slot] = gpu.QueueSubmitter.CreateSubmissionFence();
         }
 
         // The carve-bake baker's per-slot request buffers + static descriptor sets (only when the pool is enabled). Each
@@ -960,9 +957,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // drains the ring (WaitForFrameRing) before rewriting a request buffer, so one buffer per brick slot is race-free.
         if (m_brickPoolEnabled) {
             for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {
-                var requestBuffer = gpu.StorageBufferFactory.Create(
-                    deviceContext: device,
-                    sizeBytes: (((ulong)m_brickRequestScratch.Length) * (sizeof(float) * 4))
+                var requestBuffer = gpu.BufferFactory.CreateHostVisible(
+                    sizeBytes: (((ulong)m_brickRequestScratch.Length) * (sizeof(float) * 4)),
+                    usage: GpuBufferUsage.Storage
                 );
 
                 m_brickRequestBuffers[brick] = requestBuffer;
@@ -988,9 +985,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
             if (m_brickUploadPipeline is not null) {
                 for (var slot = 0; (slot < FrameRingSize); slot++) {
-                    var staging = gpu.StorageBufferFactory.Create(
-                        deviceContext: device,
-                        sizeBytes: (((ulong)SdfBrickPoolLayout.VoxelsPerBrick) * sizeof(float))
+                    var staging = gpu.BufferFactory.CreateHostVisible(
+                        sizeBytes: (((ulong)SdfBrickPoolLayout.VoxelsPerBrick) * sizeof(float)),
+                        usage: GpuBufferUsage.Storage
                     );
 
                     m_brickUploadStaging[slot] = staging;

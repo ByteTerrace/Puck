@@ -16,7 +16,7 @@ internal sealed record WorldPostRenderExtensionServices : IFullscreenPassService
     /// <inheritdoc/>
     public required IGpuDeviceContext DeviceContext { get; init; }
     /// <inheritdoc/>
-    public required IGpuGeometryBufferFactory GeometryBufferFactory { get; init; }
+    public required IGpuBufferFactory BufferFactory { get; init; }
     /// <inheritdoc/>
     public required IGpuPipelineFactory PipelineFactory { get; init; }
     /// <inheritdoc/>
@@ -41,7 +41,7 @@ internal sealed record WorldPostRenderExtensionServices : IFullscreenPassService
             Recorder = Resolve<IGpuRecorder>(),
             Bindings = Resolve<IGpuBindings>(),
             DeviceContext = Resolve<IGpuDeviceContext>(),
-            GeometryBufferFactory = Resolve<IGpuGeometryBufferFactory>(),
+            BufferFactory = Resolve<IGpuBufferFactory>(),
             PipelineFactory = Resolve<IGpuPipelineFactory>(),
             QueueSubmitter = Resolve<IGpuQueueSubmitter>(),
             RenderPassFactory = Resolve<IGpuRenderPassFactory>(),

@@ -26,13 +26,11 @@ public interface IGpuFramebuffer : IDisposable {
 /// </summary>
 public interface IGpuRenderPassFactory {
     /// <summary>Creates a render pass.</summary>
-    /// <param name="deviceContext">The GPU device context.</param>
     /// <param name="description">The attachments; <see cref="GpuRenderPassDescription.Validate"/> states the rules.</param>
     /// <returns>A new, owning <see cref="IGpuRenderPass"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="description"/> breaks a rule.</exception>
-    IGpuRenderPass Create(IGpuDeviceContext deviceContext, GpuRenderPassDescription description);
+    IGpuRenderPass Create(GpuRenderPassDescription description);
     /// <summary>Binds a render pass to images; <see cref="GpuFramebuffers.Validate"/> states the rules.</summary>
-    /// <param name="deviceContext">The GPU device context.</param>
     /// <param name="renderPass">The render pass, created by this factory.</param>
     /// <param name="colors">One image per color attachment, in order, each of that attachment's format and declaring
     /// <see cref="GpuImageUsage.ColorAttachment"/>.</param>
@@ -40,7 +38,7 @@ public interface IGpuRenderPassFactory {
     /// <see cref="GpuImageUsage.DepthAttachment"/>; otherwise <see langword="null"/>.</param>
     /// <returns>A new, owning <see cref="IGpuFramebuffer"/>, which does not own the images.</returns>
     /// <exception cref="ArgumentException">The images do not match the render pass or each other's extent.</exception>
-    IGpuFramebuffer CreateFramebuffer(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth);
+    IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth);
 }
 /// <summary>
 /// The rules every render pass factory applies to a framebuffer's images.

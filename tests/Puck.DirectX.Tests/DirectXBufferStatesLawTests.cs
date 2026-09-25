@@ -48,6 +48,47 @@ public sealed class DirectXBufferStatesLawTests {
         );
     }
     [Fact]
+    public void EachPlacementReachesIndirectArgumentFromTheStateItIsCreatedIn() {
+        var indirect = DirectXBufferStates.RequiredState(access: GpuComputeAccess.IndirectCommandRead);
+
+        Assert.Equal(
+            actual: indirect,
+            expected: IndirectArgument
+        );
+
+        // A host-visible buffer never leaves its upload-heap state, which already covers an indirect-argument read.
+        var hostVisible = new DirectXBufferStates().Plan(
+            after: indirect,
+            bufferHandle: ArgsBuffer,
+            firstState: DirectXGpuBufferFactory.HostVisibleState
+        );
+        // A device-local buffer a shader wrote holds UNORDERED_ACCESS, and moves into INDIRECT_ARGUMENT.
+        var written = new DirectXBufferStates().Plan(
+            after: indirect,
+            bufferHandle: ArgsBuffer,
+            firstState: DirectXBufferStates.RequiredState(access: GpuComputeAccess.ShaderWrite)
+        );
+        // A device-local buffer nothing wrote in this recording starts from the state it is created in.
+        var created = new DirectXBufferStates().Plan(
+            after: indirect,
+            bufferHandle: ArgsBuffer,
+            firstState: DirectXGpuBufferFactory.DeviceLocalState
+        );
+
+        Assert.Equal(
+            actual: (hostVisible.Kind, hostVisible.Before),
+            expected: (DirectXBufferBarrierKind.None, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ)
+        );
+        Assert.Equal(
+            actual: (written.Kind, written.Before, written.After),
+            expected: (DirectXBufferBarrierKind.Transition, UnorderedAccess, IndirectArgument)
+        );
+        Assert.Equal(
+            actual: (created.Kind, created.Before, created.After),
+            expected: (DirectXBufferBarrierKind.Transition, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, IndirectArgument)
+        );
+    }
+    [Fact]
     public void ARepeatedTransitionInOneRecordingRecordsNothing() {
         var states = new DirectXBufferStates();
 

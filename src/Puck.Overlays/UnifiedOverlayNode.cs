@@ -112,11 +112,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private readonly IGpuShaderModuleFactory m_shaderModuleFactory;
     private readonly UnifiedOverlaySources m_sources;
     private readonly uint m_storageBufferBinding;
-    private readonly IGpuStorageBufferFactory m_storageBufferFactory;
+    private readonly IGpuBufferFactory m_storageBufferFactory;
     private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
     private readonly OverlayThemeStore m_theme;
     private readonly ToastWriter? m_toastWriter;
-    private readonly IGpuGeometryBufferFactory m_geometryBufferFactory;
+    private readonly IGpuBufferFactory m_geometryBufferFactory;
     private readonly ReadOnlyMemory<byte> m_vertexBytecode;
     private readonly WheelWriter? m_wheelWriter;
     private readonly uint m_width;
@@ -294,7 +294,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         m_sources = sources;
         m_storageBufferBinding = services.StorageBufferBinding;
         m_storageBufferFactory = GpuWorkCounting.Wrap(
-            factory: services.StorageBufferFactory,
+            factory: services.BufferFactory,
             ledger: m_work
         );
         m_surfaceTransferFactory = services.SurfaceTransferFactory;
@@ -305,7 +305,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             )
             : null
         );
-        m_geometryBufferFactory = services.GeometryBufferFactory;
+        m_geometryBufferFactory = services.BufferFactory;
         m_vertexBytecode = vertexBytecode;
         m_width = width;
         m_writeCapture = WriteCapture;
@@ -391,14 +391,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         // The overlay clears its image each frame and leaves it shader-readable for the presenter and any capture.
         m_renderTarget = m_imageFactory.Create(
-            deviceContext: m_deviceContext,
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: m_height,
             usage: GpuImageUsage.ColorAttachment | GpuImageUsage.Sampled,
             width: m_width
         );
         m_renderPass = m_renderPassFactory.Create(
-            deviceContext: m_deviceContext,
             description: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
                 FinalLayout: GpuImageLayout.ShaderReadOnly,
                 Format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -409,32 +407,27 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         m_framebuffer = m_renderPassFactory.CreateFramebuffer(
             colors: [m_renderTarget],
             depth: null,
-            deviceContext: m_deviceContext,
             renderPass: m_renderPass
         );
-        m_commandPool = m_commandPoolFactory.Create(deviceContext: m_deviceContext);
-        m_frameFence = m_queueSubmitter.CreateSubmissionFence(deviceContext: m_deviceContext);
+        m_commandPool = m_commandPoolFactory.Create();
+        m_frameFence = m_queueSubmitter.CreateSubmissionFence();
         m_vertexShader = m_shaderModuleFactory.Create(
             bytecode: m_vertexBytecode,
-            deviceContext: m_deviceContext,
             stage: GpuShaderStage.Vertex
         );
         m_fragmentShader = m_shaderModuleFactory.Create(
             bytecode: m_fragmentBytecode,
-            deviceContext: m_deviceContext,
             stage: GpuShaderStage.Fragment
         );
-        m_vertexBuffer = m_geometryBufferFactory.Create(
+        m_vertexBuffer = m_geometryBufferFactory.CreateHostVisible(
             data: FullscreenTriangleVertexData,
-            deviceContext: m_deviceContext,
             usage: GpuBufferUsage.Vertex
         );
-        m_dataBuffer = m_storageBufferFactory.Create(
-            deviceContext: m_deviceContext,
-            sizeBytes: (((uint)m_builder.WordCount) * sizeof(uint))
+        m_dataBuffer = m_storageBufferFactory.CreateHostVisible(
+            sizeBytes: (((uint)m_builder.WordCount) * sizeof(uint)),
+            usage: GpuBufferUsage.Storage
         );
         m_pipeline = m_pipelineFactory.Create(
-            deviceContext: m_deviceContext,
             description: new GpuGraphicsPipelineDescription(
                 Name: "overlay-unified",
                 VertexInput: new GpuVertexInputLayout(
@@ -776,7 +769,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private void WriteCapture(string path) {
         m_capturePng.ThrowIfUnavailable(path: path);
 
-        m_readback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
+        m_readback ??= m_surfaceTransferFactory.CreateReadback();
 
         var pixels = m_readback.Read(
             bytesPerPixel: 4,
@@ -990,7 +983,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         m_queueSubmitter.Submit(
             commandBufferHandles: commandBuffers,
-            deviceContext: m_deviceContext,
             fence: m_frameFence!
         );
 

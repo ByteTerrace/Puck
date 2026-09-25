@@ -799,11 +799,10 @@ internal sealed partial class WorldScreenBinder {
                     minimumFeatureLevel: DirectXFeatureLevel.Level110
                 ))
             );
-            var export = (m_cameraExport ??= new DirectXGpuSurfaceExportFactory());
+            var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)targetContext));
 
             for (var index = 0; (index < allocated.Length); index++) {
                 allocated[index] = export.CreateSimultaneousAccessImage(
-                    deviceContext: targetContext,
                     format: pixelFormat,
                     height: checked((uint)height),
                     width: checked((uint)width)
@@ -818,7 +817,7 @@ internal sealed partial class WorldScreenBinder {
                 createdViews = new nint[allocated.Length];
 
                 for (var index = 0; (index < allocated.Length); index++) {
-                    createdImports[index] = transfers.CreateImport(deviceContext: deviceContext);
+                    createdImports[index] = transfers.CreateImport();
                     createdViews[index] = createdImports[index].Import(
                         deviceContext: deviceContext,
                         format: pixelFormat,

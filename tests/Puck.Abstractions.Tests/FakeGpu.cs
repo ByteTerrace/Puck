@@ -12,14 +12,13 @@ namespace Puck.Abstractions.Tests;
 internal sealed class FakeGpu :
     IGpuRecorder,
     IGpuComputeCommandPoolFactory,
-    IGpuComputePipelineFactory,
+    IGpuPipelineFactory,
     IGpuComputeServices,
     IGpuBindings,
     IGpuDeviceContext,
-    IGpuPipelineFactory,
     IGpuQueueSubmitter,
     IGpuShaderModuleFactory,
-    IGpuStorageBufferFactory,
+    IGpuBufferFactory,
     IGpuImageFactory,
     IGpuSurfaceTransferFactory {
     public Dictionary<string, int> Calls { get; } = new(comparer: StringComparer.Ordinal);
@@ -29,13 +28,13 @@ internal sealed class FakeGpu :
     public GpuDeviceIdentity? Identity => null;
     public GpuMemoryProfile MemoryProfile => default;
     public IGpuComputeCommandPoolFactory CommandPoolFactory => this;
-    public IGpuComputePipelineFactory ComputePipelineFactory => this;
+    public IGpuPipelineFactory PipelineFactory => this;
     public IGpuRecorder Recorder => this;
     public IGpuBindings Bindings => this;
     public nint DeviceHandle => 1;
     public IGpuQueueSubmitter QueueSubmitter => this;
     public IGpuShaderModuleFactory ShaderModuleFactory => this;
-    public IGpuStorageBufferFactory StorageBufferFactory => this;
+    public IGpuBufferFactory BufferFactory => this;
     public IGpuImageFactory ImageFactory => this;
     public IGpuSurfaceTransferFactory SurfaceTransferFactory => this;
 
@@ -64,14 +63,14 @@ internal sealed class FakeGpu :
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionImageLayout");
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionBuffer");
-    IGpuComputeCommandPool IGpuComputeCommandPoolFactory.Create(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-    IGpuPipeline IGpuPipelineFactory.Create(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
-        Hit(key: "IGpuPipelineFactory.Create");
+    IGpuComputeCommandPool IGpuComputeCommandPoolFactory.Create() => throw new NotSupportedException();
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
+        Hit(key: "IGpuPipelineFactory.Create(graphics)");
 
         return new FakePipeline();
     }
-    IGpuComputePipeline IGpuComputePipelineFactory.Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
-        Hit(key: "IGpuComputePipelineFactory.Create");
+    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
+        Hit(key: "IGpuPipelineFactory.Create(compute)");
 
         return new FakePipeline();
     }
@@ -95,52 +94,47 @@ internal sealed class FakeGpu :
     void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => Hit(key: "IGpuBindings.WriteCombinedImageSampler");
     void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => Hit(key: "IGpuBindings.WriteBuffer");
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => Hit(key: "IGpuBindings.WriteStorageImage");
-    IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence(IGpuDeviceContext deviceContext) {
+    IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() {
         Hit(key: "IGpuQueueSubmitter.CreateSubmissionFence");
         LastCreatedFence = new FakeFence(gpu: this);
 
         return LastCreatedFence;
     }
-    void IGpuQueueSubmitter.Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => Hit(key: "IGpuQueueSubmitter.Submit");
-    void IGpuQueueSubmitter.Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+    void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) => Hit(key: "IGpuQueueSubmitter.Submit");
+    void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
         Hit(key: "IGpuQueueSubmitter.Submit(fence)");
         LastSubmittedFence = fence;
         ((FakeFence)fence).Arm();
     }
-    void IGpuQueueSubmitter.SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => Hit(key: "IGpuQueueSubmitter.SubmitAndWait");
-    IGpuShaderModule IGpuShaderModuleFactory.Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
+    void IGpuQueueSubmitter.SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => Hit(key: "IGpuQueueSubmitter.SubmitAndWait");
+    IGpuShaderModule IGpuShaderModuleFactory.Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
         Hit(key: "IGpuShaderModuleFactory.Create");
 
         return new FakeModule();
     }
-    IGpuStorageBuffer IGpuStorageBufferFactory.Create(IGpuDeviceContext deviceContext, ulong sizeBytes) {
-        Hit(key: "IGpuStorageBufferFactory.Create");
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) {
+        Hit(key: "IGpuBufferFactory.CreateHostVisible");
 
         return new FakeBuffer(gpu: this, sizeBytes: sizeBytes);
     }
-    IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) {
-        Hit(key: "IGpuStorageBufferFactory.CreateDeviceLocal");
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
+        Hit(key: "IGpuBufferFactory.CreateHostVisible(data)");
+
+        return new FakeBuffer(gpu: this, sizeBytes: ((ulong)data.Length));
+    }
+    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) {
+        Hit(key: "IGpuBufferFactory.CreateDeviceLocal");
 
         return new FakeBuffer(gpu: this, sizeBytes: sizeBytes);
     }
-    IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
-        Hit(key: "IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs");
-
-        return new FakeBuffer(gpu: this, sizeBytes: sizeBytes);
-    }
-    IGpuStorageBuffer IGpuStorageBufferFactory.CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
-        Hit(key: "IGpuStorageBufferFactory.CreateIndirectArgs");
-
-        return new FakeBuffer(gpu: this, sizeBytes: sizeBytes);
-    }
-    IGpuImage IGpuImageFactory.Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
+    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
         Hit(key: "IGpuImageFactory.Create");
 
         return new FakeImage();
     }
-    IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-    IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-    IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
+    IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport() => throw new NotSupportedException();
+    IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => throw new NotSupportedException();
+    IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => throw new NotSupportedException();
 
     /// <summary>A fence the test signals by hand; it reads signaled when nothing is armed, as the backends' do.</summary>
     internal sealed class FakeFence(FakeGpu gpu) : IGpuSubmissionFence {

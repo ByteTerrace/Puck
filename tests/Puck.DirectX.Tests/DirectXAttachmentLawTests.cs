@@ -55,16 +55,15 @@ public sealed class DirectXAttachmentLawTests {
         };
 
         // No device context: a framebuffer that got past validation would fail on it with another exception.
-        _ = Assert.Throws<ArgumentException>(testCode: () => new DirectXGpuRenderPassFactory().CreateFramebuffer(
+        _ = Assert.Throws<ArgumentException>(testCode: () => new DirectXGpuRenderPassFactory(deviceContext: null!).CreateFramebuffer(
             colors: colors,
             depth: bound,
-            deviceContext: null!,
             renderPass: new DirectXGpuRenderPass(description: ColorAndDepth)
         ));
     }
     [Fact]
     public void APipelineWhoseDepthTestDisagreesWithItsRenderPassIsRefused() {
-        var factory = new DirectXGpuPipelineFactory();
+        var factory = new DirectXGpuPipelineFactory(deviceContext: null!);
         var untested = new GpuGraphicsPipelineDescription(
             EnableStorageBuffer: false,
             Name: "geometry",
@@ -79,7 +78,6 @@ public sealed class DirectXAttachmentLawTests {
         foreach (var (pass, description) in (((IGpuRenderPass, GpuGraphicsPipelineDescription)[])[(new DirectXGpuRenderPass(description: ColorAndDepth), untested), (new DirectXGpuRenderPass(description: ColorAndDepth with { Depth = null }), untested with { DepthCompare = GpuDepthCompare.Less })])) {
             _ = Assert.Throws<ArgumentException>(testCode: () => factory.Create(
                 description: description,
-                deviceContext: null!,
                 fragmentShaderModule: null!,
                 renderPass: pass,
                 vertexShaderModule: null!

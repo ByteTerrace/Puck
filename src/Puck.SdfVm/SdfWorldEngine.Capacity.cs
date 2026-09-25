@@ -26,13 +26,13 @@ public sealed partial class SdfWorldEngine {
         var committed = false;
 
         IGpuStorageBuffer HostBuffer(ulong bytes) {
-            var buffer = m_gpu.StorageBufferFactory.Create(deviceContext: m_deviceContext, sizeBytes: bytes);
+            var buffer = m_gpu.BufferFactory.CreateHostVisible(sizeBytes: bytes, usage: GpuBufferUsage.Storage);
 
             replacements.Add(item: buffer);
             return buffer;
         }
         IGpuBuffer DeviceBuffer(ulong bytes) {
-            var buffer = m_gpu.StorageBufferFactory.CreateDeviceLocal(deviceContext: m_deviceContext, sizeBytes: bytes);
+            var buffer = m_gpu.BufferFactory.CreateDeviceLocal(sizeBytes: bytes, usage: GpuBufferUsage.Storage);
 
             replacements.Add(item: buffer);
             return buffer;

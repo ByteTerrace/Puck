@@ -13,21 +13,21 @@ internal sealed class AbsentPipelineDevice : IGpuDeviceContext {
 }
 // A render node built over this never records, allocates, or submits: a law over it reads only its readiness. The
 // node wraps every service once for counting when it is built, so each service exists, and every call on one refuses.
-internal sealed class AbsentPipelineGpu : IGpuComputeServices, IGpuComputeCommandPoolFactory, IGpuComputePipelineFactory,
-    IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuStorageBufferFactory,
+internal sealed class AbsentPipelineGpu : IGpuComputeServices, IGpuComputeCommandPoolFactory, IGpuPipelineFactory,
+    IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuBufferFactory,
     IGpuImageFactory, IGpuSurfaceTransferFactory {
     public IGpuBindings Bindings => this;
+    public IGpuBufferFactory BufferFactory => this;
     public IGpuComputeCommandPoolFactory CommandPoolFactory => this;
-    public IGpuComputePipelineFactory ComputePipelineFactory => this;
     public IGpuImageFactory ImageFactory => this;
+    public IGpuPipelineFactory PipelineFactory => this;
     public IGpuQueueSubmitter QueueSubmitter => this;
     public IGpuRecorder Recorder => this;
     public IGpuShaderModuleFactory ShaderModuleFactory => this;
-    public IGpuStorageBufferFactory StorageBufferFactory => this;
     public IGpuSurfaceTransferFactory SurfaceTransferFactory => this;
 
-    IGpuComputeCommandPool IGpuComputeCommandPoolFactory.Create(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-    IGpuComputePipeline IGpuComputePipelineFactory.Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => throw new NotSupportedException();
+    IGpuComputeCommandPool IGpuComputeCommandPoolFactory.Create() => throw new NotSupportedException();
+    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => throw new NotSupportedException();
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) => throw new NotSupportedException();
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) => throw new NotSupportedException();
     void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) => throw new NotSupportedException();
@@ -57,17 +57,17 @@ internal sealed class AbsentPipelineGpu : IGpuComputeServices, IGpuComputeComman
     void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) => throw new NotSupportedException();
     void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBufferAccess access, uint elementStride) => throw new NotSupportedException();
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw new NotSupportedException();
-    IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-    void IGpuQueueSubmitter.Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => throw new NotSupportedException();
-    void IGpuQueueSubmitter.Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw new NotSupportedException();
-    void IGpuQueueSubmitter.SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => throw new NotSupportedException();
-    IGpuShaderModule IGpuShaderModuleFactory.Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => throw new NotSupportedException();
-    IGpuStorageBuffer IGpuStorageBufferFactory.Create(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw new NotSupportedException();
-    IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw new NotSupportedException();
-    IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw new NotSupportedException();
-    IGpuStorageBuffer IGpuStorageBufferFactory.CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw new NotSupportedException();
-    IGpuImage IGpuImageFactory.Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => throw new NotSupportedException();
-    IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-    IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-    IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
+    IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => throw new NotSupportedException();
+    void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) => throw new NotSupportedException();
+    void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw new NotSupportedException();
+    void IGpuQueueSubmitter.SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => throw new NotSupportedException();
+    IGpuShaderModule IGpuShaderModuleFactory.Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => throw new NotSupportedException();
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => throw new NotSupportedException();
+    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => throw new NotSupportedException();
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) => throw new NotSupportedException();
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => throw new NotSupportedException();
+    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => throw new NotSupportedException();
+    IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport() => throw new NotSupportedException();
+    IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => throw new NotSupportedException();
+    IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => throw new NotSupportedException();
 }

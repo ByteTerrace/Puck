@@ -40,7 +40,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
     }
     /// <inheritdoc/>
     public void EndCommandBuffer(nint commandBufferHandle) =>
-        DirectXRecorderOperations.EndCommandBuffer(commandBufferHandle: commandBufferHandle);
+        ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList)->Close();
     /// <inheritdoc/>
     public void BeginDebugGroup(nint commandBufferHandle, string label) =>
         DirectXDebugLabel.Begin(
@@ -68,23 +68,70 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         commandList->IASetPrimitiveTopology(PrimitiveTopology: D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     }
     /// <inheritdoc/>
-    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) =>
-        DirectXRecorderOperations.BindDescriptorSet(
-            commandBufferHandle: commandBufferHandle,
-            descriptorSetHandle: descriptorSetHandle,
-            isCompute: (bindPoint == GpuBindPoint.Compute),
-            pipelineLayoutHandle: pipelineLayoutHandle
+    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, nint descriptorSetHandle) {
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
+        var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
+        var layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!);
+        var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
+        var heap = ((ID3D12DescriptorHeap*)set.HeapHandle);
+
+        commandList->SetDescriptorHeaps(
+            NumDescriptorHeaps: 1,
+            ppDescriptorHeaps: &heap
         );
+
+        if (0 > layout.DescriptorTableParamIndex) {
+            return;
+        }
+
+        var handle = new D3D12_GPU_DESCRIPTOR_HANDLE { ptr = set.GpuBase };
+
+        if (bindPoint == GpuBindPoint.Compute) {
+            commandList->SetComputeRootDescriptorTable(
+                BaseDescriptor: handle,
+                RootParameterIndex: ((uint)layout.DescriptorTableParamIndex)
+            );
+        } else {
+            commandList->SetGraphicsRootDescriptorTable(
+                BaseDescriptor: handle,
+                RootParameterIndex: ((uint)layout.DescriptorTableParamIndex)
+            );
+        }
+    }
     /// <inheritdoc/>
-    public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) =>
-        DirectXRecorderOperations.PushConstants(
-            commandBufferHandle: commandBufferHandle,
-            data: data,
-            isCompute: (bindPoint == GpuBindPoint.Compute),
+    public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
+        GpuPushConstantBinding.ValidateRange(
+            dataLength: data.Length,
             offset: offset,
-            pipelineLayoutHandle: pipelineLayoutHandle,
             stageFlags: stageFlags
         );
+
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
+        var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
+        var layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!);
+
+        if (0 > layout.RootConstantsParamIndex) {
+            return;
+        }
+
+        fixed (byte* pData = data) {
+            if (bindPoint == GpuBindPoint.Compute) {
+                commandList->SetComputeRoot32BitConstants(
+                    DestOffsetIn32BitValues: (offset / 4),
+                    Num32BitValuesToSet: ((uint)(data.Length / 4)),
+                    pSrcData: pData,
+                    RootParameterIndex: ((uint)layout.RootConstantsParamIndex)
+                );
+            } else {
+                commandList->SetGraphicsRoot32BitConstants(
+                    DestOffsetIn32BitValues: (offset / 4),
+                    Num32BitValuesToSet: ((uint)(data.Length / 4)),
+                    pSrcData: pData,
+                    RootParameterIndex: ((uint)layout.RootConstantsParamIndex)
+                );
+            }
+        }
+    }
     /// <inheritdoc/>
     public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);

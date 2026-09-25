@@ -1,32 +1,26 @@
 using System.Runtime.Versioning;
-using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 
 namespace Puck.DirectX;
 
-/// <summary>
-/// Implements <see cref="IGpuComputePipelineFactory"/> for Direct3D 12, building a compute root signature whose
-/// single descriptor table mirrors the neutral binding list and a compute PSO from the supplied DXIL.
-/// </summary>
-/// <remarks>
-/// The descriptor table holds one range per binding, with each range's slot in the heap fixed at its binding
-/// index (<c>OffsetInDescriptorsFromTableStart = binding</c>, matching how <see cref="DirectXGpuBindings"/> writes a
-/// descriptor at <c>CpuBase + binding * size</c>). Shader registers are assigned per type in binding order: each
-/// UAV binding (a storage image or a read-write buffer) takes the next <c>u#</c>, each SRV binding (a read-only
-/// buffer) takes the next <c>t#</c>, and an array binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes
-/// that many consecutive registers and heap slots, so each binding list lays out exactly as its kernel declares
-/// its registers. Every parameter is <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class); each SampledImage
-/// binding adds its own CLAMP static sampler, at s0, s1, ... in binding-list order (all sharing the pipeline's one
-/// requested filter — DXC's <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState pair, so a
-/// kernel with several screen-like sources declares several distinct sampler symbols at distinct registers); the
-/// input-layout flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
-/// </remarks>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelineFactory {
+public sealed unsafe partial class DirectXGpuPipelineFactory {
     /// <inheritdoc/>
-    public IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
-        ArgumentNullException.ThrowIfNull(deviceContext);
+    /// <remarks>A compute pipeline's root signature has one descriptor table mirroring the neutral binding list.
+    /// The descriptor table holds one range per binding, with each range's slot in the heap fixed at its binding
+    /// index (<c>OffsetInDescriptorsFromTableStart = binding</c>, matching how <see cref="DirectXGpuBindings"/> writes a
+    /// descriptor at <c>CpuBase + binding * size</c>). Shader registers are assigned per type in binding order: each
+    /// UAV binding (a storage image or a read-write buffer) takes the next <c>u#</c>, each SRV binding (a read-only
+    /// buffer) takes the next <c>t#</c>, and an array binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes
+    /// that many consecutive registers and heap slots, so each binding list lays out exactly as its kernel declares
+    /// its registers. Every parameter is <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class); each SampledImage
+    /// binding adds its own CLAMP static sampler, at s0, s1, ... in binding-list order (all sharing the pipeline's one
+    /// requested filter — DXC's <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState pair, so a
+    /// kernel with several screen-like sources declares several distinct sampler symbols at distinct registers); the
+    /// input-layout flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
+    /// </remarks>
+    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         ArgumentNullException.ThrowIfNull(computeShaderModule);
         ArgumentNullException.ThrowIfNull(description);
 
@@ -37,7 +31,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         ArgumentNullException.ThrowIfNull(bindings);
         GpuComputeBinding.ValidateSet(bindings: bindings);
 
-        var device = ((ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var cs = ((DirectXGpuShaderModule)computeShaderModule);
         var hasDescriptorTable = (bindings.Count > 0);
         var hasRootConstants = (pushConstantBinding is not null);
@@ -48,8 +42,8 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
 
         // Pack heap slots in binding-list order: each binding occupies its Count consecutive slots starting right after
         // the previous binding's, so an array binding can never overlap a later binding regardless of the chosen index
-        // values (the binding index is a logical id, not the heap offset). The root signature ranges and the descriptor
-        // allocator's writes both resolve a binding to its slot through this same map, so they stay in lockstep.
+        // values (the binding index is a logical id, not the heap offset). The root signature ranges and the bindings'
+        // writes both resolve a binding to its slot through this same map, so they stay in lockstep.
         layout.SlotByBinding = PackSlots(
             bindings: bindings,
             slotCount: out var slotCount
@@ -68,7 +62,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         );
         layout.PsoHandle = BuildPso(
             device: device,
-            library: ((IDirectXDeviceContext)deviceContext).PipelineLibrary,
+            library: deviceContext.PipelineLibrary,
             rootSignatureBlob: layout.RootSignatureBlob,
             rootSignature: layout.RootSignatureHandle,
             csHandle: cs.Handle,
@@ -131,7 +125,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         var nextSrvRegister = 0u;
         var nextUavRegister = 0u;
 
-        // One range per binding. The heap slot is the packed slot from slotByBinding (the allocator writes each
+        // One range per binding. The heap slot is the packed slot from slotByBinding (DirectXGpuBindings writes each
         // descriptor at that slot + its array element); shader registers are assigned per type in binding order
         // (UAVs u0,u1...; SRVs t0,t1...), an array binding consuming `Count` consecutive registers and heap slots.
         for (var index = 0; (index < bindings.Count); index++) {
@@ -193,13 +187,11 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             parameters[paramIndex++] = constantsParam;
         }
 
-        // Each SampledImage binding reads its SRV through its OWN sampler register (s0, s1, ... in binding-list
-        // order): DXC's vk::combinedImageSampler only fuses a SCALAR Texture2D+SamplerState pair (never an array), so
-        // a shader with several screen-like sources declares several distinct sampler symbols at distinct registers —
-        // one static sampler per SampledImage binding, all with the SAME requested filter (CLAMP-addressed, all-stage
-        // visible), matches that 1:1. Existing compute pipelines (world/rt/validation/indirect) declare no
-        // SampledImage binding, so they keep NumStaticSamplers = 0 and serialize byte-identically; a single-binding
-        // pipeline (resample, the GamingBrick child resample) still gets exactly one static sampler at s0, unchanged.
+        // Each SampledImage binding reads its SRV through its own sampler register (s0, s1, ... in binding-list order):
+        // DXC's vk::combinedImageSampler fuses only a scalar Texture2D and SamplerState pair, never an array, so a shader
+        // with several screen-like sources declares a distinct sampler symbol per source. One static sampler per
+        // SampledImage binding, each with the requested filter, clamp-addressed and visible to all stages, matches that; a
+        // pipeline with no SampledImage binding has no static sampler.
         var sampledImageCount = 0u;
 
         for (var index = 0; (index < bindings.Count); index++) {

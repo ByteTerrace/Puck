@@ -14,9 +14,8 @@ namespace Puck.Shaders.Tests;
 /// <see cref="PipelineGate"/> holds that compiler work and <see cref="QueueHeld"/> holds the queue unfinished.
 /// </summary>
 internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServices, IGpuDeviceContext,
-    IGpuComputeCommandPoolFactory, IGpuComputePipelineFactory, IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory,
-    IGpuStorageBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuPipelineFactory,
-    IGpuGeometryBufferFactory, IGpuRenderPassFactory {
+    IGpuComputeCommandPoolFactory, IGpuPipelineFactory, IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory,
+    IGpuBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuRenderPassFactory {
     private readonly Dictionary<nint, Created> m_byHandle = [];
     private readonly Lock m_gate = new();
 
@@ -91,7 +90,6 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
     public long AdapterLuid => 1L;
     public IGpuBindings Bindings => this;
     public IGpuComputeCommandPoolFactory CommandPoolFactory => this;
-    public IGpuComputePipelineFactory ComputePipelineFactory => this;
     public IGpuComputeServices? ComputeServices => this;
     public IGpuDeviceContext DeviceContext => this;
     public nint DeviceHandle {
@@ -102,18 +100,17 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
         }
     }
     public GpuDeviceIdentity? Identity => null;
+    public IGpuPipelineFactory PipelineFactory => this;
     public IGpuRecorder Recorder => this;
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
     /// <summary>Gets the number of times the device handle was read.</summary>
     public int DeviceHandleReads { get; private set; }
-    public IGpuGeometryBufferFactory GeometryBufferFactory => this;
+    public IGpuBufferFactory BufferFactory => this;
     public IGpuImageFactory ImageFactory => this;
-    public IGpuPipelineFactory PipelineFactory => this;
     public IGpuQueueSubmitter QueueSubmitter => this;
     public IGpuRenderPassFactory RenderPassFactory => this;
     public IGpuShaderModuleFactory ShaderModuleFactory => this;
-    public IGpuStorageBufferFactory StorageBufferFactory => this;
     public IGpuSurfaceTransferFactory SurfaceTransferFactory => this;
 
     // The texel size of a storage image format, stated here independently of the node's own table.
@@ -222,11 +219,11 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
     public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => RecordGraphics(buffer: bufferHandle, command: "vertices", count: strideBytes, offsetBytes: 0, sizeBytes: sizeBytes);
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => ClearedImages.Add(item: imageHandle);
-    public IGpuComputeCommandPool Create(IGpuDeviceContext deviceContext) => new FakeCommandPool(created: Create(kind: "command pool"));
-    public IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => new FakePipeline(created: CreateCompiled(kind: "compute pipeline"));
-    public IGpuShaderModule Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => new FakeModule(created: CreateCompiled(kind: $"{stage} module"));
-    public IGpuStorageBuffer Create(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw new NotSupportedException();
-    public IGpuImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => new FakeImage(
+    public IGpuComputeCommandPool Create() => new FakeCommandPool(created: Create(kind: "command pool"));
+    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => new FakePipeline(created: CreateCompiled(kind: "compute pipeline"));
+    public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => new FakeModule(created: CreateCompiled(kind: $"{stage} module"));
+    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) => throw new NotSupportedException();
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => new FakeImage(
         created: Create(
             bytes: ((((ulong)width) * height) * TexelBytes(format: format)),
             kind: $"{format} image"
@@ -236,7 +233,7 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
         usage: usage,
         width: width
     );
-    public IGpuPipeline Create(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
+    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
         description.ValidateAgainst(renderPass: renderPass);
 
         var created = CreateCompiled(kind: "graphics pipeline");
@@ -247,9 +244,9 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
 
         return new FakePipeline(created: created);
     }
-    public IGpuBuffer Create(IGpuDeviceContext deviceContext, ReadOnlySpan<byte> data, GpuBufferUsage usage) {
+    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
         GpuBufferUsages.Validate(
-            sizeBytes: data.Length,
+            sizeBytes: ((ulong)data.Length),
             usage: usage
         );
 
@@ -265,11 +262,11 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
             sizeBytes: ((ulong)data.Length)
         );
     }
-    public IGpuRenderPass Create(IGpuDeviceContext deviceContext, GpuRenderPassDescription description) => new FakeRenderPass(
+    public IGpuRenderPass Create(GpuRenderPassDescription description) => new FakeRenderPass(
         created: Create(kind: "render pass"),
         description: description
     );
-    public IGpuFramebuffer CreateFramebuffer(IGpuDeviceContext deviceContext, IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) {
+    public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) {
         var (width, height) = GpuFramebuffers.Validate(
             colors: colors,
             depth: depth,
@@ -285,26 +282,24 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
             width: width
         );
     }
-    public IGpuBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) => new FakeBuffer(
+    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) => new FakeBuffer(
         created: Create(
             bytes: sizeBytes,
             kind: "buffer"
         ),
         sizeBytes: sizeBytes
     );
-    public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw new NotSupportedException();
-    public IGpuSurfaceImport CreateImport(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
-    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => throw new NotSupportedException();
+    public IGpuSurfaceImport CreateImport() => throw new NotSupportedException();
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) => Create(kind: "descriptor pool").Handle;
-    public IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext) => (ReadbackSupported
+    public IGpuSurfaceReadback CreateReadback() => (ReadbackSupported
         ? new FakeReadback(gpu: this)
         : throw new NotSupportedException());
     public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) => Create(kind: "sampler").Handle;
-    public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) => new FakeFence(
+    public IGpuSubmissionFence CreateSubmissionFence() => new FakeFence(
         created: Create(kind: "fence"),
         gpu: this
     );
-    public IGpuSurfaceUpload CreateUpload(IGpuDeviceContext deviceContext) => throw new NotSupportedException();
+    public IGpuSurfaceUpload CreateUpload() => throw new NotSupportedException();
     public void DestroyPool(nint poolHandle) => Destroy(handle: poolHandle);
     public void DestroySampler(nint samplerHandle) => Destroy(handle: samplerHandle);
     public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) { }
@@ -323,9 +318,9 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
     }
     public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) { }
     public void SetScissor(nint commandBufferHandle, GpuPixelRect rect) { }
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
-    public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => Submissions++;
-    public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => Submissions++;
+    public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
     public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Buffer, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: bufferHandle);
     public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: imageHandle);
     public void WaitIdle() {
@@ -382,11 +377,13 @@ internal sealed class FakePipelineGpu : IGpuComputeServices, IFullscreenPassServ
         public override string ToString() => $"#{Number} {Kind} (disposed {DisposeCount}x)";
     }
 
-    private sealed class FakeBuffer(Created created, ulong sizeBytes) : IGpuBuffer {
+    private sealed class FakeBuffer(Created created, ulong sizeBytes) : IGpuStorageBuffer {
         public nint BufferHandle => created.Handle;
         public ulong SizeBytes => sizeBytes;
 
         public void Dispose() => created.Dispose();
+        public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => throw new NotSupportedException();
+        public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged => throw new NotSupportedException();
     }
     private sealed class FakeCommandPool(Created created) : IGpuComputeCommandPool {
         public nint CommandBufferHandle => created.Handle;

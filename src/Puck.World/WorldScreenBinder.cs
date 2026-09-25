@@ -3,7 +3,6 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Sources;
 using Puck.Commands;
-using Puck.DirectX;
 using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Hosting;
@@ -93,17 +92,16 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // The producers every producer source opens through: the four the engine ships, then any the host registers.
     private readonly WorldImageProducers m_producers = new();
 
-    private readonly DirectXGpuSurfaceExportFactory? m_surfaceExport;
+    // Whether the host exports shared Direct3D 12 surfaces: a Direct3D 12 host on a platform that has them.
+    private readonly bool m_exportsSurfaces;
     // The backend-neutral surface-transfer factory — the Vulkan host's camera GPU tier imports its shared camera
     // targets through it (the D3D12 host samples its own resources directly and never calls it for the camera).
     // Null on a headless boot, which composes no presenter and never publishes.
     private readonly IGpuSurfaceTransferFactory? m_surfaceTransfers;
     private readonly INativeImageCaptureService m_windowCapture;
 
-    // The camera GPU tier's target factory (lazily created inside the platform-guarded open) and, on the Vulkan host,
-    // the headless Direct3D 12 device the targets are allocated on — pinned to the render adapter's LUID so the
+    // On the Vulkan host, the camera GPU tier's headless Direct3D 12 device the targets are allocated on — pinned to the render adapter's LUID so the
     // platform's D3D11 decode device and the Vulkan render device both reach the same physical memory.
-    private DirectXGpuSurfaceExportFactory? m_cameraExport;
     private DirectXDeviceContext? m_cameraTargetDevice;
 
     // The player roster — resolves a seat to its bound camera device (TryGetSeatDevice) and mints the camera<N>
@@ -246,14 +244,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_roster = roster;
         // Windows-10240 guarded because DirectXGpuSurfaceExportFactory is platform-attributed; hostsOnDirectX already
         // implies that floor (Program.cs rejects the D3D12 backend below it), so the check only satisfies the analyzer.
-        m_surfaceExport = ((hostsOnDirectX && OperatingSystem.IsWindowsVersionAtLeast(
+        m_exportsSurfaces = (hostsOnDirectX && OperatingSystem.IsWindowsVersionAtLeast(
             major: 10,
             minor: 0,
             build: 10240
-        ))
-            ? new DirectXGpuSurfaceExportFactory()
-            : null
-        );
+        ));
         m_seatCameraControls = ResolveSeatCameraControls(screens: screens);
         m_captureGate = new WorldCaptureGate(
             alwaysFills: alwaysFillsCaptures,

@@ -8,11 +8,10 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public interface IGpuSurfaceExportFactory {
     /// <summary>Creates an exportable image backed by shared GPU memory on the given device.</summary>
-    /// <param name="deviceContext">The GPU device context.</param>
     /// <param name="format">The pixel format; a color format, since a depth attachment is never exported.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
     /// <param name="usage">The usages the image is created for, as <see cref="IGpuImageFactory.Create"/> takes them.</param>
     /// <returns>A new, owning <see cref="IGpuExportableImage"/>.</returns>
-    IGpuExportableImage CreateExportableImage(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage);
+    IGpuExportableImage CreateExportableImage(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage);
 }
