@@ -1667,6 +1667,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 server: server
             ) {
                 AwaitingMirrors = true,
+                ConsoleLink = ConsoleLinkFor(link: link, row: identity.World.Value),
                 Door = door,
                 ListenEndpoint = definition.Host.Listen,
                 Tape = tape,
@@ -1685,9 +1686,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
                     row.PublishTick = gate.PublishTick;
                     Instances.Admit(row: row);
-                    if (Volatile.Read(location: ref m_deferredVerbAnswers) is { } answers) {
-                        TapEchoes(answers: answers, server: server);
-                    }
+                    TapDeferredVerbs(row: row);
 
                     if (slice is { } restoreSlice) {
                         Instances.RestoreRow(

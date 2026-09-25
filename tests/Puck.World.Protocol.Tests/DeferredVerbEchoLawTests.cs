@@ -4,193 +4,270 @@ using Xunit;
 namespace Puck.World.Protocol.Tests;
 
 /// <summary>
-/// Laws for <see cref="WorldDeferredVerbEchoes"/>, the pending-verb table a buffered-mutation verb registers its
-/// minted correlation id into so the <c>WorldServer.EchoTap</c> subscriber can print a per-verb refusal line: an
-/// entry is taken exactly once, correlation 0 never registers, and the table stays bounded under entries whose
-/// verdict never fires. A registration's result settles with the verdict, and on every path where no verdict will
-/// arrive, so a session that settles results is never left holding.
+/// Laws for <see cref="WorldDeferredVerbEchoes"/>, the console's registered lines: a line registers when a console link
+/// mints its correlation, keyed by row, and only a registered line's refusal counts, once. A rebuild or undo verb's
+/// verdict prints as its own line; an evicted line counts nothing until its verdict arrives, which counts by its real
+/// outcome; a line forgotten past the memory bound counts once as an unknown outcome; a codec refusal on a console
+/// link counts once. Echoes no console line registered (another row's, a remote peer's, correlation 0, a grant-table
+/// replay of a buffered line, the bare transport's) answer nothing.
 /// </summary>
 public sealed class DeferredVerbEchoLawTests {
-    [Fact]
-    public void PendingEntries_EvictOldestPastCapacity() {
-        var echoes = new WorldDeferredVerbEchoes();
+    private const string Row = "row";
 
-        for (var id = 1L; (id <= (WorldDeferredVerbEchoes.Capacity + 1)); id++) {
-            _ = echoes.Register(
-                correlationId: id,
-                verb: "world.row.set"
-            );
+    private static List<WorldDeferredVerbAnswer> Answers(WorldDeferredVerbEchoes echoes) {
+        var answers = new List<WorldDeferredVerbAnswer>();
+
+        echoes.Answered += answers.Add;
+
+        return answers;
+    }
+    private static CommandSettlement Register(WorldDeferredVerbEchoes echoes, long id, string row = Row) {
+        var settlement = new CommandSettlement();
+
+        _ = echoes.Register(
+            correlationId: id,
+            row: row,
+            settlement: settlement,
+            verb: "world.reset"
+        );
+
+        return settlement;
+    }
+    private static void Echo(WorldDeferredVerbEchoes echoes, long id, bool rejected, string row = Row, bool local = true, bool grantTable = false) => echoes.Answer(
+        correlationId: id,
+        grantTable: grantTable,
+        local: local,
+        message: (rejected
+            ? "refused"
+            : "applied"),
+        rejected: rejected,
+        row: row
+    );
+    private static CommandResult? Verdict(CommandSettlement settlement) {
+        CommandResult? verdict = null;
+
+        Settled(result: CommandResult.Settling(settlement: settlement), observe: result => verdict = result);
+
+        return verdict;
+    }
+
+    [Fact]
+    public void ARegisteredVerbAnswersOnceWithItsOwnLineAndCountsOnlyARefusal() {
+        var echoes = new WorldDeferredVerbEchoes();
+        var answers = Answers(echoes: echoes);
+        var applied = Register(echoes: echoes, id: 1L);
+        var refused = Register(echoes: echoes, id: 2L);
+
+        Echo(echoes: echoes, id: 1L, rejected: false);
+        Echo(echoes: echoes, id: 1L, rejected: true);
+        Echo(echoes: echoes, id: 2L, rejected: true);
+
+        Assert.Equal(
+            actual: answers,
+            expected: [
+                new WorldDeferredVerbAnswer(Counts: false, IsError: false, Line: "[world.reset: applied]"),
+                new WorldDeferredVerbAnswer(Counts: true, IsError: true, Line: "[world.reset: refused]"),
+            ]
+        );
+        Assert.Equal(actual: Verdict(settlement: applied)!.Value.Output, expected: "[world.reset: applied]");
+        Assert.True(condition: Verdict(settlement: refused)!.Value.IsError);
+        Assert.Equal(actual: echoes.PendingCount, expected: 0);
+    }
+    [InlineData("unregistered")]
+    [InlineData("zero")]
+    [InlineData("remote")]
+    [InlineData("another row")]
+    [InlineData("grant-table replay")]
+    [Theory]
+    public void AnEchoNoConsoleLineRegisteredAnswersNothing(string echo) {
+        var echoes = new WorldDeferredVerbEchoes();
+        var answers = Answers(echoes: echoes);
+
+        _ = Register(echoes: echoes, id: 1L);
+
+        switch (echo) {
+            case "unregistered":
+                Echo(echoes: echoes, id: 2L, rejected: true);
+                break;
+            case "zero":
+                Echo(echoes: echoes, id: 0L, rejected: true);
+                break;
+            case "remote":
+                Echo(echoes: echoes, id: 1L, local: false, rejected: true);
+                break;
+            case "another row":
+                Echo(echoes: echoes, id: 1L, rejected: true, row: "another");
+                break;
+            default:
+                Echo(echoes: echoes, grantTable: true, id: 1L, rejected: true);
+                break;
         }
 
-        // The oldest entry fell off the bound; the newest survives.
-        Assert.False(condition: echoes.TryTake(
-            correlationId: 1,
-            settlement: out _,
-            verb: out _
-        ));
-        Assert.True(condition: echoes.TryTake(
-            correlationId: (WorldDeferredVerbEchoes.Capacity + 1),
-            settlement: out _,
-            verb: out _
-        ));
+        Assert.Empty(collection: answers);
+        Assert.Equal(actual: echoes.PendingCount, expected: 1);
+
+        Echo(echoes: echoes, id: 1L, rejected: true);
+
+        Assert.Single(collection: answers);
     }
     [Fact]
-    public void RegisteredEntry_IsTakenExactlyOnce() {
+    public void ARegistrationWithNoVerdictToWaitForIsItsOwnAnswer() {
         var echoes = new WorldDeferredVerbEchoes();
+        var settled = new CommandSettlement();
 
-        _ = echoes.Register(
-            correlationId: 7,
-            verb: "world.row.set"
-        );
+        settled.Settle(result: CommandResult.Error(output: "[world.reset: refused inline]"));
 
-        Assert.True(condition: echoes.TryTake(
-            correlationId: 7,
-            settlement: out _,
-            verb: out var verb
-        ));
-        Assert.Equal(
-            actual: verb,
-            expected: "world.row.set"
-        );
-        Assert.False(condition: echoes.TryTake(
-            correlationId: 7,
-            settlement: out _,
-            verb: out _
-        ));
+        Assert.Equal(actual: echoes.Register(correlationId: 7L, row: Row, settlement: settled, verb: "world.reset").Output, expected: "[world.reset: refused inline]");
+        Assert.StartsWith(actualString: echoes.Register(correlationId: 0L, row: Row, settlement: new CommandSettlement(), verb: "world.reset").Output, expectedStartString: "[world.reset: no local verdict is available");
+        Assert.Equal(actual: echoes.PendingCount, expected: 0);
     }
     [Fact]
-    public void TakenEntries_DoNotConsumeTheBound() {
+    public void AnsweredLinesDoNotConsumeTheBound() {
         var echoes = new WorldDeferredVerbEchoes();
 
-        // Register-and-take far past the bound, then prove a fresh entry still registers: the evicted-id queue's
-        // stale rows never crowd out live ones.
-        for (var id = 1L; (id <= (WorldDeferredVerbEchoes.Capacity * 2)); id++) {
-            _ = echoes.Register(
-                correlationId: id,
-                verb: "world.row.set"
-            );
-            Assert.True(condition: echoes.TryTake(
-                correlationId: id,
-                settlement: out _,
-                verb: out _
-            ));
+        for (var id = 1L; (id <= (3 * WorldDeferredVerbEchoes.Capacity)); id++) {
+            _ = Register(echoes: echoes, id: id);
+            Echo(echoes: echoes, id: id, rejected: false);
         }
 
-        _ = echoes.Register(
-            correlationId: 100_000,
-            verb: "world.row.step"
-        );
+        Assert.Equal(actual: (echoes.PendingCount, echoes.EvictedCount), expected: (0, 0));
+    }
+    /// <summary>An evicted line releases its session and neither prints nor counts; when its verdict arrives it answers
+    /// with its own line and counts by its real outcome, once.</summary>
+    [Fact]
+    public void AnEvictedLineAnswersAndCountsByItsRealOutcomeWhenItsVerdictArrives() {
+        var echoes = new WorldDeferredVerbEchoes();
+        var answers = Answers(echoes: echoes);
+        var first = Register(echoes: echoes, id: 1L);
 
-        Assert.True(condition: echoes.TryTake(
-            correlationId: 100_000,
-            settlement: out _,
-            verb: out var verb
-        ));
+        for (var id = 2L; (id <= (WorldDeferredVerbEchoes.Capacity + 2L)); id++) {
+            _ = Register(echoes: echoes, id: id);
+        }
+
+        Assert.Empty(collection: answers);
+        Assert.Equal(actual: (echoes.PendingCount, echoes.EvictedCount), expected: (WorldDeferredVerbEchoes.Capacity, 2));
+        Assert.StartsWith(actualString: Verdict(settlement: first)!.Value.Output, expectedStartString: "[world.reset: evicted unanswered");
+
+        Echo(echoes: echoes, id: 1L, rejected: false);
+        Echo(echoes: echoes, id: 2L, rejected: true);
+        Echo(echoes: echoes, id: 2L, rejected: true);
+
         Assert.Equal(
-            actual: verb,
-            expected: "world.row.step"
+            actual: answers,
+            expected: [
+                new WorldDeferredVerbAnswer(Counts: false, IsError: false, Line: "[world.reset: applied]"),
+                new WorldDeferredVerbAnswer(Counts: true, IsError: true, Line: "[world.reset: refused]"),
+            ]
         );
+        Assert.Equal(actual: echoes.EvictedCount, expected: 0);
     }
+    /// <summary>Past the memory bound the oldest evicted line is forgotten: it answers once as an unknown outcome and
+    /// counts once, and its verdict arriving later answers nothing, so it is never counted twice.</summary>
     [Fact]
-    public void UnknownCorrelation_TakesNothing() {
+    public void AForgottenLineCountsOnceAndItsLateVerdictAnswersNothing() {
         var echoes = new WorldDeferredVerbEchoes();
+        var answers = Answers(echoes: echoes);
+        var last = ((WorldDeferredVerbEchoes.Capacity + WorldDeferredVerbEchoes.EvictedMemory) + 1L);
 
-        Assert.False(condition: echoes.TryTake(
-            correlationId: 42,
-            settlement: out _,
-            verb: out _
-        ));
+        for (var id = 1L; (id <= last); id++) {
+            _ = Register(echoes: echoes, id: id);
+        }
+
+        var forgotten = Assert.Single(collection: answers);
+
+        Assert.True(condition: (forgotten.Counts && forgotten.IsError));
+        Assert.StartsWith(actualString: forgotten.Line, expectedStartString: "[world.reset: unanswered");
+
+        Echo(echoes: echoes, id: 1L, rejected: true);
+        Echo(echoes: echoes, id: 2L, rejected: true);
+
+        Assert.Equal(actual: answers.Count(predicate: static answer => answer.Counts), expected: 2);
+        Assert.Equal(actual: answers[^1].Line, expected: "[world.reset: refused]");
     }
-    [Fact]
-    public void ZeroCorrelation_NeverRegisters() {
+    /// <summary>A grant applies inside its submit, so its echo arrives before the correlation returns: a console link
+    /// registers the line as it mints it, so a refusal counts once and nothing is left pending; the bare transport
+    /// registers nothing.</summary>
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [Theory]
+    public void ASynchronousRefusalCountsOnceOnlyThroughAConsoleLink(bool console, bool rejected) {
         var echoes = new WorldDeferredVerbEchoes();
+        var answers = Answers(echoes: echoes);
+        var transport = new LoopbackTransport(server: new EchoingHost(echoes: echoes, rejectGrants: rejected));
+        IServerLink link = (console
+            ? transport.ForConsole(row: echoes.ForRow(row: Row))
+            : transport);
 
-        _ = echoes.Register(
-            correlationId: 0,
-            verb: "world.row.set"
-        );
-
-        Assert.False(condition: echoes.TryTake(
-            correlationId: 0,
-            settlement: out _,
-            verb: out _
-        ));
-    }
-    [Fact]
-    public void ARegistrationSettlesWithTheVerdictItsTakerGives() {
-        var echoes = new WorldDeferredVerbEchoes();
-        var result = echoes.Register(
-            correlationId: 9,
-            verb: "world.row.set"
-        );
-        Puck.Commands.CommandResult? settled = null;
-
-        Settled(result: result, observe: verdict => settled = verdict);
-        Assert.Null(@object: settled);
-        Assert.True(condition: echoes.TryTake(
-            correlationId: 9,
-            settlement: out var settlement,
-            verb: out _
-        ));
-        settlement!.Settle(result: Puck.Commands.CommandResult.Error(output: "[world.row.set: refused]"));
-
-        Assert.True(condition: settled!.Value.IsError);
-        Assert.Equal(
-            actual: settled.Value.Output,
-            expected: "[world.row.set: refused]"
-        );
-    }
-    [Fact]
-    public void ARegistrationNoVerdictWillNameSettlesAtOnce() {
-        var echoes = new WorldDeferredVerbEchoes();
-        Puck.Commands.CommandResult? settled = null;
-
-        Settled(
-            observe: verdict => settled = verdict,
-            result: echoes.Register(
-                correlationId: 0,
-                verb: "world.row.set"
+        link.SubmitGrant(
+            actor: Principal.Console,
+            grant: new WorldGrant(
+                Capability: WorldCapability.Mutate,
+                Exclusive: false,
+                Grantee: Principal.Console,
+                Subject: GrantSubject.Section(section: WorldSection.State)
             )
         );
 
-        Assert.True(condition: settled!.Value.IsError);
-        Assert.Contains(expectedSubstring: "no local verdict", actualString: settled.Value.Output, comparisonType: StringComparison.Ordinal);
+        Assert.Equal(actual: answers.Count(predicate: static answer => answer.Counts), expected: ((console && rejected) ? 1 : 0));
+        Assert.All(collection: answers, action: static answer => Assert.Null(@object: answer.Line));
+        Assert.Equal(actual: echoes.PendingCount, expected: 0);
     }
-    /// <summary>An entry pushed out of the full table settles as an unknown outcome and is reported through
-    /// <see cref="WorldDeferredVerbEchoes.Evicted"/> exactly once, saying it was evicted unanswered: no echo will
-    /// ever answer or count it, so the eviction is the stdin driver's only report of that line.</summary>
+    /// <summary>A mutation waits for the next tick boundary: its console line stays pending until its verdict answers
+    /// it.</summary>
     [Fact]
-    public void AnEvictedRegistrationSettlesAndIsReportedAsEvictedUnanswered() {
+    public void ABufferedConsoleLineWaitsForItsVerdict() {
         var echoes = new WorldDeferredVerbEchoes();
-        var evicted = new List<Puck.Commands.CommandResult>();
-        Puck.Commands.CommandResult? settled = null;
+        var answers = Answers(echoes: echoes);
+        var host = new EchoingHost(echoes: echoes, rejectGrants: false);
+        IServerLink link = new LoopbackTransport(server: host).ForConsole(row: echoes.ForRow(row: Row));
 
-        echoes.Evicted += evicted.Add;
-        Settled(
-            observe: verdict => settled = verdict,
-            result: echoes.Register(
-                correlationId: 1,
-                verb: "world.undo"
-            )
+        _ = link.Submit(mutation: new WorldMutation.RemoveKit(Principal.Console, "one"));
+
+        Assert.Equal(actual: echoes.PendingCount, expected: 1);
+        host.EchoLast(grantTable: false, rejected: true);
+        Assert.Equal(actual: (answers.Count(predicate: static answer => answer.Counts), echoes.PendingCount), expected: (1, 0));
+    }
+    /// <summary>A rebuild replays its document's grants under its own correlation: those grant-table echoes neither
+    /// settle nor count the rebuild's line, and the rebuild's own verdict does.</summary>
+    [Fact]
+    public void ARebuildsGrantReplaysLeaveItsLineForItsOwnVerdict() {
+        var echoes = new WorldDeferredVerbEchoes();
+        var answers = Answers(echoes: echoes);
+        var host = new EchoingHost(echoes: echoes, rejectGrants: false);
+        IServerLink link = new LoopbackTransport(server: host).ForConsole(row: echoes.ForRow(row: Row));
+
+        _ = link.SubmitRebuild(new WorldRebuildRequest(WorldRebuildKind.Reset, null, null, false), Principal.Console, echoes, "world.reset");
+        host.EchoLast(grantTable: true, rejected: true);
+
+        Assert.Empty(collection: answers);
+
+        host.EchoLast(grantTable: false, rejected: false);
+
+        Assert.Equal(actual: Assert.Single(collection: answers), expected: new WorldDeferredVerbAnswer(Counts: false, IsError: false, Line: "[world.reset: applied]"));
+    }
+    /// <summary>A codec refusal with no completion prints on stderr as the transport's own answer and counts once on a
+    /// console link; through the bare transport it counts nothing.</summary>
+    [InlineData(true)]
+    [InlineData(false)]
+    [Theory]
+    public void ACodecRefusalWithNoCompletionCountsOnceOnAConsoleLink(bool console) {
+        var echoes = new WorldDeferredVerbEchoes();
+        var answers = Answers(echoes: echoes);
+        var transport = new LoopbackTransport(server: new EchoingHost(echoes: echoes, rejectGrants: false));
+        IServerLink link = (console
+            ? transport.ForConsole(row: echoes.ForRow(row: Row))
+            : transport);
+        var oversized = new string(c: 'x', count: (WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Mutation) + 1));
+
+        Assert.Equal(actual: link.SubmitWorldMutation(mutation: new WorldMutation.RemoveKit(Principal.Console, oversized)), expected: 0L);
+        Assert.Equal(
+            actual: answers,
+            expected: (console
+                ? [new WorldDeferredVerbAnswer(Counts: true, IsError: true, Line: null)]
+                : [])
         );
-        for (var id = 2L; (id <= WorldDeferredVerbEchoes.Capacity); id++) {
-            _ = echoes.Register(
-                correlationId: id,
-                verb: "world.row.set"
-            );
-        }
-
-        Assert.Empty(collection: evicted);
-        _ = echoes.Register(
-            correlationId: (WorldDeferredVerbEchoes.Capacity + 1),
-            verb: "world.row.set"
-        );
-
-        var report = Assert.Single(collection: evicted);
-
-        Assert.True(condition: report.IsError);
-        Assert.StartsWith(actualString: report.Output, expectedStartString: "[world.undo: evicted unanswered");
-        Assert.Equal(actual: settled, expected: report);
+        Assert.Equal(actual: echoes.PendingCount, expected: 0);
     }
     [Fact]
     public void TwoWorldsWithTheSameCorrelationKeepTheirOwnMutationVerdicts() {
@@ -248,7 +325,7 @@ public sealed class DeferredVerbEchoLawTests {
         Settled(pending, verdict => result = verdict);
         Assert.True(condition: result!.Value.IsError);
         Assert.Contains("retiring", result.Value.Output, StringComparison.Ordinal);
-        Assert.False(condition: echoes.TryTake(host.Envelope.CorrelationId, out _, out _));
+        Assert.Equal(actual: echoes.PendingCount, expected: 0);
     }
     /// <summary>A verdict that arrived before its line's handler returned is that line's own answer on the stdin
     /// driver's path (a Simulation-routed line, a session that settles nothing, an observer printing results), and
@@ -374,6 +451,30 @@ public sealed class DeferredVerbEchoLawTests {
     }
     private sealed class ConsolePrincipal : Puck.Commands.IPrincipalResolver {
         public Principal PrincipalOf(int slot) => Principal.Console;
+    }
+    // An authority that answers through the console's table as a row's echo tap does: a grant inside its submit, any
+    // other submission when the law echoes it.
+    private sealed class EchoingHost(WorldDeferredVerbEchoes echoes, bool rejectGrants) : IWorldServerHost {
+        private long m_last;
+
+        public IDisposable AttachSink(IClientSink sink) => throw new NotSupportedException();
+        public void EchoLast(bool grantTable, bool rejected) => Echo(
+            echoes: echoes,
+            grantTable: grantTable,
+            id: m_last,
+            rejected: rejected
+        );
+        public void EnqueueIntent(in IntentSubmission submission) => throw new NotSupportedException();
+        public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) {
+            m_last = envelope.CorrelationId;
+
+            if (envelope.Payload is WorldSubmissionPayload.Grant) {
+                EchoLast(
+                    grantTable: true,
+                    rejected: rejectGrants
+                );
+            }
+        }
     }
     private sealed class CompletionHost : IWorldServerHost {
         public Action<WorldSubmissionResult>? Completion { get; private set; }

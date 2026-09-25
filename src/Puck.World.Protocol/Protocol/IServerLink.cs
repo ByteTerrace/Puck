@@ -224,7 +224,12 @@ public static class ServerLinkSubmissions {
             principal: principal
         );
 
-        return echoes.Register(correlationId: correlation, settlement: settlement, verb: verb);
+        return echoes.Register(
+            correlationId: correlation,
+            row: ((link as IConsoleServerLink)?.Row?.Row ?? WorldDeferredVerbEchoes.DefaultRow),
+            settlement: settlement,
+            verb: verb
+        );
     }
 
     /// <summary>Revokes a capability from a principal — the <c>world.revoke</c> half. Applies synchronously at submit;

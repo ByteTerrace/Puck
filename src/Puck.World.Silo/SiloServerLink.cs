@@ -4,15 +4,18 @@ using Puck.World.Server;
 
 namespace Puck.World.Silo;
 
-// Resolves the immutable session row while its ordinary command-pump scope is active.
-internal sealed class SiloServerLink(WorldSiloHost host) : IPrincipalServerLink {
+// Resolves the immutable session row while its ordinary command-pump scope is active, and submits through that row's
+// console link, so the console's lines register under the row that answers them.
+internal sealed class SiloServerLink(WorldSiloHost host) : IConsoleServerLink {
     private IPrincipalServerLink Link => (((WorldNarrationScope.Current is { } row) && host.Instances.TryGet(
         instance: out var instance,
         name: row
-    ) && (instance?.Link is IPrincipalServerLink link))
+    ) && ((instance?.ConsoleLink ?? instance?.Link) is IPrincipalServerLink link))
         ? link
         : throw new InvalidOperationException(message: "No principal-aware World link is bound to this command.")
     );
+
+    public WorldDeferredVerbRow? Row => (Link as IConsoleServerLink)?.Row;
 
     public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) => Link.Query(
         completion: completion,

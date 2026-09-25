@@ -6,26 +6,39 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Laws for the host half of the pending-verb table (<see cref="WorldDeferredVerbAnswers"/>): an evicted line
-/// is answered and counted once, by its eviction, even when the authority refuses it later, and the table remembers a
-/// bounded number of evictions.</summary>
+/// <summary>Laws for the host half of the console's table (<see cref="WorldDeferredVerbAnswers"/>): an evicted line
+/// prints and counts nothing until its verdict arrives, which prints the line's own answer and counts by its real
+/// outcome, once; a line forgotten past the table's memory answers once, on stderr, as an unknown outcome, and its late
+/// verdict answers nothing; an echo no console line registered is never counted.</summary>
 [Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class DeferredVerbEvictionAnswerLawTests {
     internal const string EvictedVerb = "world.undo";
 
-    private static WorldEditEcho Refusal(long correlationId) => new(
-        Message: "undo refused: nothing to undo",
-        Rejected: true,
+    private static WorldEditEcho Verdict(long correlationId, bool rejected) => new(
+        Message: (rejected
+            ? "undo refused: nothing to undo"
+            : "dropped 1, 0 remaining"),
+        Rejected: rejected,
         Kind: WorldEditEchoKind.Mutation,
         CorrelationId: correlationId
     );
 
-    // Registers correlation 1, then enough later ids to evict it.
-    internal static void EvictTheFirst(WorldDeferredVerbEchoes echoes) {
-        for (var id = 1L; (id <= (WorldDeferredVerbEchoes.Capacity + 1)); id++) {
-            _ = echoes.Register(correlationId: id, verb: ((id == 1L) ? EvictedVerb : "world.reset"));
+    // Registers correlation 1 as the evicted verb, then the given number of later ids, each evicting one earlier line.
+    internal static void RegisterAfterTheFirst(WorldDeferredVerbEchoes echoes, long later) {
+        for (var id = 1L; (id <= (later + 1L)); id++) {
+            _ = echoes.Register(
+                correlationId: id,
+                row: WorldDeferredVerbEchoes.DefaultRow,
+                settlement: new CommandSettlement(),
+                verb: ((id == 1L) ? EvictedVerb : "world.reset")
+            );
         }
     }
+    // Registers correlation 1, then enough later ids to evict it.
+    internal static void EvictTheFirst(WorldDeferredVerbEchoes echoes) => RegisterAfterTheFirst(
+        echoes: echoes,
+        later: WorldDeferredVerbEchoes.Capacity
+    );
     internal static string WireErrors(CommandRegistry registry) => registry.Submit(line: "wire.errors").Output;
     internal static (string Out, string Error) Captured(Action action) {
         var (originalOut, originalError) = (Console.Out, Console.Error);
@@ -44,41 +57,56 @@ public sealed class DeferredVerbEvictionAnswerLawTests {
         return (output.ToString(), error.ToString());
     }
 
-    [Fact]
-    public void ALateRefusalOfAnEvictedLineIsNeitherPrintedNorCountedAgain() {
+    [InlineData(true)]
+    [InlineData(false)]
+    [Theory]
+    public void AnEvictedLineIsAnsweredAndCountedByItsLateVerdict(bool rejected) {
         var echoes = new WorldDeferredVerbEchoes();
         var registry = new CommandRegistry(modules: []);
         var answers = WorldDeferredVerbAnswers.Attach(echoes: echoes, registry: registry);
 
         var evicted = Captured(action: () => EvictTheFirst(echoes: echoes));
 
-        Assert.StartsWith(actualString: evicted.Error, expectedStartString: $"[{EvictedVerb}: evicted unanswered");
-        Assert.Equal(actual: WireErrors(registry: registry), expected: "[wire.errors: 1 rejected]");
+        Assert.Equal(actual: (evicted.Out, evicted.Error), expected: (string.Empty, string.Empty));
+        Assert.Equal(actual: WireErrors(registry: registry), expected: "[wire.errors: 0 rejected]");
 
-        var late = Captured(action: () => answers.Answer(echo: Refusal(correlationId: 1L)));
+        var late = Captured(action: () => answers.Answer(
+            echo: Verdict(correlationId: 1L, rejected: rejected),
+            row: WorldDeferredVerbEchoes.DefaultRow
+        ));
 
-        Assert.Empty(collection: late.Out);
-        Assert.Empty(collection: late.Error);
-        Assert.Equal(actual: WireErrors(registry: registry), expected: "[wire.errors: 1 rejected]");
+        Assert.StartsWith(actualString: (rejected ? late.Error : late.Out), expectedStartString: $"[{EvictedVerb}: ");
+        Assert.Equal(actual: WireErrors(registry: registry), expected: $"[wire.errors: {(rejected ? 1 : 0)} rejected]");
 
-        // Control: a refusal answering no registered or evicted line is still counted, and so is a second verdict for
-        // the evicted id, which the first one took.
-        answers.Answer(echo: Refusal(correlationId: 9999L));
-        answers.Answer(echo: Refusal(correlationId: 1L));
-        Assert.Equal(actual: WireErrors(registry: registry), expected: "[wire.errors: 3 rejected]");
+        // A second verdict for the answered line, and a refusal no console line registered, answer nothing.
+        var again = Captured(action: () => {
+            answers.Answer(echo: Verdict(correlationId: 1L, rejected: true), row: WorldDeferredVerbEchoes.DefaultRow);
+            answers.Answer(echo: Verdict(correlationId: 9999L, rejected: true), row: WorldDeferredVerbEchoes.DefaultRow);
+        });
+
+        Assert.Equal(actual: (again.Out, again.Error), expected: (string.Empty, string.Empty));
+        Assert.Equal(actual: WireErrors(registry: registry), expected: $"[wire.errors: {(rejected ? 1 : 0)} rejected]");
     }
     [Fact]
-    public void TheTableRemembersOnlyItsLastEvictions() {
+    public void ALineForgottenPastTheMemoryAnswersOnceAndIsNeverCountedTwice() {
         var echoes = new WorldDeferredVerbEchoes();
+        var registry = new CommandRegistry(modules: []);
+        var answers = WorldDeferredVerbAnswers.Attach(echoes: echoes, registry: registry);
 
-        EvictTheFirst(echoes: echoes);
-        for (var id = (WorldDeferredVerbEchoes.Capacity + 2L); (id <= ((2L * WorldDeferredVerbEchoes.Capacity) + WorldDeferredVerbEchoes.EvictedMemory)); id++) {
-            _ = echoes.Register(correlationId: id, verb: "world.reset");
-        }
+        var forgotten = Captured(action: () => RegisterAfterTheFirst(
+            echoes: echoes,
+            later: (WorldDeferredVerbEchoes.Capacity + WorldDeferredVerbEchoes.EvictedMemory)
+        ));
 
-        // Ids 1..(Capacity + EvictedMemory) were evicted in order, so correlation 1 has aged out and the latest is
-        // remembered.
-        Assert.False(condition: echoes.TryTakeEvicted(correlationId: 1L));
-        Assert.True(condition: echoes.TryTakeEvicted(correlationId: ((WorldDeferredVerbEchoes.Capacity + WorldDeferredVerbEchoes.EvictedMemory) + 0L)));
+        Assert.StartsWith(actualString: forgotten.Error, expectedStartString: $"[{EvictedVerb}: unanswered");
+        Assert.Equal(actual: WireErrors(registry: registry), expected: "[wire.errors: 1 rejected]");
+
+        var late = Captured(action: () => answers.Answer(
+            echo: Verdict(correlationId: 1L, rejected: true),
+            row: WorldDeferredVerbEchoes.DefaultRow
+        ));
+
+        Assert.Equal(actual: (late.Out, late.Error), expected: (string.Empty, string.Empty));
+        Assert.Equal(actual: WireErrors(registry: registry), expected: "[wire.errors: 1 rejected]");
     }
 }

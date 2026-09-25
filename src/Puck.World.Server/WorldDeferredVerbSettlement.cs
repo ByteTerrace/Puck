@@ -1,57 +1,29 @@
-using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>Settles a submitted line with the tick-boundary verdict of the edit it started.</summary>
+/// <summary>Answers the console's registered lines from a row's authority echoes.</summary>
 public static class WorldDeferredVerbSettlement {
-    /// <summary>Takes the verb a local submission registered for this verdict and settles its line with it.</summary>
-    /// <param name="echoes">The pending-verb table.</param>
-    /// <param name="echo">The verdict.</param>
-    /// <returns>The per-verb line the verdict settled with, <c>[&lt;verb&gt;: …]</c>, or <see langword="null"/> when
-    /// the verdict answers no locally registered submission.</returns>
-    /// <remarks>A host subscribes each table to its owning server's <see cref="WorldServer.EchoTap"/>: a
-    /// registered verb nothing settles holds a settling session until the table evicts it. A
-    /// <see cref="WorldEditEchoKind.GrantTable"/> echo never settles a registered verb: a rebuild replays its
-    /// document's grants under its own correlation, and those echoes narrate that replay, not the rebuild's
-    /// verdict.</remarks>
-    public static string? Settle(this WorldDeferredVerbEchoes echoes, in WorldEditEcho echo) {
+    /// <summary>Answers one echo from <paramref name="row"/>'s authority through the console's table
+    /// (<see cref="WorldDeferredVerbEchoes.Answer"/>): a verdict for a line the console registered on that row settles
+    /// it, prints a rebuild or undo verb's own line and counts a refusal; any other echo answers nothing.</summary>
+    /// <param name="echoes">The console's table.</param>
+    /// <param name="echo">The echo.</param>
+    /// <param name="row">The row whose authority raised it, as its console link names it.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="echoes"/> or <paramref name="row"/> is
+    /// <see langword="null"/>.</exception>
+    /// <remarks>A host subscribes each row's <see cref="WorldServer.EchoTap"/>: a registered verb nothing answers holds a
+    /// settling session until the table evicts it.</remarks>
+    public static void Answer(this WorldDeferredVerbEchoes echoes, in WorldEditEcho echo, string row) {
         ArgumentNullException.ThrowIfNull(argument: echoes);
 
-        if (
-            (echo.ConnectionId != SubmissionEnvelope.LocalConnectionId) ||
-            (echo.Kind == WorldEditEchoKind.GrantTable) ||
-            !echoes.TryTake(
-                correlationId: echo.CorrelationId,
-                settlement: out var settlement,
-                verb: out var verb
-            )
-        ) {
-            return null;
-        }
-
-        var verdict = $"[{verb}: {echo.Message}]";
-
-        settlement!.Settle(result: (echo.Rejected
-            ? CommandResult.Error(output: verdict)
-            : new CommandResult(Output: verdict)
-        ));
-
-        return verdict;
-    }
-    /// <summary>Takes the eviction this verdict arrives after: the table evicted the local line it answers, and the
-    /// eviction was that line's answer and its count, so the verdict adds neither.</summary>
-    /// <param name="echoes">The pending-verb table.</param>
-    /// <param name="echo">The verdict, which <see cref="Settle"/> matched to no registered line.</param>
-    /// <returns><see langword="true"/> when the verdict answers a remembered eviction
-    /// (<see cref="WorldDeferredVerbEchoes.TryTakeEvicted"/>).</returns>
-    public static bool TakeEvicted(this WorldDeferredVerbEchoes echoes, in WorldEditEcho echo) {
-        ArgumentNullException.ThrowIfNull(argument: echoes);
-
-        return (
-            (echo.ConnectionId == SubmissionEnvelope.LocalConnectionId) &&
-            (echo.Kind != WorldEditEchoKind.GrantTable) &&
-            echoes.TryTakeEvicted(correlationId: echo.CorrelationId)
+        echoes.Answer(
+            correlationId: echo.CorrelationId,
+            grantTable: (echo.Kind == WorldEditEchoKind.GrantTable),
+            local: (echo.ConnectionId == SubmissionEnvelope.LocalConnectionId),
+            message: echo.Message,
+            rejected: echo.Rejected,
+            row: row
         );
     }
 }
