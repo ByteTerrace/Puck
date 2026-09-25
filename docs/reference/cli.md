@@ -1420,8 +1420,9 @@ engine's own parse message is printed verbatim). A path argument that names
 nothing on disk is one of those usage errors—every bad path is reported before
 the run gives up, so a typo cannot pass for "no match". The recursive walk skips
 `.git`, `.tmp`, `artifacts`, `bin`, `obj`, `node_modules`, `publish`,
-`BenchmarkDotNet.Artifacts`, agent worktrees under `.claude/worktrees`, and
-binary files—naming one of those paths searches it anyway. That set is
+`BenchmarkDotNet.Artifacts`, agent worktrees under `.claude/worktrees`,
+directory links (junctions and symbolic links, which the walk never follows),
+and binary files—naming one of those paths searches it anyway. That set is
 `FileWalk.SkipDirectories`, the one prune set every tree-walking verb shares;
 `format` alone also skips the quarantined `experimental/` trees, which every
 reading verb still searches. The build-artifact

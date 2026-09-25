@@ -215,8 +215,9 @@ internal static class SearchCommand {
             requires an intermediate directory, so 'src/**/*.cs' misses 'src/foo.cs'. Repeat -g
             instead of writing a brace set.
 
-            The walk skips {FileWalk.PrunedNames}, agent worktrees under .claude/worktrees, and
-            binary files; naming one of those paths searches it anyway.
+            The walk skips {FileWalk.PrunedNames}, agent worktrees under .claude/worktrees,
+            directory links (junctions and symbolic links), and binary files; naming one of
+            those paths searches it anyway.
 
             Engine syntax extensions: _ = any char incl. newline; & = intersection;
             ~(...) = complement. Matching is leftmost-longest; no backreferences.
