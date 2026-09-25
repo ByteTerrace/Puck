@@ -1335,12 +1335,7 @@ Phase 1 follows P3, which has landed, and all of it has landed:
    refuses by name any allocation still held on it; the Direct3D 12 context's
    teardown does not end its entries yet. `QualificationJudge` judges a cell's
    `peakDeviceLocalBytes`, which every cell leaves null until a
-   reference-device reading sets it. The count follows an allocation's role,
-   not its memory type: images, device-local buffers and imports count on both
-   backends, and host-visible, staging, upload and readback memory never
-   count, on a unified-memory device too. Vulkan still decides by the memory
-   type an allocation lands in, which on such a device can count host-visible
-   buffers as well, and owes that correction.
+   reference-device reading sets it.
 
 Phase 2, the services, follows the generated frame block, which has landed:
 
