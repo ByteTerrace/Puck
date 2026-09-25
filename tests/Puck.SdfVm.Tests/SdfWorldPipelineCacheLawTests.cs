@@ -181,8 +181,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
                     X: 0f,
                     Y: 0f
                 )
-            )],
-            WarpAmount: 0f
+            )]
         );
 
         return new SdfEngineNode(

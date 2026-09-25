@@ -299,8 +299,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                         Y: 0f
                     )
                 ) { AsymmetricFrustumOffset = offset }],
-            Time: 0f,
-            WarpAmount: 0f
+            Time: 0f
         ) {
             DynamicTransforms = transforms,
             MovedTransforms = moved,

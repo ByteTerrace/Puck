@@ -71,7 +71,6 @@ public static class SdfWorldRenderBuilder {
         var producer = new SdfEngineNode(
             brickPoolVoxelCapacity: spec.BrickPoolVoxelCapacity,
             children: spec.Children,
-            createStorageImage: spec.CreateOutputImage,
             dynamicTransformCapacity: spec.DynamicTransformCapacity,
             frameSource: frameSource,
             height: spec.Height,

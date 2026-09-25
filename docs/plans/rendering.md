@@ -1890,10 +1890,23 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 
 **Build sequence.**
 
-1. The capability matrix as a law, with the members nothing calls deleted:
-   `SubmitFramePipelined`, `AcquireFramePixels`, `IsFramePixelsReady`,
-   `TryReadCadenceDiagnostics`, `SdfFrame.WarpAmount`, and the export-mode
-   output image branch.
+1. Landed, the capability matrix as a law: `SdfCapabilityMatrixLawTests`
+   (`tests/Puck.SdfVm.Tests`) assigns every public member of `SdfWorldEngine`,
+   `SdfEngineNode`, `SdfFrame`, `SdfViewSnapshot`, `SdfWorldEngineOptions` and
+   `SdfWorldRenderSpec` to exactly one capability row, names each row's graph
+   equivalent and check, maps every pass label to the graph pass that replaces
+   it, and holds the rows without a check to a named list of gaps: the live
+   program report, render scale, screen slots, decals, the glyph atlas,
+   volumes, the shading levers, debug views, the grid overlay, brick baking,
+   the output image and export, mesh draws, and assembly and lifetime. No row
+   is green, because no graph equivalent runs yet. A console verb is covered
+   through the member it drives rather than enumerated, because the verbs live
+   in `Puck.World`, which the SDF tests do not reach. The members nothing
+   called are gone: the pipelined preview path, the node's cadence diagnostics
+   and the engine's diagnostics hashing behind them, `SdfFrame.WarpAmount`, and
+   the world node's output-image factory with its shared-handle branch. An
+   offscreen camera view still selects export mode through
+   `SdfCameraView.ExportFactory`, so the engine's export path stays.
 2. The HLSL module split and the upward-include refusal, with every compiled
    kernel's hash unchanged.
 3. Landed, the generated instruction-set declarations: `puck shaders generate`
@@ -1904,16 +1917,23 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 4. Landed, the planner's vocabulary: a pass's `dispatch` (`Extent`, `Groups`,
    or `Indirect` from a buffer version and offset, which the pass reaches in the
    indirect-argument state), a buffer's `strideBytes`, and a buffer's `count`
-   by `Extent`, `Instances` or `ProgramWords` in place of `sizeBytes`. A read
-   of another kind than the prior reads records a barrier. The pipeline node
-   records none of it, so the planner refuses it on a shader pass.
-   `SdfPassPlanLawTests` builds the SDF passes as package passes from
-   `SdfFrameBufferPlan.Uses` and plans them in `PassLabels`' order less the
-   composite, with exactly `SdfFrameBufferPlan`'s edges between passes. The
-   engine records no graphics pass, so a package pass stays compute-shaped. A
-   single count basis cannot state the mask, tile and hit-record capacities,
-   which also scale with viewports and tiles; the cutover needs that before
-   the planner sizes them.
+   in place of `sizeBytes`. A count is a sum of terms, each `elements` per unit
+   of a product of bases: `Extent`, `Instances`, `ProgramWords`, `Viewports`,
+   `Tiles`, `DynamicTransforms`, `InstanceMaskWords` and `InstanceGridWords`.
+   A term names each basis once, and no two terms name the same bases. A term
+   whose bases the host resolves to zero units adds nothing, and a buffer whose
+   terms all resolve to zero bytes is refused by name. A read of another kind
+   than the prior reads records a barrier. The pipeline node records none of
+   it, so the planner refuses it on a shader pass. `SdfPassPlanLawTests` builds
+   the SDF passes as package
+   passes from `SdfFrameBufferPlan.Uses` and plans them in `PassLabels`' order
+   less the composite, with exactly `SdfFrameBufferPlan`'s edges between
+   passes, and at several viewport, tile and instance capacities sizes every
+   SDF buffer exactly as `SdfWorldEngine.FrameBufferBytes`, the one statement
+   of the engine's allocations. The engine records no graphics pass, so a
+   package pass stays compute-shaped. A program with no instances still sizes
+   the cull buffer by its tile-plane term, so the cutover resolves its real
+   instance count.
 5. The SDF pass interfaces over the four groups, with generated declarations;
    parity reads identically.
 6. The cutover, the riskiest commit: the package records into the graph's
@@ -2117,8 +2137,9 @@ that allocates nothing. The rest of P11b waits on P7b's binding groups. P12's
 source contract, producers and conversion passes have landed; P12b, the graph
 wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
 P11b and P12b, because the engine's composition and screens need somewhere to
-go before it moves; its generated instruction-set declarations (P14-3) and the
-planner's vocabulary (P14-4) needed none of them and have landed. P4-2's mesh
+go before it moves; its capability matrix (P14-1), generated instruction-set
+declarations (P14-3) and the planner's vocabulary with multi-basis counts
+(P14-4) needed none of them and have landed. P4-2's mesh
 work follows P4-1 and P7b's services. P15 and P16 both follow P14: P15 also needs P4, and P16, the smallest package
 in this group, needs P14's float working targets. P17's CPU half, the bakes and
 their texture codecs, has landed; drawing a bake follows P4 and choosing

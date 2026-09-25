@@ -309,8 +309,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
                 )
             ) {
                 Child = child,
-            }],
-            WarpAmount: 0f
+            }]
         );
     }
 

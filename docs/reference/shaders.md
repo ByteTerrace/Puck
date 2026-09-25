@@ -677,9 +677,19 @@ more pieces of vocabulary:
   version's writer first and records a barrier into that state even after
   shader reads: a read of another kind is another read state.
 - A buffer's `strideBytes` makes it a structured buffer of elements that size.
-- A buffer's `count` sizes it by `elements` per unit of a `basis` the host
-  resolves (`Extent` pixels, program `Instances`, or `ProgramWords`) in place of
-  `sizeBytes`; `ShaderPipelineResource.ResolveSizeBytes` computes the bytes.
+- A buffer's `count` sizes it in place of `sizeBytes`, as a sum of terms. Each
+  term is `elements` per unit of the product of the bases in `per`, counts the
+  host resolves: `Extent` pixels, program `Instances`, `ProgramWords`,
+  `Viewports`, `Tiles` of one viewport, `DynamicTransforms`, and the
+  `InstanceMaskWords` of one tile and `InstanceGridWords` the host derives from
+  its instances. The SDF engine's cull buffer, for one, is
+  `[{ "per": ["Viewports", "Tiles"], "elements": 4 }, { "per": ["Viewports", "Instances"], "elements": 12 }]`
+  floats. A term names at least one basis and each basis once, and no two terms
+  name the same bases, so a count has one spelling and a size that scales with
+  nothing stays `sizeBytes`. `ShaderPipelineResource.ResolveSizeBytes` computes
+  the bytes. A term whose bases the host resolves to zero units adds nothing,
+  and a buffer whose terms all resolve to zero bytes is refused, naming the
+  buffer and its terms.
 
 A shader pass declaring a `Groups` or `Indirect` dispatch is refused
 (`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding, or a document

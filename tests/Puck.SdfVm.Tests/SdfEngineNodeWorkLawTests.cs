@@ -121,8 +121,7 @@ public sealed class SdfEngineNodeWorkLawTests {
                         X: 0f,
                         Y: 0f
                     )
-                )],
-                WarpAmount: 0f
+                )]
             );
 
             Node = new SdfEngineNode(

@@ -1545,8 +1545,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             Program: program,
             ProgramChanged: programChanged,
             Time: m_elapsedSeconds,
-            Views: m_views,
-            WarpAmount: 0f
+            Views: m_views
         ) {
             // Shadow reach is continuous: zero skips the march; (0,1) scales gather + march reach; one uses the
             // engine's 0 sentinel for full reach.
