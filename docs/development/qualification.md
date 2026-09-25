@@ -116,6 +116,10 @@ A cell reads its evidence from the World's own console:
   reads must not exceed the cell's `peakOwnedPipelineBytes`. `peak=` is the
   bytes a replacement of the installed graph would reach, so it bounds the
   moment a reload or resize holds two graphs at once.
+- **Every world reload applies.** Each `world.reload` the script sends must
+  answer that it applied. A reload refused by the World, or a submission the
+  wire codec refuses before the verb can answer, fails the cell and is quoted
+  in its findings.
 - **Every wait reached**, no pipeline candidate refused, and, with the
   validation layer on, no validation message.
 
@@ -136,12 +140,16 @@ A refused profile, package or plan also exits 2.
 
 The profile sets one threshold for the pipeline workload, peak owned pipeline
 bytes, on every cell. It is the `ink` graph's planned replacement peak at the
-cell's extent: two graphs, each holding its three storages (a 16-byte float
-simulation image and two 4-byte color images) in each of three frame slots,
-plus the two published images the node holds past a replacement. That is 152
-bytes a pixel, 155,648,000 bytes at 1280×800 and 315,187,200 at 1920×1080. The
-forcing-world workload has no pipeline, so its cells carry no threshold. The
-first run on each GPU either confirms these numbers or shows what to re-record.
+cell's extent. The installed graph's steady state holds three storages (a
+16-byte float simulation image and two 4-byte color images) in each of three
+frame slots, 72 bytes a pixel. A replacement allocates a second graph beside
+it, but the float simulation history moves into the candidate rather than
+being allocated again, so the peak is 72 + 72 − 3 × 16 = 96 bytes a pixel:
+98,304,000 bytes at 1280×800 and 199,065,600 at 1920×1080. The node counts
+these bytes from its plan rather than asking the driver, so they are the same on
+every device and backend, and the threshold is the planned peak itself: any
+byte over it fails. The forcing-world workload has no pipeline, so its cells
+carry no threshold.
 
 The profile defers three checks, and a run prints each with its reason:
 

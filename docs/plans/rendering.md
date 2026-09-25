@@ -832,11 +832,12 @@ memory thresholds on the shipping candidate, or explicitly blocked checks.
 Direct3D 12 buffer transitions now take a buffer's first before-state in each
 command list from its declared prior access. The buffer has in fact decayed to
 `COMMON` after its previous submission, so the transition relies on implicit
-promotion. That has never been checked under the debug layer, because the
-debug layer fails device creation on the reference RTX 4070. P1b's run on a
-machine where the debug layer works is the evidence that settles it:
-`puck qualify` runs every Direct3D 12 cell under the debug layer when the
-release profile asks for it, and any debug-layer message fails the cell.
+promotion. The debug layer fails device creation on the reference RTX 4070, so
+the check runs on a machine where it works: `puck qualify` runs every
+Direct3D 12 cell under the debug layer when the release profile asks for it,
+and any debug-layer message fails the cell. On the NVIDIA floor card the
+functional canaries and every matrix cell report no debug-layer message before
+teardown, so implicit promotion draws no complaint on those workloads.
 
 **Pipeline creation leaves the frame thread.** The SDF engine used to build its
 compute pipelines, about 14 for the world and about 12 for each view,
@@ -941,10 +942,26 @@ device-local bytes is deferred, because no reading of what a World process
 allocates exists. Zero live Direct3D 12 objects after teardown is deferred,
 because the backend never asks its debug layer for them.
 
-Still open: the first runs on the reference GPUs. They either confirm the
-pipeline thresholds or show what to re-record, and they settle the
-buffer-transition question. Direct3D 12 cells are blocked on a machine whose
-debug layer stops device creation.
+The pipeline threshold is the `ink` graph's exact planned peak, 96 bytes a
+pixel, which both backends read on the NVIDIA floor card. The functional
+canaries and the `ink` cells pass there on both backends with the validation
+layers on, and a cell fails when a `world.reload` its script sends does not
+apply.
+
+Still open:
+
+- The flagship world's cells fail on both backends. Three CPU-pixel surface
+  uploads (`IGpuSurfaceUpload`) outlive the device at teardown: 24 objects
+  the Vulkan validation layer reports at `vkDestroyDevice`, and 18
+  `[d3d12-debug] live` objects. `VulkanSurfaceUpload` skips every destroy once
+  its device is disposed, so an owner released after the device leaks rather
+  than faults. Which three owners they are is not established.
+- The flagship world refuses its own `world.reload`. The wire codec refuses
+  the rebuild's embedded definition because `state.strideCadence`, a `Boot`
+  draw site, holds no value when the definition is decoded, and the refusal
+  produces no `world.reload` answer and no `wire.errors` count.
+- The runs on the RTX 4070 and the AMD devices. Direct3D 12 cells are blocked
+  on a machine whose debug layer stops device creation.
 
 ### P3 — Attachments and indexed geometry
 

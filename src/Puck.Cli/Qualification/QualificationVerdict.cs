@@ -44,6 +44,9 @@ internal sealed record QualificationWait(string Phase, string Outcome);
 /// <see langword="null"/>.</param>
 /// <param name="MemoryProfile">The device's memory profile as the first inspection echoes it, or
 /// <see langword="null"/>.</param>
+/// <param name="WorldReloads">The <c>world.reload</c> commands that answered they applied.</param>
+/// <param name="SubmissionRefusals">Every line refusing a <c>world.reload</c> or refusing a submission at the wire
+/// codec, which refuses before the verb can answer.</param>
 internal sealed record QualificationReadings(
     IReadOnlyList<WorldCountersRun> Counters,
     IReadOnlyList<string> CountersRefusals,
@@ -53,7 +56,9 @@ internal sealed record QualificationReadings(
     IReadOnlyList<string> ValidationMessages,
     IReadOnlyList<string> CandidateRefusals,
     string? CompilerAbsent,
-    string? MemoryProfile
+    string? MemoryProfile,
+    int WorldReloads,
+    IReadOnlyList<string> SubmissionRefusals
 ) {
     /// <summary>Gets the most bytes the instance owned or planned to own at any inspection, or <see langword="null"/>
     /// when nothing was inspected.</summary>
@@ -74,9 +79,12 @@ internal sealed record QualificationVerdict(QualificationOutcome Outcome, IReadO
 /// </summary>
 internal static partial class QualificationJudge {
     private const string CandidateRefusedInfix = " GPU candidate refused: ";
+    private const string CodecRefusedPrefix = "[world.codec refused: ";
     private const string CreatedKindPrefix = "gpu.created.";
     private const string Direct3D12DebugPrefix = "[d3d12-debug] ";
     private const string VulkanValidationPrefix = "[vulkan-debug] validation ";
+    private const string WorldReloadAppliedPrefix = "[world.reload: world.reload applied";
+    private const string WorldReloadPrefix = "[world.reload: ";
 
     // "[pipeline.inspect: <name>; owned=N bytes; steady=N bytes; peak=N bytes; budget=N bytes; …", the record's first
     // line (ShaderPipelineRenderNode.TryAppendInspection).
@@ -95,7 +103,9 @@ internal static partial class QualificationJudge {
         var waits = new List<QualificationWait>();
         var validation = new List<string>();
         var candidates = new List<string>();
+        var submissionRefusals = new List<string>();
         var releases = 0;
+        var worldReloads = 0;
         string? compilerAbsent = null;
         string? memory = null;
         var released = ((cell.Workload.Pipeline is { } pipeline)
@@ -132,6 +142,11 @@ internal static partial class QualificationJudge {
                     value: "memory: "
                 )) {
                     memory = line.Trim();
+                } else if (line.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: WorldReloadAppliedPrefix
+                )) {
+                    worldReloads++;
                 }
 
                 continue;
@@ -161,6 +176,15 @@ internal static partial class QualificationJudge {
             )) {
                 candidates.Add(item: line);
             }
+            if (line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: CodecRefusedPrefix
+            ) || line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldReloadPrefix
+            )) {
+                submissionRefusals.Add(item: line);
+            }
             if ((compilerAbsent is null) && CanaryCommand.PipelineUnsupported().IsMatch(input: line)) {
                 compilerAbsent = line;
             }
@@ -181,8 +205,10 @@ internal static partial class QualificationJudge {
             Inspections: inspections,
             MemoryProfile: memory,
             Releases: releases,
+            SubmissionRefusals: submissionRefusals,
             ValidationMessages: validation,
-            Waits: waits
+            Waits: waits,
+            WorldReloads: worldReloads
         );
     }
     /// <summary>Judges a cell.</summary>
@@ -316,6 +342,12 @@ internal static partial class QualificationJudge {
         }
         foreach (var candidate in readings.CandidateRefusals) {
             findings.Add(item: candidate);
+        }
+        if (readings.WorldReloads != expectation.WorldReloads) {
+            findings.Add(item: $"{readings.WorldReloads} world.reload(s) applied, of the {expectation.WorldReloads} the script makes");
+        }
+        foreach (var refusal in readings.SubmissionRefusals) {
+            findings.Add(item: refusal);
         }
         if (
             debugLayers &&

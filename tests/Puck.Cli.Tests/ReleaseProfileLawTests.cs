@@ -171,6 +171,7 @@ public sealed class ReleaseProfileLawTests {
         Assert.Equal(actual: script.Expectation.Releases, expected: 0);
         Assert.Equal(actual: script.Expectation.ArmedWaits, expected: 0);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.reload")), expected: 2);
+        Assert.Equal(actual: script.Expectation.WorldReloads, expected: 2);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.counters --json")), expected: 4);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.wait 60")), expected: 2);
     }
@@ -188,6 +189,7 @@ public sealed class ReleaseProfileLawTests {
         Assert.Equal(actual: script.Expectation.ArmedWaits, expected: lines.Count(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "pipeline.wait ")));
         Assert.Equal(actual: script.Expectation.CountersReadings, expected: 4);
         Assert.Equal(actual: script.Expectation.SoakWindows, expected: [(0, 1), (2, 3)]);
+        Assert.Equal(actual: script.Expectation.WorldReloads, expected: 0);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "pipeline.reload ink")), expected: pipeline.Reloads);
         Assert.Contains(collection: lines, expected: "pipeline.wait ink resized 640 400 40");
         Assert.Contains(collection: lines, expected: "pipeline.wait ink resized 1280 800 40");

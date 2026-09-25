@@ -52,8 +52,8 @@ internal static class QualifyCommand {
             instance the profile's number of times; lengths are ticks and frames, never time. A cell passes
             when every wait is reached, no GPU object is created across a soak window (the gpu.created.*
             counts of world.counters), every settled pipeline.inspect shows the instance owning exactly its
-            installed graph, every unload releases the instance, the peak owned pipeline bytes stay within the
-            cell's threshold, and no validation message appears. A cell is blocked when this machine lacks the
+            installed graph, every unload releases the instance, every world.reload applies, the peak owned
+            pipeline bytes stay within the cell's threshold, and no validation message appears. A cell is blocked when this machine lacks the
             backend's device, when a shader tool the profile lets the World find is absent, or when the run's
             own infrastructure refuses. The checks the profile defers are printed with why.
 
