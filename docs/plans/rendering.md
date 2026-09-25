@@ -1879,7 +1879,8 @@ Phase 3, the groups, follows phase 2:
       A refusal carries `GPU_DESCRIPTOR_HEAP` and names the owner, and the
       installed graph keeps presenting. `UnifiedOverlayNode` checks its one
       pool before it creates its resources. A standalone `GpuRegion` is not admitted
-      beforehand; the SDF engine's admission covers its mesh region's copy pool. The pipeline node
+      beforehand; the SDF engine admits its mesh region's copy pool with its own and
+      reserves it at construction (`GpuRegionCopySets`). The pipeline node
       holds one pool for all its passes and in-flight slots and one for its
       float preview, rather than one per pass and slot: a node at
       `ShaderPipelineLimits.MaxPasses` with three frames in flight would
@@ -2062,7 +2063,9 @@ Phase 3, the groups, follows phase 2:
     indices once), created by the first frame that draws a mesh, repacked only
     when the draw list changes, owing only the words that differ, grown by half
     again after the frame ring retires, and read by nothing until P4-2c. The
-    engine's admission covers the region's copy pool. `world.budget`'s mesh
+    engine admits the region's copy pool with its own and reserves it at
+    construction as `GpuRegionCopySets`, whose sets every region it creates or
+    grows writes, so no frame takes a descriptor range. `world.budget`'s mesh
     line reads the region's allocated bytes. Laws:
     `GpuRegionCopyPipelineCacheLawTests` (one pipeline a device, created and
     counted once, shared by two leases and a new one after the last release;

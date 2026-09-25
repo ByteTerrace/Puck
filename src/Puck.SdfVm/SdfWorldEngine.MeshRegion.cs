@@ -16,6 +16,10 @@ public sealed partial class SdfWorldEngine {
     private IReadOnlyList<SdfMeshDraw>? m_meshDraws;
     private SdfMeshRegionLayout m_meshLayout;
     private GpuRegion? m_meshRegion;
+
+    // The copy sets every staged mesh region writes, reserved at construction.
+    private readonly GpuRegionCopySets m_meshCopySets;
+
     private ulong m_meshRegionBytes;
 
     private uint[] m_meshWords = [];
@@ -27,8 +31,8 @@ public sealed partial class SdfWorldEngine {
     /// mesh. Safe to read from any thread.</summary>
     public ulong MeshRegionBytes => Volatile.Read(location: ref m_meshRegionBytes);
 
-    // The pool a staged mesh region creates beside the engine's own, which the engine's admission covers so the
-    // region's first creation has room; a grown region returns its range before taking the same size again.
+    // The pool of the copy sets a staged mesh region writes (m_meshCopySets), which the engine creates beside its own and
+    // admission counts with it, so no region the frame thread creates or grows takes a descriptor range.
     private static GpuDescriptorPoolSizes MeshRegionPoolSizes =>
         GpuRegion.CopyPoolSizes(slotCount: FrameRingSize);
 
@@ -81,8 +85,8 @@ public sealed partial class SdfWorldEngine {
     }
     // Creates the region at the size the draws need, or replaces it with one grown by half again (or to the need, if
     // larger), after every frame-ring fence retires. The replacement starts owing every word, so the next write sends
-    // the whole packed list. The old region's copy pool is returned before the new one is created, so a grown region
-    // reuses its range of the descriptor heap.
+    // the whole packed list, and writes its buffers into the reserved copy sets the old one wrote, so growing takes no
+    // descriptor range.
     private void EnsureMeshRegionCapacity(ulong bytes) {
         var current = ((ulong)(m_meshRegion?.ByteCount ?? 0));
 
@@ -132,6 +136,7 @@ public sealed partial class SdfWorldEngine {
             buffers: m_gpu.BufferFactory,
             byteCount: byteCount,
             copyPipeline: m_frameUploadPipeline,
+            copySets: m_meshCopySets,
             policy: policy,
             recorder: m_gpu.Recorder,
             slotCount: FrameRingSize

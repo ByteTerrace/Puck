@@ -193,10 +193,10 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         rig.ProduceUnchanged(frames: Frames);
         Assert.True(condition: rig.Node.IsReady);
         Assert.Null(@object: rig.Node.NotReadyReason);
-        // What is left is the copy pool of a mesh region the admission covers and no frame has drawn yet.
+        // Nothing is left: the engine reserved its mesh region's copy pool beside its own, before any frame drew a mesh.
         Assert.Equal(
             actual: (rig.Gpu.Admissions, rig.Gpu.PoolsCreated.Count, heap.FreeViewDescriptors),
-            expected: (2, 2, GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize).HeapDescriptors)
+            expected: (2, 3, 0U)
         );
     }
     [Fact]
@@ -232,7 +232,6 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         Assert.False(condition: rig.Node.IsReady);
         rig.AssertOnlyThePipelineSetIsHeld();
     }
-
     /// <summary>The operator's GPU faults are a recorded input (<see cref="GpuCreationFaults.Revision"/>): a build a fault
     /// refused is not tried again on unchanged frames, arming another fault is a change that retries it exactly once
     /// (refused again by the fault just armed, whose firing is no further change), and disarming is a change that
@@ -374,8 +373,9 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         }
 
         public ref readonly FrameContext Context => ref m_context;
-        // Each engine construction creates one descriptor pool and the pipeline set none, so the pools are the attempts.
-        public int EngineAttempts => Gpu.Created.Count(predicate: static created => (created.Kind == "descriptor pool"));
+        // Each engine construction creates its own descriptor pool beside its mesh region's copy pool, and the pipeline set
+        // none, so the pools other than copy pools are the attempts.
+        public int EngineAttempts => Gpu.PoolsCreated.Count(predicate: static sizes => (sizes != GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize)));
         public GpuCreationFaults Faults { get; }
         public FakeGpuDevice Gpu { get; }
         public SdfEngineNode Node { get; }

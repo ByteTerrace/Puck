@@ -57,6 +57,8 @@ public sealed class GpuRegion : IDisposable {
     private readonly nint[] m_copySets;
     private readonly IGpuBindings m_bindings;
     private readonly IGpuBuffer? m_deviceLocal;
+    // The copy sets an owner reserved, which the region writes instead of creating its own pool; null when it owns one.
+    private readonly GpuRegionCopySets? m_reservedSets;
 
     private readonly List<IGpuBuffer> m_ownedBuffers = [];
 
@@ -86,13 +88,19 @@ public sealed class GpuRegion : IDisposable {
     /// <param name="recorder">The recorder the staged policy's copy is recorded through.</param>
     /// <param name="copyPipeline">The copy kernel's pipeline, created from <see cref="CopyPipeline"/>; read only under the
     /// staged policy. The caller owns it and keeps it alive while the region records copies.</param>
+    /// <param name="copySets">Copy sets its owner reserved (<see cref="GpuRegionCopySets"/>), which a staged region writes
+    /// its buffers into in place of creating a pool of its own, or <see langword="null"/> to create one; read only under
+    /// the staged policy, and their slot count must equal <paramref name="slotCount"/>. The owner keeps them after the
+    /// region is disposed.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> is not a defined policy,
     /// <paramref name="byteCount"/> is not positive or not a whole number of uints, <paramref name="slotCount"/> is not
     /// positive, or a staged region holds more than <see cref="MaxStagedWords"/> words.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) {
+    /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
+    /// <paramref name="slotCount"/>.</exception>
+    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, GpuRegionCopySets? copySets = null) {
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
@@ -100,6 +108,15 @@ public sealed class GpuRegion : IDisposable {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: byteCount);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: slotCount);
 
+        if (
+            (copySets is not null) &&
+            (copySets.SlotCount != slotCount)
+        ) {
+            throw new ArgumentException(
+                message: $"The reserved copy sets hold {copySets.SlotCount} slot(s), but the region has {slotCount}.",
+                paramName: nameof(copySets)
+            );
+        }
         if ((byteCount % sizeof(uint)) != 0) {
             throw new ArgumentOutOfRangeException(
                 actualValue: byteCount,
@@ -134,6 +151,7 @@ public sealed class GpuRegion : IDisposable {
         SlotCount = slotCount;
         m_contents = new byte[byteCount];
         m_copyPipeline = copyPipeline;
+        m_reservedSets = copySets;
         m_copySets = new nint[((policy == GpuResidencyPolicy.Staged)
             ? slotCount
             : 0
@@ -442,16 +460,20 @@ public sealed class GpuRegion : IDisposable {
         return true;
     }
 
-    // One copy set per slot from one pool: the slot's staging buffer as the source, the device-local buffer as the
-    // destination.
+    // One copy set per slot, from a pool of its own or the sets its owner reserved: the slot's staging buffer as the
+    // source, the device-local buffer as the destination.
     private void CreateCopySets() {
-        m_copyPool = m_bindings.CreatePool(sizes: CopyPoolSizes(slotCount: SlotCount));
+        if (m_reservedSets is null) {
+            m_copyPool = m_bindings.CreatePool(sizes: CopyPoolSizes(slotCount: SlotCount));
+        }
 
         for (var slot = 0; (slot < SlotCount); slot++) {
-            var set = m_bindings.AllocateSet(
-                descriptorSetLayoutHandle: m_copyPipeline.DescriptorSetLayoutHandle,
-                poolHandle: m_copyPool
-            );
+            var set = ((m_reservedSets is { } reserved)
+                ? reserved.SetOf(slot: slot)
+                : m_bindings.AllocateSet(
+                    descriptorSetLayoutHandle: m_copyPipeline.DescriptorSetLayoutHandle,
+                    poolHandle: m_copyPool
+                ));
 
             m_bindings.WriteBuffer(
                 binding: CopySourceBinding,

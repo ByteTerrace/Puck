@@ -231,8 +231,10 @@ whose creations fail releases everything it created and names every pipeline
 that failed, in build order, in one refusal.
 
 An engine's construction first asks the device's descriptor heap to admit its
-pool (`SdfWorldEngine.CheckAdmission`) and refuses with `GPU_DESCRIPTOR_HEAP`
-before it allocates anything. It releases every object it created, newest
+pool and its mesh region's copy pool (`SdfWorldEngine.CheckAdmission`), and
+refuses with `GPU_DESCRIPTOR_HEAP` before it allocates anything. It creates
+both pools itself, so no later frame, the first to draw a mesh included, takes
+a descriptor range. It releases every object it created, newest
 first, when a later step throws: a creation, the ISA handshake, or the program
 upload. A
 holder builds its engine only when it has none, and a build that fails, whether

@@ -755,6 +755,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             handle: m_pool,
             release: m_bindings.DestroyPool
         );
+        // The mesh region's copy sets, reserved beside the pool so a region the first mesh frame creates or grows takes
+        // no descriptor range then; admission counted them with the pool (CheckAdmission).
+        m_meshCopySets = scope.Own(created: new GpuRegionCopySets(
+            bindings: m_bindings,
+            copyPipeline: m_frameUploadPipeline,
+            slotCount: FrameRingSize
+        ));
 
         // The cull buffer is read-only here (a stride-4 SRV on Direct3D 12); the args + bounds are written (UAVs).
         m_cullArgsSet = m_bindings.AllocateSet(
@@ -1187,6 +1194,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         m_screenSourceFiller.Dispose();
         m_meshRegion?.Dispose();
+        m_meshCopySets.Dispose();
         m_glyphAtlasUpload?.Dispose();
         m_storageImage.Dispose();
     }

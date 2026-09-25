@@ -35,7 +35,7 @@ public sealed class SdfWorldEngineWorkLawTests {
     [InlineData(0)]
     [InlineData(SdfWorldEngine.DefaultBrickPoolVoxelCapacity)]
     [Theory]
-    public void TheDescriptorPoolAnEngineStatesIsThePoolItCreates(int brickPoolVoxelCapacity) {
+    public void TheDescriptorPoolsAnEngineStatesAreThePoolsItCreates(int brickPoolVoxelCapacity) {
         using var rig = new Rig(
             brickPoolVoxelCapacity: brickPoolVoxelCapacity,
             cadence: false
@@ -45,7 +45,9 @@ public sealed class SdfWorldEngineWorkLawTests {
             expected: [SdfWorldEngine.DescriptorPoolSizes(
                 brickPool: (brickPoolVoxelCapacity > 0),
                 brickUpload: (brickPoolVoxelCapacity > 0)
-            )],
+            ),
+                GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize),
+            ],
             actual: rig.Gpu.PoolsCreated
         );
     }
