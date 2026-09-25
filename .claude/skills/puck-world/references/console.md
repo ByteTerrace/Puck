@@ -139,17 +139,19 @@ Three echo models — do not conflate them:
    `CommandResult.Settling` returns a settled settlement's verdict: it answers
    on the line and counts in `wire.errors` like any refused line, and never
    also reaches the per-verb echo. An entry pushed out of the full table
-   (`WorldDeferredVerbEchoes.Capacity` pending) answers
-   `[<verb>: evicted unanswered — …]` on stderr and counts in `wire.errors`
-   (the table's `Evicted` event), since no echo will name it again; the table
-   remembers its last `EvictedMemory` evicted ids, so the authority's later
-   verdict for one is neither printed nor counted a second time.
+   (`WorldDeferredVerbEchoes.Capacity` pending) settles its session as an
+   unknown outcome and prints and counts nothing; the table remembers its last
+   `EvictedMemory` evicted lines, so the authority's later verdict still prints
+   the per-verb line and counts by its real outcome. A line forgotten past that
+   memory answers `[<verb>: unanswered — …]` on stderr and counts once, and its
+   verdict, arriving later, answers nothing.
    `WorldDeferredVerbAnswers` (`Puck.World.Console`) is the one host wiring
    for all of this: `WorldPostBuildWiring` and the silo both attach it, and the
    World echo tap passes each echo to its `Answer`. A verb that submits through
    the plain `Submit(link, mutation)` overload (`world.generate`,
-   `world.state.cell.set`, `world.state.cell.remove`) registers nothing, so
-   its only observable answer is the universal `[world.mutation: … applied]`/
+   `world.state.cell.set`, `world.state.cell.remove`) registers no verb of its
+   own: its console link registers the line, so a refusal counts, but its only
+   observable answer is the universal `[world.mutation: … applied]`/
    `[world.mutation rejected: … — …]` narration, always stderr regardless of
    outcome — `puck canary`'s runner accounts these by correlating that
    narration to the verb's own `Describe()` prefix (`WorldServer.Describe.cs`

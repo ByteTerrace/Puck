@@ -3,7 +3,7 @@ using Puck.Commands;
 namespace Puck.Cli.Canary;
 
 internal static partial class CanaryCommand {
-    // A buffered mutation verb the console layer never registers against WorldDeferredVerbEchoes leaves the universal
+    // A buffered mutation verb that registers no verb of its own against WorldDeferredVerbEchoes leaves the universal
     // tick-boundary narration — "[world.mutation: <Describe> applied]" accepted, "[world.mutation rejected:
     // <Describe> — …]" refused, always on stderr — as its only observable answer. Describe's text is unique per
     // WorldMutation case (WorldServer.Describe.cs), so the prefix below names the verb's own records.
