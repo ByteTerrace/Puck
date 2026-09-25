@@ -4,10 +4,11 @@ namespace Puck.Hosting;
 
 /// <summary>What the scheduler decided for one instance in one frame.</summary>
 public enum RenderGraphInstanceStatus : byte {
-    /// <summary>Neither the display nor any instance rendering this frame shows it, so it does not render.</summary>
+    /// <summary>Neither the display nor any instance rendering this frame shows or reads it, so it does not
+    /// render.</summary>
     Unread = 1,
-    /// <summary>Something shows it, but it does not render this frame: its refresh is not due, or no consumer that shows
-    /// it renders. Its consumers read its latest completed output.</summary>
+    /// <summary>Something shows or reads it, but it does not render this frame: its refresh is not due, or no consumer
+    /// that shows or reads it renders. Its consumers read its latest completed output.</summary>
     Waiting = 2,
     /// <summary>It renders this frame.</summary>
     Rendered = 3,
@@ -45,7 +46,8 @@ public readonly record struct RenderGraphInstanceSchedule(
 /// output.</param>
 /// <param name="Frame">The frame of the producer's output the consumer samples: this frame when the producer renders
 /// first on a same-frame edge, otherwise its latest output completed before this frame, or -1 when it has none.</param>
-public readonly record struct RenderGraphReadSchedule(string Consumer, string Producer, bool PreviousFrame, long Frame);
+/// <param name="Kind">What the read carries: an image the consumer shows, or a buffer it reads.</param>
+public readonly record struct RenderGraphReadSchedule(string Consumer, string Producer, bool PreviousFrame, long Frame, ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image);
 /// <summary>The scheduler's per-instance memory between frames: when each instance last rendered and the extent its
 /// targets are allocated at. A history a schedule carries as its <see cref="RenderGraphSchedule.Next"/> is rewritten
 /// when that schedule is scheduled into again; <see cref="Empty"/> creates one nothing rewrites.</summary>
@@ -135,7 +137,8 @@ public sealed class RenderGraphSchedule {
     public RenderGraphHistory Next { get; }
     /// <summary>Gets the frame's total price: every render's passes times pixels.</summary>
     public long PassPixels { get; private set; }
-    /// <summary>Gets the reads of every rendering consumer that shows a producer this frame.</summary>
+    /// <summary>Gets the reads of every rendering consumer this frame: each producer it shows, then each buffer it
+    /// reads.</summary>
     public IReadOnlyList<RenderGraphReadSchedule> Reads { get; }
     /// <summary>Gets the instances that render, as indices into <see cref="Instances"/>, in render order: every
     /// same-frame producer before its consumers. Each instance appears at most once however many consumers read

@@ -3,14 +3,10 @@ using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-/// <summary>The document schema understood by the shader-pipeline planner.</summary>
-public static class ShaderPipelineSchemas {
-    /// <summary>The current shader-pipeline document schema.</summary>
-    public const string Pipeline = "puck.shader.pipeline.v1";
-}
 /// <summary>Whether an image's dimensions are tied to the output extent or fixed.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineDimensionMode>))]
 public enum ShaderPipelineDimensionMode {
@@ -107,7 +103,7 @@ public sealed record ResourceReference(
     /// <summary>Converts the convenient document spelling <c>"name"</c> to a current-frame reference.</summary>
     public static implicit operator ResourceReference(string name) => new(Name: name);
 }
-/// <summary>One resource version declared by a <see cref="ShaderPipelineDefinition"/>. Each version has exactly one
+/// <summary>One resource version declared by a <see cref="RenderGraphDefinition"/>. Each version has exactly one
 /// writer. A version that names <see cref="From"/> forwards that predecessor: its writer continues the predecessor's
 /// storage and contents, so the predecessor is consumed and every pass that samples it runs before the overwrite.</summary>
 /// <param name="Name">The unique version name.</param>
@@ -267,6 +263,8 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
     public ulong InstanceMaskWords { get; init; }
     /// <summary>Gets the words of the instance grid, which the host derives from its instances.</summary>
     public ulong InstanceGridWords { get; init; }
+    /// <summary>Gets the voxels of the SDF brick pool the host provisions for its world.</summary>
+    public ulong BrickPoolVoxels { get; init; }
 
     /// <summary>Returns the units a basis counts.</summary>
     /// <param name="basis">The basis.</param>
@@ -281,6 +279,7 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
         ShaderPipelineCountBasis.DynamicTransforms => DynamicTransforms,
         ShaderPipelineCountBasis.InstanceMaskWords => InstanceMaskWords,
         ShaderPipelineCountBasis.InstanceGridWords => InstanceGridWords,
+        ShaderPipelineCountBasis.BrickPoolVoxels => BrickPoolVoxels,
         _ => throw new ArgumentOutOfRangeException(
             actualValue: basis,
             message: "Unknown count basis.",
@@ -412,15 +411,13 @@ public sealed record ShaderPipelineGeometry(
         return data;
     }
 }
-/// <summary>One executable pass in a shader pipeline.</summary>
+/// <summary>One shader pass of a graph.</summary>
 /// <param name="Name">The unique pass name.</param>
-/// <param name="Source">The HLSL source's path, relative to the pipeline document. A package's pass the planner
-/// orders carries its package id here.</param>
+/// <param name="Source">The HLSL source's path, relative to the graph document.</param>
 /// <param name="EntryPoint">The entry point compiled by the shader compiler: a compute pass's kernel, or a graphics
-/// pass's fragment stage. A package's pass compiles nothing and leaves it empty.</param>
-/// <param name="Kind">Compute, fullscreen graphics, or indexed geometry. A document names no package work; the planner
-/// orders a package's pass (<see cref="ShaderPipelinePackagePass"/>) in the compute shape it reaches resources by, and
-/// its planned pass carries <see cref="ShaderPipelinePassKind.Package"/>.</param>
+/// pass's fragment stage.</param>
+/// <param name="Kind">Compute, fullscreen graphics, or indexed geometry. A shader pass names no package work, which a
+/// graph declares as a <see cref="RenderGraphPackagePass"/>.</param>
 /// <param name="Inputs">Named resource bindings. Set <see cref="ResourceReference.PreviousFrame"/> explicitly for feedback.</param>
 /// <param name="Outputs">The versions the pass writes. A graphics pass writes one color image and, for a geometry pass,
 /// at most one depth version.</param>
@@ -475,9 +472,10 @@ public sealed record ShaderPipelinePass(
     public IReadOnlyList<ResourceReference> OutputReferences => (Outputs ?? Array.Empty<ResourceReference>());
 }
 /// <summary>One pass of engine package work, as a frame graph hands it to the planner: the one way package work enters
-/// planning, since a document names none. The planner orders, versions and barriers it by what it reads and writes,
-/// which it reaches as a compute pass does, and its planned pass carries <see cref="ShaderPipelinePassKind.Package"/>.
-/// The package records its own work and binds its own descriptors.</summary>
+/// planning, since a graph's package passes reach the planner only through the graph compiler. The planner orders,
+/// versions and barriers it by what it reads and writes, which it reaches as a compute pass does, and its planned pass
+/// carries <see cref="ShaderPipelinePassKind.Package"/> with this compute shape as its declaration, whose source is the
+/// package id. The package records its own work and binds its own descriptors.</summary>
 /// <param name="Name">The unique pass name.</param>
 /// <param name="Package">The package id.</param>
 /// <param name="Inputs">The versions it reads.</param>
@@ -501,87 +499,6 @@ public sealed record ShaderPipelinePackagePass(
         Outputs: Outputs,
         Source: Package
     );
-}
-/// <summary>A complete data-authored, multi-pass shader pipeline.</summary>
-[method: JsonConstructor]
-public sealed record ShaderPipelineDefinition(
-    [property: JsonPropertyName("$schema")] string Schema,
-    string Name,
-    IReadOnlyList<ShaderPipelineResource> Resources,
-    IReadOnlyList<ShaderPipelinePass> Passes,
-    IReadOnlyList<string> Outputs,
-    IReadOnlyDictionary<string, ShaderConfigField>? Config = null
-) {
-    /// <summary>Initializes a pipeline using <see cref="ShaderPipelineSchemas.Pipeline"/>.</summary>
-    /// <param name="name">The pipeline name.</param>
-    /// <param name="resources">The resource versions.</param>
-    /// <param name="passes">The passes, in any order; the planner orders them.</param>
-    /// <param name="outputs">The public versions, each named by its version name; the first is published by
-    /// default.</param>
-    public ShaderPipelineDefinition(
-        string name,
-        IReadOnlyList<ShaderPipelineResource> resources,
-        IReadOnlyList<ShaderPipelinePass> passes,
-        IReadOnlyList<string> outputs
-    ) : this(
-        Schema: ShaderPipelineSchemas.Pipeline,
-        Name: name,
-        Resources: resources,
-        Passes: passes,
-        Outputs: outputs,
-        Config: null
-    ) { }
-
-    /// <summary>The schema tag expected by the planner.</summary>
-    public const string SchemaTag = ShaderPipelineSchemas.Pipeline;
-
-    /// <summary>Creates the minimal single-pass definition for a file-backed shader source.</summary>
-    /// <param name="name">The pipeline name.</param>
-    /// <param name="sourcePath">The shader source path.</param>
-    /// <param name="kind">The pass kind; when omitted, the pass is a compute pass.</param>
-    /// <param name="entryPoint">The compiler entry point.</param>
-    /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="sourcePath"/> is empty, or the source
-    /// is not an <c>.hlsl</c> file.</exception>
-    public static ShaderPipelineDefinition FromShaderSource(
-        string name,
-        string sourcePath,
-        ShaderPipelineDocumentPassKind? kind = null,
-        string entryPoint = "main"
-    ) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourcePath);
-        var extension = Path.GetExtension(path: sourcePath);
-
-        if (!extension.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: ".hlsl"
-        )) {
-            throw new ArgumentException(
-                message: $"Shader source extension '{extension}' is unsupported; a one-off shader is an .hlsl file.",
-                paramName: nameof(sourcePath)
-            );
-        }
-        var output = new ShaderPipelineResource(
-            Name: "output",
-            Kind: ShaderPipelineResourceKind.Image,
-            Format: "R8G8B8A8Unorm",
-            Dimensions: ShaderPipelineDimensions.Relative()
-        );
-        var pass = new ShaderPipelinePass(
-            Name: name,
-            Source: Path.GetFullPath(path: sourcePath),
-            EntryPoint: entryPoint,
-            Kind: (kind ?? ShaderPipelineDocumentPassKind.Compute),
-            Outputs: [new ResourceReference(Name: output.Name)]
-        );
-
-        return new ShaderPipelineDefinition(
-            name: name,
-            outputs: [output.Name],
-            passes: [pass],
-            resources: [output]
-        );
-    }
 }
 /// <summary>Limits applied while compiling an execution plan. <c>MaxFrameBlockBytes</c> bounds a pass's frame block,
 /// frame members and config together: 128 bytes is the push-constant size every Vulkan device guarantees.</summary>
@@ -617,16 +534,4 @@ public sealed class ShaderPipelineCompilationException : Exception {
 
     /// <summary>Gets all diagnostics collected before planning stopped.</summary>
     public IReadOnlyList<ShaderPipelineDiagnostic> Diagnostics { get; }
-}
-/// <summary>Source-generated metadata used by <see cref="ShaderPipelineLoader"/>.</summary>
-[JsonSerializable(typeof(ShaderPipelineDefinition))]
-[JsonSerializable(typeof(ShaderPipelineResource))]
-[JsonSerializable(typeof(ShaderPipelinePass))]
-[JsonSerializable(typeof(ResourceReference))]
-[JsonSerializable(typeof(ShaderPipelineGeometry))]
-[JsonSerializable(typeof(ShaderPipelineVertexAttribute))]
-[JsonSerializable(typeof(ShaderPipelineDispatch))]
-[JsonSerializable(typeof(ShaderPipelineCountTerm))]
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
-public partial class ShaderPipelineJsonContext : JsonSerializerContext {
 }

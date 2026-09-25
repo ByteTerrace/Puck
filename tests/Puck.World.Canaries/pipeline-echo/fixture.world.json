@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "echo",
-        "source": "echo.pipeline.json"
+        "source": "echo.graph.json"
       }
     ]
   }

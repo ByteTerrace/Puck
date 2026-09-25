@@ -60,9 +60,9 @@ internal sealed class FakeGpuDevice :
     }
 
     public long AdapterLuid => 0L;
-    /// <summary>Gets or sets a hook every compute pipeline creation runs first, on whatever thread creates it — a law
-    /// holds a pipeline build by blocking here.</summary>
-    public Action? BeforeComputePipeline { get; set; }
+    /// <summary>Gets or sets a hook every compute pipeline creation runs first, with the pipeline's description, on
+    /// whatever thread creates it — a law holds a pipeline build by blocking here, and counts or orders creations.</summary>
+    public Action<GpuComputePipelineDescription>? BeforeComputePipeline { get; set; }
 
     /// <summary>Gets each wrapped member's call count, keyed <c>Interface.Member</c>; empty unless the device counts
     /// calls.</summary>
@@ -117,9 +117,13 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionImageLayout");
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionBuffer");
-    IGpuCommandPool IGpuCommandPoolFactory.Create() => new Resource(gpu: this);
+    IGpuCommandPool IGpuCommandPoolFactory.Create() {
+        Hit(key: "IGpuCommandPoolFactory.Create");
+
+        return new Resource(gpu: this);
+    }
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
-        BeforeComputePipeline?.Invoke();
+        BeforeComputePipeline?.Invoke(obj: description);
         Hit(key: "IGpuPipelineFactory.Create(compute)");
 
         return new Resource(gpu: this);
@@ -171,12 +175,23 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuQueueSubmitter.SubmitAndWait");
         Submissions++;
     }
-    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description) => new Resource(gpu: this);
-    IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => new Resource(
-        gpu: this,
-        height: colors[0].Height,
-        width: colors[0].Width
-    );
+    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description) {
+        Hit(key: "IGpuRenderPassFactory.Create");
+
+        return new Resource(gpu: this);
+    }
+    IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) {
+        Hit(key: "IGpuRenderPassFactory.CreateFramebuffer");
+
+        // A depth-only framebuffer takes its extent from the depth attachment.
+        var extent = ((colors.Count > 0) ? colors[0] : depth);
+
+        return new Resource(
+            gpu: this,
+            height: (extent?.Height ?? 1U),
+            width: (extent?.Width ?? 1U)
+        );
+    }
     IGpuShaderModule IGpuShaderModuleFactory.Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
         Hit(key: "IGpuShaderModuleFactory.Create");
 
@@ -292,28 +307,13 @@ internal sealed class FakeGpuDevice :
         public const nint ViewHandle = 11;
 
         public void Dispose() { }
-        public nint Upload(IGpuDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) => ViewHandle;
+        public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) => ViewHandle;
     }
     private sealed class Readback(byte reportVersion) : IGpuSurfaceReadback {
         private byte[] m_pixels = [];
 
         public void Dispose() { }
-        public bool IsReadComplete() => true;
-        public ReadOnlyMemory<byte> MapPixels() => m_pixels;
-        public ReadOnlyMemory<byte> Read(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
-            SubmitRead(
-                bytesPerPixel: bytesPerPixel,
-                deviceContext: deviceContext,
-                format: format,
-                height: height,
-                sourceImageHandle: sourceImageHandle,
-                sourceLayout: sourceLayout,
-                width: width
-            );
-
-            return m_pixels;
-        }
-        public void SubmitRead(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
+        public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
             var length = checked((int)((width * height) * bytesPerPixel));
 
             if (m_pixels.Length != length) {
@@ -326,6 +326,8 @@ internal sealed class FakeGpuDevice :
                 m_pixels[2] = reportVersion;
                 m_pixels[3] = reportVersion;
             }
+
+            return m_pixels;
         }
     }
 }

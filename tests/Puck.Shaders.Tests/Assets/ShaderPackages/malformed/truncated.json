@@ -1,7 +1,7 @@
 {
   "$schema": "puck.shader.package.v1",
   "name": "graph",
-  "document": "graph.pipeline.json",
+  "document": "transitive.graph.json",
   "compiler": {
     "version": "puck-shader-compiler-4",
     "tools"

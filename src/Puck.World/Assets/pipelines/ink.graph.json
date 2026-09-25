@@ -1,0 +1,113 @@
+{
+  "$schema": "puck.render.graph.v1",
+  "name": "ink",
+  "resources": [
+    {
+      "name": "simulation",
+      "kind": "Image",
+      "format": "R32G32B32A32Float",
+      "dimensions": {
+        "mode": "Relative",
+        "width": 1,
+        "height": 1
+      },
+      "history": true,
+      "initialization": "Zero"
+    },
+    {
+      "name": "color",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Relative",
+        "width": 1,
+        "height": 1
+      }
+    },
+    {
+      "name": "image",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Relative",
+        "width": 1,
+        "height": 1
+      }
+    }
+  ],
+  "passes": [
+    {
+      "name": "simulation",
+      "source": "ink-simulation.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "inputs": [
+        {
+          "name": "simulation",
+          "previousFrame": true,
+          "binding": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "simulation",
+          "binding": 0
+        }
+      ],
+      "config": {
+        "decay": {
+          "default": 0.987,
+          "max": 1,
+          "description": "Fraction of ink retained per pipeline frame.",
+          "min": 0,
+          "type": "float"
+        }
+      }
+    },
+    {
+      "name": "visualize",
+      "source": "ink-visualize.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "inputs": [
+        {
+          "name": "simulation",
+          "binding": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "color",
+          "binding": 0
+        }
+      ],
+      "config": {
+        "exposure": {
+          "default": 1,
+          "max": 4,
+          "description": "Visualized pigment intensity.",
+          "min": 0,
+          "type": "float"
+        }
+      }
+    },
+    {
+      "name": "finish",
+      "source": "ink-finish.hlsl",
+      "entryPoint": "main",
+      "kind": "Fullscreen",
+      "inputs": [
+        {
+          "name": "color",
+          "binding": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image"
+        }
+      ]
+    }
+  ],
+  "outputs": ["image", "simulation", "color"]
+}

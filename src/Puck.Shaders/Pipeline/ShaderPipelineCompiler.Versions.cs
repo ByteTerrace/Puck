@@ -6,7 +6,7 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineCompiler {
     // The version forwarding each predecessor. A predecessor named twice keeps its first successor here; the second is
     // refused by ValidateForwards.
-    private static Dictionary<string, string> Successors(ShaderPipelineDefinition definition) {
+    private static Dictionary<string, string> Successors(RenderGraphDefinition definition) {
         var successors = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
         foreach (var resource in definition.Resources) {
@@ -38,10 +38,10 @@ public sealed partial class ShaderPipelineCompiler {
 
         return current;
     }
-    private static void ValidateForwards(ShaderPipelineDefinition definition, IReadOnlyDictionary<string, ShaderPipelineResource> resources, IReadOnlyDictionary<string, string> successors, IReadOnlySet<string> outputs, List<ShaderPipelineDiagnostic> diagnostics) {
+    private static void ValidateForwards(RenderGraphDefinition definition, IReadOnlyDictionary<string, ShaderPipelineResource> resources, IReadOnlyDictionary<string, string> successors, IReadOnlySet<string> outputs, List<ShaderPipelineDiagnostic> diagnostics) {
         var writers = new Dictionary<string, ShaderPipelinePass>(comparer: StringComparer.Ordinal);
 
-        foreach (var pass in definition.Passes) {
+        foreach (var pass in definition.ShaderPasses) {
             foreach (var output in pass.OutputReferences) {
                 writers.TryAdd(
                     key: output.Name,
@@ -197,7 +197,7 @@ public sealed partial class ShaderPipelineCompiler {
         }
 
         // A pass that samples a version while writing its successor reads contents its own writes destroy.
-        foreach (var pass in definition.Passes) {
+        foreach (var pass in definition.ShaderPasses) {
             foreach (var input in ReadsOf(pass: pass)) {
                 if (
                     !input.PreviousFrame &&
@@ -223,7 +223,7 @@ public sealed partial class ShaderPipelineCompiler {
     }
     // A forward is a consuming edge: the successor's writer runs after the predecessor's writer and after every pass that
     // samples the predecessor in the same frame.
-    private static void AddForwardDependencies(ShaderPipelineDefinition definition, List<HashSet<int>> dependencies, IReadOnlyDictionary<string, int> writerByResource) {
+    private static void AddForwardDependencies(RenderGraphDefinition definition, List<HashSet<int>> dependencies, IReadOnlyDictionary<string, int> writerByResource) {
         foreach (var successor in definition.Resources) {
             if (
                 (successor.From is not { } predecessor) ||
@@ -240,10 +240,10 @@ public sealed partial class ShaderPipelineCompiler {
             )) {
                 dependencies[overwriter].Add(item: writer);
             }
-            for (var passIndex = 0; (passIndex < definition.Passes.Count); passIndex++) {
+            for (var passIndex = 0; (passIndex < definition.ShaderPasses.Count); passIndex++) {
                 if (
                     (passIndex != overwriter) &&
-                    ReadsOf(pass: definition.Passes[passIndex]).Any(predicate: input => (!input.PreviousFrame && string.Equals(
+                    ReadsOf(pass: definition.ShaderPasses[passIndex]).Any(predicate: input => (!input.PreviousFrame && string.Equals(
                         a: input.Name,
                         b: predecessor,
                         comparisonType: StringComparison.Ordinal

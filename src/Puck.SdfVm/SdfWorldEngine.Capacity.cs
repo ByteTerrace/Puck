@@ -8,7 +8,10 @@ public sealed partial class SdfWorldEngine {
     public int ProgramWordCapacity => m_programWordCapacity;
     /// <summary>Gets the bytes allocated for the visibility records: one record of <see cref="VisibilityRecordByteLength"/>
     /// bytes for every pixel of the full extent in every viewport the engine reserves.</summary>
-    public ulong VisibilityRecordBytes => m_visibilityRecordBytes;
+    public ulong VisibilityRecordBytes => FrameBufferBytes(
+        buffer: SdfFrameBuffer.PrimaryHits,
+        capacity: FrameCapacity
+    );
     /// <summary>Gets the bytes of one visibility record, the words <c>sdf-visibility.hlsli</c> lays out.</summary>
     public static int VisibilityRecordByteLength => PrimaryHitByteLength;
 

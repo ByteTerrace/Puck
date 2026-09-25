@@ -62,8 +62,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// without a library.</param>
     /// <param name="pipelineCacheStore">Where the library lives on disk, or <see langword="null"/> to keep it in
     /// memory only.</param>
+    /// <param name="creationFaults">The host's operator-armed creation faults its services pass through
+    /// (<see cref="GpuCreationFaults.Wrap"/>), or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="deviceApi"/> is <see langword="null"/>.</exception>
-    public DirectXDeviceContext(long adapterLuid, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null) {
+    public DirectXDeviceContext(long adapterLuid, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null, GpuCreationFaults? creationFaults = null) {
         ArgumentNullException.ThrowIfNull(deviceApi);
 
         m_adapterLuid = adapterLuid;
@@ -71,7 +73,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheStore = pipelineCacheStore;
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
-        Services = CreateServices();
+        Services = CreateServices(creationFaults: creationFaults);
     }
     /// <summary>Initializes a new instance whose adapter LUID is resolved lazily on first use.</summary>
     /// <param name="adapterLuidProvider">Resolves the adapter LUID to create the device on (zero for the default adapter); invoked once, on first use.</param>
@@ -82,8 +84,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// without a library.</param>
     /// <param name="pipelineCacheStore">Where the library lives on disk, or <see langword="null"/> to keep it in
     /// memory only.</param>
+    /// <param name="creationFaults">The host's operator-armed creation faults its services pass through
+    /// (<see cref="GpuCreationFaults.Wrap"/>), or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="adapterLuidProvider"/> or <paramref name="deviceApi"/> is <see langword="null"/>.</exception>
-    public DirectXDeviceContext(Func<long> adapterLuidProvider, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null) {
+    public DirectXDeviceContext(Func<long> adapterLuidProvider, IDirectXDeviceApi deviceApi, DirectXFeatureLevel minimumFeatureLevel, GpuPipelineCacheWork? pipelineCacheWork = null, GpuPipelineCacheStore? pipelineCacheStore = null, GpuCreationFaults? creationFaults = null) {
         ArgumentNullException.ThrowIfNull(adapterLuidProvider);
         ArgumentNullException.ThrowIfNull(deviceApi);
 
@@ -92,7 +96,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheStore = pipelineCacheStore;
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
-        Services = CreateServices();
+        Services = CreateServices(creationFaults: creationFaults);
     }
 
     /// <inheritdoc />
@@ -193,8 +197,9 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// needs it, and a device recreated after a loss is reached through the same services.</remarks>
     public GpuDeviceServices Services { get; }
 
-    private GpuDeviceServices CreateServices() =>
-        new() {
+    private GpuDeviceServices CreateServices(GpuCreationFaults? creationFaults) => GpuCreationFaults.Wrap(
+        faults: creationFaults,
+        services: new() {
             Bindings = new DirectXGpuBindings(deviceContext: this),
             BufferFactory = new DirectXGpuBufferFactory(deviceContext: this),
             CommandPoolFactory = new DirectXGpuCommandPoolFactory(deviceContext: this),
@@ -205,7 +210,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             RenderPassFactory = new DirectXGpuRenderPassFactory(deviceContext: this),
             ShaderModuleFactory = new DirectXGpuShaderModuleFactory(),
             SurfaceTransferFactory = new DirectXGpuSurfaceTransferFactory(deviceContext: this),
-        };
+        }
+    );
     private void EnsureCreated() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -430,26 +436,13 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return;
         }
 
-        var fence = ((ID3D12Fence*)m_idleFence);
-        var value = m_idleFenceValue;
-
-        ((ID3D12CommandQueue*)m_commandQueue)->Signal(
-            Value: value,
-            pFence: fence
+        DirectXCommandCalls.SignalAndWait(
+            calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device.Handle)),
+            fence: ((ID3D12Fence*)m_idleFence),
+            fenceEvent: m_idleFenceEvent,
+            fenceValue: ref m_idleFenceValue,
+            queue: ((ID3D12CommandQueue*)m_commandQueue)
         );
-        m_idleFenceValue++;
-
-        if (fence->GetCompletedValue() < value) {
-            fence->SetEventOnCompletion(
-                Value: value,
-                hEvent: m_idleFenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                dwMilliseconds: uint.MaxValue,
-                hHandle: m_idleFenceEvent
-            );
-        }
-
         DrainDebugMessages();
     }
     /// <inheritdoc/>
@@ -573,9 +566,13 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// valid; they rebuild their own device-derived resources. The old objects are released WITHOUT a GPU drain (the
     /// device is removed, so a Signal/wait would never complete; a COM Release on a removed device's objects is safe). The
     /// debug layer is NOT re-enabled here (it cannot be toggled per-process and can poison creation on some configs);
-    /// <see cref="EnsureCreated"/> applies the same opt-in gate it always does.</summary>
+    /// <see cref="EnsureCreated"/> applies the same opt-in gate it always does. A device that cannot be created yet is
+    /// still the loss being recovered from: a real removal leaves no capable adapter for seconds, so the host's recovery
+    /// waits and calls again.</summary>
     /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
     /// the old device; the message names each one, the old device is released, and no new device is created.</exception>
+    /// <exception cref="DeviceLostException">No device could be created yet; the context stays without one, and the next
+    /// call tries again.</exception>
     public void Recreate() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -585,9 +582,18 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         ReleaseDeviceObjects();
 
         // m_device is now null, so this rebuilds a fresh device + queue + fence + event.
-        EnsureCreated();
+        try {
+            EnsureCreated();
+        } catch (GpuDeviceUnavailableException exception) {
+            throw new DeviceLostException(
+                innerException: exception,
+                message: "The Direct3D 12 device could not be recreated yet (the adapter is unavailable).",
+                reasonCode: ((exception.InnerException as DirectXException)?.Result ?? 0)
+            );
+        }
     }
-    /// <summary>Releases the command queue and the owned device. With the debug layer on, every object the device still
+    /// <summary>Drains the queue, a removed device counting as drained (<see cref="DirectXCommandCalls.Drain"/>), then
+    /// releases the command queue and the owned device. With the debug layer on, every object the device still
     /// holds once the context has released its own is written as a <c>[d3d12-debug] live</c> line before the device is
     /// released. Safe to call more than once.</summary>
     /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
@@ -601,7 +607,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             (0 != m_commandQueue) &&
             (0 != m_idleFence)
         ) {
-            WaitIdle();
+            _ = DirectXCommandCalls.Drain(
+                calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device!.Handle)),
+                fence: ((ID3D12Fence*)m_idleFence),
+                fenceEvent: m_idleFenceEvent,
+                fenceValue: ref m_idleFenceValue,
+                queue: ((ID3D12CommandQueue*)m_commandQueue)
+            );
+            DrainDebugMessages();
         }
 
         m_disposed = true;

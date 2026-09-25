@@ -73,7 +73,7 @@
       {
         "camera": null,
         "name": "tint",
-        "source": "../pipeline-package/tint.pipeline.json"
+        "source": "../pipeline-package/tint.graph.json"
       }
     ]
   }

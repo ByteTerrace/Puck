@@ -1,6 +1,7 @@
 using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
 using Puck.SignedDistance;
+using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 
@@ -39,13 +40,13 @@ public sealed class SdfPassPlanLawTests {
         Elements: elements,
         Per: per
     );
-    // Each buffer's element stride and size, counted by the capacities it grows with. The brick pool is sized once for
-    // the world, so it is fixed at the engine's own size; the indirect arguments and the dispatch box are fixed records.
+    // Each buffer's element stride and size, counted by the capacities it grows with. The brick pool is counted as the
+    // sdf.bricks package's port declares it; the indirect arguments and the dispatch box are fixed records.
     private static (uint Stride, ulong? SizeBytes, IReadOnlyList<ShaderPipelineCountTerm>? Count) StorageOf(SdfFrameBuffer buffer, SdfFrameCapacity capacity) => buffer switch {
         SdfFrameBuffer.Viewports => (96, null, [Term(1, ShaderPipelineCountBasis.Viewports)]),
         SdfFrameBuffer.DynamicTransforms => (48, null, [Term(1, ShaderPipelineCountBasis.DynamicTransforms)]),
         SdfFrameBuffer.InstanceGrid => (4, null, [Term(1, ShaderPipelineCountBasis.InstanceGridWords)]),
-        SdfFrameBuffer.BrickPool => (4, SdfWorldEngine.FrameBufferBytes(buffer: buffer, capacity: capacity), null),
+        SdfFrameBuffer.BrickPool => (4, null, [Term(1, ShaderPipelineCountBasis.BrickPoolVoxels)]),
         SdfFrameBuffer.InstanceMasks => (4, null, [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)]),
         // Four tile planes per tile, then two float3 part-bound corners in each of the primary and AO bands per instance.
         SdfFrameBuffer.Tiles => (4, null, [
@@ -55,7 +56,7 @@ public sealed class SdfPassPlanLawTests {
         SdfFrameBuffer.ViewsArgs => (4, ShaderPipelineDispatch.ArgumentBytes, null),
         // The dispatch box: the group origin, then the exclusive group end, four uints.
         SdfFrameBuffer.CullBounds => (4, (4 * sizeof(uint)), null),
-        SdfFrameBuffer.PrimaryHits => (((uint)SdfWorldEngine.VisibilityRecordByteLength), null, [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)]),
+        SdfFrameBuffer.PrimaryHits => (60, null, [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)]),
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(buffer)),
     };
     // The counts a host resolves for an engine of this capacity, each derived as the engine derives it.
@@ -63,6 +64,7 @@ public sealed class SdfPassPlanLawTests {
         Height: capacity.Height,
         Width: capacity.Width
     ) {
+        BrickPoolVoxels = ((ulong)capacity.BrickPoolVoxels),
         DynamicTransforms = ((ulong)capacity.DynamicTransforms),
         InstanceGridWords = ((ulong)SdfInstanceGrid.WordCapacity(maxInstances: capacity.Instances)),
         InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: capacity.Instances)),
@@ -186,7 +188,7 @@ public sealed class SdfPassPlanLawTests {
         )).ToArray();
 
         return new ShaderPipelineCompiler().Compile(
-            definition: new ShaderPipelineDefinition(
+            definition: new RenderGraphDefinition(
                 name: RenderGraphPackageCatalog.SdfWorld,
                 outputs: ["color"],
                 passes: [],
@@ -271,6 +273,21 @@ public sealed class SdfPassPlanLawTests {
                 )
             ),
             collection: buffers
+        );
+    }
+    [Fact]
+    public void TheExternalBrickPoolIsTheBufferSdfBricksWrites() {
+        var pool = Plan(capacity: Default).Storages.Single(predicate: static storage => (storage.Name == nameof(SdfFrameBuffer.BrickPool)));
+
+        Assert.True(condition: pool.Declaration.IsExternal);
+        Assert.True(condition: RenderGraphPackageCatalog.BrickPool.Accepts(resource: pool.Declaration));
+        Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(
+            id: RenderGraphPackageCatalog.SdfBricks,
+            package: out var bricks
+        ));
+        Assert.Equal(
+            actual: Assert.Single(collection: bricks.Outputs),
+            expected: RenderGraphPackageCatalog.BrickPool
         );
     }
     [Fact]

@@ -164,7 +164,7 @@ internal static class AffectedCommand {
             consumersOf: ConsumerSearch(projects: projects, repositoryRoot: repositoryRoot),
             coverage: AffectedCoverage.Read(repositoryRoot: repositoryRoot),
             catalogInputs: (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: (ShippedTree + "/")) ||
-                (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World/Assets/") && (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".pipeline.json"))) ||
+                (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World/Assets/") && (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".graph.json"))) ||
                 path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.Cli/Transpiler/") ||
                 ((owner is not null) && catalogProjects.Contains(item: owner))),
             declaresTests: path => File.ReadLines(path: Path.Combine(path1: repositoryRoot, path2: path)).Any(predicate: static line => line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "test \"")),

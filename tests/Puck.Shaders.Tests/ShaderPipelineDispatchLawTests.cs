@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 
@@ -45,7 +46,7 @@ public sealed class ShaderPipelineDispatchLawTests {
     // arguments by "consume", which also reads the table. The passes are declared in reverse, so the order is the
     // planner's.
     private static ShaderPipelinePlan PlanIndirect() => new ShaderPipelineCompiler().Compile(
-        definition: new ShaderPipelineDefinition(
+        definition: new RenderGraphDefinition(
             name: "indirect",
             outputs: ["result"],
             passes: [],
@@ -85,7 +86,7 @@ public sealed class ShaderPipelineDispatchLawTests {
     );
     private static void AssertRefused(string code, ShaderPipelineResource[] resources, string[] outputs, ShaderPipelinePass[]? passes = null, ShaderPipelinePackagePass[]? packages = null) {
         var exception = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(
-            definition: new ShaderPipelineDefinition(
+            definition: new RenderGraphDefinition(
                 name: "refused",
                 outputs: outputs,
                 passes: (passes ?? []),
@@ -147,11 +148,11 @@ public sealed class ShaderPipelineDispatchLawTests {
     public void TheVocabularyReadsFromADocument() {
         var resource = System.Text.Json.JsonSerializer.Deserialize(
             json: """{ "name": "table", "kind": "Buffer", "strideBytes": 16, "count": [{ "per": ["Viewports", "Tiles"], "elements": 4 }, { "per": ["Instances"], "elements": 2 }] }""",
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineResource
+            jsonTypeInfo: RenderGraphJsonContext.Default.ShaderPipelineResource
         );
         var pass = System.Text.Json.JsonSerializer.Deserialize(
             json: """{ "name": "consume", "source": "p", "entryPoint": "", "kind": "Compute", "dispatch": { "kind": "Indirect", "arguments": "args", "argumentsOffsetBytes": 12 } }""",
-            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelinePass
+            jsonTypeInfo: RenderGraphJsonContext.Default.ShaderPipelinePass
         );
         var expected = Words(
             count: [
@@ -209,6 +210,7 @@ public sealed class ShaderPipelineDispatchLawTests {
             Height: 4,
             Width: 8
         ) {
+            BrickPoolVoxels = 13,
             DynamicTransforms = 5,
             InstanceGridWords = 11,
             InstanceMaskWords = 2,
@@ -250,7 +252,7 @@ public sealed class ShaderPipelineDispatchLawTests {
                 count: Per(basis: basis),
                 name: basis.ToString()
             ).ResolveSizeBytes(counts: counts) / 4UL)),
-            expected: [32UL, 7UL, 100UL, 3UL, 6UL, 5UL, 2UL, 11UL]
+            expected: [32UL, 7UL, 100UL, 3UL, 6UL, 5UL, 2UL, 11UL, 13UL]
         );
         // A count is the sum of its terms, each the product of its bases' units.
         Assert.Equal(
@@ -329,11 +331,23 @@ public sealed class ShaderPipelineDispatchLawTests {
             passes: [Pass(inputs: [], kind: ShaderPipelineDocumentPassKind.Compute, name: "write", outputs: ["out"])],
             resources: [Words(name: "out", stride: 16)]
         );
+        // Only the package that writes a counted buffer publishes it; a host's counted buffer is not passed through.
         AssertRefused(
             code: "SHADERPIPE_PACKAGE_STORAGE",
             outputs: ["out"],
-            packages: [Package(inputs: [], name: "write", outputs: ["out"])],
-            resources: [Words(count: Per(basis: ShaderPipelineCountBasis.Instances), name: "out")]
+            resources: [Words(count: Per(basis: ShaderPipelineCountBasis.Instances), initialization: ShaderPipelineInitialization.External, name: "out")]
+        );
+        Assert.Equal(
+            actual: new ShaderPipelineCompiler().Compile(
+                definition: new RenderGraphDefinition(
+                    name: "published",
+                    outputs: ["out"],
+                    passes: [],
+                    resources: [Words(count: Per(basis: ShaderPipelineCountBasis.Instances), name: "out")]
+                ),
+                packages: [Package(inputs: [], name: "write", outputs: ["out"])]
+            ).Outputs,
+            expected: ["out"]
         );
     }
     [Fact]

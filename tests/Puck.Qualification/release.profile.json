@@ -25,6 +25,7 @@
     "pipeline-package",
     "pipeline-budget",
     "pipeline-churn",
+    "pipeline-fault",
     "pipeline-geometry",
     "pipeline-echo",
     "no-device-compile",

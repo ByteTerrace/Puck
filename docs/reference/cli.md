@@ -568,7 +568,7 @@ puck shaders pipeline <source> [--inspect] [--toolchain <directory>] [--cache <d
 
 `compile` writes SPIR-V and DXIL for one HLSL source stage; `--entry` names its
 entry point and defaults to `main`. `pipeline`
-loads a pipeline document or synthesizes a one-pass pipeline from a shader,
+loads a `puck.render.graph.v1` graph document or reads a one-off shader as a one-pass graph,
 validates its resource graph, and compiles every planned pass. `--inspect`
 prints the execution order, dependencies and named outputs without compiling
 shaders or creating a GPU device. A source or document that does not compile or
@@ -586,12 +586,12 @@ from the model and its first differing line; CI runs it beside
 `puck schema --check`.
 
 `interface` prints the [frame-block](shaders.md#the-frame-block) declarations
-each pass of a pipeline document or one-off shader reads, or those a shader-set
+each pass of a graph document or one-off shader reads, or those a shader-set
 manifest's stages read; `--write` writes each as `<interface>.interface.hlsli`
 beside its source instead, which a shader set, compiled at build, checks in, and
 `--echo` also generates each interface's echo pass as `<interface>.echo.hlsl`.
 
-`package` compiles a pipeline document or one-off shader and writes its
+`package` compiles a graph document or one-off shader and writes its
 `puck.shader.package.v1` package to `--output`: the source closure, each pass's
 interface and generated declarations, and its SPIR-V and DXIL binaries, with a
 manifest recording the compiler they were built with. Loading a package runs no
@@ -751,7 +751,7 @@ exactly `vulkan` and `directx` and declare the `gpu` requirement, so it is never
 automatic. It reports one proof per backend, as `<id> on <backend>`, and the
 manifest holds only when both did. No other shape reads `backends`.
 The `pipeline-feedback`, `pipeline-ink`, `pipeline-edit`, `pipeline-supersede`,
-`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn` and `pipeline-geometry` canaries use this shape to test shader
+`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault` and `pipeline-geometry` canaries use this shape to test shader
 pipelines, and `source-conversion` uses it to run the shipped image-source
 conversion kernels; the [World guide](../../src/Puck.World/README.md#shader-pipelines)
 covers the `pipeline.wait` phases their scripts use.
@@ -957,7 +957,7 @@ its own build output:
 
 ```text
 dotnet build src/Puck.Cli -c Release
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-geometry
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry
 ```
 
 ---
@@ -1196,7 +1196,7 @@ puck parity compare <leftDir> <rightDir> --contract <file> [--output <dir>]   co
 Per capture, three independent verdicts, in order:
 
 1. **Content gate**—a capture its producer refused by name (`cameraInside`,
-   `busy`, `stale`, `failed`, `unserved`; see the
+   `busy`, `stale`, `failed`, `unserved`, `deviceLost`; see the
    [parity README](../../tests/Puck.Parity/README.md)), missing, or below its
    station's census floor never reaches comparison: agreement between
    degenerate frames is vacuous.
@@ -1238,8 +1238,10 @@ The run boots `tests/Puck.Counters/counters.world.json` once per backend
 shown. It uses the same World build and leg machinery as `puck parity` (see
 [where the World artifact is built](#where-the-world-artifact-is-built)). Each
 leg runs `tests/Puck.Counters/counters.script.txt` on the World's console. The
-script turns off the cadence gate so every frame renders every pass, waits a
-pinned number of ticks, and asks for one `world.counters --json` reading. The
+script turns off the cadence gate so every frame renders every pass, pauses the
+simulation until the engine is ready, resumes it, waits a pinned number of
+ticks, and asks for one `world.counters --json` reading, so both backends read
+at the same tick however long their engines took to build. The
 runner closes the script with `wire.errors` and `quit` and requires every
 command accepted.
 

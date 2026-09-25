@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
 using Puck.Testing;
@@ -9,7 +10,9 @@ namespace Puck.SdfVm.Tests;
 /// Laws for <see cref="SdfWorldPipelines"/> over <see cref="FakeGpuDevice"/>: a build creates one pipeline per engine
 /// kernel (brick pipelines only when asked for and present) and counts them into the owner's ledger; a build and a
 /// reload that created pipelines each write the device's persistent cache once, from the thread that built them; a
-/// reload creates only the pipelines whose bytecode changed; and a canceled build throws before creating anything.
+/// reload creates only the pipelines whose bytecode changed; a canceled build throws before creating anything; a build
+/// holds at most <see cref="SdfWorldPipelines.BuildConcurrency"/> creations in the driver and starts the views variants
+/// last; and a build canceled while creations are in the driver waits for those alone and creates no more.
 /// </summary>
 public sealed class SdfWorldPipelinesLawTests {
     [Fact]
@@ -84,6 +87,90 @@ public sealed class SdfWorldPipelinesLawTests {
         ));
         Assert.Equal(expected: 0L, actual: Created(ledger: ledger));
     }
+    [Fact]
+    public async Task ABuildHoldsAtMostItsConcurrencyInTheDriverAndStartsTheViewsVariantsLast() {
+        using var driver = new SteppedDriver();
+        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
+            BeforeComputePipeline = driver.Enter,
+        };
+        var ledger = new GpuWorkLedger(
+                framesInFlight: SdfWorldEngine.FrameRingSize,
+                name: "gpu.sdf-engine"
+            );
+        var build = Task.Run(
+            cancellationToken: TestContext.Current.CancellationToken,
+            function: () => SdfWorldPipelines.Build(
+                cancellationToken: CancellationToken.None,
+                device: gpu,
+                includeBrickPipelines: false,
+                kernels: SdfTestPipelines.Kernels(beam: 1),
+                ledger: ledger
+            )
+        );
+        var started = new List<string>();
+
+        // The first creators enter together; after that each creation let through lets exactly one more start, so the
+        // order the rest start in is the build's own.
+        for (var creation = 0; (creation < SdfWorldPipelines.BuildConcurrency); creation++) {
+            started.Add(item: driver.Next());
+        }
+
+        while (started.Count < 12) {
+            driver.Step();
+            started.Add(item: driver.Next());
+        }
+
+        driver.Open();
+
+        using var pipelines = await build;
+
+        Assert.Equal(
+            actual: (driver.MostInDriver, started.Distinct().Count()),
+            expected: (SdfWorldPipelines.BuildConcurrency, 12)
+        );
+        Assert.Equal(
+            actual: started.TakeLast(count: 3),
+            expected: ["sdf-world-views-core", "sdf-world-views-folds", "sdf-world-views"]
+        );
+        Assert.Equal(expected: 12L, actual: Created(ledger: ledger));
+    }
+    [Fact]
+    public async Task ABuildCanceledWhilePipelinesAreInTheDriverWaitsOnlyForThoseAndCreatesNoMore() {
+        using var driver = new SteppedDriver();
+        using var cancellation = new CancellationTokenSource();
+        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
+            BeforeComputePipeline = driver.Enter,
+        };
+        var ledger = new GpuWorkLedger(
+                framesInFlight: SdfWorldEngine.FrameRingSize,
+                name: "gpu.sdf-engine"
+            );
+        var progress = new SdfWorldPipelineBuildProgress();
+        var build = Task.Run(
+            cancellationToken: TestContext.Current.CancellationToken,
+            function: () => SdfWorldPipelines.Build(
+                cancellationToken: cancellation.Token,
+                device: gpu,
+                includeBrickPipelines: false,
+                kernels: SdfTestPipelines.Kernels(beam: 1),
+                ledger: ledger,
+                progress: progress
+            )
+        );
+
+        for (var creation = 0; (creation < SdfWorldPipelines.BuildConcurrency); creation++) {
+            _ = driver.Next();
+        }
+
+        cancellation.Cancel();
+        driver.Open();
+
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(testCode: () => build);
+        Assert.Equal(
+            actual: (driver.Entered, Created(ledger: ledger), progress.Created),
+            expected: (SdfWorldPipelines.BuildConcurrency, ((long)SdfWorldPipelines.BuildConcurrency), SdfWorldPipelines.BuildConcurrency)
+        );
+    }
 
     private static long Created(GpuWorkLedger ledger) {
         Assert.True(condition: ledger.TryRead(kind: GpuWork.PipelinesCreated, value: out var value));
@@ -91,6 +178,66 @@ public sealed class SdfWorldPipelinesLawTests {
         return value;
     }
 
+    // A driver that holds every pipeline creation until the law lets one through (Step) or opens it, reporting each
+    // creation's pipeline name as it enters and the most creations it held at once. Once open, a creation passes
+    // straight through uncounted in the order but counted in Entered, so an extra creation after a cancel shows.
+    private sealed class SteppedDriver : IDisposable {
+        private readonly BlockingCollection<string> m_entered = [];
+        private readonly ManualResetEventSlim m_open = new(initialState: false);
+        private readonly SemaphoreSlim m_permits = new(initialCount: 0);
+
+        private int m_count;
+        private int m_inDriver;
+        private int m_most;
+
+        public int Entered => Volatile.Read(location: ref m_count);
+        public int MostInDriver => Volatile.Read(location: ref m_most);
+
+        public void Dispose() {
+            Open();
+            m_entered.Dispose();
+            m_open.Dispose();
+            m_permits.Dispose();
+        }
+        public void Enter(GpuComputePipelineDescription description) {
+            _ = Interlocked.Increment(location: ref m_count);
+
+            if (m_open.IsSet) {
+                return;
+            }
+
+            var inDriver = Interlocked.Increment(location: ref m_inDriver);
+            var most = Volatile.Read(location: ref m_most);
+
+            while ((inDriver > most) && (Interlocked.CompareExchange(
+                comparand: most,
+                location1: ref m_most,
+                value: inDriver
+            ) != most)) {
+                most = Volatile.Read(location: ref m_most);
+            }
+
+            m_entered.Add(item: description.Name);
+            m_permits.Wait();
+            _ = Interlocked.Decrement(location: ref m_inDriver);
+        }
+        // Takes the name of the next creation to enter; the bound is liveness, and decides nothing.
+        public string Next() {
+            Assert.True(condition: m_entered.TryTake(
+                cancellationToken: TestContext.Current.CancellationToken,
+                item: out var name,
+                millisecondsTimeout: 30_000
+            ));
+
+            return name!;
+        }
+        // Lets every held creation through, and every later one pass without waiting.
+        public void Open() {
+            m_open.Set();
+            _ = m_permits.Release(releaseCount: SdfWorldPipelines.BuildConcurrency);
+        }
+        public void Step() => _ = m_permits.Release();
+    }
     // A device whose persistent cache counts the writes asked of it, over another device's services.
     private sealed class PersistingDevice(GpuDeviceServices services) : IGpuDeviceContext, IGpuPipelineCache {
         private int m_persisted;

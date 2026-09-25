@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "feedback",
-        "source": "wrong-history.pipeline.json",
+        "source": "wrong-history.graph.json",
         "timeScale": 1
       }
     ]

@@ -869,14 +869,14 @@ public sealed class WorldSiloLifecycleLawTests {
         // A hosted document has no directory, so it names its pipeline by an absolute path.
         var pipelinePath = PuckPaths.Normalize(path: Path.Combine(
             path1: directory.RootPath,
-            path2: "silo.pipeline.json"
+            path2: "silo.graph.json"
         ));
 
         File.Copy(
             destFileName: pipelinePath,
             sourceFileName: Path.Combine(
                 path1: AuthoredGameFixtures.Root,
-                path2: "src/Puck.World/Assets/pipelines/ink.pipeline.json"
+                path2: "src/Puck.World/Assets/pipelines/ink.graph.json"
             )
         );
 
@@ -962,7 +962,7 @@ public sealed class WorldSiloLifecycleLawTests {
             }
 
             // Denied: a relative source in a document with no directory resolves nowhere, and is refused by name.
-            var (relativeActivated, relativeHost, _) = await TryActivateAsync(exposure: 4, source: "silo.pipeline.json", worldName: "row-relative");
+            var (relativeActivated, relativeHost, _) = await TryActivateAsync(exposure: 4, source: "silo.graph.json", worldName: "row-relative");
 
             using (relativeHost.Instances) {
                 Assert.False(condition: relativeActivated);

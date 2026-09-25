@@ -23,6 +23,7 @@ namespace Puck.Vulkan;
 public sealed class VulkanSurfaceUpload : IDisposable {
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
     private readonly IVulkanCommandResourcesFactory m_commandResourcesFactory;
+    private readonly IVulkanDeviceContext m_deviceContext;
     private readonly IVulkanFrameSynchronizationApi? m_frameSynchronizationApi;
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly IVulkanOffscreenImageApi m_offscreenImageApi;
@@ -42,7 +43,8 @@ public sealed class VulkanSurfaceUpload : IDisposable {
     private bool m_uploadPending;
     private uint m_width;
 
-    /// <summary>Initializes a reusable CPU-pixel uploader.</summary>
+    /// <summary>Initializes a reusable CPU-pixel uploader on a device context.</summary>
+    /// <param name="deviceContext">The device context whose device the image is created and uploaded on.</param>
     /// <param name="offscreenImageApi">The API used to create the sampled image.</param>
     /// <param name="framebufferSetApi">The API used to create and destroy its image view.</param>
     /// <param name="bufferApi">The API that makes the host-coherent staging buffer.</param>
@@ -50,7 +52,9 @@ public sealed class VulkanSurfaceUpload : IDisposable {
     /// <param name="commandBufferRecordingApi">The API used to record buffer-to-image copies.</param>
     /// <param name="queueSubmitter">The queue submission service.</param>
     /// <param name="frameSynchronizationApi">The optional API for pipelined upload synchronization.</param>
+    /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     public VulkanSurfaceUpload(
+        IVulkanDeviceContext deviceContext,
         IVulkanOffscreenImageApi offscreenImageApi,
         IVulkanFramebufferSetApi framebufferSetApi,
         IVulkanBufferApi bufferApi,
@@ -62,6 +66,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         ArgumentNullException.ThrowIfNull(bufferApi);
         ArgumentNullException.ThrowIfNull(commandBufferRecordingApi);
         ArgumentNullException.ThrowIfNull(commandResourcesFactory);
+        ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentNullException.ThrowIfNull(framebufferSetApi);
         ArgumentNullException.ThrowIfNull(offscreenImageApi);
         ArgumentNullException.ThrowIfNull(queueSubmitter);
@@ -69,6 +74,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_bufferApi = bufferApi;
         m_commandBufferRecordingApi = commandBufferRecordingApi;
         m_commandResourcesFactory = commandResourcesFactory;
+        m_deviceContext = deviceContext;
         m_framebufferSetApi = framebufferSetApi;
         m_frameSynchronizationApi = frameSynchronizationApi;
         m_offscreenImageApi = offscreenImageApi;
@@ -109,8 +115,8 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_imageHandle = 0;
         m_memoryHandle = 0;
     }
-    private void EnsureResources(IVulkanDeviceContext deviceContext, uint width, uint height, uint vulkanFormat) {
-        var device = deviceContext.LogicalDevice;
+    private void EnsureResources(uint width, uint height, uint vulkanFormat) {
+        var device = m_deviceContext.LogicalDevice;
 
         VulkanDeviceOwnership.ThrowIfOtherDevice(
             held: m_device,
@@ -135,60 +141,69 @@ public sealed class VulkanSurfaceUpload : IDisposable {
 
         DisposeResources();
 
-        var instance = deviceContext.Instance;
-        var image = m_offscreenImageApi.CreateColorImage(request: new VulkanOffscreenImageCreateRequest(
-            Device: device.Commands,
-            Format: vulkanFormat,
-            Height: height,
-            Instance: instance.Commands,
-            PhysicalDeviceHandle: device.PhysicalDevice.Handle,
-            UsageFlags: VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferDestination,
-            Width: width
-        ));
+        // Everything below is made on this device, and DisposeResources releases exactly what was made, so a failure
+        // part way (a refused view after its image exists, say) leaks nothing.
+        m_device = device;
 
-        m_imageHandle = image.ImageHandle;
-        m_memoryHandle = image.MemoryHandle;
-
-        m_framebufferSetApi.CreateImageView(
-            imageViewHandle: out m_imageViewHandle,
-            request: new VulkanImageViewCreateRequest(
+        try {
+            var image = m_offscreenImageApi.CreateColorImage(request: new VulkanOffscreenImageCreateRequest(
                 Device: device.Commands,
                 Format: vulkanFormat,
-                ImageHandle: m_imageHandle
-            )
-        ).ThrowIfFailed(operation: "vkCreateImageView");
+                Height: height,
+                Instance: m_deviceContext.Instance.Commands,
+                PhysicalDeviceHandle: device.PhysicalDevice.Handle,
+                UsageFlags: VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferDestination,
+                Width: width
+            ));
 
-        m_commandResources = m_commandResourcesFactory.Create(
-            commandBufferCount: 1,
-            logicalDevice: device
-        );
-        m_device = device;
+            m_imageHandle = image.ImageHandle;
+            m_memoryHandle = image.MemoryHandle;
+
+            m_framebufferSetApi.CreateImageView(
+                imageViewHandle: out var imageViewHandle,
+                request: new VulkanImageViewCreateRequest(
+                    Device: device.Commands,
+                    Format: vulkanFormat,
+                    ImageHandle: m_imageHandle
+                )
+            ).ThrowIfFailed(operation: "vkCreateImageView");
+            m_imageViewHandle = imageViewHandle;
+
+            m_commandResources = m_commandResourcesFactory.Create(
+                commandBufferCount: 1,
+                logicalDevice: device
+            );
+            m_stagingBuffer = VulkanBuffer.Create(
+                bufferApi: m_bufferApi,
+                device: m_deviceContext,
+                memory: VulkanBufferMemory.HostCoherent,
+                sizeBytes: checked((ulong)Surface.RequiredByteLength(
+                    height: height,
+                    width: width
+                )),
+                usage: VulkanBufferUsageFlags.Storage
+            );
+
+            // The pipelined path's completion fence (see the class remarks), rebuilt alongside the buffer on an extent
+            // or format change. Absent (0) when no frame-synchronization API was supplied: the blocking submit applies.
+            if (m_frameSynchronizationApi is not null) {
+                m_frameSynchronizationApi.CreateFence(
+                    fenceHandle: out m_fence,
+                    request: new VulkanFrameSynchronizationCreateRequest(
+                        Device: device.Commands,
+                        StartSignaled: false
+                    )
+                ).ThrowIfFailed(operation: "vkCreateFence");
+            }
+        } catch {
+            DisposeResources();
+
+            throw;
+        }
+
         m_format = vulkanFormat;
         m_height = height;
-        m_stagingBuffer = VulkanBuffer.Create(
-            bufferApi: m_bufferApi,
-            device: deviceContext,
-            memory: VulkanBufferMemory.HostCoherent,
-            sizeBytes: checked((ulong)Surface.RequiredByteLength(
-                height: height,
-                width: width
-            )),
-            usage: VulkanBufferUsageFlags.Storage
-        );
         m_width = width;
-
-        // The pipelined path's completion fence (see the class remarks), rebuilt alongside the buffer on an extent or
-        // format change (DisposeResources destroyed the old one just above). Absent (0) when no frame-synchronization
-        // API was supplied: the blocking submit applies.
-        if (m_frameSynchronizationApi is not null) {
-            m_frameSynchronizationApi.CreateFence(
-                fenceHandle: out m_fence,
-                request: new VulkanFrameSynchronizationCreateRequest(
-                    Device: device.Commands,
-                    StartSignaled: false
-                )
-            ).ThrowIfFailed(operation: "vkCreateFence");
-        }
     }
     // Drains the pipelined path's outstanding copy (fence wait + reset); a no-op when none is outstanding. A lost
     // device has nothing left to wait on — clear the flag so teardown proceeds (mirroring TryWaitIdle's tolerance).
@@ -235,7 +250,6 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_disposed = true;
     }
     /// <summary>Uploads a CPU-pixel surface and returns the handle of a shader-readable image view over it.</summary>
-    /// <param name="deviceContext">The device the image is created and uploaded on.</param>
     /// <param name="pixels">The CPU-pixel data to upload; it must be tightly packed.</param>
     /// <param name="width">The width of the image.</param>
     /// <param name="height">The height of the image.</param>
@@ -243,10 +257,9 @@ public sealed class VulkanSurfaceUpload : IDisposable {
     /// <returns>The native <c>VkImageView</c> handle to sample the uploaded image through.</returns>
     /// <exception cref="ArgumentException"><paramref name="pixels"/> is empty, or a dimension is zero.</exception>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    /// <exception cref="InvalidOperationException"><paramref name="deviceContext"/> is not the device an earlier upload
-    /// created this instance's resources on.</exception>
-    public nint Upload(IVulkanDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, uint width, uint height, uint vulkanFormat) {
-        ArgumentNullException.ThrowIfNull(deviceContext);
+    /// <exception cref="InvalidOperationException">The context's device is not the one an earlier upload created this
+    /// instance's resources on.</exception>
+    public nint Upload(ReadOnlyMemory<byte> pixels, uint width, uint height, uint vulkanFormat) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -267,7 +280,6 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         }
 
         EnsureResources(
-            deviceContext: deviceContext,
             height: height,
             vulkanFormat: vulkanFormat,
             width: width

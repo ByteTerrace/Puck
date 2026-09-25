@@ -7,17 +7,32 @@ namespace Puck.Hosting.Tests;
 /// once a frame, at the extent its footprint needs, at its declared refresh with consumers reading its latest completed
 /// output, and within the policy's pass-pixel budget; a view that sees itself reads its previous frame, a loop of
 /// same-frame reads is refused naming every instance in it, a refused frame leaves its schedule unchanged, and a steady
-/// frame scheduled into two alternating schedules allocates nothing and matches a run given fresh ones.
+/// frame scheduled into two alternating schedules allocates nothing and matches a run given fresh ones. A buffer read
+/// renders its producer once a frame before the views that read it, at no extent and for no pass-pixels, and a read of
+/// another kind than its producer's output is refused naming both instances.
 /// </summary>
 public sealed class RenderGraphSchedulerLawTests {
     private const int DisplayHeight = 1080;
     private const int DisplayWidth = 1920;
 
-    private static RenderGraphInstance Instance(string name, int passes = 1, RenderGraphRefresh? refresh = null, RenderGraphRead[]? reads = null) => new(
+    private static RenderGraphInstance Instance(string name, int passes = 1, RenderGraphRefresh? refresh = null, RenderGraphRead[]? reads = null, ShaderPipelineResourceKind output = ShaderPipelineResourceKind.Image) => new(
         Name: name,
+        Output: output,
         Passes: passes,
         Reads: (reads ?? []),
         Refresh: (refresh ?? RenderGraphRefresh.EveryFrame)
+    );
+    // The world's brick pool: world-scoped work whose output is a buffer the views read.
+    private static RenderGraphInstance Bricks(RenderGraphRead[]? reads = null) => Instance(
+        name: "bricks",
+        output: ShaderPipelineResourceKind.Buffer,
+        passes: 2,
+        reads: reads
+    );
+    private static RenderGraphRead BufferRead(string producer, bool previousFrame = false) => new(
+        Kind: ShaderPipelineResourceKind.Buffer,
+        PreviousFrame: previousFrame,
+        Producer: producer
     );
     private static RenderGraphInstanceSet Set(params RenderGraphInstance[] instances) {
         Assert.True(
@@ -436,6 +451,204 @@ public sealed class RenderGraphSchedulerLawTests {
         Assert.Equal(expected: 0.5625, actual: RenderGraphExtent.Quantize(allocated: 0.5, fraction: 0.55));
     }
     [Fact]
+    public void AWorldScopedBufferRendersOnceBeforeEveryViewThatReadsIt() {
+        var set = Set(
+            Instance(
+                name: "main",
+                reads: [new RenderGraphRead(Producer: "security"), BufferRead(producer: "bricks")]
+            ),
+            Instance(
+                name: "pane",
+                reads: [BufferRead(producer: "bricks")]
+            ),
+            Instance(
+                name: "security",
+                reads: [BufferRead(producer: "bricks")]
+            ),
+            Bricks()
+        );
+        // A budget of one pass-pixel defers the shown camera; the buffer costs none, so it is never deferred.
+        var schedules = Run(
+            count: 6,
+            frame: index => Frame(
+                budget: 1,
+                footprints: [new RenderGraphFootprint(Consumer: "main", Height: 0.25, Producer: "security", Width: 0.25)],
+                index: index,
+                roots: [
+                    Full(instance: "main"),
+                    new RenderGraphRoot(Height: 0.25, Instance: "pane", Width: 0.25),
+                ]
+            ),
+            set: set
+        );
+
+        foreach (var schedule in schedules) {
+            var bricks = Row(
+                name: "bricks",
+                schedule: schedule,
+                set: set
+            );
+
+            Assert.Equal(
+                actual: schedule.Renders.Select(selector: index => set.Instances[index].Name).ToArray(),
+                expected: ["bricks", "pane", "main"]
+            );
+            Assert.Equal(expected: RenderGraphInstanceStatus.Rendered, actual: bricks.Status);
+            Assert.Equal(expected: (0, 0, 0L), actual: (bricks.Width, bricks.Height, bricks.PassPixels));
+            Assert.Equal(expected: RenderGraphInstanceStatus.Deferred, actual: Row(name: "security", schedule: schedule, set: set).Status);
+            Assert.Equal(
+                actual: schedule.Reads.Where(predicate: static read => (read.Kind == ShaderPipelineResourceKind.Buffer)).ToArray(),
+                expected: [
+                    new RenderGraphReadSchedule(Consumer: "pane", Frame: schedule.Frame, Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: false, Producer: "bricks"),
+                    new RenderGraphReadSchedule(Consumer: "main", Frame: schedule.Frame, Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: false, Producer: "bricks"),
+                ]
+            );
+        }
+    }
+    [Fact]
+    public void ABufferNoRenderingViewReadsIsNotRenderedAndAPreviousFrameReadTakesItsLastOutput() {
+        var set = Set(
+            Instance(name: "main"),
+            Instance(
+                name: "security",
+                reads: [BufferRead(producer: "bricks")]
+            ),
+            Instance(
+                name: "mirror",
+                reads: [BufferRead(previousFrame: true, producer: "bricks")]
+            ),
+            Bricks()
+        );
+        var offView = Run(
+            count: 3,
+            frame: index => Frame(
+                index: index,
+                roots: [Full(instance: "main")]
+            ),
+            set: set
+        );
+
+        Assert.All(
+            action: schedule => Assert.Equal(expected: RenderGraphInstanceStatus.Unread, actual: Row(name: "bricks", schedule: schedule, set: set).Status),
+            collection: offView
+        );
+
+        var mirrored = Run(
+            count: 3,
+            frame: index => Frame(
+                index: index,
+                roots: [Full(instance: "mirror")]
+            ),
+            set: set
+        );
+
+        Assert.Equal(
+            expected: new RenderGraphReadSchedule(Consumer: "mirror", Frame: 1, Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: true, Producer: "bricks"),
+            actual: Assert.Single(collection: mirrored[^1].Reads)
+        );
+        Assert.Equal(
+            expected: 3,
+            actual: RenderCount(
+                name: "bricks",
+                schedules: mirrored,
+                set: set
+            )
+        );
+    }
+    [Fact]
+    public void AReadOfTheOtherKindIsRefusedNamingBothInstances() {
+        Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+            instances: [
+                Instance(
+                    name: "main",
+                    reads: [new RenderGraphRead(Producer: "bricks")]
+                ),
+                Bricks(),
+            ],
+            refusal: out var imageOfBuffer,
+            set: out _
+        ));
+        Assert.Equal(expected: RenderGraphInstanceRefusalCode.KindMismatch, actual: imageOfBuffer.Code);
+        Assert.Equal(expected: ["main", "bricks"], actual: imageOfBuffer.Instances);
+        Assert.Contains(expectedSubstring: "reads 'bricks' as Image, but its output is Buffer", actualString: imageOfBuffer.Message);
+
+        Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+            instances: [
+                Instance(
+                    name: "main",
+                    reads: [BufferRead(producer: "security")]
+                ),
+                Instance(name: "security"),
+            ],
+            refusal: out var bufferOfImage,
+            set: out _
+        ));
+        Assert.Equal(expected: RenderGraphInstanceRefusalCode.KindMismatch, actual: bufferOfImage.Code);
+        Assert.Equal(expected: ["main", "security"], actual: bufferOfImage.Instances);
+        Assert.Contains(expectedSubstring: "reads 'security' as Buffer, but its output is Image", actualString: bufferOfImage.Message);
+    }
+    [Fact]
+    public void ASameFrameBufferCycleRefusesNamingBothInstances() {
+        Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+            instances: [
+                Bricks(reads: [BufferRead(producer: "lattice")]),
+                Instance(
+                    name: "lattice",
+                    output: ShaderPipelineResourceKind.Buffer,
+                    reads: [BufferRead(producer: "bricks")]
+                ),
+            ],
+            refusal: out var refusal,
+            set: out _
+        ));
+        Assert.Equal(expected: RenderGraphInstanceRefusalCode.SameFrameCycle, actual: refusal.Code);
+        Assert.Equal(expected: ["bricks", "lattice"], actual: refusal.Instances);
+
+        // The control: a previous-frame buffer read breaks the loop.
+        var set = Set(
+            Bricks(reads: [BufferRead(previousFrame: true, producer: "lattice")]),
+            Instance(
+                name: "lattice",
+                output: ShaderPipelineResourceKind.Buffer,
+                reads: [BufferRead(producer: "bricks")]
+            )
+        );
+
+        Assert.Equal(expected: [0, 1], actual: set.Order);
+    }
+    [Fact]
+    public void ARootOrFootprintOverABufferIsRefusedAtTheFrame() {
+        var set = Set(
+            Instance(
+                name: "main",
+                reads: [BufferRead(producer: "bricks")]
+            ),
+            Bricks()
+        );
+        var schedule = new RenderGraphSchedule(set: set);
+
+        Assert.Throws<ArgumentException>(testCode: () => RenderGraphScheduler.Schedule(
+            frame: Frame(
+                footprints: [new RenderGraphFootprint(Consumer: "main", Height: 0.5, Producer: "bricks", Width: 0.5)],
+                index: 0,
+                roots: [Full(instance: "main")]
+            ),
+            history: RenderGraphHistory.Empty(set: set),
+            schedule: schedule,
+            set: set
+        ));
+        Assert.Throws<ArgumentException>(testCode: () => RenderGraphScheduler.Schedule(
+            frame: Frame(
+                index: 0,
+                roots: [Full(instance: "bricks")]
+            ),
+            history: RenderGraphHistory.Empty(set: set),
+            schedule: schedule,
+            set: set
+        ));
+        Assert.Equal(expected: -1L, actual: schedule.Frame);
+    }
+    [Fact]
     public void AnUndeclaredReadIsRefusedAtTheFrame() {
         var set = Set(
             Instance(name: "security"),
@@ -477,12 +690,13 @@ public sealed class RenderGraphSchedulerLawTests {
             ),
             Instance(
                 name: "mirror",
-                reads: [new RenderGraphRead(Producer: "mirror")]
+                reads: [new RenderGraphRead(Producer: "mirror"), BufferRead(previousFrame: true, producer: "bricks")]
             ),
             Instance(
                 name: "main",
-                reads: [new RenderGraphRead(Producer: "north"), new RenderGraphRead(Producer: "south"), new RenderGraphRead(Producer: "security")]
-            )
+                reads: [new RenderGraphRead(Producer: "north"), new RenderGraphRead(Producer: "south"), new RenderGraphRead(Producer: "security"), BufferRead(producer: "bricks")]
+            ),
+            Bricks()
         );
         RenderGraphRoot[] roots = [
             Full(instance: "main"),
@@ -563,12 +777,13 @@ public sealed class RenderGraphSchedulerLawTests {
             ),
             Instance(
                 name: "mirror",
-                reads: [new RenderGraphRead(Producer: "mirror")]
+                reads: [new RenderGraphRead(Producer: "mirror"), BufferRead(previousFrame: true, producer: "bricks")]
             ),
             Instance(
                 name: "main",
-                reads: [new RenderGraphRead(Producer: "north"), new RenderGraphRead(Producer: "south"), new RenderGraphRead(Producer: "security")]
-            )
+                reads: [new RenderGraphRead(Producer: "north"), new RenderGraphRead(Producer: "south"), new RenderGraphRead(Producer: "security"), BufferRead(producer: "bricks")]
+            ),
+            Bricks()
         );
         var north = new RenderGraphFootprint(Consumer: "main", Height: 0.25, Producer: "north", Width: 0.25);
         var south = new RenderGraphFootprint(Consumer: "main", Height: 0.5, Producer: "south", Width: 0.5);

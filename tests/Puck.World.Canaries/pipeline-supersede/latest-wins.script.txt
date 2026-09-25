@@ -8,12 +8,12 @@ pipeline.step feedback
 pipeline.wait feedback submitted 2 10
 # The first edit, one minus the history. pipeline.status is held until the load applies, and its reconcile queues the
 # compilation if the frame presenter has not already.
-pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.load feedback ../pipeline-edit/corrected.graph.json
 pipeline.status
 # The second edit, half the history. A reload is not a step, so the paused instance may install the first edit before
 # this one arrives, or the first may be superseded while it compiles or builds; neither edit renders without a step, and
 # no superseded line is expected, since an installed edit is replaced without one.
-pipeline.load feedback halved.pipeline.json
+pipeline.load feedback halved.graph.json
 pipeline.status
 # The last rendered frame is what the instance presents while the latest edit compiles: still 2/16.
 pipeline.capture feedback {run}/during.png

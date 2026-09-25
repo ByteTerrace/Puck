@@ -252,7 +252,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuComputePipeline m_surfacePipeline;
     private readonly IGpuComputePipeline m_ambientPipeline;
     private readonly IGpuBuffer m_primaryHitBuffer;
-    private readonly ulong m_visibilityRecordBytes;
     private readonly uint m_width;
 
     private int m_currentSlot;
@@ -602,12 +601,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // One full-extent slice per viewport, like the source textures: changing regions must never overrun a
         // buffer sized for a previous layout. Shared across frame slots; Record orders primary writes before
         // shading reads and this frame's writes after the preceding frame's reads.
-        m_visibilityRecordBytes = FrameBufferBytes(
-            buffer: SdfFrameBuffer.PrimaryHits,
-            capacity: capacity
-        );
         m_primaryHitBuffer = gpu.BufferFactory.CreateDeviceLocal(
-            sizeBytes: m_visibilityRecordBytes,
+            sizeBytes: FrameBufferBytes(
+                buffer: SdfFrameBuffer.PrimaryHits,
+                capacity: capacity
+            ),
             usage: GpuBufferUsage.Storage
         );
         // The per-tile instance mask: same (viewport, tile) indexing as the cull buffer, GPU-written by instance

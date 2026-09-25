@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Sources;
 using Puck.Commands;
@@ -96,7 +95,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // The backend-neutral surface-transfer factory — the Vulkan host's camera GPU tier imports its shared camera
     // targets through it (the D3D12 host samples its own resources directly and never calls it for the camera).
     // Null on a headless boot, which composes no presenter and never publishes.
-    private readonly IGpuSurfaceTransferFactory? m_surfaceTransfers;
     private readonly INativeImageCaptureService m_windowCapture;
 
     // On the Vulkan host, the camera GPU tier's headless Direct3D 12 device the targets are allocated on — pinned to the render adapter's LUID so the
@@ -193,8 +191,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <param name="machines">The authoritative screen-machine host this binder reads outputs from.</param>
     /// <param name="cameraCapture">The platform webcam service (CPU tier) the camera screens share one session of.</param>
     /// <param name="windowCapture">The platform compositor window-capture service.</param>
-    /// <param name="surfaceTransfers">The backend-neutral surface-transfer factory the Vulkan host's camera GPU tier
-    /// imports its shared targets through, or <see langword="null"/> on a headless boot (which never publishes).</param>
     /// <param name="cameras">The world's placeable cameras a View (jumbotron) screen resolves its camera name against.</param>
     /// <param name="anchors">The entity anchor source used by anchored cameras (the client's snapshot-fed view).</param>
     /// <param name="stamps">The compiled creation-look pool supplying authored entity parts.</param>
@@ -214,7 +210,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <param name="producers">The image producers the host registers beside the four the engine ships, or
     /// <see langword="null"/> for none; each must match a shape in <see cref="WorldImageProducerVocabulary"/>.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IGpuSurfaceTransferFactory? surfaceTransfers, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         m_renderProbe = renderProbe;
         ArgumentNullException.ThrowIfNull(argument: machines);
@@ -234,7 +230,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             cameraCapture,
             TimeSpan.FromSeconds(seconds: 2)
         );
-        m_surfaceTransfers = surfaceTransfers;
         m_windowCapture = windowCapture;
         m_cameras = cameras;
         m_anchors = anchors;

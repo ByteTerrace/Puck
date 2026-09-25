@@ -619,7 +619,12 @@ to the last reset, like `submitted`); `pipeline.inspect` prints them, one
 <name> [<bytes>|device]` (Immediate) sets or clears `ShaderPipelineRenderNode.BudgetCapBytes`,
 which only lowers the device's budget, and prints `budget= device= cap= owned=
 steady= peak=`; a candidate whose peak does not fit fails `installed` or
-`resized` with `SHADERPIPE_BUDGET` and the installed graph keeps running. A paused
+`resized` with `SHADERPIPE_BUDGET` and the installed graph keeps running.
+`gpu.faults arm <kind> [<n>] | disarm | list` (Immediate, `CommandAudience.Operator`,
+registered in both GPU presentation shapes by `AddGpuCreationFaults`) arms the
+host's `GpuCreationFaults`; an armed creation fails `installed` with
+`GPU_CREATION_FAULT`, and every form prints `armed=… <kind>=<seen> …` for a
+canary's `response` extraction. A paused
 reset's initialization frame never consumes a pending `pipeline.step`; the step
 renders one frame beyond it. A reload, a row upsert or a resize is not a step:
 a paused (or time-scale-zero) instance installs it without rendering, so

@@ -4,11 +4,21 @@ namespace Puck.Vulkan;
 
 /// <summary>
 /// Implements <see cref="IGpuSurfaceTransferFactory"/> by creating adapter wrappers over
-/// <see cref="VulkanSurfaceReadback"/>, <see cref="VulkanSurfaceUpload"/>, and <see cref="VulkanSurfaceImport"/>.
-/// Each wrapper downcasts <see cref="IGpuDeviceContext"/> to <see cref="IVulkanDeviceContext"/> and converts
-/// <see cref="GpuPixelFormat"/> constants to <c>VkFormat</c> values at call time.
+/// <see cref="VulkanSurfaceReadback"/>, <see cref="VulkanSurfaceUpload"/>, and <see cref="VulkanSurfaceImport"/>, each
+/// bound to the factory's device context. Each wrapper converts <see cref="GpuPixelFormat"/> constants to
+/// <c>VkFormat</c> values at call time.
 /// </summary>
+/// <param name="deviceContext">The device context every object the factory creates works on.</param>
+/// <param name="bufferApi">The API that makes staging and readback buffers.</param>
+/// <param name="commandBufferRecordingApi">The API used to record copies and transitions.</param>
+/// <param name="commandResourcesFactory">The factory for copy command resources.</param>
+/// <param name="externalMemoryApi">The API that imports shared allocations.</param>
+/// <param name="framebufferSetApi">The API that creates and destroys image views.</param>
+/// <param name="frameSynchronizationApi">The API for the upload's pipelined fence.</param>
+/// <param name="offscreenImageApi">The API that creates the upload's sampled image.</param>
+/// <param name="queueSubmitter">The queue submission service.</param>
 public sealed class VulkanGpuSurfaceTransferFactory(
+    IVulkanDeviceContext deviceContext,
     IVulkanBufferApi bufferApi,
     IVulkanCommandBufferRecordingApi commandBufferRecordingApi,
     IVulkanCommandResourcesFactory commandResourcesFactory,
@@ -23,6 +33,7 @@ public sealed class VulkanGpuSurfaceTransferFactory(
         new VulkanGpuSurfaceImport(inner: new VulkanSurfaceImport(
             commandBufferRecordingApi: commandBufferRecordingApi,
             commandResourcesFactory: commandResourcesFactory,
+            deviceContext: deviceContext,
             externalMemoryApi: externalMemoryApi,
             framebufferSetApi: framebufferSetApi,
             queueSubmitter: queueSubmitter
@@ -33,7 +44,7 @@ public sealed class VulkanGpuSurfaceTransferFactory(
             bufferApi: bufferApi,
             commandBufferRecordingApi: commandBufferRecordingApi,
             commandResourcesFactory: commandResourcesFactory,
-            frameSynchronizationApi: frameSynchronizationApi,
+            deviceContext: deviceContext,
             queueSubmitter: queueSubmitter
         ));
     /// <inheritdoc/>
@@ -44,6 +55,7 @@ public sealed class VulkanGpuSurfaceTransferFactory(
             bufferApi: bufferApi,
             commandBufferRecordingApi: commandBufferRecordingApi,
             commandResourcesFactory: commandResourcesFactory,
+            deviceContext: deviceContext,
             frameSynchronizationApi: frameSynchronizationApi,
             framebufferSetApi: framebufferSetApi,
             offscreenImageApi: offscreenImageApi,
@@ -53,22 +65,9 @@ public sealed class VulkanGpuSurfaceTransferFactory(
 
 file sealed class VulkanGpuSurfaceReadback(VulkanSurfaceReadback inner) : IGpuSurfaceReadback {
     public void Dispose() => inner.Dispose();
-    public bool IsReadComplete() => inner.IsReadComplete();
-    public ReadOnlyMemory<byte> MapPixels() => inner.MapPixels();
-    public ReadOnlyMemory<byte> Read(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) =>
+    public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) =>
         inner.Read(
             bytesPerPixel: bytesPerPixel,
-            deviceContext: ((IVulkanDeviceContext)deviceContext),
-            height: height,
-            sourceImageHandle: sourceImageHandle,
-            sourceLayout: sourceLayout,
-            vulkanFormat: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),
-            width: width
-        );
-    public void SubmitRead(IGpuDeviceContext deviceContext, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) =>
-        inner.SubmitRead(
-            bytesPerPixel: bytesPerPixel,
-            deviceContext: ((IVulkanDeviceContext)deviceContext),
             height: height,
             sourceImageHandle: sourceImageHandle,
             sourceLayout: sourceLayout,
@@ -78,9 +77,8 @@ file sealed class VulkanGpuSurfaceReadback(VulkanSurfaceReadback inner) : IGpuSu
 }
 file sealed class VulkanGpuSurfaceUpload(VulkanSurfaceUpload inner) : IGpuSurfaceUpload {
     public void Dispose() => inner.Dispose();
-    public nint Upload(IGpuDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) =>
+    public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) =>
         inner.Upload(
-            deviceContext: ((IVulkanDeviceContext)deviceContext),
             height: height,
             pixels: pixels,
             vulkanFormat: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),
@@ -89,9 +87,8 @@ file sealed class VulkanGpuSurfaceUpload(VulkanSurfaceUpload inner) : IGpuSurfac
 }
 file sealed class VulkanGpuSurfaceImport(VulkanSurfaceImport inner) : IGpuSurfaceImport {
     public void Dispose() => inner.Dispose();
-    public GpuImportedSurface Import(IGpuDeviceContext deviceContext, nint sharedHandle, GpuPixelFormat format, uint width, uint height) {
+    public GpuImportedSurface Import(nint sharedHandle, GpuPixelFormat format, uint width, uint height) {
         var imageViewHandle = inner.Import(
-            deviceContext: ((IVulkanDeviceContext)deviceContext),
             height: height,
             sharedHandle: sharedHandle,
             vulkanFormat: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),

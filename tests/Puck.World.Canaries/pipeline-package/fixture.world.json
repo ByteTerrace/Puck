@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "tint",
-        "source": "tint.pipeline.json"
+        "source": "tint.graph.json"
       }
     ]
   }

@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "resample",
-        "source": "resample.pipeline.json",
+        "source": "resample.graph.json",
         "timeScale": 0
       }
     ]

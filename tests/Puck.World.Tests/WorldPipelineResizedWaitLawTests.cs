@@ -17,7 +17,7 @@ public sealed class WorldPipelineResizedWaitLawTests {
     private const uint Extent = 8;
 
     private static CompiledShaderPipeline Fill() {
-        var plan = new ShaderPipelineCompiler().Compile(definition: new ShaderPipelineDefinition(
+        var plan = new ShaderPipelineCompiler().Compile(definition: new RenderGraphDefinition(
             name: "fill",
             outputs: ["image"],
             passes: [new ShaderPipelinePass(
@@ -62,7 +62,7 @@ public sealed class WorldPipelineResizedWaitLawTests {
         using var gate = new ManualResetEventSlim(initialState: true);
         var reports = new List<string>();
         var gpu = new FakeGpuDevice(reportVersion: 0) {
-            BeforeComputePipeline = () => gate.Wait(),
+            BeforeComputePipeline = _ => gate.Wait(),
         };
         using var node = new ShaderPipelineRenderNode(
             deviceContext: gpu,

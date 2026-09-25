@@ -26,21 +26,11 @@ public enum ShaderPipelinePassKind : byte {
     Fullscreen = 2,
     /// <summary>An indexed geometry pass.</summary>
     Geometry = 3,
-    /// <summary>Engine work a frame graph names under <c>packages</c>, whose source is its package id. The package
-    /// records its own work and binds its own descriptors; the planner orders, versions and barriers it by the versions
-    /// it reads and writes, which it reaches as a compute pass does. It enters the planner only as a
-    /// <see cref="ShaderPipelinePackagePass"/>, never as a document's pass.</summary>
+    /// <summary>Engine work a frame graph names under <c>packages</c> (<see cref="RenderGraphPackagePass"/>), never as a
+    /// shader pass. The package records its own work and binds its own descriptors, so its planned pass has no
+    /// declaration; the planner orders, versions and barriers it by the versions it reads and writes, which it reaches as
+    /// a compute pass does.</summary>
     Package = 4,
-}
-/// <summary>Identifies a pipeline image, raw buffer, or depth resource.</summary>
-[JsonConverter(typeof(StrictEnumConverter<ShaderPipelineResourceKind>))]
-public enum ShaderPipelineResourceKind : byte {
-    /// <summary>A two-dimensional image.</summary>
-    Image = 1,
-    /// <summary>A raw buffer of 32-bit words, bound as a <c>ByteAddressBuffer</c> or <c>RWByteAddressBuffer</c>.</summary>
-    Buffer = 2,
-    /// <summary>A depth attachment, which only a geometry pass writes and nothing samples.</summary>
-    Depth = 3,
 }
 /// <summary>Identifies how a fullscreen pass's vertex stage obtains the triangle's corners.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineVertexInput>))]
@@ -119,4 +109,6 @@ public enum ShaderPipelineCountBasis : byte {
     InstanceMaskWords = 7,
     /// <summary>Per word of the instance grid, which the host derives from its instances.</summary>
     InstanceGridWords = 8,
+    /// <summary>Per voxel of the SDF brick pool the host provisions for its world.</summary>
+    BrickPoolVoxels = 9,
 }

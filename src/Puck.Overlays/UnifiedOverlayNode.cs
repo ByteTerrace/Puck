@@ -787,7 +787,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
 
         var pixels = m_readback.Read(
             bytesPerPixel: 4,
-            deviceContext: m_deviceContext,
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: m_height,
             sourceImageHandle: m_renderTarget!.ImageHandle,
@@ -854,6 +853,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         // neither necessary nor safe.
         RetireForExit(exit: OverlayFrameExit.DeviceLost);
         ReleaseGpuResources();
+        m_capture.RefuseForDeviceLoss();
         m_inner.OnDeviceLost();
     }
     /// <inheritdoc/>

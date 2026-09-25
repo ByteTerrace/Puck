@@ -195,7 +195,7 @@ internal static class ParityCompareCommand {
             Gate/state/pixel-verdict comparison of two already-captured manifest runs.
 
             Per capture, in order: a content gate (a capture its producer refused — cameraInside, busy,
-            stale, failed, unserved — a capture or frame absent from either side, or a census below its
+            stale, failed, unserved, deviceLost — a capture or frame absent from either side, or a census below its
             station's floor refuses the capture before any pixel comparison), an exact stateHash check, and
             a per-tile pixel check (any tile exceeding its station's mean or max threshold fails the
             capture). The gate, state, and pixel checks are independent verdicts — a gate failure skips the

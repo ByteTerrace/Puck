@@ -7,7 +7,7 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "fixtures": [
-    "resample.pipeline.json",
+    "resample.graph.json",
     "seed.hlsl"
   ],
   "positive": {

@@ -21,15 +21,21 @@ document; absent: `captures/` under the run's state root, never the working
 directory; overridable by
 `--capture-dir`), rewritten as each capture ends, with exactly one entry per armed capture: the frame
 showing its tick, or a named `refusal` (`cameraInside` when
-`map(cameraPos) <= 0`, `busy`, `stale`, `failed`, `unserved`) with a
+`map(cameraPos) <= 0`, `busy`, `stale`, `failed`, `unserved`, `deviceLost`
+when the graphics device was lost while it was armed) with a
 `detail` naming the ticks.
 
 Offscreen, the host holds its clock for a capture: the pump steps no tick past
 an armed capture's tick until the capture is served or refused, whatever keeps
 the render chain from serving it (a cold-cache pipeline build, a device
-rebuild). The hold is bounded by `WorldCaptureScheduler.HoldBudgetSeconds` (60)
-summed over the run; past it the capture is refused as `unserved` with the
-chain's reason ("the engine's pipelines never installed") and the run steps on.
+rebuild). The hold counts from readiness (`IWorldEngineReadiness`): time held
+while the engine is not ready is bounded by
+`WorldCaptureScheduler.BuildHoldBudgetSeconds` (180), and time held once it is
+ready by `WorldCaptureScheduler.HoldBudgetSeconds` (60), each summed over the
+run; past either the capture is refused as `unserved`, naming the pipeline
+build and its progress when the build spent it, and the run steps on. A script
+that reads rendered work waits with `world.wait ready <seconds>`, never a tick
+count.
 A capture still owed at the run's end is refused before the render root is
 disposed (`IFixedStepSimulation.SettleOwedFrames`). The windowed host never
 holds. `world.counters` shows the hold under `world.captures`

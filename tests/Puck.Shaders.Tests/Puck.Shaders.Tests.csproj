@@ -33,7 +33,7 @@
         <!-- The film-grain variant hashes with sdfPcg3d, so the interpreter include and the files it includes resolve
              from the linked SDF directory. -->
         <Content Include="..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-vm.hlsli;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-isa.hlsli;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-ellipse.hlsli;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-parts.hlsli" Link="Assets\Shaders\Sdf\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-        <!-- Package fixtures: pipeline documents, sources, includes, and malformed manifests the package laws copy into
+        <!-- Package fixtures: graph documents, sources, includes, and malformed manifests the package laws copy into
              a scratch directory. Plain content, never fed to the shader recipe, because the laws compile them. -->
         <Content Include="Assets\ShaderPackages\**" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>

@@ -74,7 +74,7 @@ public sealed class ReleaseProfileLawTests {
             ? null
             : new QualificationPipelineRows(
                 Layout: JsonNode.Parse(json: Layout)!.AsObject(),
-                Source: "../pipelines/ink.pipeline.json"
+                Source: "../pipelines/ink.graph.json"
             ));
 
         Assert.True(condition: QualificationPlan.TryWrite(
@@ -201,6 +201,13 @@ public sealed class ReleaseProfileLawTests {
         Assert.Equal(actual: script.Expectation.WorldReloads, expected: 2);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.counters --json")), expected: 4);
         Assert.Equal(actual: lines.Count(predicate: static line => (line == "world.wait 60")), expected: 2);
+        Assert.Equal(
+            actual: lines.Where(predicate: static line => line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "world."
+            )).Take(count: 2),
+            expected: ["world.cadence off", $"world.wait ready {QualificationPlan.ReadySeconds}"]
+        );
     }
     [Fact]
     public void APipelineCellArmsWhatItsExpectationCounts() {
@@ -221,7 +228,7 @@ public sealed class ReleaseProfileLawTests {
         Assert.Contains(collection: lines, expected: "pipeline.wait ink resized 640 400 40");
         Assert.Contains(collection: lines, expected: "pipeline.wait ink resized 1280 800 40");
         Assert.Contains(collection: lines, expected: "pipeline.wait ink counted 4 40");
-        Assert.Contains(collection: lines, expected: "pipeline.load ink ../pipelines/ink.pipeline.json");
+        Assert.Contains(collection: lines, expected: "pipeline.load ink ../pipelines/ink.graph.json");
         Assert.Contains(collection: lines, filter: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set views.layouts ") && line.Contains(comparisonType: StringComparison.Ordinal, value: "\"pipeline\":null")));
         Assert.Contains(collection: lines, filter: static line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set views.layouts ") && line.Contains(comparisonType: StringComparison.Ordinal, value: "\"width\":0.5")));
     }
@@ -242,7 +249,7 @@ public sealed class ReleaseProfileLawTests {
 
         static QualificationPipelineRows Rows(string layout) => new(
             Layout: JsonNode.Parse(json: layout)!.AsObject(),
-            Source: "ink.pipeline.json"
+            Source: "ink.graph.json"
         );
 
         Assert.False(condition: QualificationPlan.TryWrite(
@@ -263,7 +270,7 @@ public sealed class ReleaseProfileLawTests {
     [Fact]
     public void RowsAreReadFromWhatTheWorldAuthors() {
         var pipeline = new QualificationPipeline(Instance: "ink", Layout: "pipeline", Loads: 1, Reloads: 1, Resizes: 1, SettleFrames: 4);
-        var world = string.Concat(str0: """{"views":{"layouts":[""", str1: Layout, str2: """],"pipelines":[{"name":"ink","source":"../pipelines/ink.pipeline.json"}]}}""");
+        var world = string.Concat(str0: """{"views":{"layouts":[""", str1: Layout, str2: """],"pipelines":[{"name":"ink","source":"../pipelines/ink.graph.json"}]}}""");
 
         Assert.True(condition: QualificationPlan.TryReadRows(
             pipeline: pipeline,
@@ -271,7 +278,7 @@ public sealed class ReleaseProfileLawTests {
             rows: out var rows,
             worldText: world
         ), userMessage: reason);
-        Assert.Equal(actual: rows!.Source, expected: "../pipelines/ink.pipeline.json");
+        Assert.Equal(actual: rows!.Source, expected: "../pipelines/ink.graph.json");
         Assert.False(condition: QualificationPlan.TryReadRows(
             pipeline: (pipeline with { Layout = "absent" }),
             reason: out var noLayout,

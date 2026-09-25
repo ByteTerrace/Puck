@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Puck.Assets;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -10,11 +11,11 @@ namespace Puck.Shaders;
 /// the identity of that definition's parameter schemas. A host records the read its installed graph was compiled
 /// from, and a commit of that instance's parameter overrides is checked against a fresh read, so a value tuned
 /// against one revision of a source is never recorded against another.</summary>
-/// <remarks>For a pipeline document or a one-off shader, the source identity covers only the file the instance names;
+/// <remarks>For a graph document or a one-off shader, the source identity covers only the file the instance names;
 /// its pass sources and includes are not part of it. For a package, it is the pin of the canonical manifest, which pins
 /// every file of the source closure, so an edit anywhere in the closure is a different source.</remarks>
 public sealed class ShaderPipelineSource {
-    private ShaderPipelineSource(string path, ShaderPipelineDefinition definition, string sourceIdentity) {
+    private ShaderPipelineSource(string path, RenderGraphDefinition definition, string sourceIdentity) {
         Path = path;
         Definition = definition;
         SourceIdentity = sourceIdentity;
@@ -26,7 +27,7 @@ public sealed class ShaderPipelineSource {
     /// changes which values a pass admits.</summary>
     public string ConfigIdentity { get; }
     /// <summary>Gets the definition the source declares.</summary>
-    public ShaderPipelineDefinition Definition { get; }
+    public RenderGraphDefinition Definition { get; }
     /// <summary>Gets the full path that was read: the source file, or the package directory.</summary>
     public string Path { get; }
     /// <summary>Gets the <see cref="ContentPin"/> text of the source file's bytes, or of a package's canonical
@@ -45,12 +46,12 @@ public sealed class ShaderPipelineSource {
     /// <summary>Computes the identity of a definition's parameter schemas, as <see cref="ConfigIdentity"/> does.</summary>
     /// <param name="definition">The pipeline definition.</param>
     /// <returns>The <see cref="ContentPin"/> text of the canonical schema listing.</returns>
-    public static string ConfigIdentityOf(ShaderPipelineDefinition definition) {
+    public static string ConfigIdentityOf(RenderGraphDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var builder = new StringBuilder();
 
-        foreach (var pass in definition.Passes.OrderBy(keySelector: static pass => pass.Name, comparer: StringComparer.Ordinal)) {
+        foreach (var pass in definition.ShaderPasses.OrderBy(keySelector: static pass => pass.Name, comparer: StringComparer.Ordinal)) {
             if (pass.Config is not { } config) {
                 continue;
             }
@@ -74,8 +75,8 @@ public sealed class ShaderPipelineSource {
         return ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: builder.ToString())).ToString();
     }
     /// <summary>Reads a pipeline instance's source the way <see cref="ShaderPackager.LoadSource"/> loads it: a directory
-    /// as a <c>puck.shader.package.v1</c> package, a <c>.json</c> path as a pipeline document, and an <c>.hlsl</c> path as a
-    /// one-off shader forming a one-pass pipeline.</summary>
+    /// as a <c>puck.shader.package.v1</c> package, a <c>.json</c> path as a graph document, and an <c>.hlsl</c> path as a
+    /// one-off shader forming a one-pass graph.</summary>
     /// <param name="name">The instance name, which names a one-off shader's pipeline. A package's pipeline is named by
     /// its manifest.</param>
     /// <param name="path">The full path of the source.</param>
@@ -164,7 +165,7 @@ public sealed class ShaderPipelineSource {
         }
 
         foreach (var (passName, config) in overrides.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
-            var pass = Definition.Passes.FirstOrDefault(predicate: candidate => string.Equals(
+            var pass = Definition.ShaderPasses.FirstOrDefault(predicate: candidate => string.Equals(
                 a: candidate.Name,
                 b: passName,
                 comparisonType: StringComparison.Ordinal

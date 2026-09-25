@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -195,7 +196,13 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
             drainQueue &&
             (0 != m_fence)
         ) {
-            WaitForGpu();
+            _ = DirectXCommandCalls.Drain(
+                calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+                fence: ((ID3D12Fence*)m_fence),
+                fenceEvent: m_fenceEvent,
+                fenceValue: ref m_fenceValue,
+                queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)
+            );
         }
 
         if (m_imageViewToken.IsAllocated) {
@@ -219,14 +226,14 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
             m_fenceEvent = HANDLE.Null;
         }
     }
-    private void WaitForGpu() {
-        DirectXFence.SignalAndWait(
-            deviceContext: m_deviceContext,
+    private void WaitForGpu() =>
+        DirectXCommandCalls.SignalAndWait(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+            fence: ((ID3D12Fence*)m_fence),
             fenceEvent: m_fenceEvent,
-            fenceHandle: m_fence,
-            fenceValue: ref m_fenceValue
+            fenceValue: ref m_fenceValue,
+            queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)
         );
-    }
 
     /// <inheritdoc/>
     public void FinalizeForExport() {

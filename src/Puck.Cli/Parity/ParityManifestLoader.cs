@@ -16,7 +16,7 @@ internal static class ParityManifestLoader {
     private static readonly Func<string, Exception> Refusal = static message => new ParityDocumentRefusal(message: message);
     // The capture producer's refusal vocabulary, spelled as the producer writes it (Puck.World's WorldCaptureRefusal,
     // camelCase). A kind outside it is drift between producer and comparator, refused rather than guessed at.
-    private static readonly string[] RefusalKinds = ["cameraInside", "busy", "stale", "failed", "unserved"];
+    private static readonly string[] RefusalKinds = ["cameraInside", "busy", "stale", "failed", "unserved", "deviceLost"];
 
     private static bool IsStateHash(string value) {
         if (value.Length != 16) {

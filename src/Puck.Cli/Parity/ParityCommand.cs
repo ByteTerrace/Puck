@@ -16,7 +16,7 @@ internal static class ParityCommand {
     private const string SdfDocumentPath = "tests/Puck.Parity/parity.sdf.json";
     private const string WorldPath = "tests/Puck.Parity/parity.world.json";
 
-    private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 600);
+    private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 900);
 
     private static int Run() {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
@@ -102,12 +102,11 @@ internal static class ParityCommand {
             backend: backend,
             budget: SuiteBudget,
             // A SAFETY NET, not the leg length: the script closes with quit, so a healthy leg ends as soon as its
-            // 1180-tick wait releases. The net only has to outlast a slow machine — an offscreen leg on the RTX 2060
-            // desktop paces one produced frame per tick and needs ~45 s for the wait alone, so 40 s (the pre-1180
-            // value) cut legs off before wire.errors on every other run there. A cold driver shader cache adds at most
-            // the capture hold budget (WorldCaptureScheduler.HoldBudgetSeconds, 60 s) while the host holds its clock
-            // at the first capture, which still ends inside this net.
-            exitAfterSeconds: 150,
+            // 1180-tick wait releases. The net outlasts a slow machine's whole leg: an offscreen leg paces one produced
+            // frame per tick (about 45 s for the wait on an RTX 2060), and the host may hold its clock at a capture for
+            // at most WorldCaptureScheduler.BuildHoldBudgetSeconds while the engine's pipeline set builds on a cold
+            // driver cache plus WorldCaptureScheduler.HoldBudgetSeconds once it is ready.
+            exitAfterSeconds: 300,
             process: out _,
             runDirectory: runDirectory,
             script: script,

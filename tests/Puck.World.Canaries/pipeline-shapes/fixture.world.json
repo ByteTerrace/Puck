@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "shapes",
-        "source": "shapes.pipeline.json",
+        "source": "shapes.graph.json",
         "timeScale": 1
       }
     ]

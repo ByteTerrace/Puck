@@ -416,10 +416,6 @@ public static class WorldBootComposition {
                 machines: sp.GetRequiredService<WorldMachineHost>(),
                 cameraCapture: sp.GetRequiredService<ICameraCaptureService>(),
                 windowCapture: sp.GetRequiredService<INativeImageCaptureService>(),
-                // The backend-neutral surface-transfer seam the Vulkan host's camera GPU tier imports its shared
-                // targets through: the services of whichever presenter's device context composes. A headless boot has
-                // no device context (null) and never publishes, so nothing reaches for it.
-                surfaceTransfers: sp.GetService<IGpuDeviceContext>()?.Services.SurfaceTransferFactory,
                 cameras: definition.Cameras,
                 anchors: sp.GetRequiredService<WorldClient>(),
                 stamps: sp.GetRequiredService<WorldStampPool>(),
@@ -591,11 +587,8 @@ public static class WorldBootComposition {
                     )
                     : string.Empty
                 ),
+                readiness: sp.GetService<IWorldEngineReadiness>(),
                 server: server,
-                unservedReason: ((renderProbe is null)
-                    ? null
-                    : () => renderProbe.Node?.UnservedCaptureReason
-                ),
                 worldFile: Path.GetFileName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath)
             );
         });
@@ -1034,6 +1027,7 @@ public static class WorldBootComposition {
         AddWorldPipelineCache(services: services);
         AddWorldShaderWork(services: services);
         AddWorldBakes(services: services);
+        services.AddGpuCreationFaults();
         // The render levers need only the render settings, the session-lever submit and the render probe registered
         // below, so an offscreen boot honors the same engine-wide options and debug views a windowed one does (the
         // presentation-only console modules stay unregistered).
@@ -1059,6 +1053,8 @@ public static class WorldBootComposition {
         // Resolved eagerly by the IRenderNode factory below, before anything touches the GPU — see its own remarks
         // for the per-backend bring-up (surfaceless Direct3D 12; a never-shown window for Vulkan).
         services.AddSingleton<WorldOffscreenGpuActivation>();
+        // The offscreen host rebuilds a lost device through the activation that brought it up.
+        services.AddSingleton<IDeviceRebuild>(implementationFactory: static sp => sp.GetRequiredService<WorldOffscreenGpuActivation>());
 
         services.AddSingleton(implementationFactory: static sp => {
             var hostSettings = sp.GetRequiredService<WorldHostSettings>();
@@ -1074,6 +1070,8 @@ public static class WorldBootComposition {
         // and the SDF document intake itself. None of these touch a window or the GPU.
         services.AddSingleton<WorldRenderProbe>();
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
+        // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
+        services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<WorldSeatViewports>();
         services.AddSingleton<MarkerStore>();
@@ -1213,6 +1211,7 @@ public static class WorldBootComposition {
         AddWorldPipelineCache(services: services);
         AddWorldShaderWork(services: services);
         AddWorldBakes(services: services);
+        services.AddGpuCreationFaults();
 
         // The world speaker device: the hosted service owning the mixer + the WASAPI governor/pump threads. One
         // dedicated bounded-join worker owns the device lifecycle, so a stalled device cannot wedge shutdown; a
@@ -1413,6 +1412,8 @@ public static class WorldBootComposition {
         // through — a mutable holder the render-root factory below fills in once the engine node exists.
         services.AddSingleton<WorldRenderProbe>();
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
+        // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
+        services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
 
         // The first-party puck.sdf.v1 geometry-document emitter (world.sdf.load) — a singleton so the command

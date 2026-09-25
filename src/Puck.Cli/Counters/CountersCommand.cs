@@ -197,7 +197,9 @@ internal static class CountersCommand {
                 artifact: artifact.Path,
                 backend: backend,
                 budget: SuiteBudget,
-                exitAfterSeconds: 150,
+                // A safety net, not the leg length: it outlasts the script's 180-second world.wait ready deadline and
+                // the ticks after it, so a build that never finishes is named by that wait rather than cut off.
+                exitAfterSeconds: 240,
                 process: out var process,
                 runDirectory: runDirectory,
                 script: script,

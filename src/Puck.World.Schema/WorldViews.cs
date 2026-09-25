@@ -25,7 +25,8 @@ public readonly record struct WorldViewSlot(float X = 0f, float Y = 0f, float Wi
 /// to the shader runtime and its host.</summary>
 /// <param name="Name">The pipeline's stable name (a <c>SafeName</c>, unique within the section) — what a
 /// <see cref="WorldViewSlot.Pipeline"/> names and a <c>pipeline.*</c> console verb addresses.</param>
-/// <param name="Source">Where the pipeline comes from: a pipeline document, a one-off shader source file, or a
+/// <param name="Source">Where the pipeline comes from: a <c>puck.render.graph.v1</c> graph document of shader passes, a
+/// one-off shader source file, which reads as a one-pass graph, or a
 /// <c>puck.shader.package.v1</c> package directory, which loads with its source tree gone. It resolves beside the
 /// document that authors it (<see cref="WorldDocumentPaths"/>), like every relative path a document authors.</param>
 /// <param name="Camera">The authored camera feeding the pipeline frame block's <c>cameraPosition</c>,

@@ -12,7 +12,7 @@
   ],
   "timeoutSeconds": 60,
   "fixtures": [
-    "four-pass.pipeline.json",
+    "four-pass.graph.json",
     "four-pass.world.json"
   ],
   "positive": {

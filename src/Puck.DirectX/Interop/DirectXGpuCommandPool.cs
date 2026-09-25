@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.System.Com;
@@ -36,7 +37,10 @@ public sealed unsafe class DirectXGpuCommandPool : IGpuCommandPool {
             riid: ID3D12GraphicsCommandList.IID_Guid,
             type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
-        ((ID3D12GraphicsCommandList*)commandList)->Close();
+        DirectXCommandCalls.Close(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
+            commandList: ((ID3D12GraphicsCommandList*)commandList)
+        );
 
         m_token = GCHandle.Alloc(value: new DirectXCommandBufferState {
             Allocator = ((nint)commandAllocator),

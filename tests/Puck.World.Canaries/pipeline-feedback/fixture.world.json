@@ -59,7 +59,7 @@
       {
         "camera": null,
         "name": "feedback",
-        "source": "feedback.pipeline.json",
+        "source": "feedback.graph.json",
         "timeScale": 1
       }
     ]

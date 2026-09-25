@@ -106,17 +106,24 @@ ship, and a runtime re-check would duplicate the build's gate.
 
 ## Multi-pass shader pipelines
 
-`ShaderPipelineDefinition` describes a connected graph of compute, fullscreen
-and geometry passes. Each pass names its HLSL source and declares its entry point, workgroup, resource
-inputs and outputs, and optional per-pass config. `ShaderPipelineCompiler` validates the
-immutable graph before `ShaderPipelineLoader` snapshots sources/includes and
-compiles every live pass to both SPIR-V and DXIL. A failed pass refuses the
-whole candidate so a running renderer can keep its last installed graph.
+A pipeline is a [frame graph](#frame-graphs) of shader passes that a world
+names: a `puck.render.graph.v1` document (`RenderGraphDefinition`) whose
+compute, fullscreen and geometry passes each name an HLSL source and declare
+an entry point, workgroup, resource inputs and outputs, and optional per-pass
+config. `RenderGraphCompiler` checks the document and plans it with
+`ShaderPipelineCompiler` before `ShaderPipelineLoader` snapshots
+sources/includes and compiles every live pass to both SPIR-V and DXIL. A
+pipeline's host offers no package (`RenderGraphCompiler.ShaderPasses`), so a
+graph naming one is refused as `RENDERGRAPH_PACKAGE_UNKNOWN`. A failed pass
+refuses the whole candidate so a running renderer can keep its last installed
+graph.
 
-HLSL is the one source language. A one-off `.hlsl` source loads as a compute
-pass with entry point `main`; any other extension requires a JSON pipeline.
-Pipeline-level `config` is currently rejected; declare fields on each pass so
-the packed parameter block has one unambiguous ABI.
+HLSL is the one source language. A one-off `.hlsl` source loads as a one-pass
+graph (`RenderGraphDefinition.FromShaderSource`): a compute pass with entry
+point `main` writing one image; any other extension requires a graph document.
+Config is declared on each pass, so the packed parameter block has one
+unambiguous ABI; the document has no top-level `config`, and the reader refuses
+one as an unknown member.
 
 ### The frame block
 
@@ -197,12 +204,12 @@ declared extent (`SHADERPIPE_ATTACHMENT_EXTENT`).
 ## Frame graphs
 
 A `puck.render.graph.v1` document describes a frame as passes connected by
-named image and buffer versions. It has the pipeline document's members with
-the same shapes, `name`, `resources`, `passes` and `outputs`, plus `packages`:
-passes of engine work named by package instead of by shader source. A
-pipeline document's content is therefore a graph with no packages, and a
-pipeline is a graph a world names. `puck schema` writes the document's schema
-to `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
+named image and buffer versions. It is the one pass-graph document: its members
+are `name`, `resources`, `passes` and `outputs`, plus `packages`, passes of
+engine work named by package instead of by shader source. A pipeline is a
+graph of shader passes alone that a world names. A graph document's file name
+ends in `.graph.json`. `puck schema` writes the document's schema to
+`src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 
 ```json
 {
@@ -226,32 +233,58 @@ to `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 ```
 
 A package pass names a package id and binds one version to each of the
-package's ports, inputs then outputs, in port order. Every port carries an
-image, and a package binds its own descriptors, so a package reference
-declares no binding. `RenderGraphPackageCatalog` is what a host offers:
+package's ports, inputs then outputs, in port order. A port
+(`RenderGraphPackagePort`) carries an image or a buffer, and a buffer port
+states its `strideBytes` and `count` as a buffer resource does. The version a
+pass binds must carry what its port carries: its kind, and for a buffer port
+the same stride and count. A package binds its own descriptors, so a package
+reference declares no binding. `RenderGraphPackageCatalog` is what a host
+offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one output | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
-| `overlay` | one input, one output | The console, HUD, toasts and cursor drawn over the input. |
-| `resample` | one input, one output | The input reconstructed at the output's extent: an exact copy at the same extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its kernel is `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`. |
-| `post.<set id>` | one input, one output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
+| `sdf.world` | no input, one image output | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
+| `sdf.bricks` | no input, one buffer output | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
+| `overlay` | one image input, one image output | The console, HUD, toasts and cursor drawn over the input. |
+| `resample` | one image input, one image output | The input reconstructed at the output's extent: an exact copy at the same extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its kernel is `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`. |
+| `post.<set id>` | one image input, one image output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
 
-`RenderGraphCompiler` checks the package passes against the catalog, then plans
-the whole graph with `ShaderPipelineCompiler`. The planner sees a package pass
-as its own kind, `Package`, whose source is its package id: it binds no
-descriptors and compiles nothing, and it reaches its versions as a compute pass
-does. One planner orders every pass, versions and barriers every access, and
+`RenderGraphCompiler` checks the schema tag and the package passes against the
+catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
+planner. Package work enters the planner only through the graph compiler; the
+planner's own document entry refuses a graph naming package passes
+(`SHADERPIPE_PACKAGE_PASS`). The planner sees a package pass as its own kind,
+`Package`, whose planned pass's declaration is the compute shape it reaches its
+versions by, with the package id as its source, and the graph plan's step names
+its package: it binds no descriptors and compiles nothing. A pipeline host
+offers no package, so the packager and the loader see shader passes alone; a
+pipeline candidate (`CompiledShaderPipeline`) holds a package pass without a
+compiled shader, and the render node records it through its package's recorder
+(see the graph runtime below). One planner orders
+every pass, versions and barriers every access, and
 keeps history. A version declared `External` is an input the host binds, such
 as another instance's output, and `RenderGraphPlan.Inputs` lists them. A graph
 that reads its own output reads a `history` version's previous frame, exactly
-as a pipeline does. The refusals are `RENDERGRAPH_SCHEMA`,
+as a pipeline does.
+
+A buffer edge is an external buffer version bound to another instance's buffer
+output, such as a view reading the brick pool `sdf.bricks` publishes. The
+planner treats it as it treats an external image: the first read in a frame
+starts from the host's state and records a buffer barrier into the read state,
+and a read after a pass of the same graph wrote the buffer records a buffer
+barrier from that write. `RenderGraphPlan.KindOf` names what a version carries,
+which is the kind of the instance edge bound to it. Only the package that
+writes a structured or counted buffer publishes it; any other structured or
+counted output is refused with `SHADERPIPE_PACKAGE_STORAGE`.
+
+The refusals are `RENDERGRAPH_SCHEMA`,
 `RENDERGRAPH_DOCUMENT_SHAPE`, `RENDERGRAPH_PACKAGE_UNKNOWN`,
-`RENDERGRAPH_PACKAGE_PORTS`, `RENDERGRAPH_PACKAGE_BINDING`,
-`RENDERGRAPH_PACKAGE_INPUT` and `RENDERGRAPH_PACKAGE_OUTPUT`. A planner refusal
-keeps its `SHADERPIPE_` code. A pass `kind` is `Compute`, `Fullscreen` or
-`Geometry`: only the `packages` member declares package work, so the reader
-refuses a pass that names `Package` at its `kind`.
+`RENDERGRAPH_PACKAGE_PORTS`, `RENDERGRAPH_PACKAGE_BINDING`, and
+`RENDERGRAPH_PACKAGE_INPUT` and `RENDERGRAPH_PACKAGE_OUTPUT` for a version that
+does not carry what its port carries, which name the pass, the version and the
+port. A planner refusal keeps its `SHADERPIPE_` code. A pass `kind` is
+`Compute`, `Fullscreen` or `Geometry`: only the `packages` member declares
+package work, so the reader refuses a pass that names `Package` at its `kind`.
 
 A world names graph instances in `views.graphs`. Each row names a graph
 `source`, relative to the world document as a `views.pipelines` source is, an
@@ -272,7 +305,10 @@ another row's output:
 An input that names its own row reads that row's previous frame. An input
 marked `previousFrame` takes its producer's last completed frame, which lets
 two rows show each other. The validator refuses any other loop of inputs
-through the scheduler's own rule, naming every instance in the loop.
+through the scheduler's own rule, naming every instance in the loop. A row's
+instance reads every producer as an image and publishes an image: the rows do
+not yet take their edges' kinds from their graphs' plans, so no world row
+declares a buffer edge.
 `graphBudget` is the scheduler's price ceiling on the instances the display
 does not show directly. How the rows are scheduled is in
 [hosting](hosting.md#render-lifecycle-and-publication). Each row appears in
@@ -281,9 +317,19 @@ ceiling (one display), its rate, and the passes its graph plans to. The server
 plans each row's source for that price. A document analysed without its
 sources reports why the passes are unplanned.
 
-The live renderer does not run graphs yet. `views.pipelines`, the SDF engine's
-child composition and `ViewStack` still render every view, and moving them onto
-graph instances is P11b in
+`RenderGraphRuntime` runs a set of instances. Each frame it schedules the set,
+then renders each scheduled instance through its own `ShaderPipelineRenderNode`
+at the scheduled extent. One submission per instance records the graph's
+shader passes and, through the recorder `RenderGraphPackageRecorders` holds
+for each package id, its package passes, all in the planner's order. A
+`RenderGraphRuntimeGraph` binds each external version to a producer instance;
+the runtime binds it to the frame of that producer's output the schedule
+names, and to a transparent-black stand-in while the producer has none. A
+bound image may have any extent. Captures read the root instance's output,
+and each instance counts its own passes. The live renderer does not use the
+runtime yet: `views.pipelines`, the SDF engine's child composition and
+`ViewStack` still render every view, and no host registers a package
+recorder. Moving them onto graph instances is P11b in
 [the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
 
 ## Pass interfaces
@@ -435,7 +481,7 @@ any non-`float` type by return value. `pass.Config` reads the live values back.
 | `ShaderSetManifest` | A parsed, validated `puck.shader.manifest.v1` document with its `FrameLayout`, load `Directory`, and the validated `Bytecode` of every stage it read, keyed by `"<stem><extension>"` — a consumer building an executor from it reads a stage's bytes there instead of reading the file again. |
 | `ShaderSetCatalog` | The shipped sets under a directory tree, by id; `Shipped` is the deploy's own `Assets/Shaders` tree. |
 | `RenderGraphDefinition` / `RenderGraphPackagePass` | A [frame graph](#frame-graphs) document and one package pass. |
-| `RenderGraphPackageCatalog` / `RenderGraphPackage` | The packages a host offers graphs, by id, and one package's ports. |
+| `RenderGraphPackageCatalog` / `RenderGraphPackage` / `RenderGraphPackagePort` | The packages a host offers graphs, by id, and one package's typed ports. |
 | `RenderGraphCompiler` / `RenderGraphPlan` / `RenderGraphStep` / `RenderGraphSource` | Validation and planning through the pipeline planner; the plan; one planned pass; reading and planning a graph file. |
 | `ShaderConfigField` / `ShaderConfigValues` | One config schema field; a document's bound values. |
 | `ShaderConfigBinding` | The config-schema binder every manifest with a `config` block shares—`TryBind`, `JsonSchema`, `ValidateSchema`. |
@@ -594,10 +640,10 @@ pipeline is never called one. This runtime's
 former “study” name was accidental; neither the runtime, the document
 vocabulary, nor a compatibility alias restores it.
 
-`puck.shader.pipeline.v1` documents declare resources, passes and outputs.
-JSON is the authoritative pipeline model; any future `.puck` pipeline
+A pipeline's `puck.render.graph.v1` document declares resources, passes and
+outputs. JSON is the authoritative graph model; any future `.puck` graph
 vocabulary must lower into it and reuse its validation rather than introduce a
-second graph compiler. A world names a pipeline document, a one-off shader or a
+second graph compiler. A world names a graph document, a one-off shader or a
 [package](#packaging-a-pipeline) by path, and that path loads the JSON model: no
 `.puck` vocabulary for authoring one exists yet.
 
@@ -681,7 +727,8 @@ more pieces of vocabulary:
   host resolves: `Extent` pixels, program `Instances`, `ProgramWords`,
   `Viewports`, `Tiles` of one viewport, `DynamicTransforms`, and the
   `InstanceMaskWords` of one tile and `InstanceGridWords` the host derives from
-  its instances. The SDF engine's cull buffer, for one, is
+  its instances, and the `BrickPoolVoxels` of the world's SDF brick pool. The
+  SDF engine's cull buffer, for one, is
   `[{ "per": ["Viewports", "Tiles"], "elements": 4 }, { "per": ["Viewports", "Instances"], "elements": 12 }]`
   floats. A term names at least one basis and each basis once, and no two terms
   name the same bases, so a count has one spelling and a size that scales with
@@ -691,8 +738,9 @@ more pieces of vocabulary:
   buffer and its terms.
 
 A shader pass declaring a `Groups` or `Indirect` dispatch is refused
-(`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding, or a document
-publishing, a buffer with a stride or a count (`SHADERPIPE_PACKAGE_STORAGE`).
+(`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding a buffer with
+a stride or a count, or a document publishing one no package pass writes
+(`SHADERPIPE_PACKAGE_STORAGE`).
 Malformed shapes and layouts are refused as `SHADERPIPE_DISPATCH_SHAPE`,
 `SHADERPIPE_DISPATCH_ARGUMENTS`, `SHADERPIPE_BUFFER_STRIDE` and
 `SHADERPIPE_BUFFER_COUNT`.
@@ -767,10 +815,10 @@ indices, binds both ranges and draws the indices.
 
 ### Loading and installing
 
-See the [three-pass ink pipeline](../../src/Puck.World/Assets/pipelines/ink.pipeline.json)
+See the [three-pass ink pipeline](../../src/Puck.World/Assets/pipelines/ink.graph.json)
 for a complete example: a floating-point feedback simulation feeds a color
 pass, followed by a fullscreen HLSL finish. Each source file lives beside its
-pipeline document. Source paths in the pipeline resolve relative to that
+graph document. Source paths in the pipeline resolve relative to that
 document; the world's path to the pipeline resolves relative to the world.
 
 The loader compiles the whole candidate before the host installs it, and
@@ -779,7 +827,7 @@ reports one `ShaderPipelineLoadStatus`. `Compiled` carries the candidate.
 changed during compilation, and the host schedules the whole pipeline again.
 `Unsupported` means a required shader tool is absent from this environment.
 A failed pass leaves the last successful pipeline running. Watched editing includes
-the pipeline document, shader files and includes. A candidate captures each
+the graph document, shader files and includes. A candidate captures each
 source revision, and a source edit during compilation triggers a debounced
 whole-pipeline retry. Superseded compiler tasks are canceled and retired after
 their native processes finish. Retiring the replaced graph accounts for its
@@ -980,6 +1028,17 @@ the budget beside `owned` and the installed graph's `steady` and `peak`, where
 `peak` is what a reload of the installed graph would reach from what the node
 owns now.
 
+A candidate that fits can still fail while it allocates, when the device
+refuses a creation. The node disposes exactly what the candidate created,
+keeps the installed graph running, and reports the failure as `LastSwapError`
+the same way. `gpu.faults` makes that happen on a real device: `gpu.faults arm
+<kind> [<n>]` fails the nth creation of a kind counted from the arming, or the
+next one, with `GPU_CREATION_FAULT` before the call reaches the device. The
+kinds are `pipeline`, `buffer`, `image`, `render-pass`, `framebuffer`,
+`shader-module`, `command-pool` and `bindings-pool`. `gpu.faults disarm`
+clears every fault and count, and `gpu.faults list` prints them. The verb
+answers the operator alone, so no world document reaches it.
+
 ### Per-instance overrides
 
 A world's `views.pipelines` row can override its source's parameters for that
@@ -991,7 +1050,7 @@ names the image version the instance shows, and `timeScale` sets its clock
 rate:
 
 ```json
-{ "name": "ink", "source": "../pipelines/ink.pipeline.json", "timeScale": 0,
+{ "name": "ink", "source": "../pipelines/ink.graph.json", "timeScale": 0,
   "output": "image", "overrides": { "visualize": { "exposure": 0.5 } } }
 ```
 
@@ -1029,7 +1088,7 @@ graph that failed to compile is never the installed one, so its values are
 never committed. `world.save` writes only committed values, through the atomic
 file writer, so a failed write leaves the previous document complete.
 
-For a pipeline document or a one-off shader, the source identity covers only
+For a graph document or a one-off shader, the source identity covers only
 the file the row names; its pass sources and includes are outside it. For a
 package, it is the content pin of the canonical manifest, which pins every file
 of the source closure, so an edit anywhere in a package is a changed source.
@@ -1118,7 +1177,7 @@ path. Only the `default` variant is built today; every variant of a pass reads
 the same interface, so a quality tier cannot change what a pass reads.
 
 ```sh
-puck shaders package src/Puck.World/Assets/pipelines/ink.pipeline.json --output artifacts/ink
+puck shaders package src/Puck.World/Assets/pipelines/ink.graph.json --output artifacts/ink
 puck shaders pipeline artifacts/ink
 ```
 
@@ -1152,7 +1211,7 @@ manifest's own name is refused.
 |-----|---------|
 | `$schema` | `puck.shader.package.v1`. |
 | `name` | The pipeline's name. |
-| `document` | The logical path loading starts from: the pipeline document or the one-off shader. |
+| `document` | The logical path loading starts from: the graph document or the one-off shader. |
 | `compiler` | `{ version, tools: [ { name, version } ] }`: the compiler revision every pass compiled under, and the first line each native tool's `--version` query printed. |
 | `capabilities` | `{ targetFloor: { vulkan, shaderModel }, imageFormats, buffers, workgroupInvocations, parameterBytes }`, derived from the plan: the target every stage compiles to, every image format a storage declares, whether a raw buffer is bound, the largest compute workgroup, and the largest pass parameter block. |
 | `files[]` | `{ path, pin, bytes }` for every authored file of the closure, ordered by path. `pin` is the `sha256/<hex64>` content pin of the file's UTF-8 text, the same hash the cache key records; `bytes` is its length on disk. |
@@ -1192,7 +1251,7 @@ holds files but no manifest is refused as `SHADERPKG_OUTPUT` rather than
 replaced.
 
 A package is not a sandbox. Loading one runs its GPU code with the same trust
-as a pipeline document on disk.
+as a graph document on disk.
 
 ### Limits
 
@@ -1219,7 +1278,7 @@ instance may hold is bounded separately by its
 
 A `views.pipelines` row's `source` names a package the way it names any other
 source: by path, relative to the world document. A path that is a directory is
-a package; any other path is a pipeline document or a one-off shader.
+a package; any other path is a graph document or a one-off shader.
 
 ```json
 { "name": "ink", "source": "../packages/ink", "overrides": { "visualize": { "exposure": 0.5 } } }
@@ -1281,7 +1340,12 @@ factory seams with a device-free fake. A failure injected at every allocation
 of a replacement is refused, with each created object disposed once and the
 installed graph still producing; the same holds for a replacement that
 publishes a float output, whose preview is part of the count, for a selection
-whose preview cannot be allocated, and for a resize. The budget laws count the
+whose preview cannot be allocated, and for a resize. The same law runs through
+`GpuCreationFaults`, the decorator `gpu.faults` arms on a real device: every
+creation of every kind a replacement makes fails in turn, the refusal names
+its kind and number, disposal is exact, and the same replacement tried again
+installs. `GpuCreationFaultsLawTests` hold the decorator itself: an armed fault
+fires once, at the nth creation of its kind, and never reaches the device. The budget laws count the
 bytes the fake creates independently of the node. For each graph shape (the
 feedback graph with and without carried history, a float output, a buffer
 handoff, a `Position` vertex input and a resize), the planned steady state is
@@ -1335,7 +1399,7 @@ match its render pass and a pipeline whose depth test disagrees with it.
 `ShaderPipelineVertexInputTests` cover the
 `vertex` member. `puck canary pipeline-feedback pipeline-ink pipeline-edit
 pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override
-pipeline-package pipeline-budget pipeline-churn pipeline-geometry pipeline-echo
+pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
 no-device-compile` runs the real World
 offscreen on Vulkan and on Direct3D 12. It checks a float
 history against an arithmetic oracle across pause, reset, step and paused
@@ -1405,13 +1469,20 @@ search path: the shipped ink pipeline, named by source, renders from the build's
 stored package, the tint source is refused by `SHADERPKG_ABSENT`, and the tint
 package renders from its binaries; its discriminating leg names the Moth shader
 under a name no shipped world gives it and alters a package binary, so both are
-refused. Neither the budget nor the churn canary injects an allocation failure on a real device: the
-device factories have no fault seam, so partial-allocation failure is covered
-only by the fake. The suite also compiles every canary
+refused. The fault canary injects an allocation failure on a real device
+through `gpu.faults`: it arms the second image created after a paused feedback
+instance loads the corrected edit, so the edit creates one image and fails at
+the next. `pipeline.wait installed` fails with `GPU_CREATION_FAULT` naming
+image creation 2, `gpu.faults list` reads nothing armed after exactly two image
+creations, `pipeline.inspect` reads the installed graph's 49152 bytes again,
+the installed graph still steps, and the same edit reloaded with nothing armed
+creates its six images and installs. Run with `puck canary --debug-layers`, any
+validation message fails it. Its discriminating leg arms the seventh image,
+which the edit never reaches. The suite also compiles every canary
 document; the broken edit fails in its middle pass. A missing GPU or compiler
 is reported as unsupported, not passed. CPU tests alone do not establish GPU
 correctness. `puck parity` checks its authored
-rendering cases; it is not blanket coverage of arbitrary pipeline documents.
+rendering cases; it is not blanket coverage of arbitrary graph documents.
 
 `ShaderPackageLawTests` hold the source closure and packages over the fixtures
 in `tests/Puck.Shaders.Tests/Assets/ShaderPackages`. They check that a

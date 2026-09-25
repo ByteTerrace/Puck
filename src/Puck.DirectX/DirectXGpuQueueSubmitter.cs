@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -59,12 +60,16 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
+    // The device the fence is on; the context owns it, and a removal is read from it.
+    private readonly nint m_device;
+
     private nint m_fence;
     private HANDLE m_fenceEvent;
     private ulong m_nextValue = 1UL;
     private ulong m_pendingValue; // 0 = no submission outstanding
 
     internal DirectXGpuSubmissionFence(ID3D12Device* device) {
+        m_device = ((nint)device);
         device->CreateFence(
             Flags: default,
             InitialValue: 0,
@@ -116,9 +121,11 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         }
 
         m_pendingValue = m_nextValue++;
-        commandQueue->Signal(
-            Value: m_pendingValue,
-            pFence: ((ID3D12Fence*)m_fence)
+        DirectXCommandCalls.Signal(
+            calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)),
+            fence: ((ID3D12Fence*)m_fence),
+            queue: commandQueue,
+            value: m_pendingValue
         );
     }
 
@@ -128,19 +135,12 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
             return;
         }
 
-        var fence = ((ID3D12Fence*)m_fence);
-
-        if (fence->GetCompletedValue() < m_pendingValue) {
-            fence->SetEventOnCompletion(
-                Value: m_pendingValue,
-                hEvent: m_fenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                dwMilliseconds: uint.MaxValue,
-                hHandle: m_fenceEvent
-            );
-        }
-
+        DirectXCommandCalls.Wait(
+            calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)),
+            fence: ((ID3D12Fence*)m_fence),
+            fenceEvent: m_fenceEvent,
+            value: m_pendingValue
+        );
         m_pendingValue = 0UL;
     }
     /// <inheritdoc/>

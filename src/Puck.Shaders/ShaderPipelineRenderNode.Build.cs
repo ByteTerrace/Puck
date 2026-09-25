@@ -297,7 +297,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
                     build.Passes[planned.Index] = objects;
                     objects.Create(
-                        compiled: pipeline.Shaders[planned.Name],
+                        compiled: pipeline.Shaders.GetValueOrDefault(key: planned.Name),
                         planned: planned,
                         request: request,
                         specs: specs
@@ -351,8 +351,23 @@ public sealed partial class ShaderPipelineRenderNode {
         public IGpuRenderPass? RenderPass;
         public IGpuShaderModule? Secondary;
 
-        public void Create(ShaderPipelinePlannedPass planned, CompiledShader compiled, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs) {
+        public void Create(ShaderPipelinePlannedPass planned, CompiledShader? compiled, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs) {
             var declaration = planned.Declaration;
+
+            // A package pass creates no module or pipeline, and binds its own descriptors: its recorder records it.
+            if (planned.Kind == ShaderPipelinePassKind.Package) {
+                Extent = ResolveExtent(
+                    frame: (request.Key.Width, request.Key.Height),
+                    pass: declaration,
+                    specs: specs
+                );
+
+                return;
+            }
+            if (compiled is null) {
+                throw new InvalidDataException(message: $"Pass '{declaration.Name}' has no compiled shader.");
+            }
+
             var push = PushConstantBinding(
                 sizeBytes: planned.Parameters.SizeBytes,
                 stages: FrameBlockStages

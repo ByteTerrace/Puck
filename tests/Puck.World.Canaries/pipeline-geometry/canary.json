@@ -7,8 +7,8 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "fixtures": [
-    "geometry.pipeline.json",
-    "always.pipeline.json",
+    "geometry.graph.json",
+    "always.graph.json",
     "layers.hlsl",
     "present.hlsl",
     "stripes.hlsl"

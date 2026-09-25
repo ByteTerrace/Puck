@@ -242,9 +242,9 @@ public sealed class SdfCapabilityMatrixLawTests {
             Green: false,
             Members: [
                 "SdfWorldEngine.FrameBufferBytes", "SdfWorldEngine.TileSize", "SdfWorldEngine.MaxFrameUploadTableWords",
-                "SdfWorldEngine.VisibilityRecordBytes", "SdfWorldEngine.VisibilityRecordByteLength", "SdfEngineNode.VisibilityRecordBytes",
+                "SdfWorldEngine.RequireOneCopyDispatch", "SdfWorldEngine.VisibilityRecordBytes",
+                "SdfWorldEngine.VisibilityRecordByteLength", "SdfEngineNode.VisibilityRecordBytes",
                 "SdfWorldEngine.DescriptorPoolSizes",
-                "SdfWorldEngine.RequireOneCopyDispatch",
             ]
         ),
         new(
@@ -252,7 +252,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Equivalent: "captures from the graph's root output",
             Check: "WorldCaptureHoldLawTests; WorldCaptureSchedulerLawTests; puck parity",
             Green: false,
-            Members: ["SdfEngineNode.RequestCapture", "SdfEngineNode.PendingCapturePath", "SdfEngineNode.UnservedCaptureReason"]
+            Members: ["SdfEngineNode.RequestCapture", "SdfEngineNode.PendingCapturePath"]
         ),
         new(
             Capability: "kernel variants and reload",
@@ -261,7 +261,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Green: false,
             Members: [
                 "SdfWorldEngine.InstallReload", "SdfEngineNode.RequestShaderReload", "SdfEngineNode.ShaderReloadStatus",
-                "SdfEngineNode.IsReady",
+                "SdfEngineNode.IsReady", "SdfEngineNode.NotReadyReason",
             ]
         ),
         new(

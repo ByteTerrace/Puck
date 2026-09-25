@@ -11,9 +11,10 @@ namespace Puck.World;
 /// overlay, and the render host here; each is <see langword="null"/> until the renderer is built on the first frame.
 /// It is also the <see cref="IGpuWorkRegistry"/> whose nodes the <c>gpu</c> section of <c>world.counters</c> reports:
 /// the engine node, its hosted children that count their work, the overlay, and the offscreen views
-/// <see cref="WorldScreenBinder"/> registers.
+/// <see cref="WorldScreenBinder"/> registers. It is the host's <see cref="IWorldEngineReadiness"/> too: the engine node's
+/// readiness, not ready until the render factory has composed that node.
 /// </summary>
-internal sealed class WorldRenderProbe : IGpuWorkRegistry {
+internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     private readonly Lock m_gate = new();
     private readonly List<WorkEntry> m_views = [];
 
@@ -37,6 +38,13 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry {
         Device?.Capabilities;
     /// <summary>The SDF engine node the render root wraps, or <see langword="null"/> until the render factory has run.</summary>
     public SdfEngineNode? Node { get; set; }
+    /// <inheritdoc/>
+    public bool IsReady => (Node?.IsReady ?? false);
+    /// <inheritdoc/>
+    public string? NotReadyReason => ((Node is { } node)
+        ? node.NotReadyReason
+        : "the renderer has not been composed: no frame has been produced"
+    );
     /// <summary>The unified overlay decorator, or <see langword="null"/> when the overlay was not composed —
     /// <c>world.counters gpu</c> reports its pass beside the engine's.</summary>
     public UnifiedOverlayNode? Overlay { get; set; }

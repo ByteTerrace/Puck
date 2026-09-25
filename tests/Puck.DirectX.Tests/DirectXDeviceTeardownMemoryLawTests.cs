@@ -122,8 +122,6 @@ public sealed class DirectXDeviceTeardownMemoryLawTests {
             m_native.GetDeviceCapabilities(deviceHandle: deviceHandle);
         public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) =>
             m_native.GetDeviceIdentity(deviceHandle: deviceHandle);
-        public int GetDeviceRemovedReason(nint deviceHandle) =>
-            m_native.GetDeviceRemovedReason(deviceHandle: deviceHandle);
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) =>
             m_native.GetMemoryProfile(deviceHandle: deviceHandle);
         public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) =>
