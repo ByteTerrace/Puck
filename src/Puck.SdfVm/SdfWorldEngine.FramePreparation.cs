@@ -659,8 +659,8 @@ public sealed partial class SdfWorldEngine {
         }
 
         // The screen-light and volume tables are packed every frame; UploadProgram seeds the screen-surface table and
-        // SetScreenSurface patches it, and SetScreenDecal/ClearScreenDecal patch the decal table. Each region then sends
-        // this slot the words it owes.
+        // SetScreenSurface patches it, and SetScreenDecal/ClearScreenDecal patch the decal table. The upload pass sends
+        // this slot the words each region owes.
         PackScreenLights(frame: frame);
         _ = m_screenLightRegion.Write(
             bytes: m_screenLightScratch,
@@ -671,11 +671,7 @@ public sealed partial class SdfWorldEngine {
             bytes: m_volumeScratch,
             offset: 0
         );
-        FlushRegions(slot: slot);
-        StageMeshRegion(
-            draws: frame.MeshDraws,
-            slot: slot
-        );
+        StageMeshRegion(draws: frame.MeshDraws);
 
         // CompositeParams { uint2 imageExtent; uint2 tileGrid; uint viewportCount; uint childMask; uint screenMask; uint instanceMaskWordCount; uint sampleIndex; } — Stage 0/1 push.
         var pushWords = MemoryMarshal.Cast<byte, uint>(span: m_pushConstant.AsSpan());

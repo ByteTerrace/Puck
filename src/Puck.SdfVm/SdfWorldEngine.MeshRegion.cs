@@ -26,9 +26,9 @@ public sealed partial class SdfWorldEngine {
     /// mesh. Safe to read from any thread.</summary>
     public ulong MeshRegionBytes => Volatile.Read(location: ref m_meshRegionBytes);
 
-    // Packs a new draw list into the region, growing it first when the list needs more bytes, then sends this slot
-    // what it owes. Called with the slot's fence retired.
-    private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws, int slot) {
+    // Packs a new draw list into the region, growing it first when the list needs more bytes; the upload pass sends the
+    // slot what it owes. Called with the slot's fence retired.
+    private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws) {
         if (!ReferenceEquals(
             objA: draws,
             objB: m_meshDraws
@@ -64,8 +64,6 @@ public sealed partial class SdfWorldEngine {
             m_meshDraws = draws;
             m_meshLayout = layout;
         }
-
-        m_meshRegion?.Flush(slot: slot);
     }
     // Creates the region at the size the draws need, or replaces it with one grown by half again (or to the need, if
     // larger), after every frame-ring fence retires. The replacement starts owing every word, so the next write sends
@@ -83,15 +81,7 @@ public sealed partial class SdfWorldEngine {
             val2: (current + (current / 2UL))
         );
 
-        // Headroom never carries a region past what one staged copy dispatch holds, unless the draws alone need more,
-        // which CreateRegion refuses by name.
-        grown = Math.Min(
-            val1: (((grown + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint)),
-            val2: Math.Max(
-                val1: bytes,
-                val2: (((ulong)GpuRegion.MaxStagedWords) * sizeof(uint))
-            )
-        );
+        grown = (((grown + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint));
 
         if (m_meshRegion is { } previous) {
             WaitForFrameRing();
@@ -104,8 +94,7 @@ public sealed partial class SdfWorldEngine {
         }
 
         m_meshRegion = CreateRegion(
-            byteCount: checked((int)grown),
-            table: "mesh"
+            byteCount: checked((int)grown)
         );
         Volatile.Write(
             location: ref m_meshRegionBytes,

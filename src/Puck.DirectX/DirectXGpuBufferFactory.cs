@@ -10,6 +10,8 @@ namespace Puck.DirectX;
 /// Implements <see cref="IGpuBufferFactory"/> for Direct3D 12 on its device context. A host-visible buffer is an
 /// upload-heap buffer, permanently mapped and permanently in <see cref="HostVisibleState"/>, which covers every read
 /// state a vertex, index, constant, shader-resource or indirect-argument use needs, so no transition ever moves it. A
+/// host-visible device-local buffer is the same on a <c>GPU_UPLOAD</c> heap, the adapter's memory the host writes
+/// through its aperture, which exists only where the device reports GPU upload heaps. A
 /// device-local buffer is a default-heap buffer created in <see cref="DeviceLocalState"/> that allows unordered access
 /// when it declares <see cref="GpuBufferUsage.Storage"/>; a shader's write promotes it to <c>UNORDERED_ACCESS</c>, and
 /// an indirect dispatch reading it records the transition into <c>INDIRECT_ARGUMENT</c>
@@ -51,37 +53,19 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
         );
     }
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) {
-        GpuBufferUsages.Validate(
+    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) =>
+        CreateMapped(
+            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
             sizeBytes: sizeBytes,
             usage: usage
         );
-
-        var buffer = DirectXBuffers.CreateCommitted(
-            device: Device,
-            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
-            initialState: HostVisibleState,
-            sizeBytes: sizeBytes
+    /// <inheritdoc/>
+    public IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) =>
+        CreateMapped(
+            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_GPU_UPLOAD,
+            sizeBytes: sizeBytes,
+            usage: usage
         );
-        void* mapped;
-
-        try {
-            mapped = DirectXCommandCalls.Map(
-                calls: new DirectXDeviceCommandCalls(device: Device),
-                resource: buffer
-            );
-        } catch {
-            _ = ((IUnknown*)buffer)->Release();
-
-            throw;
-        }
-
-        return new DirectXGpuStorageBuffer(
-            bufferHandle: ((nint)buffer),
-            mapped: mapped,
-            sizeBytes: sizeBytes
-        );
-    }
     /// <inheritdoc/>
     public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
         var buffer = CreateHostVisible(
@@ -96,4 +80,44 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
 
     private ID3D12Device* Device =>
         ((ID3D12Device*)deviceContext.Device.Handle);
+
+    // A permanently mapped buffer on an UPLOAD or GPU_UPLOAD heap, in HostVisibleState; a GPU_UPLOAD buffer joins the
+    // device-local counts, since it is the adapter's memory.
+    private IGpuStorageBuffer CreateMapped(D3D12_HEAP_TYPE heapType, ulong sizeBytes, GpuBufferUsage usage) {
+        GpuBufferUsages.Validate(
+            sizeBytes: sizeBytes,
+            usage: usage
+        );
+
+        var buffer = DirectXBuffers.CreateCommitted(
+            device: Device,
+            heapType: heapType,
+            initialState: HostVisibleState,
+            memory: deviceContext.Memory,
+            sizeBytes: sizeBytes
+        );
+        void* mapped;
+
+        try {
+            mapped = DirectXCommandCalls.Map(
+                calls: new DirectXDeviceCommandCalls(device: Device),
+                resource: buffer
+            );
+        } catch {
+            DirectXDeviceMemory.CountReleased(
+                memory: deviceContext.Memory,
+                resource: ((nint)buffer)
+            );
+            _ = ((IUnknown*)buffer)->Release();
+
+            throw;
+        }
+
+        return new DirectXGpuStorageBuffer(
+            bufferHandle: ((nint)buffer),
+            mapped: mapped,
+            memory: deviceContext.Memory,
+            sizeBytes: sizeBytes
+        );
+    }
 }

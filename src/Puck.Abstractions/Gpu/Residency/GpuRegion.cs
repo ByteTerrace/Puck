@@ -27,7 +27,8 @@ namespace Puck.Abstractions.Gpu;
 /// <see cref="CopyDestinationBinding"/>, <see cref="CopyWorkgroupSize"/> threads per group, and takes no push constants:
 /// the staging buffer states its copy. Its first <see cref="CopyHeaderWords"/> uints are <c>(count, runCount,
 /// blockBase, destinationBase)</c>, then come <c>runCount</c> <c>(block offset, first thread)</c> pairs, and the block
-/// starts at <c>blockBase</c>. Thread <c>i</c> below <c>count</c> finds the last run whose first thread is at most
+/// starts at <c>blockBase</c>. Thread <c>i</c> (its dispatch row times <see cref="CopyRowThreads"/> plus its column,
+/// <see cref="CopyGroups"/> sizing the dispatch) below <c>count</c> finds the last run whose first thread is at most
 /// <c>i</c>, takes <c>word</c> as that run's block offset plus <c>i</c> minus its first thread, and copies
 /// <c>destination[destinationBase + word] = source[blockBase + word]</c>. That kernel is <c>Puck.Shaders</c>'
 /// <c>region-copy.comp</c>, created from <see cref="CopyPipeline"/> once per device and leased by every owner
@@ -44,13 +45,17 @@ public sealed class GpuRegion : IDisposable {
     public const uint CopySourceBinding = 0U;
     /// <summary>The copy kernel's threads per group.</summary>
     public const uint CopyWorkgroupSize = 64U;
+    /// <summary>The most groups one dispatch dimension carries on both backends (Vulkan's guaranteed
+    /// <c>maxComputeWorkGroupCount</c>, Direct3D 12's <c>D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION</c>). A copy
+    /// of more words than one row of that many groups carries dispatches further rows in its second dimension, and the
+    /// kernel numbers its threads row by row, <see cref="CopyRowThreads"/> to a row.</summary>
+    public const uint CopyMaxGroupsPerDimension = 65_535U;
+    /// <summary>The threads in one row of a copy's dispatch: <see cref="CopyMaxGroupsPerDimension"/> groups of
+    /// <see cref="CopyWorkgroupSize"/>.</summary>
+    public const uint CopyRowThreads = (CopyMaxGroupsPerDimension * CopyWorkgroupSize);
     /// <summary>The most separate word ranges one copy carries; past it neighbouring ranges pair up and the words
     /// between them are copied again.</summary>
     public const int MaxCopyRuns = 256;
-    /// <summary>The most words a staged region holds: its first copy is one one-dimensional dispatch, and one dispatch
-    /// dimension carries at most 65,535 groups on both backends (Vulkan's guaranteed <c>maxComputeWorkGroupCount</c>,
-    /// Direct3D 12's <c>D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION</c>).</summary>
-    public const int MaxStagedWords = (65_535 * ((int)CopyWorkgroupSize));
 
     // Where a staging buffer's block starts, in uints: past the header and the run-table reserve of two uints per run.
     private const int CopyBlockBase = (CopyHeaderWords + (MaxCopyRuns * 2));
@@ -87,6 +92,8 @@ public sealed class GpuRegion : IDisposable {
     /// staged policy, its device-local buffer and one copy descriptor set per slot. Every buffer starts owing the whole
     /// region, since a new buffer's contents are undefined, and <see cref="Contents"/> starts zeroed.</summary>
     /// <param name="policy">The residency policy, normally <see cref="GpuResidency.Select"/>'s choice.</param>
+    /// <param name="memory">Where the ring's or in-place buffer lives, normally <see cref="GpuResidency.RingMemory"/>'s
+    /// choice; a staged region's staging buffers are host memory whatever it says.</param>
     /// <param name="byteCount">The region's size in bytes; positive and a whole number of uints.</param>
     /// <param name="slotCount">The caller's frame slots; at least one.</param>
     /// <param name="buffers">The factory that creates the host-visible and device-local buffers.</param>
@@ -97,15 +104,16 @@ public sealed class GpuRegion : IDisposable {
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> is not a defined policy,
-    /// <paramref name="byteCount"/> is not positive or not a whole number of uints, <paramref name="slotCount"/> is not
-    /// positive, or a staged region holds more than <see cref="MaxStagedWords"/> words.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) : this(
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> or <paramref name="memory"/> is not a
+    /// defined value, <paramref name="byteCount"/> is not positive or not a whole number of uints, or
+    /// <paramref name="slotCount"/> is not positive.</exception>
+    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) : this(
         bindings: bindings,
         buffers: buffers,
         byteCount: byteCount,
         copyPipeline: copyPipeline,
         destination: null,
+        memory: memory,
         policy: policy,
         recorder: recorder,
         slotCount: slotCount
@@ -116,8 +124,7 @@ public sealed class GpuRegion : IDisposable {
     /// the destination holds is the owner's. <see cref="Contents"/> starts zeroed.</summary>
     /// <param name="destination">The device-local buffer the copy writes; the caller owns it and keeps it alive while the
     /// region records copies.</param>
-    /// <param name="byteCount">The region's size in bytes; positive, a whole number of uints and at most
-    /// <see cref="MaxStagedWords"/> words.</param>
+    /// <param name="byteCount">The region's size in bytes; positive and a whole number of uints.</param>
     /// <param name="slotCount">The caller's frame slots; at least one.</param>
     /// <param name="buffers">The factory that creates the staging buffers.</param>
     /// <param name="bindings">The bindings service the copy sets come from.</param>
@@ -125,21 +132,21 @@ public sealed class GpuRegion : IDisposable {
     /// <param name="copyPipeline">The copy kernel's pipeline, created from <see cref="CopyPipeline"/>; the caller owns
     /// it and keeps it alive while the region records copies.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not positive, not a whole number
-    /// of uints or more than <see cref="MaxStagedWords"/> words, or <paramref name="slotCount"/> is not
-    /// positive.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not positive or not a whole number
+    /// of uints, or <paramref name="slotCount"/> is not positive.</exception>
     public GpuRegion(IGpuBuffer destination, int byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) : this(
         bindings: bindings,
         buffers: buffers,
         byteCount: byteCount,
         copyPipeline: copyPipeline,
         destination: (destination ?? throw new ArgumentNullException(paramName: nameof(destination))),
+        memory: GpuHostVisibleMemory.Host,
         policy: GpuResidencyPolicy.Staged,
         recorder: recorder,
         slotCount: slotCount
     ) { }
 
-    private GpuRegion(GpuResidencyPolicy policy, int byteCount, int slotCount, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) {
+    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, int byteCount, int slotCount, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline) {
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
@@ -163,20 +170,21 @@ public sealed class GpuRegion : IDisposable {
             );
         }
 
-        var words = (byteCount / sizeof(uint));
-
-        if (
-            (policy == GpuResidencyPolicy.Staged) &&
-            (words > MaxStagedWords)
-        ) {
+        if (!Enum.IsDefined(value: memory)) {
             throw new ArgumentOutOfRangeException(
-                actualValue: byteCount,
-                message: $"A staged region holds at most {MaxStagedWords} words, which one copy dispatch carries.",
-                paramName: nameof(byteCount)
+                actualValue: memory,
+                message: "The host-visible memory is not defined.",
+                paramName: nameof(memory)
             );
         }
 
+        var words = (byteCount / sizeof(uint));
+
         ByteCount = byteCount;
+        Memory = ((policy == GpuResidencyPolicy.Staged)
+            ? GpuHostVisibleMemory.Host
+            : memory
+        );
         Policy = policy;
         SlotCount = slotCount;
         m_contents = new byte[byteCount];
@@ -231,9 +239,15 @@ public sealed class GpuRegion : IDisposable {
             );
 
             for (var index = 0; (index < m_hostBuffers.Length); index++) {
-                m_hostBuffers[index] = buffers.CreateHostVisible(
-                    sizeBytes: hostBytes,
-                    usage: GpuBufferUsage.Storage
+                m_hostBuffers[index] = ((Memory == GpuHostVisibleMemory.DeviceLocal)
+                    ? buffers.CreateHostVisibleDeviceLocal(
+                        sizeBytes: hostBytes,
+                        usage: GpuBufferUsage.Storage
+                    )
+                    : buffers.CreateHostVisible(
+                        sizeBytes: hostBytes,
+                        usage: GpuBufferUsage.Storage
+                    )
                 );
                 m_ownedBuffers.Add(item: m_hostBuffers[index]);
             }
@@ -277,6 +291,21 @@ public sealed class GpuRegion : IDisposable {
         Registers: GpuRegisterNumbering.Binding
     );
 
+    /// <summary>Returns the groups a copy of <paramref name="count"/> words dispatches: one row of up to
+    /// <see cref="CopyMaxGroupsPerDimension"/> groups, and as many full rows of that width as it takes past one.</summary>
+    /// <param name="count">The words the copy carries; at least one.</param>
+    /// <returns>The groups along the dispatch's first and second dimensions.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is zero.</exception>
+    public static (uint X, uint Y) CopyGroups(uint count) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: count);
+
+        var groups = ((((ulong)count) + (CopyWorkgroupSize - 1UL)) / CopyWorkgroupSize);
+
+        return ((groups <= CopyMaxGroupsPerDimension)
+            ? (((uint)groups), 1U)
+            : (CopyMaxGroupsPerDimension, ((uint)((groups + (CopyMaxGroupsPerDimension - 1UL)) / CopyMaxGroupsPerDimension)))
+        );
+    }
     /// <summary>Returns the descriptor pool a <see cref="GpuResidencyPolicy.Staged"/> region creates: one
     /// <see cref="CopyBindings"/> set per frame slot. A region under any other policy creates none.</summary>
     /// <param name="slotCount">The frame slots the region serves.</param>
@@ -306,6 +335,9 @@ public sealed class GpuRegion : IDisposable {
         !m_disposed &&
         (m_owed[0].Count > 0)
     );
+    /// <summary>Gets where the buffers the region's readers bind directly live: its ring's or in-place buffer's memory,
+    /// and <see cref="GpuHostVisibleMemory.Host"/> for a staged region, whose staging buffers are host memory.</summary>
+    public GpuHostVisibleMemory Memory { get; }
     /// <summary>Gets the residency policy the region was created under.</summary>
     public GpuResidencyPolicy Policy { get; }
     /// <summary>Gets the number of frame slots the region serves.</summary>
@@ -422,10 +454,12 @@ public sealed class GpuRegion : IDisposable {
             group: 0,
             pipelineLayoutHandle: m_copyPipeline.LayoutHandle
         );
+        var (groupsX, groupsY) = CopyGroups(count: m_header[0]);
+
         m_recorder.Dispatch(
             commandBufferHandle: commandBuffer,
-            groupCountX: ((m_header[0] + (CopyWorkgroupSize - 1U)) / CopyWorkgroupSize),
-            groupCountY: 1,
+            groupCountX: groupsX,
+            groupCountY: groupsY,
             groupCountZ: 1
         );
         owed.Clear();

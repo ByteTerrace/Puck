@@ -34,19 +34,68 @@ public sealed class SdfWorldEngineUploadLawTests {
     private const int StagingReserveBytes = (HeaderBytes + (GpuRegion.MaxCopyRuns * RunEntryBytes));
 
     [Fact]
-    public void ATablePastOneCopyDispatchIsRefusedByNameWhereItIsSized() {
-        var fitting = checked((int)(GpuRegion.MaxStagedWords / (DynamicTransformBytes / sizeof(uint))));
+    public void AProgramPastOneDispatchRowUploadsByteExact() {
+        // Past one row of 65,535 groups of 64 threads, the copy dispatches a second row; the fake refuses a dispatch
+        // that is not exactly GpuRegion.CopyGroups and runs the kernel's thread numbering.
+        using var rig = new Rig(slots: 1);
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        using (var rig = new Rig(slots: fitting)) {
-            rig.Render(time: 0f);
+        // Each sphere is one instruction of 12 words.
+        for (var sphere = 0; (sphere < ((((int)GpuRegion.CopyRowThreads) / 12) + 4096)); sphere++) {
+            builder.Sphere(
+                material: material,
+                radius: 1f
+            );
         }
 
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => new Rig(slots: (fitting + 1)));
+        var large = builder.Build();
 
-        Assert.Contains(
-            expectedSubstring: "dynamic-transform",
-            actualString: refusal.Message
+        Assert.True(condition: (large.Words.Length > GpuRegion.CopyRowThreads));
+        Assert.True(condition: (GpuRegion.CopyGroups(count: ((uint)large.Words.Length)).Y >= 2U));
+        rig.Warm();
+        rig.Engine.UploadProgram(program: large);
+        rig.Render(time: 0f);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: large.Words).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: (((ulong)large.Words.Length) * sizeof(uint)))
         );
+    }
+    [Fact]
+    public void RingRegionsLiveInTheApertureOnADiscreteAdapterAndInHostMemoryOnUnifiedMemory() {
+        const ulong GiB = (1UL << 30);
+        var discrete = new GpuMemoryProfile(
+            CoherentUnifiedMemory: false,
+            DeviceLocalBytes: (12UL * GiB),
+            HostVisibleDeviceLocalBytes: (12UL * GiB),
+            LargestDeviceLocalHeapBytes: (12UL * GiB),
+            UnifiedMemory: false
+        );
+        var unified = new GpuMemoryProfile(
+            CoherentUnifiedMemory: true,
+            DeviceLocalBytes: (8UL * GiB),
+            HostVisibleDeviceLocalBytes: (8UL * GiB),
+            LargestDeviceLocalHeapBytes: (8UL * GiB),
+            UnifiedMemory: true
+        );
+
+        // Eight per-frame tables, each a ring of one buffer per slot, and nothing staged or copied.
+        using (var rig = new Rig(profile: discrete, slots: 40)) {
+            rig.Warm();
+            Assert.Equal(expected: (8 * SdfWorldEngine.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            rig.Move(slot: 3);
+            rig.Render(time: 0f);
+            Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
+        }
+
+        using (var rig = new Rig(profile: unified, slots: 40)) {
+            rig.Warm();
+            Assert.Equal(expected: 0, actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
+        }
+
+        Assert.Equal(expected: GpuHostVisibleMemory.DeviceLocal, actual: GpuResidency.RingMemory(profile: discrete));
+        Assert.Equal(expected: GpuHostVisibleMemory.Host, actual: GpuResidency.RingMemory(profile: unified));
     }
     [Fact]
     public void AStillFrameWritesOnlyTheViewportWordItsTimeMoved() {
@@ -468,8 +517,10 @@ public sealed class SdfWorldEngineUploadLawTests {
         private SdfWorldPipelines m_pipelines = null!;
         private GpuRegionCopyPipeline m_regionCopy = null!;
 
-        public Rig(int slots, int programWordReserve = 0) {
-            Gpu = new UploadModelGpu(reportVersion: SdfIsa.Version);
+        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default) {
+            Gpu = new UploadModelGpu(reportVersion: SdfIsa.Version) {
+                MemoryProfile = profile,
+            };
             m_programWordReserve = programWordReserve;
             m_program = Program(albedo: Vector3.One);
             m_transforms = Transforms(slots: slots);

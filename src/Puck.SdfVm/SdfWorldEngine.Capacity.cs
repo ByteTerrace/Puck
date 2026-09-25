@@ -116,12 +116,7 @@ public sealed partial class SdfWorldEngine {
             return;
         }
 
-        RequireOneCopyDispatch(
-            byteLength: (((ulong)program.Words.Length) * sizeof(uint)),
-            table: "program"
-        );
-
-        var words = GrowCapacity(m_programWordCapacity, program.Words.Length, GpuRegion.MaxStagedWords);
+        var words = GrowCapacity(m_programWordCapacity, program.Words.Length, (int.MaxValue / sizeof(uint)));
         var instances = GrowCapacity(m_instanceCapacity, program.Instances.Count, SdfProgramBuilder.MaxInstances);
         var growProgram = (words != m_programWordCapacity);
         var growInstances = (instances != m_instanceCapacity);
@@ -146,8 +141,8 @@ public sealed partial class SdfWorldEngine {
 
         try {
             // Create the entire replacement before changing any binding or releasing an old region or buffer.
-            var programRegion = (growProgram ? Replacement(created: CreateRegion(byteCount: checked((words * sizeof(uint))), table: "program")) : m_programRegion);
-            var gridRegion = (growInstances ? Replacement(created: CreateRegion(byteCount: checked((gridWords * sizeof(uint))), table: "instance-grid")) : m_instanceGridRegion);
+            var programRegion = (growProgram ? Replacement(created: CreateRegion(byteCount: checked((words * sizeof(uint))))) : m_programRegion);
+            var gridRegion = (growInstances ? Replacement(created: CreateRegion(byteCount: checked((gridWords * sizeof(uint))))) : m_instanceGridRegion);
             var masks = (growInstances ? DeviceBuffer(buffer: SdfFrameBuffer.InstanceMasks) : m_instanceMaskBuffer);
             var tiles = (growInstances ? DeviceBuffer(buffer: SdfFrameBuffer.Tiles) : m_tileBuffer);
 

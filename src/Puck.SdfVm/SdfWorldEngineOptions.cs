@@ -12,9 +12,7 @@ namespace Puck.SdfVm;
 /// <param name="DynamicTransformCapacity">The number of dynamic entity-transform slots to allocate (at least one slot
 /// is always bound so the binding stays valid for a static scene). The engine automatically raises this floor to the
 /// program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/>. Each slot costs 48 bytes of the dynamic-transform
-/// region, and a frame uploads only the words that changed; one staged copy of the whole table bounds it at
-/// <see cref="GpuRegion.MaxStagedWords"/> words on every device, and a larger capacity is refused by name. Excess
-/// transforms in a frame beyond the capacity are dropped.</param>
+/// region, and a frame uploads only the words that changed. Excess transforms in a frame beyond the capacity are dropped.</param>
 /// <param name="CreateOutputImage">An optional factory for the output image. When it returns an
 /// <see cref="IGpuExportableImage"/>, the engine runs in <em>export</em> mode: each submitted frame ends in the
 /// cross-backend handoff layout and <see cref="SdfWorldEngine.SubmitFrame"/> drains the producer queue so the shared

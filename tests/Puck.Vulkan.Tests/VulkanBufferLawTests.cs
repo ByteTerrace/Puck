@@ -121,6 +121,10 @@ public sealed class VulkanBufferLawTests {
             expected: (HostVisibleCoherentProperties, true, GpuMemoryRole.HostVisible)
         );
         Assert.Equal(
+            actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.HostCoherentDeviceLocal),
+            expected: (HostVisibleCoherentProperties | DeviceLocalProperty, true, GpuMemoryRole.HostVisibleDeviceLocal)
+        );
+        Assert.Equal(
             actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.DeviceLocal),
             expected: (DeviceLocalProperty, true, GpuMemoryRole.DeviceLocal)
         );

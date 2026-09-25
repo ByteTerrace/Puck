@@ -16,6 +16,8 @@ public sealed partial class SdfWorldEngine {
     private const int ViewsPass = 8;
     private const int CompositePass = 9;
 
+    private static readonly WorkClass[] PassClassTable = BuildPassClasses();
+
     // The ledger every wrapped GPU service counts into: the owner's (a node or view that outlives device-loss rebuilds)
     // or the engine's own.
     private readonly GpuWorkLedger m_work;
@@ -35,6 +37,11 @@ public sealed partial class SdfWorldEngine {
     /// <summary>Gets the render passes' labels, in submission order — the GPU work ledger's per-pass column names
     /// (<see cref="Work"/>) and the width a caller sizes a per-pass read to.</summary>
     public static ReadOnlySpan<string> PassLabels => PassLabelTable;
+    /// <summary>Gets what two runs of each pass may be held to agree on, in <see cref="PassLabels"/> order:
+    /// <c>upload</c> is <see cref="WorkClass.PerBackendDeterministic"/>, because what it writes and copies follows the
+    /// residency policy each device's memory profile selects, and every other pass is
+    /// <see cref="WorkClass.Deterministic"/>.</summary>
+    public static ReadOnlySpan<WorkClass> PassClasses => PassClassTable;
     /// <summary>Gets the GPU work this engine recorded: per pass, for the newest submission known to have completed.
     /// A frame's host-visible uploads, brick uploads and bakes, and the barriers before its first pass are counted
     /// outside every pass. A pass the cadence gate skipped reads skipped, not zero.</summary>
@@ -45,9 +52,17 @@ public sealed partial class SdfWorldEngine {
     public IWorkCounterSource WorkLifetime =>
         m_work;
 
+    private static WorkClass[] BuildPassClasses() {
+        var classes = new WorkClass[(CompositePass + 1)];
+
+        classes[UploadPass] = WorkClass.PerBackendDeterministic;
+
+        return classes;
+    }
     private void ReconfigureWork() {
         m_workRevision++;
         m_work.Configure(
+            passClasses: PassClassTable,
             passLabels: PassLabelTable,
             revision: m_workRevision
         );

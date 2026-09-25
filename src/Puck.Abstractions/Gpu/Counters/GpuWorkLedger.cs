@@ -40,6 +40,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
 
     private readonly GpuWorkSample[] m_snapshots = [new(), new()];
     private int m_currentPass = -1;
+    private WorkClass[] m_classes = [];
     private string[] m_labels = [];
 
     private long m_lastSealed;
@@ -86,9 +87,34 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     /// passes.</summary>
     /// <param name="revision">The node's number for this pass configuration, reported with every sample recorded under it.</param>
     /// <param name="passLabels">The pass labels, in pass order; copied.</param>
-    /// <exception cref="ArgumentException">An element of <paramref name="passLabels"/> is <see langword="null"/>.</exception>
+    /// <param name="passClasses">What two runs of each pass may be held to agree on, in pass order and copied, or empty
+    /// when every pass is <see cref="WorkClass.Deterministic"/>. A pass whose work follows the device (the SDF engine's
+    /// region copies, which follow its residency policy) is <see cref="WorkClass.PerBackendDeterministic"/>: its counts
+    /// read that class whatever their kinds declare.</param>
+    /// <exception cref="ArgumentException">An element of <paramref name="passLabels"/> is <see langword="null"/>, or
+    /// <paramref name="passClasses"/> is neither empty nor as long as <paramref name="passLabels"/>, or holds a class other
+    /// than <see cref="WorkClass.Deterministic"/> or <see cref="WorkClass.PerBackendDeterministic"/>.</exception>
     /// <exception cref="InvalidOperationException">The work being recorded has already entered or skipped a pass.</exception>
-    public void Configure(long revision, ReadOnlySpan<string> passLabels) {
+    public void Configure(long revision, ReadOnlySpan<string> passLabels, ReadOnlySpan<WorkClass> passClasses = default) {
+        if (
+            !passClasses.IsEmpty &&
+            (passClasses.Length != passLabels.Length)
+        ) {
+            throw new ArgumentException(
+                message: $"{passClasses.Length} pass classes were given for {passLabels.Length} passes.",
+                paramName: nameof(passClasses)
+            );
+        }
+
+        foreach (var passClass in passClasses) {
+            if (passClass is not (WorkClass.Deterministic or WorkClass.PerBackendDeterministic)) {
+                throw new ArgumentException(
+                    message: $"A pass is deterministic or per-backend-deterministic, not {passClass}.",
+                    paramName: nameof(passClasses)
+                );
+            }
+        }
+
         foreach (var label in passLabels) {
             if (label is null) {
                 throw new ArgumentException(
@@ -103,8 +129,13 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
 
         m_labels = passLabels.ToArray();
+        m_classes = (passClasses.IsEmpty
+            ? new WorkClass[passLabels.Length]
+            : passClasses.ToArray()
+        );
         m_revision = revision;
         m_open?.Rebind(
+            classes: m_classes,
             labels: m_labels,
             revision: m_revision
         );
@@ -295,6 +326,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
 
         chosen!.Open(
+            classes: m_classes,
             labels: m_labels,
             revision: m_revision
         );
@@ -306,6 +338,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         var passCount = record.Labels.Length;
 
         m_snapshots[((int)((m_version + 1L) & 1L))].Load(
+            classes: record.Classes,
             counts: record.Counts.AsSpan(
                 length: ((passCount + 1) * Columns),
                 start: 0
@@ -337,6 +370,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         Sealed = 2,
     }
     private sealed class Record {
+        public WorkClass[] Classes = [];
         public long[] Counts = new long[Columns];
 
         public GpuWorkCountingFence? Fence;
@@ -355,8 +389,9 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             Fence = null;
             State = RecordState.Free;
         }
-        public void Open(string[] labels, long revision) {
+        public void Open(string[] labels, WorkClass[] classes, long revision) {
             Rebind(
+                classes: classes,
                 labels: labels,
                 revision: revision
             );
@@ -370,7 +405,8 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             Submission = 0L;
         }
         // Keeps the outside row, which does not depend on the passes; clears every pass row and state.
-        public void Rebind(string[] labels, long revision) {
+        public void Rebind(string[] labels, WorkClass[] classes, long revision) {
+            Classes = classes;
             var countLength = ((labels.Length + 1) * Columns);
 
             if (Counts.Length < countLength) {

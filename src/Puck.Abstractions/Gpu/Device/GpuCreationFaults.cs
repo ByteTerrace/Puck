@@ -241,6 +241,7 @@ public sealed class GpuCreationFaults {
             return (m_lossArmed != 0L);
         }
     }
+
     /// <summary>Gets how many frames GPU hosts have counted since the faults were last disarmed.</summary>
     public long FramesSeen {
         get {
@@ -403,6 +404,14 @@ file sealed class FaultingBufferFactory(IGpuBufferFactory inner, GpuCreationFaul
         Enter(kind: GpuCreationKind.Buffer);
 
         return inner.CreateHostVisible(
+            sizeBytes: sizeBytes,
+            usage: usage
+        );
+    }
+    public IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) {
+        Enter(kind: GpuCreationKind.Buffer);
+
+        return inner.CreateHostVisibleDeviceLocal(
             sizeBytes: sizeBytes,
             usage: usage
         );

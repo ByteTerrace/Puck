@@ -26,6 +26,16 @@ public static class GpuResidency {
             paramName: nameof(policy)
         ),
     };
+    /// <summary>Returns where a ring's (or an in-place region's) buffers live on a device with <paramref name="profile"/>:
+    /// in the device-local aperture when the device exposes one onto dedicated memory, which is why
+    /// <see cref="Select"/> chose to write directly, and in host memory otherwise, which on unified memory is the device's
+    /// one pool.</summary>
+    /// <param name="profile">The device's memory profile.</param>
+    /// <returns>The memory.</returns>
+    public static GpuHostVisibleMemory RingMemory(GpuMemoryProfile profile) => ((profile.IsDeviceLocalHostVisible && !profile.UnifiedMemory)
+        ? GpuHostVisibleMemory.DeviceLocal
+        : GpuHostVisibleMemory.Host
+    );
     /// <summary>Selects the policy for a region of <paramref name="byteCount"/> bytes on a device with
     /// <paramref name="profile"/>. A region within <see cref="HostVisibleShare"/> of the host-visible device-local heap
     /// is written through a ring, or in place on coherent unified memory when no submission reading the region is in

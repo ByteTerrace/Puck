@@ -66,7 +66,8 @@ public sealed class GpuResidencyLawTests {
                 CoherentUnifiedMemory: true,
                 DeviceLocalBytes: (4UL * GiB),
                 HostVisibleDeviceLocalBytes: (4UL * GiB),
-                LargestDeviceLocalHeapBytes: (4UL * GiB)
+                LargestDeviceLocalHeapBytes: (4UL * GiB),
+                UnifiedMemory: true
             ),
             actual: CoherentUnified
         );
@@ -75,7 +76,8 @@ public sealed class GpuResidencyLawTests {
                 CoherentUnifiedMemory: false,
                 DeviceLocalBytes: ((12UL * GiB) + (256UL * MiB)),
                 HostVisibleDeviceLocalBytes: (256UL * MiB),
-                LargestDeviceLocalHeapBytes: (12UL * GiB)
+                LargestDeviceLocalHeapBytes: (12UL * GiB),
+                UnifiedMemory: false
             ),
             actual: DiscreteSmallAperture
         );
@@ -84,7 +86,8 @@ public sealed class GpuResidencyLawTests {
                 CoherentUnifiedMemory: false,
                 DeviceLocalBytes: (8UL * GiB),
                 HostVisibleDeviceLocalBytes: 0UL,
-                LargestDeviceLocalHeapBytes: (8UL * GiB)
+                LargestDeviceLocalHeapBytes: (8UL * GiB),
+                UnifiedMemory: false
             ),
             actual: DiscreteNoAperture
         );
@@ -117,7 +120,8 @@ public sealed class GpuResidencyLawTests {
                 CoherentUnifiedMemory: true,
                 DeviceLocalBytes: ((512UL * MiB) + (8UL * GiB)),
                 HostVisibleDeviceLocalBytes: ((512UL * MiB) + (8UL * GiB)),
-                LargestDeviceLocalHeapBytes: ((512UL * MiB) + (8UL * GiB))
+                LargestDeviceLocalHeapBytes: ((512UL * MiB) + (8UL * GiB)),
+                UnifiedMemory: true
             ),
             actual: GpuMemoryProfile.FromDirectX(
                 cacheCoherentUnifiedMemory: true,
@@ -139,7 +143,8 @@ public sealed class GpuResidencyLawTests {
                 CoherentUnifiedMemory: false,
                 DeviceLocalBytes: (12UL * GiB),
                 HostVisibleDeviceLocalBytes: (12UL * GiB),
-                LargestDeviceLocalHeapBytes: (12UL * GiB)
+                LargestDeviceLocalHeapBytes: (12UL * GiB),
+                UnifiedMemory: false
             ),
             actual: GpuMemoryProfile.FromDirectX(
                 cacheCoherentUnifiedMemory: false,
@@ -154,7 +159,8 @@ public sealed class GpuResidencyLawTests {
                 CoherentUnifiedMemory: false,
                 DeviceLocalBytes: (12UL * GiB),
                 HostVisibleDeviceLocalBytes: 0UL,
-                LargestDeviceLocalHeapBytes: (12UL * GiB)
+                LargestDeviceLocalHeapBytes: (12UL * GiB),
+                UnifiedMemory: false
             ),
             actual: GpuMemoryProfile.FromDirectX(
                 cacheCoherentUnifiedMemory: false,
@@ -232,6 +238,7 @@ public sealed class GpuResidencyLawTests {
                 buffers: gpu.Services.BufferFactory,
                 byteCount: ByteCount,
                 copyPipeline: copy,
+                memory: GpuHostVisibleMemory.Host,
                 policy: policy,
                 recorder: gpu.Services.Recorder,
                 slotCount: Slots
@@ -295,6 +302,7 @@ public sealed class GpuResidencyLawTests {
             buffers: gpu.Services.BufferFactory,
             byteCount: 64,
             copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
             policy: GpuResidencyPolicy.Staged,
             recorder: gpu.Services.Recorder,
             slotCount: 2
@@ -309,6 +317,7 @@ public sealed class GpuResidencyLawTests {
             buffers: gpu.Services.BufferFactory,
             byteCount: 6,
             copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
             policy: GpuResidencyPolicy.Ring,
             recorder: gpu.Services.Recorder,
             slotCount: 2
@@ -326,6 +335,7 @@ public sealed class GpuResidencyLawTests {
             buffers: gpu.Services.BufferFactory,
             byteCount: 64,
             copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
             policy: policy,
             recorder: gpu.Services.Recorder,
             slotCount: 3
@@ -349,6 +359,7 @@ public sealed class GpuResidencyLawTests {
             buffers: gpu.Services.BufferFactory,
             byteCount: 256,
             copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
             policy: GpuResidencyPolicy.Staged,
             recorder: gpu.Services.Recorder,
             slotCount: 2
@@ -433,6 +444,65 @@ public sealed class GpuResidencyLawTests {
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => region.Target(destinationWord: DestinationWords));
     }
     [Fact]
+    public void ARingLivesInTheApertureOnlyWhereTheDeviceExposesOneOntoDedicatedMemory() {
+        Assert.Equal(expected: GpuHostVisibleMemory.DeviceLocal, actual: GpuResidency.RingMemory(profile: DiscreteSmallAperture));
+        Assert.Equal(expected: GpuHostVisibleMemory.Host, actual: GpuResidency.RingMemory(profile: CoherentUnified));
+        Assert.Equal(expected: GpuHostVisibleMemory.Host, actual: GpuResidency.RingMemory(profile: DiscreteNoAperture));
+        Assert.Equal(expected: GpuHostVisibleMemory.Host, actual: GpuResidency.RingMemory(profile: default));
+        Assert.Equal(expected: GpuHostVisibleMemory.Host, actual: GpuResidency.RingMemory(profile: GpuMemoryProfile.FromDirectX(
+            cacheCoherentUnifiedMemory: false,
+            dedicatedVideoMemory: (512UL * MiB),
+            gpuUploadHeapSupported: false,
+            sharedSystemMemory: (8UL * GiB),
+            unifiedMemory: true
+        )));
+
+        foreach (var (profile, aperture) in ((ReadOnlySpan<(GpuMemoryProfile, int)>)[(DiscreteSmallAperture, 3), (CoherentUnified, 0)])) {
+            var gpu = new UploadModelGpu(reportVersion: 0);
+            using var copy = CopyPipeline(gpu: gpu);
+            using var region = new GpuRegion(
+                bindings: gpu.Services.Bindings,
+                buffers: gpu.Services.BufferFactory,
+                byteCount: 64,
+                copyPipeline: copy,
+                memory: GpuResidency.RingMemory(profile: profile),
+                policy: GpuResidency.Select(byteCount: 64UL, profile: profile, readersInFlight: true),
+                recorder: gpu.Services.Recorder,
+                slotCount: 3
+            );
+
+            Assert.Equal(expected: GpuResidencyPolicy.Ring, actual: region.Policy);
+            Assert.Equal(expected: aperture, actual: gpu.ApertureBuffers);
+            Assert.Equal(expected: (3 - aperture), actual: gpu.HostBuffers);
+        }
+    }
+    [Fact]
+    public void AStagedCopyPastOneRowOfGroupsDispatchesMoreRowsAndStaysExact() {
+        var words = (((int)GpuRegion.CopyRowThreads) + 1000);
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: (words * sizeof(uint)),
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        var bytes = new byte[(words * sizeof(uint))];
+
+        new Random(Seed: 11).NextBytes(buffer: bytes);
+        _ = region.Write(bytes: bytes, offset: 0);
+        region.Flush(slot: 0);
+        region.RecordCopy(commandBuffer: 2, slot: 0);
+        Assert.Equal(expected: bytes, actual: gpu.Memory(bufferHandle: region.Buffer(slot: 0).BufferHandle));
+        Assert.Equal(expected: (GpuRegion.CopyMaxGroupsPerDimension, 2U), actual: GpuRegion.CopyGroups(count: ((uint)words)));
+        Assert.Equal(expected: (1U, 1U), actual: GpuRegion.CopyGroups(count: 1U));
+        Assert.Equal(expected: (GpuRegion.CopyMaxGroupsPerDimension, 1U), actual: GpuRegion.CopyGroups(count: GpuRegion.CopyRowThreads));
+    }
+    [Fact]
     public void OnlyARegionWithAnExternalDestinationRetargets() {
         var gpu = new UploadModelGpu(reportVersion: 0);
         using var copy = CopyPipeline(gpu: gpu);
@@ -441,6 +511,7 @@ public sealed class GpuResidencyLawTests {
             buffers: gpu.Services.BufferFactory,
             byteCount: 64,
             copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
             policy: GpuResidencyPolicy.Staged,
             recorder: gpu.Services.Recorder,
             slotCount: 2

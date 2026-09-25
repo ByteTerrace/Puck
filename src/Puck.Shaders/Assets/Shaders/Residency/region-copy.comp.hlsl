@@ -5,20 +5,22 @@
 // copies wrote. Bit-exact: uints move as uints, whatever the block stores in them.
 //
 // Source layout: a four-uint header (count, runCount, blockBase, destinationBase), then runCount (block offset, first
-// thread) pairs, then the block at blockBase. Thread i below count binary-searches the last run whose first thread is at
-// most i, and copies destination[destinationBase + word] = source[blockBase + word], word being that run's block offset
+// thread) pairs, then the block at blockBase. Thread i, its dispatch row times RegionCopyRowThreads plus its column (a
+// copy past one row of 65,535 groups dispatches further rows), below count binary-searches the last run whose first
+// thread is at most i, and copies destination[destinationBase + word] = source[blockBase + word], word being that run's block offset
 // plus i minus its first thread. No push constants: the staging buffer states its copy.
-// KEEP IN SYNC with GpuRegion (its Copy* constants and StageOwed's header and run table). Each register number equals
+// KEEP IN SYNC with GpuRegion (its Copy* constants, CopyGroups, and StageOwed's header and run table). Each register number equals
 // its binding (GpuRegisterNumbering.Binding).
 
 [[vk::binding(0, 0)]] StructuredBuffer<uint> copySource : register(t0);
 [[vk::binding(1, 0)]] RWStructuredBuffer<uint> copyDestination : register(u1);
 
 static const uint RegionCopyHeaderWords = 4;
+static const uint RegionCopyRowThreads = (65535 * 64);
 
 [numthreads(64, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    uint i = id.x;
+    uint i = ((id.y * RegionCopyRowThreads) + id.x);
 
     if (i >= copySource[0]) {
         return;

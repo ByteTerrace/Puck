@@ -6,10 +6,12 @@ namespace Puck.SdfVm;
 
 // The host-written tables: program words, viewport rows, dynamic transforms, the frame instance grid, screen surfaces,
 // screen lights, volumes, glyph decals and mesh draws, each a GpuRegion under the policy GpuResidency.Select chooses for
-// its size with the frame ring's reader in flight. A frame writes each table into its region, which owes only the words
-// that differ; PrepareFrame flushes this ring slot's share once the slot's fence has retired, and the upload pass
-// records each staged region's copy, then one transition per copied buffer so every later pass reads what it wrote. The
-// top-of-frame barrier orders the copies after the previous frame's reads. Nothing writes a region's buffer directly.
+// its size with the frame ring's reader in flight, a ring's buffers in the memory GpuResidency.RingMemory chooses. A
+// frame writes each table into its region, which owes only the words that differ; the upload pass flushes this ring
+// slot's share (its fence has retired), records each staged region's copy, then one transition per copied buffer so
+// every later pass reads what it wrote. What the pass records follows the device's policy, so its counts are
+// per-backend-deterministic. The top-of-frame barrier orders the copies after the previous frame's reads. Nothing
+// writes a region's buffer directly.
 public sealed partial class SdfWorldEngine {
     private const int DynamicTransformWordCount = (DynamicTransformByteLength / sizeof(uint));
     // The per-frame regions RegionAt names, the mesh region last.
@@ -47,21 +49,6 @@ public sealed partial class SdfWorldEngine {
     // A per-frame grid rebuild owed whether or not a transform moved: set by UploadProgram for a moving-instance program.
     private bool m_instanceGridRebuildOwed;
 
-    /// <summary>Refuses, by table name, a host-written table too large for one staged copy
-    /// (<see cref="GpuRegion.MaxStagedWords"/> words), whatever policy the device would choose for it, so an oversized
-    /// table fails where it is sized, on every device alike.</summary>
-    /// <param name="table">The table's name, as the refusal prints it.</param>
-    /// <param name="byteLength">The table's size in bytes.</param>
-    /// <exception cref="InvalidOperationException">The table holds more than <see cref="GpuRegion.MaxStagedWords"/>
-    /// words.</exception>
-    public static void RequireOneCopyDispatch(string table, ulong byteLength) {
-        var words = (byteLength / sizeof(uint));
-
-        if (words > GpuRegion.MaxStagedWords) {
-            throw new InvalidOperationException(message: $"the SDF engine's {table} table holds {words} words, past the {GpuRegion.MaxStagedWords} one copy dispatch carries (65535 groups of {GpuRegion.CopyWorkgroupSize} threads); lower the capacity that sizes it.");
-        }
-    }
-
     // The copy pools the engine's regions create under the staged policy, which its admission covers whatever policy
     // the device selects: one per per-frame region, and the brick staging's with a brick pool.
     private static GpuDescriptorPoolSizes[] RegionPoolSizes(bool brickPool) {
@@ -95,21 +82,20 @@ public sealed partial class SdfWorldEngine {
         WriteStorageBuffer(binding: DecalCellsBindingIndex, buffer: m_decalRegion.Buffer(slot: slot), set: views);
         WriteStorageBuffer(binding: VolumeBindingIndex, buffer: m_volumeRegion.Buffer(slot: slot), set: views);
     }
-    // A region of byteCount bytes for this device, refused by name past one staged copy.
-    private GpuRegion CreateRegion(int byteCount, string table) {
-        RequireOneCopyDispatch(
-            byteLength: ((ulong)byteCount),
-            table: table
-        );
+    // A region of byteCount bytes under the policy the device's profile selects, its ring in the memory the profile
+    // selects.
+    private GpuRegion CreateRegion(int byteCount) {
+        var profile = m_deviceContext.MemoryProfile;
 
         return new GpuRegion(
             bindings: m_gpu.Bindings,
             buffers: m_gpu.BufferFactory,
             byteCount: byteCount,
             copyPipeline: m_regionCopyPipeline,
+            memory: GpuResidency.RingMemory(profile: profile),
             policy: GpuResidency.Select(
                 byteCount: ((ulong)byteCount),
-                profile: m_deviceContext.MemoryProfile,
+                profile: profile,
                 readersInFlight: true
             ),
             recorder: m_gpu.Recorder,
@@ -121,17 +107,16 @@ public sealed partial class SdfWorldEngine {
             RegionAt(index: index)?.Dispose();
         }
     }
-    // Sends this ring slot what it owes of every per-frame region but the mesh region, which StageMeshRegion flushes.
-    private void FlushRegions(int slot) {
-        for (var index = 0; (index < (RegionCount - 1)); index++) {
-            RegionAt(index: index)!.Flush(slot: slot);
-        }
-    }
-    // Records every staged region's owed copy for this slot, then makes each copied buffer readable by the passes after
-    // it. A frame owing nothing records nothing.
+    // The upload pass: sends this ring slot, whose fence has retired, what it owes of every region, records every staged
+    // region's copy, then makes each copied buffer readable by the passes after it. Every host write and copy of the
+    // regions is counted in this pass. A frame owing nothing writes and records nothing.
     private void RecordRegionCopies(nint commandBuffer) {
         var recorder = m_gpu.Recorder;
         var copied = 0;
+
+        for (var index = 0; (index < RegionCount); index++) {
+            RegionAt(index: index)?.Flush(slot: m_currentSlot);
+        }
 
         for (var index = 0; (index < RegionCount); index++) {
             if (RegionAt(index: index) is not { OwesCopy: true } region) {

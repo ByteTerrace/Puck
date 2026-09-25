@@ -508,36 +508,28 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // The screen-surface table is always MaxScreenSurfaces entries, indexed directly by screen index, so Stage 1's
         // binding stays valid for a program with none: an all-zero undeclared entry is never addressed.
         m_programRegion = scope.Own(created: CreateRegion(
-            byteCount: checked((m_programWordCapacity * sizeof(uint))),
-            table: "program"
+            byteCount: checked((m_programWordCapacity * sizeof(uint)))
         ));
         m_viewportRegion = scope.Own(created: CreateRegion(
-            byteCount: m_viewportScratch.Length,
-            table: "viewport"
+            byteCount: m_viewportScratch.Length
         ));
         m_dynamicTransformRegion = scope.Own(created: CreateRegion(
-            byteCount: checked((m_dynamicTransformCapacity * DynamicTransformByteLength)),
-            table: "dynamic-transform"
+            byteCount: checked((m_dynamicTransformCapacity * DynamicTransformByteLength))
         ));
         m_instanceGridRegion = scope.Own(created: CreateRegion(
-            byteCount: checked((m_instanceGridWordCapacity * sizeof(uint))),
-            table: "instance-grid"
+            byteCount: checked((m_instanceGridWordCapacity * sizeof(uint)))
         ));
         m_screenSurfaceRegion = scope.Own(created: CreateRegion(
-            byteCount: (MaxScreenSurfaces * ScreenSurfaceByteLength),
-            table: "screen-surface"
+            byteCount: (MaxScreenSurfaces * ScreenSurfaceByteLength)
         ));
         m_screenLightRegion = scope.Own(created: CreateRegion(
-            byteCount: m_screenLightScratch.Length,
-            table: "screen-light"
+            byteCount: m_screenLightScratch.Length
         ));
         m_volumeRegion = scope.Own(created: CreateRegion(
-            byteCount: m_volumeScratch.Length,
-            table: "volume"
+            byteCount: m_volumeScratch.Length
         ));
         m_decalRegion = scope.Own(created: CreateRegion(
-            byteCount: ((DecalBufferCells * DecalWordsPerCell) * sizeof(uint)),
-            table: "decal"
+            byteCount: ((DecalBufferCells * DecalWordsPerCell) * sizeof(uint))
         ));
         // The cull buffer is GPU-written by the beam prepass (a UAV), so it is device-local (a Direct3D 12 default heap).
         // Four tile planes followed by two world-space bound corners per instance per viewport. The beam refits

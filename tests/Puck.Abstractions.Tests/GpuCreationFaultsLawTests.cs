@@ -27,6 +27,7 @@ public sealed class GpuCreationFaultsLawTests {
         ["IGpuBindings.CreatePool"] = (GpuCreationKind.BindingsPool, static services => _ = services.Bindings.CreatePool(sizes: default)),
         ["IGpuBufferFactory.CreateDeviceLocal"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateDeviceLocal(sizeBytes: 16, usage: GpuBufferUsage.Storage)),
         ["IGpuBufferFactory.CreateHostVisible"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateHostVisible(sizeBytes: 16, usage: GpuBufferUsage.Storage)),
+        ["IGpuBufferFactory.CreateHostVisibleDeviceLocal"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateHostVisibleDeviceLocal(sizeBytes: 16, usage: GpuBufferUsage.Storage)),
         ["IGpuBufferFactory.CreateHostVisible(data)"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateHostVisible(data: new byte[16], usage: GpuBufferUsage.Vertex)),
         ["IGpuCommandPoolFactory.Create"] = (GpuCreationKind.CommandPool, static services => _ = services.CommandPoolFactory.Create()),
         ["IGpuImageFactory.Create"] = (GpuCreationKind.Image, static services => _ = services.ImageFactory.Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, usage: GpuImageUsage.Storage, width: 4)),
@@ -190,19 +191,19 @@ public sealed class GpuCreationFaultsLawTests {
             services: gpu.Services
         );
 
-        // Armed past every kind's creations below (a buffer has three creating members), so each kind is counted and
+        // Armed past every kind's creations below (a buffer has four creating members), so each kind is counted and
         // still armed when the faults are disarmed.
         foreach (var kind in GpuCreationFaults.Kinds) {
             faults.Arm(
                 kind: kind,
-                nth: 4
+                nth: 5
             );
         }
 
         foreach (var (key, (_, create)) in Creations()) {
             Assert.True(
                 condition: Reaches(create: create, gpu: gpu, services: services),
-                userMessage: $"{key} faulted before its fourth creation."
+                userMessage: $"{key} faulted before its fifth creation."
             );
         }
 

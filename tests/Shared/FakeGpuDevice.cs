@@ -105,7 +105,8 @@ internal sealed class FakeGpuDevice :
     /// its height times four bytes, a buffer its size.</summary>
     public GpuDeviceMemoryWork Memory { get; } = new(backend: "fake");
 
-    public GpuMemoryProfile MemoryProfile => default;
+    /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
+    public GpuMemoryProfile MemoryProfile { get; set; }
     /// <summary>Gets this device as every one of its own services.</summary>
     public GpuDeviceServices Services { get; }
 
@@ -375,6 +376,19 @@ internal sealed class FakeGpuDevice :
 
         return new Resource(
             creation: Track(kind: "host-visible buffer"),
+            gpu: this,
+            sizeBytes: sizeBytes
+        );
+    }
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) {
+        Hit(key: "IGpuBufferFactory.CreateHostVisibleDeviceLocal");
+
+        return new Resource(
+            creation: Track(
+                deviceLocal: true,
+                deviceLocalBytes: sizeBytes,
+                kind: "host-visible device-local buffer"
+            ),
             gpu: this,
             sizeBytes: sizeBytes
         );

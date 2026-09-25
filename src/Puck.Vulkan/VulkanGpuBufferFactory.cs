@@ -5,7 +5,8 @@ namespace Puck.Vulkan;
 
 /// <summary>
 /// Implements <see cref="IGpuBufferFactory"/> for Vulkan through <see cref="IVulkanBufferApi"/>, on its device context:
-/// a host-visible buffer is a host-coherent allocation mapped for its lifetime, a device-local one a
+/// a host-visible buffer is a host-coherent allocation mapped for its lifetime, a host-visible device-local one a
+/// <c>DEVICE_LOCAL</c>, host-coherent allocation (the aperture) mapped the same way, and a device-local one a
 /// <c>DEVICE_LOCAL</c> allocation that is never mapped.
 /// </summary>
 /// <param name="deviceContext">The device context every buffer is created on.</param>
@@ -51,6 +52,13 @@ public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, I
     public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) =>
         Create(
             memory: VulkanBufferMemory.HostCoherent,
+            sizeBytes: sizeBytes,
+            usage: usage
+        );
+    /// <inheritdoc/>
+    public IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) =>
+        Create(
+            memory: VulkanBufferMemory.HostCoherentDeviceLocal,
             sizeBytes: sizeBytes,
             usage: usage
         );
