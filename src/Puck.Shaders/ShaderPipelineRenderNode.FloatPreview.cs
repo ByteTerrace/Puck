@@ -14,6 +14,13 @@ public sealed partial class ShaderPipelineRenderNode {
     /// <summary>Gets whether a selection's float preview is being built on the thread pool. The current selection stays
     /// published meanwhile; the new one takes effect at the first frame boundary after the build finishes.</summary>
     public bool IsBuildingPreview => (m_previewBuild.IsPending && !m_previewBuild.IsCompleted);
+    /// <summary>Gets the float preview's descriptor pool for one in-flight frame: one set holding the sampled source.</summary>
+    public static GpuDescriptorPoolSizes PreviewDescriptorPool { get; } = new(
+        CombinedImageSamplerCount: 1,
+        MaxSets: 1,
+        StorageBufferCount: 0,
+        StorageImageCount: 0
+    );
 
     // Puts built preview objects into service with the descriptor and command objects the frame thread owns.
     private FloatPreviewPass CreatePreview(PreviewObjects objects) => new(
@@ -323,15 +330,9 @@ public sealed partial class ShaderPipelineRenderNode {
             m_targetInitialized = new bool[inFlight];
             try {
                 var bindings = gpu.Bindings;
-                var poolSizes = new GpuDescriptorPoolSizes(
-                    CombinedImageSamplerCount: 1,
-                    MaxSets: 1,
-                    StorageBufferCount: 0,
-                    StorageImageCount: 0
-                );
 
                 for (var i = 0; (i < inFlight); i++) {
-                    m_descriptorPools[i] = bindings.CreatePool(sizes: poolSizes);
+                    m_descriptorPools[i] = bindings.CreatePool(sizes: PreviewDescriptorPool);
                     m_descriptorSets[i] = bindings.AllocateSet(
                         m_descriptorPools[i],
                         m_pipeline.DescriptorSetLayoutHandle

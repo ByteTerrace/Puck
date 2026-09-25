@@ -1470,25 +1470,41 @@ Phase 3, the groups, follows phase 2:
       free list as it began and allocate nothing (reuse). A double free and a
       free of a range never allocated are refused by name
       (`GpuRangeAllocatorLawTests`).
-    - 14a-2, the heap's size, GPU-free: the composition sums the descriptor
-      demand every pool owner declares before it creates a pool, from the
-      same `GpuDescriptorPoolSizes` its pool is created with, times the sets
-      it keeps in flight: the SDF engine per frame-ring slot, each pipeline
-      node pass per in-flight slot and per instance the graph budget admits,
-      the overlay, the float preview's slots and each `GpuRegion`'s copy
-      pool. The heap holds twice that demand, because a reloaded graph keeps
-      its predecessor's pools until the predecessor's last submission
-      retires, so a reload briefly holds both. The size is the smaller of
-      that and `GpuDeviceCapabilities.ViewHeapSize`, and a demand the device
-      cannot hold is refused by name at device creation rather than
-      truncated. The sampler heap is the smaller of 2,048 and
-      `GpuDeviceCapabilities.SamplerHeapSize`. Laws: the demand sum over a
-      fake composition, the doubling, the cap, and the refusal.
+    - 14a-2, done: the heaps' size and admission, GPU-free.
+      `GpuDescriptorHeapBudget` in `Puck.Abstractions/Gpu` sizes the view
+      heap to `GpuDeviceCapabilities.ViewHeapSize` and the sampler heap to
+      `SamplerHeapSize`, each as the device reports it, and refuses by name a
+      device that reports neither, as a Vulkan device does. Every pool owner
+      states its pools statically and creates them from that statement:
+      `SdfWorldEngine.DescriptorPoolSizes`, `UnifiedOverlayNode.DescriptorPoolSizes`,
+      `ShaderPipelineRenderNode.DescriptorPools` (a pass's pool per in-flight
+      slot, then `PreviewDescriptorPool` per slot) and
+      `GpuRegion.CopyPoolSizes`. `TryAdmit` takes a candidate's statement
+      and either allocates one view range per pool that holds a descriptor or
+      refuses the whole candidate by name with its demand, allocating
+      nothing; `Release` returns an admission's ranges. At most
+      `MaxLivePools` pools, 1,024, are live on a device. `HeapBytes` is the
+      figure `memory.directx` records. Laws: `GpuDescriptorHeapBudgetLawTests`
+      (the reported and guaranteed sizes, the no-heap refusal, whole-or-nothing
+      admission, release and reuse, the live-pool refusal, the bytes), and on
+      the fakes one law per owner that its statement equals the pools it
+      creates (`SdfWorldEngineWorkLawTests`, `UnifiedOverlayWorkLawTests`,
+      `ShaderPipelineRenderNodeLawTests`, `GpuResidencyLawTests`). Nothing
+      admits through the budget yet. The choice and the two rejected sizings
+      are in [the decisions](../decisions/rendering.md#how-worlds-reach-the-gpu).
     - 14a-3, the heap in place: `DirectXGpuBindings` creates the two
-      shader-visible heaps once per device and a pool allocates its range
-      from them instead of a heap of its own; each command list binds the
-      device's heaps once. It also reads `ResourceBindingTier`, and on Vulkan
-      the device creation refuses a `MaxBoundDescriptorSets` below four or a
+      shader-visible heaps once per device from the device's
+      `GpuDescriptorHeapBudget` and a pool allocates its range from them
+      instead of a heap of its own; each command list binds the device's
+      heaps once, and the heaps' bytes count under `memory.directx`. An owner
+      is admitted before it allocates, and a pipeline candidate that does not
+      fit is refused by name at install while the installed graph keeps
+      presenting. The pipeline node holds one pool for all its passes and
+      in-flight slots rather than one per pass and slot: a node at
+      `ShaderPipelineLimits.MaxPasses` with three frames in flight otherwise
+      holds 387 pools, so three such nodes would pass `MaxLivePools`. It
+      also reads `ResourceBindingTier`, and on Vulkan the device creation
+      refuses a `MaxBoundDescriptorSets` below four or a
       `MaxPushConstantBytes` below four by name. Check: `puck parity` and
       the GPU canaries on Direct3D 12, whose sources the coverage index does
       not map because it is recorded on Vulkan, so every Direct3D 12 canary

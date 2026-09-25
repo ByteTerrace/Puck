@@ -53,6 +53,8 @@ internal sealed class FakeGpuDevice :
     public GpuMemoryProfile MemoryProfile => default;
     /// <summary>Gets this device as every one of its own services.</summary>
     public GpuDeviceServices Services { get; }
+    /// <summary>Gets every descriptor pool created, in creation order, as its creation sized it.</summary>
+    public List<GpuDescriptorPoolSizes> PoolsCreated { get; } = [];
     /// <summary>Gets the number of submissions made, fenced or not.</summary>
     public int Submissions { get; private set; }
 
@@ -86,7 +88,11 @@ internal sealed class FakeGpuDevice :
         return new Resource();
     }
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => 7;
-    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => 8;
+    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) {
+        PoolsCreated.Add(item: sizes);
+
+        return 8;
+    }
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => 9;
     void IGpuBindings.DestroyPool(nint poolHandle) { }
     void IGpuBindings.DestroySampler(nint samplerHandle) { }

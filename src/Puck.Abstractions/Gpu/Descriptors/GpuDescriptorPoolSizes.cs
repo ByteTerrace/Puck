@@ -16,6 +16,10 @@ public readonly record struct GpuDescriptorPoolSizes(
     uint StorageBufferCount,
     uint StorageImageCount
 ) {
+    /// <summary>Gets the shader-visible view-heap slots the pool occupies on a backend that packs every kind into one
+    /// heap: the sum of the per-kind counts.</summary>
+    public uint HeapDescriptors => checked(((CombinedImageSamplerCount + StorageBufferCount) + StorageImageCount));
+
     /// <summary>Sums the per-kind descriptor demand across one or more descriptor sets, each a compute pipeline's
     /// binding list. <see cref="MaxSets"/> is the number of sets; an array binding (<see cref="GpuComputeBinding.Count"/>
     /// &gt; 1) contributes its full count. Backend-neutral: a Vulkan pool consumes the per-kind counts directly, while a

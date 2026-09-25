@@ -296,6 +296,30 @@ public sealed class GpuResidencyLawTests {
             slotCount: 2
         ));
     }
+    [InlineData(GpuResidencyPolicy.InPlace)]
+    [InlineData(GpuResidencyPolicy.Ring)]
+    [InlineData(GpuResidencyPolicy.Staged)]
+    [Theory]
+    public void TheCopyPoolARegionStatesIsThePoolItCreates(GpuResidencyPolicy policy) {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            policy: policy,
+            recorder: gpu.Services.Recorder,
+            slotCount: 3
+        );
+
+        Assert.Equal(
+            actual: gpu.PoolsCreated,
+            expected: ((policy == GpuResidencyPolicy.Staged)
+                ? [GpuRegion.CopyPoolSizes(slotCount: 3)]
+                : [])
+        );
+    }
 
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {
         using var module = gpu.Services.ShaderModuleFactory.Create(
