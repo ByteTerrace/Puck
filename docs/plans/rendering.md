@@ -750,8 +750,9 @@ which oracle laws pin. The three destinations are defined:
 surface only; `Passthrough` needs a source the local user opened, and
 `SourcePassthrough.ToClient` states the client-coordinate and DPI contract;
 `Presentation` is the `ISourcePicker` seam. A world screen's `route.input`
-names its destination, `WorldScreenMappings.Of` publishes the row's mapping with
-the glass bezel as its warp, `world.screens` echoes the destination, and the
+names its destination, `WorldScreenMappings.Of` builds the row's mapping with
+the glass bezel as its warp, though only its laws call it yet,
+`world.screens` echoes the destination, and the
 validator refuses `Passthrough` by name. `SourceFocus` in `Puck.Input` routes
 keys and text to a focused passthrough source, sends each release where its
 press went, and returns focus to the game on Control, Alt and Escape.
@@ -802,8 +803,15 @@ There is no jitter, motion vector, or history in the SDF kernels; render scale
 is a bilinear-to-Catmull-Rom upsample in the composite pass.
 
 P12's source contract, producer registration and conversion passes have
-landed; the graph wiring, the uploads through P7's residency, and zero-copy
-import are owed. Every image that enters rendering from outside a pass is
+landed; the graph wiring, the uploads through P7's residency, and
+synchronization across devices are owed. The camera and probe GPU tiers, and
+desktop capture on a Direct3D 12 host, already share their images without a
+copy, as simultaneous-access Direct3D 12 textures that a Vulkan host imports.
+Nothing orders the devices on the GPU: each producer ends a write with a CPU
+wait on its Direct3D 11 device and then publishes a slot index, and the
+consumer holds a CPU slot lease until its submission retires. The capture GPU
+route and the offscreen views' renders sample a slot with no lease at all.
+Every image that enters rendering from outside a pass is
 described by `ImageSourceDescriptor` (`Puck.Abstractions.Sources`): producer,
 transport, extent, pixel format (including palette-indexed and NV12), color
 encoding, cadence, presentation stamp, content class and capture fill. A world
@@ -830,7 +838,9 @@ linear light. `ImageSourceConversion` is their CPU reference, and the
 `source-conversion` canary holds the palette and NV12 kernels to it on both
 backends. No producer writes a region yet. The emulators still publish through
 `IMachineVideoOutput`'s own `IGpuSurfaceUpload`, and the test pattern, the QR
-code, the capture CPU tier and the fills through `CpuSurfaceSource`. Each waits
+code, the capture and camera CPU tiers and the fills through
+`CpuSurfaceSource`. Only the camera's CPU tier hands the screen a counted
+lease; the others and the machine outputs hand it a bare handle. Each waits
 for P12b to record its region flush and conversion dispatch as a graph source
 node. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
 through Media Foundation (`Win32MediaFoundationCameraService`). Linux registers
@@ -2266,6 +2276,139 @@ schema or planner change.
 
 **Depends on:** P11 and P7.
 
+**P12b, the rest of the package.** P12b moves the source contract into the
+graph. Today the screen binder resolves every screen's image into
+`SdfEngineNode`'s 32 screen slots through one lease callback per slot
+(`WorldScreenBinder.ScreenSources`, read through
+`SdfWorldRenderSpec.ScreenSourceFrames`), and the graph runtime never sees a
+source. Four facts shape the order:
+
+- `sdf.world` is an external producer, and the runtime refuses an external
+  instance that declares reads, so a screen inside the SDF frame cannot read a
+  source instance through a graph edge until external producers take image
+  reads or P14-6 makes the engine a package. P12b takes the first path, so it
+  does not wait on P14.
+- Nothing orders the producing and consuming devices on the GPU, and two paths
+  sample a shared slot with no lease (see the implementation status).
+- No producer writes an upload region, and no graph runs `source-rgba` or
+  `source-transfer`.
+- Few canaries reach this path. The coverage index maps no canary to the
+  capture feed, the camera converter, the QR binder or the descriptor, and the
+  62 it maps to `WorldScreenBinder.cs` mostly construct the binder, because the
+  index is per file. By document, `hud-frame-slots` names a camera producer
+  (offscreen, it opens no device), `instrument-clock-source` a machine output,
+  `view-screens` view screens, and `source-conversion` the palette and NV12
+  kernels; no canary names a test pattern, a QR code, a capture, a probe or a
+  session. Most steps therefore land with a canary of their own.
+
+Each commit is marked with what it waits on. None waits on P7b's groups
+except step 8.
+
+1. Sources are instances. GPU-free; can land now. A `producer` screen source,
+   a machine output and a probe output become external instances whose package
+   is `source.<producer id>` and which carry their settings, and
+   `WorldImageProducers` registers one external-producer factory per producer
+   id. The scheduler schedules a source by demand, at most once a frame however
+   many screens read it; at its descriptor's cadence (a `Static` source once, a
+   `Tick` source once per completed tick, a `Rate` source at most `RateHz`);
+   and at the extent its producer negotiated rather than a footprint. An
+   instance's `SourceHandle` is its identity, which P13b-1 reads. Laws in
+   `RenderGraphSchedulerLawTests`: two screens on one camera publish it once a
+   frame, counted; a source no visible consumer reads publishes nothing; a
+   static source publishes once; a rate source never exceeds its rate over a
+   fixed frame sequence.
+2. Feeds are external producers, and every screen image is a lease. Can land
+   now; it edits `SdfEngineNode`, so it lands before or after P7b-20, not
+   beside it. An `IWorldImageFeed` adapts to `IRenderGraphExternalProducer`:
+   `Produce` publishes the feed at its cadence, and `TryAcquireOutput` returns
+   `WorldCaptureGate.Resolve`'s lease, so the gate sits at the one place a
+   source's image is acquired. External producers take image reads: the runtime
+   binds each read's latest completed output as a lease and hands the bound
+   leases to `Produce`, and `SdfEngineNode` maps them to its screen slots. The
+   refusal of external reads narrows to buffer and previous-frame reads. The
+   capture GPU route acquires its slot through `LatestSlotPublication` as the
+   camera does, and the offscreen views bind acquired leases rather than
+   `ScreenSlot.Handle()` until P11b deletes `ViewStack`. This deletes
+   `ScreenSourceCell`, the binder's per-slot callbacks,
+   `SdfEngineNode.SetScreenSourceFrames` and the legacy
+   `SdfWorldRenderSpec.ScreenSources`. Laws on the fake GPU: a screen's lease
+   retires after the sampling slot's fence; a slot the capture producer is
+   lapping is never handed out while leased; a filled external source binds
+   its fill and is never acquired. Canaries: `view-screens`,
+   `instrument-clock-source`, `hud-frame-slots`, the rest of the binder's 62,
+   and `puck parity`.
+3. Uploaded sources write regions, and conversions are planned passes. Can
+   land now over host-visible regions; the device-local residency P7's policy
+   chooses follows P7b-17 and P7b-19. If it lands before P7b-15, its
+   conversion passes move onto groups with 14b-3's pipeline sources. An
+   uploaded source writes `ImageSourceUploadLayout` regions into a
+   `GpuRegion` range per frame slot, which the runtime binds to the source
+   graph's host buffer port. The graph's one pass is the conversion
+   `ImageSourceConversion.PassOf` names, writing the RGBA8 image every
+   consumer reads, so one conversion runs per source however many consumers
+   read it. The test pattern and the QR code move first; the capture and
+   camera CPU tiers follow through `source-rgba`; each capture fill becomes a
+   static source. `CpuSurfaceSource`'s screen role goes with its last caller.
+   Checks: two consumers of one source run one conversion, counted through
+   `IGpuWorkSource`; `source-conversion` gains `source-rgba` and
+   `source-transfer`; a new canary shows a test-pattern screen and a QR
+   screen on both backends.
+4. Fences across devices. Can land now; it needs nothing from P7b's groups.
+   Each producer's Direct3D 11 CPU wait gives way to a shared fence. The
+   producer opens a `D3D12_FENCE_FLAG_SHARED` fence (Direct3D 11 through
+   `ID3D11Device5::OpenSharedFence`, signalling on its immediate context),
+   each published slot carries the value its write signals, and the consuming
+   submission waits for that value on the GPU: `ID3D12CommandQueue::Wait` on
+   Direct3D 12, and on Vulkan the same fence imported as a timeline semaphore
+   (`VK_KHR_external_semaphore_win32`, the Direct3D 12 fence handle type) in
+   the submission's wait list. The consumer-to-producer order stays the CPU
+   slot lease released after the consumer's fence, so a producer never writes
+   a slot a submission still samples. No keyed mutex. The queue submitter
+   gains a list of external waits. A device that cannot share a fence keeps
+   the CPU wait and says so in `world.screens`. Checks: a law on one adapter
+   in which a Direct3D 11 writer and a Direct3D 12 reader, ordered only by the
+   shared fence, read the written pattern; the Vulkan import on a device that
+   reports the extension; a recorded camera run on both backends on real
+   hardware. Whether WARP's Direct3D 11 device opens a shared fence is
+   unverified.
+5. The capture gate over the graph. Can land now, after step 2. The gate
+   reads the capture armed on `RenderGraphRuntime` rather than
+   `WorldRenderProbe`'s pending path, and its fixed `HoldFrames` gives way to
+   taint. An instance whose latest output read an unfilled external source is
+   tainted, and a capture frame renders every tainted instance it reads again,
+   whatever its divisor, before the root composes, so a slow view cannot carry
+   external pixels into a capture. Laws: a view at divisor 8 that read a
+   camera renders again in the capture frame and reads the fill; a capture
+   never reads a tainted output. `puck parity` is unchanged, since an
+   offscreen host always fills.
+6. Machine outputs are sources, with the exact verdict. Can land now after
+   step 3; it edits `Puck.GamingBricks`. `QueuedMachineWorker.PublishFrame`'s
+   own upload gives way to a region the machine source writes (RGBA or palette
+   indexed, deterministic, tick cadence); the machine arm stays typed because
+   it names a document row. The P12b canary captures a machine source and the
+   test pattern at their instances, before composition, and holds each exactly
+   to its `IImageSourceReference` through `ImageSourceVerdict` on both
+   backends. Canaries: `instrument-clock-source`, the new canary and the
+   emulator batteries.
+7. Probe outputs and view exports are sources. Can land now, after step 4. A
+   probe kernel's output ring is an imported external source, and a view
+   export (a Direct3D 12 image a Direct3D 11 probe reads) signals the same
+   shared fence in the other direction, replacing the drain in
+   `ViewExportRing`. It needs a probe canary, which does not exist.
+8. Consumer-chosen filtering and no slot limit. Waits on P7b-14b-6 and P7b-20.
+   Screens read a separate image and sampler, each screen row chooses nearest
+   or linear, and the 32 fixed slots give way to the engine's group arrays.
+   Until then every screen samples through the one nearest sampler the glyph
+   atlas shares.
+9. The check's list and the deletions, last. Every `WorldScreenSource` arm
+   (`none`, `machine`, the four shipped producer ids, `view`, `session`,
+   `text` and `probe`) is listed with the producer or instance that reproduces
+   it and the check that holds it, and then `ScreenSlot.AcquireFrame`'s
+   per-kind resolution is deleted. The `view` and `session` arms are rendered
+   instances, which P11b's `ViewStack` deletion owns. A law registers a third,
+   fake producer with no schema or planner change. Linux producers and POSIX
+   file-descriptor import stay open.
+
 ### P13 — Hit-to-source mapping and input destinations
 
 **Starts from:** `WorldFramePresenter.UpdatePipelinePointer`, which maps the
@@ -2308,6 +2451,47 @@ a click at the mapped point and the focus chord returns input to the game; a
 pick through a portal reaches the nested world's surface.
 
 **Depends on:** P11 and P12.
+
+**P13b, the rest of the package.** P13's CPU model has no live caller:
+`WorldScreenMappings.Of`, `RenderGraphHitWalk` and `SourceFocus` are called
+only by their laws, `SourceHandle.Producer` only by tests, and the screen
+shading reads its own bezel constant. The pipeline pane's pointer is the one
+live mapping. Each commit is marked with what it waits on; only step 5 waits
+on P7b's groups.
+
+1. Mappings are published from the live renderer. GPU-free; can land after
+   P12b-1. The binder publishes each screen's `SourceMapping` through
+   `WorldScreenMappings.Of`, with the source instance's `SourceHandle` in
+   place of the stand-in, and each pane's through its graph instance, and
+   `world.screens` reports the mapping it publishes. Laws:
+   `WorldScreenInputLawTests` over the live binder's rows.
+2. The simulation destination. GPU-free; can land now. A module registers the
+   `source.pointer.origin` and `source.pointer.direction` Axis3D commands, the
+   host writes the pointer ray through the active camera into the tick's
+   snapshot, and a machine reads the mapped pixel through
+   `SourceMapping.MapRay` inside the tick. A headless canary drives the ray
+   over standard input at a light-gun screen and observes the pixel the
+   machine reports, with identical state hashes on every run and backend. It
+   needs a machine that reads a pointer, which none does yet.
+3. The presentation destination. The CPU half can land now; GPU picking
+   follows P4. A host `ISourcePicker` answers hover and highlight from the
+   published mappings, and later from P4's visibility record.
+4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
+   `SourceFocus`, a focused capture source's window receives pointer and key
+   events at `SourcePassthrough.ToClient`'s client coordinates, and the chord
+   returns focus to the game. The check is the recorded Windows run, on real
+   hardware.
+5. The GPU draws from the mapping. Waits on P7b-20. The screen shading reads
+   each screen's UV layout, crop, letterbox and warp inset from the published
+   mapping instead of `CrtBezel` in `sdf-world.hlsli`, and its mirror,
+   `WorldScreenMappings.Bezel`, is deleted. It adds a per-screen buffer to the
+   SDF engine, so it waits for the engine's groups rather than adding a
+   binding P7b-20 would move again.
+6. Hits continue through live instances. Can land after P11b wires the graph
+   root and P12b-1. `RenderGraphHitWalk` walks the runtime's instance set, and
+   the pane pointer maps through its instance once `views.pipelines` is
+   retired. The portal check needs a nested world rendered as an instance,
+   which no live world does yet.
 
 ### P14 — The SDF engine as a pass package
 
@@ -2641,18 +2825,16 @@ independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
 **Contracts.** P7's memory profile and residency selector have landed, and P7b
-is under way: steps 5, 7, 8, 9 and 12 have landed. Step 6 needs nothing else;
-steps 10 and 11 follow step 9. The groups run in order from step 13, the
-GPU-free group contract, which the rest of phase 3 builds on; step 20, the SDF
+is under way: steps 1 to 13, 14a, 14b-1 and 14b-1b have landed. The groups
+run in order from step 13, the GPU-free group contract, which the rest of
+phase 3 builds on; step 20, the SDF
 engine's groups, also follows P4-1. P8 has landed pending its GPU canaries, and
 its frame group moves from push constants to a descriptor set when step 15
 puts pipelines on groups. P7 and P8 do not read simulation state, so they do
 not wait on the state rebuild.
 
-**The frame graph and nesting.** P11's CPU half has landed, and so have five
-of P11b's items: the first-class package pass kind, a steady-state schedule
-that allocates nothing, the document pass kind, the fold of the pipeline
-document into the graph document, and planned buffer edges. The rest of P11b runs
+**The frame graph and nesting.** P11's CPU half has landed, and so have the
+nine P11b items its implementation status lists. The rest of P11b runs
 beside P7b; only the overlay as a true package waits on its sampler tables and
 the overlay's move onto groups, and only the per-device pass-pipeline cache
 waits on pipelines moving onto groups. P12's
