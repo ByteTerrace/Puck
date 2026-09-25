@@ -457,8 +457,9 @@ frame ring does not. The one state-shaped path that reaches the GPU is the
 physics field lattice, mirrored on the client by `WorldClientFieldLattice` and
 uploaded by `WorldFieldEmitter` one field per produced frame.
 
-P11's CPU half has landed; its second half, P11b, waits on P7's binding
-groups. The frame graph is a document, `puck.render.graph.v1`
+P11's CPU half has landed. Its second half, P11b, runs beside P7b: only the
+overlay as a true package and the per-device pass-pipeline cache wait on P7's
+binding groups. The frame graph is a document, `puck.render.graph.v1`
 (`RenderGraphDefinition` in `src/Puck.Shaders/Graph`). Its members are the
 pipeline document's, plus `packages`: engine work named by package id from
 `RenderGraphPackageCatalog`, which offers `sdf.world`, `overlay` and one
@@ -500,10 +501,19 @@ still render every view, nothing feeds the scheduler a frame, and
 wires `WorldBootComposition`'s node tree onto graph instances fed by the
 scheduler, puts the live schedule's extents and prices in `world.budget`,
 runs the parity and counted-GPU checks, and makes the deletions P11 lists,
-including the `puck.shader.pipeline.v1` schema, whose documents then need only
-their tag changed. Two P11b items have landed: the first-class package pass
-kind in `ShaderPipelineCompiler`, and a steady-state schedule that allocates
-nothing.
+including the `puck.shader.pipeline.v1` schema. Folding that schema into the
+graph document is more than a tag change: the pipeline document's top-level
+`config`, which the planner already refuses, goes with it; the tests and the
+`puck affected` path filter that glob `*.pipeline.json` move with the
+suffix; and a single `.hlsl` source still reads as a one-pass graph. Three
+P11b items have landed: the first-class package pass kind in
+`ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, and
+a document pass kind with no package member, so package work enters the
+planner only through its package entry. A world may author its own root graph
+in `views.graphs`; when it does not, composition synthesizes the default one,
+`sdf.world` then each `render.extensions` pass as `post.<id>` then `overlay`,
+as a graph document that goes through the same compiler, so no render tree is
+built in C# alone.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
@@ -526,7 +536,7 @@ press went, and returns focus to the game on Control, Alt and Escape.
 `RenderGraphHitWalk` in `src/Puck.Hosting/Graph` continues a hit on a rendered
 source through the producer's camera up to a depth limit, normally
 `RenderGraphInstanceSet.NestingDepth`. The pipeline pane's pointer
-(`WorldFramePresenter.ResolvePipelineMouse`) maps through its pane's
+(`WorldFramePresenter.UpdatePipelinePointer`) maps through its pane's
 `SourceMapping`. The laws are `SourceMappingLawTests`,
 `SourcePointerCommandLawTests`, `RenderGraphHitWalkLawTests`,
 `SourceFocusLawTests`, `WorldScreenInputLawTests` and the Maths
@@ -1763,7 +1773,7 @@ schema or planner change.
 
 ### P13 — Hit-to-source mapping and input destinations
 
-**Starts from:** `WorldFramePresenter.ResolvePipelineMouse`, which maps the
+**Starts from:** `WorldFramePresenter.UpdatePipelinePointer`, which maps the
 pointer into a pipeline pane, and `WorldCursorFeed`, which hover-tests HUD
 rectangles only. Nothing maps a hit on a world surface to a source's pixels.
 
@@ -1946,7 +1956,10 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups.
 P11b keeps one resample pass, a port of `resample.comp.hlsl`, in the graph's
-package library; P14 deletes any SDF-side copy, and the pixelate interface
+package library. The port keeps the composite's reconstruction, bilinear
+blending toward clamped Catmull-Rom by `UpscaleSharpness`, which today's
+`resample.comp.hlsl` lacks, so the render-scale lever survives the composite's
+deletion; P14 deletes any SDF-side copy, and the pixelate interface
 fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
 P11b's `sdf.world` adapter submits through `SdfWorldEngine`'s ring as an
 external producer whose output image the graph imports. Before P12, a screen's
@@ -2116,9 +2129,12 @@ its frame group moves from push constants to a descriptor set when step 15
 puts pipelines on groups. P7 and P8 do not read simulation state, so they do
 not wait on the state rebuild.
 
-**The frame graph and nesting.** P11's CPU half has landed, and so have two of
-P11b's items: the first-class package pass kind and a steady-state schedule
-that allocates nothing. The rest of P11b waits on P7b's binding groups. P12's
+**The frame graph and nesting.** P11's CPU half has landed, and so have three
+of P11b's items: the first-class package pass kind, a steady-state schedule
+that allocates nothing, and the document pass kind. The rest of P11b runs
+beside P7b; only the overlay as a true package waits on its sampler tables and
+the overlay's move onto groups, and only the per-device pass-pipeline cache
+waits on pipelines moving onto groups. P12's
 source contract, producers and conversion passes have landed; P12b, the graph
 wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
 P11b and P12b, because the engine's composition and screens need somewhere to
@@ -2138,8 +2154,9 @@ P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
 which have landed. It also follows P11b's graph wiring, because the rows it
 binds are `views.graphs` rows.
 
-The longest remaining chain runs through P7b's groups to P11b and P12b, then
-P14, and ends with P15.
+The longest remaining chain runs through P7b's groups to the two P11b items
+that wait on them, then P14, and ends with P15; the rest of P11b and P12b
+proceed beside P7b.
 
 ## Verification summary
 

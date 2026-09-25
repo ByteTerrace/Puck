@@ -10,8 +10,8 @@ namespace Puck.Shaders;
 public sealed record RenderGraphPackage(string Id, int Inputs, int Outputs, string Summary);
 /// <summary>The engine packages a host offers graphs, by id.</summary>
 public sealed class RenderGraphPackageCatalog {
-    /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion, lighting and
-    /// composition from the instance's camera. The screens it shows are the instance's reads, not ports.</summary>
+    /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
+    /// from the instance's camera. The screens it shows are the instance's reads, not ports.</summary>
     public const string SdfWorld = "sdf.world";
     /// <summary>The id of the unified overlay: the console, HUD, toasts and cursor drawn over its input.</summary>
     public const string Overlay = "overlay";
