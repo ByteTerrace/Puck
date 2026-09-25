@@ -1,8 +1,8 @@
 namespace Puck.SignedDistance;
 
-// Values must match Assets/Shaders/Sdf/sdf-vm.hlsli (SDF_WPG_*); IUC order.
 /// <summary>The 17 wallpaper symmetry groups, in IUC order. P1–P4G tile a square/rectangular lattice; P3 and up tile
-/// the equilateral hexagonal lattice (the cell must be square — the pitch is the cell's x extent).</summary>
+/// the equilateral hexagonal lattice (the cell must be square — the pitch is the cell's x extent). The kernels read each
+/// member as <c>SDF_WPG_*</c> from the generated <c>sdf-isa.hlsli</c>.</summary>
 public enum SdfWallpaperGroup : uint {
     /// <summary>Pure lattice translation (bit-identical to a two-axis RepeatLimited).</summary>
     P1 = 0,
@@ -40,7 +40,7 @@ public enum SdfWallpaperGroup : uint {
     P6M = 16,
 }
 /// <summary>The plane a <see cref="SdfOp.WallpaperFold"/> folds, named by the two axes it acts on (the third axis is
-/// untouched). Values must match the axis decode in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+/// untouched). The kernels read each member as <c>SDF_WPG_PLANE_*</c> from the generated <c>sdf-isa.hlsli</c>.</summary>
 public enum SdfWallpaperPlane : uint {
     /// <summary>Fold X and Z (tile the ground).</summary>
     XZ = 0,

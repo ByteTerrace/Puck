@@ -1,7 +1,8 @@
 namespace Puck.SignedDistance;
 
-/// <summary>Identifies an SDF VM instruction operation. Values must match the <c>SDF_OP_*</c> definitions in
-/// <c>Assets/Shaders/Sdf/sdf-vm.hlsli</c>; reserved gaps preserve the packed wire format.</summary>
+/// <summary>Identifies an SDF VM instruction operation. The kernels read each member as <c>SDF_OP_*</c> from the
+/// generated <c>sdf-isa.hlsli</c> (<c>Puck.SdfVm.SdfIsaHlsl</c>); reserved gaps preserve the packed wire
+/// format.</summary>
 public enum SdfOp : uint {
     ResetPoint = 0,
     Translate = 1,
@@ -124,8 +125,7 @@ public enum SdfOp : uint {
     /// distanceScale / the wallpaper material delta), so <see cref="ResetPoint"/> semantics are unchanged and per-shape
     /// cull bounds after the Push in the same chain stay sound. Depth is capped at
     /// <see cref="SdfProgramBuilder.MaxFieldScopeDepth"/> (a shader-constant + validator rule, not part of the packed
-    /// layout). Op-unused (scope-free) programs are byte-identical. KEEP IN SYNC with SDF_OP_PUSH_FIELD in
-    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// layout). Op-unused (scope-free) programs are byte-identical.</summary>
     PushField = 27,
     /// <summary>Closes the scope opened by the matching <see cref="PushField"/> and composes the scope's accumulated
     /// field back into the saved parent accumulator as a single candidate — reusing the shape blend tail (a pop is just
@@ -137,8 +137,7 @@ public enum SdfOp : uint {
     /// re-scaled or take the point material delta (the fusion trap). Its material tie-break matches shape's (strict
     /// compare — the parent keeps its material on a tie). A chamfer compose is the one non-1-Lipschitz case: it enters
     /// <see cref="SdfProgram.StepScale"/> through the same per-composition recurrence a chamfer
-    /// <see cref="ShapeBlend"/> does, so repeated pops accumulate. KEEP IN SYNC with SDF_OP_POP_FIELD in
-    /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <see cref="ShapeBlend"/> does, so repeated pops accumulate.</summary>
     PopField = 28,
     /// <summary>Adds bounded hash-lattice fBm value noise to the field accumulated so far — irregular surface relief
     /// (terrain crags, bark, rock) where <see cref="Displace"/>'s periodic sine product would read as corrugation. A
@@ -179,7 +178,7 @@ public enum SdfOp : uint {
     /// value noise so the erosion front is ragged rather than a uniform shrink. RENDER-ONLY, like the other warp
     /// family ops: <c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c> does not interpret this op (it carries no
     /// dynamic-transform table in its signature to read a lane from), so a shape carrying it is unreachable for
-    /// deterministic field contact. KEEP IN SYNC with SDF_OP_LANE_ERODE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// deterministic field contact.</summary>
     LaneErode = 34,
     /// <summary>Adds amplitude*(F(localPoint*frequency)-0.5) to the running field.
     /// Data0=(frequency, amplitude, randomness, 0), Shape=seed, Blend=SdfCellMode.

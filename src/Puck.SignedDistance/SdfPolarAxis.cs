@@ -2,8 +2,8 @@ namespace Puck.SignedDistance;
 
 /// <summary>The rotation axis of an angular domain-repeat (<see cref="SdfProgramBuilder.RepeatPolar"/> /
 /// <see cref="SdfOp.RepeatPolar"/>): the fold acts in the plane PERPENDICULAR to it, leaving the axial coordinate
-/// untouched. Values MUST match the <c>SDF_POLAR_AXIS_*</c> defines in Assets/Shaders/Sdf/sdf-vm.hlsli (read from the
-/// instruction's Shape lane).</summary>
+/// untouched. The kernels read each member as <c>SDF_POLAR_AXIS_*</c> from the generated <c>sdf-isa.hlsli</c> (the
+/// value rides the instruction's Shape lane).</summary>
 public enum SdfPolarAxis : uint {
     /// <summary>Repeat about the local X axis — the fold acts in the YZ plane.</summary>
     X = 0,

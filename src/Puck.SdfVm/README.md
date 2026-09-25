@@ -346,9 +346,16 @@ is booted by hand on each backend and compared with `puck parity compare`;
 the [parity README](../../tests/Puck.Parity/README.md) has the recipe. GPU
 kernel behavior outside the parity stations is not verified by any machine
 check.
-The [`rendering` skill](../../.claude/skills/rendering/SKILL.md) carries the
-C#↔HLSL sync-pair contracts this project and `Puck.SignedDistance` must change
-together.
+The kernels read the instruction set from
+`Assets/Shaders/Sdf/sdf-isa.hlsli`, which `SdfIsaHlsl` generates from
+`Puck.SignedDistance`: the ISA version and report word, every opcode, shape,
+blend, lift, noise, polar-axis and wallpaper enum, and the packed-layout
+constants. It is checked in and never edited by hand. After changing any of
+those C# members, run `puck shaders generate` and rebuild this project;
+`puck shaders generate --check` exits 1 naming the file when it has drifted,
+and CI runs it. The [`rendering` skill](../../.claude/skills/rendering/SKILL.md)
+carries the C#↔HLSL sync-pair contracts that are still written on both sides
+and must change together.
 
 ## Capture completion
 

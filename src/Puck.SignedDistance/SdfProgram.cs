@@ -54,9 +54,6 @@ namespace Puck.SignedDistance;
 /// <summary>Contains the typed SDF instruction stream and its packed GPU representation, bounds, instances,
 /// materials, screen surfaces, and acceleration metadata.</summary>
 public sealed partial class SdfProgram {
-    // Bounding-sphere entry modes (KEEP IN SYNC with the SDF_BOUND_* skip in Assets/Shaders/Sdf/sdf-vm.hlsli map()).
-    private const uint BoundModeDynamic = 2;
-    private const uint BoundModeStatic = 1;
     /// <summary>The float-safety inflation applied to every packed bound radius: the skip compares a HOST-float bound
     /// against a SHADER-float running minimum, so the radius is padded past both precisions' worst rounding — a skip
     /// then only fires with real margin, keeping the skipped field bit-identical to full evaluation.</summary>
@@ -80,42 +77,14 @@ public sealed partial class SdfProgram {
     /// branch — no sphere-vs-cone math, mask bit left 0 — while the slot still occupies its reserved capacity. Chosen
     /// well below any legitimate rounding of a real radius toward 0 so the branch never misfires on a genuine bound.</summary>
     private const float ParkedBoundRadius = -1f;
-    // High leaf shape-index bit: the host-collapsed local rotation is identity, so the shader need not load/apply it.
-    // KEEP IN SYNC with SDF_RIGID_LEAF_IDENTITY_ROTATION / SDF_RIGID_LEAF_SHAPE_MASK in sdf-vm.hlsli.
-    private const uint RigidLeafIdentityRotationFlag = 0x80000000u;
-    // Second-highest leaf shape-index bit: the leaf rides a fold run, described by the slot that follows it. KEEP IN SYNC
-    // with SDF_RIGID_LEAF_FOLDED in sdf-vm.hlsli.
-    private const uint RigidLeafFoldedFlag = 0x40000000u;
-    // The longest fold run, in instructions from its first fold through its last, a rigid leaf carries; longer runs stay
-    // on the generic interpreter. KEEP IN SYNC with SDF_RIGID_LEAF_MAX_FOLD_RUN in sdf-vm.hlsli.
-    private const int RigidLeafMaxFoldRun = 8;
-    // High shape-type-lane bit on a ShapeBlend instruction: SdfInstruction.Detail. Shape-type ids are far below 2^31,
-    // so the bit is free. KEEP IN SYNC with SDF_SHAPE_DETAIL_FLAG in sdf-vm.hlsli.
-    private const uint ShapeDetailFlag = 0x80000000u;
     // Instance-header .z admission bit; KEEP IN SYNC with sdfLoadProgramLayout's noDetailShapes.
     private const uint NoDetailShapesFlag = 1u;
-    // The next-highest shape-type-lane bit: SdfInstruction.Secondary == false. KEEP IN SYNC with
-    // SDF_SHAPE_NO_SECONDARY_FLAG in sdf-vm.hlsli.
-    private const uint ShapeNoSecondaryFlag = 0x40000000u;
     /// <summary>Each packed screen-surface entry's uvec4 (16-byte) stride: right.xyz+halfWidth, up.xyz+halfHeight,
     /// origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli's ScreenSurfaceData).</summary>
     private const int ScreenSurfaceVectorsPerEntry = 3;
     /// <summary>Each packed <see cref="SdfShapeType.Sweep"/> curve table entry's uvec4 stride: (A.xyz, radiusStart),
     /// (B.xyz, radiusEnd), (C.xyz, bulge).</summary>
     private const int SweepCurveVectorsPerEntry = 3;
-    /// <summary>Material float4 stride; paired with PackMaterials and sdfMaterialLoad.</summary>
-    private const int MaterialVectorsPerEntry = 20;
-    private const uint SegmentEndMask = 0x7FFFFFFFu;
-    // High segment-mode bit: the segment owns a host-compiled rigid-leaf plan. The low byte remains SDF_BOUND_*.
-    // KEEP IN SYNC with SDF_SEGMENT_RIGID_PLAN / SDF_SEGMENT_BOUND_MASK in sdf-vm.hlsli.
-    private const uint SegmentRigidPlanFlag = 0x80000000u;
-    /// <summary>The per-instance shadow-transparent flag, OR'd into the high bit of the instance meta's segmentEnd lane
-    /// (i1.w) for an instance whose compose only removes material (a pure Subtraction-family carve). The soft-shadow
-    /// gather reads it under the <c>sdf.shadow-proxy</c> lever to omit the instance from the shadow occluder set
-    /// (marching the pre-carve union hull); mapCore masks it off with <see cref="SegmentEndMask"/>, so segmentEnd
-    /// stays the true directory range and every rendered pixel is byte-identical. Segment-directory indices are far below
-    /// 2^31, so this high bit is free. KEEP IN SYNC with sdf-vm.hlsli's SDF_INSTANCE_SHADOW_TRANSPARENT_BIT / SDF_INSTANCE_SEGMENT_END_MASK.</summary>
-    private const uint ShadowTransparentInstanceFlag = 0x80000000u;
     /// <summary>The UNMASKABLE-instance sentinel radius: an instance carrying an unbounded shape or compose
     /// (<see cref="HasUnmaskableInfluence"/>) packs this instead of a real bound, so the beam prepass's sphere-vs-cone
     /// test <c>axisDistance &lt;= (radius + chord*alongRay) * inverseAperture</c> passes for every tile and the instance
@@ -868,7 +837,7 @@ public sealed partial class SdfProgram {
             End: (segmentEnd + 1),
             InstanceIndex: instanceIndex,
             Instruction: segmentStart,
-            Mode: 0,
+            Mode: BoundModeNone,
             Radius: 0f,
             Slot: 0
         );

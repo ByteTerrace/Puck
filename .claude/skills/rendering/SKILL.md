@@ -28,7 +28,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, `SdfBandedFieldEvaluator`, `BakedWorldQuery`); seams `IWorldQuery`/`IFieldEvaluator` in `src/Puck.Maths/FixedPoint` | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
 | Prototype bakes (mesh, textures, impostor) | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakeTier`, `SdfBakedTexture`); `src/Puck.Assets/Textures` (BC4/BC5/BC6H/BC7 codecs, `TextureMipChain`, `OctahedralNormal`); `CreationBaker`, `CreationBakeKey`, `CreationBakeCodec` in `src/Puck.World.Authoring/Authoring`; `WorldBakeStore`, `WorldBakeChunk` in `src/Puck.World.Schema`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes), [creation bakes](../../../docs/architecture/worlds.md#creation-bakes) |
 | GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldEngine.*.cs`, `SdfEngineNode`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
-| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `sdf-vm.hlsli` is the interpreter (`mapCore`, `mapGradCore`), `sdf-world.hlsli` the view logic, one `*.comp.hlsl` wrapper per dispatch | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
+| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), `sdf-vm.hlsli` the interpreter (`mapCore`, `mapGradCore`), `sdf-world.hlsli` the view logic, one `*.comp.hlsl` wrapper per dispatch | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
 | Cameras and offscreen views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewStack`, `ViewTransition`) | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldPipelineRuntime`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
 | Shader manifests, pipelines, builds | `src/Puck.Shaders`, `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
@@ -56,23 +56,29 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    `MaxSmoothBlendRadius` (compose halo), `MaxScopedFieldReach` (a scoped field
    op's outward growth), or `HasUnmaskableInfluence` (no finite bound can
    contain it). Every soft-blend family needs its own halo derivation.
-3. **Every GPU call site** — `mapCore` and its hit-only twin `mapGradCore` in
+3. **Kernel declarations** — run `puck shaders generate` to rewrite
+   `sdf-isa.hlsli` from the C# model; the new member appears as its enum's
+   prefix plus its name in upper snake case (`SdfOp.CellDisplace` is
+   `SDF_OP_CELL_DISPLACE`). Never hand-write a `#define` for an ISA value: a new
+   ISA-owned constant the kernels read joins `SdfIsaHlsl.Generate`. CI's
+   `puck shaders generate --check` fails on a stale file.
+4. **Every GPU call site** — `mapCore` and its hit-only twin `mapGradCore` in
    `sdf-vm.hlsli`, including the rigid-leaf fast paths in each, and the compiled
    part walk in `sdf-parts.hlsli`. A blend needs `blendShape` and
    `blendShapeDual` (subtraction negates the candidate gradient) and a place in
    the material-winner rules of `sdfComposeCandidate` and its dual twin.
-4. **Kernel tiers** — if the case is stripped under `SDF_STRIP_HEAVY` or
+5. **Kernel tiers** — if the case is stripped under `SDF_STRIP_HEAVY` or
    `SDF_STRIP_ALL_EXOTIC`, `SdfViewsKernelVariants.FirstHeavyTouch` /
    `FirstExoticTouch` must send a program using it to a fuller variant. Read the
    current sets from `SdfViewsKernelVariant.cs` and the `#if` gates rather than
    from any list.
-5. **CPU interpreter** — `SdfFieldEvaluator` either interprets the instruction
+6. **CPU interpreter** — `SdfFieldEvaluator` either interprets the instruction
    (its blend switch and `ResolveWinner` included) or refuses it by name. Its
    blend switch falls through to union for an unknown value, so a missing arm
    silently turns the new blend into a union in contact and queries.
-6. **ISA version** — bump `SdfIsa.Version` and `sdf-isa.hlsli` together when
-   existing bytecode would misread the new encoding.
-7. **Document surface** — enum values are nameable in creation documents and
+7. **ISA version** — raise `SdfIsa.Version` and regenerate when existing
+   bytecode would misread the new encoding.
+8. **Document surface** — enum values are nameable in creation documents and
    `.puck` as soon as they exist, and their XML docs feed the generated world
    schemas. Either carry the new parameters through `CreationCanonicalizer` and
    the stamp emitters or refuse the value there, then regenerate with
@@ -82,8 +88,9 @@ Large additions to `SdfProgram.cs` belong in a partial file: the file-length
 ledger (`puck lengths`) only lets a recorded file shrink.
 
 [references/sync-pairs.md](references/sync-pairs.md) lists every C#↔HLSL
-coupling with its exact layout. Read it before editing an enum value, a packed
-word, a byte length, a binding, or a register.
+coupling with its exact layout and marks which side is generated. Read it
+before editing an enum value, a packed word, a byte length, a binding, or a
+register.
 
 ## Editing kernels
 
@@ -134,7 +141,7 @@ word, a byte length, a binding, or a register.
 These are one-line cautions; the owning pages hold the derivations.
 
 - **One accumulator.** `mapCore` carries one running distance for the whole
-  program and `SDF_OP_RESET` resets only the point. Union and subtraction are
+  program and `SDF_OP_RESET_POINT` resets only the point. Union and subtraction are
   local; an intersection-family blend annihilates every earlier shape it does
   not overlap, so author an intersection pair first against the empty
   accumulator. Field ops (`Onion`, `Dilate`, `Displace`) silently grow every
