@@ -129,7 +129,7 @@ public sealed class SdfEngineNodeWorkLawTests {
                 frameSource: new FixedFrameSource(frame: frame),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
-                pipelines: new SdfWorldPipelineCache(),
+                pipelines: SdfTestPipelines.Cache(),
                 width: Extent
             );
             m_context = new FrameContext(

@@ -3,10 +3,11 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-// A graph's package passes, recorded inside the node's own submission. The planner orders a package pass in the compute
-// shape it reaches resources by, so the node allocates the versions it writes like any pass's, records its planned
-// barriers, and hands its recorder the command buffer with the versions bound to its ports resolved for the frame slot,
-// the pass's frame block and the frame's lease list. The package's factory builds its pipelines with the candidate's
+// A graph's package passes, recorded inside the node's own submission. The planner plans a package pass's barriers and
+// layouts from its ports' accesses as it plans a shader pass's, so the node allocates the versions it writes like any
+// pass's, records its planned barriers, and hands its recorder the command buffer with the versions bound to its ports
+// resolved for the frame slot in their planned layouts, the pass's frame block and the frame's lease list. The recorder
+// records no barrier. The package's factory builds its pipelines with the candidate's
 // shader passes on the thread pool; its recorder is created from those objects when the graph installs, records its own
 // work, binds its own descriptors from the graph's pool, and is disposed with the graph's passes, so a replacement, a
 // device loss and disposal each release it with the objects it recorded against. The node ends and submits the command
@@ -114,15 +115,45 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return null;
     }
+    // The position of the first input an output of the pass would stand for that is a host's image bound in another
+    // layout than the node publishes in, or -1 when there is none. The node publishes every image in its output layout,
+    // which is the layout its consumer's descriptor is written with, and hands a host's image back in the host's own
+    // layout, so an output cannot stand for such an input: the recording must draw.
+    private int HostInputInAnotherLayout(RuntimePass pass) {
+        var count = Math.Min(
+            val1: pass.Inputs.Length,
+            val2: pass.Outputs.Length
+        );
+
+        for (var index = 0; (index < count); index++) {
+            if (
+                m_resourceLookup[pass.Inputs[index].Name].Spec.IsExternal &&
+                m_externalImages.TryGetValue(
+                    key: pass.Inputs[index].Name,
+                    value: out var image
+                ) &&
+                (image.Layout != m_outputLayout)
+            ) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
     // Records what a package's recording did with its outputs: each output of a recording that drew nothing stands for
     // the input at its position until the pass records again, and a recording that drew clears that.
     private void ApplyOutcome(RuntimePass pass, int slot, RenderGraphPackageOutcome outcome) {
-        if (
-            (outcome == RenderGraphPackageOutcome.DrewNothing) &&
-            (pass.PackageAliasRefusal is { } refusal)
-        ) {
-            throw new InvalidOperationException(message: refusal);
+        if (outcome == RenderGraphPackageOutcome.DrewNothing) {
+            if (pass.PackageAliasRefusal is { } refusal) {
+                throw new InvalidOperationException(message: refusal);
+            }
+            if (HostInputInAnotherLayout(pass: pass) is var host and >= 0) {
+                var name = pass.Inputs[host].Name;
+
+                throw new InvalidOperationException(message: $"Package pass '{pass.Name}' drew nothing, but its input '{name}' is a host's image in {m_externalImages[name].Layout} layout and the instance publishes in {m_outputLayout}, so its output cannot stand for it.");
+            }
         }
+
 
         for (var index = 0; (index < pass.Outputs.Length); index++) {
             var output = m_resourceLookup[pass.Outputs[index].Name];
@@ -215,6 +246,7 @@ public sealed partial class ShaderPipelineRenderNode {
             Height: pass.Height,
             Inputs: inputs,
             Leases: m_frameLeases,
+            MayStandIn: ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass) < 0)),
             Outputs: outputs,
             Recorder: recorder,
             Slot: slot,

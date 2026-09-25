@@ -475,10 +475,12 @@ public sealed record ShaderPipelinePass(
     public IReadOnlyList<ResourceReference> OutputReferences => (Outputs ?? Array.Empty<ResourceReference>());
 }
 /// <summary>One pass of engine package work, as a frame graph hands it to the planner: the one way package work enters
-/// planning, since a graph's package passes reach the planner only through the graph compiler. The planner orders,
-/// versions and barriers it by what it reads and writes, which it reaches as a compute pass does, and its planned pass
-/// carries <see cref="ShaderPipelinePassKind.Package"/> and a <see cref="ShaderPipelinePackageStep"/> in place of a
-/// declaration. The package records its own work and binds its own descriptors.</summary>
+/// planning, since a graph's package passes reach the planner only through the graph compiler. The planner orders and
+/// versions it by what it reads and writes, and plans each port's barrier and layout from the stage and access the port
+/// declares (<see cref="RenderGraphPortAccess"/>) exactly as it plans a shader pass's, so the package records no barrier
+/// of its own. Its planned pass carries <see cref="ShaderPipelinePassKind.Package"/> and a
+/// <see cref="ShaderPipelinePackageStep"/> in place of a declaration. The package records its own work and binds its
+/// own descriptors.</summary>
 /// <param name="Name">The unique pass name.</param>
 /// <param name="Package">The package id.</param>
 /// <param name="Inputs">The versions it reads.</param>
@@ -487,15 +489,33 @@ public sealed record ShaderPipelinePass(
 /// <see cref="ShaderPipelineDispatchKind.Extent"/>.</param>
 /// <param name="Config">The package's config schema with each field defaulting to the pass's bound value, which lays out
 /// its frame block after the frame members; <see langword="null"/> when the package takes no config.</param>
+/// <param name="InputAccesses">How it reads each of <paramref name="Inputs"/>, one read access per input in order, or
+/// <see langword="null"/> when it reads every input as a compute dispatch does
+/// (<see cref="RenderGraphPortAccess.ComputeRead"/>).</param>
+/// <param name="OutputAccesses">How it writes each of <paramref name="Outputs"/>, one write access per output in order,
+/// or <see langword="null"/> when it writes every output as a compute dispatch does
+/// (<see cref="RenderGraphPortAccess.ComputeWrite"/>).</param>
 public sealed record ShaderPipelinePackagePass(
     string Name,
     string Package,
     IReadOnlyList<ResourceReference> Inputs,
     IReadOnlyList<ResourceReference> Outputs,
     ShaderPipelineDispatch? Dispatch = null,
-    IReadOnlyDictionary<string, ShaderConfigField>? Config = null
+    IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
+    IReadOnlyList<RenderGraphPortAccess>? InputAccesses = null,
+    IReadOnlyList<RenderGraphPortAccess>? OutputAccesses = null
 ) {
-    // The compute-shaped pass the planner orders it as; nothing compiles its empty entry point.
+    // Whether each port access is declared once per reference, reads on the inputs and writes on the outputs.
+    internal bool HasValidAccesses => (
+        ((InputAccesses is null) || ((InputAccesses.Count == Inputs.Count) && InputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeRead or RenderGraphPortAccess.FragmentSampled)))) &&
+        ((OutputAccesses is null) || ((OutputAccesses.Count == Outputs.Count) && OutputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeWrite or RenderGraphPortAccess.ColorAttachmentWrite))))
+    );
+
+    // How the pass reaches the version at an input or output position.
+    internal RenderGraphPortAccess InputAccess(int index) => (InputAccesses?[index] ?? RenderGraphPortAccess.ComputeRead);
+    internal RenderGraphPortAccess OutputAccess(int index) => (OutputAccesses?[index] ?? RenderGraphPortAccess.ComputeWrite);
+    // The compute-shaped pass the planner orders it as; nothing compiles its empty entry point, and its accesses come
+    // from its ports, never from this shape's kind.
     internal ShaderPipelinePass Shape() => new(
         Config: Config,
         Dispatch: Dispatch,

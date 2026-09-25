@@ -57,8 +57,12 @@ The id is the manifest's file stem. The engine finds the manifest under the
 deploy's `Assets/Shaders` tree (`ShaderSetCatalog`), validates the config
 against the manifest's schema—an unknown field, a value out of range, or a
 missing required field refuses by field name—and runs the set as one
-fullscreen pass over
-the world's output (`FullscreenPassNode`). `puck schema` emits every shipped
+fullscreen pass over the world's output: the entry's `post.<id>` package pass
+(`PostProcessPackage`) in the world's default root graph, one pass per entry in
+document order, then the overlay in a windowed world
+([the default root graph](#the-default-root-graph)). A config that does not
+bind is the graph compiler's `RENDERGRAPH_PACKAGE_CONFIG`, and the boot refuses
+the definition naming the entry. `puck schema` emits every shipped
 manifest's config schema into the world-document JSON Schema, so
 `render.extensions[].config` also validates by id in an editor.
 
@@ -273,25 +277,31 @@ package's ports, inputs then outputs, in port order. A port
 (`RenderGraphPackagePort`) carries an image or a buffer, and a buffer port
 states its `strideBytes` and `count` as a buffer resource does. The version a
 pass binds must carry what its port carries: its kind, and for a buffer port
-the same stride and count. A package compiles no source, so a package
-reference names no `"as"`. `RenderGraphPackageCatalog` is what a host
+the same stride and count. A port also declares the stage and access its
+package reaches it by (`RenderGraphPortAccess`): an input is a compute read or
+a fragment-sampled read, and an output a compute write or a color-attachment
+write, which only an image port takes. A package compiles no source, so a
+package reference names no `"as"`. `RenderGraphPackageCatalog` is what a host
 offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one image output | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
-| `sdf.bricks` | no input, one buffer output | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
-| `overlay` | one image input, one image output | The console, HUD, toasts and cursor drawn over the input. |
-| `resample` | one image input, one image output | The input reconstructed at the output's extent: an exact copy at the same extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its kernel is `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`. |
-| `post.<set id>` | one image input, one image output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
+| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
+| `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
+| `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
+| `resample` | one image input read by compute, one image output written by compute | The input reconstructed at the output's extent: an exact copy at the same extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its kernel is `src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl`. |
+| `post.<set id>` | one fragment-sampled image input, one color-attachment image output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
 
 `RenderGraphCompiler` checks the schema tag and the package passes against the
 catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
 planner. Package work enters the planner only through the graph compiler; the
 planner's own document entry refuses a graph naming package passes
 (`SHADERPIPE_PACKAGE_PASS`). The planner sees a package pass as its own kind,
-`Package`, ordered by the versions it reaches as a compute pass would. Its
-planned pass has no declaration; it carries a `ShaderPipelinePackageStep`
+`Package`, ordered by the versions it reads and writes, and plans each port's
+barrier and layout from the port's access exactly as it plans a shader
+pass's: a fragment-sampled input as a graphics pass's input and a
+color-attachment output as a graphics pass's output. Its planned pass has no
+declaration; it carries a `ShaderPipelinePackageStep`
 instead, naming the package, the versions bound to its ports and the extent it
 runs at, which is what the render node reads. It binds no descriptors and
 compiles nothing. A pipeline host
@@ -378,9 +388,11 @@ Each recording carries the pass's frame block, written as a shader pass's is
 (the frame members, then the package's config), and the frame's lease list,
 which retires a lease after that frame slot's fence. A package pass may carry
 `config` values, which the graph compiler binds against the package's schema
-and refuses by name as `RENDERGRAPH_PACKAGE_CONFIG`. A package that draws
-into an output brackets its render pass with `RenderGraphPackageDraw`, since
-the planner orders it in a compute pass's shape.
+and refuses by name as `RENDERGRAPH_PACKAGE_CONFIG`. A recorder records no
+barrier: the instance records the pass's planned barriers first, so a
+fragment-sampled input arrives shader-readable and a color-attachment output in
+render-target layout, which the package's render pass leaves it in for the
+next planned barrier to move on.
 
 A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
 and each output then stands for the input at its position: the instance
@@ -388,7 +400,15 @@ publishes that input's image with no copy, in its own layout
 (`ShaderPipelineRenderNode.PublishedLayout`), and a root capture reads it. An
 output another pass reads, that is history, or that is not an RGBA8 image
 beside an input image of its format is refused by name when its pass draws
-nothing. `PostProcessPackage` serves every `post.<id>` and `OverlayPackage`
+nothing. So is an output standing for a host's image bound in another layout
+than the instance publishes in: the instance publishes every image in its output
+layout, the one its consumer's descriptor is written with (the display samples
+the root shader-readable), and hands a host's image back in the host's own. The
+recording is told so beforehand (`RenderGraphPackageRecording.MayStandIn`), and
+draws instead: the overlay draws its empty frame, which reproduces its input.
+An external image is bound in the layout its producer declares for its lease,
+which is the layout the producer's own submissions leave it in, and the planner
+plans its barriers from it. `PostProcessPackage` serves every `post.<id>` and `OverlayPackage`
 serves `overlay`.
 
 An instance can instead be an external producer: a `RenderGraphInstance` whose
@@ -406,10 +426,35 @@ declared by one and a previous-frame read of one. `SdfEngineNode` is the
 counts every acquisition of its output, and disposes an engine a new extent
 replaced only once that engine's output is released.
 
-Captures read the root instance's output, and each instance counts its own
-passes. The live renderer does not use the runtime yet: `views.pipelines`,
-the SDF engine's child composition and `ViewStack` still render every view,
-and no host registers a package factory or an external producer. Moving them onto graph instances is P11b in
+A capture armed on the runtime reads the root instance's output, and one armed
+through `RenderGraphRuntime.CaptureTarget` reads the instance it names. A graph
+instance's node serves it on a frame the instance renders with every image
+input it shows bound to a completed output, never a stand-in, and an external
+producer serves it from the next frame it produces. Until then
+`UnservedCaptureReasonOf` names why. The root may be an external producer, when
+nothing is drawn over its output. Each instance counts its own passes.
+
+### The default root graph
+
+The main view runs through the runtime. A world that authors no root of its
+own gets the default graph `WorldRootGraph` synthesizes from its document, a
+graph document value planned by `RenderGraphCompiler` like any other:
+
+- `world`: the `sdf.world` external producer, the SDF engine node.
+- `main`: the root graph reading `world`'s output over the whole display, with
+  one `post.<id>` pass per `render.extensions` entry in document order, then
+  the `overlay` pass in a windowed World that loaded its glyph atlas.
+
+When there is no pass to draw over the world, as in an offscreen World with no
+`render.extensions`, `world` is the root and the display shows the engine's
+output directly. `RenderGraphRuntimeNode` is the host's render root: each frame
+it shows the root over a display of the World's configured extent. A
+`captures` row reads the root, or names `world` to capture the SDF world before
+its post passes and overlay. `world.counters gpu` reports `world` as the engine
+node and `main` as the root's node, whose passes are the post passes and the
+overlay. `views.pipelines`, the SDF engine's child composition and `ViewStack`
+still render the panes and screens a world shows, and `views.graphs` rows do
+not run yet. Moving them onto graph instances is the rest of P11b in
 [the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
 
 ## Pass interfaces
@@ -547,29 +592,27 @@ var catalog = ShaderSetCatalog.Scan(rootDirectory: Path.Combine(AppContext.BaseD
 ShaderSetManifest manifest = catalog.Load(id: "sdf-film-grain");   // throws on an unshipped id
 ShaderConfigValues config = manifest.BindConfig(config: entry.Config); // throws naming the field
 
-IRenderNode pass = new FullscreenPassNode(
-    inner: worldNode, manifest: manifest, config: config,
-    deviceContext: deviceContext, hostsOnDirectX: false, width: 1920, height: 1080);
+var packages = new RenderGraphPackageRecorders();
+packages.Register(package: "post.sdf-film-grain", factory: new PostProcessPackage(manifest: manifest));
 ```
 
-The pass's GPU seam is the device context the composition root resolves from its
-one registered backend, the device the inner node renders on; the pass records
-through its services (`IGpuDeviceContext.Services`), whose image factory creates
-the images a pass draws into. The adapter delegates GPU recording, resource allocation, and synchronization to `ShaderPipelineRenderNode`. The pass is an `ICaptureRequestTarget`: an armed capture reads
-back the pass's own render target—the composed result—and prints
-`[capture] <set name> -> <path>` on stderr; a frame the pass passes through
-untouched forwards the same request to its inner node instead. The request
-reports write completion or failure and is failed if disposed before service;
-see [capture completion](../../src/Puck.SdfVm/README.md#capture-completion).
+A graph runs a set as a `post.<id>` package pass, recorded by the one
+`PostProcessPackage` registered for its id inside the instance's
+`ShaderPipelineRenderNode` submission. The node is an `ICaptureRequestTarget`:
+an armed capture reads back the node's published output, the composed
+result. The request reports write completion or failure and is failed if
+disposed before service; see
+[capture completion](../../src/Puck.SdfVm/README.md#capture-completion).
 `ShaderSetManifest.ConfigJsonSchema()` emits the config schema as a JSON
 Schema object; `manifest.TryBindConfig(config, out values, out reason)` is
 the non-throwing bind. `IShaderModuleLoader`/`ShaderModuleLoader` load and
 validate one shader stage's bytes from an `IAssetSource`, cached by content
-hash, for a caller building its own pipelines. `pass.TrySetConfig(field,
-value)` overwrites one scalar-`float` config field's live value, which the
-pass's frame block carries from the next frame its executor renders—the
-write a presentation binding drives per frame; it refuses an unknown field or
-any non-`float` type by return value. `pass.Config` reads the live values back.
+hash, for a caller building its own pipelines.
+`ShaderPipelineRenderNode.TrySetConfig(passName, config, out reason)` rebinds a
+pass's whole config, which its frame block carries from the next frame the node
+renders; the World's parameter bindings write one scalar-`float` field of every
+pass composed from one `render.extensions` id through it
+(`WorldPostRenderExtensionPasses`).
 
 | Type | Role |
 |------|------|
@@ -583,7 +626,8 @@ any non-`float` type by return value. `pass.Config` reads the live values back.
 | `ShaderFrameInterface` / `ShaderFrameValues` / `ShaderPipelineParameterLayout` | A pass's [interface](#frame-values-extent-and-ports), its frame values and ports; the values a host supplies each frame; a pass's laid-out blocks, its config binder and its host writers (`WriteFrame`, `WriteExtent`). |
 | `ShaderPipelinePassPorts` | A document pass's ports as pass-group members, the identifier each reads as (`Identifier`), and the load's refusal of a source that never names one (`UnnamedPort`). |
 | `ShaderValueType` | `float`…`int4`, with component count and kind. |
-| `FullscreenPassNode` | The node that runs a graphics set as one pass over an inner `IRenderNode`, recording through its device context's services. |
+| `PostProcessPackage` | The `post.<id>` package recorder that runs a graphics set as one fullscreen pass of a graph, recording through its instance's services. |
+
 | `IShaderModuleLoader` / `ShaderModuleLoader` / `ShaderStageInfo` / `ShaderStage` | Per-stage bytecode loading with content-hash caching. |
 | `ProbeKindManifest` / `ProbeKindCatalog` | A `puck.probe.manifest.v1` probe kind and the shipped kinds under a directory tree, by id. |
 | `ManifestCatalog<TManifest>` | The suffix-scanning, id-indexed discovery both catalogs derive from. |
@@ -617,6 +661,18 @@ dispatches them yet; the frame graph's source nodes will. The
 `source-conversion` canary runs the palette and NV12 kernels as passes of an
 offscreen pipeline on both backends and holds their output to the CPU
 reference.
+
+## The region copy
+
+`Assets/Shaders/Residency/region-copy.comp.hlsl` is the staged residency
+policy's copy: one dispatch moves the owed word ranges of a host-written block
+from its staging buffer (binding 0) into the device-local buffer its readers
+bind (binding 1), one thread a word, with each register at its binding number.
+`GpuRegion` (`Puck.Abstractions`) owns its ABI and pipeline description
+(`GpuRegion.CopyPipeline`). `GpuRegionCopyPipelineCache` creates one pipeline
+a device from it, on the thread pool, and every owner leases that pipeline
+rather than creating its own: the SDF engine records its table upload and its
+mesh region with it. The cache counts what it creates under `gpu.region-copy`.
 
 ## Probe kinds (`puck.probe.manifest.v1`)
 

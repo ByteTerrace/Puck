@@ -96,10 +96,10 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
     [Fact]
     public void AnEngineTheHeapCannotAdmitIsRefusedByNameAllocatesNothingAndRetriesOnlyOnAChangedInput() {
         using var rig = new Rig(reportVersion: SdfIsa.Version);
-        var demand = SdfWorldEngine.DescriptorPoolSizes(
+        var demand = (SdfWorldEngine.DescriptorPoolSizes(
             brickPool: false,
             brickUpload: false
-        ).HeapDescriptors;
+        ).HeapDescriptors + GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize).HeapDescriptors);
         var heap = Heap(views: (demand - 1U));
 
         rig.Gpu.DescriptorHeap = heap;
@@ -159,10 +159,10 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
     public void AHeapRefusedEngineRetriesExactlyOnceAfterAnotherOwnerReleasesItsPool() {
         using var rig = new Rig(reportVersion: SdfIsa.Version);
         IGpuBindings bindings = rig.Gpu;
-        var demand = SdfWorldEngine.DescriptorPoolSizes(
+        var demand = (SdfWorldEngine.DescriptorPoolSizes(
             brickPool: false,
             brickUpload: false
-        ).HeapDescriptors;
+        ).HeapDescriptors + GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize).HeapDescriptors);
         var heap = Heap(views: demand);
 
         rig.Gpu.DescriptorHeap = heap;
@@ -193,9 +193,10 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         rig.ProduceUnchanged(frames: Frames);
         Assert.True(condition: rig.Node.IsReady);
         Assert.Null(@object: rig.Node.NotReadyReason);
+        // What is left is the copy pool of a mesh region the admission covers and no frame has drawn yet.
         Assert.Equal(
             actual: (rig.Gpu.Admissions, rig.Gpu.PoolsCreated.Count, heap.FreeViewDescriptors),
-            expected: (2, 2, 0U)
+            expected: (2, 2, GpuRegion.CopyPoolSizes(slotCount: SdfWorldEngine.FrameRingSize).HeapDescriptors)
         );
     }
     [Fact]
@@ -352,7 +353,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
                 frameSource: m_source,
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
-                pipelines: new SdfWorldPipelineCache(),
+                pipelines: SdfTestPipelines.Cache(),
                 width: Extent
             );
             m_context = new FrameContext(

@@ -357,6 +357,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 )) {
                     throw new NotSupportedException(message: "PNG capture is unavailable.");
                 }
+
+                Console.Error.WriteLine(value: $"[capture] {m_descriptor.Name} -> {path}");
             })
         );
     }
@@ -1322,38 +1324,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             return buffer;
         }
         throw new InvalidDataException(message: $"External buffer '{name}' is not bound.");
-    }
-    // The extent a pass runs at: its first output's declared dimensions, else its first input's, else the frame's.
-    private static (uint Width, uint Height) ResolveExtent(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> specs, (uint Width, uint Height) frame) {
-        foreach (var output in pass.OutputReferences) {
-            if (
-                specs.TryGetValue(
-                key: output.Name,
-                value: out var spec
-            ) &&
-                (spec.Dimensions is { } dimensions)
-            ) {
-                return dimensions.Resolve(
-                    frameHeight: frame.Height,
-                    frameWidth: frame.Width
-                );
-            }
-        }
-        foreach (var input in pass.InputReferences) {
-            if (
-                specs.TryGetValue(
-                key: input.Name,
-                value: out var spec
-            ) &&
-                (spec.Dimensions is { } dimensions)
-            ) {
-                return dimensions.Resolve(
-                    frameHeight: frame.Height,
-                    frameWidth: frame.Width
-                );
-            }
-        }
-        return frame;
     }
     private ShaderPipelineExternalImage ResolveImage(RuntimeResource resource, string name, int index) {
         if (

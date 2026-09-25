@@ -249,7 +249,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_seatCameraControls = ResolveSeatCameraControls(screens: screens);
         m_captureGate = new WorldCaptureGate(
             alwaysFills: alwaysFillsCaptures,
-            captureArmed: () => (m_renderProbe?.Render?.PendingCapturePath is not null)
+            captureArmed: () => (m_renderProbe?.Root?.PendingCapturePath is not null)
         );
         m_fillImage = FillImage;
         m_producers.Register(producer: new WorldTestPatternProducer());

@@ -14,8 +14,9 @@ namespace Puck.World.Tests;
 /// <summary>
 /// Laws of the <c>overlay</c> package (<see cref="OverlayPackage"/>) run as a graph's package pass over
 /// <see cref="FakeGpuDevice"/>: a frame with nothing visible draws nothing and the instance publishes its input in the
-/// output's place, a frame with a drawn cursor publishes the instance's own output, the bound frame-slot leases move
-/// into the frame's lease list, and a steady drawn frame allocates nothing.
+/// output's place, a frame with a drawn cursor publishes the instance's own output, a drawn frame is handed its input
+/// shader-readable and its target in render-target layout by the node's planned barriers and records none of its own,
+/// the bound frame-slot leases move into the frame's lease list, and a steady drawn frame allocates nothing.
 /// </summary>
 public sealed class OverlayPackageLawTests {
     private const uint Extent = 64;
@@ -82,6 +83,22 @@ public sealed class OverlayPackageLawTests {
         );
     }
     [Fact]
+    public void ADrawnOverlayIsHandedItsPlannedLayoutsAndRecordsNoBarrierOfItsOwn() {
+        using var rig = new Rig();
+
+        _ = ProduceUntilPublished(node: rig.Node);
+        rig.ShowCursor();
+
+        for (var frame = 0; (frame < 4); frame++) {
+            _ = rig.Node.ProduceFrame(context: default);
+        }
+
+        Assert.Equal(
+            expected: (0, (GpuImageLayout.ShaderReadOnly, GpuImageLayout.RenderTarget), RenderGraphPackageOutcome.Drew),
+            actual: (rig.Observed.PackageBarriers, rig.Observed.Layouts, rig.Observed.Outcome)
+        );
+    }
+    [Fact]
     public void BoundFrameSlotLeasesMoveIntoTheFramesLeaseList() {
         var retired = 0;
         var slots = new OverlayFrameSlots(sources: new LeasingFrameSources(retire: () => retired++));
@@ -134,7 +151,10 @@ public sealed class OverlayPackageLawTests {
         private readonly CursorStore m_cursor = new();
 
         public Rig() {
-            var gpu = new FakeGpuDevice(reportVersion: 0);
+            var gpu = new FakeGpuDevice(
+                countCalls: true,
+                reportVersion: 0
+            );
             var package = new OverlayPackage(
                 capacity: new OverlayCapacity(
                     BindingBarMaxBanks: 0,
@@ -176,8 +196,12 @@ public sealed class OverlayPackageLawTests {
             );
             var packages = new RenderGraphPackageRecorders();
 
+            Observed = new ObservedPackageFactory(
+                barriers: () => ((gpu.Count(key: "IGpuRecorder.TransitionImageLayout") + gpu.Count(key: "IGpuRecorder.MemoryBarrier")) + gpu.Count(key: "IGpuRecorder.TransitionBuffer")),
+                inner: package
+            );
             packages.Register(
-                factory: package,
+                factory: Observed,
                 package: RenderGraphPackageCatalog.Overlay
             );
             Node = new ShaderPipelineRenderNode(
@@ -207,6 +231,8 @@ public sealed class OverlayPackageLawTests {
         }
 
         public ShaderPipelineRenderNode Node { get; }
+        // What the overlay's recorder was handed and recorded itself.
+        public ObservedPackageFactory Observed { get; }
 
         public void Dispose() => Node.Dispose();
         public void ShowCursor() => m_cursor.Publish(frame: new OverlayCursorFrame(Seats: new[] {

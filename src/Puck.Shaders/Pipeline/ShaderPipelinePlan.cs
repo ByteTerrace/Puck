@@ -82,29 +82,17 @@ public sealed record ShaderPipelineAttachment(
     GpuAttachmentLoad Load,
     GpuAttachmentStore Store
 );
-/// <summary>A package pass's step in an immutable execution plan: the package whose recorder records it, the versions
-/// bound to its ports, and the extent it runs at. The package binds its own descriptors, so its ports carry no
-/// binding.</summary>
+/// <summary>A package pass's step in an immutable execution plan: the package whose recorder records it and the versions
+/// bound to its ports. The package binds its own descriptors, so its ports carry no binding; the extent it runs at is
+/// its planned pass's (<see cref="ShaderPipelinePlannedPass.ResolveExtent"/>).</summary>
 /// <param name="Package">The package id, which names the recorder that records the pass.</param>
 /// <param name="Inputs">The versions bound to its input ports, in port order.</param>
 /// <param name="Outputs">The versions bound to its output ports, in port order.</param>
-/// <param name="Extent">The dimensions of its first output that declares them, else of its first input that does, or
-/// <see langword="null"/> when it runs at the frame's extent.</param>
 public sealed record ShaderPipelinePackageStep(
     string Package,
     IReadOnlyList<ResourceReference> Inputs,
-    IReadOnlyList<ResourceReference> Outputs,
-    ShaderPipelineDimensions? Extent
-) {
-    /// <summary>Resolves the extent the pass runs at against a frame's.</summary>
-    /// <param name="frameWidth">The frame width, in pixels.</param>
-    /// <param name="frameHeight">The frame height, in pixels.</param>
-    /// <returns>The pass's extent.</returns>
-    public (uint Width, uint Height) ResolveExtent(uint frameWidth, uint frameHeight) => (Extent?.Resolve(
-        frameHeight: frameHeight,
-        frameWidth: frameWidth
-    ) ?? (frameWidth, frameHeight));
-}
+    IReadOnlyList<ResourceReference> Outputs
+);
 /// <summary>A pass entry in an immutable shader execution plan.</summary>
 /// <param name="Name">The unique pass name.</param>
 /// <param name="Declaration">A shader pass's declaration, with every binding resolved, or <see langword="null"/> for a
@@ -119,6 +107,9 @@ public sealed record ShaderPipelinePackageStep(
 /// render pass leaves every attachment in its attachment layout, and a later access's planned barrier moves it on.</param>
 /// <param name="Kind">The planner's kind: the shader pass's kind, or <see cref="ShaderPipelinePassKind.Package"/> for a
 /// package's pass, which carries its <paramref name="Package"/> step instead of a declaration.</param>
+/// <param name="Extent">The dimensions the pass runs at, whatever its kind: those of its first output whose storage
+/// declares them, else of its first input whose storage does, or <see langword="null"/> when it runs at the frame's
+/// extent. The planner computes it once for every pass; <see cref="ResolveExtent"/> resolves it against a frame.</param>
 public sealed record ShaderPipelinePlannedPass(
     string Name,
     ShaderPipelinePass? Declaration,
@@ -128,12 +119,23 @@ public sealed record ShaderPipelinePlannedPass(
     ShaderPipelineParameterLayout Parameters,
     IReadOnlyList<ShaderPipelineAccess> Accesses,
     IReadOnlyList<ShaderPipelineAttachment> Attachments,
-    ShaderPipelinePassKind Kind
+    ShaderPipelinePassKind Kind,
+    ShaderPipelineDimensions? Extent
 ) {
     /// <summary>Gets the versions the pass reads: its declaration's inputs, or its package step's input ports.</summary>
     public IReadOnlyList<ResourceReference> Inputs => (Declaration?.InputReferences ?? Package!.Inputs);
     /// <summary>Gets the versions the pass writes: its declaration's outputs, or its package step's output ports.</summary>
     public IReadOnlyList<ResourceReference> Outputs => (Declaration?.OutputReferences ?? Package!.Outputs);
+
+    /// <summary>Resolves the extent the pass runs at against a frame's: its <see cref="Extent"/>, or the frame's own
+    /// when it has none. A resized frame resolves again through the same rule.</summary>
+    /// <param name="frameWidth">The frame width, in pixels.</param>
+    /// <param name="frameHeight">The frame height, in pixels.</param>
+    /// <returns>The pass's extent.</returns>
+    public (uint Width, uint Height) ResolveExtent(uint frameWidth, uint frameHeight) => (Extent?.Resolve(
+        frameHeight: frameHeight,
+        frameWidth: frameWidth
+    ) ?? (frameWidth, frameHeight));
 }
 /// <summary>The result of pipeline planning, with passes in deterministic execution order.</summary>
 public sealed class ShaderPipelinePlan {

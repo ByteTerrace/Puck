@@ -5,18 +5,18 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Testing;
 
 /// <summary>
-/// A device-free GPU that models memory for the one kernel whose effect a host law can predict: the table uploader,
-/// <c>sdf-frame-upload.comp</c>, whose ABI <see cref="GpuRegion"/>'s staged copy speaks. Every buffer is backed by bytes
+/// A device-free GPU that models memory for the one kernel whose effect a host law can predict: the region copy,
+/// <c>region-copy.comp</c>, which <see cref="GpuRegion"/>'s staged copy and the SDF engine's table upload record. Every buffer is backed by bytes
 /// and carries its own handle; host writes land in those bytes and are tallied per buffer; descriptor sets remember
 /// which buffer each binding names; and a dispatch recorded while the pipeline built from
-/// <see cref="FrameUploadBytecode"/> is bound runs that kernel's copy at record time, from the set's binding 0 into its
+/// <see cref="RegionCopyBytecode"/> is bound runs that kernel's copy at record time, from the set's binding 0 into its
 /// binding 1: the push carries <c>(count, runCount, offset, tableBase)</c> in uints, and thread <c>i</c> below the
 /// count copies <c>destination[word] = source[tableBase + word]</c>, where <c>word</c> is <c>offset + i</c> for one run
 /// or, for two or more, found in the source's leading <c>(table offset, prefix)</c> run table (a linear search here; the
 /// kernel's binary search finds the same run). Recording order is execution order here, as it is on one queue behind
 /// the barriers the caller records. A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
 /// <para>Shader modules and pipelines are created on the thread pool, several at once
-/// (<c>SdfWorldPipelines.BuildConcurrency</c>), so handles come from an interlocked counter and the upload kernel is
+/// (<c>SdfWorldPipelines.BuildConcurrency</c>), so handles come from an interlocked counter and the copy kernel is
 /// identified by the handles of the modules built from its bytecode and the pipelines built from those modules, each a
 /// concurrent set, never by one shared field a concurrent build could overwrite.</para>
 /// </summary>
@@ -27,8 +27,8 @@ internal sealed class UploadModelGpu :
     IGpuBindings,
     IGpuShaderModuleFactory,
     IGpuBufferFactory {
-    /// <summary>The first bytecode byte that marks the frame-upload kernel.</summary>
-    public const byte FrameUploadBytecode = 0xF7;
+    /// <summary>The first bytecode byte that marks the region-copy kernel.</summary>
+    public const byte RegionCopyBytecode = 0xF7;
 
     private readonly Dictionary<(nint Set, uint Binding), nint> m_bindings = [];
     private readonly Dictionary<nint, MemoryBuffer> m_buffers = [];
@@ -128,7 +128,7 @@ internal sealed class UploadModelGpu :
 
         if (
             !bytecode.IsEmpty &&
-            (bytecode.Span[0] == FrameUploadBytecode)
+            (bytecode.Span[0] == RegionCopyBytecode)
         ) {
             _ = m_uploadModules.TryAdd(
                 key: module.Handle,

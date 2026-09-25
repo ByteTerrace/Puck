@@ -363,7 +363,7 @@ public sealed partial class ShaderPipelineRenderNode {
             if (planned.Declaration is not { } declaration) {
                 var step = planned.Package!;
 
-                Extent = step.ResolveExtent(
+                Extent = planned.ResolveExtent(
                     frameHeight: request.Key.Height,
                     frameWidth: request.Key.Width
                 );
@@ -408,10 +408,9 @@ public sealed partial class ShaderPipelineRenderNode {
                 : compiled.SpirvByStage
             );
 
-            Extent = ResolveExtent(
-                frame: (request.Key.Width, request.Key.Height),
-                pass: declaration,
-                specs: specs
+            Extent = planned.ResolveExtent(
+                frameHeight: request.Key.Height,
+                frameWidth: request.Key.Width
             );
             Bindings = (grouped
                 ? []

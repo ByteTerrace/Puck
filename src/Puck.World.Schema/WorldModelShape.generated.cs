@@ -2588,6 +2588,7 @@ public static partial class WorldModelShape {
                 M("station", typeof(global::Puck.State.CellName), typeof(global::Puck.World.WorldCaptureRow), "Station", Read | Write),
                 M("ticks", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.UInt64>), typeof(global::Puck.World.WorldCaptureRow), "Ticks", Read | Write),
                 M("palette", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldCapturePaletteEntry>), typeof(global::Puck.World.WorldCaptureRow), "Palette", Read | Write),
+                M("instance", typeof(global::System.String), typeof(global::Puck.World.WorldCaptureRow), "Instance", Read | Write),
             ],
             []),
         T(typeof(global::Puck.World.WorldCapturesSection), true, JsonTypeInfoKind.Object, null,

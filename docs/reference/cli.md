@@ -633,10 +633,26 @@ break, and nothing wider:
   file lies in its directory, is a world, script or fixture its manifest
   names, or is a source file the canary executed when coverage was last
   recorded in [`tests/Puck.Affected`](../../tests/Puck.Affected/README.md).
+  A canary is also chosen for any file its manifest's documents reach, read
+  with the documents' own readers: a world reaches the layers it composes,
+  the neighbour worlds its adjacencies name and the `.graph.json` documents
+  its `views.pipelines` and `views.graphs` rows name, and a graph document
+  reaches the pass shaders it declares, each resolved as the host resolves
+  it. A world is read composed and parsed but not validated, so a world whose
+  adjacencies or extensions need the host's resolvers still reaches them.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
-- A changed `Puck.World` source the coverage index does not know is listed as
-  `unmapped`. It chooses no canary; the list says coverage is due for a fresh
-  recording.
+- A file no canary can execute is placed through the indexed C# sources it
+  stands for. A project file, restore lock or `NativeMethods.txt` stands for
+  its project's sources. A shader source or include stands for the C# that
+  names, by its file name, each kernel whose include closure reaches it: the
+  kernels are the stage sources the projects' shader items declare, the
+  Direct3D 11 kernels (`Direct3D11KernelSource`) among them. A file
+  `puck schema` writes stands for the sources declaring the types it is
+  generated from. A shader that neither a kernel's loader nor a canary's
+  documents reach has no stand-in.
+- A changed `Puck.World` source that neither the coverage index nor a stand-in
+  places is listed as `unmapped`. It chooses no canary; the list says coverage
+  is due for a fresh recording.
 - Build infrastructure (`build/`, `Directory.Build.*`, `global.json`,
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`
   and `experimental/` choose nothing.

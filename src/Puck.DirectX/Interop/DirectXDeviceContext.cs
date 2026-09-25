@@ -306,6 +306,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             m_infoQueue = ((nint)infoQueuePtr);
         }
 
+        // A requested layer states whether it is live, so a validation run that prints no [d3d12-debug] line can tell a
+        // clean run from one the layer never watched. The prefix is not [d3d12-debug], which a run's checks fail on.
+        if (EnableDebugLayer) {
+            (DebugOutput ?? Console.Error).WriteLine(value: ((0 != m_infoQueue)
+                ? "[d3d12] debug layer live: the device reports through its info queue"
+                : "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated"));
+        }
+
         var queueDesc = new D3D12_COMMAND_QUEUE_DESC {
             Type = D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
         };

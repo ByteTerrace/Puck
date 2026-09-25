@@ -148,17 +148,18 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     public int ProgramWordCapacity => (m_engine?.ProgramWordCapacity ?? m_programWordCapacity);
     /// <summary>Gets the bytes the engine allocates for its visibility records, or zero before engine initialization.</summary>
     public ulong VisibilityRecordBytes => (m_engine?.VisibilityRecordBytes ?? 0UL);
-    /// <summary>Gets the bytes the mesh region needs for the last captured frame's mesh draws
-    /// (<see cref="SdfMeshRegion.BytesOf"/>), or zero before a frame or when the frame draws no mesh.</summary>
-    public ulong MeshRegionBytes => Volatile.Read(location: ref m_meshRegionBytes);
-    /// <summary>Gets the mesh draws of the last captured frame, the ones <see cref="MeshRegionBytes"/> counts.</summary>
+    /// <summary>Gets the bytes the engine's mesh region holds (<see cref="SdfWorldEngine.MeshRegionBytes"/>), or zero
+    /// before engine initialization and before a frame draws a mesh.</summary>
+    public ulong MeshRegionBytes => (m_engine?.MeshRegionBytes ?? 0UL);
+    /// <summary>Gets the mesh draws of the last captured frame, the ones the mesh region holds once the frame
+    /// renders.</summary>
     public int MeshDrawCount => (Volatile.Read(location: ref m_meshRegionDraws)?.Count ?? 0);
 
     private readonly int m_programWordCapacity;
-    // The mesh draw list MeshRegionBytes was counted from: a producer hands the same list until its placements move,
-    // so the count reruns only when the list itself changes.
+
+    // The last captured frame's mesh draw list, which MeshDrawCount reads from another thread.
     private IReadOnlyList<SdfMeshDraw>? m_meshRegionDraws;
-    private ulong m_meshRegionBytes;
+
     private readonly Dictionary<int, Func<Vector3>> m_screenLights;
 
     // This frame's screen-source leases, moved into the frame-ring slot that samples them when the slot's fence has
@@ -242,7 +243,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         m_deviceContext = gpuDevice;
         m_engine = m_pipelines.TryBuild(
-            construct: static (pipelines, inputs) => {
+            construct: static (pipelines, regionCopy, inputs) => {
                 // The viewport CAPACITY: the first frame's count raised to the declared floor (the split-screen
                 // envelope — the engine itself composites each frame's actual Views.Count, validated against it).
                 if (inputs.Options.ViewportCapacity > SdfWorldEngine.MaxViewports) {
@@ -254,6 +255,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
                     height: inputs.Height,
                     options: inputs.Options,
                     pipelines: pipelines,
+                    regionCopy: regionCopy,
                     width: inputs.Width
                 );
             },
@@ -590,16 +592,10 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             interpolationAlpha: ((float)context.InterpolationAlpha)
         );
 
-        if (!ReferenceEquals(
-            objA: frame.MeshDraws,
-            objB: m_meshRegionDraws
-        )) {
-            m_meshRegionDraws = frame.MeshDraws;
-            Volatile.Write(
-                location: ref m_meshRegionBytes,
-                value: SdfMeshRegion.BytesOf(draws: frame.MeshDraws)
-            );
-        }
+        Volatile.Write(
+            location: ref m_meshRegionDraws,
+            value: frame.MeshDraws
+        );
 
         // Decide this frame's child slots and produce each child viewport's surface (so its image-view is known before
         // the source array is bound). Children need nothing from the engine, so they step and produce whether or not

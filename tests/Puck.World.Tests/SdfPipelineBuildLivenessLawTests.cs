@@ -71,7 +71,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
-            pipelines: new SdfWorldPipelineCache(),
+            pipelines: SdfTestPipelines.Cache(),
             width: Extent
         );
         // Disposed before the node, so a failing assertion releases the held build instead of leaving the node's
@@ -168,7 +168,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             frameSource: new FixedFrameSource(frame: Frame(child: "pane")),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
-            pipelines: new SdfWorldPipelineCache(),
+            pipelines: SdfTestPipelines.Cache(),
             width: Extent
         );
         // Disposed before the node, so a failing assertion releases the held build instead of leaving the node's
@@ -211,7 +211,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
     [Fact]
     public void ADeviceLossWaitsOnlyForThePipelinesInTheDriverAndTheNextFrameStartsAnother() {
         using var driver = new HeldDriver();
-        var cache = new SdfWorldPipelineCache();
+        var cache = SdfTestPipelines.Cache();
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
             BeforeComputePipeline = driver.Enter,
         };
@@ -272,7 +272,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
     [Fact]
     public void OnlyTheLastReleaseCancelsAndItWaitsOnlyForThePipelinesInTheDriver() {
         using var driver = new HeldDriver();
-        var cache = new SdfWorldPipelineCache();
+        var cache = SdfTestPipelines.Cache();
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
             BeforeComputePipeline = driver.Enter,
         };
@@ -294,7 +294,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         first.Release();
         Assert.Equal(
             actual: (cache.SharedSets, last.Progress.Describe()),
-            expected: (1, "building (0 of 12 pipelines created)")
+            expected: (1, "building (0 of 11 pipelines created)")
         );
 
         var release = new Thread(start: last.Release);
@@ -377,7 +377,14 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             m_open.Dispose();
         }
         public void Enter(GpuComputePipelineDescription description) {
-            if (m_open.IsSet) {
+            // The device's region-copy pipeline builds beside the set, from another cache, so the driver lets it pass.
+            if (
+                m_open.IsSet ||
+                ReferenceEquals(
+                    objA: description,
+                    objB: GpuRegion.CopyPipeline
+                )
+            ) {
                 return;
             }
 

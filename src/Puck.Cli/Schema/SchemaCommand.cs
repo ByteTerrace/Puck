@@ -36,6 +36,65 @@ internal static class SchemaCommand {
 
     private readonly record struct SchemaFile(string FullPath, string Text);
 
+    /// <summary>Returns the types a file this generator writes is generated from: each fixed output's document type, and
+    /// for a world section's schema the type of the <see cref="WorldDefinition"/> property its JSON key names.</summary>
+    /// <param name="relativePath">The file, repository-relative with forward slashes.</param>
+    /// <returns>The source types, or an empty list when this generator does not write the file.</returns>
+    internal static IReadOnlyList<Type> SourceTypesOf(string relativePath) {
+        ArgumentNullException.ThrowIfNull(argument: relativePath);
+
+        switch (relativePath) {
+            case RootRelativePath:
+            case TypeScriptRelativePath:
+            case WorldModelShapeSource.RelativePath:
+            case ((SectionsRelativeDirectory + "/") + WorldSchema.CommonDefsFileName):
+                return [typeof(WorldDefinition)];
+            case ProjectionRelativePath:
+                return [typeof(WorldProjectionDocument)];
+            case SiloRelativePath:
+                return [typeof(WorldSiloDefinition)];
+            case RenderGraphRelativePath:
+                return [typeof(RenderGraphDefinition)];
+            case CountersReportRelativePath:
+                return [typeof(WorldCountersReport)];
+            case ReleaseProfileRelativePath:
+                return [typeof(ReleaseProfile)];
+        }
+
+        const string SectionSuffix = ".schema.json";
+
+        if (
+            !relativePath.StartsWith(comparisonType: StringComparison.Ordinal, value: (SectionsRelativeDirectory + "/")) ||
+            !relativePath.EndsWith(comparisonType: StringComparison.Ordinal, value: SectionSuffix)
+        ) {
+            return [];
+        }
+
+        var section = relativePath[(SectionsRelativeDirectory.Length + 1)..^SectionSuffix.Length];
+        var property = typeof(WorldDefinition).GetProperties().FirstOrDefault(predicate: candidate => string.Equals(
+            a: (candidate.GetCustomAttributes(attributeType: typeof(System.Text.Json.Serialization.JsonPropertyNameAttribute), inherit: true).OfType<System.Text.Json.Serialization.JsonPropertyNameAttribute>().FirstOrDefault()?.Name ?? System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(name: candidate.Name)),
+            b: section,
+            comparisonType: StringComparison.Ordinal
+        ));
+
+        return ((property is null)
+            ? [typeof(WorldDefinition)]
+            : [ElementTypeOf(type: property.PropertyType)]
+        );
+    }
+
+    // A section's own shape: a list's or a nullable's element, as the schema describes each entry.
+    private static Type ElementTypeOf(Type type) {
+        if (Nullable.GetUnderlyingType(nullableType: type) is { } underlying) {
+            return underlying;
+        }
+
+        return ((type.IsGenericType && (type.GetGenericArguments() is [var element]))
+            ? element
+            : type
+        );
+    }
+
     // Every src/<project>/Assets/Shaders tree is a shipped shader asset tree (the shared shader recipe ships its
     // manifests beside its bytecode), so their manifests are the extension vocabulary the runtime catalog sees.
     internal static List<WorldSchema.PostRenderExtensionSchema> LoadPostRenderExtensions(string repositoryRoot) {

@@ -26,6 +26,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
     /// <summary>Gets every object created so far, in creation order.</summary>
     public List<Created> CreatedObjects { get; } = [];
+    /// <summary>Gets each direct dispatch's group counts, in recording order, while <see cref="Recording"/> is on.</summary>
+    public List<(uint X, uint Y, uint Z)> Dispatches { get; } = [];
     /// <summary>Gets every descriptor pool created so far, in creation order, as its creation sized it.</summary>
     public List<GpuDescriptorPoolSizes> DescriptorPools { get; } = [];
 
@@ -404,7 +406,11 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         Destroy(handle: poolHandle);
     }
     public void DestroySampler(nint samplerHandle) => Destroy(handle: samplerHandle);
-    public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) { }
+    public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
+        if (Recording) {
+            Dispatches.Add(item: (groupCountX, groupCountY, groupCountZ));
+        }
+    }
     public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
     public void Draw(nint commandBufferHandle, in GpuDrawParameters parameters) => RecordGraphics(command: "draw", buffer: 0, offsetBytes: 0, sizeBytes: 0, count: parameters.VertexCount);
     public void DrawIndexed(nint commandBufferHandle, uint indexCount) => RecordGraphics(buffer: 0, command: "draw-indexed", count: indexCount, offsetBytes: 0, sizeBytes: 0);

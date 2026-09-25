@@ -63,7 +63,7 @@ never a Vulkan or DirectX type by name.
 
 ## The render pipeline
 
-Ten kernels run per frame: `sdf-frame-upload.comp` (the frame data that
+Ten kernels run per frame: `region-copy.comp` (from `Puck.Shaders`: the frame data that
 changed, copied into persistent device-local tables; see
 [what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads)) → `sdf-sky.comp` (a direct, un-culled pass that
 fills every source pixel with the authored sky, before any tile is culled)
@@ -180,12 +180,13 @@ near, and composites it immediately. This avoids capacity-sized per-pixel arrays
 and duplicated unrolled integrators; intersecting volumes still require repeated
 selection scans. The [authoring contract](../Puck.World.Authoring/README.md#bounded-volumes-volumes)
 describes density controls and lighting limits.
-`SdfWorldRenderSpec.Decorate` is where a host wraps that node: post-render
-passes are `Puck.Shaders.FullscreenPassNode`s built from `puck.shader.manifest.v1`
-manifests shipped in this project's `Assets/Shaders/Sdf/` tree
-(`sdf-film-grain.frag.hlsl` + `sdf-film-grain.puck.shader.json` is the one
-today), selected by a world document's `render.extensions[].id`; this project
-carries no per-pass C#.
+What is drawn over that node's output belongs to the render graph: the node
+is the `sdf.world` producer a graph instance reads, and post-render passes are
+`post.<id>` package passes (`Puck.Shaders.PostProcessPackage`) over
+`puck.shader.manifest.v1` manifests shipped in this project's
+`Assets/Shaders/Sdf/` tree (`sdf-film-grain.frag.hlsl` +
+`sdf-film-grain.puck.shader.json` is the one today), selected by a world
+document's `render.extensions[].id`; this project carries no per-pass C#.
 
 ## Pipelines build off the frame thread
 
@@ -392,9 +393,9 @@ and must change together.
 
 ## Capture completion
 
-`SdfWorldRender.RequestCapture(path)` returns a `FrameCaptureRequest`.
-The request follows the outermost capture-capable decorator down to whichever
-node serves the frame. Its `Completion` resolves with a `FrameCaptureResult`
+A caller creates a `FrameCaptureRequest` and arms it on a capture target:
+the render graph's root, one of its instances, or `SdfEngineNode` itself, which
+serves it from the next frame it produces. Its `Completion` resolves with a `FrameCaptureResult`
 only after the PNG writer returns, or with a failure if readback, writing,
 capture availability, or disposal prevents success. A busy target refuses
 instead of replacing the earlier request. `PendingCapturePath` is a busy

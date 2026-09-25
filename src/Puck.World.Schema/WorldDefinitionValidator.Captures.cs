@@ -3,7 +3,7 @@ using Puck.World.Authoring;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    // Structural only: station uniqueness and spelling, tick ordering/uniqueness within a station, and a parseable palette. Which
+    // Structural only: station uniqueness and spelling, the instance it reads, tick ordering/uniqueness within a station, and a parseable palette. Which
     // camera a station's ticks actually show is a document DECISION (state + rules + a camera program's select op),
     // never checked here — a station name is a label, not a reference.
     private static void ValidateCaptures(WorldDefinition definition, List<string> errors) {
@@ -55,6 +55,19 @@ public static partial class WorldDefinitionValidator {
                 reason: out var stationReason
             )) {
                 errors.Add(item: $"{path}.station {stationReason}.");
+            }
+
+            // The instances a capture can name are the ones every composed render graph has: the root, by omitting the
+            // name, and the SDF world beneath whatever is drawn over it.
+            if (
+                (row.Instance is { } instance) &&
+                !string.Equals(
+                    a: instance,
+                    b: WorldViewGraphs.WorldInstance,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ) {
+                errors.Add(item: $"{path}.instance '{instance}' names no render-graph instance a capture can read: name '{WorldViewGraphs.WorldInstance}' for the SDF world before its post passes and overlay, or omit it for the root.");
             }
 
             ValidateCaptureTicks(

@@ -45,5 +45,7 @@
     <ItemGroup>
         <!-- The neutral group layouts the backends' planners and the spike's interfaces are held to. -->
         <Compile Include="..\Shared\GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
+        <!-- The package decorator the post and overlay laws observe a recording through. -->
+        <Compile Include="..\Shared\ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
     </ItemGroup>
 </Project>

@@ -117,13 +117,13 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 frameSource: new FixedFrameSource(frame: Frame()),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
-                pipelines: new SdfWorldPipelineCache(),
+                pipelines: SdfTestPipelines.Cache(),
                 width: Extent
             );
             Target = new RecordingTarget(node: Node);
             Scheduler = new WorldCaptureScheduler(
                 backend: "vulkan",
-                captureTarget: () => Target,
+                captureTarget: _ => Target,
                 directory: directory,
                 readiness: new NodeReadiness(node: Node),
                 server: m_row.Server,
@@ -415,8 +415,8 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         Assert.False(condition: run.Node.IsReady);
         Assert.Equal(
             expected: [
-                "first:10:Unserved:the engine's pipeline set is building (0 of 12 pipelines created) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
-                "second:30:Unserved:the engine's pipeline set is building (0 of 12 pipelines created) (the host held its clock at tick 30 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
+                "first:10:Unserved:the engine's pipeline set is building (0 of 11 pipelines created) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
+                "second:30:Unserved:the engine's pipeline set is building (0 of 11 pipelines created) (the host held its clock at tick 30 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
             ],
             actual: run.Scheduler.Entries.Select(selector: static entry => $"{entry.Station}:{entry.Tick}:{entry.Refusal}:{entry.Detail}")
         );
@@ -469,7 +469,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         var entry = Assert.Single(collection: run.Scheduler.Entries);
 
         Assert.Equal(
-            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of 12 pipelines created)"),
+            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of 11 pipelines created)"),
             actual: (entry.Refusal!.Value, entry.Detail!)
         );
         run.AssertNothingReachedDisposal();

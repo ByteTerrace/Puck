@@ -21,7 +21,7 @@ public sealed class AffectedSelectionLawTests {
     ];
     private static readonly HashSet<string> WorldClosure = new(collection: ["World", "Core"], comparer: StringComparer.OrdinalIgnoreCase);
 
-    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null) => AffectedSelection.Select(
+    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null) => AffectedSelection.Select(
         canaries: Canaries,
         changed: changed,
         consumersOf: (consumersOf ?? (static _ => [])),
@@ -29,6 +29,8 @@ public sealed class AffectedSelectionLawTests {
         declaresTests: static path => path.Contains(comparisonType: StringComparison.Ordinal, value: "tested"),
         catalogInputs: static (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/World/Assets/worlds/") || (owner == "Core")),
         projects: Projects,
+        canariesReaching: (canariesReaching ?? (static _ => new HashSet<string>())),
+        standInsFor: (standInsFor ?? (static _ => [])),
         worldClosure: WorldClosure
     );
 
@@ -69,6 +71,27 @@ public sealed class AffectedSelectionLawTests {
     public void ParityRunsWhenAChosenCanaryRendersOnAGpu() {
         Assert.True(condition: Select(changed: ["src/World/Assets/ink.hlsl"]).Parity);
         Assert.False(condition: Select(changed: ["tests/Canaries/doors/positive.script.txt"]).Parity);
+    }
+    /// <summary>A file the index cannot know is placed through its indexed stand-ins: their canaries are its canaries and
+    /// it is not unmapped; a stand-in the index does not know places nothing.</summary>
+    [Fact]
+    public void AFileTheIndexCannotKnowIsPlacedThroughItsIndexedStandIns() {
+        var coverage = new Dictionary<string, IReadOnlySet<string>> { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) };
+        var placed = Select(
+            changed: ["src/World/World.csproj"],
+            coverage: coverage,
+            standInsFor: static path => ((path == "src/World/World.csproj") ? ["src/World/Door.cs"] : [])
+        );
+        var unplaced = Select(
+            changed: ["src/World/World.csproj"],
+            coverage: coverage,
+            standInsFor: static _ => ["src/World/Unrecorded.cs"]
+        );
+
+        Assert.Equal(actual: placed.Canaries, expected: ["doors"]);
+        Assert.Empty(collection: placed.Unmapped);
+        Assert.Empty(collection: unplaced.Canaries);
+        Assert.Equal(actual: unplaced.Unmapped, expected: ["src/World/World.csproj"]);
     }
     [Fact]
     public void AWorldSourceTheIndexDoesNotKnowIsReportedAndChoosesNoCanary() {

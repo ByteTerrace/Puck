@@ -52,8 +52,10 @@ for the current hardware matrix.
 ## Production SDF world path
 
 These are the kernels `SdfWorldKernels` loads and `SdfWorldEngine` records, in
-recording order (`SdfFramePass`). Brick work and the table uploads record only
-when they have work. Runtime ISA probes verify the beam, the three hit passes,
+recording order (`SdfFramePass`). The table upload and the mesh region record
+`Puck.Shaders`' `region-copy.comp` through the device's one region-copy
+pipeline, which the engine leases rather than loads. Brick work and the table
+uploads record only when they have work. Runtime ISA probes verify the beam, the three hit passes,
 and all three views variants during initialization and compiled-shader reload;
 they do not verify rendered-image correctness. No automated gate covers the
 rendered image beyond `puck parity`, so a kernel change is judged by running
@@ -63,7 +65,6 @@ rendered image beyond `puck parity`, so a kernel change is judged by running
 |---|---|---|
 | `Sdf/sdf-brick-upload.comp.hlsl` | Copies host-baked voxel distances (a field lattice's height columns) from a staging buffer into the persistent brick pool. | `SdfWorldEngine` brick pool |
 | `Sdf/sdf-brick-bake.comp.hlsl` | Writes the closed-form sphere-carve union distance into the brick pool, sliced across frames. | `SdfWorldEngine.BrickBake.cs`, `SdfCarveBakePlanner` |
-| `Sdf/sdf-frame-upload.comp.hlsl` | Copies the changed word ranges of the viewport rows, dynamic transforms, and frame instance grid into their device-local twins, so no march kernel reads host-visible memory. | `SdfWorldEngine.Uploads.cs` |
 | `Sdf/sdf-sky.comp.hlsl` | Fills every source pixel with the authored sky before any march, so a tile the beam culls is never a stale pixel. Shares Stage 1's descriptor layout. | `SdfWorldEngine` sky pipeline |
 | `Sdf/sdf-instance-cull.comp.hlsl` | Bins the program's instances against each tile's cone into the per-tile instance mask the beam's march consumes. | `SdfWorldEngine` instance-cull pipeline |
 | `Sdf/sdf-beam.comp.hlsl` | Tile prepass. Cone-marches each `(viewport, tile)` to a conservative march start or `TileEmpty`, and writes the tile planes and part bounds the hit passes read. | `SdfWorldEngine` beam pipeline and tile buffers |

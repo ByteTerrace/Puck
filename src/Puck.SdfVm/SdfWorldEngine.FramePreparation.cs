@@ -665,6 +665,10 @@ public sealed partial class SdfWorldEngine {
         }
 
         WriteStagedUploads(slot: slot);
+        StageMeshRegion(
+            draws: frame.MeshDraws,
+            slot: slot
+        );
         // The ring tables: each slot's buffer receives only the ranges it is behind its mirror by. UploadProgram seeds
         // the screen-surface mirror and SetScreenSurface patches it; SetScreenDecal/ClearScreenDecal patch the decal
         // mirror; the screen-light and volume tables are packed every frame and diffed into theirs.
