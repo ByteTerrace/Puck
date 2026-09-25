@@ -224,12 +224,17 @@ The SDF engine node and the unified overlay both use it.
 
 `RenderGraphScheduler` decides which views render in a frame. Every view is a
 `RenderGraphInstance`: a name, a refresh (a frame divisor or a rate in hertz),
-the passes one render records, and the instances it may read.
-`RenderGraphInstanceSet.TryCreate` validates a set and orders it so every
-producer renders before the consumers that read it in the same frame. A read of
-the instance's own output, or a read declared previous-frame, takes the
-producer's last completed frame instead. A loop of same-frame reads is refused
-with `SameFrameCycle`, naming every instance in the loop. `Schedule` is a pure
+the passes one render records, the instances it may read, and what its output
+carries: an image, or a buffer such as the world's SDF brick pool. Each read
+carries a kind too, the same `ShaderPipelineResourceKind` a graph version
+declares. `RenderGraphInstanceSet.TryCreate` validates a set and orders it so
+every producer renders before the consumers that read it in the same frame,
+whatever the read carries. A read of the instance's own output, or a read
+declared previous-frame, takes the producer's last completed frame instead. A
+loop of same-frame reads is refused with `SameFrameCycle`, naming every
+instance in the loop, and a read whose kind is not what its producer's output
+carries is refused with `KindMismatch`, naming the consumer and the producer.
+`Schedule` is a pure
 function of the set, a `RenderGraphFrame`, and the previous frame's
 `RenderGraphHistory`. The frame carries the display's extent and rate, the
 instances the display shows (`RenderGraphRoot`), how much of each rendering
@@ -247,10 +252,14 @@ and the frame's pass-pixel budget:
 - The instances the display does not show directly spend at most the budget,
   priced as passes times pixels. The stalest due instance goes first, so an
   instance the budget defers is first in line on the next frame.
+- A buffer read has no footprint. A consumer that renders reads it, so the
+  producer is demanded whenever a consumer is, renders at most once a frame
+  before its same-frame readers, and renders at no extent for no pass-pixels.
+  A root or footprint that names a buffer is refused.
 
 The schedule lists every instance with its status, extent, divisor, passes and
-price, the renders in order, and the frame of its output each rendering
-consumer reads. The caller owns it: `Schedule` fills a `RenderGraphSchedule`
+price, the renders in order, and the frame and kind of the output each
+rendering consumer reads. The caller owns it: `Schedule` fills a `RenderGraphSchedule`
 created for the set, together with the history the next frame reads
 (`RenderGraphSchedule.Next`). Scheduling into a schedule replaces everything it
 held, and a refused frame leaves it unchanged. The next frame goes into another

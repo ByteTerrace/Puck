@@ -502,7 +502,12 @@ runs the parity and counted-GPU checks, and makes the deletions P11 lists,
 including the `puck.shader.pipeline.v1` schema, whose documents then need only
 their tag changed. Two P11b items have landed: the first-class package pass
 kind in `ShaderPipelineCompiler`, and a steady-state schedule that allocates
-nothing.
+nothing. Buffer edges are planned: package ports are typed with a buffer's
+stride and count, `sdf.bricks` publishes the brick pool as a buffer output, and
+an instance read carries the version's kind, so the scheduler orders a buffer
+producer before its readers at no extent while the planner records the read's
+buffer barrier; no world row declares a buffer edge and nothing records one
+until the graph runtime lands.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface

@@ -1,3 +1,5 @@
+using Puck.Hosting;
+
 namespace Puck.Shaders;
 
 // Dispatch shapes and package storage. A pass dispatches over the frame extent, by fixed group counts, or indirectly

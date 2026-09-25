@@ -1,5 +1,6 @@
 using Puck.Abstractions.Gpu;
 using System.Collections.ObjectModel;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -592,6 +593,13 @@ public sealed partial class ShaderPipelineCompiler {
         }
 
         var outputNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        // A package's structured or counted storage is published only by the package that writes it, for another
+        // instance to read across a buffer edge; the pipeline node publishes raw buffers of fixed size.
+        var packageWritten = definition.Passes
+            .Where(predicate: static pass => (pass.Kind == ShaderPipelinePassKind.Package))
+            .SelectMany(selector: static pass => pass.OutputReferences)
+            .Select(selector: static reference => reference.Name)
+            .ToHashSet(comparer: StringComparer.Ordinal);
 
         foreach (var output in definition.Outputs) {
             if (!outputNames.Add(item: output)) {
@@ -621,12 +629,13 @@ public sealed partial class ShaderPipelineCompiler {
                 );
             } else if (
                 (published.Kind == ShaderPipelineResourceKind.Buffer) &&
-                published.IsPackageStorage
+                published.IsPackageStorage &&
+                !packageWritten.Contains(item: output)
             ) {
                 Add(
                     code: "SHADERPIPE_PACKAGE_STORAGE",
                     diagnostics: diagnostics,
-                    message: $"Pipeline output '{output}' declares a stride or a count; a package's storage is never published.",
+                    message: $"Pipeline output '{output}' declares a stride or a count, and no package pass writes it; only the package that writes a package's storage publishes it.",
                     name: output
                 );
             }

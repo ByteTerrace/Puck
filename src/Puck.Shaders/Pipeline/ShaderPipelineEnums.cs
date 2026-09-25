@@ -19,16 +19,6 @@ public enum ShaderPipelinePassKind : byte {
     /// the planner refuses one there with <c>SHADERPIPE_PACKAGE_PASS</c>.</summary>
     Package = 4,
 }
-/// <summary>Identifies a pipeline image, raw buffer, or depth resource.</summary>
-[JsonConverter(typeof(StrictEnumConverter<ShaderPipelineResourceKind>))]
-public enum ShaderPipelineResourceKind : byte {
-    /// <summary>A two-dimensional image.</summary>
-    Image = 1,
-    /// <summary>A raw buffer of 32-bit words, bound as a <c>ByteAddressBuffer</c> or <c>RWByteAddressBuffer</c>.</summary>
-    Buffer = 2,
-    /// <summary>A depth attachment, which only a geometry pass writes and nothing samples.</summary>
-    Depth = 3,
-}
 /// <summary>Identifies how a fullscreen pass's vertex stage obtains the triangle's corners.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineVertexInput>))]
 public enum ShaderPipelineVertexInput : byte {
@@ -106,4 +96,6 @@ public enum ShaderPipelineCountBasis : byte {
     InstanceMaskWords = 7,
     /// <summary>Per word of the instance grid, which the host derives from its instances.</summary>
     InstanceGridWords = 8,
+    /// <summary>Per voxel of the SDF brick pool the host provisions for its world.</summary>
+    BrickPoolVoxels = 9,
 }

@@ -1,5 +1,6 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 

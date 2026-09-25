@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -267,6 +268,8 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
     public ulong InstanceMaskWords { get; init; }
     /// <summary>Gets the words of the instance grid, which the host derives from its instances.</summary>
     public ulong InstanceGridWords { get; init; }
+    /// <summary>Gets the voxels of the SDF brick pool the host provisions for its world.</summary>
+    public ulong BrickPoolVoxels { get; init; }
 
     /// <summary>Returns the units a basis counts.</summary>
     /// <param name="basis">The basis.</param>
@@ -281,6 +284,7 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
         ShaderPipelineCountBasis.DynamicTransforms => DynamicTransforms,
         ShaderPipelineCountBasis.InstanceMaskWords => InstanceMaskWords,
         ShaderPipelineCountBasis.InstanceGridWords => InstanceGridWords,
+        ShaderPipelineCountBasis.BrickPoolVoxels => BrickPoolVoxels,
         _ => throw new ArgumentOutOfRangeException(
             actualValue: basis,
             message: "Unknown count basis.",

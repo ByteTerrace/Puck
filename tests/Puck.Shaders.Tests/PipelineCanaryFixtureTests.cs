@@ -1,3 +1,5 @@
+using Puck.Hosting;
+
 namespace Puck.Shaders.Tests;
 
 /// <summary>The pipeline documents the <c>pipeline-feedback</c> and <c>pipeline-edit</c> canaries boot must plan, and

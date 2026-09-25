@@ -226,15 +226,20 @@ to `src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`.
 ```
 
 A package pass names a package id and binds one version to each of the
-package's ports, inputs then outputs, in port order. Every port carries an
-image, and a package binds its own descriptors, so a package reference
-declares no binding. `RenderGraphPackageCatalog` is what a host offers:
+package's ports, inputs then outputs, in port order. A port
+(`RenderGraphPackagePort`) carries an image or a buffer, and a buffer port
+states its `strideBytes` and `count` as a buffer resource does. The version a
+pass binds must carry what its port carries: its kind, and for a buffer port
+the same stride and count. A package binds its own descriptors, so a package
+reference declares no binding. `RenderGraphPackageCatalog` is what a host
+offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one output | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
-| `overlay` | one input, one output | The console, HUD, toasts and cursor drawn over the input. |
-| `post.<set id>` | one input, one output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
+| `sdf.world` | no input, one image output | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
+| `sdf.bricks` | no input, one buffer output | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
+| `overlay` | one image input, one image output | The console, HUD, toasts and cursor drawn over the input. |
+| `post.<set id>` | one image input, one image output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
 
 `RenderGraphCompiler` checks the package passes against the catalog, then plans
 the whole graph with `ShaderPipelineCompiler`. The planner sees a package pass
@@ -244,10 +249,24 @@ does. One planner orders every pass, versions and barriers every access, and
 keeps history. A version declared `External` is an input the host binds, such
 as another instance's output, and `RenderGraphPlan.Inputs` lists them. A graph
 that reads its own output reads a `history` version's previous frame, exactly
-as a pipeline does. The refusals are `RENDERGRAPH_SCHEMA`,
+as a pipeline does.
+
+A buffer edge is an external buffer version bound to another instance's buffer
+output, such as a view reading the brick pool `sdf.bricks` publishes. The
+planner treats it as it treats an external image: the first read in a frame
+starts from the host's state and records a buffer barrier into the read state,
+and a read after a pass of the same graph wrote the buffer records a buffer
+barrier from that write. `RenderGraphPlan.KindOf` names what a version carries,
+which is the kind of the instance edge bound to it. Only the package that
+writes a structured or counted buffer publishes it; any other structured or
+counted output is refused with `SHADERPIPE_PACKAGE_STORAGE`.
+
+The refusals are `RENDERGRAPH_SCHEMA`,
 `RENDERGRAPH_DOCUMENT_SHAPE`, `RENDERGRAPH_PACKAGE_UNKNOWN`,
-`RENDERGRAPH_PACKAGE_PORTS`, `RENDERGRAPH_PACKAGE_BINDING`,
-`RENDERGRAPH_PACKAGE_INPUT` and `RENDERGRAPH_PACKAGE_OUTPUT`. A planner refusal
+`RENDERGRAPH_PACKAGE_PORTS`, `RENDERGRAPH_PACKAGE_BINDING`, and
+`RENDERGRAPH_PACKAGE_INPUT` and `RENDERGRAPH_PACKAGE_OUTPUT` for a version that
+does not carry what its port carries, which name the pass, the version and the
+port. A planner refusal
 keeps its `SHADERPIPE_` code, among them `SHADERPIPE_PACKAGE_PASS` for a pass
 in a pipeline's or a graph's `passes` that declares the `Package` kind, which
 only the `packages` member declares.
@@ -271,7 +290,10 @@ another row's output:
 An input that names its own row reads that row's previous frame. An input
 marked `previousFrame` takes its producer's last completed frame, which lets
 two rows show each other. The validator refuses any other loop of inputs
-through the scheduler's own rule, naming every instance in the loop.
+through the scheduler's own rule, naming every instance in the loop. A row's
+instance reads every producer as an image and publishes an image: the rows do
+not yet take their edges' kinds from their graphs' plans, so no world row
+declares a buffer edge.
 `graphBudget` is the scheduler's price ceiling on the instances the display
 does not show directly. How the rows are scheduled is in
 [hosting](hosting.md#render-lifecycle-and-publication). Each row appears in
@@ -436,7 +458,7 @@ any non-`float` type by return value. `pass.Config` reads the live values back.
 | `ShaderSetManifest` | A parsed, validated `puck.shader.manifest.v1` document with its `FrameLayout`, load `Directory`, and the validated `Bytecode` of every stage it read, keyed by `"<stem><extension>"` — a consumer building an executor from it reads a stage's bytes there instead of reading the file again. |
 | `ShaderSetCatalog` | The shipped sets under a directory tree, by id; `Shipped` is the deploy's own `Assets/Shaders` tree. |
 | `RenderGraphDefinition` / `RenderGraphPackagePass` | A [frame graph](#frame-graphs) document and one package pass. |
-| `RenderGraphPackageCatalog` / `RenderGraphPackage` | The packages a host offers graphs, by id, and one package's ports. |
+| `RenderGraphPackageCatalog` / `RenderGraphPackage` / `RenderGraphPackagePort` | The packages a host offers graphs, by id, and one package's typed ports. |
 | `RenderGraphCompiler` / `RenderGraphPlan` / `RenderGraphStep` / `RenderGraphSource` | Validation and planning through the pipeline planner; the plan; one planned pass; reading and planning a graph file. |
 | `ShaderConfigField` / `ShaderConfigValues` | One config schema field; a document's bound values. |
 | `ShaderConfigBinding` | The config-schema binder every manifest with a `config` block shares—`TryBind`, `JsonSchema`, `ValidateSchema`. |
@@ -682,7 +704,8 @@ more pieces of vocabulary:
   host resolves: `Extent` pixels, program `Instances`, `ProgramWords`,
   `Viewports`, `Tiles` of one viewport, `DynamicTransforms`, and the
   `InstanceMaskWords` of one tile and `InstanceGridWords` the host derives from
-  its instances. The SDF engine's cull buffer, for one, is
+  its instances, and the `BrickPoolVoxels` of the world's SDF brick pool. The
+  SDF engine's cull buffer, for one, is
   `[{ "per": ["Viewports", "Tiles"], "elements": 4 }, { "per": ["Viewports", "Instances"], "elements": 12 }]`
   floats. A term names at least one basis and each basis once, and no two terms
   name the same bases, so a count has one spelling and a size that scales with
@@ -692,8 +715,9 @@ more pieces of vocabulary:
   buffer and its terms.
 
 A shader pass declaring a `Groups` or `Indirect` dispatch is refused
-(`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding, or a document
-publishing, a buffer with a stride or a count (`SHADERPIPE_PACKAGE_STORAGE`).
+(`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding a buffer with
+a stride or a count, or a document publishing one no package pass writes
+(`SHADERPIPE_PACKAGE_STORAGE`).
 Malformed shapes and layouts are refused as `SHADERPIPE_DISPATCH_SHAPE`,
 `SHADERPIPE_DISPATCH_ARGUMENTS`, `SHADERPIPE_BUFFER_STRIDE` and
 `SHADERPIPE_BUFFER_COUNT`.

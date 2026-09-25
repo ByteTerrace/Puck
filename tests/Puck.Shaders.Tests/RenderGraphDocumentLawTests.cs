@@ -235,7 +235,8 @@ public sealed class RenderGraphDocumentLawTests {
             id: "post.sdf-film-grain",
             package: out var grain
         ));
-        Assert.Equal(expected: (1, 1), actual: (grain.Inputs, grain.Outputs));
+        Assert.Equal(expected: RenderGraphPackagePort.Image, actual: Assert.Single(collection: grain.Inputs));
+        Assert.Equal(expected: RenderGraphPackagePort.Image, actual: Assert.Single(collection: grain.Outputs));
         Assert.True(condition: catalog.TryGet(
             id: RenderGraphPackageCatalog.SdfWorld,
             package: out _

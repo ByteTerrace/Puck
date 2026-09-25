@@ -13,9 +13,11 @@ public static class RenderGraphSchemas {
 /// reads and writes, and the planner orders it among the shader passes by those versions.</summary>
 /// <param name="Name">The pass's unique name, shared with the shader passes.</param>
 /// <param name="Package">The package id, which the host's <see cref="RenderGraphPackageCatalog"/> declares.</param>
-/// <param name="Inputs">The versions the package reads, one per input port in port order. A reference may read a
-/// history version's previous frame. A package binds its own descriptors, so no reference declares a binding.</param>
-/// <param name="Outputs">The image versions the package writes, one per output port in port order.</param>
+/// <param name="Inputs">The versions the package reads, one per input port in port order, each carrying what its port
+/// carries (<see cref="RenderGraphPackagePort"/>). A reference may read a history version's previous frame. A package
+/// binds its own descriptors, so no reference declares a binding.</param>
+/// <param name="Outputs">The versions the package writes, one per output port in port order, each carrying what its
+/// port carries.</param>
 public sealed record RenderGraphPackagePass(
     string Name,
     string Package,
