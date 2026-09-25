@@ -10,11 +10,10 @@ namespace Puck.Testing;
 // or the frames a node produces while its build runs on the thread pool.
 internal static class SdfTestPipelines {
     // Builds a set on the calling thread, counting into the ledger the engine will count into.
-    public static SdfWorldPipelines Build(IGpuComputeServices gpu, IGpuDeviceContext device, SdfWorldKernels kernels, GpuWorkLedger ledger) =>
+    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfWorldKernels kernels, GpuWorkLedger ledger) =>
         SdfWorldPipelines.Build(
             cancellationToken: CancellationToken.None,
             device: device,
-            gpu: gpu,
             includeBrickPipelines: false,
             kernels: kernels,
             ledger: ledger

@@ -135,7 +135,7 @@ public static partial class WorldDefinitionLoader {
             return true;
         } catch (Exception exception) {
             admission = null;
-            reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {WorldJsonPayload.Reason(exception: exception)}";
             return false;
         }
     }

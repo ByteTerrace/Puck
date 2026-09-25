@@ -184,8 +184,7 @@ public sealed class WorldSceneMovedTransformsLawTests {
             Program: program,
             ProgramChanged: false,
             Time: 0f,
-            Views: [],
-            WarpAmount: 0f
+            Views: []
         ) {
             DynamicTransforms = transforms,
             MovedTransforms = moved,

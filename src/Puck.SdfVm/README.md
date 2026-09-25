@@ -194,8 +194,9 @@ code. With its cache cold, after a kernel or driver change, that can take
 seconds per pipeline, and the engine has about fourteen of them. So the engine
 never creates one. `SdfWorldPipelines.Build` creates the whole set, and
 `SdfEngineNode`, `SdfCameraView`, and `WorldSessionView` lease it from
-`SdfWorldPipelineCache`, which the composition hands them on
-`SdfViewGpuServices`. The cache keeps one set per device, kernel set and
+`SdfWorldPipelineCache`, which the composition hands each of them; the engine
+records through the services of the device context it renders on
+(`IGpuDeviceContext.Services`). The cache keeps one set per device, kernel set and
 brick-pipeline choice: the first lease starts its build on the thread pool
 through `Puck.Hosting.BackgroundBuild`, and every other holder of the same key
 shares it, so a world with many camera views builds one set for all of them.

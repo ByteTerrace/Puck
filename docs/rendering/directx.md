@@ -152,6 +152,17 @@ it like any other Puck handle owner.
 | Device creation | `IDirectXDeviceApi` | `D3D12CreateDevice` | `DirectXDevice` (owns `ID3D12Device`) |
 | Software fallback | `IDirectXDeviceApi` | `IDXGIFactory4::EnumWarpAdapter` + `D3D12CreateDevice` | `DirectXDevice` (WARP) |
 | Memory profile | `IDirectXDeviceApi` | `ID3D12Device::CheckFeatureSupport` (architecture, options 16), `IDXGIAdapter1::GetDesc1` | `GpuMemoryProfile` |
+| Binding capabilities | `IDirectXDeviceApi` | `ID3D12Device::CheckFeatureSupport` (options, root signature, shader model, options 19) | `GpuDeviceCapabilities` |
+
+Every feature query goes through `DirectXFeatureReads` over an
+`IDirectXFeatureSupport`, which returns the query's `HRESULT` rather than
+throwing. A runtime that does not know a feature, root signature version or
+shader model answers `E_INVALIDARG`, and each read falls back as its
+documentation states: options 19 to the heap sizes every binding tier
+guarantees, the version and model queries to the next one down, the
+architecture query to the default memory profile, and the Shader Model floor to
+below. A bring-up that fails after its device exists releases the device and
+everything created with it, so the context's next use creates the device again.
 
 ---
 

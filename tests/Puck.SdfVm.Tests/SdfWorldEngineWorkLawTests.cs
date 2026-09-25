@@ -163,13 +163,11 @@ public sealed class SdfWorldEngineWorkLawTests {
 
             Pipelines = SdfTestPipelines.Build(
                 device: gpu,
-                gpu: gpu,
                 kernels: SdfTestPipelines.Kernels(),
                 ledger: owned
             );
             Engine = new SdfWorldEngine(
                 device: gpu,
-                gpu: gpu,
                 height: Extent,
                 options: new SdfWorldEngineOptions(
                     BrickPoolVoxelCapacity: 0,
@@ -198,8 +196,7 @@ public sealed class SdfWorldEngineWorkLawTests {
                         X: 0f,
                         Y: 0f
                     )
-                )],
-                WarpAmount: 0f
+                )]
             ) {
                 EnableCadenceGate = cadence,
             };

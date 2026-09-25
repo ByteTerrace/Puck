@@ -25,15 +25,14 @@ public interface ISdfFrameSource {
     /// <see cref="ScreenDecals"/>) so a host node's type coupling doesn't grow to thread it.</summary>
     /// <param name="bakes">The engine's brick-bake service (poll/request), never null.</param>
     void AdvanceBricks(ISdfBrickBakeService bakes) { }
-    /// <summary>Hands the frame source the live GPU device + compute services once per produced frame, right AFTER
+    /// <summary>Hands the frame source the live GPU device once per produced frame, right AFTER
     /// <see cref="CaptureFrame"/> and BEFORE the host polls this frame's screen-source providers — the seam a source
     /// that feeds a screen from CPU pixels uses to upload this frame's image to a stable handle its provider then
     /// returns (the provider is polled just after this call). Default no-op: a source with no CPU-fed screen (the vast
     /// majority) need not override it. Mirrors <see cref="AdvanceBricks"/>: an engine seam handed an engine
     /// capability, not a host-shaped hook.</summary>
-    /// <param name="deviceContext">The live GPU device context to upload on.</param>
-    /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
-    void PrepareScreenSources(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) { }
+    /// <param name="deviceContext">The live GPU device context to upload on, through its services.</param>
+    void PrepareScreenSources(IGpuDeviceContext deviceContext) { }
     /// <summary>Hands the frame source this frame's full <see cref="Puck.Hosting.FrameContext"/> once per produced frame,
     /// right AFTER <see cref="PrepareScreenSources"/> and BEFORE the host polls this frame's screen-source providers — the
     /// seam a source that hosts its own offscreen view pool (a <see cref="Views.ViewStack"/> of diegetic camera / nested-

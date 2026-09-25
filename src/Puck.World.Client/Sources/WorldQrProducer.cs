@@ -174,7 +174,7 @@ public sealed class WorldQrFeed : IWorldImageFeed, IImageSourceReference {
         m_published = false;
     }
     /// <inheritdoc/>
-    public void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    public void Publish(ulong tick, IGpuDeviceContext deviceContext) {
         if (m_published) {
             return;
         }
@@ -182,7 +182,6 @@ public sealed class WorldQrFeed : IWorldImageFeed, IImageSourceReference {
         _ = m_surface.Publish(
             deviceContext: deviceContext,
             format: SurfaceFormat.B8G8R8A8Unorm,
-            gpu: gpu,
             height: Descriptor.Height,
             pixels: m_pixels,
             width: Descriptor.Width

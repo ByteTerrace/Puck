@@ -21,7 +21,7 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// color (camera program operands, markers, render lighting, sky and environment colors, the theme), and a render
 /// cycle's position row. <see cref="BodyBindings"/> are templates a body reads through its own
 /// <c>WorldStateLease</c>: the population's scale row, a look's pose references and lane operands, a creation
-/// driver's state signal and gate tokens, and an effector's state target. A template keeps its
+/// driver's state signal and gate tokens, and an effector's gate tokens and state target. A template keeps its
 /// <see cref="StateBinding.BodyKey"/> key as authored; a body's lease resolves that key to the body's index when it
 /// acquires the template, so every body reads its own slot of one table, and the slot is released when the body leaves.
 /// <para>
@@ -46,6 +46,7 @@ public sealed class WorldPresentationManifest {
         typeof(BindableColor),
         typeof(BindableScalar),
         typeof(CreationDriverDocument),
+        typeof(CreationEffectorDocument),
         typeof(CreationEffectorTargetDocument),
         typeof(OverlayPredicate.State),
         typeof(WorldBindingBarAuthoring),
@@ -227,6 +228,17 @@ public sealed class WorldPresentationManifest {
                 token: token
             )) {
                 AddBody(binding: (binding with { Target = (truth || binding.Target) }));
+            }
+        }
+        // A driver's or an effector's gate reads each state token's truth (WorldGaitDrivers.GateHolds).
+        public void AddGate(IReadOnlyList<string>? gate) {
+            foreach (var token in (gate ?? [])) {
+                if (CreationDriverDocument.IsStateSignal(signal: token)) {
+                    AddBodyToken(
+                        token: token,
+                        truth: true
+                    );
+                }
             }
         }
         public void Visit(object? value, WorldModelType? declared = null) {
@@ -413,16 +425,14 @@ public sealed class WorldPresentationManifest {
                         );
                     }
 
-                    foreach (var token in (driver.When ?? [])) {
-                        if (CreationDriverDocument.IsStateSignal(signal: token)) {
-                            AddBodyToken(
-                                token: token,
-                                truth: true
-                            );
-                        }
-                    }
+                    AddGate(gate: driver.When);
 
                     return false;
+                case CreationEffectorDocument effector:
+                    // The walk continues into the effector's target.
+                    AddGate(gate: effector.When);
+
+                    return true;
                 case CreationEffectorTargetDocument target:
                     if (string.Equals(
                         a: target.Kind,

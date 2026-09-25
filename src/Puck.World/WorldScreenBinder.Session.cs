@@ -41,7 +41,7 @@ internal sealed partial class WorldScreenBinder {
             );
         }
 
-        if (m_viewServices is not null) {
+        if (m_viewPipelines is not null) {
             RegisterSessionView(
                 feed: feed,
                 index: index
@@ -77,7 +77,7 @@ internal sealed partial class WorldScreenBinder {
         }
     }
     // Completes a resolved session's offscreen GPU registration — deferred from ResolveSession because the render
-    // envelope (m_viewServices) is not known until the render factory calls ConfigureViews (or a live reconcile runs,
+    // envelope (m_viewPipelines) is not known until the render factory calls ConfigureViews (or a live reconcile runs,
     // by which point it always is). Mirrors RegisterCameraView's shape: one WorldSessionSceneEmitter composed through
     // its own SdfCompositionFrameSource, wrapped in a WorldSessionView and registered under the slot's own name — NOT
     // shared across screens even when two name the same destination+camera (unlike camera views), since the shipped
@@ -101,7 +101,7 @@ internal sealed partial class WorldScreenBinder {
         var width = ((uint)(feed.Resolution?.Width ?? ((int)WorldSessionView.DefaultWidth)));
         var height = ((uint)(feed.Resolution?.Height ?? ((int)WorldSessionView.DefaultHeight)));
         var view = new WorldSessionView(
-            services: m_viewServices!,
+            pipelines: m_viewPipelines!,
             hostsOnDirectX: m_viewHostsOnDirectX,
             frameSource: frameSource,
             width: width,

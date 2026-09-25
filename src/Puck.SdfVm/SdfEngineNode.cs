@@ -59,7 +59,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     // answer ProduceChildren/StepChildren/the SetChildSource loop all share for "is this slot a child this frame".
     private uint m_childSlotMask;
 
-    private readonly Func<IGpuDeviceContext, IGpuImage>? m_createStorageImage;
     private readonly string? m_debugLabel;
     private readonly int m_dynamicTransformCapacity;
     private readonly ISdfFrameSource m_frameSource;
@@ -158,7 +157,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
     private readonly Dictionary<int, Func<nint>> m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
-    private readonly SdfViewGpuServices m_services;
     private readonly int m_viewportCapacity;
     private readonly uint m_width;
 
@@ -179,7 +177,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     private bool m_disposed;
     private SdfWorldEngine? m_engine;
     private bool m_glyphAtlasInitialized;
-    private IGpuComputeServices? m_gpu;
 
     // The lease on the pipeline set the engine records with, shared through the composition's pipeline cache, built off
     // the frame thread and kept across engine rebuilds until a device loss or disposal releases it.
@@ -221,15 +218,10 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             return true;
         }
 
-        // One cohesive compute-services bundle instead of resolving each granular factory; the granular interfaces
-        // are still registered for a node that needs only one of them. Forwarded unchanged from the composition
-        // root's SdfViewGpuServices rather than re-resolved here.
-        m_gpu ??= m_services.Gpu;
         m_deviceContext = gpuDevice;
 
         if (m_pipelines.Poll(
             device: gpuDevice,
-            gpu: m_gpu,
             hostsOnDirectX: false,
             includeBrickPipelines: (m_brickPoolVoxelCapacity > 0),
             kernels: m_kernels
@@ -250,11 +242,9 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         m_engine = new SdfWorldEngine(
             device: gpuDevice,
-            gpu: m_gpu,
             height: m_height,
             options: new SdfWorldEngineOptions(
                 BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
-                CreateOutputImage: m_createStorageImage,
                 DynamicTransformCapacity: Math.Max(
                     val1: Math.Max(
                         val1: 1,
@@ -516,6 +506,9 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             child.OnDeviceLost();
         }
 
+        // The lost submissions will never sample the leased screen sources, so the leases retire before the frame
+        // source is told: a producer retiring its images then releases them at once, on the device that made them.
+        RetireAllScreenSourceFrames();
         m_frameSource.NotifyDeviceLost();
         m_engine?.Dispose();
         m_engine = null;
@@ -524,7 +517,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         CancelShaderReload(reason: "the device was lost");
         m_pipelines.Release();
         m_work.Invalidate();
-        RetireAllScreenSourceFrames();
         m_glyphAtlasInitialized = false;
         m_uploadedGlyphAtlas = null;
         m_deviceContext = null;
@@ -609,13 +601,10 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             );
         }
 
-        // Screen-source PREPARE: hand the frame source the live device + compute services so a CPU-pixel source can
-        // upload THIS frame's image to a stable handle before the providers below are polled (they return that
-        // handle). Mirrors AdvanceBricks — an engine seam, default no-op. m_gpu is set by EnsureEngine just above.
-        m_frameSource.PrepareScreenSources(
-            deviceContext: gpuDevice,
-            gpu: m_gpu!
-        );
+        // Screen-source PREPARE: hand the frame source the live device so a CPU-pixel source can upload THIS frame's
+        // image through its services to a stable handle before the providers below are polled (they return that
+        // handle). Mirrors AdvanceBricks — an engine seam, default no-op.
+        m_frameSource.PrepareScreenSources(deviceContext: gpuDevice);
 
         // View RENDER: hand the frame source this frame's full context so a source hosting an offscreen ViewStack (a
         // diegetic camera / jumbotron) renders its views against the live device now — their handles fresh before the
@@ -715,22 +704,12 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             writer: m_writeDebugCapture
         );
 
-        // Export mode hands the host a shared NT handle (zero-copy cross-backend present); same-device mode hands it
-        // an image view to sample directly.
-        return (m_engine.ExportMode
-            ? Surface.SharedTexture(
-                sharedHandle: m_engine.ExportSharedHandle,
-                width: m_width,
-                height: m_height,
-                format: SurfaceFormat.R8G8B8A8Unorm
-            )
-            : Surface.SameDeviceImage(
-                imageHandle: m_engine.OutputImageHandle,
-                imageViewHandle: m_engine.OutputImageViewHandle,
-                width: m_width,
-                height: m_height,
-                format: SurfaceFormat.R8G8B8A8Unorm
-            )
+        return Surface.SameDeviceImage(
+            imageHandle: m_engine.OutputImageHandle,
+            imageViewHandle: m_engine.OutputImageViewHandle,
+            width: m_width,
+            height: m_height,
+            format: SurfaceFormat.R8G8B8A8Unorm
         );
     }
     /// <inheritdoc/>
@@ -744,32 +723,14 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             request: request
         );
     }
-    /// <summary>Reads the cadence gate's per-span diagnostics through the live engine (a passthrough of
-    /// <see cref="SdfWorldEngine.CadenceDiagnostics"/>) — the seam the <c>sdf.info</c> verb's cadence section reads
-    /// without depending on the engine.</summary>
-    /// <param name="diagnostics">Receives the latest diagnostics.</param>
-    /// <returns>Whether the engine is built (false leaves <paramref name="diagnostics"/> at its default).</returns>
-    public bool TryReadCadenceDiagnostics(out SdfCadenceDiagnostics diagnostics) {
-        diagnostics = default;
-
-        if (m_engine is null) {
-            return false;
-        }
-
-        diagnostics = m_engine.CadenceDiagnostics;
-
-        return true;
-    }
 
     /// <summary>Initializes a new instance of the <see cref="SdfEngineNode"/> class.</summary>
-    /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) this node forwards
-    /// to its offscreen engine — resolved once at the composition root and stashed unchanged (the device itself
-    /// still comes from the host context each frame).</param>
+    /// <param name="pipelines">The composition's pipeline cache the node leases its engine's pipeline set from. The
+    /// device, and the services the engine records through, come from the host context each frame.</param>
     /// <param name="frameSource">The per-frame source of the scene, cameras, and viewport regions.</param>
     /// <param name="kernels">The compiled world kernel set (SPIR-V for Vulkan, DXIL for Direct3D 12).</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
-    /// <param name="createStorageImage">An optional factory for the output image. When it returns an <see cref="IGpuExportableImage"/>, the node runs in <em>export</em> mode: it ends each frame in the cross-backend handoff layout, drains the producer queue, and emits a shared-handle <see cref="Surface"/> (for zero-copy cross-backend present) instead of a same-device image-view one. When <see langword="null"/>, a plain same-device storage image is created from the resolved <see cref="IGpuImageFactory"/>.</param>
     /// <param name="children">An optional map from a stable name to a child <see cref="IRenderNode"/> that supplies a
     /// viewport slot's surface instead of an SDF camera whenever the frame's own <see cref="SdfFrame.Views"/> binds that
     /// slot's <see cref="SdfViewSnapshot.Child"/> to the same name (see this class's remarks for the per-frame
@@ -817,8 +778,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// carves (no pool is allocated).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfEngineNode(SdfViewGpuServices services, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, Func<IGpuDeviceContext, IGpuImage>? createStorageImage = null, IReadOnlyDictionary<string, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
-        ArgumentNullException.ThrowIfNull(services);
+    public SdfEngineNode(SdfWorldPipelineCache pipelines, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, IReadOnlyDictionary<string, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
+        ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
 
         if (
@@ -840,7 +801,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
                 comparer: StringComparer.Ordinal
             )
         );
-        m_createStorageImage = createStorageImage;
         m_dynamicTransformCapacity = dynamicTransformCapacity;
         m_instanceCapacity = instanceCapacity;
         m_viewportCapacity = viewportCapacity;
@@ -861,8 +821,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             ? EmptyScreenSurfaceTransforms
             : new Dictionary<int, Func<SdfScreenSurfaceTransform?>>(collection: screenSurfaceTransforms)
         );
-        m_pipelines = new SdfWorldPipelineSource(cache: services.Pipelines);
-        m_services = services;
+        m_pipelines = new SdfWorldPipelineSource(cache: pipelines);
         m_width = width;
         m_writeDebugCapture = WriteDebugCapture;
     }

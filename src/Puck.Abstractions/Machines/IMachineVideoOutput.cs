@@ -11,9 +11,8 @@ public interface IMachineVideoOutput {
     Vector3 EmittedLight { get; }
 
     /// <summary>Publishes the most recent complete frame on the selected GPU. Unchanged frames need no upload.</summary>
-    /// <param name="deviceContext">The GPU device context.</param>
-    /// <param name="gpu">Backend-neutral upload services.</param>
-    void PublishFrame(IGpuDeviceContext deviceContext, IGpuComputeServices gpu);
+    /// <param name="deviceContext">The GPU device context, whose services upload the frame.</param>
+    void PublishFrame(IGpuDeviceContext deviceContext);
     /// <summary>Retires GPU resources without changing the machine's simulation state.</summary>
     void NotifyDeviceLost();
 }

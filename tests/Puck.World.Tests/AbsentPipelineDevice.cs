@@ -2,31 +2,36 @@ using Puck.Abstractions.Gpu;
 
 namespace Puck.World.Tests;
 
-/// <summary>A device a pipeline render node can be built over without a GPU: it has no handle and nothing to wait for.</summary>
-internal sealed class AbsentPipelineDevice : IGpuDeviceContext {
+// A device a pipeline render node can be built over without a GPU: nothing to wait for, and a node built over it never
+// records, allocates, or submits, so a law over it reads only its readiness. The node wraps every service once for
+// counting when it is built, so each service exists, and every call on one refuses.
+internal sealed class AbsentPipelineDevice : IGpuDeviceContext, IGpuCommandPoolFactory, IGpuPipelineFactory,
+    IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuBufferFactory,
+    IGpuImageFactory, IGpuRenderPassFactory, IGpuSurfaceTransferFactory {
+    public AbsentPipelineDevice() =>
+        Services = new GpuDeviceServices {
+            Bindings = this,
+            BufferFactory = this,
+            CommandPoolFactory = this,
+            ImageFactory = this,
+            PipelineFactory = this,
+            QueueSubmitter = this,
+            Recorder = this,
+            RenderPassFactory = this,
+            ShaderModuleFactory = this,
+            SurfaceTransferFactory = this,
+        };
+
     public long AdapterLuid => 0L;
-    public nint DeviceHandle => 0;
-    public GpuDeviceIdentity? Identity => null;
     public GpuDeviceCapabilities? Capabilities => null;
+    public GpuDeviceIdentity? Identity => null;
     public GpuMemoryProfile MemoryProfile => default;
+    public GpuDeviceServices Services { get; }
 
     public void WaitIdle() { }
-}
-// A render node built over this never records, allocates, or submits: a law over it reads only its readiness. The
-// node wraps every service once for counting when it is built, so each service exists, and every call on one refuses.
-internal sealed class AbsentPipelineGpu : IGpuComputeServices, IGpuCommandPoolFactory, IGpuPipelineFactory,
-    IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory, IGpuBufferFactory,
-    IGpuImageFactory, IGpuSurfaceTransferFactory {
-    public IGpuBindings Bindings => this;
-    public IGpuBufferFactory BufferFactory => this;
-    public IGpuCommandPoolFactory CommandPoolFactory => this;
-    public IGpuImageFactory ImageFactory => this;
-    public IGpuPipelineFactory PipelineFactory => this;
-    public IGpuQueueSubmitter QueueSubmitter => this;
-    public IGpuRecorder Recorder => this;
-    public IGpuShaderModuleFactory ShaderModuleFactory => this;
-    public IGpuSurfaceTransferFactory SurfaceTransferFactory => this;
 
+    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description) => throw new NotSupportedException();
+    IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => throw new NotSupportedException();
     IGpuCommandPool IGpuCommandPoolFactory.Create() => throw new NotSupportedException();
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) => throw new NotSupportedException();
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) => throw new NotSupportedException();

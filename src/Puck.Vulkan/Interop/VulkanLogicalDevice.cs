@@ -63,7 +63,10 @@ public sealed class VulkanLogicalDevice : IDisposable {
         m_logicalDeviceApi = logicalDeviceApi;
     }
 
-    /// <summary>Destroys the owned device. Safe to call more than once.</summary>
+    /// <summary>Destroys the owned device, then ends its entries in the device-local memory counts. Safe to call more
+    /// than once.</summary>
+    /// <exception cref="InvalidOperationException">An allocation the device's memory counts still hold was never
+    /// released by its owner; the device is destroyed first, and the message names each leaked allocation.</exception>
     public void Dispose() {
         if (m_disposed) {
             return;
@@ -72,6 +75,7 @@ public sealed class VulkanLogicalDevice : IDisposable {
         PipelineCache?.Dispose();
         m_logicalDeviceApi.DestroyDevice(device: Commands);
         m_disposed = true;
+        Commands.Memory?.EndDevice(device: Commands.Handle);
     }
     /// <summary>Drains the device, tolerating an already-LOST device: <c>vkDeviceWaitIdle</c> returns
     /// <c>VK_ERROR_DEVICE_LOST</c> on a lost device (surfaced as <see cref="DeviceLostException"/>), which during

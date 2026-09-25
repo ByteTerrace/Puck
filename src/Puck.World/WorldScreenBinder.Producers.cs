@@ -71,14 +71,13 @@ internal sealed partial class WorldScreenBinder {
     }
     // Ensures the fill image of every external feed is uploaded while the gate fills, so a filled source never samples
     // an unset handle; a device loss drops the uploads and the next filled frame re-uploads them.
-    private void EnsureFills(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    private void EnsureFills(IGpuDeviceContext deviceContext) {
         if (!m_captureGate.Filling) {
             return;
         }
 
         EnsureFill(
             deviceContext: deviceContext,
-            gpu: gpu,
             rgba: ImageSourceDescriptor.DefaultCaptureFill
         );
 
@@ -86,7 +85,6 @@ internal sealed partial class WorldScreenBinder {
             if (slot.LiveFeed is { } live) {
                 EnsureFill(
                     deviceContext: deviceContext,
-                    gpu: gpu,
                     rgba: live.Descriptor.CaptureFill
                 );
             }
@@ -94,13 +92,12 @@ internal sealed partial class WorldScreenBinder {
             if (slot.DeclaredFeed is { Descriptor.FillsCaptures: true } declared) {
                 EnsureFill(
                     deviceContext: deviceContext,
-                    gpu: gpu,
                     rgba: declared.Descriptor.CaptureFill
                 );
             }
         }
     }
-    private void EnsureFill(IGpuDeviceContext deviceContext, IGpuComputeServices gpu, uint rgba) {
+    private void EnsureFill(IGpuDeviceContext deviceContext, uint rgba) {
         if (!m_fills.TryGetValue(
             key: rgba,
             value: out var surface
@@ -116,7 +113,6 @@ internal sealed partial class WorldScreenBinder {
         _ = surface.Publish(
             deviceContext: deviceContext,
             format: SurfaceFormat.R8G8B8A8Unorm,
-            gpu: gpu,
             height: 1U,
             pixels: new[] { ((byte)rgba), ((byte)(rgba >> 8)), ((byte)(rgba >> 16)), ((byte)(rgba >> 24)) },
             width: 1U
@@ -222,7 +218,7 @@ internal sealed partial class WorldScreenBinder {
             sensor: Sensor
         );
         public void NotifyDeviceLost() { }
-        public void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) { }
+        public void Publish(ulong tick, IGpuDeviceContext deviceContext) { }
     }
     // The desktop-capture producer: a window keyed by title or a whole monitor keyed by index, opened through the one
     // capture open ladder (TryCreateCaptureFeed), which retains a pending feed for a target not yet present.
@@ -293,12 +289,11 @@ internal sealed partial class WorldScreenBinder {
         public void Dispose() => Feed.Dispose();
         public nint Handle() => Feed.Handle();
         public void NotifyDeviceLost() => Feed.NotifyDeviceLost();
-        public void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+        public void Publish(ulong tick, IGpuDeviceContext deviceContext) {
             if (Feed.ShouldPull()) {
                 m_binder.CaptureWindow(
                     deviceContext: deviceContext,
-                    feed: Feed,
-                    gpu: gpu
+                    feed: Feed
                 );
             }
         }

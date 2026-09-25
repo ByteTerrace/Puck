@@ -106,6 +106,10 @@ public sealed class GpuWorkCountingLawTests {
         );
         Assert.Same(
             expected: rig.Gpu,
+            actual: rig.Services.RenderPassFactory
+        );
+        Assert.Same(
+            expected: rig.Gpu,
             actual: rig.Services.SurfaceTransferFactory
         );
     }
@@ -187,7 +191,7 @@ public sealed class GpuWorkCountingLawTests {
             ? method.Name[4..]
             : method.Name);
 
-    private sealed record Rig(FakeGpu Gpu, GpuWorkLedger Ledger, IGpuComputeServices Services, IGpuPipelineFactory Pipelines) {
+    private sealed record Rig(FakeGpu Gpu, GpuWorkLedger Ledger, GpuDeviceServices Services, IGpuPipelineFactory Pipelines) {
         public static Rig Create() {
             var gpu = new FakeGpu();
             var ledger = new GpuWorkLedger(
@@ -199,7 +203,7 @@ public sealed class GpuWorkCountingLawTests {
                 Gpu: gpu,
                 Ledger: ledger,
                 Pipelines: GpuWorkCounting.Wrap(factory: ((IGpuPipelineFactory)gpu), ledger: ledger),
-                Services: GpuWorkCounting.Wrap(ledger: ledger, services: ((IGpuComputeServices)gpu))
+                Services: GpuWorkCounting.Wrap(ledger: ledger, services: gpu.Services)
             );
         }
     }

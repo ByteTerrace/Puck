@@ -178,8 +178,6 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     }
     private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu) => new(
         deviceContext: gpu,
-        gpu: gpu,
-        graphics: gpu,
         height: Extent,
         hostsOnDirectX: false,
         inFlightFrames: InFlight,
@@ -363,10 +361,6 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             Assert.Equal(
                 expected: 0,
                 actual: gpu.WaitIdleCount
-            );
-            Assert.Equal(
-                expected: 0,
-                actual: gpu.DeviceHandleReads
             );
             Assert.All(
                 action: static created => Assert.Equal(

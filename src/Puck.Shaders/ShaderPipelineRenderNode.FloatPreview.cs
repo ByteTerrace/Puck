@@ -19,7 +19,6 @@ public sealed partial class ShaderPipelineRenderNode {
     private FloatPreviewPass CreatePreview(PreviewObjects objects) => new(
         device: m_device,
         gpu: m_gpu,
-        graphics: (m_graphics ?? throw new InvalidOperationException(message: "Float preview requires graphics services.")),
         inFlight: m_inFlight,
         objects: objects,
         outputLayout: m_outputLayout
@@ -95,7 +94,6 @@ public sealed partial class ShaderPipelineRenderNode {
         var device = m_device;
         var gpu = m_gpu;
         var directX = m_directX;
-        var graphics = (m_graphics ?? throw new InvalidOperationException(message: "Float preview requires graphics services."));
         var inFlight = m_inFlight;
 
         m_previewBuilding = request;
@@ -103,7 +101,6 @@ public sealed partial class ShaderPipelineRenderNode {
             device: device,
             gpu: gpu,
             directX: directX,
-            graphics: graphics,
             height: request.Height,
             inFlight: inFlight,
             width: request.Width
@@ -202,7 +199,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public IGpuShaderModule? Vertex { get; private set; }
         public uint Width { get; }
 
-        public static PreviewObjects Create(IGpuComputeServices gpu, IFullscreenPassServices graphics, IGpuDeviceContext device, bool directX, uint width, uint height, uint inFlight) {
+        public static PreviewObjects Create(GpuDeviceServices gpu, IGpuDeviceContext device, bool directX, uint width, uint height, uint inFlight) {
             var objects = new PreviewObjects(
                 height: height,
                 inFlight: inFlight,
@@ -239,7 +236,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     null
                 );
 
-                objects.RenderPass = graphics.RenderPassFactory.Create(
+                objects.RenderPass = gpu.RenderPassFactory.Create(
                     description: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
                         FinalLayout: GpuImageLayout.ShaderReadOnly,
                         Format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -247,7 +244,7 @@ public sealed partial class ShaderPipelineRenderNode {
                         Store: GpuAttachmentStore.Store
                     )])
                 );
-                objects.Pipeline = graphics.PipelineFactory.Create(
+                objects.Pipeline = gpu.PipelineFactory.Create(
                     objects.RenderPass,
                     objects.Vertex,
                     objects.Fragment,
@@ -261,7 +258,7 @@ public sealed partial class ShaderPipelineRenderNode {
                         usage: TargetUsage,
                         width: width
                     );
-                    objects.Framebuffers[i] = graphics.RenderPassFactory.CreateFramebuffer(
+                    objects.Framebuffers[i] = gpu.RenderPassFactory.CreateFramebuffer(
                         objects.RenderPass,
                         [objects.Targets[i]],
                         null
@@ -299,8 +296,7 @@ public sealed partial class ShaderPipelineRenderNode {
         private readonly nint[] m_descriptorPools;
         private readonly nint[] m_descriptorSets;
         private readonly IGpuDeviceContext m_device;
-        private readonly IGpuComputeServices m_gpu;
-        private readonly IFullscreenPassServices m_graphics;
+        private readonly GpuDeviceServices m_gpu;
         private readonly PreviewObjects m_objects;
         private readonly GpuImageLayout m_outputLayout;
         private readonly IGpuCommandPool[] m_draw;
@@ -311,10 +307,9 @@ public sealed partial class ShaderPipelineRenderNode {
         private readonly bool[] m_targetInitialized;
         private readonly IGpuImage[] m_targets;
 
-        public FloatPreviewPass(PreviewObjects objects, IGpuComputeServices gpu, IFullscreenPassServices graphics, IGpuDeviceContext device, uint inFlight, GpuImageLayout outputLayout) {
+        public FloatPreviewPass(PreviewObjects objects, GpuDeviceServices gpu, IGpuDeviceContext device, uint inFlight, GpuImageLayout outputLayout) {
             m_objects = objects;
             m_gpu = gpu;
-            m_graphics = graphics;
             m_device = device;
             m_outputLayout = outputLayout;
             m_targets = objects.Targets;
@@ -459,7 +454,7 @@ public sealed partial class ShaderPipelineRenderNode {
             );
             commands.Add(item: pre.CommandBufferHandle);
             var draw = m_draw[slot].CommandBufferHandle;
-            var graphics = m_graphics.Recorder;
+            var graphics = m_gpu.Recorder;
 
             graphics.BeginCommandBuffer(
                 commandBufferHandle: draw

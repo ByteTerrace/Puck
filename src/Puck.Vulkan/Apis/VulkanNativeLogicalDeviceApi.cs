@@ -230,7 +230,6 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
             device.Handle,
             0
         );
-        device.Dispose();
     }
     /// <inheritdoc/>
     public nint GetDeviceQueue(VulkanDeviceCommands device, uint queueFamilyIndex, uint queueIndex) {

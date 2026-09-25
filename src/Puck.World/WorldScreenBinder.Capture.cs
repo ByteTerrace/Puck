@@ -123,7 +123,7 @@ internal sealed partial class WorldScreenBinder {
     // monitor); reacquisition is World policy rather than a compatibility path in the platform feed. On the D3D12 GPU
     // transport the platform copies GPU-side into shared textures the screen samples directly — the CPU surface is never
     // published, only its divided-cadence readback frames feed the room glow.
-    private void CaptureWindow(CaptureFeed feed, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    private void CaptureWindow(CaptureFeed feed, IGpuDeviceContext deviceContext) {
         if (!feed.TryEnsureSource(adapterLuid: AdapterLuidForOpen())) {
             feed.Live = false;
             feed.Fault = $"{feed.Label} is unavailable";
@@ -169,7 +169,6 @@ internal sealed partial class WorldScreenBinder {
         if (feed.Source!.TryCapture(surface: out var surface)) {
             _ = feed.Surface.Publish(
                 deviceContext: deviceContext,
-                gpu: gpu,
                 surface: in surface
             );
             feed.Live = true;

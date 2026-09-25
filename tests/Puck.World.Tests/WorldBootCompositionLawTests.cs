@@ -32,7 +32,8 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
         "quit",
     ];
 
-    // Each law's boot resolves its per-run files under a root of its own, never the per-user one.
+    // Each law's boot resolves its per-run files and its device caches under a root of its own, never the per-user
+    // one.
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-boot-");
 
     private HostApplicationBuilder ComposeBoot(WorldHostPresentation presentation) {
@@ -57,6 +58,11 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
 
         builder.Services.AddWorldBoot(inputs: new WorldBootInputs(
             Authenticator: new WorldAttestedAuthenticator(),
+            Caches: new WorldCacheRoots(
+                bakes: m_stateDirectory.PathOf(name: "bakes"),
+                compilations: m_stateDirectory.PathOf(name: "compilations"),
+                compiledWorlds: m_stateDirectory.PathOf(name: "compiled-worlds")
+            ),
             Extensions: extensions,
             HostSettings: WorldHostSettings.Resolve(
                 backendOverride: null,
@@ -93,8 +99,8 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
             (type.Name == "WorldOffscreenGpuActivation")
         );
     }
-    // A neutral GPU service the fake stands in for: the device context, the compute bundle, and every device-bound
-    // recorder, binding writer, factory and submitter a backend registers over its own device context.
+    // A neutral GPU service the fake stands in for: the device context, whose services the fake also is, and the
+    // optional surface export a backend registers beside it.
     private static bool IsNeutralGpuService(Type type, FakeGpuDevice fake) => (
         type.IsInterface &&
         string.Equals(a: type.Namespace, b: typeof(IGpuDeviceContext).Namespace, comparisonType: StringComparison.Ordinal) &&

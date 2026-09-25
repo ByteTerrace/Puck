@@ -85,8 +85,7 @@ public sealed class WorldRenderFarDistanceLawTests {
             Program: null!,
             ProgramChanged: false,
             Time: 0f,
-            Views: [],
-            WarpAmount: 0f
+            Views: []
         );
 
         Assert.Equal(

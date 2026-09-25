@@ -350,7 +350,6 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
             ) {
                 CreateNode = static name => new ShaderPipelineRenderNode(
                     deviceContext: new AbsentPipelineDevice(),
-                    gpu: new AbsentPipelineGpu(),
                     height: 4,
                     hostsOnDirectX: false,
                     name: name,

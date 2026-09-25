@@ -16,9 +16,9 @@ namespace Puck.Testing;
 /// the barriers the caller records. A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
 /// </summary>
 internal sealed class UploadModelGpu :
+    IGpuDeviceContext,
     IGpuPipelineFactory,
     IGpuRecorder,
-    IGpuComputeServices,
     IGpuBindings,
     IGpuShaderModuleFactory,
     IGpuBufferFactory {
@@ -40,19 +40,27 @@ internal sealed class UploadModelGpu :
     /// <param name="reportVersion">The ISA version a 1×1 readback reports.</param>
     public UploadModelGpu(byte reportVersion) {
         m_inner = new FakeGpuDevice(reportVersion: reportVersion);
+        Services = new GpuDeviceServices {
+            Bindings = this,
+            BufferFactory = this,
+            CommandPoolFactory = m_inner.Services.CommandPoolFactory,
+            ImageFactory = m_inner.Services.ImageFactory,
+            PipelineFactory = this,
+            QueueSubmitter = m_inner.Services.QueueSubmitter,
+            Recorder = this,
+            RenderPassFactory = m_inner.Services.RenderPassFactory,
+            ShaderModuleFactory = this,
+            SurfaceTransferFactory = m_inner.Services.SurfaceTransferFactory,
+        };
     }
 
-    public IGpuBindings Bindings => this;
-    public IGpuCommandPoolFactory CommandPoolFactory => m_inner.CommandPoolFactory;
-    public IGpuPipelineFactory PipelineFactory => this;
-    public IGpuRecorder Recorder => this;
-    /// <summary>Gets the device the engine renders on.</summary>
-    public IGpuDeviceContext Device => m_inner;
-    public IGpuBufferFactory BufferFactory => this;
-    public IGpuImageFactory ImageFactory => m_inner.ImageFactory;
-    public IGpuQueueSubmitter QueueSubmitter => m_inner.QueueSubmitter;
-    public IGpuShaderModuleFactory ShaderModuleFactory => this;
-    public IGpuSurfaceTransferFactory SurfaceTransferFactory => m_inner.SurfaceTransferFactory;
+    public long AdapterLuid => 0L;
+    public GpuDeviceCapabilities? Capabilities => null;
+    public GpuDeviceIdentity? Identity => null;
+    public GpuMemoryProfile MemoryProfile => default;
+    /// <summary>Gets the model's buffers, bindings, pipelines, shader modules and recorder, and the
+    /// <see cref="FakeGpuDevice"/>'s other services.</summary>
+    public GpuDeviceServices Services { get; }
     /// <summary>Gets the table-upload copies recorded since the last <see cref="ResetTallies"/>.</summary>
     public int UploadCopies { get; private set; }
 
@@ -91,6 +99,7 @@ internal sealed class UploadModelGpu :
 
         UploadCopies = 0;
     }
+    public void WaitIdle() { }
 
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         var pipeline = new Handles(handle: NextHandle(), layout: NextHandle(), setLayout: NextHandle());
@@ -118,8 +127,8 @@ internal sealed class UploadModelGpu :
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) => throw new NotSupportedException();
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) => throw new NotSupportedException();
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) => NextHandle();
-    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => m_inner.Bindings.CreatePool(sizes: sizes);
-    nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => m_inner.Bindings.CreateSampler(filter: filter);
+    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) => m_inner.Services.Bindings.CreatePool(sizes: sizes);
+    nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => m_inner.Services.Bindings.CreateSampler(filter: filter);
     void IGpuBindings.DestroyPool(nint poolHandle) { }
     void IGpuBindings.DestroySampler(nint samplerHandle) { }
     void IGpuBindings.WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) { }

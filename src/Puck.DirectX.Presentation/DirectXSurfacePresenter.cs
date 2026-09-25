@@ -19,25 +19,22 @@ namespace Puck.DirectX.Presentation;
 public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, IDeviceLostRecoverable {
     private readonly DirectXSurfaceCompositor m_compositor;
     private readonly DirectXDeviceContext m_deviceContext;
-    private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
 
     private IGpuSurfaceImport? m_captureImport;
     private IGpuSurfaceReadback? m_captureReadback;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXSurfacePresenter"/> class.</summary>
-    /// <param name="deviceContext">The shared device and command queue.</param>
+    /// <param name="deviceContext">The shared device and command queue, whose services create the lazily armed capture
+    /// readback and shared-surface importer.</param>
     /// <param name="compositor">The DXGI swap chain and blit pipeline.</param>
-    /// <param name="surfaceTransferFactory">Creates the lazily armed capture readback and shared-surface importer.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="deviceContext"/>, <paramref name="compositor"/>, or
-    /// <paramref name="surfaceTransferFactory"/> is <see langword="null"/>.</exception>
-    public DirectXSurfacePresenter(DirectXDeviceContext deviceContext, DirectXSurfaceCompositor compositor, IGpuSurfaceTransferFactory surfaceTransferFactory) {
+    /// <exception cref="ArgumentNullException"><paramref name="deviceContext"/> or <paramref name="compositor"/> is
+    /// <see langword="null"/>.</exception>
+    public DirectXSurfacePresenter(DirectXDeviceContext deviceContext, DirectXSurfaceCompositor compositor) {
         ArgumentNullException.ThrowIfNull(compositor);
         ArgumentNullException.ThrowIfNull(deviceContext);
-        ArgumentNullException.ThrowIfNull(surfaceTransferFactory);
 
         m_compositor = compositor;
         m_deviceContext = deviceContext;
-        m_surfaceTransferFactory = surfaceTransferFactory;
     }
 
     private void ReleaseCaptureResources() {
@@ -97,7 +94,6 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
             captureReadback: ref m_captureReadback,
             deviceContext: m_deviceContext,
             surface: surface,
-            surfaceTransferFactory: m_surfaceTransferFactory,
             toGpuFormat: GpuPixelFormats.FromSurfaceFormat
         );
     }

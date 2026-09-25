@@ -26,8 +26,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuDeviceContext m_device;
     private readonly bool m_directX;
-    private readonly IGpuComputeServices m_gpu;
-    private readonly IFullscreenPassServices? m_graphics;
+    private readonly GpuDeviceServices m_gpu;
     private readonly uint m_inFlight;
     private readonly GpuImageLayout m_outputLayout;
     private readonly FrameSlot[] m_slots;
@@ -68,10 +67,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private string[] m_passLabels = [];
     private readonly List<nint> m_commands = [];
 
-    /// <summary>Creates an initially empty node. The first valid <see cref="Swap"/> installs a graph.</summary>
-    public ShaderPipelineRenderNode(string name, IGpuComputeServices gpu, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, IFullscreenPassServices? graphics = null, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General) {
+    /// <summary>Creates an initially empty node that records through <paramref name="deviceContext"/>'s services. The
+    /// first valid <see cref="Swap"/> installs a graph.</summary>
+    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentNullException.ThrowIfNull(gpu);
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
@@ -86,11 +85,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         m_gpu = GpuWorkCounting.Wrap(
             ledger: m_work,
-            services: gpu
+            services: deviceContext.Services
         );
         m_device = deviceContext;
         m_directX = hostsOnDirectX;
-        m_graphics = CountGraphics(graphics: graphics);
         m_inFlight = inFlightFrames;
         if (outputLayout is not GpuImageLayout.General and not GpuImageLayout.ShaderReadOnly) {
             throw new ArgumentOutOfRangeException(
@@ -108,15 +106,13 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         m_requestedHeight = height;
     }
     /// <summary>Creates a node with an already compiled candidate.</summary>
-    public ShaderPipelineRenderNode(CompiledShaderPipeline pipeline, IGpuComputeServices gpu, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, IFullscreenPassServices? graphics = null, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General)
+    public ShaderPipelineRenderNode(CompiledShaderPipeline pipeline, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General)
         : this(
         pipeline.Plan.Definition.Name,
-        gpu,
         deviceContext,
         hostsOnDirectX,
         width,
         height,
-        graphics,
         inFlightFrames,
         outputLayout
     ) => Swap(pipeline: pipeline);
@@ -227,13 +223,15 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         if (declaration.Kind == ShaderPipelineDocumentPassKind.Compute) {
             runtime.Pools = new IGpuCommandPool[m_inFlight];
         } else {
+            // Geometry buffers are created through the device's buffer factory, not the node's counted one, so they count
+            // as no created storage buffer and no written bytes.
             if (declaration.Geometry is { } geometry) {
-                runtime.GeometryBuffer = m_graphics!.BufferFactory.CreateHostVisible(
+                runtime.GeometryBuffer = m_device.Services.BufferFactory.CreateHostVisible(
                     data: geometry.BufferData(),
                     usage: GpuBufferUsage.Vertex | GpuBufferUsage.Index
                 );
             } else if (declaration.Vertex == ShaderPipelineVertexInput.Position) {
-                runtime.GeometryBuffer = m_graphics!.BufferFactory.CreateHostVisible(
+                runtime.GeometryBuffer = m_device.Services.BufferFactory.CreateHostVisible(
                     data: FullscreenTriangle.CreateVertexData(),
                     usage: GpuBufferUsage.Vertex
                 );
@@ -260,7 +258,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 : null);
 
             for (var slot = 0; (slot < m_inFlight); slot++) {
-                runtime.Framebuffers[slot] = m_graphics!.RenderPassFactory.CreateFramebuffer(
+                runtime.Framebuffers[slot] = m_gpu.RenderPassFactory.CreateFramebuffer(
                     runtime.RenderPass!,
                     [.. colors.Select(selector: images => images[slot])],
                     depth?[slot]
@@ -1009,7 +1007,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         var framebuffer = pass.Framebuffers![slot];
         var command = pass.Draw![slot].CommandBufferHandle;
-        var recorderGraphics = m_graphics!.Recorder;
+        var recorderGraphics = m_gpu.Recorder;
         var pipeline = pass.Graphics!;
 
         recorderGraphics.BeginCommandBuffer(
@@ -1244,18 +1242,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             }
         }
     }
-    private static void ValidatePlan(ShaderPipelinePlan plan, IFullscreenPassServices? graphics) {
+    private static void ValidatePlan(ShaderPipelinePlan plan) {
         if (
             (plan.Passes.Count == 0) ||
             (plan.Resources.Count == 0)
         ) {
             throw new InvalidDataException(message: "A shader pipeline needs resources and passes.");
-        }
-        if (
-            plan.Passes.Any(predicate: static pass => pass.Declaration.IsGraphics) &&
-            (graphics is null)
-        ) {
-            throw new InvalidDataException(message: "Graphics pipeline passes require graphics services.");
         }
         var resources = plan.Resources.ToDictionary(
             item => item.Name,
@@ -1576,10 +1568,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         if (!pipeline.IsSuccess) {
             throw new InvalidDataException(message: "A failed shader compilation cannot be installed.");
         }
-        ValidatePlan(
-            pipeline.Plan,
-            m_graphics
-        );
+        ValidatePlan(plan: pipeline.Plan);
         if (
             (m_inFlight < 2) &&
             pipeline.Plan.Resources.Any(predicate: static resource => resource.Declaration.History)
@@ -1725,7 +1714,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         public nint[]? Sets;
         public IGpuBuffer? GeometryBuffer;
 
-        public void Dispose(IGpuComputeServices gpu, IGpuDeviceContext device) {
+        public void Dispose(GpuDeviceServices gpu, IGpuDeviceContext device) {
             Compute?.Dispose();
             GeometryBuffer?.Dispose();
             if (Framebuffers is not null) {

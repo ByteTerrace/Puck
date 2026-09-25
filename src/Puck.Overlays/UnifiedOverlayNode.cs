@@ -39,8 +39,8 @@ public sealed record UnifiedOverlaySources(
 /// records. Every surface is a writer: the console panel, the per-seat binding bars, and the toast are each a small CPU
 /// writer emitting the shared record vocabulary (panel chrome / rect / fixed-cell text run / icon chip) through
 /// <see cref="OverlayFrameBuilder"/>, so a future surface is a new writer, never a new node or shader.
-/// Backend-neutral: only neutral <c>IGpu*</c> services (<see cref="OverlayServices"/>), with bytecode selected by
-/// the caller.
+/// Backend-neutral: only the neutral services of its device context (<see cref="IGpuDeviceContext.Services"/>), with
+/// bytecode selected by the caller.
 /// </summary>
 /// <remarks>
 /// The overlay decorator contract in full: the per-node submission fence (the previous frame's pass must
@@ -58,8 +58,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // channel scopes (wheel, then cursor on top), drawn over everything and outside the replace-band suppression
     // (see ProduceFrame's tail).
     private const int FirstPartyChannelCount = 4;
-    // Combined image-sampler binding layout (identical numbering on both backends — see OverlayServices.StorageBufferBinding
-    // for the storage buffer's matching binding): 0 the inner world image (SamplerBinding); 1..OverlayFrameSlots.SlotCount
+    // Combined image-sampler binding layout (identical numbering on both backends — see StorageBufferBinding for the
+    // storage buffer's matching binding): 0 the inner world image (SamplerBinding); 1..OverlayFrameSlots.SlotCount
     // the frame-slot table (FrameSlotFirstBinding..), one scalar Texture2D+SamplerState pair per binding (DXC's
     // vk::combinedImageSampler never fuses an array — see overlay-unified.frag.hlsl's frameTextureN/frameSamplerN
     // declarations); OverlayFrameSlots.SlotCount+1 the storage buffer, immediately after every sampler. All 1+SlotCount
@@ -73,6 +73,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     // counts float4 + sdf float4 + misc float4 — KEEP IN SYNC with overlay-unified.frag.hlsl's OverlayPassData.
     private const int PushConstantByteLength = ((sizeof(float) * 4) * 3);
     private const uint SamplerBinding = 0;
+    // The program storage buffer's binding, immediately after every sampler on both backends: Vulkan declares the
+    // TextureSamplerCount scalar combined-image-sampler bindings followed by the storage buffer at the next binding
+    // number (VulkanGraphicsPipelineFactory.BuildDescriptorBindings); the Direct3D 12 graphics root signature packs its
+    // descriptor table [t0..tN-1 texture SRVs, then the storage SRV at tN] with an identity binding-to-slot map
+    // (DirectXGpuPipelineFactory.BuildLayout).
+    private const uint StorageBufferBinding = TextureSamplerCount;
     // 1 (SamplerBinding) + the frame-slot table — see FrameSlotFirstBinding's remarks.
     private const uint TextureSamplerCount = (1u + OverlayFrameSlots.SlotCount);
     private const uint VertexCount = 3;
@@ -111,7 +117,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     private readonly IGpuRenderPassFactory m_renderPassFactory;
     private readonly IGpuShaderModuleFactory m_shaderModuleFactory;
     private readonly UnifiedOverlaySources m_sources;
-    private readonly uint m_storageBufferBinding;
     private readonly IGpuBufferFactory m_storageBufferFactory;
     private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
     private readonly OverlayThemeStore m_theme;
@@ -180,7 +185,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     /// <param name="capacity">The host's declared counts the lease table is derived from (see
     /// <see cref="OverlayCapacity"/>).</param>
     /// <param name="glyphs">The shared SDF glyph pack (per-glyph signed-distance cells).</param>
-    /// <param name="services">The neutral GPU service bundle (same device as <paramref name="inner"/>).</param>
+    /// <param name="deviceContext">The device the overlay renders on, the one <paramref name="inner"/> renders on; the
+    /// overlay records through its services.</param>
+    /// <param name="frameSources">The host's <see cref="OverlayHudElementKind.Frame"/> content seam: every produced
+    /// frame's <see cref="OverlayFrameSlots"/> table acquires each visible <c>Frame</c> element's lease through it. A host
+    /// with no live frame content passes a null object that always answers <see langword="false"/>.</param>
     /// <param name="vertexBytecode">The fullscreen vertex shader, in the host backend's bytecode format.</param>
     /// <param name="fragmentBytecode">The unified overlay fragment shader, in the host backend's bytecode format.</param>
     /// <param name="width">The render width in pixels.</param>
@@ -194,7 +203,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         UnifiedOverlaySources sources,
         OverlayCapacity capacity,
         OverlayGlyphSdfPack glyphs,
-        OverlayServices services,
+        IGpuDeviceContext deviceContext,
+        IOverlayFrameSources frameSources,
         ReadOnlyMemory<byte> vertexBytecode,
         ReadOnlyMemory<byte> fragmentBytecode,
         uint width,
@@ -203,8 +213,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
     ) {
         ArgumentNullException.ThrowIfNull(argument: glyphs);
         ArgumentNullException.ThrowIfNull(argument: inner);
-        ArgumentNullException.ThrowIfNull(argument: services);
+        ArgumentNullException.ThrowIfNull(argument: deviceContext);
+        ArgumentNullException.ThrowIfNull(argument: frameSources);
         ArgumentNullException.ThrowIfNull(argument: sources);
+
+        var services = deviceContext.Services;
 
         m_theme = new OverlayThemeStore();
         m_theme.Publish(theme: in theme);
@@ -256,8 +269,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             bindings: services.Bindings,
             ledger: m_work
         );
-        m_deviceContext = services.DeviceContext;
-        m_frameSlots = new OverlayFrameSlots(sources: services.FrameSources);
+        m_deviceContext = deviceContext;
+        m_frameSlots = new OverlayFrameSlots(sources: frameSources);
         m_markerWriter = ((sources.Markers is { } markers)
             ? new MarkerWriter(
                 maxChipsPerSeat: capacity.MarkerMaxChipsPerSeat,
@@ -292,7 +305,6 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
             ledger: m_work
         );
         m_sources = sources;
-        m_storageBufferBinding = services.StorageBufferBinding;
         m_storageBufferFactory = GpuWorkCounting.Wrap(
             factory: services.BufferFactory,
             ledger: m_work
@@ -465,7 +477,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget {
         );
         m_sampler = m_bindings.CreateSampler();
         m_bindings.WriteBuffer(
-            binding: m_storageBufferBinding,
+            binding: StorageBufferBinding,
             bufferHandle: m_dataBuffer.BufferHandle,
             bufferSize: (((uint)m_builder.WordCount) * sizeof(uint)),
             descriptorSetHandle: m_descriptorSet,

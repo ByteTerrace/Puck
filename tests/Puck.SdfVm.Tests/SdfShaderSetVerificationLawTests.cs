@@ -72,7 +72,6 @@ public sealed class SdfShaderSetVerificationLawTests {
 
         using var pipelines = SdfTestPipelines.Build(
             device: gpu,
-            gpu: gpu,
             kernels: kernels,
             ledger: ledger
         );
@@ -80,7 +79,6 @@ public sealed class SdfShaderSetVerificationLawTests {
 
         using var engine = new SdfWorldEngine(
             device: gpu,
-            gpu: gpu,
             height: Extent,
             options: new SdfWorldEngineOptions(
                 BrickPoolVoxelCapacity: 0,

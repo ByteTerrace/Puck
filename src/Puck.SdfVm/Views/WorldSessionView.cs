@@ -43,7 +43,6 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     private readonly bool m_hostsOnDirectX;
     private readonly bool m_isBudgeted;
     private readonly Func<int, nint>? m_resolveScreenSource;
-    private readonly SdfViewGpuServices m_services;
     private readonly uint m_width;
     // Owned here rather than by the engine, so submission identities keep increasing across an engine rebuild.
     private readonly GpuWorkLedger m_work = new(
@@ -78,7 +77,8 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     private SdfWorldEngine? m_retiredEngine;
 
     /// <summary>Wraps a session-observed world's own frame source as view content.</summary>
-    /// <param name="services">The concrete GPU-services closure this view forwards to its offscreen engine.</param>
+    /// <param name="pipelines">The composition's pipeline cache the view leases its offscreen engine's pipeline set
+    /// from.</param>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12 (selects the kernel bytecode).</param>
     /// <param name="frameSource">The destination's OWN frame source — entirely independent of the host world's
     /// program/anchors/emitters.</param>
@@ -93,12 +93,11 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     /// resolve every produced frame instead (see <see cref="IsBudgeted"/>). The document-level ceiling on how many
     /// simultaneously unbudgeted sessions may exist is the same <see cref="OffscreenRenderBudget.PerProducedFrame"/>,
     /// enforced by the host's document validator — this constructor trusts its caller, not a second count here.</param>
-    public WorldSessionView(SdfViewGpuServices services, bool hostsOnDirectX, ISdfFrameSource frameSource, uint width = DefaultWidth, uint height = DefaultHeight, Func<int, nint>? resolveScreenSource = null, bool isBudgeted = true) {
-        ArgumentNullException.ThrowIfNull(services);
+    public WorldSessionView(SdfWorldPipelineCache pipelines, bool hostsOnDirectX, ISdfFrameSource frameSource, uint width = DefaultWidth, uint height = DefaultHeight, Func<int, nint>? resolveScreenSource = null, bool isBudgeted = true) {
+        ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
 
-        m_pipelines = new SdfWorldPipelineSource(cache: services.Pipelines);
-        m_services = services;
+        m_pipelines = new SdfWorldPipelineSource(cache: pipelines);
         m_hostsOnDirectX = hostsOnDirectX;
         m_frameSource = frameSource;
         m_width = width;
@@ -122,13 +121,12 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     /// <summary>Gets the GPU objects this view's engines have created, over the view's whole life.</summary>
     public IWorkCounterSource WorkLifetime => m_work;
 
-    private bool EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfFrame frame) =>
+    private bool EnsureEngine(IGpuDeviceContext device, SdfFrame frame) =>
         SdfFilmingViewEngine.EnsureEngine(
             device: device,
             engine: ref m_engine,
             frame: frame,
             frameSource: m_frameSource,
-            gpu: gpu,
             height: m_height,
             hostsOnDirectX: m_hostsOnDirectX,
             pipelines: m_pipelines,
@@ -217,7 +215,6 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
         // While the pipelines build, keep serving the last completed image (no signal before the first).
         if (!EnsureEngine(
             device: device,
-            gpu: m_services.Gpu,
             frame: frame
         )) {
             return m_lastGoodHandle;

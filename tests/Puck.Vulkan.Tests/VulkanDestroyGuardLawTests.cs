@@ -275,19 +275,16 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
             memory: memory,
             wired: [nameof(VulkanDeviceCommands.FreeMemory)]
         );
-        var properties = new VkPhysicalDeviceMemoryProperties { MemoryTypeCount = 2U };
 
-        properties.MemoryTypePairs[0] = 0x1U;
-        properties.MemoryTypePairs[2] = 0x6U;
         device.CountAllocated(
-            allocateInfo: new VkMemoryAllocateInfo { AllocationSize = 65536UL, MemoryTypeIndex = 0U },
+            allocationSize: 65536UL,
             memoryHandle: DeviceLocalMemory,
-            memoryProperties: in properties
+            role: GpuMemoryRole.DeviceLocal
         );
         device.CountAllocated(
-            allocateInfo: new VkMemoryAllocateInfo { AllocationSize = 4096UL, MemoryTypeIndex = 1U },
+            allocationSize: 4096UL,
             memoryHandle: HostMemory,
-            memoryProperties: in properties
+            role: GpuMemoryRole.HostVisible
         );
 
         var calls = Record(release: () => {
@@ -300,6 +297,45 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
             expected: [(device.Handle, HostMemory, ((nint)0)), (device.Handle, DeviceLocalMemory, ((nint)0))]
         );
         Assert.Equal(expected: (65536L, 65536L, 65536L), actual: (memory.Read(kind: GpuDeviceMemoryWork.Allocated), memory.Read(kind: GpuDeviceMemoryWork.Released), memory.Read(kind: GpuDeviceMemoryWork.Peak)));
+    }
+    [Fact]
+    public void AHostVisibleBufferOnAUnifiedMemoryDeviceIsNotCounted() {
+        const nint DeviceLocalBuffer = 0x5000;
+        const nint HostVisibleBuffer = 0x6000;
+        const uint DeviceLocalBit = 0x1U;
+
+        var memory = new GpuDeviceMemoryWork(backend: "vulkan");
+        var device = RecordingDevice(
+            memory: memory,
+            wired: []
+        );
+        // A unified-memory table: every type is DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT.
+        var unified = new VkPhysicalDeviceMemoryProperties { MemoryTypeCount = 2U };
+
+        unified.MemoryTypePairs[0] = 0x7U;
+        unified.MemoryTypePairs[2] = 0x7U;
+
+        foreach (var (kind, handle) in new[] { (VulkanBufferMemory.HostCoherent, HostVisibleBuffer), (VulkanBufferMemory.DeviceLocal, DeviceLocalBuffer) }) {
+            var (preferred, required, role) = VulkanNativeBufferApi.MemoryProperties(memory: kind);
+            var index = VulkanMemoryTypes.FindIndex(
+                memoryProperties: in unified,
+                memoryTypeBits: 0x3U,
+                preferredProperties: preferred,
+                requireProperties: required,
+                resourceDescription: "a law buffer"
+            );
+
+            Assert.Equal(expected: DeviceLocalBit, actual: unified.MemoryTypePropertyFlags(memoryTypeIndex: ((int)index)) & DeviceLocalBit);
+            device.CountAllocated(
+                allocationSize: 1024UL,
+                memoryHandle: handle,
+                role: role
+            );
+        }
+
+        Assert.Equal(expected: (1024L, 1024L), actual: (memory.Read(kind: GpuDeviceMemoryWork.Allocated), memory.Held));
+        Assert.False(condition: memory.CountReleased(allocation: HostVisibleBuffer, device: device.Handle));
+        Assert.True(condition: memory.CountReleased(allocation: DeviceLocalBuffer, device: device.Handle));
     }
     [Fact]
     public void EveryDestroyEntryPointOfBothTablesIsCoveredByAKind() {

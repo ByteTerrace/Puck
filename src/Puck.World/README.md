@@ -131,7 +131,10 @@ leaving out the creation bakes: those a
 compiled world names fill the bake cache from the build's bake pack
 (`Assets/worlds/bakes.puckbake`), and a presentation bakes any that are
 missing in the background and keeps them in the per-user `bakes` cache
-([creation bakes](../../docs/architecture/worlds.md#creation-bakes)).
+([creation bakes](../../docs/architecture/worlds.md#creation-bakes)). The
+entry point names these three per-user caches and hands them to the boot as
+`WorldCacheRoots`, so a host or test that composes World services uses
+directories of its own.
 
 Boot prints one line naming the world-definition file it loaded (an explicit
 `--world <path>` or the shipped `Assets/worlds/puck.world.json`), one
@@ -1191,7 +1194,13 @@ project still makes on a machine's behalf. The machines outlive the render
 device, so the binder that published an output's upload also retires it: on
 device loss and when the render chain is torn down, it calls
 `IMachineVideoOutput.NotifyDeviceLost` for every output it has published on
-that device. It recreates its own slot for a
+that device (`PublishedMachineOutputs`, which records an output before it
+publishes, so a publish that loses the device still retires its upload).
+Device loss also retires every probe's shared ring, keeping its request so the
+next publish provisions a fresh one, and the Vulkan host's headless camera
+device is disposed only after the last image made on it is released
+(`DisposeAfterDependents`), however late a submitted frame's lease releases
+it. It recreates its own slot for a
 screen index removed and later restored by `world.reset`/`.load` exactly as
 `WorldMachineHost` does (bounded to indices the render engine's boot-frozen
 provider key set already names). A recreate re-points a `ScreenSourceCell`'s

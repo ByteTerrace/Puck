@@ -6,8 +6,10 @@ namespace Puck.Vulkan;
 
 /// <summary>
 /// Materializes CPU pixels onto a Vulkan device so a host can sample them like any other
-/// image. It owns a host-visible staging buffer, a sampled image, and that image's view, and rebuilds
-/// them when the device or the extent/format changes. Each <see cref="Upload"/> writes the pixels
+/// image. It owns a host-visible staging buffer, a sampled image, and that image's view on the device of its first
+/// upload, and rebuilds them when the extent or format changes. It never moves to another device: its owner releases
+/// it before that device goes, a device loss included, and creates a new one on the replacement, so an upload handed a
+/// different device refuses it. Each <see cref="Upload"/> writes the pixels
 /// into the staging buffer, copies them into the image, leaves it shader-readable, and returns the image-view
 /// handle. This is the generic counterpart to <see cref="VulkanGpuImage"/> for surfaces that crossed a
 /// device boundary as host memory — the consumer half of the CPU-pixel transport, reusable by any Vulkan host.
@@ -78,12 +80,10 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             return;
         }
 
-        // Destroying a device does not free its children: every object below must be destroyed while the device lives
-        // (VUID-vkDestroyDevice-device-05137). An owner that releases this upload after its device is gone has its
-        // teardown in the wrong order, and the caller disposing this upload is that owner.
-        if (device.IsDisposed) {
-            throw new InvalidOperationException(message: $"A {nameof(VulkanSurfaceUpload)} was released after its device was destroyed; the owner disposing it must release it before the device goes.");
-        }
+        VulkanDeviceOwnership.ThrowIfDestroyed(
+            held: device,
+            holder: nameof(VulkanSurfaceUpload)
+        );
 
         // The staging/command resources may still feed an outstanding pipelined copy — drain it first.
         WaitForPendingUpload();
@@ -112,10 +112,14 @@ public sealed class VulkanSurfaceUpload : IDisposable {
     private void EnsureResources(IVulkanDeviceContext deviceContext, uint width, uint height, uint vulkanFormat) {
         var device = deviceContext.LogicalDevice;
 
+        VulkanDeviceOwnership.ThrowIfOtherDevice(
+            held: m_device,
+            holder: nameof(VulkanSurfaceUpload),
+            offered: device
+        );
+
         if (
             (0 != m_imageViewHandle) &&
-            (m_device is not null) &&
-            (m_device.Commands == device.Commands) &&
             (m_width == width) &&
             (m_height == height) &&
             (m_format == vulkanFormat)
@@ -173,9 +177,9 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         );
         m_width = width;
 
-        // The pipelined path's completion fence (see the class remarks) — device-scoped, so a device/extent change
-        // rebuilds it alongside the buffer (DisposeResources destroyed the old one just above). Absent (0) when no
-        // frame-synchronization API was supplied: the legacy blocking submit applies.
+        // The pipelined path's completion fence (see the class remarks), rebuilt alongside the buffer on an extent or
+        // format change (DisposeResources destroyed the old one just above). Absent (0) when no frame-synchronization
+        // API was supplied: the blocking submit applies.
         if (m_frameSynchronizationApi is not null) {
             m_frameSynchronizationApi.CreateFence(
                 fenceHandle: out m_fence,
@@ -226,9 +230,9 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             return;
         }
 
-        m_disposed = true;
         m_device?.TryWaitIdle();
         DisposeResources();
+        m_disposed = true;
     }
     /// <summary>Uploads a CPU-pixel surface and returns the handle of a shader-readable image view over it.</summary>
     /// <param name="deviceContext">The device the image is created and uploaded on.</param>
@@ -239,6 +243,8 @@ public sealed class VulkanSurfaceUpload : IDisposable {
     /// <returns>The native <c>VkImageView</c> handle to sample the uploaded image through.</returns>
     /// <exception cref="ArgumentException"><paramref name="pixels"/> is empty, or a dimension is zero.</exception>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="deviceContext"/> is not the device an earlier upload
+    /// created this instance's resources on.</exception>
     public nint Upload(IVulkanDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, uint width, uint height, uint vulkanFormat) {
         ArgumentNullException.ThrowIfNull(deviceContext);
         ObjectDisposedException.ThrowIf(

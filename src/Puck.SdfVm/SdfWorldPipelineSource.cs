@@ -20,12 +20,11 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     // Returns the ready set; the first call starts taking the lease and every call until the set has built returns
     // null. A lease or build that failed rethrows its exception here, on the frame thread, so a device loss reaches the
     // host's recovery; the next call starts again.
-    public SdfWorldPipelines? Poll(IGpuComputeServices gpu, IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
+    public SdfWorldPipelines? Poll(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
         if (m_lease is null) {
             if (!m_acquire.IsPending) {
                 Start(
                     device: device,
-                    gpu: gpu,
                     hostsOnDirectX: hostsOnDirectX,
                     includeBrickPipelines: includeBrickPipelines,
                     kernels: kernels
@@ -60,10 +59,9 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
         (m_lease?.TryMakePrivate() ?? false);
 
     // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame.
-    private void Start(IGpuComputeServices gpu, IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) =>
+    private void Start(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) =>
         m_acquire.Start(build: _ => cache.Acquire(
             device: device,
-            gpu: gpu,
             includeBrickPipelines: includeBrickPipelines,
             kernels: (kernels ?? cache.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX)))
         ));

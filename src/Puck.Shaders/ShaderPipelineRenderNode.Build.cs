@@ -185,7 +185,6 @@ public sealed partial class ShaderPipelineRenderNode {
             Device: m_device,
             DirectX: m_directX,
             Gpu: m_gpu,
-            Graphics: m_graphics,
             InFlight: m_inFlight,
             Key: key
         );
@@ -271,7 +270,7 @@ public sealed partial class ShaderPipelineRenderNode {
             );
     }
     // Everything a build reads, captured on the frame thread when it starts; a build never touches the node.
-    private sealed record BuildRequest(BuildKey Key, IGpuComputeServices Gpu, IFullscreenPassServices? Graphics, IGpuDeviceContext Device, bool DirectX, uint InFlight);
+    private sealed record BuildRequest(BuildKey Key, GpuDeviceServices Gpu, IGpuDeviceContext Device, bool DirectX, uint InFlight);
     // The pipeline and module set of one candidate, built on the thread pool. The install takes each object into the
     // runtime graph and clears it here, so disposing a build releases exactly what was never taken.
     private sealed class GraphBuild : IDisposable {
@@ -311,7 +310,6 @@ public sealed partial class ShaderPipelineRenderNode {
                         device: request.Device,
                         gpu: request.Gpu,
                         directX: request.DirectX,
-                        graphics: (request.Graphics ?? throw new InvalidOperationException(message: "Float preview requires graphics services.")),
                         height: preview.Height,
                         inFlight: request.InFlight,
                         width: preview.Width
@@ -404,7 +402,6 @@ public sealed partial class ShaderPipelineRenderNode {
             }
 
             if (
-                (request.Graphics is not { } graphics) ||
                 !primary.TryGetValue(
                 key: ShaderStage.Vertex,
                 value: out var vertex
@@ -414,7 +411,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 value: out var fragment
             )
             ) {
-                throw new InvalidDataException(message: $"Fullscreen pass '{declaration.Name}' needs vertex and fragment bytecode plus graphics services.");
+                throw new InvalidDataException(message: $"Fullscreen pass '{declaration.Name}' needs vertex and fragment bytecode.");
             }
 
             Primary = gpu.ShaderModuleFactory.Create(
@@ -454,13 +451,13 @@ public sealed partial class ShaderPipelineRenderNode {
             );
             var sampled = ((uint)Bindings.Count(predicate: static item => (item.Kind == GpuComputeBindingKind.SampledImage)));
 
-            RenderPass = graphics.RenderPassFactory.Create(
+            RenderPass = gpu.RenderPassFactory.Create(
                 description: RenderPassOf(
                     planned: planned,
                     specs: specs
                 )
             );
-            Graphics = graphics.PipelineFactory.Create(
+            Graphics = gpu.PipelineFactory.Create(
                 RenderPass,
                 Primary,
                 Secondary,

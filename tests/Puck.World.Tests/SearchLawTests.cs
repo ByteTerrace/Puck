@@ -91,7 +91,7 @@ public sealed class SearchLawTests {
                 ]),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
-                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict", Depth: depth, Score: "pieceCell[a] + pieceCell[b]", Best: "best", Nodes: nodes),
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict", Depth: depth, Score: ExpressionProgram.Parse(text: "pieceCell[a] + pieceCell[b]"), Best: "best", Nodes: nodes),
             ]),
         };
 
@@ -151,7 +151,7 @@ public sealed class SearchLawTests {
                 ),
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
-                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict", Depth: 1, Score: "roll", Best: "best"),
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict", Depth: 1, Score: ExpressionProgram.Parse(text: "roll"), Best: "best"),
             ]),
         };
 
@@ -504,7 +504,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict", Depth: 1,
-                    Score: "pieceCell[a] == 3 ? 1000 : (pieceCell[a] == 1 ? -1000 : 0)", Method: SearchMethod.MonteCarlo, Best: "best", Iterations: iterations, Nodes: nodes),
+                    Score: ExpressionProgram.Parse(text: "pieceCell[a] == 3 ? 1000 : (pieceCell[a] == 1 ? -1000 : 0)"), Method: SearchMethod.MonteCarlo, Best: "best", Iterations: iterations, Nodes: nodes),
             ]),
         };
 
@@ -1034,7 +1034,7 @@ public sealed class SearchLawTests {
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "cards", Zones: ["deck", "hand", "discard"], Turn: "turn", Verdict: "verdict",
                     Shapes: [(shape ?? new WorldSearchShape.Transferred(Selector: selector))], Legal: "legal", Counts: "counts",
-                    Score: (best ? "handCount" : null), Best: (best ? "best" : null)),
+                    Score: (best ? ExpressionProgram.Parse(text: "handCount") : null), Best: (best ? "best" : null)),
             ]),
         };
 

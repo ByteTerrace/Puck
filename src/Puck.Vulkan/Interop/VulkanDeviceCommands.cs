@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Puck.Vulkan.Bindings;
 
 namespace Puck.Vulkan.Interop;
@@ -9,14 +8,10 @@ namespace Puck.Vulkan.Interop;
 /// so a call through this table skips the loader's dispatch trampoline and costs one field load plus one indirect call.
 /// Core entry points are required and resolved eagerly; an extension entry point is <see langword="null"/> when the
 /// device was created without its extension, and every caller that can reach it without the extension checks it first.
-/// The table lives exactly as long as its device: <see cref="VulkanLogicalDevice"/> owns it, disposes it after
-/// destroying the device, and it is never resolved again or reused for another device.
-/// <para>Backend-neutral callers identify the device by <see cref="Token"/>, an opaque <c>GCHandle</c> value that
-/// <see cref="FromToken"/> turns back into the table with one handle dereference and no search.</para>
+/// The table lives exactly as long as its device: <see cref="VulkanLogicalDevice"/> owns it, and it is never resolved
+/// again or reused for another device.
 /// </summary>
-public sealed unsafe class VulkanDeviceCommands : IDisposable {
-    private GCHandle m_token;
-
+public sealed unsafe class VulkanDeviceCommands {
     /// <summary>The <c>vkAcquireNextImageKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_swapchain</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult> AcquireNextImageKhr;
     /// <summary>The <c>vkAllocateCommandBuffers</c> entry point.</summary>
@@ -201,13 +196,14 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
     public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null) {
         ArgumentNullException.ThrowIfNull(argument: procedures);
 
-        Memory = memory;        VulkanArgument.RequireHandle(
+        VulkanArgument.RequireHandle(
             handle: deviceHandle,
             handleDescription: "logical-device",
             paramName: nameof(deviceHandle)
         );
 
         Handle = deviceHandle;
+        Memory = memory;
         AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkAcquireNextImageKHR"u8
@@ -548,9 +544,6 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
             deviceHandle: deviceHandle,
             functionName: "vkWaitForPresentKHR"u8
         ));
-        // Allocated last so a missing core entry point above never leaves a live handle behind.
-        m_token = GCHandle.Alloc(value: this);
-        Token = GCHandle.ToIntPtr(value: m_token);
     }
 
     /// <summary>Gets the native <c>VkDevice</c> handle whose entry points the table holds.</summary>
@@ -558,26 +551,7 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
     /// <summary>Gets the device-local memory counts this table's allocations and frees join, or <see langword="null"/>
     /// when it counts none.</summary>
     public GpuDeviceMemoryWork? Memory { get; }
-    /// <summary>Gets the opaque value the backend-neutral <c>IGpu*</c> interfaces carry as their device handle; valid until
-    /// the table is disposed.</summary>
-    public nint Token { get; }
 
-    /// <summary>Returns the table a <see cref="Token"/> identifies.</summary>
-    /// <param name="token">The <see cref="Token"/> of a table that has not been disposed.</param>
-    /// <returns>The table the token identifies.</returns>
-    /// <exception cref="ObjectDisposedException"><paramref name="token"/> no longer identifies a device command table.</exception>
-    public static VulkanDeviceCommands FromToken(nint token) {
-        // The type test turns a released token (whose slot reads null) or a slot reused by another object into a
-        // managed failure instead of a call through an unrelated object's fields.
-        if (GCHandle.FromIntPtr(value: token).Target is VulkanDeviceCommands device) {
-            return device;
-        }
-
-        throw new ObjectDisposedException(
-            message: "The device token no longer identifies a Vulkan device command table; its device was destroyed.",
-            objectName: nameof(VulkanDeviceCommands)
-        );
-    }
     /// <summary>Destroys or frees one object this device owns through the object type's entry point, skipping a zero
     /// handle. Every <c>vkDestroy*</c> child-object entry point and <c>vkFreeMemory</c> share this shape, and this is
     /// the only zero-handle guard on them: every device-level destroy path calls it without checking first.</summary>
@@ -587,7 +561,10 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
         if (0 != handle) {
             // The same field value this table resolved, so an address comparison identifies vkFreeMemory.
             if (((nint)destroy) == ((nint)FreeMemory)) {
-                _ = Memory?.CountReleased(allocation: handle);
+                _ = Memory?.CountReleased(
+                    allocation: handle,
+                    device: Handle
+                );
             }
 
             destroy(
@@ -597,27 +574,20 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
             );
         }
     }
-    /// <summary>Counts one successful <c>vkAllocateMemory</c> into <see cref="Memory"/> at its allocation size when the
-    /// memory type it chose is device-local; memory of any other type counts nothing. Swapchain images are never
-    /// allocated through this table, so they are never counted.</summary>
+    /// <summary>Counts one successful <c>vkAllocateMemory</c> into <see cref="Memory"/> at its allocation size, keyed by
+    /// this device, when its role counts (<see cref="GpuDeviceMemoryWork.IsCounted"/>); the memory type it chose never
+    /// decides. Swapchain images are never allocated through this table, so they are never counted.</summary>
     /// <param name="memoryHandle">The <c>VkDeviceMemory</c> the allocation returned; freeing it through
     /// <see cref="FreeMemory"/> through <c>Destroy</c> counts its release.</param>
-    /// <param name="allocateInfo">The allocation's <c>VkMemoryAllocateInfo</c>: its size and memory type.</param>
-    /// <param name="memoryProperties">The physical device's memory types, which say whether the type is device-local.</param>
-    public void CountAllocated(nint memoryHandle, in VkMemoryAllocateInfo allocateInfo, in VkPhysicalDeviceMemoryProperties memoryProperties) {
-        if (
-            (Memory is { } memory) &&
-            VulkanMemoryTypes.IsDeviceLocal(
-                memoryProperties: in memoryProperties,
-                memoryTypeIndex: allocateInfo.MemoryTypeIndex
-            )
-        ) {
-            memory.CountAllocated(
-                allocation: memoryHandle,
-                bytes: checked((long)allocateInfo.AllocationSize)
-            );
-        }
-    }
+    /// <param name="allocationSize">The allocation's size, in bytes, as <c>VkMemoryAllocateInfo.allocationSize</c>.</param>
+    /// <param name="role">What the allocation is for.</param>
+    public void CountAllocated(nint memoryHandle, ulong allocationSize, GpuMemoryRole role) =>
+        _ = Memory?.CountAllocated(
+            allocation: memoryHandle,
+            bytes: checked((long)allocationSize),
+            device: Handle,
+            role: role
+        );
     /// <summary>Destroys one buffer or image this device owns and then frees the memory bound to it, skipping either
     /// handle when it is zero.</summary>
     /// <param name="destroy">The object type's entry point from this table: <see cref="DestroyBuffer"/> or <see cref="DestroyImage"/>.</param>
@@ -632,11 +602,5 @@ public sealed unsafe class VulkanDeviceCommands : IDisposable {
             destroy: FreeMemory,
             handle: memoryHandle
         );
-    }
-    /// <summary>Releases <see cref="Token"/>; the entry points stay readable but the token no longer resolves.</summary>
-    public void Dispose() {
-        if (m_token.IsAllocated) {
-            m_token.Free();
-        }
     }
 }

@@ -179,10 +179,7 @@ public sealed class SdfWorldEngineUploadLawTests {
             frameSource: new FixedFrameSource(frame: frame),
             height: Extent,
             kernels: Kernels(),
-            services: new SdfViewGpuServices(
-                Gpu: gpu,
-                Pipelines: new SdfWorldPipelineCache()
-            ),
+            pipelines: new SdfWorldPipelineCache(),
             width: Extent
         );
         var context = new FrameContext(
@@ -191,7 +188,7 @@ public sealed class SdfWorldEngineUploadLawTests {
             ElapsedTicks: 0UL,
             FrameDeltaTicks: 0UL,
             Host: new HostContext(capabilities: new Dictionary<Type, object> {
-                [typeof(IGpuDeviceContext)] = gpu.Device,
+                [typeof(IGpuDeviceContext)] = gpu,
             }),
             StepTicks: 0UL,
             TargetHeight: Extent,
@@ -273,8 +270,7 @@ public sealed class SdfWorldEngineUploadLawTests {
                 X: 0f,
                 Y: 0f
             )
-        )],
-        WarpAmount: 0f
+        )]
     ) {
         DynamicTransforms = transforms,
     };
@@ -406,15 +402,13 @@ public sealed class SdfWorldEngineUploadLawTests {
             );
 
             m_pipelines = SdfTestPipelines.Build(
-                device: Gpu.Device,
-                gpu: Gpu,
+                device: Gpu,
                 kernels: Kernels(),
                 ledger: ledger
             );
 
             return new SdfWorldEngine(
-                device: Gpu.Device,
-                gpu: Gpu,
+                device: Gpu,
                 height: Extent,
                 options: new SdfWorldEngineOptions(
                     BrickPoolVoxelCapacity: 0,

@@ -15,8 +15,8 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
 
     private readonly CaptureRequestSlot m_capture = new();
 
-    private readonly IGpuComputeServices? m_compute;
     private readonly NodeDescriptor m_descriptor;
+    private readonly IGpuDeviceContext m_deviceContext;
     private readonly uint m_height;
     private readonly bool m_hostsOnDirectX;
     private readonly IRenderNode m_inner;
@@ -25,7 +25,6 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
 
     private readonly List<RetiringExecutor> m_retiring = [];
 
-    private readonly IFullscreenPassServices m_services;
     private readonly uint m_width;
 
     private ShaderConfigValues m_config;
@@ -48,25 +47,26 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     /// <param name="inner">The node whose output the pass reads; the pass owns and disposes it.</param>
     /// <param name="manifest">The graphics shader set the pass runs.</param>
     /// <param name="config">The set's initial configuration values.</param>
-    /// <param name="services">The GPU services the pass records through.</param>
+    /// <param name="deviceContext">The device the pass renders on, the one the inner node renders on; the pass records
+    /// through its services.</param>
     /// <param name="hostsOnDirectX">Whether the device is Direct3D 12 (else Vulkan).</param>
     /// <param name="width">The output width, in pixels.</param>
     /// <param name="height">The output height, in pixels.</param>
     /// <param name="loadWork">The counts each executor's bytecode load adds to; <see langword="null"/> counts into the
     /// process's <see cref="LoadWork"/>. It must count <see cref="Loads"/> and <see cref="BytecodeBytes"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="inner"/>, <paramref name="manifest"/>,
-    /// <paramref name="config"/>, or <paramref name="services"/> is <see langword="null"/>.</exception>
+    /// <paramref name="config"/>, or <paramref name="deviceContext"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="loadWork"/> does not count <see cref="Loads"/> and
     /// <see cref="BytecodeBytes"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is zero.</exception>
     /// <exception cref="InvalidDataException"><paramref name="manifest"/> is a compute set, or declares anything but
     /// one sampled image.</exception>
     public FullscreenPassNode(IRenderNode inner, ShaderSetManifest manifest, ShaderConfigValues config,
-        IFullscreenPassServices services, bool hostsOnDirectX, uint width, uint height, WorkCounterSet? loadWork = null) {
+        IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, WorkCounterSet? loadWork = null) {
         ArgumentNullException.ThrowIfNull(inner);
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(config);
-        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
         if (!manifest.IsGraphics) {
@@ -86,7 +86,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             SurfaceId: SurfaceId.New()
         );
         m_inner = inner; m_manifest = manifest; m_config = config;
-        m_width = width; m_height = height; m_hostsOnDirectX = hostsOnDirectX; m_services = services;
+        m_width = width; m_height = height; m_hostsOnDirectX = hostsOnDirectX; m_deviceContext = deviceContext;
         m_loadWork = (loadWork ?? LoadWork);
 
         if (
@@ -97,10 +97,6 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
                 message: $"Work source '{m_loadWork.Name}' does not count {Loads.Name} and {BytecodeBytes.Name}.",
                 paramName: nameof(loadWork)
             );
-        }
-
-        if (services.ComputeServices is not null) {
-            m_compute = services.ComputeServices;
         }
     }
 
@@ -120,7 +116,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     public NodeDescriptor Descriptor => m_descriptor;
     public string? PendingCapturePath => (m_capture.PendingPath ?? (m_nextExecutor?.PendingCapturePath ?? (m_executor?.PendingCapturePath ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath)));
 
-    private ShaderPipelineRenderNode CreateExecutor(IGpuComputeServices compute, GpuPixelFormat inputFormat, uint inputWidth, uint inputHeight) {
+    private ShaderPipelineRenderNode CreateExecutor(GpuPixelFormat inputFormat, uint inputWidth, uint inputHeight) {
         var input = new ShaderPipelineResource(
             "input",
             ShaderPipelineResourceKind.Image,
@@ -201,12 +197,10 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
 
         return new ShaderPipelineRenderNode(
             candidate,
-            compute,
-            m_services.DeviceContext,
+            m_deviceContext,
             m_hostsOnDirectX,
             m_width,
             m_height,
-            m_services,
             outputLayout: GpuImageLayout.ShaderReadOnly
         );
     }
@@ -328,7 +322,6 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
         ) {
             m_nextExecutor?.Dispose();
             m_nextExecutor = CreateExecutor(
-                (m_compute ?? throw new InvalidOperationException(message: "Fullscreen pass services do not provide compute services.")),
                 format,
                 surface.Width,
                 surface.Height

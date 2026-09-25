@@ -128,7 +128,7 @@ public sealed class ShaderLoadWorkLawTests {
             inner: inner,
             loadWork: work,
             manifest: manifest,
-            services: new FakePipelineGpu(),
+            deviceContext: new FakePipelineGpu(),
             width: 64
         );
 
@@ -205,7 +205,7 @@ public sealed class ShaderLoadWorkLawTests {
                 inner: new ImageNode(),
                 loadWork: work,
                 manifest: manifest,
-                services: new FakePipelineGpu(),
+                deviceContext: new FakePipelineGpu(),
                 width: 64
             );
 
@@ -234,7 +234,7 @@ public sealed class ShaderLoadWorkLawTests {
                 name: ShaderSetManifest.LoadWorkSourceName
             ),
             manifest: manifest,
-            services: new FakePipelineGpu(),
+            deviceContext: new FakePipelineGpu(),
             width: 64
         ));
     }

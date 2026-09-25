@@ -163,8 +163,6 @@ public sealed class ShaderPipelineAttachmentLawTests {
         const uint InFlight = 3;
         var node = new ShaderPipelineRenderNode(
             deviceContext: gpu,
-            gpu: gpu,
-            graphics: gpu,
             height: Extent,
             hostsOnDirectX: false,
             inFlightFrames: InFlight,

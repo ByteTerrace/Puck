@@ -41,8 +41,9 @@ internal sealed class WorldOffscreenGpuActivation : IDisposable {
         if (hostSettings.HostsOnDirectX) {
             // The device is otherwise created by the render root's first GPU call, inside the frame loop; bringing it
             // up here raises an absent adapter's GpuDeviceUnavailableException while the host starts, where
-            // LauncherHostRun reports it as the unsupported-environment outcome.
-            _ = services.GetRequiredService<IGpuDeviceContext>().DeviceHandle;
+            // LauncherHostRun reports it as the unsupported-environment outcome. Reading the adapter LUID creates
+            // the Direct3D 12 device.
+            _ = services.GetRequiredService<IGpuDeviceContext>().AdapterLuid;
 
             return;
         }

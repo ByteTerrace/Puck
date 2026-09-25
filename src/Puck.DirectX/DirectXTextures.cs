@@ -105,7 +105,8 @@ public static unsafe class DirectXTextures {
         DirectXDeviceMemory.CountAllocated(
             device: device,
             memory: memory,
-            resource: ((ID3D12Resource*)texture)
+            resource: ((ID3D12Resource*)texture),
+            role: GpuMemoryRole.DeviceLocal
         );
 
         return ((ID3D12Resource*)texture);

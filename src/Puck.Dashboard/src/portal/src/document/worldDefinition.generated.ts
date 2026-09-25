@@ -9557,9 +9557,9 @@ export type WorldSearchRow = {
    */
   depth?: number;
   /**
-   * An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies — the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with MonteCarlo unauthored alongside it.
+   * A value expression, stored as its program like every other expression a world document holds, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies — the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with MonteCarlo unauthored alongside it.
    */
-  score?: string | null;
+  score?: ExpressionProgramNonNullable2;
   /**
    * A keyed integer row receiving the deepest completed depth's answer: token (the mover's ordinal in Tokens), to (its destination cell), and score (the negamax value, or, with Scores authored, the root mover's own seat's value).
    */

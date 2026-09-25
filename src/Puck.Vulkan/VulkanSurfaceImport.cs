@@ -60,23 +60,25 @@ public sealed class VulkanSurfaceImport : IDisposable {
     }
 
     private void DisposeResources() {
-        var device = m_device;
-
-        m_commandResources?.Dispose();
-        m_commandResources = null;
-
-        if (device is not null) {
-            m_framebufferSetApi.DestroyImageView(
-                device: device.Commands,
-                imageViewHandle: m_imageViewHandle
-            );
-            m_externalMemoryApi.DestroyImage(
-                device: device.Commands,
-                imageHandle: m_imageHandle,
-                memoryHandle: m_memoryHandle
-            );
+        if (m_device is not { } device) {
+            return;
         }
 
+        VulkanDeviceOwnership.ThrowIfDestroyed(
+            held: device,
+            holder: nameof(VulkanSurfaceImport)
+        );
+        m_commandResources?.Dispose();
+        m_commandResources = null;
+        m_framebufferSetApi.DestroyImageView(
+            device: device.Commands,
+            imageViewHandle: m_imageViewHandle
+        );
+        m_externalMemoryApi.DestroyImage(
+            device: device.Commands,
+            imageHandle: m_imageHandle,
+            memoryHandle: m_memoryHandle
+        );
         m_imageViewHandle = 0;
         m_imageHandle = 0;
         m_memoryHandle = 0;
@@ -120,14 +122,16 @@ public sealed class VulkanSurfaceImport : IDisposable {
     }
 
     /// <summary>Waits for device idle, then frees the image view, imported image, and imported memory. Safe to call more than once.</summary>
+    /// <exception cref="InvalidOperationException">The device was destroyed first, so these resources can no longer be
+    /// destroyed and the owner's teardown order is wrong; the import stays undisposed.</exception>
     public void Dispose() {
         if (m_disposed) {
             return;
         }
 
-        m_disposed = true;
         m_device?.TryWaitIdle();
         DisposeResources();
+        m_disposed = true;
     }
     /// <summary>Imports the shared surface (once) and returns the handle of a shader-readable image view over it.</summary>
     /// <param name="deviceContext">The device the image is imported on; must share the producer's adapter.</param>
@@ -154,10 +158,14 @@ public sealed class VulkanSurfaceImport : IDisposable {
 
         var device = deviceContext.LogicalDevice;
 
+        VulkanDeviceOwnership.ThrowIfOtherDevice(
+            held: m_device,
+            holder: nameof(VulkanSurfaceImport),
+            offered: device
+        );
+
         if (
             (0 != m_imageViewHandle) &&
-            (m_device is not null) &&
-            (m_device.Commands == device.Commands) &&
             (m_sharedHandle == sharedHandle) &&
             (m_width == width) &&
             (m_height == height) &&

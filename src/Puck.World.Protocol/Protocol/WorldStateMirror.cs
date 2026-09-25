@@ -613,6 +613,7 @@ public sealed class WorldStateMirror : IWorkCounterSource {
     }
     private void Read(int slot) {
         ref var entry = ref m_slots[slot];
+        var hadNumber = entry.HasNumber;
         var previousMotion = entry.Sample.Motion;
         var previousValue = entry.Sample.Value;
 
@@ -639,6 +640,13 @@ public sealed class WorldStateMirror : IWorkCounterSource {
             value: sample.Value
         );
         entry.Current = number;
+
+        // A slot never read, or whose last read held no number, has nothing to interpolate from: it presents its
+        // first number whole rather than easing in from zero.
+        if (!hadNumber) {
+            entry.Previous = entry.Current;
+        }
+
         entry.Interpolates = (
             (sample.Motion is WorldStateMotion.Easing or WorldStateMotion.Advancing) ||
             (previousMotion is WorldStateMotion.Easing or WorldStateMotion.Advancing)

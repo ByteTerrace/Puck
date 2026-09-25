@@ -83,8 +83,6 @@ public sealed class ShaderPipelineVertexInputTests {
 
         using (var node = new ShaderPipelineRenderNode(
             deviceContext: gpu,
-            gpu: gpu,
-            graphics: gpu,
             height: 8,
             hostsOnDirectX: false,
             name: "copy",

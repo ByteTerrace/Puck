@@ -128,33 +128,49 @@
             "default": null
           },
           "count": {
-            "description": "A counted buffer\u0027s size, which scales with a count the host resolves, in place of SizeBytes. Only a package pass reaches a counted buffer.",
+            "description": "A counted buffer\u0027s size in elements, a sum of terms that each scale with a product of counts the host resolves, in place of SizeBytes. Only a package pass reaches a counted buffer.",
             "type": [
-              "object",
+              "array",
               "null"
             ],
-            "properties": {
-              "basis": {
-                "description": "What the count scales with.",
-                "enum": [
-                  "Extent",
-                  "Instances",
-                  "ProgramWords"
-                ],
-                "title": "ShaderPipelineCountBasis"
+            "items": {
+              "description": "One term of a counted buffer\u0027s size: Elements elements per unit of the product of the bases in Per, each element ElementBytes long. A buffer\u0027s count is the sum of its terms.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "per": {
+                  "description": "The bases whose units multiply, at least one, each at most once.",
+                  "type": "array",
+                  "items": {
+                    "description": "Identifies a count a term of a counted buffer\u0027s size scales with.",
+                    "enum": [
+                      "Extent",
+                      "Instances",
+                      "ProgramWords",
+                      "Viewports",
+                      "Tiles",
+                      "DynamicTransforms",
+                      "InstanceMaskWords",
+                      "InstanceGridWords"
+                    ],
+                    "title": "ShaderPipelineCountBasis"
+                  }
+                },
+                "elements": {
+                  "description": "The elements per unit of the product, at least one.",
+                  "type": "integer",
+                  "default": 1
+                }
               },
-              "elements": {
-                "description": "The elements per unit, at least one.",
-                "type": "integer",
-                "default": 1
-              }
+              "required": [
+                "per"
+              ],
+              "additionalProperties": false,
+              "title": "ShaderPipelineCountTerm"
             },
-            "required": [
-              "basis"
-            ],
-            "additionalProperties": false,
-            "default": null,
-            "title": "ShaderPipelineBufferCount"
+            "default": null
           }
         },
         "required": [

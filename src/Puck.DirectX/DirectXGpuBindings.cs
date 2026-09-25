@@ -49,7 +49,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     }
     /// <inheritdoc/>
     public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var totalDescriptors = ((sizes.CombinedImageSamplerCount + sizes.StorageBufferCount) + sizes.StorageImageCount);
         var capacity = ((totalDescriptors > 0)
             ? totalDescriptors
@@ -102,7 +102,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         nint imageViewHandle,
         nint samplerHandle
     ) {
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
         var imageView = ((DirectXImageView)GCHandle.FromIntPtr(value: imageViewHandle).Target!);
         var slotIndex = (set.SlotByBinding[binding] + arrayElement);
@@ -150,7 +150,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             );
         }
 
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
             ptr = (set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize))),
@@ -221,7 +221,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         uint arrayElement,
         nint imageViewHandle
     ) {
-        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
         var imageView = ((DirectXImageView)GCHandle.FromIntPtr(value: imageViewHandle).Target!);
         var slotIndex = (set.SlotByBinding[binding] + arrayElement);

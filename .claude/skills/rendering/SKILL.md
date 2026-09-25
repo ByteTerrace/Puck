@@ -247,8 +247,8 @@ These are one-line cautions; the owning pages hold the derivations.
   [references/kernels.md](references/kernels.md#buffer-hazards).
 - **Pipelines are never created on the frame thread.** `SdfWorldEngine`'s
   constructor takes a built `SdfWorldPipelines` and creates none. Nodes and
-  views lease that set from `SdfViewGpuServices.Pipelines`, the composition's
-  one `SdfWorldPipelineCache`: one set per device, `SdfWorldKernels.ContentKey`
+  views lease that set from the `SdfWorldPipelineCache` the composition hands
+  each of them, its one cache: one set per device, `SdfWorldKernels.ContentKey`
   and brick-pipeline choice, built on the thread pool
   (`Puck.Hosting.BackgroundBuild`) by the first lease and shared by the rest.
   A holder (`SdfWorldPipelineSource`) takes its lease off the frame thread,
@@ -304,8 +304,11 @@ These are one-line cautions; the owning pages hold the derivations.
   value is `GpuDepthAttachment.ClearDepth` on the render pass, never a recorder
   argument.
   The recorder, `IGpuBindings`, every `IGpu*Factory` and the queue submitter are
-  bound to their backend's device context when they are registered and take no
-  device argument; a new service follows them. `IGpuBufferFactory` creates by
+  `IGpuDeviceContext.Services` (`GpuDeviceServices`), which the backend creates
+  with its context, bound to it and taking no device argument; a consumer takes
+  the device context and reads them there, never a bundle of its own or a DI
+  registration of one service, and a new device-bound service joins that set.
+  The optional `IGpuSurfaceExportFactory` is registered on its own. `IGpuBufferFactory` creates by
   `GpuBufferUsage` and placement (`CreateHostVisible`, `CreateDeviceLocal`), and a
   geometry buffer is a host-visible one created with its data.
   A candidate (never the device-loss rebuild) is refused in `EnsureBuild` with
@@ -401,11 +404,12 @@ These are one-line cautions; the owning pages hold the derivations.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
-- **GPU work is counted through wrapped services.** `SdfWorldEngine` wraps the
-  services it is handed with `GpuWorkCounting` over its `GpuWorkLedger` (the
+- **GPU work is counted through wrapped services.** `SdfWorldEngine` wraps its
+  device context's services with `GpuWorkCounting` over its `GpuWorkLedger` (the
   owner's, through `SdfWorldEngineOptions.WorkLedger`, so submission identity
-  survives a rebuild); hand it unwrapped services, since wrapping twice is
-  refused. A new pass needs its `EnterPass`/`LeavePass` where it submits, and
+  survives a rebuild). A counting set is never a device's own
+  `IGpuDeviceContext.Services`, and wrapping a counting member again is refused.
+  A new pass needs its `EnterPass`/`LeavePass` where it submits, and
   a new cadence-skipped pass its `SkipPass`. `SdfWorldEngineWorkLawTests`
   pins every pass's exact counts over `tests/Shared/FakeGpuDevice.cs`, so a
   recording change re-records those constants in the same change.
@@ -485,13 +489,18 @@ Compiler discovery `None` strips every `dxc` directory from a matrix leg's
 `PATH`. Lengths are ticks and frames; the profile sets no time threshold. A
 cell's `peakDeviceLocalBytes` judges the largest `gpu.memory.device-local.peak`
 of `memory.<backend>` (`GpuDeviceMemoryWork`, counted where each backend
-allocates buffers, images and exported or imported memory, never swapchain
+allocates buffers, images and exported or imported memory, by role through
+`GpuDeviceMemoryWork.IsCounted` and never by memory type, never swapchain
 images); every cell leaves it null until a reference-device reading sets it. With the
 Direct3D 12 debug layer on, `DirectXDeviceContext.Dispose` releases its own
 objects, then asks `ID3D12DebugDevice::ReportLiveDeviceObjects` for the rest and
 prints each (the device's own entry left out) as a `[d3d12-debug] live` line, so
 a leak fails a debug-layer run; `Recreate` never reports, because the nodes
-still hold their old objects while a removed device is replaced. A new counted object kind or inspection field that
+still hold their old objects while a removed device is replaced. Every device
+teardown ends its `GpuDeviceMemoryWork` entries (`EndDevice`): a Vulkan logical
+device's disposal and a Direct3D 12 context's `Dispose` and `Recreate` refuse by
+name any counted allocation still held on the device, and release the device
+regardless, so fix a late release's order, never the refusal. A new counted object kind or inspection field that
 qualification should judge joins `QualificationJudge`, and its laws are
 `ReleaseProfileLawTests` and `QualificationVerdictLawTests`. The owning
 explanation is [Qualifying a package](../../../docs/development/qualification.md).
@@ -531,7 +540,15 @@ planner refuses them on a shader pass, because the node records extent
 dispatches over raw fixed buffers. `SdfPassPlanLawTests` plans the SDF engine's
 passes from `SdfFrameBufferPlan`'s uses and holds the order to `PassLabels` and
 the between-pass buffer barriers to its edges, so a change to either side moves
-the law.
+the law. It also counts each SDF buffer over the bases it grows with (a sum of
+terms, each a product of bases) and holds the planner's size to
+`SdfWorldEngine.FrameBufferBytes`, the one statement of every device-local
+frame buffer's size that construction and program growth allocate by; a new
+buffer or a resized one changes that function and the law's counts together.
+`SdfCapabilityMatrixLawTests` assigns every public member of the engine's
+surface to one capability row with its graph equivalent and check, so a new
+public member needs a row, and nothing a row claims is deleted before the row
+is green.
 The grouped binding contract is the pass interface in `src/Puck.Shaders/Interface`
 ([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)); every
 pipeline pass and shader set reads its frame block through one, and no shipped

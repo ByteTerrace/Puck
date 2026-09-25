@@ -5,8 +5,8 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>The host half of a <see cref="WorldDeferredVerbEchoes"/> table, shared by every composition root that
-/// registers one: prints each late answer the table raises and counts each refusal once in the registry
-/// <c>wire.errors</c> reads. A late typed verdict (<see cref="WorldDeferredVerbEchoes.Completed"/>) prints on stderr
+/// registers one: prints each late answer the table raises and counts each refusal of the local console's lines once
+/// in the registry <c>wire.errors</c> reads. A late typed verdict (<see cref="WorldDeferredVerbEchoes.Completed"/>) prints on stderr
 /// when it is an error and on stdout otherwise; an eviction (<see cref="WorldDeferredVerbEchoes.Evicted"/>) is its
 /// line's only answer, so it prints on stderr and counts. A host whose authority echoes reach it passes each echo to
 /// <see cref="Answer"/>, which prints the registered line's verdict and counts a refusal unless an eviction already
@@ -40,13 +40,23 @@ public sealed class WorldDeferredVerbAnswers {
         return answers;
     }
     /// <summary>Answers one authority echo: settles and prints the local line it answers, and counts a refusal no
-    /// line's own dispatch could report. A refusal answering a line the table evicted is not counted again, since
-    /// its eviction was already counted.</summary>
+    /// line's own dispatch could report. Only the local console connection's submissions are this console's lines: a
+    /// remote peer's echo is neither printed nor counted, and neither is a rebuild verdict no line registered, since
+    /// every console rebuild verb registers its line and an unregistered rebuild was submitted by the host itself
+    /// (the silo's reload, answered on its own reply) or by a replay drive. A refusal answering a line the table
+    /// evicted is not counted again, since its eviction was already counted.</summary>
     /// <param name="echo">The authority's echo.</param>
     public void Answer(in WorldEditEcho echo) {
+        if (echo.ConnectionId != SubmissionEnvelope.LocalConnectionId) {
+            return;
+        }
+
         if (m_echoes.Settle(echo: in echo) is { } verdict) {
             Write(isError: echo.Rejected, line: verdict);
-        } else if (m_echoes.TakeEvicted(echo: in echo)) {
+        } else if (
+            m_echoes.TakeEvicted(echo: in echo) ||
+            (echo.Kind == WorldEditEchoKind.Rebuild)
+        ) {
             return;
         }
 
