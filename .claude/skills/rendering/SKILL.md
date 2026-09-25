@@ -441,11 +441,17 @@ These are one-line cautions; the owning pages hold the derivations.
   flight), and brick staging is a staged region whose destination is the brick
   pool (`Target` names the brick's slot). Change a table only through its
   region's `Write`, which owes each run of words that differs; a direct buffer
-  write is lost or overwritten. `PrepareFrame` flushes the slot's share, and the
-  upload pass records each staged copy, then one buffer transition per copied
-  buffer; the region tables are not in `SdfFrameBufferPlan`. A still frame writes
-  only the viewport word its time moved. The byte counts are pinned by
-  `SdfWorldEngineUploadLawTests` over `UploadModelGpu`, which runs the copies.
+  write is lost or overwritten. The upload pass flushes the slot's share, records
+  each staged copy, then one buffer transition per copied buffer; the region
+  tables are not in `SdfFrameBufferPlan`. What it writes and records follows the
+  device's policy, so `upload` is per-backend-deterministic
+  (`SdfWorldEngine.PassClasses`, a per-pass class `GpuWorkLedger.Configure`
+  carries into `world.counters --json`, which `puck counters` loosens its counts
+  by); keep region writes inside that pass. A copy past one row of 65,535 groups
+  dispatches more rows (`GpuRegion.CopyGroups`), so no table size is refused. A
+  still frame writes only the viewport word its time moved. The byte counts are
+  pinned by `SdfWorldEngineUploadLawTests` over `UploadModelGpu`, which runs the
+  copies.
 - **Dynamic transforms move by the moved set, never by a diff.**
   `SdfCompositionFrameSource` keeps the table across frames; an emitter repacks
   only owners whose inputs moved or that are still settling
@@ -492,10 +498,16 @@ These are one-line cautions; the owning pages hold the derivations.
   leads with a header and a run table. The SDF engine records every region copy
   with that pipeline (its holder leases it beside the set, and the engine takes
   it at construction). The overlay's buffer still uploads by hand, so a new host
-  upload goes through a region rather than a second hand-built path. On a device
-  with an aperture the selector picks `Ring`, whose buffers the neutral factory
-  places in host memory. `GpuResidencyLawTests` pins the policy table, the
-  staged header and runs, the external destination and byte-identical region
+  upload goes through a region rather than a second hand-built path. A ring's
+  buffers live where `GpuResidency.RingMemory(profile)` says: in the
+  device-local aperture on a discrete adapter that exposes one
+  (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, a Vulkan
+  `DEVICE_LOCAL|HOST_VISIBLE|HOST_COHERENT` allocation or a Direct3D 12
+  `GPU_UPLOAD` heap, role `GpuMemoryRole.HostVisibleDeviceLocal`, counted under
+  `memory.<backend>`), in host memory on unified memory
+  (`GpuMemoryProfile.UnifiedMemory`). `GpuResidencyLawTests` pins the policy
+  table, the ring memory, the staged header and runs, a copy past one dispatch
+  row, the external destination and byte-identical region
   contents over `UploadModelGpu` (`tests/Shared`),
   `GpuRegionCopyPipelineCacheLawTests` one pipeline per device shared by its
   owners, and `pipeline.inspect` echoes the profile and the policy.
@@ -533,7 +545,11 @@ These are one-line cautions; the owning pages hold the derivations.
   paced by the clock or a cross-process cache `Pacing`.
   `world.counters --json` publishes the classes in its `kinds` legend, and
   `puck counters` compares only what the class allows, so a new kind's class
-  is part of its contract.
+  is part of its contract. A pass carries a class too
+  (`GpuWorkLedger.Configure`'s `passClasses`, written on each pass of the JSON):
+  a pass whose work follows the device, as the SDF engine's `upload` follows its
+  residency policy, is `PerBackendDeterministic`, and its deterministic kinds
+  read that class.
 - **Lifetime counts outside the nodes are `WorkCounterSet`s.** A source that
   needs only named kinds holds a `WorkCounterSet` (interlocked, allocation-free
   reads) rather than a hand-written `IWorkCounterSource`. `ShaderCompiler.Work`

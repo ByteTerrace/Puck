@@ -172,8 +172,9 @@ flight:
   that frame stages in the other slot's buffer.
 - **Ring**, on a device with a host-visible aperture or unified memory: each
   ring slot has its own buffer the kernels read directly, and each receives
-  the words it is behind by when its turn comes. Nothing is copied. The buffers
-  are host memory, not the aperture.
+  the words it is behind by when its turn comes. Nothing is copied. On a
+  discrete adapter the buffers live in its aperture, so the kernels read them
+  from device memory; on unified memory they are the one pool.
 
 Dynamic transforms are never compared as a table: the engine packs only the
 rows the frame's moved set (`SdfFrame.MovedTransforms`) owes since the frame it
@@ -198,7 +199,7 @@ each row carries the frame's presentation time. When a sky's clouds drift, a
 few words of its environment rows are written too. A frame whose time did not
 move writes nothing. The frame instance grid is rebuilt only on a frame whose
 transforms moved. `world.counters gpu` reports the written bytes as
-`uploads.host-visible` on its `outside` line.
+`uploads.host-visible` on its `upload` line.
 
 There are two distinct submission entry points, and they must never be blurred:
 
@@ -222,9 +223,12 @@ ten labeled passes (`upload`, `sky`, `mask`, `beam`, `cull-args`, `primary`,
 `surface`, `ambient`, `views`, and `composite`) records, with no arming and no
 effect on the image: dispatches, indirect dispatches, barriers, pipeline and
 descriptor-set binds, push-constant bytes, descriptor writes and host-visible
-upload bytes. Work before the first pass (brick uploads and bakes, the
-begin-of-frame transitions) or between frames (region writes, descriptor
-rebinds) is counted outside every pass. A frame the cadence gate skips reports
+upload bytes. The `upload` pass counts the regions' writes and copies; since
+they follow each device's residency policy, the pass is per-backend
+deterministic, and `puck counters` does not hold the two backends to it. Work
+before the first pass (brick uploads and bakes, the begin-of-frame transitions)
+or between frames (descriptor rebinds) is counted outside every pass. A frame
+the cadence gate skips reports
 `sky` through `views` as skipped rather than as zero. Counts are published only
 once the GPU has finished the submission, so `world.counters gpu` shows the newest
 completed frame, under the program and kernel revision it ran with.

@@ -460,10 +460,11 @@ instance's parameter bytes. Every host upload of the SDF engine is a region
 (P7b-19): its program words, per-frame tables and mesh draws each under the
 policy the selector chooses with the frame ring's reader in flight, and its
 brick staging a staged region whose destination is the brick pool. The
-overlay's host-written buffer still uploads by hand. The neutral buffer factory
-places a ring's buffers in host-visible memory, not in the device-local
-aperture the profile reports, so on a device with an aperture the SDF engine's
-tables are read from host memory. The one state-shaped path that reaches the GPU is the
+overlay's host-written buffer still uploads by hand. A ring's buffers live
+where `GpuResidency.RingMemory` says: in the device-local aperture
+(`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, counted under
+`memory.<backend>`) on a discrete adapter that exposes one, and in host memory
+on unified memory. The one state-shaped path that reaches the GPU is the
 physics field lattice, mirrored on the client by `WorldClientFieldLattice` and
 uploaded by `WorldFieldEmitter` one field per produced frame.
 
@@ -2075,29 +2076,45 @@ Phase 3, the groups, follows phase 2:
     transforms, frame instance grid, screen surfaces, screen lights, volumes,
     glyph decals and mesh draws are each a region under the policy
     `GpuResidency.Select` chooses for its size with the frame ring's reader in
-    flight; a write owes each run of words that differs, `PrepareFrame` flushes
-    the slot's share, and the upload pass records every staged region's copy and
-    then one buffer transition per copied buffer, so the frame buffer plan no
-    longer lists the tables. Brick staging is a staged region whose destination
+    flight, a ring's buffers in the memory `GpuResidency.RingMemory` chooses: the
+    device-local aperture on a discrete adapter that exposes one
+    (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`: a Vulkan
+    `DEVICE_LOCAL|HOST_VISIBLE|HOST_COHERENT` allocation, a Direct3D 12
+    `GPU_UPLOAD` heap; its role `GpuMemoryRole.HostVisibleDeviceLocal` counts
+    under `memory.<backend>`), host memory on unified memory
+    (`GpuMemoryProfile.UnifiedMemory`). A write owes each run of words that
+    differs; the upload pass flushes the slot's share, records every staged
+    region's copy and then one buffer transition per copied buffer, so the frame
+    buffer plan no longer lists the tables. What the upload pass writes and
+    records follows each device's policy, so the pass is
+    per-backend-deterministic (`SdfWorldEngine.PassClasses`, carried per pass
+    by `GpuWorkLedger.Configure` into `world.counters --json`), and
+    `puck counters` does not hold the backends to its counts. Brick staging is a staged region whose destination
     is the brick pool: `GpuRegion.Target` names the brick's slot, and since the
     bake also writes the pool, a retarget owes every word written after it. The
     copy kernel takes no push constants: a staging buffer leads with a
     four-word header (count, run count, block base, destination word) and a run
     entry for every run, so a copy stages 16 bytes of header and 8 bytes a run
-    that the push and the single-run case used to carry. The program region
-    holds the live program rather than the render envelope's worst-case reserve,
-    which a ring would hold once per slot, and grows by half again past it; the
-    program upload drains the frame ring only when a capacity grows, and a table
-    past one staged copy is refused by name on every device. `GpuResidency.Select` takes
+    that the push and the single-run case used to carry. A copy past one row of
+    65,535 groups dispatches more rows (`GpuRegion.CopyGroups`), so no table size
+    is refused. The program region holds the live program rather than the render
+    envelope's worst-case reserve, which a ring would hold once per slot, and
+    grows by half again past it; the program upload drains the frame ring only
+    when a capacity grows. `GpuResidency.Select` takes
     whether readers are in flight, which replaces the mesh region's own ring
     override. `RecordFrameUpload`, its sets and the engine's device-local table
     buffers, `sdf-brick-upload.comp` and its pipeline, and `SdfRingTable` are
     deleted. Laws: `GpuResidencyLawTests` (the policy table over four synthetic
-    profiles with and without readers in flight, a copy stating itself in its
-    staging buffer, an external destination and its retarget),
-    `SdfWorldEngineUploadLawTests` (restated in words owed, headers and run
-    entries), `SdfWorldEngineWorkLawTests` (eight copies and eight transitions
-    in a first frame's upload, and nothing written on the second),
+    profiles with and without readers in flight, ring memory per profile, a copy
+    stating itself in its staging buffer, a copy past one dispatch row, an
+    external destination and its retarget), `SdfWorldEngineUploadLawTests`
+    (restated in words owed, headers and run entries; a program past 4.19M words
+    uploads byte-exact; an aperture profile's rings live in the aperture and a
+    unified one's in host memory), `SdfWorldEngineWorkLawTests` (eight copies
+    and eight transitions in a first frame's upload, which also counts the
+    region writes, and nothing written on the second), `CountersLawTests` and
+    `GpuWorkReportLawTests` (the pass class on the wire and in comparison),
+    `GpuDeviceMemoryWorkLawTests` (the aperture role counts),
     `SdfFrameBufferPlanLawTests` and `SdfPassPlanLawTests` (the plan without the
     tables).
 20. The SDF engine moves onto groups, its push blocks and hand-set binding

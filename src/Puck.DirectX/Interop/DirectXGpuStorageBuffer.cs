@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.System.Com;
 
 namespace Puck.DirectX.Interop;
@@ -24,9 +25,12 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
     /// <param name="memory">The device-local counts a GPU-upload-heap buffer was counted into, whose release this owner
     /// counts, or <see langword="null"/>; an upload-heap buffer was counted into none, so its release counts
     /// nothing.</param>
+    /// <param name="state">The state the buffer was created in, which the resource-state tracker starts it at:
+    /// <see cref="DirectXGpuBufferFactory.HostVisibleState"/> on an upload heap,
+    /// <see cref="DirectXGpuBufferFactory.DeviceLocalState"/> on a GPU upload heap.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bufferHandle"/> is zero.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="mapped"/> is <see langword="null"/>.</exception>
-    public DirectXGpuStorageBuffer(nint bufferHandle, ulong sizeBytes, void* mapped, GpuDeviceMemoryWork? memory = null) {
+    public DirectXGpuStorageBuffer(nint bufferHandle, ulong sizeBytes, void* mapped, GpuDeviceMemoryWork? memory = null, D3D12_RESOURCE_STATES state = DirectXGpuBufferFactory.HostVisibleState) {
         ArgumentOutOfRangeException.ThrowIfZero(value: bufferHandle);
 
         if (mapped is null) {
@@ -39,7 +43,7 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
         m_buffer = bufferHandle;
         DirectXResourceStates.Register(
             resource: m_buffer,
-            state: DirectXGpuBufferFactory.HostVisibleState
+            state: state
         );
         m_mapped = mapped;
         m_memory = memory;

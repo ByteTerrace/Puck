@@ -347,10 +347,13 @@ it. Direct3D 12 fills the same profile from its own queries; see
 [its memory profile](directx.md#memory-profile). `pipeline.inspect` prints the
 profile and the policy chosen for a pipeline instance's parameter bytes.
 
-The neutral buffer factory places a ring's host-visible buffers in the first
-host-visible, host-coherent memory type, not in the device-local aperture the
-profile reports. Every host-written table of the SDF engine is a region, so on a
-device with an aperture its kernels read those tables from host memory.
+`GpuResidency.RingMemory` places a ring's buffers in the device-local aperture
+on a discrete adapter that exposes one: `CreateHostVisibleDeviceLocal`
+allocates a `DEVICE_LOCAL`, `HOST_VISIBLE` and `HOST_COHERENT` memory type
+(Direct3D 12 uses a `GPU_UPLOAD` heap), counted under `memory.vulkan` because
+it is the adapter's memory. On unified memory (`GpuMemoryProfile.UnifiedMemory`:
+an integrated or CPU device, or Direct3D 12's `UMA`) a ring's buffers are
+ordinary host-visible buffers in the device's one pool.
 
 ---
 
