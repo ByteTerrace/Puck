@@ -1424,13 +1424,102 @@ Phase 3, the groups, follows phase 2:
     move to a separate image and sampler with 14b's sampler tables, and both
     enums are deleted there.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
-    of it (14a). The heap's sizes come from the capability report:
-    `GpuDeviceCapabilities` records options 19's view and sampler heap sizes
-    on Direct3D 12. Both backends then realize several groups, with sampler
-    tables and one 4-byte push range (14b), the riskiest commit. 14b creates root
-    signatures and pipeline layouts from step 13's plans, moves every combined
-    image sampler to a separate image and sampler, and deletes
-    `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`.
+    of it (14a). Both backends then realize several groups, with sampler
+    tables and one 4-byte push range (14b), the riskiest step, which lands as
+    the commits below rather than one. The floor device, the RTX 2060, reports
+    resource binding tier 3, a shader-visible CBV/SRV/UAV heap of at most
+    1,000,000 descriptors (it refuses 1,000,001), a sampler heap of 2,048,
+    and on Vulkan `maxBoundDescriptorSets` 32 and `maxPushConstantsSize` 256,
+    so four groups and a 4-byte push index fit with room on both backends.
+
+    14a, the device heap, touches Direct3D 12 alone; a Vulkan pool stays a
+    `VkDescriptorPool`.
+    - 14a-1, the range allocator, GPU-free: a free list over `[0, size)`
+      that allocates a pool's contiguous range first-fit, returns it on free,
+      and coalesces neighbours. A request no free range can hold is refused
+      by name, stating the request, the largest free range and the heap's
+      size; the heap never grows. Laws on a fake heap: a request of exactly
+      the free size succeeds and one descriptor more is refused
+      (exhaustion); after freeing a middle range, a request larger than it
+      but smaller than the total free count is refused until its neighbours
+      free and coalesce (fragmentation); a freed range is the one the next
+      equal request receives, and a thousand allocate-free cycles leave the
+      free list as it began (reuse).
+    - 14a-2, the heap's size, GPU-free: the composition sums the descriptor
+      demand every pool owner declares before it creates a pool, from the
+      same `GpuDescriptorPoolSizes` its pool is created with, times the sets
+      it keeps in flight: the SDF engine per frame-ring slot, each pipeline
+      node pass per in-flight slot and per instance the graph budget admits,
+      the overlay, the float preview's slots and each `GpuRegion`'s copy
+      pool. The heap holds twice that demand, because a reloaded graph keeps
+      its predecessor's pools until the predecessor's last submission
+      retires, so a reload briefly holds both. The size is the smaller of
+      that and `GpuDeviceCapabilities.ViewHeapSize`, and a demand the device
+      cannot hold is refused by name at device creation rather than
+      truncated. The sampler heap is the smaller of 2,048 and
+      `GpuDeviceCapabilities.SamplerHeapSize`. Laws: the demand sum over a
+      fake composition, the doubling, the cap, and the refusal.
+    - 14a-3, the heap in place: `DirectXGpuBindings` creates the two
+      shader-visible heaps once per device and a pool allocates its range
+      from them instead of a heap of its own; each command list binds the
+      device's heaps once. It also reads `ResourceBindingTier`, and on Vulkan
+      the device creation refuses a `MaxBoundDescriptorSets` below four or a
+      `MaxPushConstantBytes` below four by name. Check: `puck parity` and
+      the GPU canaries on Direct3D 12, whose sources the coverage index does
+      not map because it is recorded on Vulkan, so every Direct3D 12 canary
+      runs (unverified against a Direct3D 12 recording).
+
+    14b, the groups. Each commit lands with `puck parity` unchanged, and the
+    canaries named are those `tests/Puck.Affected/canary-coverage.json` maps
+    to the commit's sources, by text rather than a `puck affected` run, so
+    they are unverified; Direct3D 12 files are unmapped, so a commit that
+    touches one also runs its canaries on Direct3D 12. Each owner's commit
+    also moves its binding lists from `GpuComputeBindingKind` to
+    `GpuBindingKind`, so the last one leaves the old enum unused.
+    - 14b-1, layouts from the plans: Direct3D 12 creates a root signature from
+      `DirectXRootLayout.Plan` (each table's ranges at the plan's registers,
+      spaces and offsets, the pushed index as one 32-bit root constant at
+      `b0` in space 4, every parameter at the plan's visibility) and Vulkan a
+      pipeline layout from `VulkanGroupLayouts.Plan` (a set layout per set
+      number with its bindings' stage flags, and the push range). Sampler
+      tables allocate from the sampler heap, replacing static samplers for a
+      pipeline built this way. No shipped pipeline moves yet: laws hold a
+      fake device to the descriptions built from the spike's tables, and a
+      debug-layer run creates the film grain and pixelate layouts on both
+      backends. Canaries: the 18 the pipeline factories map to,
+      `no-device-compile`, the thirteen `pipeline-*`, `sdf-decode-sign-refusal`,
+      `source-conversion`, `world-counters` and `world-seat-binding-recompose`.
+    - 14b-2, the Vulkan presenter: `blit.frag.hlsl` and
+      `VulkanGraphicsPipelineFactory`, which `SurfaceCompositor` builds from,
+      read a separate image and sampler. Canaries: 17, the 14b-1 set without
+      `world-seat-binding-recompose`.
+    - 14b-3, the pipeline node and the sources it runs:
+      `ShaderPipelineRenderNode` and its float preview
+      (`pipeline-preview.frag.hlsl`), the shipped ink pipeline
+      (`ink-simulation.hlsl`, `ink-visualize.hlsl`) and the seven canary
+      sources under `pipeline-edit`, `pipeline-feedback`, `pipeline-shapes`
+      and `pipeline-supersede`. Canaries: `no-device-compile`, the thirteen
+      `pipeline-*` and `source-conversion`.
+    - 14b-4, the overlay: `overlay-unified.frag.hlsl`'s nineteen combined
+      declarations and `UnifiedOverlayNode`'s pool. Canaries:
+      `instrument-clock-source`, `music-conditional-layer-and-embellishment`,
+      `voice-babble` and `world-seat-binding-recompose`.
+    - 14b-5, film grain and the fullscreen passes: `sdf-film-grain.frag.hlsl`,
+      `FullscreenPassNode`, and `ShaderSetManifest` with its binding record.
+      Canaries: 21, the 14b-1 set with the overlay's three audio canaries.
+    - 14b-6, the SDF engine, last: `sdf-world.hlsli`'s thirty-two screen
+      sources (bindings 12 to 43), the glyph atlas in `sdf-vm.hlsli`
+      (binding 44), and the engine's binding lists in
+      `SdfWorldEngine.Pipelines.cs`. Canaries: 20 mapped, the 14b-5 set
+      without `sdf-decode-sign-refusal`, plus `sdf-visibility-fresh`, which
+      the index has not recorded yet. `resample.comp.hlsl`, which nothing
+      dispatches, takes a separate image and sampler with P11b's port.
+    - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
+      then states a `GpuBindingKind`, `ShaderSetManifestBindingKind`, and
+      `GpuDescriptorPoolSizes.CombinedImageSamplerCount`, with their last
+      users in `GpuRegion`, the backends' pipeline factories and the
+      contract and wire-name laws. Canaries: the 19 `GpuDescriptorPoolSizes`
+      and `GpuRegion` map to.
 15. Pipelines move onto groups: `WriteFrame` writes the frame group, set 0, into
     a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
     3; passes include their generated interface; the pipeline document's
