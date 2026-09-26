@@ -2,7 +2,7 @@
 // with per-record early-outs. Re-measure through the live pass-timing instrument before growing content; the
 // linear scan stays until it does.
 //
-// The unified overlay pass (single-source HLSL; DXC -> SPIR-V for Vulkan AND DXIL for Direct3D 12). ONE decorator
+// The unified overlay pass (single-source HLSL; DXC -> SPIR-V for Vulkan AND DXIL for Direct3D 12). ONE pass
 // draws every 2D surface from one packed storage buffer: N PANELS (token chrome — a scrim fill in a rounded rect, a
 // 1px hairline outline, an optional title band + divider, an optional Tier-1 status ring + bloom halo) plus a flat
 // list of ELEMENTS — rounded-rect cells, fixed-cell text runs into the ONE shared SDF glyph atlas, ICON CHIPS,
@@ -13,11 +13,12 @@
 // console panel, the per-seat binding bars, and the toast are all CPU writers into the same records — a future
 // surface is a new writer, not a new shader.
 //
-// The storage buffer (uint4-strided; word offsets — see overlay-common.hlsli's buffer-shape note):
+// The storage buffer, one per frame slot holding the regions at the same bases (uint4-strided; word offsets — see
+// overlay-common.hlsli's buffer-shape note):
 //   [0, tokenEnd)          the design-token slab (colors + geometry scalars; OverlayTokenBlock.cs)
 //   [atlasBase, panelBase) the shared atlas' per-glyph SDF cells (one RGBA texel per word, uploaded once) — indices
 //                          0..94 the printable-ASCII block, 95.. this boot's appended icon glyphs, total count
-//                          carried in the push constants (glyphCount below), never a compile-time constant
+//                          carried in the pass block (glyphCount below), never a compile-time constant
 //   [panelBase, elementBase) the panel records · [elementBase, textBase) the element records ·
 //   [textBase, clipBase)   the glyph-code words the text runs index (one pre-resolved index per word) ·
 //   [clipBase, ...)        the clip table (normalized x, y, w, h per rect; record word 9 indexes it, 0 = unclipped).
@@ -27,12 +28,12 @@
 // Puck.Overlays.OverlayFrameBuilder (record word layouts) and OverlayFrameComposer.WritePassValues (pass block values).
 //
 // Everything it reads comes from the overlay package's generated interface (overlay.interface.hlsli, generated from
-// RenderGraphPackageCatalog.OverlayMembers; ShaderFrameBlockLawTests holds it to the generator): the frame group
-// at set 0, and the pass group at set 3 holding the extent and the three per-frame values below, the inner world image
-// (source), the frame-slot table (frameSlot0..frameSlot7, a Frame element's sampled WorldFrameSource content, e.g. a
-// face cam), the one sampler every image is read through (linearSampler) and the storage buffer (overlayData). The
-// slots are separate scalar images selected by a switch rather than one array binding, so every backend binds them
-// alike.
+// RenderGraphPackageCatalog.OverlayMembers; OverlayPackageLawTests holds it to the generator and to this shader's
+// reflection): the frame group at set 0, and the pass group at set 3 holding the extent and the three per-frame values
+// below, the inner world image (source), the frame-slot table (frameSlot0..frameSlot7, a Frame element's sampled
+// WorldFrameSource content, e.g. a face cam), the one sampler every image is read through (linearSampler) and the
+// storage buffer (overlayData). The slots are separate scalar images selected by a switch rather than one array
+// binding, so every backend binds them alike.
 #include "overlay-common.hlsli"
 #include "overlay.interface.hlsli"
 

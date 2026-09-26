@@ -8,20 +8,21 @@ using Xunit;
 namespace Puck.World.Tests;
 
 // The GPU work and creation laws of the overlay package's graph: the exact counts of a drawn overlay pass, submission
-// identity across a device loss, that the descriptor pools the node states for the graph are the pools it creates, and
-// that every creation the graph's install makes, failed in turn through GpuCreationFaults, is refused by name and
-// releases exactly what was created before it, and the same graph swapped in again installs and draws.
+// identity across a device loss, that the descriptor pools the node states for the graph are the pools it creates, that
+// a refused install is retried once per change of the operator's GPU faults or, for a heap refusal, of the heap's
+// release revision, and that every creation the graph's install makes, failed in turn through GpuCreationFaults, is
+// refused by name and releases exactly what was created before it, and the same graph swapped in again installs and
+// draws.
 public sealed partial class OverlayPackageLawTests {
     // A steady drawn frame, once every slot has drawn twice. The overlay pass: one command buffer, the planned transition
     // of its target back to render target from the layout publication left it in, one render pass and draw, one pipeline
     // bind, the frame and pass set binds, nothing pushed, nine sampled-image writes (the world image and the eight frame
-    // slots, unbound ones given the world image), and 128 uploaded bytes: the 112 bytes of the frame's packed cursor
-    // records, and the pass block's words 6, 7, 8 and 10, 16 bytes, since the region bases WritePassValues writes there
-    // are shifted per frame slot and so differ from the previous frame's. Outside it: the command buffer, the
-    // output's transition to the publish layout, the world image handed back to its host's layout, and the frame group's
-    // one 256-byte constant-buffer view.
+    // slots, unbound ones given the world image), and 112 uploaded bytes, the frame's packed cursor records: every slot's
+    // storage buffer holds the regions at the same bases, so the pass block's values are the same every steady frame and
+    // none of them uploads. Outside it: the command buffer, the output's transition to the publish layout, the world
+    // image handed back to its host's layout, and the frame group's one 256-byte constant-buffer view.
     private const string DrawnPass =
-        "work overlay executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=9 uploads.host-visible=128 clears=0\n" +
+        "work overlay executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=9 uploads.host-visible=112 clears=0\n" +
         "work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=256 clears=0";
 
     // The fake as a device context whose services pass through creation faults, as a backend's do.
@@ -111,6 +112,165 @@ public sealed partial class OverlayPackageLawTests {
             )
         );
     }
+    /// <summary>The operator's GPU faults are an input of a refused candidate (<see cref="GpuCreationFaults.Revision"/>):
+    /// a refusal a fault caused holds over unchanged frames, arming another fault retries the candidate exactly once
+    /// (refused again by the fault just armed, whose firing is no further change), and disarming retries it exactly once
+    /// more, which installs the graph.</summary>
+    [Fact]
+    public void ArmingAFaultRetriesARefusedCandidateOnceAndDisarmingInstallsItOnce() {
+        var faults = new GpuCreationFaults();
+        using var rig = new Rig(
+            faults: faults,
+            trackObjects: true
+        );
+
+        void ProduceUntil(Func<bool> condition, string what) => Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => {
+                    _ = rig.Node.ProduceFrame(context: default);
+
+                    return condition();
+                },
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ),
+            userMessage: what
+        );
+
+        faults.Arm(kind: GpuCreationKind.Image);
+        ProduceUntil(
+            condition: () => (rig.Node.LastSwapError is not null),
+            what: "The armed image fault never refused the graph."
+        );
+
+        var imagesAsked = faults.SeenOf(kind: GpuCreationKind.Image);
+
+        for (var frame = 0; (frame < 3); frame++) {
+            _ = rig.Node.ProduceFrame(context: default);
+        }
+
+        Assert.Equal(
+            actual: (faults.SeenOf(kind: GpuCreationKind.Image), rig.Node.IsBuildingCandidate),
+            expected: (imagesAsked, false)
+        );
+
+        faults.Arm(kind: GpuCreationKind.Image);
+        ProduceUntil(
+            condition: () => ((faults.SeenOf(kind: GpuCreationKind.Image) == (imagesAsked + 1L)) && (rig.Node.LastSwapError is not null)),
+            what: "Arming a fault never retried the refused graph."
+        );
+
+        for (var frame = 0; (frame < 3); frame++) {
+            _ = rig.Node.ProduceFrame(context: default);
+        }
+
+        Assert.Equal(
+            actual: (faults.SeenOf(kind: GpuCreationKind.Image), rig.Node.IsBuildingCandidate),
+            expected: ((imagesAsked + 1L), false)
+        );
+        Assert.StartsWith(
+            actualString: rig.Node.LastSwapError!.Message,
+            expectedStartString: $"[{GpuCreationFaults.RefusalCode}] "
+        );
+
+        faults.Disarm();
+        ProduceUntil(
+            condition: () => rig.Node.IsReady,
+            what: "Disarming never installed the refused graph."
+        );
+        Assert.Null(@object: rig.Node.LastSwapError);
+
+        var created = rig.Gpu.Created.Count;
+
+        for (var frame = 0; (frame < 3); frame++) {
+            _ = rig.Node.ProduceFrame(context: default);
+        }
+
+        Assert.Equal(
+            actual: rig.Gpu.Created.Count,
+            expected: created
+        );
+    }
+    /// <summary>A graph whose pools the device's heap cannot admit is refused by name before it creates anything, tries
+    /// nothing again over frames that return no heap space, and installs once another owner returns heap space: the
+    /// heap's release revision (<see cref="IGpuBindings.HeapReleaseRevision"/>) is the change a heap refusal waits
+    /// for.</summary>
+    [Fact]
+    public void AGraphTheHeapRefusesInstallsOnceAnotherOwnerReturnsHeapSpace() {
+        using var rig = new Rig();
+        IGpuBindings bindings = rig.Gpu;
+        var pools = ShaderPipelineRenderNode.DescriptorPools(
+            inFlight: InFlight,
+            plan: new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: Graph()).Pipeline,
+            preview: false
+        );
+        var demand = ((uint)pools.Sum(selector: static pool => ((long)pool.HeapDescriptors)));
+
+        rig.Gpu.DescriptorHeap = new GpuDescriptorHeapBudget(capabilities: (GpuDeviceCapabilities.FromDirectX(
+            resourceBindingTier: 3,
+            rootSignatureVersion: "1.1",
+            samplerHeapSize: 64,
+            shaderModel: "6.6",
+            staticSamplerHeapSize: 0,
+            viewHeapSize: 0
+        ) with {
+            ViewHeapSize = demand,
+        }));
+
+        // Another owner holds one view descriptor of a heap exactly the graph's size.
+        var other = bindings.CreatePool(
+            name: default,
+            sizes: new GpuDescriptorPoolSizes(
+                CombinedImageSamplerCount: 0,
+                MaxSets: 1,
+                StorageBufferCount: 1,
+                StorageImageCount: 0
+            )
+        );
+
+        Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => {
+                    _ = rig.Node.ProduceFrame(context: default);
+
+                    return (rig.Node.LastSwapError is not null);
+                },
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ),
+            userMessage: "The heap never refused the graph."
+        );
+        Assert.IsType<GpuDescriptorHeapRefusalException>(@object: rig.Node.LastSwapError);
+        Assert.StartsWith(
+            actualString: rig.Node.LastSwapError!.Message,
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'shader pipeline root' needs {demand} view "
+        );
+        Assert.Empty(collection: rig.Gpu.PoolsCreated.Skip(count: 1));
+
+        var admissions = rig.Gpu.Admissions;
+
+        // Frames that return no heap space try nothing again.
+        for (var frame = 0; (frame < 3); frame++) {
+            _ = rig.Node.ProduceFrame(context: default);
+        }
+
+        Assert.Equal(
+            actual: (rig.Gpu.Admissions, rig.Node.IsBuildingCandidate),
+            expected: (admissions, false)
+        );
+
+        // The other owner's release is the change a heap refusal waits for: the graph builds again and installs, with
+        // no device loss.
+        bindings.DestroyPool(poolHandle: other);
+        _ = ProduceUntilPublished(node: rig.Node);
+        Assert.Null(@object: rig.Node.LastSwapError);
+        Assert.Equal(
+            actual: rig.Gpu.Admissions,
+            expected: (admissions + 1)
+        );
+        Assert.Equal(
+            actual: rig.Gpu.PoolsCreated.Skip(count: 1),
+            expected: pools
+        );
+    }
     [Fact]
     public void EveryCreationOfTheOverlayGraphFaultedInTurnIsRefusedByNameAndReleasesWhatWasCreated() {
         var expected = new Dictionary<GpuCreationKind, long>();
@@ -126,6 +286,10 @@ public sealed partial class OverlayPackageLawTests {
                 expected[kind] = measuredFaults.SeenOf(kind: kind);
             }
         }
+
+        // The recorder creates its framebuffers at install, so a framebuffer fault refuses the install by name like any
+        // other creation rather than escaping a produced frame.
+        Assert.True(condition: (expected[GpuCreationKind.Framebuffer] > 0L));
 
         var faulted = 0;
 

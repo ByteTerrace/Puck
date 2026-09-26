@@ -310,6 +310,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             InstallPackage(
                 descriptorPool: descriptorPool,
                 objects: objects,
+                outputImages: PackageOutputImages(
+                    carried: carried,
+                    map: map,
+                    pass: runtime
+                ),
                 planned: planned,
                 runtime: runtime
             );
@@ -732,7 +737,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             built.Dispose();
             Refuse(
                 candidate: true,
-                error: new InvalidDataException(message: $"{refusal}; the installed graph keeps running.")
+                error: new GpuDescriptorHeapRefusalException(message: $"{refusal}; the installed graph keeps running.")
             );
 
             return;
@@ -1559,8 +1564,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     /// initialization, and the old graph retires like any replaced graph. A resize replaces the graph and is not a step:
     /// a paused instance builds and installs it too, renders nothing, and keeps publishing its last image until its next
     /// step, resume or reset. A refused candidate leaves the installed graph at its old extent, records
-    /// <see cref="LastSwapError"/>, and is not retried until a different extent is
-    /// requested. Requesting the extent already requested does nothing.</summary>
+    /// <see cref="LastSwapError"/>, and is retried when a different extent is requested or when something it was refused
+    /// on changes (the operator's GPU faults, or heap space for a heap refusal). Requesting the extent already requested
+    /// does nothing.</summary>
     /// <param name="width">The requested frame width, in pixels.</param>
     /// <param name="height">The requested frame height, in pixels.</param>
     /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
@@ -1580,6 +1586,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
         m_requestedWidth = width;
         m_requestedHeight = height;
+        ForgetRefusal();
         if (
             !m_ready ||
             (m_pipeline is null)
@@ -1676,6 +1683,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
         m_lastSwapError = null;
         m_pending = pipeline;
+        ForgetRefusal();
     }
     /// <summary>Copies one pass's live packed parameter block for inspection or persistence.</summary>
     public bool TryGetConfigSnapshot(string passName, out byte[] bytes) {

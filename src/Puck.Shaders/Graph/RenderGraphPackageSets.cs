@@ -2,8 +2,8 @@ using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
-/// <summary>What an instance hands a package pass's recorder when its graph installs: the pool its sets come from and
-/// the constant buffers its two blocks live in, one per frame slot. The instance owns all of it; the pool's sets are
+/// <summary>What an instance hands a package pass's recorder when its graph installs: the pool its sets come from, the
+/// constant buffers its two blocks live in, one per frame slot, and the images its outputs can be. The instance owns all of it; the pool's sets are
 /// released with the pool.</summary>
 /// <param name="DescriptorPool">The instance's descriptor pool, which holds the pass's frame group and pass group sets
 /// once per frame slot.</param>
@@ -11,7 +11,10 @@ namespace Puck.Shaders;
 /// the instance shares and the instance writes each frame.</param>
 /// <param name="PassBlocks">The constant buffer holding the pass's pass block in each frame slot, which the instance
 /// uploads after each recording (<see cref="RenderGraphPackageRecording.PassBlock"/>).</param>
-public sealed record RenderGraphPackageGroups(nint DescriptorPool, IReadOnlyList<IGpuBuffer> FrameBlocks, IReadOnlyList<IGpuBuffer> PassBlocks);
+/// <param name="OutputImages">Each output's image instances the pass can draw into, one list per output and empty for
+/// an external or buffer output: a graphics package creates its framebuffers over them here, so a recording creates
+/// nothing.</param>
+public sealed record RenderGraphPackageGroups(nint DescriptorPool, IReadOnlyList<IGpuBuffer> FrameBlocks, IReadOnlyList<IGpuBuffer> PassBlocks, IReadOnlyList<IReadOnlyList<IGpuImage>> OutputImages);
 /// <summary>A package pass's frame group and pass group sets, one of each per frame slot, allocated from the instance's
 /// pool against its pipeline's group layouts, with each set's block already bound to its constant buffer. A recorder
 /// writes its resources into the slot's pass set by member name and binds both sets by group, as a document pass's

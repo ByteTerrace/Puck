@@ -86,6 +86,9 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets or sets a hook every compute pipeline creation runs first, with the pipeline's description, on
     /// whatever thread creates it — a law holds a pipeline build by blocking here, and counts or orders creations.</summary>
     public Action<GpuComputePipelineDescription>? BeforeComputePipeline { get; set; }
+    /// <summary>Gets or sets what every service call does besides being counted, given the call's key (such as
+    /// <c>IGpuBindings.WriteSampledImage</c>): a law throws from it to fail that call, as a lost device does.</summary>
+    public Action<string>? OnCall { get; set; }
 
     /// <summary>Gets each wrapped member's call count, keyed <c>Interface.Member</c>; empty unless the device counts
     /// calls.</summary>
@@ -191,6 +194,8 @@ internal sealed class FakeGpuDevice :
         if (m_countCalls) {
             CollectionsMarshal.GetValueRefOrAddDefault(dictionary: Calls, key: key, exists: out _)++;
         }
+
+        OnCall?.Invoke(obj: key);
     }
 
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) => Hit(key: "IGpuRecorder.BeginCommandBuffer");

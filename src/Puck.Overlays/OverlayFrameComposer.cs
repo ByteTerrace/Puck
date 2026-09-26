@@ -164,8 +164,6 @@ public sealed class OverlayFrameComposer {
     public OverlayFrameBuilder Builder => m_builder;
     /// <summary>Gets the frame-slot table the HUD's <c>Frame</c> elements bind their leases through.</summary>
     public OverlayFrameSlots FrameSlots => m_frameSlots;
-    /// <summary>Gets the number of words each frame's dynamic regions span after the static prefix.</summary>
-    public int DynamicWords => (m_builder.WordCount - m_builder.PanelBaseWords);
 
     // The resources a channel lost this frame, each as {verb} ({written} of {reserved} written), shared by both
     // narrations so a reservation-overflow "dropped" and an own-cap "refused" read in the same shape.
@@ -365,45 +363,39 @@ public sealed class OverlayFrameComposer {
     }
     /// <summary>Uploads only what this frame wrote, per region, never the capacity-sized region behind it: the
     /// shader's loops are bounded by the same counts, so a region's untouched tail holds nothing it reads.</summary>
-    /// <param name="buffer">The storage buffer the fragment shader reads.</param>
-    /// <param name="shiftWords">How many words past the builder's own bases the frame's dynamic regions sit in the
-    /// buffer: zero for a buffer holding one frame, a frame slot's offset for one holding a region per slot.</param>
+    /// <param name="buffer">The storage buffer the fragment shader reads, which holds the regions at the builder's own
+    /// bases.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <see langword="null"/>.</exception>
-    public void UploadFrameRegions(IGpuStorageBuffer buffer, int shiftWords) {
+    public void UploadFrameRegions(IGpuStorageBuffer buffer) {
         ArgumentNullException.ThrowIfNull(argument: buffer);
 
         Upload(
             baseWords: m_builder.PanelBaseWords,
             buffer: buffer,
-            length: (m_builder.PanelCount * OverlayFrameBuilder.PanelWords),
-            shiftWords: shiftWords
+            length: (m_builder.PanelCount * OverlayFrameBuilder.PanelWords)
         );
         Upload(
             baseWords: m_builder.ElementBaseWords,
             buffer: buffer,
-            length: (m_builder.ElementCount * OverlayFrameBuilder.ElementWords),
-            shiftWords: shiftWords
+            length: (m_builder.ElementCount * OverlayFrameBuilder.ElementWords)
         );
         Upload(
             baseWords: m_builder.TextBaseWords,
             buffer: buffer,
-            length: m_builder.TextWordCount,
-            shiftWords: shiftWords
+            length: m_builder.TextWordCount
         );
         Upload(
             baseWords: m_builder.ClipBaseWords,
             buffer: buffer,
-            length: (m_builder.ClipCount * OverlayFrameBuilder.ClipWords),
-            shiftWords: shiftWords
+            length: (m_builder.ClipCount * OverlayFrameBuilder.ClipWords)
         );
     }
     /// <summary>Writes the pass block's three per-frame values (<see cref="RenderGraphPackageCatalog.OverlayMembers"/>):
-    /// <c>counts</c>, <c>sdf</c> and <c>misc</c>, the counts, glyph and outline figures and region bases the shader reads,
-    /// each dynamic base moved by <paramref name="shiftWords"/>.</summary>
+    /// <c>counts</c>, <c>sdf</c> and <c>misc</c>, the counts, glyph and outline figures and region bases the shader reads.
+    /// Every slot's buffer holds the regions at the same bases, so a steady frame writes the same values.</summary>
     /// <param name="values">The destination: the pass block from <c>counts</c>' offset, where the three float4 values lie
     /// one after another, at least <see cref="PassValueBytes"/> long.</param>
-    /// <param name="shiftWords">How many words past the builder's own bases the frame's dynamic regions sit.</param>
-    public void WritePassValues(Span<byte> values, int shiftWords) {
+    public void WritePassValues(Span<byte> values) {
         var floats = MemoryMarshal.Cast<byte, float>(span: values);
 
         floats[0] = m_builder.PanelCount;
@@ -412,16 +404,16 @@ public sealed class OverlayFrameComposer {
         floats[3] = m_builder.Glyphs.AtlasCellHeight;
         floats[4] = m_builder.Glyphs.DistanceRange;
         floats[5] = OutlineBand;
-        floats[6] = (m_builder.PanelBaseWords + shiftWords);
-        floats[7] = (m_builder.ElementBaseWords + shiftWords);
-        floats[8] = (m_builder.TextBaseWords + shiftWords);
+        floats[6] = m_builder.PanelBaseWords;
+        floats[7] = m_builder.ElementBaseWords;
+        floats[8] = m_builder.TextBaseWords;
         // The glyph pack's base word: the atlas sits after the token slab, in the static prefix.
         floats[9] = OverlayTokenBlock.WordCount;
-        floats[10] = (m_builder.ClipBaseWords + shiftWords);
+        floats[10] = m_builder.ClipBaseWords;
         floats[11] = m_builder.Glyphs.GlyphCount;
     }
 
-    private void Upload(IGpuStorageBuffer buffer, int baseWords, int length, int shiftWords) {
+    private void Upload(IGpuStorageBuffer buffer, int baseWords, int length) {
         if (length <= 0) {
             return;
         }
@@ -431,7 +423,7 @@ public sealed class OverlayFrameComposer {
                 length: length,
                 start: baseWords
             ),
-            destinationOffsetBytes: ((ulong)((baseWords + shiftWords) * sizeof(uint)))
+            destinationOffsetBytes: ((ulong)(baseWords * sizeof(uint)))
         );
     }
 }
