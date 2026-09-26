@@ -719,7 +719,7 @@ sub-steps, in this order:
     image a package draws into is created usable as a color attachment.
   - `PostProcessPackage` is the one factory for every post-process package,
     registered per package under its id. Each frame it writes the input into the slot's set,
-    pushes the frame block, and records the render pass and the draw over a
+    binds its frame and pass sets by group (step 18), and records the render pass and the draw over a
     framebuffer cached per output image, between the barriers the node plans
     for its ports (5d). The extent comes from the schedule, so a post pass
     resizes with its instance.

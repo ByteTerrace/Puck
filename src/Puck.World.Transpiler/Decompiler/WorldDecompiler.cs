@@ -775,8 +775,8 @@ public static partial class WorldDecompiler {
             );
         }
 
-        // Graph instances: each row prints as its named block.
-        foreach (var (rowsKey, keyword) in ((ReadOnlySpan<(string, string)>)[("graphs", "graph")])) {
+        // Graph instances and post passes: each row prints as its named block.
+        foreach (var (rowsKey, keyword) in ((ReadOnlySpan<(string, string)>)[("graphs", "graph"), ("post", "post")])) {
             if (
                 !views.TryGetPropertyValue(
                 jsonNode: out var rowsNode,
@@ -815,7 +815,7 @@ public static partial class WorldDecompiler {
 
         // Other views properties
         var handledViewsKeys = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase) {
-            "layouts", "seatControl", "seatRig", "graphs",
+            "layouts", "seatControl", "seatRig", "graphs", "post",
         };
 
         foreach (var (k, v) in views) {
