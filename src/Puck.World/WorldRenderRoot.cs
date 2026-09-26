@@ -126,15 +126,15 @@ internal static class WorldRenderRoot {
             );
         }
 
-        // An uploaded producer's source instance converts the region its feed writes through the conversion its
-        // descriptor names; any other producer's instance, and a machine or probe source, renders through an external
-        // producer that hands out its image through the binder's capture gate.
+        // An uploaded producer's source instance and a machine source convert the region their upload writes through
+        // the conversion its descriptor names; any other producer's instance, and a probe source, renders through an
+        // external producer that hands out its image through the binder's capture gate.
         SourceConversionPackage.RegisterAll(packages: packages);
         binder.Producers.RegisterPackages(
             adapt: binder.Adapt,
             packages: packages
         );
-        packages.RegisterProducer(
+        packages.RegisterSource(
             factory: binder.MachineSource,
             package: RenderGraphInstance.SourcePackage(producer: WorldImageProducerSettings.MachineId)
         );
