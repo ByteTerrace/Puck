@@ -1,5 +1,4 @@
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.Shaders;
@@ -53,21 +52,26 @@ internal static class SdfTestPipelines {
             ViewsFolds: code
         );
     }
-    // Produces frames until the node's pipeline build has installed its engine, and returns the surface of that first
-    // real frame. The bound is liveness for a build over a fake device; it decides nothing.
-    public static Surface ProduceFirstFrame(this SdfEngineNode node, in FrameContext context) {
-        var surface = default(Surface);
+    // Produces frames at the context's target extent until the node's pipeline build has installed its engine, and returns
+    // whether that first real frame was submitted. The bound is liveness for a build over a fake device; it decides
+    // nothing.
+    public static bool ProduceFirstFrame(this SdfEngineNode node, in FrameContext context) {
+        var produced = false;
         var copy = context;
 
         Assert.True(condition: SpinWait.SpinUntil(
             condition: () => {
-                surface = node.ProduceFrame(context: in copy);
+                produced = node.Produce(
+                    context: in copy,
+                    height: copy.TargetHeight,
+                    width: copy.TargetWidth
+                );
 
                 return node.IsReady;
             },
             timeout: TimeSpan.FromSeconds(value: 30)
         ), userMessage: node.NotReadyReason);
 
-        return surface;
+        return produced;
     }
 }

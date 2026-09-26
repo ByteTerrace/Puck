@@ -208,7 +208,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 maxFrameTicks: ulong.MaxValue,
                 stepTicks: m_stepTicks
             );
-            _ = Node.ProduceFrame(context: in m_context);
+            _ = Node.Produce(context: in m_context, height: Extent, width: Extent);
 
             foreach (var request in Target.Requests) {
                 if (

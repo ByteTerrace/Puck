@@ -256,11 +256,11 @@ public sealed class SdfWorldEngineUploadLawTests {
         _ = node.ProduceFirstFrame(context: in context);
 
         for (var produced = 0; (produced < SdfWorldEngine.FrameRingSize); produced++) {
-            _ = node.ProduceFrame(context: in context);
+            _ = node.Produce(context: in context, height: Extent, width: Extent);
         }
 
         gpu.ResetTallies();
-        _ = node.ProduceFrame(context: in context);
+        _ = node.Produce(context: in context, height: Extent, width: Extent);
         Assert.Equal(expected: 0L, actual: gpu.HostBytes());
 
         node.OnDeviceLost();

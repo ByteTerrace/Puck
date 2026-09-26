@@ -106,7 +106,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
         first.Dispose();
         Assert.Equal(expected: 1, actual: pipelines.SharedSets);
         Assert.Equal(expected: 1, actual: pipelines.RegionCopy.Pipelines.SharedPipelines);
-        Assert.False(condition: second.ProduceFrame(context: in context).IsEmpty);
+        Assert.True(condition: second.Produce(context: in context, height: Extent, width: Extent));
 
         second.Dispose();
         Assert.Equal(expected: 0, actual: pipelines.SharedSets);
@@ -125,7 +125,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
         _ = second.ProduceFirstFrame(context: in context);
 
         Assert.True(condition: first.RequestShaderReload(directory: AppContext.BaseDirectory));
-        _ = first.ProduceFrame(context: in context);
+        _ = first.Produce(context: in context, height: Extent, width: Extent);
 
         var status = first.ShaderReloadStatus;
 

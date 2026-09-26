@@ -1058,7 +1058,9 @@ P11b's last four commits are these; 11 and 12 have landed:
        dark glass. Landed: `sdf-world.hlsli`'s unbound branch shades a constant
        glass color under the faint sun tint, and `screenContent` is deleted.
     5. The engine node is an external producer only: `SdfEngineNode` is no
-       `IRenderNode`, and harnesses produce it through `Produce`.
+       `IRenderNode`, and harnesses produce it through `Produce`. Landed: its
+       frame render and `Descriptor` are gone from its surface, and the
+       SdfVm and World harnesses produce it at their extent.
 14. The final sweep: the rest of the deletions P11 lists, and the owning guides
     and the `rendering` skill describe the result.
 

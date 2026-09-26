@@ -37,7 +37,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
 
         var refusal = rig.ProduceUntilRefused();
 
-        Assert.True(condition: refusal.IsEmpty);
+        Assert.False(condition: refusal);
         Assert.Contains(
             expectedSubstring: GpuCreationFaults.RefusalCode,
             actualString: rig.Node.NotReadyReason
@@ -52,7 +52,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         );
 
         rig.ChangeProgram();
-        _ = rig.Node.ProduceFrame(context: in rig.Context);
+        _ = rig.Node.Produce(context: in rig.Context, height: Extent, width: Extent);
         Assert.True(condition: rig.Node.IsReady);
         Assert.Null(@object: rig.Node.NotReadyReason);
         Assert.Equal(
@@ -70,7 +70,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
 
         var refusal = rig.ProduceUntilRefused();
 
-        Assert.True(condition: refusal.IsEmpty);
+        Assert.False(condition: refusal);
         Assert.Contains(
             expectedSubstring: GpuCreationFaults.RefusalCode,
             actualString: rig.Node.NotReadyReason
@@ -113,7 +113,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
 
         // The refusal is a named build refusal, never a throw out of the frame, and the construction was refused before
         // it allocated: nothing but the pipeline set exists, no pool was created and the heap lent nothing.
-        Assert.True(condition: refusal.IsEmpty);
+        Assert.False(condition: refusal);
         Assert.Contains(
             expectedSubstring: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view and {samplers} sampler descriptors",
             actualString: rig.Node.NotReadyReason
@@ -152,7 +152,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         // A heap that holds the pool admits the next changed build, which creates the engine and its one pool.
         rig.Gpu.DescriptorHeap = Heap(views: demand);
         rig.ChangeProgram();
-        _ = rig.Node.ProduceFrame(context: in rig.Context);
+        _ = rig.Node.Produce(context: in rig.Context, height: Extent, width: Extent);
         Assert.True(condition: rig.Node.IsReady);
         Assert.Null(@object: rig.Node.NotReadyReason);
         Assert.Equal(
@@ -444,24 +444,30 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         // Produces frames that change no build input, each presenting nothing new unless the node is ready.
         public void ProduceUnchanged(int frames) {
             for (var frame = 0; (frame < frames); frame++) {
-                var surface = Node.ProduceFrame(context: in m_context);
-
                 Assert.Equal(
-                    actual: surface.IsEmpty,
-                    expected: !Node.IsReady
+                    actual: Node.Produce(
+                        context: in m_context,
+                        height: Extent,
+                        width: Extent
+                    ),
+                    expected: Node.IsReady
                 );
             }
         }
-        // Produces frames until the node refuses its engine build, and returns that frame's surface. A refusal never
-        // throws out of the frame. The bound is liveness for a pipeline build on the thread pool; it decides nothing.
-        public Surface ProduceUntilRefused() {
-            var surface = default(Surface);
+        // Produces frames until the node refuses its engine build, and returns whether that frame was submitted. A refusal
+        // never throws out of the frame. The bound is liveness for a pipeline build on the thread pool; it decides nothing.
+        public bool ProduceUntilRefused() {
+            var produced = false;
             var context = m_context;
             var node = Node;
 
             Assert.True(condition: SpinWait.SpinUntil(
                 condition: () => {
-                    surface = node.ProduceFrame(context: in context);
+                    produced = node.Produce(
+                        context: in context,
+                        height: Extent,
+                        width: Extent
+                    );
 
                     return (node.NotReadyReason?.Contains(
                         comparisonType: StringComparison.Ordinal,
@@ -472,7 +478,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
             ));
             Assert.False(condition: node.IsReady);
 
-            return surface;
+            return produced;
         }
 
         private static bool IsPipelineSetObject(FakeGpuDevice.Creation created) =>

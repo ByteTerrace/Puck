@@ -203,7 +203,7 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
         m_reads = reads;
 
         try {
-            return !ProduceFrame(context: in context).IsEmpty;
+            return ProduceFrame(context: in context);
         } finally {
             m_reads = null;
         }

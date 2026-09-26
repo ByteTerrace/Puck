@@ -17,7 +17,7 @@ namespace Puck.SdfVm;
 /// <param name="HalfHeight">The half-extent along <paramref name="Up"/> this frame.</param>
 public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 Right, Vector3 Up, float HalfWidth, float HalfHeight);
 /// <summary>
-/// The SDF engine as a host-model <see cref="IRenderNode"/>: a generic multi-viewport SDF world renderer driven by
+/// The SDF engine as a render graph's <c>sdf.world</c> external producer: a generic multi-viewport SDF world renderer driven by
 /// compute, fully backend-neutral (it depends only on the neutral <c>IGpuCompute*</c> seam, so the identical node runs
 /// on whichever backend the host publishes). It resolves the shared device from <see cref="FrameContext.Host"/>,
 /// pulls each frame's scene + cameras + regions from an <see cref="ISdfFrameSource"/>, and drives the shared
@@ -41,7 +41,7 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// sampling frame tracks the geometry the dynamic transform already moved (see <see cref="SdfWorldEngine.SetScreenSurface"/>).
 /// </para>
 /// </summary>
-public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
+public sealed partial class SdfEngineNode : ICaptureRequestTarget {
     private readonly int m_brickPoolVoxelCapacity;
     private readonly string? m_debugLabel;
     private readonly int m_dynamicTransformCapacity;
@@ -156,11 +156,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     // Concrete Dictionary<,> (not the read-only interface) so the per-frame foreach binds the struct enumerator
     // instead of boxing IEnumerator on the render thread every ProduceFrame; the ctor copies the caller's map to match.
     private static readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> EmptyScreenSurfaceTransforms = new();
-
-    private readonly NodeDescriptor m_descriptor = new(
-        Name: "compute-sdf-world",
-        SurfaceId: SurfaceId.New()
-    );
 
     private static LeaseRetireList[] BuildScreenSourceFrameRing(int capacity) {
         var ring = new LeaseRetireList[SdfWorldEngine.FrameRingSize];
@@ -366,63 +361,17 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             retained.RetireAll();
         }
     }
-
-    /// <inheritdoc/>
-    public void Dispose() {
+    // Renders one frame through the engine's ring at the node's extent: every view of the frame, its screens bound from the
+    // reads the graph handed Produce. Returns whether a frame was submitted: nothing is while the pipelines build or the
+    // context resolves no device.
+    private bool ProduceFrame(in FrameContext context) {
         if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-        m_debugCapture.Refuse(error: new ObjectDisposedException(objectName: nameof(SdfEngineNode)));
-
-        // Drain before tearing down GPU resources: the per-frame submits are fire-and-forget, so a frame may still be
-        // in flight. This also proves every retained external screen-source acquisition is safe to release below.
-        m_deviceContext.TryWaitIdle();
-        m_engine?.Dispose();
-        m_engine = null;
-        m_engineProduced = false;
-        DisposeRetiringEngines();
-        CancelShaderReload(reason: "the node was disposed");
-        m_pipelines.Release();
-        RetireAllScreenSourceFrames();
-    }
-    /// <inheritdoc/>
-    public void OnDeviceLost() {
-        // Device-loss recovery on the still-valid (lost) device. Unlike Dispose there is NO idle drain — the device is
-        // lost, so nothing in flight will ever complete, and the host pump recreates the device immediately after. The
-        // next ProduceFrame rebuilds the engine against the recreated device (construction re-uploads the program, so a
-        // recovered device never renders an empty scene).
-        // The lost submissions will never sample the leased screen sources, so the leases retire before the frame
-        // source is told: a producer retiring its images then releases them at once, on the device that made them.
-        RetireAllScreenSourceFrames();
-        Array.Clear(array: m_boundScreenSources);
-        m_frameSource.NotifyDeviceLost();
-        m_engine?.Dispose();
-        m_engine = null;
-        m_engineProduced = false;
-        // No lost submission will sample a replaced engine's output, so every held engine goes with the device.
-        DisposeRetiringEngines();
-        // A pipeline build or kernel reload still in flight is waited out and discarded before the host recreates the
-        // device; the rebuilt engine builds its pipelines anew on the recreated one.
-        CancelShaderReload(reason: "the device was lost");
-        m_pipelines.Release();
-        m_work.Invalidate();
-        m_glyphAtlasInitialized = false;
-        m_uploadedGlyphAtlas = null;
-        m_deviceContext = null;
-        // The frame an armed capture was owed is not produced on the lost device.
-        m_debugCapture.RefuseForDeviceLoss();
-    }
-    /// <inheritdoc/>
-    public Surface ProduceFrame(in FrameContext context) {
-        if (m_disposed) {
-            return default;
+            return false;
         }
 
         // The shared device is an inherited host capability (every node in the tree composites on one device).
         if (!context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var gpuDevice)) {
-            return default;
+            return false;
         }
 
         // The frame a view's producer captured ahead of this render, or this render's own.
@@ -435,7 +384,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             frame: frame,
             gpuDevice: gpuDevice
         )) {
-            return default;
+            return false;
         }
 
         ApplyPendingShaderReload();
@@ -533,13 +482,55 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             writer: m_writeDebugCapture
         );
 
-        return Surface.SameDeviceImage(
-            imageHandle: m_engine.OutputImageHandle,
-            imageViewHandle: m_engine.OutputImageViewHandle,
-            width: m_engine.OutputWidth,
-            height: m_engine.OutputHeight,
-            format: GpuPixelFormat.R8G8B8A8Unorm
-        );
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_disposed = true;
+        m_debugCapture.Refuse(error: new ObjectDisposedException(objectName: nameof(SdfEngineNode)));
+
+        // Drain before tearing down GPU resources: the per-frame submits are fire-and-forget, so a frame may still be
+        // in flight. This also proves every retained external screen-source acquisition is safe to release below.
+        m_deviceContext.TryWaitIdle();
+        m_engine?.Dispose();
+        m_engine = null;
+        m_engineProduced = false;
+        DisposeRetiringEngines();
+        CancelShaderReload(reason: "the node was disposed");
+        m_pipelines.Release();
+        RetireAllScreenSourceFrames();
+    }
+    /// <inheritdoc/>
+    public void OnDeviceLost() {
+        // Device-loss recovery on the still-valid (lost) device. Unlike Dispose there is NO idle drain — the device is
+        // lost, so nothing in flight will ever complete, and the host pump recreates the device immediately after. The
+        // next ProduceFrame rebuilds the engine against the recreated device (construction re-uploads the program, so a
+        // recovered device never renders an empty scene).
+        // The lost submissions will never sample the leased screen sources, so the leases retire before the frame
+        // source is told: a producer retiring its images then releases them at once, on the device that made them.
+        RetireAllScreenSourceFrames();
+        Array.Clear(array: m_boundScreenSources);
+        m_frameSource.NotifyDeviceLost();
+        m_engine?.Dispose();
+        m_engine = null;
+        m_engineProduced = false;
+        // No lost submission will sample a replaced engine's output, so every held engine goes with the device.
+        DisposeRetiringEngines();
+        // A pipeline build or kernel reload still in flight is waited out and discarded before the host recreates the
+        // device; the rebuilt engine builds its pipelines anew on the recreated one.
+        CancelShaderReload(reason: "the device was lost");
+        m_pipelines.Release();
+        m_work.Invalidate();
+        m_glyphAtlasInitialized = false;
+        m_uploadedGlyphAtlas = null;
+        m_deviceContext = null;
+        // The frame an armed capture was owed is not produced on the lost device.
+        m_debugCapture.RefuseForDeviceLoss();
     }
     /// <inheritdoc/>
     public void RequestCapture(FrameCaptureRequest request) {
@@ -644,8 +635,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             }
         }
     }
-    /// <inheritdoc/>
-    public NodeDescriptor Descriptor => m_descriptor;
 
     /// <summary>Returns the image-view handle a screen was bound to by the latest produced frame.</summary>
     /// <param name="screen">The program-declared screen index, below <see cref="SdfWorldEngine.MaxScreenSurfaces"/>.</param>

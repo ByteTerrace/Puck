@@ -3,8 +3,8 @@
 Puck.SdfVm is the SDF GPU engine: the device-explicit render pipeline that
 walks a compiled signed-distance program on the GPU—`SdfWorldEngine` (beam
 cull → per-view render over a viewport table of cameras and regions, each view
-into its own output image) and `SdfEngineNode` (the host-model `IRenderNode`
-that wraps it and publishes each view's output to the render graph). The
+into its own output image) and `SdfEngineNode` (the render graph's `sdf.world`
+external producer that wraps it and publishes each view's output). The
 single-source HLSL kernels (`Assets/Shaders/Sdf`) compile to both SPIR-V
 (Vulkan) and DXIL (Direct3D 12) from one shared source, and the C# side of the
 instruction-set contract they decode lives one project away.
@@ -167,9 +167,9 @@ per-program derived buffer and mask width, called once at construction and
 again whenever a host swaps the live program. Composition probes reserve
 `SdfProgram.PartCompilationWordCapacity` so different part-sharing or admission
 outcomes within the probe's ceilings cannot overrun the program allocation.
-`SdfEngineNode` is the
-`Puck.Hosting.IRenderNode` adapter a generic render tree composes—it owns
-device-loss recovery and forwards `NotifyDeviceLost` to the wrapped engine. It
+`SdfEngineNode` is the render graph's `sdf.world` external producer, which the
+runtime produces through `Produce`—it owns device-loss recovery and forwards
+`NotifyDeviceLost` to the wrapped engine. It
 also records the last uploaded program's word/instance count and Lipschitz
 step scale (`LiveProgramWords`/`LiveProgramInstances`/`LiveProgramStepScale`,
 against the current `ProgramWordCapacity`, including live growth)—the live half of `Puck.World`'s
