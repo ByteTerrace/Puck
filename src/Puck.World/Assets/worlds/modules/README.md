@@ -436,8 +436,8 @@ module's own bare names cannot collide with them.
 The importing host must declare its own `channels` row named `jump` (the shipped
 island already does) and a `placements.policy.derivedFaceScreens` reservation of at
 least 1 for the mirror's face to bind; a host authoring neither still boots the rest
-of the district, but the counter never advances and the mirror shows the no-signal
-card. A host that also wants the gate to open and the fact to travel declares a
+of the district, but the counter never advances and the mirror shows unbound
+glass. A host that also wants the gate to open and the fact to travel declares a
 keyed `int` row named `identity` in its own `state.world` (`WorldIdentityFactLane`)—
 without it `setIdentityFact`/`$identity:` both refuse by name at compile, and
 `studioGate` simply never leaves its authored `studioGateClosed` prototype.

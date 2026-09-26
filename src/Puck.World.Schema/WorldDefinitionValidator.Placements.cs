@@ -1887,7 +1887,7 @@ public static partial class WorldDefinitionValidator {
 
             // The per-instance FACE overrides: each names a declared creation face, no duplicates. The View source's
             // camera name is resolved LENIENTLY (a derived creation-camera name is unknown to the document validator; the
-            // binder lights an unresolved feed with its no-signal card, never a hard reject).
+            // binder shows an unresolved feed as unbound glass, never a hard reject).
             ValidateFaceSources(
                 definition: definition,
                 faceSources: placement.FaceSources,
