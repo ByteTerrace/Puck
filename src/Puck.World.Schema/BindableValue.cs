@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -22,6 +23,32 @@ public readonly record struct StateBinding(string Row, string? Key, bool Target)
     /// key, never a substring of one.</summary>
     public const string BodyKey = "$body";
 
+    /// <summary>Resolves a reference's cell key against the body reading it: a key that is exactly
+    /// <see cref="BodyKey"/> is the token and names the body's decimal index; any other key, including one that merely
+    /// contains the token's text, names the cell spelled that way.</summary>
+    /// <param name="key">The parsed key, or <see langword="null"/> for the slot cell.</param>
+    /// <param name="bodyIndex">The reading body's 0-based index, or negative for no body.</param>
+    /// <param name="resolved">The key to read.</param>
+    /// <returns><see langword="false"/> when the key is the token but no body is reading.</returns>
+    public static bool TryResolveBodyKey(string? key, int bodyIndex, out string? resolved) {
+        resolved = key;
+
+        if (!string.Equals(
+            a: key,
+            b: BodyKey,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return true;
+        }
+
+        if (bodyIndex < 0) {
+            return false;
+        }
+
+        resolved = bodyIndex.ToString(provider: CultureInfo.InvariantCulture);
+
+        return true;
+    }
     /// <summary>Parses the state arm of the binding grammar: <c>state.&lt;row&gt;</c> (the row's slot cell) or
     /// <c>state.&lt;row&gt;.&lt;key&gt;</c>, either with an optional trailing <c>.$target</c>. Any other token —
     /// including a literal — is not a state binding.</summary>

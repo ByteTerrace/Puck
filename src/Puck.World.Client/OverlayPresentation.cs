@@ -58,8 +58,8 @@ public static class OverlayRecency {
 /// The binding reads the eased follower by default and the stored truth with <c>.$target</c>, at the tick the mirror
 /// last read.</summary>
 public static class OverlayStateComparison {
-    /// <summary>Returns whether the predicate holds. An unparseable binding, an undeclared row, or an absent cell
-    /// reads false.</summary>
+    /// <summary>Returns whether the predicate holds. An unparseable binding, one no manifest registered, an undeclared
+    /// row, or an absent cell reads false.</summary>
     /// <param name="mirror">The state mirror the binding reads through.</param>
     /// <param name="state">The predicate.</param>
     /// <returns><see langword="true"/> when the predicate holds.</returns>
@@ -67,7 +67,7 @@ public static class OverlayStateComparison {
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: state);
 
-        var slot = mirror.RegisterToken(
+        var slot = mirror.SlotOf(
             conversion: WorldStateConversion.Number,
             token: state.Binding
         );

@@ -356,7 +356,7 @@ public sealed class WorldStateLease {
     private int Acquire(string row, string? key, bool target) {
         if (
             (m_mirror is not { } mirror) ||
-            !WorldGaitDrivers.TryResolveBodyKey(
+            !StateBinding.TryResolveBodyKey(
             bodyIndex: m_bodyIndex,
             key: key,
             resolved: out var resolved

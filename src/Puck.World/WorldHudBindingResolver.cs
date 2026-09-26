@@ -10,7 +10,8 @@ namespace Puck.World;
 /// The render-side implementation of <see cref="IHudBindingResolver"/> for the closed <see cref="HudBindingVocabulary"/>:
 /// resolves each frame's live value for <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>,
 /// <c>population.active</c>, and <c>state.&lt;row&gt;[.&lt;key&gt;][.$target]</c>. Each token is parsed once, on first
-/// sight; a state token registers its slot with the client's <see cref="WorldStateMirror"/> then. Presentation-only:
+/// sight; a state token reads the slot the document's presentation manifest registered with the client's
+/// <see cref="WorldStateMirror"/>, found afresh each frame, so it never reads a slot a document swap retired. Presentation-only:
 /// every normalization here is cosmetic (which fraction of a gauge fills), never simulation state, and is free to
 /// change without a determinism concern.
 /// </summary>
@@ -29,9 +30,8 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
     private readonly FrameRateMonitor m_frameRate = frameRate;
     private readonly WorldPopulation m_population = population;
     private readonly WorldContinuum m_continuum = continuum;
-    // Every token seen so far, parsed once, with the mirror slot a state token reads (-1 for any other kind); an
-    // unknown token is remembered as unresolvable.
-    private readonly Dictionary<string, (bool Known, HudBinding Binding, int Slot)> m_tokens = new(comparer: StringComparer.Ordinal);
+    // Every token seen so far, parsed once; an unknown token is remembered as unresolvable.
+    private readonly Dictionary<string, (bool Known, HudBinding Binding)> m_tokens = new(comparer: StringComparer.Ordinal);
 
     private void ResolveFps(out float fraction, out string text) {
         var fps = m_frameRate.Summarize().AverageFps;
@@ -191,7 +191,7 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
         fraction = (((float)(tick % TickCycleLength)) / TickCycleLength);
         text = tick.ToString(provider: CultureInfo.InvariantCulture);
     }
-    private (bool Known, HudBinding Binding, int Slot) Token(string binding) {
+    private (bool Known, HudBinding Binding) Token(string binding) {
         if (m_tokens.TryGetValue(
             key: binding,
             value: out var seen
@@ -203,19 +203,8 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
             binding: out var parsed,
             token: binding
         );
-        var slot = ((known && (parsed.Kind == HudBindingKind.StateNamed))
-            ? m_client.StateMirror.Register(
-                binding: new StateBinding(
-                Key: parsed.StateCellKey,
-                Row: parsed.StateName!,
-                Target: parsed.Target
-            ),
-                conversion: WorldStateConversion.Number
-            )
-            : -1
-        );
 
-        seen = (known, parsed, slot);
+        seen = (known, parsed);
         m_tokens[binding] = seen;
 
         return seen;
@@ -226,7 +215,7 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
         fraction = 0f;
         text = string.Empty;
 
-        var (known, parsed, slot) = Token(binding: binding);
+        var (known, parsed) = Token(binding: binding);
 
         if (!known) {
             return false;
@@ -266,6 +255,15 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
 
                 return true;
             case HudBindingKind.StateNamed:
+                var slot = m_client.StateMirror.SlotOf(
+                    conversion: WorldStateConversion.Number,
+                    token: binding
+                );
+
+                if (slot < 0) {
+                    return false;
+                }
+
                 ResolveState(
                     fraction: out fraction,
                     slot: slot,
