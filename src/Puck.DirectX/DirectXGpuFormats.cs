@@ -1,11 +1,27 @@
+using Puck.Abstractions.Presentation;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Puck.DirectX;
 
-/// <summary>Maps backend-neutral <see cref="GpuPixelFormat"/> values to their <c>DXGI_FORMAT</c> equivalents, and image
-/// layouts to resource states.</summary>
+/// <summary>Maps backend-neutral <see cref="GpuPixelFormat"/> values to their <c>DXGI_FORMAT</c> equivalents, a
+/// <see cref="DisplayColorSpace"/> to its <c>DXGI_COLOR_SPACE_TYPE</c>, and image layouts to resource states.</summary>
 public static class DirectXGpuFormats {
+    /// <summary>Converts a <see cref="DisplayColorSpace"/> to the <c>DXGI_COLOR_SPACE_TYPE</c> a swap chain presents
+    /// it in.</summary>
+    /// <param name="colorSpace">The backend-neutral color space.</param>
+    /// <returns>The corresponding <c>DXGI_COLOR_SPACE_TYPE</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="colorSpace"/> is not defined.</exception>
+    public static DXGI_COLOR_SPACE_TYPE ToDxgiColorSpace(DisplayColorSpace colorSpace) => colorSpace switch {
+        DisplayColorSpace.Srgb => DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
+        DisplayColorSpace.Hdr10 => DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
+        DisplayColorSpace.ScRgb => DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709,
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: colorSpace,
+            message: "The display color space is not defined.",
+            paramName: nameof(colorSpace)
+        ),
+    };
     /// <summary>Converts a <see cref="GpuPixelFormat"/> to its <c>DXGI_FORMAT</c> value.</summary>
     /// <param name="gpuPixelFormat">The backend-neutral pixel format.</param>
     /// <returns>The corresponding <c>DXGI_FORMAT</c>.</returns>

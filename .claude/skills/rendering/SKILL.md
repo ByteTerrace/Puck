@@ -559,7 +559,9 @@ These are one-line cautions; the owning pages hold the derivations.
   them from that statement, and checks `IGpuBindings.CanAdmit` before it
   allocates, so a candidate that does not fit is refused with
   `GPU_DESCRIPTOR_HEAP` and nothing grows; a new owner does the same, and a new
-  shader-visible heap is never created. The owning explanation is
+  shader-visible heap is never created: `DirectXDescriptorHeaps.Create` makes
+  CPU-only heaps, and `DirectXGpuBindings.ShaderVisibleHeapsCreated` reads two
+  per device. The owning explanation is
   [Direct3D 12](../../../docs/rendering/directx.md#descriptor-heaps).
 - **Every pipeline goes through the device's persistent cache.** Vulkan's
   `VulkanLogicalDevice.PipelineCache` and Direct3D 12's
@@ -705,9 +707,17 @@ These are one-line cautions; the owning pages hold the derivations.
   own profile with no host-visible device-local bytes and reads an uploaded
   source's conversion back byte-exact on Vulkan, Direct3D 12 hardware (debug
   layer on, no `[d3d12-debug]` line) and WARP.
-  A Vulkan swapchain is created only in a `GpuPixelFormat`
-  (`VulkanSwapchainFactory.SelectSurfaceFormat` over `SwapchainFormats`); a
+  A swapchain on either backend is created in a `DisplayOutput` (format and
+  `DisplayColorSpace`) chosen by `DisplayOutput.TrySelect`: SDR in
+  `SdrFormats` unless an HDR color space is requested
+  (`PresentationOptions.ColorSpace`, `Srgb` everywhere) and reported
+  (`VulkanSwapchainFactory.SelectOutput` over the surface's pairs, the
+  Direct3D 12 compositor's `ReportedOutputs` over `IDXGIOutput6`); a Vulkan
   surface offering none of them refuses at creation, never mid-frame.
+  `ISurfacePresenter.Output` exposes the chosen one. Paper white is
+  `PresentationOptions.PaperWhiteNits` (80 to 10,000 nits, default
+  `DisplayOutput.SdrWhiteNits`), and `DisplayOutput.WhiteScale` is the one
+  conversion to an output's UI white: one in SDR at every level.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
@@ -1383,8 +1393,8 @@ The Direct3D 12 surface compositor's blit is build DXIL
 compositors bind `SurfaceBlitLayout` (the pass group, `t0` and `s1` in space 3)
 and lease their blit from the device's `GpuPassPipelineCache` for a render pass
 in the swapchain's format, so no presentation pipeline is created outside a
-build cache; the Direct3D 12 one keeps its own one-SRV and one-sampler
-shader-visible heaps until P16. No Puck assembly may
+build cache; the Direct3D 12 one binds a set of a pool admitted into the
+device's heaps. No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
 
 ## Verifying

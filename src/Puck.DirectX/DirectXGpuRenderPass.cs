@@ -74,7 +74,6 @@ public sealed unsafe class DirectXGpuFramebuffer : IGpuFramebuffer {
                 var rtvHeap = DirectXDescriptorHeaps.Create(
                     count: ((uint)colors.Count),
                     device: device,
-                    shaderVisible: false,
                     type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV
                 );
 
@@ -99,7 +98,6 @@ public sealed unsafe class DirectXGpuFramebuffer : IGpuFramebuffer {
                 var dsvHeap = DirectXDescriptorHeaps.Create(
                     count: 1,
                     device: device,
-                    shaderVisible: false,
                     type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_DSV
                 );
 
