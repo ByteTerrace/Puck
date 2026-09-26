@@ -9403,7 +9403,7 @@ export type WorldScreenSourceMachine = {
 };
 
 /**
- * No provider is bound — the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).
+ * No provider is bound — the engine shades the slot as dark glass, lit faintly by the sun.
  */
 export type WorldScreenSourceNone = {
   $type?: "none";

@@ -96,8 +96,8 @@ internal sealed partial class WorldScreenBinder {
             width: 1U
         );
     }
-    // The fill image of a packed RGBA8 color, held until the frame that samples it retires, or 0 (the procedural no-signal
-    // card, which shows no external pixels either) before EnsureFills has converted it.
+    // The fill image of a packed RGBA8 color, held until the frame that samples it retires, or 0 (unbound glass, which shows
+    // no external pixels either) before EnsureFills has converted it.
     private GpuImageLease FillImage(uint rgba) => (m_fills.TryGetValue(
         key: rgba,
         value: out var fill

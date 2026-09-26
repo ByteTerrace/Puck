@@ -91,7 +91,7 @@ public sealed partial class SdfProgramBuilder {
     /// engine's viewport capacity). Capped at 32 by the single-<c>uint</c>
     /// <c>screenMask</c> the engine pushes per frame.</summary>
     public const int MaxScreenSurfaces = 32;
-    /// <summary>The reserved material identifier used by the plain procedural screen material, which the kernels read
+    /// <summary>The reserved material identifier used by the plain screen material, unbound glass, which the kernels read
     /// as <c>SDF_SCREEN_MATERIAL</c>.</summary>
     public const int ScreenMaterialId = 65535;
     /// <summary>The most bounded emissive volumes (<see cref="SdfVolume"/>) one rendered frame may carry — matches
@@ -1171,7 +1171,7 @@ public sealed partial class SdfProgramBuilder {
 
             if (shapeMaterial >= ScreenMaterialId) {
                 if (shapeMaterial == ScreenMaterialId) {
-                    continue;   // The plain sentinel: procedural screen shading, and the one screen id that reads no side table at all.
+                    continue;   // The plain sentinel: unbound glass, and the one screen id that reads no side table at all.
                 }
 
                 var screenIndex = ((shapeMaterial - ScreenMaterialId) - 1);
@@ -1180,7 +1180,7 @@ public sealed partial class SdfProgramBuilder {
                     continue;
                 }
 
-                throw new InvalidOperationException(message: $"A shape names screen material {shapeMaterial}, which decodes to screen index {screenIndex}, but the program declares no screen surface at that index (declared: {DescribeScreenIndices()}). The shader indexes the screen-surface and decal tables directly with it, so this would read a slot the program never packed. Declare the surface (ScreenSlab's screen overload emits both halves together), or use {ScreenMaterialId} for the plain procedural screen material.");
+                throw new InvalidOperationException(message: $"A shape names screen material {shapeMaterial}, which decodes to screen index {screenIndex}, but the program declares no screen surface at that index (declared: {DescribeScreenIndices()}). The shader indexes the screen-surface and decal tables directly with it, so this would read a slot the program never packed. Declare the surface (ScreenSlab's screen overload emits both halves together), or use {ScreenMaterialId} for the plain screen material.");
             }
 
             if (shapeMaterial < m_materials.Count) {

@@ -1055,7 +1055,8 @@ P11b's last four commits are these; 11 and 12 have landed:
        is uncapped. Law: more than five views render. Landed:
        `SdfWorldEngineWorkLawTests.MoreThanFiveViewsEachRenderIntoTheirOwnOutput`.
     4. The procedural test card goes: a screen with nothing bound shades as
-       dark glass.
+       dark glass. Landed: `sdf-world.hlsli`'s unbound branch shades a constant
+       glass color under the faint sun tint, and `screenContent` is deleted.
     5. The engine node is an external producer only: `SdfEngineNode` is no
        `IRenderNode`, and harnesses produce it through `Produce`.
 14. The final sweep: the rest of the deletions P11 lists, and the owning guides

@@ -464,7 +464,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         }
 
         // Screen DECALS (the material-level text tier): a screen slot showing dense reading text this frame binds its
-        // glyph-cell grid; a null result clears the slot back to the image/procedural path (the atlas-unavailable
+        // glyph-cell grid; a null result clears the slot back to the image or unbound-glass path (the atlas-unavailable
         // degrade). Read straight off the frame source (the ISdfFrameSource.ScreenDecals seam, mirroring GlyphAtlas /
         // ScreenSurfaceTransforms) so this node's type coupling doesn't grow to thread it.
         if (m_frameSource.ScreenDecals is { } screenDecals) {

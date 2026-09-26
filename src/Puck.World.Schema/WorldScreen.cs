@@ -27,8 +27,7 @@ public abstract record WorldScreenSource {
     private protected WorldScreenSource() {
     }
 
-    /// <summary>No provider is bound — the engine lights the slot with its procedural no-signal fallback (an animated
-    /// test-card / striped no-signal look, never black).</summary>
+    /// <summary>No provider is bound — the engine shades the slot as dark glass, lit faintly by the sun.</summary>
     public sealed record None() : WorldScreenSource;
     /// <summary>A named machine output. The source is a consumer reference only: the named machine is prepared,
     /// advanced, and retired by the world's machine host independently of every display that samples it.</summary>
@@ -361,7 +360,7 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 }
 /// <summary>One diegetic screen in the world — a screen slab emitted by
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder"/> whose lit face
-/// samples a bound source (or the procedural fallback when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
+/// samples a bound source (or shades as dark glass when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
 /// <see cref="Up"/> + <see cref="HalfWidth"/>/<see cref="HalfHeight"/>) is the sampled surface frame and must match the
 /// slab's placement; the frame source bakes the geometry translate from it.</summary>
 /// <param name="Index">The engine screen-surface index (0..<see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>−1)

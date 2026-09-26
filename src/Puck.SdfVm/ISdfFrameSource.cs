@@ -42,7 +42,7 @@ public interface ISdfFrameSource {
     /// <summary>Per-frame GLYPH DECAL providers keyed by the program-declared screen index — a screen slot showing dense
     /// reading text (the material-level text tier, <see cref="SdfWorldEngine.SetScreenDecal"/>) instead of a bound
     /// image. Each provider returns this frame's cell grid, or <see langword="null"/> to leave the slot on the
-    /// image/procedural path (the atlas-unavailable degrade). Default null (no decal screens) — a source with none need
+    /// image or unbound-glass path (the atlas-unavailable degrade). Default null (no decal screens) — a source with none need
     /// not override it. Mirrors <see cref="ScreenSurfaceTransforms"/>/<see cref="GlyphAtlas"/>: read straight off the
     /// frame source so a host node's type coupling doesn't grow to thread it.</summary>
     IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => null;

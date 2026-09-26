@@ -202,9 +202,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // always renders the first frame before it can skip.
     private ulong m_previousFrameSignature;
     // CADENCE GATE: whether the LIVE uploaded program declares any ScreenSlab shape (bound or not) — computed once at
-    // UploadProgram (the single owner of per-program state), never per frame. A declared-but-unbound slab's face is the
-    // animated test-card (screenContent, sdf-world.hlsli), which reads presentation TIME every frame; the signature
-    // excludes that lane (ComputeFrameSignature), so this fact is what makes DecideCadenceSkip force a render instead.
+    // UploadProgram (the single owner of per-program state), never per frame. A bound slab's image changes in place under
+    // the same view handle, which no packed span the signature hashes sees (ComputeFrameSignature), so this fact is what
+    // makes DecideCadenceSkip force a render instead.
     private bool m_programDeclaresScreenSlab;
     // Monotonic revisions folded into the signature so a change to a resource NOT re-hashed each frame still invalidates
     // it: m_programRevision bumps on every UploadProgram (program words, live mask width, kernel variant, screen-surface

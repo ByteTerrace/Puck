@@ -861,7 +861,7 @@
       "title": "WorldRenderSky"
     },
     "WorldScreenSourceNone": {
-      "description": "No provider is bound \u2014 the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).",
+      "description": "No provider is bound \u2014 the engine shades the slot as dark glass, lit faintly by the sun.",
       "properties": {
         "$type": {
           "const": "none"

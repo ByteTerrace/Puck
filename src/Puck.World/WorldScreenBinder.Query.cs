@@ -10,7 +10,7 @@ namespace Puck.World;
 /// declared machine whose content file was missing, a webcam that would not open, a captured window not found), if any.</summary>
 /// <param name="Assigned">Whether a machine is booted on the screen.</param>
 /// <param name="Engine">The screen-machine engine id hosting the machine (meaningful only when <paramref name="Assigned"/>).</param>
-/// <param name="Handle">The current source image-view handle (0 = unbound → the procedural fallback).</param>
+/// <param name="Handle">The current source image-view handle (0 = unbound, dark glass).</param>
 /// <param name="FramesStepped">How many frames the machine has stepped since it booted.</param>
 /// <param name="PendingSteps">Accepted queued-machine steps not yet completed; zero for synchronous machines.</param>
 /// <param name="MaximumPendingSteps">The queued machine's finite pending-segment capacity; zero for synchronous

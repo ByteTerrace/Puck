@@ -231,8 +231,8 @@ These are one-line cautions; the owning pages hold the derivations.
   host-owned bindings every frame and value-skip only engine-owned views. A
   stress test for handle reuse must render a frame between image swaps
   (`world.wait`); swaps inside one frame never publish the retired handle.
-- **Screens.** `SetScreenSource(i, 0)` unbinds to the procedural test card, not
-  black. Inside view V's own render, a screen showing V samples V's previous
+- **Screens.** `SetScreenSource(i, 0)` unbinds: the face shades as dark glass,
+  lit faintly by the sun. Inside view V's own render, a screen showing V samples V's previous
   output: the engine renders a view whose current output one of its own screens
   samples into another output (`SdfWorldEngine.ViewOutputs`). A leased
   image (`Puck.Hosting.GpuImageLease`) stays in a `LeaseRetireList` until the

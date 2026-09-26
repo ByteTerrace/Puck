@@ -223,11 +223,9 @@ about frame layout.
 
 A render-graph instance is the thing that *produces* the image a screen
 source samples—the instance and the screen surface are two ends of a wire,
-not one object. `SetScreenSource(index, 0)`—a provider that returns no
-handle—unbinds that wire: the face falls back to its flat/procedural "no
-signal" material, never simply goes black. A screen reading solid black is
-a *different* bug (a dead image or a zeroed room-light entry), never the
-correct look for "nothing is wired here."
+not one object. `SetScreenSource(index, 0)`—a screen reading no instance—unbinds
+that wire: the face shades as dark glass, lit faintly by the sun, the look of a
+display with nothing behind it.
 
 The conflation to watch for: treating a screen surface as if it needs a
 *layout slot* to show something, or treating a *pane* as if it needs a
