@@ -212,8 +212,8 @@ public sealed class SurfaceCompositor : IDisposable {
 
         m_resourceDevice = device;
 
-        // The blit is the device's pass pipeline for SurfaceBlitLayout, created for a render pass of one color attachment in
-        // the swapchain's format, which a pipeline shares with the swapchain's own render pass. A lease on the new key is
+        // The blit is the device's pass pipeline for SurfaceBlitLayout, created for the swapchain's render pass description in
+        // its format, compatible with the swapchain's own render pass (VulkanGpuRenderPass.PresentRequestOf). A lease on the new key is
         // taken before the old one is released, so a recreation that keeps the format keeps the pipeline; the pool holds
         // exactly one source image and one sampler per ring set, the pass group's two bindings.
         var previousLease = m_blitLease;
@@ -223,12 +223,7 @@ public sealed class SurfaceCompositor : IDisposable {
             key: GpuPassPipelineKey.OfGraphics(
                 description: BlitDescription,
                 fragment: m_blitFragmentBytecode,
-                renderPass: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
-                    FinalLayout: GpuImageLayout.RenderTarget,
-                    Format: VulkanGpuFormats.FromVkFormat(vkFormat: m_renderer.Swapchain.ImageFormat),
-                    Load: GpuAttachmentLoad.Clear,
-                    Store: GpuAttachmentStore.Store
-                )]),
+                renderPass: VulkanGpuRenderPass.PresentDescription(format: VulkanGpuFormats.FromVkFormat(vkFormat: m_renderer.Swapchain.ImageFormat)),
                 vertex: m_vertexBytecode
             )
         );
