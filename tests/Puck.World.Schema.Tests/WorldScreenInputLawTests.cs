@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.Maths;
@@ -7,7 +8,8 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 /// <summary>Laws for a screen row's input destination: a document that declares passthrough refuses by name, a
-/// simulation screen's mapping comes from the row alone, and the screen glass's bezel maps to no pixel.</summary>
+/// simulation screen's mapping comes from the row alone, the screen glass's bezel maps to no pixel, and a
+/// <c>$pointer</c> read maps its ray without allocating whether it hits, lands on the bezel or misses.</summary>
 public sealed class WorldScreenInputLawTests {
     // A screen facing +z at (1, 2, 3), two units wide and one and a half tall.
     private static WorldScreen Screen(SourceDestination? input) => new(
@@ -111,5 +113,47 @@ public sealed class WorldScreenInputLawTests {
                 v: 0.5
             )).Outcome
         );
+    }
+    [Fact]
+    public void APointerReadMapsItsRayWithoutAllocating() {
+        // The operands a $pointer rule compiles: one per facet, over the row's source-normalized mapping.
+        var mapping = WorldScreenMappings.Normalized(screen: Screen(input: SourceDestination.Simulation));
+        var operands = new[] { PointerFacet.X, PointerFacet.Y, PointerFacet.On }.Select(selector: facet => new PointerOperand(
+            facet: facet,
+            mapping: mapping,
+            seat: 0
+        )).ToArray();
+        var hit = RayAt(
+            u: 0.5,
+            v: 0.25
+        );
+        var bezel = RayAt(
+            u: (WorldScreenMappings.Bezel / 2),
+            v: 0.5
+        );
+        var miss = RayAt(
+            u: 2.0,
+            v: 0.5
+        );
+
+        Assert.Equal(expected: SourceHitOutcome.OnSource, actual: mapping.MapRay(ray: hit).Outcome);
+        Assert.Equal(expected: SourceHitOutcome.OutsideWarp, actual: mapping.MapRay(ray: bezel).Outcome);
+        Assert.Equal(expected: SourceHitOutcome.OutsidePlacement, actual: mapping.MapRay(ray: miss).Outcome);
+        Assert.Equal(expected: 1L, actual: operands[2].Read(ray: hit));
+        Assert.All(
+            action: ray => Assert.Equal(expected: 0L, actual: operands[2].Read(ray: ray)),
+            collection: new SourceRay?[] { bezel, miss, null }
+        );
+
+        var sink = 0L;
+
+        Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: () => {
+            foreach (var operand in operands) {
+                sink ^= operand.Read(ray: hit);
+                sink ^= operand.Read(ray: bezel);
+                sink ^= operand.Read(ray: miss);
+            }
+        }));
+        GC.KeepAlive(obj: sink);
     }
 }

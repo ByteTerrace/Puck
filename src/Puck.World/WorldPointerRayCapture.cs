@@ -78,10 +78,9 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
 
     /// <inheritdoc/>
     public void CaptureFrame(ulong frameKey) {
-        var device = m_pointer.PositionedDevice;
-
+        // The seat and its device in one read, so they always name the same report.
         if (
-            (m_pointer.PositionedSlot is not { } slot) ||
+            (m_pointer.Positioned is not (var slot, var device)) ||
             (m_roster.DeviceSlot(device: device) != slot) ||
             (m_roster.KindOf(device: device) != InputDeviceKind.Mouse) ||
             !DeclaresSimulationScreen()

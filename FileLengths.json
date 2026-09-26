@@ -19,7 +19,7 @@
         "src/Puck.World.Authoring/Authoring/CreationCanonicalizer.cs": 2457,
         "src/Puck.World.Client/PlayerRoster.cs": 2296,
         "src/Puck.World.Console/WorldRowCommandModule.cs": 2484,
-        "src/Puck.World.Schema/WorldDefinitionFileSource.cs": 2161,
+        "src/Puck.World.Schema/WorldDefinitionFileSource.cs": 2118,
         "src/Puck.World.Schema/WorldDefinitionValidator.Metadata.cs": 2083,
         "src/Puck.World.Schema/WorldDefinitionValidator.Placements.cs": 2419,
         "src/Puck.World.Schema/WorldDefinitionValidator.cs": 2465,
