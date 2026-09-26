@@ -1,11 +1,13 @@
 using System.Globalization;
+using System.Text.Json;
+using Puck.Abstractions.Sources;
 
 namespace Puck.World.Client;
 
 /// <summary>Mints the names of the offscreen view registrations the engine creates beside the ones an author names:
 /// a session screen's view and a seat-relative camera's per-seat view, a screen source's render-graph instance
-/// (<see cref="Source"/>, <c>source$&lt;screen&gt;</c>), and the names the synthesized root graph declares for itself
-/// (<see cref="Root"/>). Each is a generated document name
+/// (<see cref="Source"/>, <c>source$&lt;producer&gt;$&lt;digest&gt;</c>), and the names the synthesized root graph
+/// declares for itself (<see cref="Root"/>). Each is a generated document name
 /// (<see cref="GeneratedName.Join"/>), and an authored camera name may not be in that form, so no minted view name can
 /// equal a camera's own registration. The parts are recoverable: a session view is <c>session$&lt;screen&gt;</c>, two
 /// parts; a seat view is <c>&lt;camera&gt;$seat$&lt;seat&gt;</c>, three parts, the camera first because it is the
@@ -25,14 +27,19 @@ public static class WorldViewNames {
         SessionHead,
         screen.ToString(provider: CultureInfo.InvariantCulture)
     );
-    /// <summary>Returns the name of the source instance a screen's producer, machine or probe source is read through,
-    /// named after the first screen showing it, so every later screen showing the same source reads the same
-    /// instance.</summary>
-    /// <param name="screen">The 0-based index of the first screen showing the source.</param>
-    /// <returns><c>source$&lt;screen&gt;</c>.</returns>
-    public static string Source(int screen) => GeneratedName.Join(
+    /// <summary>Returns the name of the source instance a producer, machine or probe source is read through, named by its
+    /// content: its producer and the digest of its settings' canonical form (<see cref="ImageSourceSettings.Digest"/>).
+    /// Every screen showing equal sources reads the one instance of that name, a screen added, removed or reordered
+    /// renames no other source, and a settings change is a new name.</summary>
+    /// <param name="producer">The producer's registered id, free of <see cref="GeneratedName.Joiner"/>.</param>
+    /// <param name="settings">The source's settings object, or <see langword="null"/> for none.</param>
+    /// <returns><c>source$&lt;producer&gt;$&lt;digest&gt;</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="producer"/> is empty or carries the joiner, or a setting
+    /// holds an undefined value.</exception>
+    public static string Source(string producer, IReadOnlyDictionary<string, JsonElement>? settings) => GeneratedName.Join(
         SourceHead,
-        screen.ToString(provider: CultureInfo.InvariantCulture)
+        producer,
+        ImageSourceSettings.Digest(settings: settings)
     );
     /// <summary>Returns the view name a seat-relative camera registers under for one seat.</summary>
     /// <param name="camera">The camera's name; free of <see cref="GeneratedName.Joiner"/> past its first
