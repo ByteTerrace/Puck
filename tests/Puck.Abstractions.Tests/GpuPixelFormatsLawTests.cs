@@ -14,6 +14,16 @@ public sealed class GpuPixelFormatsLawTests {
         Assert.Equal(expected: ((5UL * 5UL) * 16UL), actual: GpuPixelFormats.LevelByteLength(format: GpuPixelFormat.Bc6hUfloat, height: 17U, width: 17U));
         Assert.Equal(expected: 8UL, actual: GpuPixelFormats.LevelByteLength(format: GpuPixelFormat.Bc4Unorm, height: 1U, width: 1U));
         Assert.Equal(expected: ((3UL * 2UL) * 4UL), actual: GpuPixelFormats.LevelByteLength(format: GpuPixelFormat.R8G8B8A8Unorm, height: 2U, width: 3U));
+        Assert.Equal(expected: (3UL * 2UL), actual: GpuPixelFormats.LevelByteLength(format: GpuPixelFormat.R8Unorm, height: 2U, width: 3U));
+        Assert.Equal(expected: ((3UL * 2UL) * 2UL), actual: GpuPixelFormats.LevelByteLength(format: GpuPixelFormat.R8G8Unorm, height: 2U, width: 3U));
+    }
+    [Fact]
+    public void EveryFormatStatesItsUnitBytes() {
+        foreach (var format in Enum.GetValues<GpuPixelFormat>()) {
+            Assert.True(condition: (GpuPixelFormats.UnitBytes(format: format) > 0U), userMessage: $"{format}");
+        }
+
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuPixelFormats.UnitBytes(format: default));
     }
     [Fact]
     public void AChainIsItsLevelsBackToBack() {

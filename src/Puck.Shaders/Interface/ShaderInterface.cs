@@ -15,13 +15,10 @@ namespace Puck.Shaders;
 /// includes, and the interface's <see cref="Hash"/> versions both.
 /// <para>Member order is significant: a group's constant block and its bindings follow declaration order, so reordering
 /// members moves offsets and bindings and changes the hash.</para>
-/// <para>A pass that binds no descriptor set for its frame group receives the frame group's block as push constants
-/// instead (<see cref="PushConstants"/>): Vulkan push constants, and Direct3D 12 root constants at register <c>b0</c>,
-/// space 0. The block's offsets are the same either way.</para>
-/// <para>A pass that binds its groups can instead push one 4-byte index (<see cref="PushesIndex"/>), which it reads as
-/// <c>pushedIndex.index</c>: Vulkan push constants at offset 0, and Direct3D 12 root constants at register <c>b0</c> in
-/// space <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>. A pipeline pushes one value, so an interface pushes
-/// its frame block or an index, never both.</para>
+/// <para>A pass binds every group it uses as a descriptor set, and can push one 4-byte index
+/// (<see cref="PushesIndex"/>), which it reads as <c>pushedIndex.index</c>: Vulkan push constants at offset 0, and
+/// Direct3D 12 root constants at register <c>b0</c> in space
+/// <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>.</para>
 /// </summary>
 public sealed partial class ShaderInterface {
     /// <summary>The HLSL name of the constant buffer variable generated for the pushed index.</summary>
@@ -34,17 +31,13 @@ public sealed partial class ShaderInterface {
     /// <summary>Initializes a new instance of the <see cref="ShaderInterface"/> class.</summary>
     /// <param name="name">The interface's name: lowercase ASCII words joined by hyphens, such as <c>film-grain</c>.</param>
     /// <param name="members">The members in declaration order; at least one.</param>
-    /// <param name="pushConstants">The group whose constant block is delivered as push constants rather than bound as a
-    /// constant buffer, or <see langword="null"/> when every block is a constant buffer. Only the frame group can be
-    /// pushed, and a pushed group holds values and arrays only.</param>
     /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index, which the generated include
     /// declares as <see cref="PushedIndexVariableName"/>.</param>
     /// <exception cref="InvalidDataException">The name or a member is malformed, a name repeats or collides with a
     /// generated declaration, a member carries a field its kind does not take or lacks one it needs, a buffer's element
-    /// is a three-component vector, the pushed group is not the frame group, holds an image, buffer or sampler, or holds
-    /// no value, or the interface pushes both its frame block and an index.</exception>
+    /// is a three-component vector.</exception>
     [JsonConstructor]
-    public ShaderInterface(string name, IReadOnlyList<ShaderInterfaceMember> members, ShaderInterfaceGroup? pushConstants = null, bool pushesIndex = false) {
+    public ShaderInterface(string name, IReadOnlyList<ShaderInterfaceMember> members, bool pushesIndex = false) {
         if (
             (name is null) ||
             !InterfaceNamePattern().IsMatch(input: name)
@@ -78,20 +71,6 @@ public sealed partial class ShaderInterface {
             }
         }
 
-        if (pushConstants is { } pushed) {
-            if (pushed != ShaderInterfaceGroup.Frame) {
-                throw new InvalidDataException(message: $"Shader interface '{name}' pushes the {pushed} group; only the frame group's block can be pushed.");
-            }
-            if (members.Any(predicate: member => ((member.Group == pushed) && !member.IsBlockMember))) {
-                throw new InvalidDataException(message: $"Shader interface '{name}' pushes the {pushed} group, which then holds values and arrays only.");
-            }
-            if (!members.Any(predicate: member => ((member.Group == pushed) && member.IsBlockMember))) {
-                throw new InvalidDataException(message: $"Shader interface '{name}' pushes the {pushed} group, which holds no value.");
-            }
-            if (pushesIndex) {
-                throw new InvalidDataException(message: $"Shader interface '{name}' pushes both its {pushed} block and an index; a pipeline pushes one value, so an interface that pushes an index binds its {pushed} group.");
-            }
-        }
         if (pushesIndex) {
             foreach (var generated in ((ReadOnlySpan<string>)[PushedIndexVariableName, PushedIndexTypeName(interfaceName: name)])) {
                 if (!identifiers.Add(item: generated)) {
@@ -102,7 +81,6 @@ public sealed partial class ShaderInterface {
 
         Name = name;
         Members = new ReadOnlyCollection<ShaderInterfaceMember>(list: members.ToArray());
-        PushConstants = pushConstants;
         PushesIndex = pushesIndex;
     }
 
@@ -110,10 +88,6 @@ public sealed partial class ShaderInterface {
     public string Name { get; }
     /// <summary>Gets the members in declaration order.</summary>
     public IReadOnlyList<ShaderInterfaceMember> Members { get; }
-    /// <summary>Gets the group whose constant block is delivered as push constants, or <see langword="null"/> when every
-    /// block is bound as a constant buffer.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public ShaderInterfaceGroup? PushConstants { get; }
     /// <summary>Gets a value indicating whether the pass's pipeline pushes one 4-byte index, read as
     /// <c>pushedIndex.index</c>. The canonical JSON writes it only when it is set.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]

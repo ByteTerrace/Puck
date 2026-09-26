@@ -36,7 +36,7 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
     /// <summary>Gets the replaced engines not yet disposed because a consumer still holds one of their outputs.</summary>
     public int RetiringEngines => m_retiringEngines.Count;
 
-    SurfaceFormat IRenderGraphExternalProducer.Format => SurfaceFormat.R8G8B8A8Unorm;
+    GpuPixelFormat IRenderGraphExternalProducer.Format => GpuPixelFormat.R8G8B8A8Unorm;
 
     /// <summary>Returns the producer that stands for one view past view 0 in a render graph: its <c>Produce</c> records
     /// the extent the graph scheduled the view at, which the engine renders the view at from the next frame on, and it
@@ -148,7 +148,7 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
 
         output = new RenderGraphExternalOutput(
             Image: Surface.SameDeviceImage(
-                format: SurfaceFormat.R8G8B8A8Unorm,
+                format: GpuPixelFormat.R8G8B8A8Unorm,
                 height: acquired.Height,
                 imageHandle: acquired.ImageHandle,
                 imageViewHandle: acquired.ImageViewHandle,
@@ -225,7 +225,7 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
     // One view past view 0 as an external producer: the node renders it, and this records its scheduled extent and hands
     // out its output. The node owns it, so its disposal and device loss release nothing.
     private sealed class SdfViewProducer(SdfEngineNode node, int view) : IRenderGraphExternalProducer {
-        public SurfaceFormat Format => SurfaceFormat.R8G8B8A8Unorm;
+        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
         public string? NotReadyReason => (node.HasViewOutput(view: view)
             ? null
             : (node.NotReadyReason ?? $"view {view} of the world has not rendered"));

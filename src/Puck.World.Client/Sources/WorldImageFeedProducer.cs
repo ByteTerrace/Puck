@@ -49,9 +49,9 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     /// that opened hands out no image.</summary>
     public IWorldImportFeed? Feed { get; }
     /// <inheritdoc/>
-    public SurfaceFormat Format => ((Descriptor?.Format == ImagePixelFormat.R8G8B8A8Unorm)
-        ? SurfaceFormat.R8G8B8A8Unorm
-        : SurfaceFormat.B8G8R8A8Unorm
+    public GpuPixelFormat Format => ((Descriptor?.Format == ImagePixelFormat.R8G8B8A8Unorm)
+        ? GpuPixelFormat.R8G8B8A8Unorm
+        : GpuPixelFormat.B8G8R8A8Unorm
     );
     /// <inheritdoc/>
     public string? NotReadyReason => (Fault ?? (((Feed?.Handle() ?? 0) == 0)

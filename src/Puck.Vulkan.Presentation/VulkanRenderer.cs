@@ -206,15 +206,12 @@ public sealed class VulkanRenderer(
             PresentMode.Adaptive => VulkanPresentMode.FifoRelaxed,
             _ => null,
         };
-        var preferredFormat = ((presentationOptions.SurfaceFormat == SurfaceFormat.Unknown)
-            ? ((GpuPixelFormat?)null)
-            : GpuPixelFormats.FromSurfaceFormat(format: presentationOptions.SurfaceFormat));
 
         m_swapchain = swapchainFactory.Create(
             desiredHeight: height,
             desiredWidth: width,
             logicalDevice: device,
-            preferredFormat: preferredFormat,
+            preferredFormat: presentationOptions.SurfaceFormat,
             preferredPresentMode: preferredPresentMode,
             supportDetails: supportDetails,
             surface: m_surface!

@@ -62,6 +62,7 @@ node produces a one-pixel CPU surface and has no device-owned resources to
 release:
 
 ```csharp
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -76,7 +77,7 @@ sealed class StatusPixelNode : IRenderNode {
         pixels: pixels,
         width: 1,
         height: 1,
-        format: SurfaceFormat.R8G8B8A8Unorm);
+        format: GpuPixelFormat.R8G8B8A8Unorm);
 
     public void Dispose() { }
 }

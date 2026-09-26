@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
+using Puck.Abstractions.Gpu;
 using Puck.Assets.Textures;
 using Xunit;
 
@@ -13,7 +14,10 @@ namespace Puck.Assets.Tests;
 /// decoders read hand-built blocks field by field as the formats lay them out, and refuse the modes they do not read.
 /// </summary>
 public sealed class TextureCodecLawTests {
+    // The block sizes the BC specifications fix: eight bytes for BC4, sixteen for BC5, BC6H and BC7.
+    private const int Bc4BlockBytes = 8;
     private const int Side = 64;
+    private const int WideBlockBytes = 16;
 
     // A deterministic generator for test content: xorshift32.
     private sealed class Seeded(uint seed) {
@@ -92,7 +96,7 @@ public sealed class TextureCodecLawTests {
 
     [Fact]
     public void Bc4RoundTripsRepresentableBlocksExactlyAndStaysWithinItsBound() {
-        Span<byte> block = stackalloc byte[Bc4Codec.BlockBytes];
+        Span<byte> block = stackalloc byte[Bc4BlockBytes];
         Span<byte> decoded = stackalloc byte[16];
         Span<byte> again = stackalloc byte[16];
         Span<byte> values = stackalloc byte[16];
@@ -160,7 +164,7 @@ public sealed class TextureCodecLawTests {
     }
     [Fact]
     public void Bc7RoundTripsUniformAndTwoColorBlocksExactly() {
-        Span<byte> block = stackalloc byte[Bc7Codec.BlockBytes];
+        Span<byte> block = stackalloc byte[WideBlockBytes];
         Span<byte> decoded = stackalloc byte[64];
         var rgba = new byte[64];
         Span<byte> first = stackalloc byte[4];
@@ -302,7 +306,7 @@ public sealed class TextureCodecLawTests {
             (3, 2, 64, 7, 0, 1, 2),
             (7, 2, 64, 5, 5, 1, 2),
         ];
-        Span<byte> block = stackalloc byte[Bc7Codec.BlockBytes];
+        Span<byte> block = stackalloc byte[WideBlockBytes];
         Span<byte> decoded = stackalloc byte[64];
         var rgba = new byte[64];
         var ends = new int[6, 4];
@@ -357,8 +361,8 @@ public sealed class TextureCodecLawTests {
     }
     [Fact]
     public void Bc7ChoosesAPartitionedModeForTwoRegionBlocksNoOneSubsetHolds() {
-        Span<byte> block = stackalloc byte[Bc7Codec.BlockBytes];
-        Span<byte> again = stackalloc byte[Bc7Codec.BlockBytes];
+        Span<byte> block = stackalloc byte[WideBlockBytes];
+        Span<byte> again = stackalloc byte[WideBlockBytes];
         Span<byte> decoded = stackalloc byte[64];
         var rgba = new byte[64];
 
@@ -388,7 +392,7 @@ public sealed class TextureCodecLawTests {
     }
     [Fact]
     public void Bc6hRoundTripsUniformAndTenBitTwoEndpointBlocksExactly() {
-        Span<byte> block = stackalloc byte[Bc6hCodec.BlockBytes];
+        Span<byte> block = stackalloc byte[WideBlockBytes];
         Span<ushort> decoded = stackalloc ushort[48];
         var rgb = new ushort[48];
         Span<ushort> first = stackalloc ushort[3];
@@ -530,7 +534,7 @@ public sealed class TextureCodecLawTests {
             (10, 6, 0, 0, 0),
         ];
         byte[] weights = [0, 9, 18, 27, 37, 46, 55, 64];
-        Span<byte> block = stackalloc byte[Bc6hCodec.BlockBytes];
+        Span<byte> block = stackalloc byte[WideBlockBytes];
         Span<ushort> decoded = stackalloc ushort[48];
         var rgb = new ushort[48];
         var ends = new int[4, 3];
@@ -586,8 +590,8 @@ public sealed class TextureCodecLawTests {
     }
     [Fact]
     public void Bc6hChoosesATwoRegionModeForBlocksNoOneRegionHolds() {
-        Span<byte> block = stackalloc byte[Bc6hCodec.BlockBytes];
-        Span<byte> again = stackalloc byte[Bc6hCodec.BlockBytes];
+        Span<byte> block = stackalloc byte[WideBlockBytes];
+        Span<byte> again = stackalloc byte[WideBlockBytes];
         Span<ushort> decoded = stackalloc ushort[48];
         var rgb = new ushort[48];
 
@@ -620,16 +624,16 @@ public sealed class TextureCodecLawTests {
     public void NaturalContentDecodesWithinTheStatedBounds() {
         // BC4 and BC5 per channel, BC7 over RGBA; bounds in 8-bit codes.
         var single = Natural(channels: 1, seed: 3);
-        var bc4 = Difference(actual: TextureCompression.Decode(blocks: TextureCompression.Encode(format: TextureFormat.Bc4Unorm, height: Side, texels: single, width: Side), format: TextureFormat.Bc4Unorm, height: Side, width: Side), expected: single);
+        var bc4 = Difference(actual: TextureCompression.Decode(blocks: TextureCompression.Encode(format: GpuPixelFormat.Bc4Unorm, height: Side, texels: single, width: Side), format: GpuPixelFormat.Bc4Unorm, height: Side, width: Side), expected: single);
         var pair = Natural(channels: 2, seed: 5);
-        var bc5 = Difference(actual: TextureCompression.Decode(blocks: TextureCompression.Encode(format: TextureFormat.Bc5Unorm, height: Side, texels: pair, width: Side), format: TextureFormat.Bc5Unorm, height: Side, width: Side), expected: pair);
+        var bc5 = Difference(actual: TextureCompression.Decode(blocks: TextureCompression.Encode(format: GpuPixelFormat.Bc5Unorm, height: Side, texels: pair, width: Side), format: GpuPixelFormat.Bc5Unorm, height: Side, width: Side), expected: pair);
         var color = Natural(channels: 4, seed: 7);
-        var bc7 = Difference(actual: TextureCompression.Decode(blocks: TextureCompression.Encode(format: TextureFormat.Bc7Unorm, height: Side, texels: color, width: Side), format: TextureFormat.Bc7Unorm, height: Side, width: Side), expected: color);
+        var bc7 = Difference(actual: TextureCompression.Decode(blocks: TextureCompression.Encode(format: GpuPixelFormat.Bc7Unorm, height: Side, texels: color, width: Side), format: GpuPixelFormat.Bc7Unorm, height: Side, width: Side), expected: color);
 
         // BC6H: relative error, the decoded value's distance from the source over the source, for every texel above
         // 1/64; separately over the blocks whose every channel spans at most a factor of four, and over all blocks.
         var hdr = NaturalHdr(seed: 11);
-        var decoded = TextureCompression.Decode(blocks: TextureCompression.Encode(format: TextureFormat.Bc6hUfloat, height: Side, texels: hdr, width: Side), format: TextureFormat.Bc6hUfloat, height: Side, width: Side);
+        var decoded = TextureCompression.Decode(blocks: TextureCompression.Encode(format: GpuPixelFormat.Bc6hUfloat, height: Side, texels: hdr, width: Side), format: GpuPixelFormat.Bc6hUfloat, height: Side, width: Side);
 
         double Value(byte[] texels, int x, int y, int channel) =>
             ((double)BitConverter.UInt16BitsToHalf(value: BinaryPrimitives.ReadUInt16LittleEndian(source: texels.AsSpan(start: ((((y * Side) + x) * 8) + (channel * 2))))));
@@ -686,14 +690,14 @@ public sealed class TextureCodecLawTests {
         var color = Natural(channels: 4, seed: 7);
         var hdr = NaturalHdr(seed: 11);
         var encoded = new[] {
-            TextureCompression.Encode(format: TextureFormat.Bc4Unorm, height: Side, texels: single, width: Side),
-            TextureCompression.Encode(format: TextureFormat.Bc5Unorm, height: Side, texels: pair, width: Side),
-            TextureCompression.Encode(format: TextureFormat.Bc6hUfloat, height: Side, texels: hdr, width: Side),
-            TextureCompression.Encode(format: TextureFormat.Bc7Unorm, height: Side, texels: color, width: Side),
+            TextureCompression.Encode(format: GpuPixelFormat.Bc4Unorm, height: Side, texels: single, width: Side),
+            TextureCompression.Encode(format: GpuPixelFormat.Bc5Unorm, height: Side, texels: pair, width: Side),
+            TextureCompression.Encode(format: GpuPixelFormat.Bc6hUfloat, height: Side, texels: hdr, width: Side),
+            TextureCompression.Encode(format: GpuPixelFormat.Bc7Unorm, height: Side, texels: color, width: Side),
         };
 
-        Assert.Equal(expected: encoded[0], actual: TextureCompression.Encode(format: TextureFormat.Bc4Unorm, height: Side, texels: single, width: Side));
-        Assert.Equal(expected: encoded[3], actual: TextureCompression.Encode(format: TextureFormat.Bc7Unorm, height: Side, texels: color, width: Side));
+        Assert.Equal(expected: encoded[0], actual: TextureCompression.Encode(format: GpuPixelFormat.Bc4Unorm, height: Side, texels: single, width: Side));
+        Assert.Equal(expected: encoded[3], actual: TextureCompression.Encode(format: GpuPixelFormat.Bc7Unorm, height: Side, texels: color, width: Side));
         var actual = string.Join(separator: ' ', values: encoded.Select(selector: Sha));
 
         Assert.True(
@@ -712,14 +716,14 @@ public sealed class TextureCodecLawTests {
     [Fact]
     public void APartialEdgeBlockRepeatsTheEdgeAndDecodesOnlyTheLevel() {
         var texels = Natural(channels: 4, seed: 13).AsSpan(length: ((6 * 5) * 4), start: 0).ToArray();
-        var blocks = TextureCompression.Encode(format: TextureFormat.Bc7Unorm, height: 5, texels: texels, width: 6);
+        var blocks = TextureCompression.Encode(format: GpuPixelFormat.Bc7Unorm, height: 5, texels: texels, width: 6);
 
-        Assert.Equal(expected: ((2 * 2) * Bc7Codec.BlockBytes), actual: blocks.Length);
-        Assert.Equal(expected: texels.Length, actual: TextureCompression.Decode(blocks: blocks, format: TextureFormat.Bc7Unorm, height: 5, width: 6).Length);
-        Assert.Throws<ArgumentException>(testCode: () => TextureCompression.Encode(format: TextureFormat.Bc7Unorm, height: 5, texels: texels.AsSpan(start: 1).ToArray(), width: 6));
-        Assert.Throws<ArgumentException>(testCode: () => TextureCompression.Encode(format: TextureFormat.Rgba8Unorm, height: 5, texels: texels, width: 6));
-        Assert.Equal(expected: 16L, actual: TextureFormats.LevelBytes(format: TextureFormat.Bc7Unorm, height: 1, width: 1));
-        Assert.Equal(expected: 8L, actual: TextureFormats.LevelBytes(format: TextureFormat.Bc4Unorm, height: 2, width: 3));
+        Assert.Equal(expected: ((2 * 2) * WideBlockBytes), actual: blocks.Length);
+        Assert.Equal(expected: texels.Length, actual: TextureCompression.Decode(blocks: blocks, format: GpuPixelFormat.Bc7Unorm, height: 5, width: 6).Length);
+        Assert.Throws<ArgumentException>(testCode: () => TextureCompression.Encode(format: GpuPixelFormat.Bc7Unorm, height: 5, texels: texels.AsSpan(start: 1).ToArray(), width: 6));
+        Assert.Throws<ArgumentException>(testCode: () => TextureCompression.Encode(format: GpuPixelFormat.R8G8B8A8Unorm, height: 5, texels: texels, width: 6));
+        Assert.Equal(expected: ((ulong)WideBlockBytes), actual: GpuPixelFormats.LevelByteLength(format: GpuPixelFormat.Bc7Unorm, height: 1U, width: 1U));
+        Assert.Equal(expected: ((ulong)Bc4BlockBytes), actual: GpuPixelFormats.LevelByteLength(format: GpuPixelFormat.Bc4Unorm, height: 2U, width: 3U));
     }
 
     // Writes fields least significant bit first, as BC6H and BC7 lay them out, independently of the codecs' own writer.

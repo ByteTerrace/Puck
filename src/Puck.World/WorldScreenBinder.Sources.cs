@@ -182,7 +182,7 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
                 return m_descriptor;
             }
         }
-        public SurfaceFormat Format => SurfaceFormat.R8G8B8A8Unorm;
+        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
         public string? NotReadyReason => ((Output() is { NativeImageViewHandle: not 0 })
             ? null
             : $"machine source '{instance}' has no published frame");
@@ -272,7 +272,7 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
                 return m_descriptor;
             }
         }
-        public SurfaceFormat Format => SurfaceFormat.R8G8B8A8Unorm;
+        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
         public string? NotReadyReason => ((feed is { Live: true })
             ? null
             : (feed?.Fault ?? $"probe source '{instance}' names no probe"));

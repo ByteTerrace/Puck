@@ -33,7 +33,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
         // A frame nothing produced hands out the same image again, each acquisition counted.
         Assert.Equal(
             actual: (second.Image.ImageViewHandle, second.Image.Width, second.Image.Height, second.Image.Format, second.Layout, rig.Node.OutputLeases),
-            expected: (first.Image.ImageViewHandle, Extent, Extent, SurfaceFormat.R8G8B8A8Unorm, GpuImageLayout.ShaderReadOnly, 2)
+            expected: (first.Image.ImageViewHandle, Extent, Extent, GpuPixelFormat.R8G8B8A8Unorm, GpuImageLayout.ShaderReadOnly, 2)
         );
         Assert.Equal(
             actual: first.Lease.ImageViewHandle,

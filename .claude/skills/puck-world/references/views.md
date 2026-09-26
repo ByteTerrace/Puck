@@ -358,8 +358,8 @@ Free Cam do not alter the logical movement basis.
   seat 1 with `reason=no-position` after the pointer left the window or a
   device changed seats), pointer position,
   viewport mapping (`WorldSeatViewports.Locate`, which the pointer-ray capture
-  shares), visibility, arming reason, buttons, hover, and system-release
-  generation.
+  shares), visibility, arming reason, buttons, hover (a HUD panel, else the
+  display pane the picker hovers), and system-release generation.
 - `world.view.panes [<x> <y>]` — reads the panes the root's `place` passes
   draw, in drawing order, each as its published `SourceMapping`
   (`WorldViewGraphHost.PublishPanes`); given a display point, it echoes the
@@ -370,8 +370,16 @@ Free Cam do not alter the logical movement basis.
   (`WorldViewGraphHost.Screens`, the binder's `WorldScreenMappingSet`), so a
   walk from a view's pane continues through a screen: `Producer` on a producer,
   machine or probe source's pixel, `Unread` on a screen showing a camera view,
-  which is no live instance yet. It refuses by name in a boot with no GPU
-  presentation.
+  which is no live instance yet. It ends with the pane the pointer hovers
+  (`hovered=pane<i> <kind>:<name> pixel <x>,<y>` or `hovered=none`): each
+  frame `WorldCursorFeed` asks the host's picker through
+  `WorldViewGraphHost.Hover` for the pointer's display point, whenever the
+  pointer is on the window, not steering, and the cursor policy shows it,
+  inside its seat's viewport or not, and the overlay's `CursorWriter` outlines
+  the hovered pane's rect in the accent hue. Offscreen, nothing asks, so it
+  reads `none`. The drawn cursor's `hover=` names a hovered pane
+  (`pane '<name>'`) when no HUD panel is under it. It refuses by name in a
+  boot with no GPU presentation.
 - `world.screens` — lists the declared screens, then the creation faces showing
   a source, each ending in `mapping <SourceMapping.Describe()>` (the line
   `world.view.panes` prints for a pane) or `mapping none (<reason>)`. A boot

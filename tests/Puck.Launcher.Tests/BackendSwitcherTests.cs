@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Xunit;
@@ -16,7 +17,7 @@ public sealed class BackendSwitcherTests {
             otherName: "second"
         );
         var source = Surface.SameDeviceImage(
-            format: SurfaceFormat.R8G8B8A8Unorm,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 1U,
             imageHandle: 11,
             imageViewHandle: 12,
@@ -60,7 +61,7 @@ public sealed class BackendSwitcherTests {
             otherName: null
         );
         var source = Surface.SameDeviceImage(
-            format: SurfaceFormat.R8G8B8A8Unorm,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 1U,
             imageHandle: 11,
             imageViewHandle: 12,

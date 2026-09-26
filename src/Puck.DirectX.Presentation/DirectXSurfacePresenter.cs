@@ -93,8 +93,7 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
             captureImport: ref m_captureImport,
             captureReadback: ref m_captureReadback,
             deviceContext: m_deviceContext,
-            surface: surface,
-            toGpuFormat: GpuPixelFormats.FromSurfaceFormat
+            surface: surface
         );
     }
     /// <inheritdoc/>

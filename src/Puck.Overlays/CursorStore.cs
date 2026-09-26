@@ -27,10 +27,14 @@ public readonly record struct OverlayCursorSeat(
     OverlayColorRole Role
 );
 /// <summary>The per-frame cursor snapshot — one entry per seat whose pointer is currently visible (the host owns the
-/// visibility policy; an empty frame draws nothing, so hiding is simply not publishing the seat).</summary>
+/// visibility policy; an empty frame draws nothing, so hiding is simply not publishing the seat) and the display pane
+/// the pointer hovers, which <see cref="CursorWriter"/> outlines.</summary>
 /// <param name="Seats">The cursor-bearing seats, in slot order.</param>
+/// <param name="HoveredPane">The rect, in normalized frame space, of the pane under the pointer (a view or a picture
+/// the root's <c>place</c> passes draw), or <see langword="null"/> when the pointer hovers none.</param>
 public readonly record struct OverlayCursorFrame(
-    ReadOnlyMemory<OverlayCursorSeat> Seats
+    ReadOnlyMemory<OverlayCursorSeat> Seats,
+    NormalizedRect? HoveredPane = null
 );
 /// <summary>The read seam <see cref="CursorWriter"/> consumes; the host's cursor feed is the writer.</summary>
 public interface ICursorSource {

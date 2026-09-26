@@ -808,7 +808,7 @@ internal sealed partial class WorldScreenBinder {
     // writes on the GPU (a camera stream) gets a shared fence beside its targets; a probe output, whose kernel waits on
     // the CPU for its readings, gets none.
     [SupportedOSPlatform("windows10.0.10240")]
-    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, SurfaceFormat format, int width, int height, bool sharedFence, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out SharedRingFence? fence, out string fault) {
+    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, GpuPixelFormat format, int width, int height, bool sharedFence, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out SharedRingFence? fence, out string fault) {
         var allocated = new IGpuExportableImage[SharedTargetCount];
         var handles = new nint[allocated.Length];
         IGpuSurfaceImport[]? createdImports = null;
@@ -816,11 +816,10 @@ internal sealed partial class WorldScreenBinder {
         SharedRingFence? createdFence = null;
 
         try {
-            var pixelFormat = (format switch {
-                SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
-                SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
-                _ => throw new NotSupportedException(message: $"shared-target format {format} is unsupported"),
-            });
+            if (!Surface.IsSurfaceFormat(format: format)) {
+                throw new NotSupportedException(message: $"shared-target format {format} is unsupported");
+            }
+
             // The targets are Direct3D 12 shared simultaneous-access textures on both hosts: the D3D12 host samples its
             // own resources, the Vulkan host allocates them on a headless device pinned to the render adapter and
             // imports each handle (one importer per slot).
@@ -836,7 +835,7 @@ internal sealed partial class WorldScreenBinder {
 
             for (var index = 0; (index < allocated.Length); index++) {
                 allocated[index] = export.CreateSimultaneousAccessImage(
-                    format: pixelFormat,
+                    format: format,
                     height: checked((uint)height),
                     width: checked((uint)width)
                 );
@@ -852,7 +851,7 @@ internal sealed partial class WorldScreenBinder {
                 for (var index = 0; (index < allocated.Length); index++) {
                     createdImports[index] = transfers.CreateImport();
                     createdViews[index] = createdImports[index].Import(
-                        format: pixelFormat,
+                        format: format,
                         height: checked((uint)height),
                         sharedHandle: handles[index],
                         width: checked((uint)width)

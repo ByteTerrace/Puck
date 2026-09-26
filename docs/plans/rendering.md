@@ -1112,8 +1112,11 @@ through each screen.
 P13b owes the rest. The screen shading still reads its own bezel constant,
 which `WorldScreenMappings` mirrors, and the GPU does not yet draw from the
 mapping. No host feeds
-`SourceFocus` or delivers a focused source's input to its window, no machine
-reads a mapped pointer, and nothing reads the picker for hover yet. The
+`SourceFocus` or delivers a focused source's input to its window, and no machine
+reads a mapped pointer. The pointer's pane hover reads the picker on the CPU
+(P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`, outlined by the
+overlay's `CursorWriter` and echoed as `world.view.panes`' `hovered=`); GPU
+picking follows P4. The
 recorded Windows run, a click reaching a captured editor window at the mapped
 point and the chord returning input to the game, belongs to P13b-4 and is
 [deferred to the end](#deferred-to-the-end).
@@ -1142,7 +1145,7 @@ A view that would see itself reads slot 0 and draws the procedural test card,
 and a chain of different views lags one frame per hop.
 
 `Surface` already distinguishes CPU pixels, a shared handle, and a same-device
-image, but `SurfaceFormat` has only two 8-bit RGBA formats, the SDF engine's
+image, but a surface carries only the two 8-bit RGBA formats, the SDF engine's
 internal targets are `R8G8B8A8Unorm`, and no HDR color space is selected
 anywhere. The tonemap is an ACES fit applied at the end of the SDF view pass.
 There is no jitter, motion vector, or history in the SDF kernels; render scale
@@ -1246,6 +1249,14 @@ WARP, holding each to the CPU decoder under the fixture's tolerance;
 `BakeSamplingFixtureLawTests` holds the fixture's GPU-free half. BC7 albedo is
 uploaded without sRGB decode: the drawing path chooses its sRGB view.
 
+The pixel-format fold is done: `GpuPixelFormat` is the one vocabulary a GPU
+image, a presented or captured `Surface`, a swapchain and a baked texture's
+levels are all stored in, and `GpuPixelFormats` states each format's texel or
+block size once, which the block codecs, the upload chain check and the shader
+pipeline budget all read. `ImagePixelFormat` stays apart: it is the code an
+uploaded source's region header carries for its conversion kernel, including
+the palette-indexed and NV12 host layouts no GPU image is created in.
+
 P17 still owes:
 
 - drawing a bake, which needs P4's shared visibility, and choosing per
@@ -1253,13 +1264,7 @@ P17 still owes:
   decides how an sRGB bake is read (a `Bc7UnormSrgb` view or a decode in the
   shader);
 - the parity world shipping its bakes, and the check that a missing bake draws
-  through its field and then switches;
-- the pixel-format fold. The block-compressed `GpuPixelFormat` members carry the
-  baker's `TextureFormat` names, and the fold makes them one vocabulary: it
-  replaces `GpuPixelFormats.UnitBytes` and `LevelByteLength` with the codecs'
-  own block sizes, the name-for-name parse in `BakeSamplingDeviceLawTests`, the
-  per-format switches in `ShaderPipelineRenderNode.Budget` and
-  `ShaderInterface.StorageFormatSpelling`, and `GpuPixelFormats.FromSurfaceFormat`.
+  through its field and then switches.
 
 The SDF engine's frame data is written by hand in three places: an `SdfFrame`
 field, a numbered row in the packed buffer, and an HLSL accessor.
@@ -3317,10 +3322,23 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      three-tick burst gives three snapshots, each carrying the ray; and
      `Locate` answers what the cursor's own mapping answered.
    A machine that reads a pointer, a light gun, is still owed.
-3. The presentation destination. The CPU picker and its host half have landed:
-   the World host publishes its panes to its `SourcePanePicker` every frame,
-   from the placements `place` draws. Nothing reads the picker for hover or
-   highlight yet, and GPU picking follows P4's visibility record.
+3. The presentation destination. The CPU half has landed: the World host
+   publishes its panes to its `SourcePanePicker` every frame, from the
+   placements `place` draws, and the drawn cursor's feed (`WorldCursorFeed`)
+   asks it which pane the pointer hovers each frame
+   (`WorldViewGraphHost.Hover`, over the pointer's display point) whenever the
+   pointer rests on the window, is not steering, and the cursor policy shows
+   it, inside its seat's viewport or beside it. The overlay's `CursorWriter`
+   outlines the hovered pane's rect with four accent hairline edges
+   (`OverlayCursorFrame.HoveredPane`, records the overlay already draws), the
+   cursor's hover label names the pane when no HUD panel is under it, and
+   `world.view.panes` ends with `hovered=`. A pane the layout does not show is
+   never published, so it is never hovered. Laws:
+   `WorldViewPaneMappingLawTests` (`.Hover`: the picker's pane drives the
+   outline, off every pane and an unshown pane hover none, and a steady hovered
+   frame allocates nothing in the host, the picker or the writer). The
+   outline is checked on the CPU only; no capture has inspected it on either
+   backend. GPU picking follows P4's visibility record.
 4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
    `SourceFocus`, a focused capture source's window receives pointer and key
    events at `SourcePassthrough.ToClient`'s client coordinates, and the chord
@@ -3650,11 +3668,9 @@ its chunk in compiled worlds, and background baking on the CPU thread pool.
 
 The texture pipeline that stores these generates mips and compresses with BC7
 for color, BC5 for normals, and BC6H for HDR data, and each texture declares
-whether it is sRGB or linear. The Steam Deck supports all three formats. Once
-P17's first step puts a baked texture on the GPU, one pixel-format vocabulary
-remains: `GpuPixelFormat`, `SurfaceFormat`, `ImagePixelFormat` and the baker's
-`TextureFormat` fold into it rather than being bridged by conversions such as
-`GpuPixelFormats.FromSurfaceFormat`.
+whether it is sRGB or linear. The Steam Deck supports all three formats. One
+pixel-format vocabulary, `GpuPixelFormat`, names the baker's stored formats, the
+GPU's images and the presented surfaces, with no conversion between them.
 
 Each bake is keyed by the prototype's content hash, the baker version, and the
 quality tier, and one cache is filled in two ways. A build ships each bake once

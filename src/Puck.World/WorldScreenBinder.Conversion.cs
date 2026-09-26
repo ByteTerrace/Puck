@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
@@ -7,9 +8,9 @@ namespace Puck.World;
 
 internal sealed partial class WorldScreenBinder {
     // The image source format of CPU pixels a capture or camera tier hands over, or null for one no conversion reads.
-    private static ImagePixelFormat? PixelFormatOf(SurfaceFormat format) => format switch {
-        SurfaceFormat.B8G8R8A8Unorm => ImagePixelFormat.B8G8R8A8Unorm,
-        SurfaceFormat.R8G8B8A8Unorm => ImagePixelFormat.R8G8B8A8Unorm,
+    private static ImagePixelFormat? PixelFormatOf(GpuPixelFormat format) => format switch {
+        GpuPixelFormat.B8G8R8A8Unorm => ImagePixelFormat.B8G8R8A8Unorm,
+        GpuPixelFormat.R8G8B8A8Unorm => ImagePixelFormat.R8G8B8A8Unorm,
         _ => null,
     };
     // Converts one CPU surface through a tier's conversion, when the runtime runs and a conversion reads its pixels.

@@ -381,7 +381,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
 
         surface = Surface.CpuPixels(
-            format: SurfaceFormat.B8G8R8A8Unorm,
+            format: GpuPixelFormat.B8G8R8A8Unorm,
             height: checked((uint)m_targetHeight),
             pixels: m_consumerPixels,
             width: checked((uint)m_targetWidth)

@@ -58,6 +58,8 @@ public static class VulkanGpuFormats {
         GpuPixelFormat.R8G8B8A8Srgb => VulkanFormat.R8G8B8A8Srgb,
         GpuPixelFormat.B8G8R8A8Srgb => VulkanFormat.B8G8R8A8Srgb,
         GpuPixelFormat.R10G10B10A2Unorm => VulkanFormat.A2B10G10R10UnormPack32,
+        GpuPixelFormat.R8Unorm => VulkanFormat.R8Unorm,
+        GpuPixelFormat.R8G8Unorm => VulkanFormat.R8G8Unorm,
         _ => throw new ArgumentOutOfRangeException(
         paramName: nameof(gpuPixelFormat),
         actualValue: gpuPixelFormat,

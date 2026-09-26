@@ -19,9 +19,11 @@ namespace Puck.World.Tests;
 /// instance by <see cref="RenderGraphInstance.Handle"/>, at the extent the runtime's latest schedule renders it at, in
 /// drawing order (views, then panes); the presentation picker and the hit walk over the live instance set read exactly
 /// those mappings; a pane that has not rendered, or that the root does not draw, publishes nothing; and a steady frame
-/// publishes without allocating.
+/// publishes without allocating. The hover laws (<c>.Hover</c>) hold the presentation destination: the pane the picker
+/// answers for the pointer is the hovered pane, the cursor writer outlines exactly its rect, and a steady hovered frame
+/// allocates nothing.
 /// </summary>
-public sealed class WorldViewPaneMappingLawTests : IDisposable {
+public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     private const int Display = 64;
     private const string Pane = "pane";
 

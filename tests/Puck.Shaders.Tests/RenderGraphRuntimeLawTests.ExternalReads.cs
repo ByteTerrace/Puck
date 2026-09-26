@@ -249,7 +249,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
 
         public (uint Width, uint Height) Extent { get; private set; }
-        public SurfaceFormat Format => SurfaceFormat.R8G8B8A8Unorm;
+        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
         public nint ImageView => m_image!.ImageViewHandle;
         public string? NotReadyReason => ((Produced == 0) ? "the fake camera has not produced" : null);
         public string? PendingCapturePath => null;
@@ -289,7 +289,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Acquired++;
             output = new RenderGraphExternalOutput(
                 Image: (ViewOnly ? default : Surface.SameDeviceImage(
-                    format: SurfaceFormat.R8G8B8A8Unorm,
+                    format: GpuPixelFormat.R8G8B8A8Unorm,
                     height: image.Height,
                     imageHandle: image.ImageHandle,
                     imageViewHandle: image.ImageViewHandle,
@@ -308,7 +308,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     /// <summary>A world producer that records the images it is handed and, when asked, takes their leases as a
     /// submission sampling them would.</summary>
     private sealed class ReadingWorld : IRenderGraphExternalProducer {
-        public SurfaceFormat Format => SurfaceFormat.R8G8B8A8Unorm;
+        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
 
         public LeaseRetireList Held { get; } = new();
 
