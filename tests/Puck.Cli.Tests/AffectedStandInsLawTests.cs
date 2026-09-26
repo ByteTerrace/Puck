@@ -9,10 +9,11 @@ namespace Puck.Cli.Tests;
 
 /// <summary>
 /// Laws for <see cref="AffectedStandIns"/>: a project's own build inputs stand for its indexed sources; a shader source
-/// or include stands for the indexed C# of the kernel's own project that names, by an exact string literal, a kernel
-/// whose include closure reaches it; a file <c>puck schema</c> writes stands for the indexed sources declaring the type
-/// it is generated from; and on the real tree every non-C# source checkpoint 5's record could not place now has a
-/// stand-in the index knows.
+/// or include stands for the indexed C#, in the kernel's project or a project its build references, that names by an
+/// exact string literal a kernel whose include closure reaches it; a shader-set manifest, its stage sources and its
+/// frame interface stand for the C# declaring the manifest's model; a file <c>puck schema</c> writes stands for the
+/// indexed sources declaring the type it is generated from; and on the real tree every non-C# source checkpoint 5's
+/// record could not place now has a stand-in the index knows.
 /// </summary>
 public sealed class AffectedStandInsLawTests {
     private static readonly Dictionary<string, string> Texts = new(comparer: StringComparer.Ordinal) {
@@ -23,8 +24,8 @@ public sealed class AffectedStandInsLawTests {
         ["src/Engine/Model.cs"] = "public sealed record FrameDocument(int Width); internal readonly record struct FramePart(int X);",
     };
     private static readonly AffectedKernel[] Kernels = [
-        new(Closure: ["src/Engine/Assets/sdf-beam.comp.hlsl", "src/Engine/Assets/sdf-common.hlsli"], Path: "src/Engine/Assets/sdf-beam.comp.hlsl", Project: "src/Engine"),
-        new(Closure: ["src/Engine/Assets/sdf-views.comp.hlsl", "src/Engine/Assets/sdf-common.hlsli", "src/Engine/Assets/sdf-visibility.hlsli"], Path: "src/Engine/Assets/sdf-views.comp.hlsl", Project: "src/Engine"),
+        new(Closure: ["src/Engine/Assets/sdf-beam.comp.hlsl", "src/Engine/Assets/sdf-common.hlsli"], Path: "src/Engine/Assets/sdf-beam.comp.hlsl", Projects: ["src/Engine"]),
+        new(Closure: ["src/Engine/Assets/sdf-views.comp.hlsl", "src/Engine/Assets/sdf-common.hlsli", "src/Engine/Assets/sdf-visibility.hlsli"], Path: "src/Engine/Assets/sdf-views.comp.hlsl", Projects: ["src/Engine"]),
     ];
 
     private static string Read(string path) => Texts[path];
@@ -71,6 +72,60 @@ public sealed class AffectedStandInsLawTests {
         Assert.Equal(actual: SchemaCommand.SourceTypesOf(relativePath: "src/Puck.World/Assets/worlds/schema/prototypes.schema.json"), expected: [typeof(WorldPrototype)]);
         Assert.Empty(collection: SchemaCommand.SourceTypesOf(relativePath: "src/Puck.World/Assets/worlds/puck.world.json"));
     }
+    /// <summary>A kernel is named by a constant in a project its project's build references: the conversion pass's
+    /// loader. A project the kernel's project does not reference names nothing, even with the same literal.</summary>
+    [Fact]
+    public void AKernelStandsForTheConstantThatNamesItInAReferencedProject() {
+        var tree = new AffectedMemoryTree(files: new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+            ["src/Contracts/Contracts.csproj"] = "<Project />",
+            ["src/Contracts/Passes.cs"] = "public const string Rgba = \"source-rgba\";",
+            ["src/Engine/Engine.csproj"] = """<Project><ItemGroup><ComputeShaderSource Include="Assets/**/*.comp.hlsl" /></ItemGroup></Project>""",
+            ["src/Engine/Assets/source-rgba.comp.hlsl"] = "[numthreads(8, 8, 1)] void main() {}",
+            ["src/Other/Other.csproj"] = "<Project />",
+            ["src/Other/Echo.cs"] = "Load(\"source-rgba\");",
+        });
+        AffectedProject[] projects = [
+            new(Directory: "src/Contracts", IsSuite: false, Name: "Contracts", References: []),
+            new(Directory: "src/Engine", IsSuite: false, Name: "Engine", References: ["Contracts"]),
+            new(Directory: "src/Other", IsSuite: false, Name: "Other", References: []),
+        ];
+
+        Assert.Equal(actual: Assert.Single(collection: AffectedStandIns.Kernels(projects: projects, tree: tree)).Projects, expected: ["src/Contracts", "src/Engine"]);
+        Assert.Equal(
+            actual: AffectedStandIns.Create(indexed: ["src/Contracts/Passes.cs", "src/Other/Echo.cs"], projects: projects, tree: tree)(arg: "src/Engine/Assets/source-rgba.comp.hlsl"),
+            expected: ["src/Contracts/Passes.cs"]
+        );
+    }
+    /// <summary>A shader-set manifest, each stage source it names with that source's includes, and the frame interface
+    /// generated for it stand for the manifest's owner, the C# declaring <see cref="ShaderSetManifest"/>; a stage source
+    /// no manifest names does not.</summary>
+    [Fact]
+    public void AShaderSetsManifestSourcesAndInterfaceStandForTheManifestsOwner() {
+        var tree = new AffectedMemoryTree(files: new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+            ["src/Engine/Engine.csproj"] = """<Project><ItemGroup><VertexShaderSource Include="Assets/**/*.vert.hlsl" /><FragmentShaderSource Include="Assets/**/*.frag.hlsl" /></ItemGroup></Project>""",
+            ["src/Engine/Assets/grain.puck.shader.json"] = """
+                {
+                  "$schema": "puck.shader.manifest.v1",
+                  "name": "grain",
+                  "stages": { "vertex": "fullscreen.vert", "fragment": "grain.frag" },
+                  "bindings": [ { "kind": "SampledImage", "name": "source" } ]
+                }
+                """,
+            ["src/Engine/Assets/fullscreen.vert.hlsl"] = "float4 main() : SV_Position { return 0; }",
+            ["src/Engine/Assets/grain.frag.hlsl"] = "#include \"grain.common.hlsli\"\nfloat4 main() : SV_Target { return 0; }",
+            ["src/Engine/Assets/grain.common.hlsli"] = "static const uint Grain = 1;",
+            ["src/Engine/Assets/other.frag.hlsl"] = "float4 main() : SV_Target { return 0; }",
+            ["src/Engine/Sets.cs"] = "public sealed record ShaderSetManifest(string Name);",
+        });
+        AffectedProject[] projects = [new(Directory: "src/Engine", IsSuite: false, Name: "Engine", References: [])];
+        var standInsFor = AffectedStandIns.Create(indexed: ["src/Engine/Sets.cs"], projects: projects, tree: tree);
+
+        foreach (var path in ((string[])["grain.puck.shader.json", "grain.frag.hlsl", "grain.common.hlsli", "fullscreen.vert.hlsl", "grain.interface.hlsli"])) {
+            Assert.Equal(actual: standInsFor(arg: $"src/Engine/Assets/{path}"), expected: ["src/Engine/Sets.cs"]);
+        }
+
+        Assert.Empty(collection: standInsFor(arg: "src/Engine/Assets/other.frag.hlsl"));
+    }
     /// <summary>On the real tree, each non-C# source kind checkpoint 5's coverage record left unplaced reaches indexed
     /// stand-ins: the loader an include reaches, the declaration a schema is generated from, and a project's
     /// sources.</summary>
@@ -91,6 +146,15 @@ public sealed class AffectedStandInsLawTests {
         Assert.Contains(collection: standInsFor(arg: "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-visibility.hlsli"), expected: "src/Puck.SdfVm/SdfWorldEngine.Pipelines.cs");
         Assert.Contains(collection: standInsFor(arg: "src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json"), expected: "src/Puck.Shaders/Graph/RenderGraphModel.cs");
         Assert.Contains(collection: standInsFor(arg: "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json"), expected: "src/Puck.World.Schema/WorldProjection.cs");
+
+        // A shader set's manifest, stage source and interface stand for the manifest's owner, and a conversion kernel for
+        // the constant that names it in a project the kernel's project references.
+        foreach (var path in ((string[])["sdf-film-grain.puck.shader.json", "sdf-film-grain.frag.hlsl", "sdf-film-grain.interface.hlsli"])) {
+            Assert.Contains(collection: standInsFor(arg: $"src/Puck.SdfVm/Assets/Shaders/Sdf/{path}"), expected: "src/Puck.Shaders/ShaderSetManifest.cs");
+        }
+        foreach (var path in ((string[])["source-rgba.comp.hlsl", "source-transfer.comp.hlsl"])) {
+            Assert.Contains(collection: standInsFor(arg: $"src/Puck.Shaders/Assets/Shaders/Sources/{path}"), expected: "src/Puck.Abstractions/Sources/ImageSourceConversion.cs");
+        }
 
         foreach (var path in ((string[])[
             "src/Puck.DirectX/NativeMethods.txt",
