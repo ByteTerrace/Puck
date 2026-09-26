@@ -34,6 +34,45 @@ public interface IWorldImageFeed : IDisposable {
     /// <param name="deviceContext">The live GPU device context, whose services upload the image.</param>
     void Publish(ulong tick, IGpuDeviceContext deviceContext);
 }
+/// <summary>An uploaded feed: one whose producer writes CPU pixels, which a source instance's graph reads as a region
+/// (<see cref="IRenderGraphSourceUpload"/>) and converts through the pass its descriptor names.</summary>
+public interface IWorldUploadFeed : IWorldImageFeed {
+    /// <summary>Writes the feed's image for a tick into a region's planes, laid out by
+    /// <see cref="ImageSourceUploadLayout.HeaderOf"/> of <see cref="IWorldImageFeed.Descriptor"/>, whose header the region
+    /// already holds.</summary>
+    /// <param name="tick">The completed simulation tick the frame presents.</param>
+    /// <param name="region">The region.</param>
+    /// <returns><see langword="true"/> when the region holds an image; <see langword="false"/> while the feed has
+    /// none.</returns>
+    bool TryWrite(long tick, GpuRegion region);
+}
+/// <summary>An uploaded source instance's upload over the feed its producer opened: the render-graph runtime converts the
+/// region the feed writes. It owns the feed.</summary>
+/// <param name="opening">What the source instance's factory opened.</param>
+public sealed class WorldImageSourceUpload(WorldImageSourceOpening opening) : IRenderGraphSourceUpload {
+    /// <inheritdoc/>
+    public ImageSourceDescriptor? Descriptor => ((Fault is null)
+        ? Opening.Feed?.Descriptor
+        : null);
+
+    /// <inheritdoc/>
+    public string? Fault { get; } = (opening.Fault ?? ((opening.Feed is IWorldUploadFeed)
+        ? null
+        : $"image producer '{opening.Feed?.Descriptor.Producer}' opened a feed that writes no region"));
+    /// <summary>Gets what the source instance's factory opened.</summary>
+    public WorldImageSourceOpening Opening { get; } = opening;
+
+    /// <inheritdoc/>
+    public void Dispose() => Opening.Feed?.Dispose();
+    /// <inheritdoc/>
+    public bool TryWrite(long tick, GpuRegion region) => (
+        (Fault is null) &&
+        ((IWorldUploadFeed)Opening.Feed!).TryWrite(
+            region: region,
+            tick: tick
+        )
+    );
+}
 /// <summary>
 /// A producer registered with the World host under an id: it opens a feed for every screen source naming it. Its id,
 /// content class and transport are its document shape's (<see cref="WorldImageProducerShape"/>), which
@@ -68,41 +107,42 @@ public sealed class WorldImageProducers {
     /// <summary>Gets the registered producers in registration order.</summary>
     public IReadOnlyList<IWorldImageProducer> Producers => m_registry.Producers;
 
-    /// <summary>Registers one external-producer factory per producer registered so far with a host's render-graph
-    /// packages, under the producer's source package (<c>source.&lt;id&gt;</c>). Each factory opens the feed of the source instance
-    /// it is created for, from the instance's settings, through <see cref="TryOpen"/>, so a feed that disagrees with its
-    /// registration is refused by name there, and hands what it opened to <paramref name="adapt"/>.</summary>
+    /// <summary>Registers every producer registered so far with a host's render-graph packages, under the producer's
+    /// source package (<c>source.&lt;id&gt;</c>): an uploaded producer as an upload
+    /// (<see cref="RenderGraphPackageRecorders.RegisterSource"/>), whose instance the runtime converts from the region its
+    /// feed writes (<see cref="WorldImageSourceUpload"/>), and any other through <paramref name="adapt"/>, as an external
+    /// producer. Each factory opens the feed of the source instance it is created for, from the instance's settings,
+    /// through <see cref="TryOpen"/>, so a feed that disagrees with its registration is refused by name there.</summary>
     /// <param name="packages">The packages the host's render-graph runtime installs instances from.</param>
-    /// <param name="adapt">Adapts one opening to the render-graph producer the runtime owns; it owns the feed.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="packages"/> or <paramref name="adapt"/> is
-    /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">A producer's source package already has an external producer.</exception>
-    public void RegisterPackages(RenderGraphPackageRecorders packages, Func<WorldImageSourceOpening, IRenderGraphExternalProducer> adapt) {
+    /// <param name="adapt">Adapts one opening of a producer that is not uploaded to the render-graph producer the runtime
+    /// owns, which owns the feed, or <see langword="null"/> to leave those producers unregistered.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="packages"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A producer's source package already has an external producer or an
+    /// upload.</exception>
+    public void RegisterPackages(RenderGraphPackageRecorders packages, Func<WorldImageSourceOpening, IRenderGraphExternalProducer>? adapt) {
         ArgumentNullException.ThrowIfNull(argument: packages);
-        ArgumentNullException.ThrowIfNull(argument: adapt);
 
         foreach (var producer in m_registry.Producers) {
             var id = producer.Id;
+            var package = RenderGraphInstance.SourcePackage(producer: id);
 
-            packages.RegisterProducer(
-                factory: context => {
-                    _ = TryOpen(
-                        fault: out var fault,
-                        feed: out var feed,
-                        source: new WorldScreenSource.Producer(
-                            Id: id,
-                            Settings: context.Settings
-                        )
-                    );
-
-                    return adapt(arg: new WorldImageSourceOpening(
-                        Context: context,
-                        Fault: fault,
-                        Feed: feed
-                    ));
-                },
-                package: RenderGraphInstance.SourcePackage(producer: id)
-            );
+            if (producer.Transport == ImageSourceTransport.Uploaded) {
+                packages.RegisterSource(
+                    factory: context => new WorldImageSourceUpload(opening: Open(
+                        context: context,
+                        id: id
+                    )),
+                    package: package
+                );
+            } else if (adapt is not null) {
+                packages.RegisterProducer(
+                    factory: context => adapt(arg: Open(
+                        context: context,
+                        id: id
+                    )),
+                    package: package
+                );
+            }
         }
     }
     /// <summary>Registers a producer.</summary>
@@ -135,6 +175,25 @@ public sealed class WorldImageProducers {
 
         m_registry.Register(producer: producer);
     }
+
+    // Opens a source instance's feed from its settings.
+    private WorldImageSourceOpening Open(RenderGraphExternalProducerContext context, string id) {
+        _ = TryOpen(
+            fault: out var fault,
+            feed: out var feed,
+            source: new WorldScreenSource.Producer(
+                Id: id,
+                Settings: context.Settings
+            )
+        );
+
+        return new WorldImageSourceOpening(
+            Context: context,
+            Fault: fault,
+            Feed: feed
+        );
+    }
+
     /// <summary>Opens a feed for a producer source through the producer registered under its id. A feed whose descriptor
     /// names another producer, content class or transport than the registration is disposed and refused by name.</summary>
     /// <param name="source">The source.</param>

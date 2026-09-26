@@ -5381,6 +5381,7 @@ public static partial class WorldModelShape {
                 M("timeScale", typeof(global::System.Single), typeof(global::Puck.World.WorldViewGraph), "TimeScale", Read | Write),
                 M("output", typeof(global::System.String), typeof(global::Puck.World.WorldViewGraph), "Output", Read | Write),
                 M("overrides", typeof(global::System.Collections.Generic.IReadOnlyDictionary<global::System.String, global::System.Text.Json.JsonElement>), typeof(global::Puck.World.WorldViewGraph), "Overrides", Read | Write),
+                M("settings", typeof(global::System.Collections.Generic.IReadOnlyDictionary<global::System.String, global::System.Text.Json.JsonElement>), typeof(global::Puck.World.WorldViewGraph), "Settings", Read | Write),
             ],
             []),
         T(typeof(global::Puck.World.WorldViewGraphBudget), true, JsonTypeInfoKind.Object, null,

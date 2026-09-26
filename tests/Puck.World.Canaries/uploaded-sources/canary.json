@@ -1,0 +1,48 @@
+{
+  "id": "uploaded-sources",
+  "title": "An uploaded test pattern and QR code convert through their source graphs and show in their panes",
+  "binding": "The positive leg boots an offscreen 64x64 world whose views.graphs rows are two uploaded source instances, a 32x64 test pattern (source.testPattern) and a QR code of 'puck' with a four-module quiet zone (source.qr), each an instance of the render-graph runtime whose one pass is the shipped source-rgba conversion reading the region its producer writes, placed in the left and right halves of the display by the one layout. A captures row captures the test pattern's source instance at tick 60, before composition: its bars are the pattern's own yellow, red and blue, in the columns WorldTestPatternProducer draws them, so the conversion swapped the producer's BGRA into RGBA. The root's screenshot shows the red and blue bars in the left pane, and in the right pane the code's white quiet zone and the dark center of its top-left finder pattern. The discriminating leg authors the code with no quiet zone and captures the pattern at tick 448, where the pattern's sweep covers the yellow bar's columns: the yellow observation turns red because the source converts the image of the tick it presents, and the quiet-zone and finder observations turn red because the right pane shows the changed code, while the bars that neither change moves hold.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json",
+    "script": "sources.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "the-source-instance-shows-its-yellow-bar", "capture": "state/captures/pattern~60.png", "extent": [32, 64], "region": [0.19, 0.07, 0.27, 0.56], "reduce": "every", "minimum": [1, 1, 0, 1], "maximum": [1, 1, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-source-instance-shows-its-red-bar", "capture": "state/captures/pattern~60.png", "extent": [32, 64], "region": [0.76, 0.07, 0.83, 0.56], "reduce": "every", "minimum": [1, 0, 0, 1], "maximum": [1, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-source-instance-shows-its-blue-bar", "capture": "state/captures/pattern~60.png", "extent": [32, 64], "region": [0.91, 0.07, 0.96, 0.56], "reduce": "every", "minimum": [0, 0, 1, 1], "maximum": [0, 0, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-left-pane-shows-the-red-bar", "capture": "frame.png", "extent": [64, 64], "region": [0.38, 0.07, 0.41, 0.56], "reduce": "every", "minimum": [1, 0, 0, 1], "maximum": [1, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-left-pane-shows-the-blue-bar", "capture": "frame.png", "extent": [64, 64], "region": [0.455, 0.07, 0.48, 0.56], "reduce": "every", "minimum": [0, 0, 1, 1], "maximum": [0, 0, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-right-pane-shows-the-codes-quiet-zone", "capture": "frame.png", "extent": [64, 64], "region": [0.51, 0.01, 0.55, 0.12], "reduce": "every", "minimum": [1, 1, 1, 1], "maximum": [1, 1, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-right-pane-shows-the-finders-dark-center", "capture": "frame.png", "extent": [64, 64], "region": [0.615, 0.23, 0.64, 0.28], "reduce": "every", "minimum": [0, 0, 0, 1], "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/uploaded-sources/discriminating.world.json",
+    "script": "sources.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "the-source-instance-shows-its-yellow-bar", "capture": "state/captures/pattern~448.png", "extent": [32, 64], "region": [0.19, 0.07, 0.27, 0.56], "reduce": "every", "minimum": [1, 1, 0, 1], "maximum": [1, 1, 0, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "the-source-instance-shows-its-red-bar", "capture": "state/captures/pattern~448.png", "extent": [32, 64], "region": [0.76, 0.07, 0.83, 0.56], "reduce": "every", "minimum": [1, 0, 0, 1], "maximum": [1, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-source-instance-shows-its-blue-bar", "capture": "state/captures/pattern~448.png", "extent": [32, 64], "region": [0.91, 0.07, 0.96, 0.56], "reduce": "every", "minimum": [0, 0, 1, 1], "maximum": [0, 0, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-left-pane-shows-the-red-bar", "capture": "frame.png", "extent": [64, 64], "region": [0.38, 0.07, 0.41, 0.56], "reduce": "every", "minimum": [1, 0, 0, 1], "maximum": [1, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-left-pane-shows-the-blue-bar", "capture": "frame.png", "extent": [64, 64], "region": [0.455, 0.07, 0.48, 0.56], "reduce": "every", "minimum": [0, 0, 1, 1], "maximum": [0, 0, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "the-right-pane-shows-the-codes-quiet-zone", "capture": "frame.png", "extent": [64, 64], "region": [0.51, 0.01, 0.55, 0.12], "reduce": "every", "minimum": [1, 1, 1, 1], "maximum": [1, 1, 1, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "the-right-pane-shows-the-finders-dark-center", "capture": "frame.png", "extent": [64, 64], "region": [0.615, 0.23, 0.64, 0.28], "reduce": "every", "minimum": [0, 0, 0, 1], "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": false }
+    ]
+  }
+}

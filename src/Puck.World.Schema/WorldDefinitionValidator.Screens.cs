@@ -1100,6 +1100,7 @@ public static partial class WorldDefinitionValidator {
 
         var graphNames = ValidateGraphs(
             cameras: cameras,
+            definition: definition,
             errors: errors,
             views: views
         );
