@@ -663,6 +663,11 @@ public sealed partial class SdfEngineNode : ICaptureRequestTarget {
 
         return (m_capturedAhead ??= Capture(context: in context));
     }
+    /// <summary>Starts a produced frame: drops a frame a view captured ahead (<see cref="HostFrame"/>) that the node did
+    /// not render, as when the render graph did not schedule the node that frame, so the next <see cref="HostFrame"/>
+    /// captures the current one and a view never films a stale frame. A host calls it once per produced frame, before the
+    /// render graph produces any instance.</summary>
+    public void BeginFrame() => m_capturedAhead = null;
 
     /// <summary>Gets or sets the factory of the image view 0 renders into, forwarded to
     /// <see cref="SdfWorldEngineOptions.CreateOutputImage"/>: one returning an <see cref="IGpuExportableImage"/> puts the

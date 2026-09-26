@@ -72,6 +72,8 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
+        // A frame a camera view captured ahead in an earlier frame the world node never rendered is stale now.
+        ViewHost?.BeginFrame();
         ReconcileSessionLifecycles();
         RetireParkedCaptures();
 

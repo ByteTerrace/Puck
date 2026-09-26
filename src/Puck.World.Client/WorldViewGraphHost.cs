@@ -327,8 +327,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// default graph (the world producer, then every row, then the root that reads the world and the panes) when the
     /// section names no <c>views.root</c>, or the rows alone, rooted where <c>views.root</c> says, when it does. The
     /// instance the SDF engine renders its first view through (the synthesized world producer, or every
-    /// <c>sdf.world</c> row of an authored root that names no later view) reads every source and every view, so its
-    /// screens sample them.</summary>
+    /// <c>sdf.world</c> row of an authored root that names no later view) reads every source and every view a screen shows,
+    /// so its screens sample them.</summary>
     /// <param name="views">The document's <c>views</c> section.</param>
     /// <param name="synthesized">The default graph, or <see langword="null"/> when the section names its own root.</param>
     /// <param name="sources">The source instances the world's screens read (<see cref="WorldScreenMappingSet.Sources"/>).</param>
@@ -431,15 +431,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         (WorldViewNames.ViewOf(instance: instance.Name) is null) &&
         !rendered.Contains(name: instance.Name)
     );
-    // The instance with a read of every source and every view added, within the frame, when the SDF engine renders its
-    // screens through it.
+    // The instance with a read of every source and every view a screen shows added, within the frame, when the SDF engine
+    // renders its screens through it.
     private static RenderGraphInstance ReadingScreens(RenderGraphInstance instance, IReadOnlyList<RenderGraphInstance> sources, WorldViewInstances rendered) => ((((sources.Count == 0) && (rendered.Views.Count == 0)) || !RendersScreens(instance: instance, rendered: rendered))
         ? instance
         : (instance with {
             Reads = [
                 .. instance.Reads,
                 .. sources.Select(selector: static source => new RenderGraphRead(Producer: source.Name)),
-                .. rendered.Views.Select(selector: static view => new RenderGraphRead(Producer: view.Name)),
+                .. rendered.Views.Where(predicate: static view => view.Demand.HasFlag(flag: WorldViewDemand.Screen)).Select(selector: static view => new RenderGraphRead(Producer: view.Name)),
             ],
         }));
     // The footprints a screen-rendering instance shows its reads through: a source renders at its producer's negotiated
@@ -465,7 +465,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
                 foreach (var view in rendered.Views) {
                     if (
-                        (view.Demand == WorldViewDemand.Screen) &&
+                        view.Demand.HasFlag(flag: WorldViewDemand.Screen) &&
                         string.Equals(
                             a: view.Name,
                             b: read.Producer,
@@ -1171,7 +1171,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_roots.Clear();
 
         foreach (var view in rendered.Views) {
-            if (view.Demand == WorldViewDemand.Root) {
+            if (view.Demand.HasFlag(flag: WorldViewDemand.Root)) {
                 m_roots.Add(item: new RenderGraphRoot(
                     Height: view.Height,
                     Instance: view.Name,

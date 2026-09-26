@@ -90,7 +90,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Members: [
                 "SdfWorldEngine.SubmitFrame", "SdfWorldEngine.RenderFrame", "SdfWorldEngine.ReadPixels", "SdfWorldEngine.FrameRingSize",
                 "SdfFrame.Time", "SdfWorldEngine.FrameValues",
-                "SdfEngineNode.HostFrame",
+                "SdfEngineNode.HostFrame", "SdfEngineNode.BeginFrame",
             ]
         ),
         new(
@@ -123,6 +123,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Members: [
                 "SdfWorldEngine.SetScreenSource", "SdfWorldEngine.SetScreenSurface", "SdfWorldEngine.SetScreenLight",
                 "SdfWorldEngine.MaxScreenSurfaces", "SdfWorldRenderSpec.ScreenSources", "SdfEngineNode.BoundScreenSource",
+                "SdfWorldEngine.ScreenSourcesTainted",
             ]
         ),
         new(

@@ -1224,19 +1224,25 @@ instance whose producer the binder creates (`WorldScreenBinder.TryViewProducer`,
 tried before the world node in the render root's `sdf.world` factory): an
 `SdfEngineNode` of its own, one viewport and no brick pool, a camera's filming
 the frame the world node renders (`SdfEngineNode.HostFrame`, captured once a
-frame by whichever renders first) through `SdfCameraFrameSource`, a session's
-the destination's own frame source on its own clock. A camera view reads every
-source within the frame and every view, itself included, at its previous frame;
-a session reads nothing; the world's instance reads every view within the frame.
-`WorldViewGraphHost.TryCompose` puts the views after the sources, and a view a
-screen shows is demanded through a footprint of its declared extent over the
-display (`WorldViewDemand.Screen`), one a HUD frame or a probe export shows as a
-root beside the runtime's (`WorldViewGraphHost.Roots`, `WorldViewDemand.Root`),
-and a parked one not at all. Every view refreshes at `world.view-refresh`'s
-divisor except a window session (every frame). The binder recomposes the views
-only when they change (`ReconcileViews`), and forcibly on the first frame the
-capture gate fills while a screen shows external content, which restarts their
-scheduling so each renders over the fills.
+frame by whichever renders first, and dropped at the next frame's start,
+`SdfEngineNode.BeginFrame`, so a view films the current frame even when nothing
+schedules the world) through `SdfCameraFrameSource`, a session's the
+destination's own frame source on its own clock. A camera view reads every
+source within the frame and every view a screen shows, itself included, at its
+previous frame; a session reads nothing; the world's instance reads every view a
+screen shows within the frame, so the reads grow with the views shown, never
+with the square of every view. `WorldViewGraphHost.TryCompose` puts the views
+after the sources. A view's demand (`WorldViewDemand`, flags) is every way
+something shows it: a screen, through a footprint of its declared extent over the
+display, and a HUD frame or a probe export, as a root beside the runtime's
+(`WorldViewGraphHost.Roots`); a parked one is demanded not at all. A declared
+extent past the display is scaled by one factor on both axes
+(`WorldViewInstances.Fit`), so a view never renders stretched. Every view
+refreshes at `world.view-refresh`'s divisor except a window session (every
+frame). The binder sets its views each time a registration, a screen or a
+session moves, and a `WorldViewSet` publishes them only when one changed, so a
+steady frame allocates nothing; a capture frame renders every tainted view
+again.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):

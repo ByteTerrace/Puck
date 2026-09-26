@@ -423,6 +423,26 @@ public sealed class SdfEngineNodeLeaseLawTests {
             expected: (captures + 2)
         );
     }
+    // A frame a view captured ahead that the node never renders, because the graph did not schedule it, is dropped when the
+    // next frame begins, so the view films the current frame rather than the first one forever.
+    [Fact]
+    public void AViewFilmsTheCurrentFrameWhenTheNodeDoesNotRender() {
+        using var rig = new Rig();
+
+        rig.ProduceFirst();
+
+        var captures = rig.Frames.Captures;
+
+        _ = rig.Node.HostFrame(context: rig.Context);
+        rig.Node.BeginFrame();
+        _ = rig.Node.HostFrame(context: rig.Context);
+        rig.Node.BeginFrame();
+        _ = rig.Node.HostFrame(context: rig.Context);
+        Assert.Equal(
+            actual: rig.Frames.Captures,
+            expected: (captures + 3)
+        );
+    }
     // A mirror: a screen sampling the node's own view binds the output the view completed before, and the engine renders
     // the frame into another image, reusing a replaced one once nothing holds it, so a steady mirror cycles through at
     // most three images: the one it writes, the one it samples, and the one a ring slot's fence still holds.

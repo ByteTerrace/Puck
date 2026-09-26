@@ -96,6 +96,22 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Assert.Contains(collection: set.Reads[camera], filter: edge => ((edge.Producer == camera) && edge.PreviousFrame));
         Assert.True(condition: (set.Order.ToList().IndexOf(item: camera) < set.Order.ToList().IndexOf(item: world)));
     }
+    // A camera a screen and a HUD frame both show is demanded both ways: the world shows it through a footprint, and the
+    // display shows it as a root, so it renders even where nothing schedules the world.
+    [Fact]
+    public void ACameraAScreenAndAHudFrameShowIsAFootprintAndARoot() {
+        _ = ShowCamera(demand: WorldViewDemand.Screen | WorldViewDemand.Root);
+        Frame(pane: null);
+
+        Assert.Contains(
+            collection: m_host.Footprints,
+            filter: static footprint => (footprint.Producer == ViewCamera)
+        );
+        Assert.Equal(
+            actual: Assert.Single(collection: m_host.Roots).Instance,
+            expected: ViewCamera
+        );
+    }
     [Fact]
     public void ACameraNothingShowsRendersZeroTimes() {
         _ = ShowCamera(demand: WorldViewDemand.None);

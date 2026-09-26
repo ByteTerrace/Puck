@@ -16,10 +16,15 @@ internal sealed partial class WorldScreenBinder {
     // What the views are composed with: the host world's frame source, whose glyph atlas, decals and moving screens a
     // camera view shares, and the display's extent, which a view's declared extent is a fraction of.
     private ISdfFrameSource? m_viewHostSource;
+
     private int m_viewDisplayHeight = 1;
     private int m_viewDisplayWidth = 1;
+
     // The simulation tick the frame the world node renders presents, which a camera rig's clock reads.
     private ulong m_viewAuthoritativeTick;
+
+    // The views as the render graph last received them, set again whenever a registration, a screen or a session moves.
+    private readonly WorldViewSet m_views = new();
 
     /// <summary>Gets or sets the world's engine node, whose frame (<see cref="SdfEngineNode.HostFrame"/>) every camera view
     /// films; <see langword="null"/> in a presentation with no render graph, where no view renders.</summary>
@@ -111,82 +116,87 @@ internal sealed partial class WorldScreenBinder {
             ? null
             : runtime.Producer(instance: index));
     }
-    // Rebuilds the view instances from the camera registrations and the session screens and hands them to the mappings
-    // when they differ from the ones the mappings hold, which composes the running set again.
+    // Sets every view from the camera registrations and the session screens and hands the views to the mappings when any
+    // changed, which composes the running set again; a frame that changes nothing allocates nothing. A view's demand is
+    // every way something shows it: a screen, and a HUD frame or a probe export.
     private void ReconcileViews() {
-        var views = new List<WorldView>();
         var refresh = RenderGraphRefresh.Every(divisor: m_viewRefreshDivisor);
 
-        foreach (var name in m_cameraViews.Keys.Order(comparer: StringComparer.Ordinal)) {
-            var registration = m_cameraViews[name];
-            var exported = (
-                (registration.Seat == DefaultViewSeat) &&
-                HasViewExportReferences(cameraName: registration.Row.Name)
-            );
-            var demand = ((WiredScreensFor(name: name).Count > 0)
-                ? WorldViewDemand.Screen
-                : ((exported || (HasRetainedView(registrationName: name) && !m_parkedViews.Contains(item: name)))
-                    ? WorldViewDemand.Root
-                    : WorldViewDemand.None));
+        m_views.Begin();
 
-            views.Add(item: new WorldView(
+        foreach (var (name, registration) in m_cameraViews) {
+            var demand = (IsWired(name: name)
+                ? WorldViewDemand.Screen
+                : WorldViewDemand.None);
+
+            if (
+                (
+                    (registration.Seat == DefaultViewSeat) &&
+                    HasViewExportReferences(cameraName: registration.Row.Name)
+                ) ||
+                (HasRetainedView(registrationName: name) && !m_parkedViews.Contains(item: name))
+            ) {
+                demand |= WorldViewDemand.Root;
+            }
+
+            var (width, height) = WorldViewInstances.Fit(
+                displayHeight: m_viewDisplayHeight,
+                displayWidth: m_viewDisplayWidth,
+                height: ((int)registration.Row.RenderHeight),
+                width: ((int)registration.Row.RenderWidth)
+            );
+
+            m_views.Set(view: new WorldView(
                 Demand: demand,
                 FilmsWorld: true,
-                Height: ViewFraction(
-                    display: m_viewDisplayHeight,
-                    pixels: ((int)registration.Row.RenderHeight)
-                ),
+                Height: height,
                 Name: name,
                 Refresh: refresh,
-                Width: ViewFraction(
-                    display: m_viewDisplayWidth,
-                    pixels: ((int)registration.Row.RenderWidth)
-                )
+                Width: width
             ));
         }
-        foreach (var index in m_slots.Keys.Order()) {
-            if (m_slots[index].Session is not { FrameSource: not null } feed) {
+        foreach (var slot in m_slots.Values) {
+            if (slot.Session is not { FrameSource: not null } feed) {
                 continue;
             }
 
-            var resolution = (feed.Resolution ?? new WorldScreenResolution(
-                Height: WorldViewInstances.DefaultSessionHeight,
-                Width: WorldViewInstances.DefaultSessionWidth
-            ));
+            var (width, height) = WorldViewInstances.Fit(
+                displayHeight: m_viewDisplayHeight,
+                displayWidth: m_viewDisplayWidth,
+                height: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight),
+                width: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth)
+            );
 
             // A window renders every produced frame: a stale image between refreshes would show the destination lagging the
             // viewer's own eye, breaking the parallax the projection exists for.
-            views.Add(item: new WorldView(
+            m_views.Set(view: new WorldView(
                 Demand: WorldViewDemand.Screen,
                 FilmsWorld: false,
-                Height: ViewFraction(
-                    display: m_viewDisplayHeight,
-                    pixels: resolution.Height
-                ),
+                Height: height,
                 Name: feed.RegistrationName,
                 Refresh: ((feed.Projection == WorldScreenProjection.Window)
                     ? RenderGraphRefresh.EveryFrame
                     : refresh),
-                Width: ViewFraction(
-                    display: m_viewDisplayWidth,
-                    pixels: resolution.Width
-                )
+                Width: width
             ));
         }
 
-        if (!views.SequenceEqual(second: Mappings.Views.Views)) {
-            Mappings.ReconcileViews(views: WorldViewInstances.Of(views: views));
+        if (m_views.TryPublish(instances: out var views)) {
+            Mappings.ReconcileViews(views: views);
         }
     }
-    // The fraction of a display axis a view's declared extent covers, at most the whole axis.
-    private static double ViewFraction(int pixels, int display) => Math.Min(
-        val1: 1.0,
-        val2: (Math.Max(
-            val1: 1,
-            val2: pixels
-        ) / ((double)Math.Max(
-            val1: 1,
-            val2: display
-        )))
-    );
+    // Whether any screen shows a camera registration.
+    private bool IsWired(string name) {
+        foreach (var slot in m_slots.Values) {
+            if (string.Equals(
+                a: slot.View?.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

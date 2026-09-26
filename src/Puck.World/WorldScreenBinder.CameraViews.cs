@@ -239,7 +239,9 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
         ReconcileViews();
     }    // Resolves a placeable-camera name against the world's declared cameras (ordinal), or null when none matches.
     private WorldCamera? ResolveCamera(string name) {
-        foreach (var camera in m_cameras) {
+        for (var index = 0; (index < m_cameras.Count); index++) {
+            var camera = m_cameras[index];
+
             if (string.Equals(
                 a: camera.Name,
                 b: name,
