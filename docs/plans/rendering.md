@@ -1308,7 +1308,9 @@ through the same one-pass graph on a node of their own
 their tier is chosen per device at run time and the HUD reads them outside the
 set, and hand out counted leases. A fill converts as soon as a screen shows or
 a HUD frame names an external source, because a converter's graph builds off
-the frame thread (`WorldCaptureFills`, held by `WorldCaptureFillLawTests`); a
+the frame thread, and never while none does, so a capture of a world showing no
+external content builds no pipeline (`WorldCaptureFills`, held by
+`WorldCaptureFillLawTests`); a
 camera source's descriptor states the extent its seat's sensor delivers,
 requested until the device negotiates one. A machine's video output is an
 uploaded source too (`MachineVideoSourceUpload`): once per completed
@@ -3363,12 +3365,14 @@ except step 8.
       its owner retired, after the last lease. `CpuSurfaceSource` is deleted,
       and publishing takes the frame context. A capture fill
       (`WorldCaptureFills`) converts whenever a screen shows or a HUD frame
-      names an external source, not only while the gate fills, since a
+      names an external source, whether or not the gate fills, since a
       converter's graph builds off the frame thread and a fill first converted
-      on the arming frame has no image on that frame. Laws:
+      on the arming frame has no image on that frame, and only then, since the
+      gate resolves no other read to a fill. Laws:
       `RenderGraphRuntimeLawTests.AConverterConvertsPixelsOutsideTheSetThroughItsDescriptorsConversion`,
-      `WorldCaptureFillLawTests.AScreenShowingAnExternalSourceHasItsFillConvertedBeforeTheCaptureIsArmed`
-      and `WorldCaptureFillLawTests.AFillFirstConvertedOnTheArmingFrameHasNoImageUntilALaterFrame`.
+      `WorldCaptureFillLawTests.AScreenShowingAnExternalSourceHasItsFillConvertedBeforeTheCaptureIsArmed`,
+      `WorldCaptureFillLawTests.AFillFirstConvertedOnTheArmingFrameHasNoImageUntilALaterFrame`
+      and `WorldCaptureFillLawTests.ACaptureWhileNothingShowsExternalContentConvertsNoFillAndBuildsNoPipeline`.
 3. Uploaded sources write regions, and conversions are planned passes. The
    source-graph side has landed. An uploaded producer registers an upload for
    its source package (`RenderGraphPackageRecorders.RegisterSource`, through

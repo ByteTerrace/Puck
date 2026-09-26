@@ -1189,7 +1189,8 @@ converted through `source-rgba` (`WorldCaptureFills`). Its converter builds
 off the frame thread, so a fill first converted on the frame a capture is
 armed for would have no image on that frame; each fill therefore converts as
 soon as a screen shows or a HUD frame names an external source, before any
-capture is armed. The gate
+capture is armed, and no fill converts while none does, since the gate then
+resolves nothing to one. The gate
 covers screen slots, camera views filming those screens, and HUD `Frame`
 elements. An offscreen host, which serves scheduled captures and `puck parity`,
 fills every frame. A windowed host fills while a capture is armed on the

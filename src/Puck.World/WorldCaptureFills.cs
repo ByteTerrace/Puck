@@ -11,28 +11,26 @@ namespace Puck.World;
 /// (<see cref="RenderGraphRuntime.CreateConverter"/>), and again only after a device loss drops it. A converter builds its
 /// graph off the frame thread and its first conversions wait for it, so a fill first converted on the frame a capture is
 /// armed for has no image on that frame, and the capture would show nothing where the external content was. The fills
-/// therefore convert whenever external content is consumed, not only while the gate fills: by the frame a capture is armed,
-/// each fill a filled source resolves to has already converted. Every member runs on the thread that produces frames.
+/// therefore convert whenever external content is consumed, gate filling or not: by the frame a capture is armed, each fill
+/// a filled source resolves to has already converted. They convert only then: a gate filling while nothing consumes
+/// external content resolves no image to a fill, so a capture of such a world, and every frame of an offscreen host that
+/// fills always, creates no converter. Every member runs on the thread that produces frames.
 /// </summary>
 public sealed class WorldCaptureFills : IDisposable {
     private readonly Func<bool> m_consumesExternal;
-    private readonly WorldCaptureGate m_gate;
     private readonly Dictionary<uint, WorldScreenBinder.ConvertedPixels> m_fills = new();
 
     private bool m_disposed;
 
     /// <summary>Initializes a new instance of the <see cref="WorldCaptureFills"/> class.</summary>
-    /// <param name="gate">The gate whose filled sources resolve to these fills.</param>
     /// <param name="consumesExternal">Answers whether any consumer shows external content this frame: a screen showing a
-    /// source for which <see cref="IsExternal"/> holds, or a HUD frame naming one.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="gate"/> or <paramref name="consumesExternal"/> is
-    /// <see langword="null"/>.</exception>
-    public WorldCaptureFills(WorldCaptureGate gate, Func<bool> consumesExternal) {
-        ArgumentNullException.ThrowIfNull(argument: gate);
+    /// source for which <see cref="IsExternal"/> holds, or a HUD frame naming one. Those are the only reads a
+    /// <see cref="WorldCaptureGate"/> resolves to a fill.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="consumesExternal"/> is <see langword="null"/>.</exception>
+    public WorldCaptureFills(Func<bool> consumesExternal) {
         ArgumentNullException.ThrowIfNull(argument: consumesExternal);
 
         m_consumesExternal = consumesExternal;
-        m_gate = gate;
     }
 
     /// <summary>Returns whether a screen source shows external content: a producer whose registered shape's content class is
@@ -60,9 +58,9 @@ public sealed class WorldCaptureFills : IDisposable {
         ? fill.Acquire()
         : 0
     );
-    /// <summary>Converts the fills a frame needs, before any source of the frame resolves: while the gate fills, or whenever
-    /// a consumer shows external content, it converts the default fill (<see cref="ImageSourceDescriptor.DefaultCaptureFill"/>),
-    /// and otherwise converts nothing.</summary>
+    /// <summary>Converts the fills a frame needs, before any source of the frame resolves: whenever a consumer shows external
+    /// content, whether or not the gate fills, it converts the default fill
+    /// (<see cref="ImageSourceDescriptor.DefaultCaptureFill"/>), and otherwise converts nothing.</summary>
     /// <param name="context">The host's frame context.</param>
     /// <param name="runtime">The runtime whose converters convert the fills, or <see langword="null"/> before one runs,
     /// when nothing converts.</param>
@@ -71,10 +69,7 @@ public sealed class WorldCaptureFills : IDisposable {
     public bool Begin(in FrameContext context, RenderGraphRuntime? runtime) {
         if (
             m_disposed ||
-            (
-                !m_gate.Filling &&
-                !m_consumesExternal()
-            )
+            !m_consumesExternal()
         ) {
             return false;
         }

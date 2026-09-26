@@ -348,8 +348,11 @@ These are one-line cautions; the owning pages hold the derivations.
   out under a counted lease; never upload a sampled image by hand. A converter
   builds off the frame thread, so a capture fill (`WorldCaptureFills`)
   converts whenever a screen shows or a HUD frame names an external source,
-  never first on the frame a capture is armed for, which would have no image
-  (`WorldCaptureFillLawTests`). An uploaded
+  never first on the frame a capture is armed for, which would have no image,
+  and never while none does: a filling gate with no external consumer resolves
+  nothing to a fill, so a capture of such a world creates no pipeline
+  (`WorldCaptureFillLawTests`, the `device-loss-windowed` discriminating leg).
+  An uploaded
   source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`, the

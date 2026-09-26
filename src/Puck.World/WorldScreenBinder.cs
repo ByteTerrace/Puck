@@ -242,10 +242,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             alwaysFills: alwaysFillsCaptures,
             captureArmed: () => (Runtime?.PendingCapturePath is not null)
         );
-        m_fills = new WorldCaptureFills(
-            consumesExternal: ConsumesExternal,
-            gate: m_captureGate
-        );
+        m_fills = new WorldCaptureFills(consumesExternal: ConsumesExternal);
         m_fillImage = m_fills.Acquire;
         m_producers.Register(producer: new WorldTestPatternProducer());
         m_producers.Register(producer: new WorldQrProducer());
