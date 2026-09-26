@@ -1224,8 +1224,11 @@ destination as `input:<destination>`. The mapping and its laws are described in
 On a windowed host, `WorldPointerRayCapture` casts the OS pointer through its
 seat's camera each frame and holds the two commands on that seat's lane, the
 seat folds them into its intent's `SourceRay`, and a rule reads the mapped hit
-as `$pointer:<seat>:<screenIndex>:x|y|on`. `body.channels` echoes the ray and
-its hit on every `Simulation` screen.
+as `$pointer:<seat>:<screenIndex>:x|y|on`. A typed
+`source.pointer.origin <x> <y> <z>` or `source.pointer.direction <x> <y> <z>`
+is held on the seat's lane in the same way, until it is typed again,
+`source.pointer.clear` ends the ray, or the seat is vacated. `body.channels`
+echoes the ray and its hit on every `Simulation` screen.
 
 **A window captured into a pane takes input only when the local user opens it.**
 `source.passthrough open <instance> <windowTitle...>` opens the window capture a

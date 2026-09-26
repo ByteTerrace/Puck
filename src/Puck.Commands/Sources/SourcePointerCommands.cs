@@ -10,6 +10,9 @@ public static class SourcePointerCommands {
     public const string Origin = "source.pointer.origin";
     /// <summary>The Axis3D command carrying the pointer ray's world-space direction; it need not be unit length.</summary>
     public const string Direction = "source.pointer.direction";
+    /// <summary>The verb that ends a seat's held pointer ray: neither <see cref="Origin"/> nor <see cref="Direction"/>
+    /// is sustained on the seat's lane from the next snapshot on.</summary>
+    public const string Clear = "source.pointer.clear";
 
     /// <summary>Reads the pointer ray a lane carries this tick.</summary>
     /// <param name="lane">The slot's lane of the tick's snapshot.</param>

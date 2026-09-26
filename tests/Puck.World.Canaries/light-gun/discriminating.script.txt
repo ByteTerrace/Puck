@@ -5,23 +5,11 @@ body.engage 0
 world.wait 3
 source.pointer.origin 0.5 1 5
 source.pointer.direction 0 0 -1
-world.wait 1
-source.pointer.origin 0.5 1 5
-source.pointer.direction 0 0 -1
-world.wait 1
-source.pointer.origin 0.5 1 5
-source.pointer.direction 0 0 -1
+world.wait 2
 screen.state 0
 world.wait 1
 world.state seen
-source.pointer.origin 0.5 1 5
-source.pointer.direction 0 0 -1
-world.wait 1
-source.pointer.origin 0.5 1 5
-source.pointer.direction 0 0 -1
-world.wait 1
-source.pointer.origin 0.5 1 5
-source.pointer.direction 0 0 -1
+world.wait 2
 screen.state 0
 world.wait 1
 world.state seen
