@@ -1365,7 +1365,7 @@ public static class WorldBootComposition {
         // router the window pump offers every raw event to before the observers above, so a focused source's keys and
         // the pointer over its pane reach its window instead of the game.
         services.AddSingleton(implementationFactory: static sp => new WorldSourcePassthrough(
-            binder: sp.GetRequiredService<WorldScreenBinder>(),
+            windows: sp.GetRequiredService<WorldScreenBinder>(),
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             viewports: sp.GetRequiredService<WorldSeatViewports>()
         ));

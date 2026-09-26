@@ -1244,10 +1244,14 @@ open source's window, captured frame, client area and DPI scale. Only the
 host's own console may run the verb, as typed text; the local operator
 attachment (`world.control`) is that console too. No binding, seat, peer,
 addon, schedule or world document can open a passthrough source or send it
-input. A source whose pane is no longer published, or stops showing the window
-it was opened on (its instance stops, its capture reopens onto another window,
-or a row of the same name replaces it), is closed before the next event routes.
-Closing a source, by the verb or this way, releases every key and button its
+input. A source that stops showing the window it was opened on (its instance
+stops, its capture reopens onto another window, or a row of the same name
+replaces it) is closed before the next event routes. A source whose pane is
+only not published for a while stays open: its window receives nothing while the
+pane is unshown, and an event arriving then first takes the keyboard from it and
+releases what it holds. Once the same instance's pane is published again a click
+on it reaches the window again.
+Closing a source, by the verb or on removal, releases every key and button its
 window holds and returns the keyboard to the game. Delivery is Windows-only:
 the capture feed's `Win32PassthroughWindow` sends window messages to the
 captured window, described in
