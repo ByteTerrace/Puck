@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Sources;
 using Puck.DirectX;
 using Puck.DirectX.Interop;
 using Puck.Hosting;
@@ -12,6 +14,9 @@ using Puck.World.Client;
 namespace Puck.World;
 
 internal sealed partial class WorldScreenBinder {
+    // Captures a live verb opened to prove its target, each waiting for the source instance that shows it to adopt it.
+    private readonly List<ParkedCapture> m_parkedCaptures = [];
+
     // The render adapter LUID a capture feed opens its platform capture on when the D3D12 GPU transport is active, or
     // null on the Vulkan/CPU path (and until the render device is first seen at publish; declared GPU-route captures
     // defer their open to the first pull, where this has resolved).
@@ -336,7 +341,8 @@ internal sealed partial class WorldScreenBinder {
     }
 
     /// <summary>Binds a declared screen to a live desktop-window capture keyed by a title fragment — the runtime
-    /// <c>screen.source &lt;index&gt; capture</c> path. Any existing producer on the slot is cleared first. The capture rebinds each grab, so
+    /// <c>screen.source &lt;index&gt; capture</c> path. The screen shows the capture's source instance over its row from
+    /// the render graph's next frame, which adopts the capture opened here. The capture rebinds each grab, so
     /// the target window need not be open yet (it reads no signal until it appears, and rebinds if it disappears and
     /// returns); only an unopenable capture service fails here.</summary>
     /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
@@ -347,10 +353,7 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: "binder disposed");
         }
 
-        if (m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) is false) {
+        if (!m_slots.ContainsKey(key: index)) {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
@@ -363,20 +366,22 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: fault);
         }
 
-        slot.ClearLive();
-        slot.LiveFeed = new CaptureSlotFeed(
-            binder: this,
-            feed: feed
+        BindCapture(
+            feed: feed,
+            index: index,
+            settings: new WorldCaptureSettings(
+                Profile: WorldFeedProfile.Default,
+                WindowTitle: windowTitle
+            )
         );
-        slot.DeclaredFault = null;
-        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} capturing '{windowTitle}'");
     }
     /// <summary>Binds a declared screen to a live whole-monitor capture keyed by index — the runtime <c>screen.source &lt;index&gt; desktop</c>
-    /// path. Any existing producer on the slot is cleared first. The capture rebinds each grab, so it reads no signal
-    /// until the monitor is present and reacquires if it disconnects and returns; an out-of-range index or an unopenable
-    /// capture service fails here.</summary>
+    /// path. The screen shows the capture's source instance over its row from the render graph's next frame, which adopts
+    /// the capture opened here. The capture rebinds each grab, so it reads no signal until the monitor is present and
+    /// reacquires if it disconnects and returns; an out-of-range index or an unopenable capture service fails
+    /// here.</summary>
     /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
     /// <param name="monitorIndex">The 0-based monitor to capture whole (0 = primary).</param>
     /// <returns>Whether the bind succeeded, and a message describing the outcome.</returns>
@@ -385,10 +390,7 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: "binder disposed");
         }
 
-        if (m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) is false) {
+        if (!m_slots.ContainsKey(key: index)) {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
@@ -401,17 +403,87 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: fault);
         }
 
-        slot.ClearLive();
-        slot.LiveFeed = new CaptureSlotFeed(
-            binder: this,
-            feed: feed
+        BindCapture(
+            feed: feed,
+            index: index,
+            settings: new WorldCaptureSettings(
+                MonitorIndex: monitorIndex,
+                Profile: WorldFeedProfile.Default
+            )
         );
-        slot.DeclaredFault = null;
-        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} capturing monitor {monitorIndex}");
     }
 
+    // Shows a live capture's source over a screen's row, parking the capture the verb opened for the source instance to
+    // adopt when the render graph opens it.
+    private void BindCapture(int index, CaptureFeed feed, WorldCaptureSettings settings) {
+        var source = WorldImageProducerSettings.SourceOf(
+            id: WorldImageProducerSettings.CaptureId,
+            settings: settings
+        );
+
+        m_parkedCaptures.Add(item: new ParkedCapture(
+            feed: feed,
+            source: source
+        ));
+        ShowLive(
+            index: index,
+            source: source
+        );
+    }
+    // Hands a capture source instance the capture a live verb parked for equal settings, if one is waiting.
+    private bool TryClaimParkedCapture(WorldScreenSource.Producer source, [NotNullWhen(returnValue: true)] out CaptureFeed? capture) {
+        for (var index = 0; (index < m_parkedCaptures.Count); index++) {
+            var parked = m_parkedCaptures[index];
+
+            if (ImageSourceSettings.Equal(
+                left: parked.Source.Settings,
+                right: source.Settings
+            )) {
+                m_parkedCaptures.RemoveAt(index: index);
+                capture = parked.Feed;
+
+                return true;
+            }
+        }
+
+        capture = null;
+
+        return false;
+    }
+    // Disposes every parked capture an earlier publish already saw: the render graph opens the instances a publish's frame
+    // shows right after that publish, so a capture still parked then was claimed by no instance (one already running under
+    // equal settings, or no render graph at all).
+    private void RetireParkedCaptures() {
+        for (var index = (m_parkedCaptures.Count - 1); (index >= 0); index--) {
+            var parked = m_parkedCaptures[index];
+
+            if (parked.Published) {
+                m_parkedCaptures.RemoveAt(index: index);
+                parked.Feed.Dispose();
+            } else {
+                parked.Published = true;
+            }
+        }
+    }
+    private void DisposeParkedCaptures() {
+        foreach (var parked in m_parkedCaptures) {
+            parked.Feed.Dispose();
+        }
+
+        m_parkedCaptures.Clear();
+    }
+
+    // A capture a live verb opened, waiting for the source instance that shows it.
+    private sealed class ParkedCapture(WorldScreenSource.Producer source, CaptureFeed feed) {
+        public CaptureFeed Feed { get; } = feed;
+
+        // Whether a publish has run since the capture was parked.
+        public bool Published { get; set; }
+
+        public WorldScreenSource.Producer Source { get; } = source;
+    }
     // One feed's PRESENTATION CLOCK, stated once so a webcam and a window capture cannot drift into different refresh
     // policies. Camera pixels are nondeterministic presentation input and must not freeze when authoritative simulation
     // time is paused or absent. The first pull after arming always runs; later pulls wait out the profile's whole period.

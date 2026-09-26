@@ -57,16 +57,9 @@ internal sealed partial class WorldScreenBinder {
     /// <param name="index">The engine screen-surface index.</param>
     /// <returns>The order, or <see langword="null"/> when the screen's source crosses no devices.</returns>
     public SharedFenceOrder? FenceOrderAt(int index) {
-        if (!m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        )) {
-            return null;
-        }
-
         var feed = ((ReadOf(screen: index) is { } instance)
             ? FeedOf(instance: instance)
-            : slot.LiveFeed);
+            : null);
 
         return (feed switch {
             CameraSlotFeed camera => CameraFenceOrderFor(
@@ -132,7 +125,7 @@ internal sealed partial class WorldScreenBinder {
                     instance: instance,
                     slot: slot
                 )
-                : slot.CurrentFault())
+                : slot.DeclaredFault)
         );
     }
     /// <summary>Gets the live decal-text source at a screen index, or <see langword="null"/> when the slot's current

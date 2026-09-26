@@ -1149,10 +1149,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) {
         if (context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)) {
-            m_binder.Publish(
-                deviceContext: device,
-                tick: m_simulation.Tick
-            );
+            m_binder.Publish(deviceContext: device);
         }
 
         if (m_graphs is not { } graphs) {

@@ -345,35 +345,17 @@ internal sealed partial class WorldScreenBinder {
         m_cameraDemand.Clear();
 
         foreach (var slot in m_slots.Values) {
-            var rowCamera = WorldImageProducerSettings.TryCamera(
-                camera: out var declared,
-                source: slot.DeclaredSource
-            );
-            int seat;
-            WorldCameraSensor sensor;
-
-            if (slot.LiveFeed is CameraSlotFeed live) {
-                (seat, sensor) = (live.Seat, live.Sensor);
-            } else if (
-                rowCamera &&
-                (ReadOf(screen: slot.Index) is not null)
-            ) {
-                // A screen showing its camera row reads the row's source instance, whose feed resolves the seat's
-                // shared feed this demand opens.
-                (seat, sensor) = ((declared!.Seat ?? DefaultViewSeat), declared.Sensor);
-            } else {
+            // A screen showing a camera reads its source instance, whose feed resolves the seat's shared feed this demand
+            // opens.
+            if (!WorldImageProducerSettings.TryCamera(
+                camera: out var shown,
+                source: ShownOf(screen: slot.Index)
+            )) {
                 continue;
             }
 
-            var requested = ((
-                rowCamera &&
-                ((declared!.Seat ?? seat) == seat) &&
-                (declared.Sensor == sensor)
-            )
-                ? (declared.Profile ?? WorldFeedProfile.Default)
-                : WorldFeedProfile.Default
-            );
-            var key = (seat, sensor);
+            var requested = (shown.Profile ?? WorldFeedProfile.Default);
+            var key = ((shown.Seat ?? DefaultViewSeat), shown.Sensor);
 
             m_cameraDemand[key] = (m_cameraDemand.TryGetValue(
                 key: key,

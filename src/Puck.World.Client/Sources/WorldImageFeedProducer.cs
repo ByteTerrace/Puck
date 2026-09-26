@@ -18,6 +18,8 @@ namespace Puck.World.Client;
 public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWorkSource {
     private readonly Func<uint, GpuImageLease> m_fill;
     private readonly WorldCaptureGate m_gate;
+    // Why the opened feed hands out no image, when it is no import feed.
+    private readonly string? m_notImported;
 
     /// <summary>Initializes a new instance of the <see cref="WorldImageFeedProducer"/> class, which owns the opened
     /// feed.</summary>
@@ -32,16 +34,21 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
 
         m_fill = fill;
         m_gate = gate;
+        Feed = (opening.Feed as IWorldImportFeed);
+        m_notImported = (((opening.Feed is not null) && (Feed is null))
+            ? $"image producer '{opening.Feed.Descriptor.Producer}' opened a feed that hands out no image"
+            : null);
         Opening = opening;
     }
 
     /// <inheritdoc/>
-    public ImageSourceDescriptor? Descriptor => Opening.Feed?.Descriptor;
+    public ImageSourceDescriptor? Descriptor => Feed?.Descriptor;
     /// <summary>Gets why the source shows nothing: why its feed did not open, or the feed's own fault; or
     /// <see langword="null"/> while it shows its image.</summary>
-    public string? Fault => (Opening.Fault ?? Opening.Feed?.Fault);
-    /// <summary>Gets the feed the producer owns, or <see langword="null"/> when none opened.</summary>
-    public IWorldImageFeed? Feed => Opening.Feed;
+    public string? Fault => (Opening.Fault ?? (m_notImported ?? Feed?.Fault));
+    /// <summary>Gets the feed the producer publishes and acquires, or <see langword="null"/> when none opened or the one
+    /// that opened hands out no image.</summary>
+    public IWorldImportFeed? Feed { get; }
     /// <inheritdoc/>
     public SurfaceFormat Format => ((Descriptor?.Format == ImagePixelFormat.R8G8B8A8Unorm)
         ? SurfaceFormat.R8G8B8A8Unorm
@@ -61,13 +68,13 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     /// <inheritdoc/>
     public void Dispose() => Opening.Feed?.Dispose();
     /// <inheritdoc/>
-    public void OnDeviceLost() => Opening.Feed?.NotifyDeviceLost();
+    public void OnDeviceLost() => Feed?.NotifyDeviceLost();
     /// <inheritdoc/>
     /// <remarks>Publishes the feed on the frame's device, at the frame's completed tick, and reports whether it has an
     /// image. The extent is the one the feed declared, so the arguments are not read.</remarks>
     public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
         if (
-            (Opening.Feed is not { } feed) ||
+            (Feed is not { } feed) ||
             !context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)
         ) {
             return false;
@@ -94,7 +101,7 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     /// <remarks>The image is the feed's acquired frame, or its capture fill while the gate fills its content class; the
     /// output's image is empty and its lease carries the image view.</remarks>
     public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
-        if (Opening.Feed is not { } feed) {
+        if (Feed is not { } feed) {
             output = default;
 
             return false;

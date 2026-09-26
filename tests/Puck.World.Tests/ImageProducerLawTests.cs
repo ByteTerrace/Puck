@@ -97,14 +97,24 @@ public sealed class ImageProducerLawTests {
 
         Assert.False(condition: reference.TryWriteReference(rgba: rgba, stamp: out _));
 
-        opened.Publish(
-            deviceContext: Gpu,
-            tick: 640UL
+        using var region = new GpuRegion(
+            bindings: Gpu.Services.Bindings,
+            buffers: Gpu.Services.BufferFactory,
+            byteCount: (ImageSourceUploadLayout.HeaderBytes + rgba.Length),
+            copyPipeline: null,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.InPlace,
+            recorder: Gpu.Services.Recorder,
+            slotCount: 1
         );
 
+        Assert.True(condition: Assert.IsAssignableFrom<IWorldUploadFeed>(@object: opened).TryWrite(
+            region: region,
+            tick: 640L
+        ));
         Assert.True(condition: reference.TryWriteReference(rgba: rgba, stamp: out var stamp));
         Assert.Equal(expected: new ImageSourceStamp(Sequence: 1UL, Tick: 640UL), actual: stamp);
-        Assert.NotEqual(expected: 0, actual: ((int)opened.Handle()));
 
         var bgra = new byte[rgba.Length];
 
@@ -118,6 +128,12 @@ public sealed class ImageProducerLawTests {
         for (var offset = 0; (offset < rgba.Length); offset += 4) {
             Assert.Equal(expected: (bgra[(offset + 2)], bgra[(offset + 1)], bgra[offset], bgra[(offset + 3)]), actual: (rgba[offset], rgba[(offset + 1)], rgba[(offset + 2)], rgba[(offset + 3)]));
         }
+
+        // The region holds the same pattern behind its header.
+        Assert.Equal(
+            actual: region.Contents[ImageSourceUploadLayout.HeaderBytes..].ToArray(),
+            expected: bgra
+        );
 
         Assert.True(condition: ImageSourceVerdict.Compare(actual: rgba, descriptor: opened.Descriptor, expected: rgba).Holds);
 
@@ -318,12 +334,12 @@ public sealed class ImageProducerLawTests {
         }
 
         gate.BeginFrame();
-        Assert.Equal(expected: FakeFeed.DesktopHandle, actual: gate.Resolve(feed: feed!, fill: Fill).ImageViewHandle);
+        Assert.Equal(expected: FakeFeed.DesktopHandle, actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
         Assert.Equal(expected: 1, actual: desktop.Feed!.Acquisitions);
 
         armed = true;
         gate.BeginFrame();
-        Assert.Equal(expected: ((nint)0xF111), actual: gate.Resolve(feed: feed!, fill: Fill).ImageViewHandle);
+        Assert.Equal(expected: ((nint)0xF111), actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
         Assert.Equal(actual: filled, expected: [ImageSourceDescriptor.DefaultCaptureFill]);
 
         // The capture is served: the gate keeps filling for its hold, then shows the desktop again.
@@ -331,13 +347,13 @@ public sealed class ImageProducerLawTests {
 
         for (var frame = 0; (frame < WorldCaptureGate.HoldFrames); frame++) {
             gate.BeginFrame();
-            Assert.Equal(expected: ((nint)0xF111), actual: gate.Resolve(feed: feed!, fill: Fill).ImageViewHandle);
+            Assert.Equal(expected: ((nint)0xF111), actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
         }
 
         Assert.Equal(expected: 1, actual: desktop.Feed.Acquisitions);
 
         gate.BeginFrame();
-        Assert.Equal(expected: FakeFeed.DesktopHandle, actual: gate.Resolve(feed: feed!, fill: Fill).ImageViewHandle);
+        Assert.Equal(expected: FakeFeed.DesktopHandle, actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
 
         // An offscreen host fills every frame, and deterministic content is never filled.
         var offscreen = new WorldCaptureGate(
@@ -345,7 +361,7 @@ public sealed class ImageProducerLawTests {
             captureArmed: static () => false
         );
 
-        Assert.Equal(expected: ((nint)0xF111), actual: offscreen.Resolve(feed: feed!, fill: Fill).ImageViewHandle);
+        Assert.Equal(expected: ((nint)0xF111), actual: offscreen.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
         Assert.False(condition: offscreen.Fills(content: ImageContentClass.Deterministic));
         Assert.False(condition: offscreen.Fills(content: ImageContentClass.Presentation));
         Assert.Equal(expected: 2, actual: desktop.Feed.Acquisitions);
@@ -443,7 +459,7 @@ public sealed class ImageProducerLawTests {
             return true;
         }
     }
-    private sealed class FakeFeed(ImageSourceDescriptor descriptor) : IWorldImageFeed {
+    private sealed class FakeFeed(ImageSourceDescriptor descriptor) : IWorldImportFeed {
         public static readonly nint DesktopHandle = 0xDE5C;
 
         public int Acquisitions { get; private set; }

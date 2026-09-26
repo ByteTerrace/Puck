@@ -47,7 +47,7 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
             return slot.Light();
         }
 
-        return slot.DeclaredSource switch {
+        return ShownOf(screen: screen) switch {
             WorldScreenSource.Machine machine => (m_machines.VideoOutput(
                 instance: machine.Instance,
                 output: machine.Output
@@ -84,12 +84,9 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
         instance: context.Instance
     );
     /// <inheritdoc/>
-    /// <remarks>A screen reads its row's source instance while it shows its row; a live presentation source bound over
-    /// the row is rendered by the binder.</remarks>
-    public string? ReadOf(int screen) => (m_liveBinds.Contains(item: screen)
-        ? null
-        : Mappings.InstanceOf(screen: screen)
-    );
+    /// <remarks>A screen reads the source instance of the source it shows: its row's, or the one a live presentation
+    /// verb bound over the row.</remarks>
+    public string? ReadOf(int screen) => Mappings.InstanceOf(screen: screen);
     /// <inheritdoc/>
     public GpuImageLease Rendered(int screen) => (m_slots.TryGetValue(
         key: screen,
@@ -128,7 +125,7 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
     // signal, an upload refused), a probe not yet live, or null while it shows its image. A machine's fault is
     // Machines.State's concern.
     private string? SourceFault(ScreenSlot slot, string instance) {
-        if (slot.DeclaredSource is WorldScreenSource.Probe probe) {
+        if (ShownOf(screen: slot.Index) is WorldScreenSource.Probe probe) {
             return ((m_probeFeeds.TryGetValue(
                 key: probe.Id,
                 value: out var feed

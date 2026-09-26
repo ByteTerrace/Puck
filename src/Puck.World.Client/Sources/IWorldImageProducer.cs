@@ -8,11 +8,10 @@ namespace Puck.World.Client;
 
 /// <summary>
 /// One open image source: the feed a <see cref="IWorldImageProducer"/> opened for a
-/// <see cref="WorldScreenSource.Producer"/> source. A source instance's producer (<see cref="WorldImageFeedProducer"/>,
-/// or the runtime's upload for an <see cref="IWorldUploadFeed"/>) owns it, publishes it at its cadence, hands its image
-/// out through <see cref="WorldCaptureGate"/> (so an external feed never reaches a capture), and disposes it when the set
-/// no longer runs the instance; the screen binder does the same for a feed a live presentation verb bound. Every member
-/// runs on the presentation thread.
+/// <see cref="WorldScreenSource.Producer"/> source. The source instance that shows it owns it and disposes it when the
+/// render graph's set no longer runs the instance: the runtime's upload for an <see cref="IWorldUploadFeed"/>, or a
+/// <see cref="WorldImageFeedProducer"/> for an <see cref="IWorldImportFeed"/>. Every member runs on the presentation
+/// thread.
 /// </summary>
 public interface IWorldImageFeed : IDisposable {
     /// <summary>Gets the feed's descriptor: its producer, transport, format, cadence, content class and capture fill.</summary>
@@ -21,7 +20,11 @@ public interface IWorldImageFeed : IDisposable {
     string? Fault { get; }
     /// <summary>Gets the image's average emitted color, normalized to 0–1, which lights the room around the screen.</summary>
     Vector3 Light { get; }
-
+}
+/// <summary>A feed whose producer keeps its image on the GPU and hands it out (an imported transport: a camera, a desktop
+/// capture): its <see cref="WorldImageFeedProducer"/> publishes it at its cadence and acquires its image through
+/// <see cref="WorldCaptureGate"/>, so an external feed never reaches a capture.</summary>
+public interface IWorldImportFeed : IWorldImageFeed {
     /// <summary>Acquires the image for one submitted frame. A feed whose image another thread keeps writing returns a
     /// lease the sampling node retires once that submission completes.</summary>
     /// <returns>The lease, or one holding a zero handle while the feed has no image.</returns>

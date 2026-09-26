@@ -1148,14 +1148,13 @@ image through the capture gate, and the `machine` and `probe` ids register the
 binder's own. Such a source hands out an image view that only the SDF world
 samples, so a pane or graph input bound to one is refused.
 
-The live render graph runs every source a screen row shows: the SDF world
-producer reads each one, and each frame the engine binds the image the runtime
-hands it for a source to every screen whose row shows it, under a lease it holds
-until the submission that sampled it has finished. A screen showing a view, a
-session or a source a presentation verb bound live (`screen.source <index>
-<kind>`) is bound by the binder instead, until live binds become source
-instances (P12b-2 in
-[the rendering plan](../../docs/plans/rendering.md#p12--image-sources)).
+The live render graph runs every source a screen shows, its row's or the one a
+presentation verb bound over the row (`screen.source <index> <kind>`, a
+`screen.select` entry): the SDF world producer reads each one, and each frame
+the engine binds the image the runtime hands it for a source to every screen
+showing it, under a lease it holds until the submission that sampled it has
+finished. A live bind publishes its source's mapping as a row does. A screen
+showing a view or a session is bound by the binder instead.
 
 The engine ships four producers, each with its settings record in
 `WorldImageProducerSettings`:
@@ -1277,12 +1276,13 @@ device is disposed only after the last image made on it is released
 it. It recreates its own slot for a
 screen index removed and later restored by `world.reset`/`.load` exactly as
 `WorldMachineHost` does (bounded to the indices declared at boot, which the
-engine node binds every frame through the binder's `ISdfScreenSources`). It still OWNS the genuinely presentation
-sources—every producer feed and every jumbotron view—bound through `screen.source <index> <kind>`
-(`camera`, `capture`, `desktop`, `probe`, `view`, `qr`; it ejects a
-present machine first, through the ordered domain) and `screen.eject` (which
-routes to whichever half—machine or
-local producer—actually holds the slot). A camera source row picks its
+engine node binds every frame through the binder's `ISdfScreenSources`). It still
+OWNS the genuinely presentation sources bound through `screen.source <index>
+<kind>` (`camera`, `capture`, `desktop`, `probe`, `view`, `qr`; it ejects a
+present machine first, through the ordered domain)—a jumbotron view it renders
+itself, any other a source instance it shows over the row—and `screen.eject`
+(which routes to whichever half—machine or presentation source—actually holds
+the slot). A camera source row picks its
 `sensor` (`color` default, or `infrared`—its own shared feed; two-sensor
 worlds prefer the device's Windows Face Authentication Profile V2 and its
 driver-declared simultaneous native format pair. On Windows, Puck first asks

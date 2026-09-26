@@ -15,61 +15,18 @@ internal sealed partial class WorldScreenBinder {
     // Whether an external image resolves to its capture fill this frame.
     private bool FillsExternal => m_captureGate.Fills(content: ImageContentClass.External);
 
-    // Whether any screen shows external content: a live feed, a probe output, or a row's external source instance.
+    // Whether any screen shows external content: a camera, a capture or a probe output.
     private bool BindsExternal() {
         foreach (var slot in m_slots.Values) {
-            if (
-                (slot.LiveFeed is not null) ||
-                (slot.Probe is not null) ||
-                ShowsExternalRow(slot: slot)
-            ) {
+            if (IsExternal(source: ShownOf(screen: slot.Index))) {
                 return true;
             }
         }
 
         return false;
     }
-    // Opens a live producer source's feed through the registry and places it: an external feed is the slot's live feed,
-    // any other its declared feed. A producer that cannot open leaves its fault on the slot.
-    private bool OpenProducer(ScreenSlot slot, WorldScreenSource.Producer source) {
-        if (!m_producers.TryOpen(
-            fault: out var fault,
-            feed: out var feed,
-            source: source
-        )) {
-            slot.DeclaredFault = fault;
-
-            return false;
-        }
-
-        if (feed!.Descriptor.Content == ImageContentClass.External) {
-            slot.LiveFeed?.Dispose();
-            slot.LiveFeed = feed;
-        } else {
-            slot.ReleaseDeclared();
-            slot.DeclaredFeed = feed;
-        }
-
-        slot.DeclaredFault = null;
-
-        return true;
-    }
-    // The live producer bind (screen.select): the previous live feed and declared feed both give way to the new source,
-    // so the slot shows exactly what the entry names.
-    private (bool Ok, string Message) ApplyProducer(int index, ScreenSlot slot, WorldScreenSource.Producer source) {
-        slot.ClearLive();
-        slot.ReleaseDeclared();
-
-        return (OpenProducer(
-            slot: slot,
-            source: source
-        )
-            ? (Ok: true, Message: $"screen {index} showing producer '{source.Id}'")
-            : (Ok: false, Message: $"screen {index} producer '{source.Id}': {slot.DeclaredFault}")
-        );
-    }
-    // Ensures the fill image of every external feed is uploaded while the gate fills, so a filled source never samples
-    // an unset handle; a device loss drops the uploads and the next filled frame re-uploads them.
+    // Ensures the fill image of every external source a screen shows is uploaded while the gate fills, so a filled
+    // source never samples an unset handle; a device loss drops the uploads and the next filled frame re-uploads them.
     private void EnsureFills(IGpuDeviceContext deviceContext) {
         if (!m_captureGate.Filling) {
             return;
@@ -81,13 +38,6 @@ internal sealed partial class WorldScreenBinder {
         );
 
         foreach (var slot in m_slots.Values) {
-            if (slot.LiveFeed is { } live) {
-                EnsureFill(
-                    deviceContext: deviceContext,
-                    rgba: live.Descriptor.CaptureFill
-                );
-            }
-
             if (
                 (ReadOf(screen: slot.Index) is { } instance) &&
                 (FeedOf(instance: instance) is { Descriptor.FillsCaptures: true } source)
@@ -128,14 +78,6 @@ internal sealed partial class WorldScreenBinder {
     )
         ? surface.CurrentHandle
         : 0
-    );
-    private GpuImageLease Resolve(IWorldImageFeed feed) => m_captureGate.Resolve(
-        feed: feed,
-        fill: m_fillImage
-    );
-    private nint ResolveHandle(IWorldImageFeed feed) => (m_captureGate.Fills(content: feed.Descriptor.Content)
-        ? FillImage(rgba: feed.Descriptor.CaptureFill).ImageViewHandle
-        : feed.Handle()
     );
     private Vector3 ResolveLight(IWorldImageFeed feed) => (m_captureGate.Fills(content: feed.Descriptor.Content)
         ? WorldImageLight.OfFill(rgba: feed.Descriptor.CaptureFill)
@@ -179,7 +121,7 @@ internal sealed partial class WorldScreenBinder {
     }
     // One screen's reference to a seat's shared camera feed. Publishing, device loss and disposal belong to the shared
     // feed the binder owns, so they are nothing here.
-    private sealed class CameraSlotFeed : IWorldImageFeed {
+    private sealed class CameraSlotFeed : IWorldImportFeed {
         private readonly WorldScreenBinder m_binder;
 
         public CameraSlotFeed(WorldScreenBinder binder, WorldFeedProfile? profile, int seat, WorldCameraSensor sensor) {
@@ -223,7 +165,8 @@ internal sealed partial class WorldScreenBinder {
         public void Publish(ulong tick, IGpuDeviceContext deviceContext) { }
     }
     // The desktop-capture producer: a window keyed by title or a whole monitor keyed by index, opened through the one
-    // capture open ladder (TryCreateCaptureFeed), which retains a pending feed for a target not yet present.
+    // capture open ladder (TryCreateCaptureFeed), which retains a pending feed for a target not yet present. A capture a
+    // live verb already opened to prove its target is adopted rather than opened again.
     private sealed class CaptureProducer(WorldScreenBinder binder) : IWorldImageProducer {
         public ImageContentClass Content => ImageContentClass.External;
         public string Id => WorldImageProducerSettings.CaptureId;
@@ -237,6 +180,19 @@ internal sealed partial class WorldScreenBinder {
                 fault = refusal;
 
                 return false;
+            }
+
+            if (binder.TryClaimParkedCapture(
+                capture: out var parked,
+                source: source
+            )) {
+                feed = new CaptureSlotFeed(
+                    binder: binder,
+                    feed: parked
+                );
+                fault = null;
+
+                return true;
             }
 
             if (binder.TryCreateCaptureFeed(
@@ -259,7 +215,7 @@ internal sealed partial class WorldScreenBinder {
     // One screen's own window or monitor capture: it pulls on the capture's cadence when published and is disposed with
     // the slot. It is an imported source on either route: the CPU tier a Vulkan host takes is the import's staged-copy
     // fallback, as the camera's CPU tier is, so its descriptor agrees with the producer's registered shape.
-    private sealed class CaptureSlotFeed : IWorldImageFeed {
+    private sealed class CaptureSlotFeed : IWorldImportFeed {
         private readonly WorldScreenBinder m_binder;
 
         public CaptureSlotFeed(WorldScreenBinder binder, CaptureFeed feed) {

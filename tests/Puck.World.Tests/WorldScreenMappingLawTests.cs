@@ -12,8 +12,9 @@ namespace Puck.World.Tests;
 /// Laws for the mappings the screen binder publishes through <see cref="WorldScreenMappingSet"/>: each screen row's
 /// <see cref="WorldScreenMappings.Of"/> mapping, named by its source instance's handle, at the extent its image has. A
 /// screen at an arbitrary pose maps known points to known source pixels in fixed point, identically on every run; a
-/// view and a session name their instances with document extents; a live presentation source, an unknown extent or no
-/// source publishes nothing and says why; and a steady frame publishes without allocating.
+/// view and a session name their instances with document extents; a live bind over a row publishes the bound source's
+/// mapping; an unknown extent or no source publishes nothing and says why; and a steady frame publishes without
+/// allocating.
 /// </summary>
 public sealed class WorldScreenMappingLawTests {
     private const int Height = 144;
@@ -164,8 +165,7 @@ public sealed class WorldScreenMappingLawTests {
             expected: ("eye", WorldViewNames.Session(screen: 5))
         );
     }
-    // A screen showing no image, a live presentation source no row names, or an image of unknown extent publishes no
-    // mapping, and the line world.screens prints says why; a screen that publishes prints the pane line's form.
+    // A screen showing no image, or an image of unknown extent, publishes no mapping, and the line world.screens prints says why; a screen that publishes prints the pane line's form.
     [Fact]
     public void AScreenWithoutAMappingSaysWhy() {
         var images = new Images();
@@ -173,7 +173,6 @@ public sealed class WorldScreenMappingLawTests {
 
         images.Extents[0] = (Width, Height);
         images.Extents[1] = (Width, Height);
-        images.Live.Add(item: 1);
         set.Reconcile(
             cameras: [],
             screens: [
@@ -198,16 +197,58 @@ public sealed class WorldScreenMappingLawTests {
             expectedEndString: $"source {Width}x{Height} crop 0,0 {Width}x{Height} layout Identity fit Stretch warp {WorldScreenMappings.GlassPass} inverse destination Simulation"
         );
         Assert.Equal(
-            actual: new[] { 1, 2, 4, 6, 9 }.Select(selector: screen => set.Describe(screen: screen)),
+            actual: new[] { 2, 4, 6, 9 }.Select(selector: screen => set.Describe(screen: screen)),
             expected: [
-                "none (a live presentation source no row names)",
                 "none (the image's extent is not known yet)",
                 "none (no image source)",
                 "none (camera 'missing' not declared)",
                 null,
             ]
         );
-        Assert.Single(collection: set.Mappings);
+        Assert.Equal(expected: 2, actual: set.Mappings.Count);
+    }
+    // A source a live presentation verb binds over a row is the source the screen shows: the set runs its instance in the
+    // row's place, the screen publishes its mapping named by that instance, and a live bind of nothing publishes none.
+    [Fact]
+    public void ALiveBindOverARowPublishesTheBoundSourcesMapping() {
+        var images = new Images();
+        var set = new WorldScreenMappingSet();
+        var code = WorldImageProducerSettings.SourceOf(
+            id: WorldImageProducerSettings.QrId,
+            settings: new WorldQrSettings(Payload: "puck")
+        );
+        var live = new Dictionary<int, WorldScreenSource> {
+            [0] = new WorldScreenSource.None(),
+            [1] = code,
+        };
+
+        images.Extents[0] = (Width, Height);
+        images.Extents[1] = (Width, Height);
+        set.Reconcile(
+            cameras: [],
+            live: live,
+            screens: [
+                Screen(index: 0, source: Pattern),
+                Screen(index: 1, source: Pattern),
+            ]
+        );
+        live.Clear();
+        set.Publish(images: images);
+
+        var instance = WorldSourceInstances.Of(shown: [code]);
+
+        Assert.Equal(
+            actual: (set.Describe(screen: 0), set.InstanceOf(screen: 0), set.InstanceOf(screen: 1)),
+            expected: ("none (no image source)", null, instance.InstanceOf(screen: 0))
+        );
+        Assert.Equal(
+            actual: set.Sources.Instances.Select(selector: static source => source.Name),
+            expected: [instance.InstanceOf(screen: 0)!]
+        );
+        Assert.Equal(
+            actual: Assert.Single(collection: set.Mappings).Source,
+            expected: instance.HandleOf(screen: 0)
+        );
     }
     // A frame whose handles and extents hold publishes the mappings it published before, allocating nothing; a new
     // extent publishes a new mapping.
@@ -245,12 +286,10 @@ public sealed class WorldScreenMappingLawTests {
         Assert.Same(actual: set.Mappings[1], expected: published[1]);
     }
 
-    // The running images a test hands the set: extents by screen, and the screens showing a live source.
+    // The running images a test hands the set: extents by screen.
     private sealed class Images : IWorldScreenImages {
         public Dictionary<int, (int Width, int Height)> Extents { get; } = [];
-        public HashSet<int> Live { get; } = [];
 
-        public bool ShowsRow(int screen) => !Live.Contains(item: screen);
         public bool TryExtent(int screen, out int width, out int height) {
             if (Extents.TryGetValue(key: screen, value: out var extent)) {
                 (width, height) = extent;

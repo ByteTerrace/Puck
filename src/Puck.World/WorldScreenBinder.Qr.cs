@@ -29,13 +29,12 @@ internal sealed partial class WorldScreenBinder {
     }
 
     /// <summary>Authors (or re-authors) a declared screen's QR code — the runtime <c>screen.source &lt;index&gt; qr</c> path, the live twin
-    /// of a declared <c>qr</c> producer source. The payload is encoded and rasterized once, right here
-    /// (<see cref="WorldQrFeed.TryBuild"/>), so the per-frame cost of the resulting screen is a single upload and then
-    /// nothing at all. Any live producer on the slot (the webcam, a window capture) and any jumbotron view are cleared
-    /// first, exactly as <c>screen.source &lt;index&gt; camera</c>/<c>view</c> clear each other, so the freshly authored
-    /// code is what the screen shows next publish. Fails loudly — never throws — for an undeclared screen, an
-    /// unrecognized EC-level letter, a negative quiet zone, or a payload too large for the encoder's supported version
-    /// range (refused by name, never truncated).</summary>
+    /// of a declared <c>qr</c> producer source. The payload is encoded here to prove it (<see cref="WorldQrFeed.TryBuild"/>),
+    /// and the screen shows the code's source instance over its row from the render graph's next frame, which converts
+    /// it once. Any jumbotron view is released first, exactly as <c>screen.source &lt;index&gt; camera</c>/<c>view</c>
+    /// replace each other. Fails loudly — never throws — for an undeclared screen, an unrecognized EC-level letter, a
+    /// negative quiet zone, or a payload too large for the encoder's supported version range (refused by name, never
+    /// truncated).</summary>
     /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
     /// <param name="payload">The payload string to encode, UTF-8 byte mode.</param>
     /// <param name="ecLevel">The error-correction level letter (<c>L</c>/<c>M</c>/<c>Q</c>/<c>H</c>, case-insensitive),
@@ -55,51 +54,80 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (!WorldQrFeed.TryBuild(
-            ecLevel: (ecLevel ?? QrErrorCorrection.Letter(level: QrErrorCorrection.Default)),
+        var settings = new WorldQrSettings(
+            EcLevel: (ecLevel ?? QrErrorCorrection.Letter(level: QrErrorCorrection.Default)),
+            Payload: payload,
+            QuietZoneModules: (quietZoneModules ?? QrDefaultQuietZoneModules)
+        );
+
+        if (!TryBuildQr(
+            authoring: out var authoring,
             fault: out var fault,
-            feed: out var feed,
-            payload: payload,
-            quietZoneModules: (quietZoneModules ?? QrDefaultQuietZoneModules)
+            settings: settings
         )) {
             return (Ok: false, Message: fault!);
         }
 
-        slot.ClearLive();
         ReleaseSlotView(slot: slot);
-        slot.ReleaseDeclared();
-        slot.DeclaredFeed = feed;
         slot.DeclaredFault = null;
-        ShowLive(index: index);
+        ShowLive(
+            index: index,
+            source: WorldImageProducerSettings.SourceOf(
+                id: WorldImageProducerSettings.QrId,
+                settings: settings
+            )
+        );
 
-        return (Ok: true, Message: $"screen {index} showing QR v{feed!.Version} {QrErrorCorrection.Letter(level: feed.Level)} mask{feed.Mask} {feed.Descriptor.Width}x{feed.Descriptor.Height} '{ElideForEcho(payload: feed.Payload)}'");
+        return (Ok: true, Message: $"screen {index} showing QR v{authoring.Version} {QrErrorCorrection.Letter(level: authoring.Level)} mask{authoring.Mask} {authoring.Width}x{authoring.Height} '{ElideForEcho(payload: authoring.Payload)}'");
     }
+
+    // Encodes a QR source's settings and reads back what the encoder decided: the one construction the live verb and the
+    // read-back share with the source instance's producer, so their refusals and results read identically.
+    private static bool TryBuildQr(WorldQrSettings settings, out WorldScreenQrAuthoring authoring, out string? fault) {
+        if (!WorldQrFeed.TryBuild(
+            ecLevel: settings.EcLevel,
+            fault: out fault,
+            feed: out var feed,
+            payload: settings.Payload,
+            quietZoneModules: settings.QuietZoneModules
+        )) {
+            authoring = default;
+
+            return false;
+        }
+
+        using (feed) {
+            authoring = new WorldScreenQrAuthoring(
+                Payload: feed!.Payload,
+                Level: feed.Level,
+                Version: feed.Version,
+                Mask: feed.Mask,
+                QuietZoneModules: feed.QuietZoneModules,
+                Width: feed.Descriptor.Width,
+                Height: feed.Descriptor.Height
+            );
+        }
+
+        return true;
+    }
+
     /// <summary>Reads back a screen's QR authoring — the <c>screen.source &lt;index&gt; qr</c> query (no payload argument) that makes the
     /// decision its setter made pipe-assertable: the payload, level, encoder-chosen version and mask, quiet zone, and
-    /// rendered pixel extent. Fails when the screen carries no QR (nothing authored, or the declared source is
-    /// something else).</summary>
+    /// rendered pixel extent. Fails when the screen shows no QR (nothing authored, or its source is something
+    /// else).</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <param name="authoring">The screen's QR authoring, on success; <see langword="default"/> otherwise.</param>
-    /// <returns>Whether the screen carries a QR.</returns>
+    /// <returns>Whether the screen shows a QR.</returns>
     public bool TryReadQr(int index, out WorldScreenQrAuthoring authoring) {
-        if (
-            m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) &&
-            (slot.DeclaredFeed is WorldQrFeed qr)
-        ) {
-            authoring = new WorldScreenQrAuthoring(
-                Payload: qr.Payload,
-                Level: qr.Level,
-                Version: qr.Version,
-                Mask: qr.Mask,
-                QuietZoneModules: qr.QuietZoneModules,
-                Width: qr.Descriptor.Width,
-                Height: qr.Descriptor.Height
+        if (WorldImageProducerSettings.TryQr(
+            qr: out var settings,
+            source: ShownOf(screen: index)
+        )) {
+            return TryBuildQr(
+                authoring: out authoring,
+                fault: out _,
+                settings: settings
             );
-
-            return true;
         }
 
         authoring = default;

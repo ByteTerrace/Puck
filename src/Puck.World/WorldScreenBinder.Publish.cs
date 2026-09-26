@@ -79,19 +79,19 @@ internal sealed partial class WorldScreenBinder {
     }
     /// <summary>Publishes the screens' content for this produced frame, before the render graph schedules it: it advances
     /// the capture gate first, so every source this frame resolves sees the same answer, uploads the fills a filled
-    /// external source resolves to, services the shared camera feeds, the probe outputs and the HUD's captures, and
-    /// publishes each live feed a presentation verb bound. A row's producer, machine or probe source is a source
-    /// instance the runtime publishes at its cadence when it renders the instance. It ends by publishing every screen's
-    /// mapping (<see cref="Mappings"/>) at the extents its images now have.</summary>
-    /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
+    /// external source resolves to, and services the shared camera feeds, the probe outputs and the HUD's captures. A
+    /// producer, machine or probe source a screen shows is a source instance the runtime publishes at its cadence when it
+    /// renders the instance. It ends by publishing every screen's mapping (<see cref="Mappings"/>) at the extents its
+    /// images now have.</summary>
     /// <param name="deviceContext">The live GPU device context to upload on, through its services.</param>
-    public void Publish(ulong tick, IGpuDeviceContext deviceContext) {
+    public void Publish(IGpuDeviceContext deviceContext) {
         if (m_disposed) {
             return;
         }
 
         m_captureGate.BeginFrame();
         ReconcileSessionLifecycles();
+        RetireParkedCaptures();
 
         // Resolve the render adapter LUID once, backend-neutrally — the device is created lazily, so the value is
         // first available here (not at construction). Capture feeds and the camera GPU tier then open their platform
@@ -116,28 +116,6 @@ internal sealed partial class WorldScreenBinder {
         CaptureCamera(deviceContext: deviceContext);
         ServiceProbeFeeds(deviceContext: deviceContext);
         PublishFrameCaptures(deviceContext: deviceContext);
-
-        foreach (var slot in m_slots.Values) {
-            // A live feed hides the live QR code, so only the shown feed publishes; a probe output was published once
-            // above (ServiceProbeFeeds), and the shared webcam's feed publishes nothing of its own.
-            if (slot.LiveFeed is { } live) {
-                live.Publish(
-                    deviceContext: deviceContext,
-                    tick: tick
-                );
-
-                continue;
-            }
-
-            if (slot.Probe is not null) {
-                continue;
-            }
-
-            slot.DeclaredFeed?.Publish(
-                deviceContext: deviceContext,
-                tick: tick
-            );
-        }
 
         Mappings.Publish(images: this);
     }

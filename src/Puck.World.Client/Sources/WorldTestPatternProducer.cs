@@ -1,9 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
-using Puck.Hosting;
-using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
@@ -123,11 +120,10 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
         return true;
     }
 
-    // One test-pattern source: the pattern's pixels, rendered for every published tick, uploaded for a screen and written
-    // into a source instance's region.
+    // One test-pattern source: the pattern's pixels, rendered for every tick its source instance converts and written into
+    // the instance's region.
     private sealed class Feed : IWorldUploadFeed, IImageSourceReference {
         private readonly byte[] m_pixels;
-        private readonly CpuSurfaceSource m_surface = new();
 
         private ImageSourceStamp m_stamp;
 
@@ -149,30 +145,7 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
         public string? Fault => null;
         public Vector3 Light { get; private set; }
 
-        public GpuImageLease AcquireFrame() => m_surface.CurrentHandle;
-        public void Dispose() => m_surface.Dispose();
-        public nint Handle() => m_surface.CurrentHandle;
-        public void NotifyDeviceLost() => m_surface.NotifyDeviceLost();
-        public void Publish(ulong tick, IGpuDeviceContext deviceContext) {
-            Render(
-                bgra: m_pixels,
-                height: ((int)Descriptor.Height),
-                tick: tick,
-                width: ((int)Descriptor.Width)
-            );
-            _ = m_surface.Publish(
-                deviceContext: deviceContext,
-                format: SurfaceFormat.B8G8R8A8Unorm,
-                height: Descriptor.Height,
-                pixels: m_pixels,
-                width: Descriptor.Width
-            );
-            Light = WorldImageLight.Average(bgra: m_pixels);
-            m_stamp = new ImageSourceStamp(
-                Sequence: (m_stamp.Sequence + 1UL),
-                Tick: tick
-            );
-        }
+        public void Dispose() { }
         public bool TryWrite(long tick, GpuRegion region) {
             ArgumentNullException.ThrowIfNull(argument: region);
 

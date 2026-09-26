@@ -372,7 +372,7 @@ public sealed class WorldSourceInstanceLawTests {
         );
 
         public void Dispose() => Opening.Feed?.Dispose();
-        public void OnDeviceLost() => Opening.Feed?.NotifyDeviceLost();
+        public void OnDeviceLost() { }
         public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) => false;
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new InvalidOperationException(message: "the test source serves no capture"));
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
@@ -445,11 +445,7 @@ public sealed class WorldSourceInstanceLawTests {
         public string? Fault => null;
         public System.Numerics.Vector3 Light => System.Numerics.Vector3.Zero;
 
-        public GpuImageLease AcquireFrame() => 0;
         public void Dispose() => Disposed = true;
-        public nint Handle() => 0;
-        public void NotifyDeviceLost() { }
-        public void Publish(ulong tick, IGpuDeviceContext deviceContext) { }
     }
     private sealed class ReservedShape(string id) : WorldImageProducerShape {
         public override ImageContentClass Content => ImageContentClass.Deterministic;

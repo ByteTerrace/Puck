@@ -89,10 +89,11 @@ internal sealed partial class WorldScreenBinder {
         return builder.ToString();
     }
     /// <summary>Binds a declared screen to a seat's camera device's sensor — the runtime
-    /// <c>screen.source &lt;index&gt; camera [color|infrared] [seat N]</c> path. Any existing producer on the slot is
-    /// cleared first. The seat's camera device resolves (and its sensor feed opens, or reopens with the new sensor
-    /// set) on the next publish; an unassigned seat or an incompatible sensor then reports through the slot's fault
-    /// and <c>screen.camera</c>. Fails loudly for an undeclared screen or a platform without camera support.</summary>
+    /// <c>screen.source &lt;index&gt; camera [color|infrared] [seat N]</c> path. The screen shows the camera's source
+    /// instance over its row from the render graph's next frame. The seat's camera device resolves (and its sensor feed
+    /// opens, or reopens with the new sensor set) on the next publish; an unassigned seat or an incompatible sensor then
+    /// reports through the screen's fault and <c>screen.camera</c>. Fails loudly for an undeclared screen or a platform
+    /// without camera support.</summary>
     /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
     /// <param name="sensor">Which sensor stream to bind.</param>
     /// <param name="seat">The 1-based local seat whose camera device this screen shows.</param>
@@ -106,10 +107,7 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: $"unknown camera sensor '{sensor}'");
         }
 
-        if (!m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        )) {
+        if (!m_slots.ContainsKey(key: index)) {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
@@ -117,17 +115,18 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: "no camera device present");
         }
 
-        slot.ClearLive();
-        slot.LiveFeed = new CameraSlotFeed(
-            binder: this,
-            profile: null,
-            seat: seat,
-            sensor: sensor
+        // Demand resolves at the next publish (ReconcileCameraDemand reads the camera each screen shows) — one produced
+        // frame's seam between this bind and the seat's device/feed appearing live.
+        ShowLive(
+            index: index,
+            source: WorldImageProducerSettings.SourceOf(
+                id: WorldImageProducerSettings.CameraId,
+                settings: new WorldCameraSettings(
+                    Seat: seat,
+                    Sensor: sensor
+                )
+            )
         );
-        slot.DeclaredFault = null;
-        // Demand resolves at the next publish (ReconcileCameraDemand reads the slot's camera feed directly) — one
-        // produced frame's seam between this bind and the seat's device/feed appearing live.
-        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} showing seat {seat}'s {SensorName(sensor: sensor)} webcam");
     }
