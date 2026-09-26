@@ -464,7 +464,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lastSources = null;
         m_lastViews = null;
         m_runtime = runtime;
-        m_sourceFootprints = SourceFootprints(set: runtime.Instances);
+        // The first Reconcile composes the set again and derives the source footprints from it.
+        m_sourceFootprints = [];
         m_synthesized = synthesized;
         ResetFootprints();
     }
