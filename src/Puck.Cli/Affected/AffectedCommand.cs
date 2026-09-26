@@ -33,14 +33,24 @@ internal static class AffectedCommand {
     private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
         .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
         .Where(predicate: static line => (line.Length > 0))];
-    // Tracked files that differ from the base, staged or not, plus untracked files git does not ignore.
-    private static bool TryReadChanged(string repositoryRoot, string since, out IReadOnlyList<string> changed, out string error) {
+    // Tracked files that differ from the base, staged or not, plus untracked files git does not ignore; and of those, the
+    // ones deleted since the base.
+    private static bool TryReadChanged(string repositoryRoot, string since, out IReadOnlyList<string> changed, out IReadOnlySet<string> deleted, out string error) {
         changed = [];
+        deleted = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         var diff = CliGit.Run(repositoryRoot, "diff", "--name-only", "--no-renames", since);
 
         if (diff.ExitCode != 0) {
             error = $"git diff against '{since}' failed: {diff.Stderr.Trim()}";
+
+            return false;
+        }
+
+        var removed = CliGit.Run(repositoryRoot, "diff", "--name-only", "--no-renames", "--diff-filter=D", since);
+
+        if (removed.ExitCode != 0) {
+            error = $"git diff against '{since}' failed: {removed.Stderr.Trim()}";
 
             return false;
         }
@@ -54,6 +64,7 @@ internal static class AffectedCommand {
         }
 
         changed = [.. Lines(text: diff.Stdout).Concat(second: Lines(text: untracked.Stdout)).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)];
+        deleted = Lines(text: removed.Stdout).ToHashSet(comparer: StringComparer.Ordinal);
         error = string.Empty;
 
         return true;
@@ -171,7 +182,7 @@ internal static class AffectedCommand {
     public static bool TryPlan(string repositoryRoot, string since, out IReadOnlyList<string> changed, out AffectedPlan? plan, out string error) {
         plan = null;
 
-        if (!TryReadChanged(changed: out changed, error: out error, repositoryRoot: repositoryRoot, since: since)) {
+        if (!TryReadChanged(changed: out changed, deleted: out var deleted, error: out error, repositoryRoot: repositoryRoot, since: since)) {
             return false;
         }
 
@@ -212,7 +223,13 @@ internal static class AffectedCommand {
                 projects: projects,
                 repositoryRoot: repositoryRoot
             ),
-            worldClosure: closure
+            worldClosure: closure,
+            deleted: deleted,
+            // A file deleted since the base is placed through the index the base recorded, which is the only one that
+            // can still name it.
+            recorded: ((deleted.Count > 0)
+                ? AffectedCoverage.ReadAt(repositoryRoot: repositoryRoot, revision: since)
+                : null)
         );
 
         return true;
@@ -356,6 +373,14 @@ internal static class AffectedCommand {
             Console.Out.WriteLine(value: $"affected: {plan.Unmapped.Count} World source(s) are missing from {CoveragePath}, so no canary was chosen for them; record coverage with `puck affected --record` when the owner asks for a full run.");
         }
 
+        foreach (var path in plan.Deleted) {
+            Console.Out.WriteLine(value: $"deleted {path}");
+        }
+
+        if (plan.Deleted.Count > 0) {
+            Console.Out.WriteLine(value: $"affected: {plan.Deleted.Count} deleted World source(s) are named by neither {CoveragePath} nor the index the base recorded, so no canary was chosen for them; a recording cannot place a file that no longer exists, and their projects' suites still run.");
+        }
+
         return (run
             ? Execute(plan: plan, repositoryRoot: repositoryRoot)
             : CliExit.Success
@@ -388,7 +413,8 @@ internal static class AffectedCommand {
               include through the C# that names each kernel whose include closure reaches it, and a file
               puck schema writes through the sources declaring the types it is generated from. A changed
               World source neither the index nor a stand-in places is listed as unmapped rather than
-              widening the run.
+              widening the run. A file deleted since --since is placed by the index the base recorded, and
+              one neither index names is listed as deleted, never unmapped.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test.
               Prose, .claude/, .github/, editors/ and experimental/ choose nothing.

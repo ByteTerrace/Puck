@@ -1,5 +1,6 @@
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Puck.Cli.Architecture;
@@ -29,13 +30,30 @@ internal static partial class AffectedCoverage {
             path1: repositoryRoot,
             path2: AffectedCommand.CoveragePath
         );
+
+        return (File.Exists(path: path)
+            ? Parse(utf8: File.ReadAllBytes(path: path))
+            : new Dictionary<string, IReadOnlySet<string>>(comparer: StringComparer.Ordinal));
+    }
+    /// <summary>Reads the index as a revision recorded it, inverted: the entries a file deleted since that revision still
+    /// has there.</summary>
+    /// <param name="repositoryRoot">The repository root.</param>
+    /// <param name="revision">The revision.</param>
+    /// <returns>The inverted index; empty when the revision holds none.</returns>
+    /// <exception cref="InvalidDataException">The revision's index is not a <see cref="Schema"/> document.</exception>
+    public static IReadOnlyDictionary<string, IReadOnlySet<string>> ReadAt(string repositoryRoot, string revision) {
+        var shown = CliGit.Run(repositoryRoot, "show", $"{revision}:{AffectedCommand.CoveragePath}");
+
+        return ((shown.ExitCode == 0)
+            ? Parse(utf8: Encoding.UTF8.GetBytes(s: shown.Stdout))
+            : new Dictionary<string, IReadOnlySet<string>>(comparer: StringComparer.Ordinal));
+    }
+
+    // Inverts one index document into each source file with the canary ids that executed it.
+    private static Dictionary<string, IReadOnlySet<string>> Parse(byte[] utf8) {
         var coverage = new Dictionary<string, IReadOnlySet<string>>(comparer: StringComparer.Ordinal);
 
-        if (!File.Exists(path: path)) {
-            return coverage;
-        }
-
-        using var document = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: path));
+        using var document = JsonDocument.Parse(utf8Json: utf8);
         var root = document.RootElement;
 
         if (
@@ -62,7 +80,6 @@ internal static partial class AffectedCoverage {
 
         return coverage;
     }
-
     // Every C# source of the projects the World is built from, repository-relative: the files the index answers for.
     private static SortedSet<string> WorldSources(string repositoryRoot) {
         var model = ArchitectureModel.Load(repositoryRoot: repositoryRoot);
