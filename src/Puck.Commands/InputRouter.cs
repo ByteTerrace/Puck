@@ -2162,47 +2162,9 @@ public sealed partial class InputRouter : IDisposable {
         // captured set, so the recorded snapshot reproduces the run exactly.
         DrainDue(windowEndTick: windowEndTick);
 
-        // Working per-slot ordered state for this tick. Seeded from carried held state (held digitals re-assert as
-        // Active), then every due signal is appended in order; repeated commands stay repeated.
-        foreach (var working in m_workingBySlot.Values) {
-            working.Clear();
-        }
-
-        foreach (var (slot, held) in m_heldBySlot) {
-            if (held.Count == 0) {
-                continue;
-            }
-
-            var working = WorkingFor(
-                slot: slot,
-                workingBySlot: m_workingBySlot
-            );
-
-            foreach (var state in held.Values) {
-                if (state.HasEntry) {
-                    // The held entry is already phase Active — a held digital re-asserts each tick.
-                    working.Add(item: state.Entry);
-                }
-
-                if (state.Contributions is { } contributions) {
-                    foreach (var contribution in contributions) {
-                        working.Add(item: contribution.Entry);
-                    }
-                }
-            }
-
-            working.Sort(comparison: static (left, right) => {
-                var byCommand = left.CommandId.CompareTo(value: right.CommandId);
-
-                return ((byCommand != 0)
-                    ? byCommand
-                    : StringComparer.Ordinal.Compare(
-                        x: left.Source,
-                        y: right.Source
-                    )
-                );
-            });
-        }
+        // Working per-slot ordered state for this tick: carried state first, then every due signal is appended in order;
+        // repeated commands stay repeated.
+        SeedCarried();
 
         // Router-synthesized edges owed from an EARLIER tick fold next: a transient impulse's inactive twin and every
         // deterministic cancellation. Draining them HERE — after the held seeding, before this tick's own due

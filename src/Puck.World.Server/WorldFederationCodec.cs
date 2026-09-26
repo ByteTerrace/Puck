@@ -142,7 +142,7 @@ public static partial class WorldFederationCodec {
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames.</summary>
-    public const ulong WireKey = 0x324445464B435550UL; // "PUCKFED2", typed identity records in traveler projections.
+    public const ulong WireKey = 0x334445464B435550UL; // "PUCKFED3", intents carry the optional pointer ray.
 
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
     private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader, WorldPlayerDefaults defaults, int ordinal) {

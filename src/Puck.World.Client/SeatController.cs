@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -56,6 +57,10 @@ public sealed class SeatController {
     // The analog producer's latest sample, routed from this tick's snapshot. InputRouter re-dispatches a carried analog
     // value every tick; ClearAnalog wipes this local staging state after the tick so only snapshot input can refill it.
     private SeatMoveSample m_move;
+    // The pointer ray's two halves, routed from this tick's snapshot through source.pointer.origin and
+    // source.pointer.direction and quantized once at that door. Consume-then-clear like the sticks.
+    private FixedVector3? m_pointerDirection;
+    private FixedVector3? m_pointerOrigin;
 
     // The device-image fold primitive per channel ordinal: base zero, contributions are (control value × scale), no
     // pool, accumulate in RAW Int64 and clamp EXACTLY ONCE at the end. A saturating clamp per contribution is
@@ -190,6 +195,16 @@ public sealed class SeatController {
             return false;
         }
     }
+    /// <summary>Gets this tick's pointer ray, folded into <see cref="HeldIntent"/>: present only when both
+    /// <c>source.pointer.origin</c> and <c>source.pointer.direction</c> arrived this tick, and <see langword="null"/>
+    /// after <see cref="ClearAnalog"/> until routed input refills both halves.</summary>
+    public SourceRay? PointerRay => (((m_pointerOrigin is { } origin) && (m_pointerDirection is { } direction))
+        ? new SourceRay(
+            Direction: direction,
+            Origin: origin
+        )
+        : null
+    );
     /// <summary>Gets a value indicating whether <c>player.orbit</c> is held: pointer motion orbits the camera.</summary>
     public bool Orbiting { get; private set; }
     /// <summary>Gets a value indicating whether <c>player.steer</c> is held: pointer motion orbits the camera and the
@@ -221,6 +236,8 @@ public sealed class SeatController {
         m_move = default;
         m_look = default;
         m_motionAngularVelocity = Vector3.Zero;
+        m_pointerOrigin = null;
+        m_pointerDirection = null;
     }
     /// <summary>Folds the held-control set — every channel ROW held on a role ordinal — into the tick's submitted
     /// intent: peers summed then clamped, so opposing rows cancel and two rows never exceed full deflection. The
@@ -232,8 +249,10 @@ public sealed class SeatController {
     /// grounded body motion program simply never reads the extra three, exactly like an unbound composition channel;
     /// a document declaring them (required for a free-attitude body motion program, see
     /// <c>WorldDefinitionValidator</c>) is the only way they drive anything, so wiring them through here never
-    /// changes Grounded behavior.</summary>
-    public PlayerIntent HeldIntent() {
+    /// changes Grounded behavior. The tick's <see cref="PointerRay"/> rides the intent beside the channels.</summary>
+    public PlayerIntent HeldIntent() => (HeldRoles() with { SourceRay = PointerRay });
+
+    private PlayerIntent HeldRoles() {
         // No rows held (the common case — an idle seat, or a stick-only one): nothing to fold.
         if (m_heldControls.Count == 0) {
             return default;
@@ -282,6 +301,7 @@ public sealed class SeatController {
             )
         );
     }
+
     /// <summary>Asserts a channel contribution as held, keyed by (control, ordinal) — so a second physical control
     /// sharing this ordinal (even at the identical scale) holds independently of the first, one control feeding several
     /// channels holds each of them, and an analog control's magnitude updates in place every re-dispatch tick without
@@ -308,6 +328,8 @@ public sealed class SeatController {
         m_motionAngularVelocity = Vector3.Zero;
         m_look = default;
         m_move = default;
+        m_pointerOrigin = null;
+        m_pointerDirection = null;
         FreeLooking = false;
         PointerSteering = false;
         CameraFrameYaw = null;
@@ -349,6 +371,19 @@ public sealed class SeatController {
             Behavior: behavior,
             Value: move
         );
+    }
+    /// <summary>Feeds this tick's pointer-ray direction, already quantized at the router seam
+    /// (<see cref="Puck.Commands.CommandValueQuantization.QuantizeAxis3D"/>) and stored verbatim; it need not be unit
+    /// length.</summary>
+    /// <param name="direction">The already-quantized world-space direction.</param>
+    public void SetPointerDirection(FixedVector3 direction) {
+        m_pointerDirection = direction;
+    }
+    /// <summary>Feeds this tick's pointer-ray origin, already quantized at the router seam
+    /// (<see cref="Puck.Commands.CommandValueQuantization.QuantizeAxis3D"/>) and stored verbatim.</summary>
+    /// <param name="origin">The already-quantized world-space origin, in world units.</param>
+    public void SetPointerOrigin(FixedVector3 origin) {
+        m_pointerOrigin = origin;
     }
     /// <summary>Sets the held right-stick free-look modifier.</summary>
     /// <param name="held">Whether free look is active.</param>
