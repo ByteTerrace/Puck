@@ -1014,7 +1014,46 @@ P11b's last four commits are these; 11 and 12 have landed:
 13. Screens onto graph instances, after P12b-2: each screen reads a graph
     instance the scheduler feeds, and `ViewStack`, `OffscreenRenderBudget`, the
     procedural test card, `SdfWorldEngine.MaxViewports` and the hand-composed
-    `IRenderNode` tree are deleted.
+    `IRenderNode` tree are deleted. It lands as these commits, in order, each
+    green:
+    1. External producers read previous frames. `RenderGraphInstanceSet`
+       refuses only an external producer's buffer reads: it may read its own
+       output and any instance's previous frame, and any instance may read an
+       external producer's previous frame, so a mirror is a self-read rather
+       than a refusal. The runtime binds such a read to the producer's latest
+       completed output as the reader renders, which for a self-read is the
+       reader's own previous frame. A view whose current output is bound as
+       one of its own screens renders into another output
+       (`SdfWorldEngine.ViewOutputs`), reusing a replaced output of its extent
+       once nothing holds it, so a mirror samples its previous image and never
+       the one it writes. Laws: a mirror facing itself shows the previous
+       frame; a self-reading view never writes the image it samples.
+    2. Camera views and sessions are `sdf.world` instances. Each camera a
+       screen, a HUD frame or a probe export shows is an external instance of
+       `sdf.world` named by its registration, rendered by an `SdfEngineNode` of
+       its own at the extent its footprint asks (its declared render size over
+       the display) and the refresh `world.view-refresh` sets; it reads every
+       source instance within the frame and every view instance, itself
+       included, at its previous frame. A session screen's view is an
+       `sdf.world` instance too, rendered through the destination's own frame
+       source. The world producer reads every view within the frame, the world
+       node captures its frame before any view renders
+       (`SdfEngineNode.HostFrame`), and a view films that frame. Every screen
+       reads an instance (`ISdfScreenSources.Rendered` goes), and
+       `ViewStack`, `SdfCameraView`, `WorldSessionView`,
+       `SdfFilmingViewEngine`, `ScreenSlotPriority`, `OffscreenRenderBudget`
+       and `ISdfFrameSource.RenderViews` are deleted. A camera-view screen's
+       hit walk continues into the view. Laws: a camera on two screens renders
+       once a frame; an off-view camera renders zero times; a view on a
+       quarter-size screen renders at a quarter extent; a camera-view screen's
+       walk continues into the view.
+    3. The view limit goes: `SdfWorldEngine.MaxViewports` is deleted, an
+       engine provisions any viewport capacity, and `WorldRootGraph.ViewsOf`
+       is uncapped. Law: more than five views render.
+    4. The procedural test card goes: a screen with nothing bound shades as
+       dark glass.
+    5. The engine node is an external producer only: `SdfEngineNode` is no
+       `IRenderNode`, and harnesses produce it through `Produce`.
 14. The final sweep: the rest of the deletions P11 lists, and the owning guides
     and the `rendering` skill describe the result.
 
