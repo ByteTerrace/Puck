@@ -944,7 +944,11 @@ passes.
 `RenderGraphRuntime`): each frame, before the runtime schedules, it reconciles
 the accepted `views` section into the runtime's instance set with
 `TryReconfigure` (a surviving instance keeps its node, graph and history; a
-removed one retires), compiles each source row in the background through
+removed one retires, except that a removed graph instance a kept consumer's
+installed graph still binds is held through `ShaderPipelineRenderNode.HoldBinding`
+until that consumer installs a graph that no longer reads it, rebinds the name
+or is released, `RenderGraphRuntime.RetiredProducers` counting what is held),
+compiles each source row in the background through
 `ShaderPackager.LoadSource`, and installs it with `TryInstall`, inputs taken
 from the row's `inputs`. A row naming an engine `package` (such as `sdf.world`)
 compiles nothing. Panes are placed by the `place` package (`PlacePackage`,

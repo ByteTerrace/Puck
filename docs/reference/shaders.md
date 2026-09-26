@@ -496,7 +496,10 @@ rows on the runtime through `IRenderGraphInstances`, which `RenderGraphRuntime`
 implements. Each frame, before the runtime schedules, the host reconciles the
 accepted `views` section into the runtime's instance set with `TryReconfigure`:
 an instance that survives keeps its node, its graph and its history, and a
-removed one retires. The host compiles each source row in the background
+removed one retires. A surviving instance whose replacement graph is still
+building keeps presenting its installed graph, so a removed instance that graph
+reads stays alive until the replacement installs, the name is bound again, or
+the survivor is released. The host compiles each source row in the background
 through `ShaderPackager.LoadSource` and installs the result with `TryInstall`,
 its inputs taken from the row's `inputs`. The `pipeline.*` console verbs
 address these rows by name.

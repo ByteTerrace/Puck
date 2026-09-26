@@ -66,11 +66,13 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private RuntimeResource[] m_resources = [];
     private IReadOnlyDictionary<string, RuntimeResource> m_resourceLookup = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
     private RuntimePass[] m_passes = [];
+
     // The installed graph's frame group layout and region, null when no pass binds groups, and the region while it waits
     // for the grouped pass that owns it to install.
     private ShaderPipelineParameterLayout? m_frameLayout;
     private GpuRegion? m_frameRegion;
     private GpuRegion? m_frameRegionOwner;
+
     private readonly CaptureRequestSlot m_capture = new();
     private readonly CapturePngWriter m_capturePng = new();
     private bool m_initializationPending = true;
@@ -796,6 +798,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 m_pending = null;
                 m_resizePending = false;
                 ConfigureWork();
+                ReleaseUndeclaredBindingHolds();
             }
         } catch (Exception error) {
             m_work.Discard();
@@ -1198,6 +1201,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         ReleaseRetired();
         RetireAllLeases();
+        RetireBindingHolds();
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
         m_previousSurface = default;
@@ -1356,6 +1360,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             kind: ShaderPipelineResourceKind.Buffer,
             name: name
         );
+        ReleaseBindingHold(name: name);
         m_externalBuffers[name] = buffer;
     }
     /// <summary>Binds a host-owned image for a named external resource. The node never disposes it. The image must have
@@ -1373,6 +1378,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             name: name
         );
         ClearLease(name: name);
+        ReleaseBindingHold(name: name);
         m_externalImages[name] = image;
     }
     /// <inheritdoc/>

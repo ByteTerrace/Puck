@@ -142,6 +142,88 @@ public sealed partial class RenderGraphRuntimeLawTests {
         frames.Settle();
         Assert.False(condition: frames.Next().IsEmpty);
     }
+    // A kept root presents its installed graph while its replacement builds, and that graph still samples the output of
+    // a producer the reconfiguration removed: the removed producer is held, never disposed under the root's frames,
+    // until the root installs a graph that no longer reads it, and then the hold is released and it is disposed once.
+    [Fact]
+    public void ARemovedProducerAKeptRootStillReadsIsHeldUntilTheRootsReplacementInstalls() {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders(Camera);
+        var roots = new[] { new RenderGraphRoot(Height: 1.0, Instance: "main", Width: 1.0) };
+
+        using var runtime = TwoInstances(
+            gpu: gpu,
+            recorders: recorders
+        );
+
+        new Frames(
+            footprints: [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0)],
+            roots: roots,
+            runtime: runtime
+        ).Settle();
+
+        var main = runtime.NodeOf(instance: "main")!;
+
+        Assert.True(
+            condition: runtime.TryReconfigure(
+                graphs: [Graph(pipeline: ScreensGraph(pool: false))],
+                refusal: out var refusal,
+                root: "main",
+                set: Set(Instance(name: "main"))
+            ),
+            userMessage: refusal?.Message
+        );
+        Assert.True(condition: main.HasPendingCandidate);
+
+        var frames = new Frames(
+            footprints: [],
+            roots: roots,
+            runtime: runtime
+        );
+        FakePipelineGpu.Created? sampled = null;
+
+        using (var opener = new PipelineGateOpener()) {
+            gpu.PipelineGate = opener.Gate;
+            gpu.DescriptorWrites.Clear();
+            gpu.Recording = true;
+
+            try {
+                // The replacement, which reads no screen, waits in the driver, so each of these frames records the
+                // installed graph, which samples the removed camera's last output: that image lives through every one.
+                for (var frame = 0; (frame < 3); frame++) {
+                    _ = frames.Next();
+                    Assert.True(condition: main.HasPendingCandidate);
+
+                    var view = gpu.DescriptorWrites.Last(predicate: static write => (write.Binding == 1)).Handle;
+
+                    sampled = gpu.CreatedObjects.Single(predicate: created => ((created.Handle + 1) == view));
+                    Assert.Equal(
+                        actual: sampled.DisposeCount,
+                        expected: 0
+                    );
+                    Assert.Equal(
+                        actual: runtime.RetiredProducers,
+                        expected: 1
+                    );
+                }
+            } finally {
+                gpu.Recording = false;
+                gpu.PipelineGate = null;
+            }
+        }
+
+        main.WaitForBuild();
+        _ = frames.Next();
+        Assert.False(condition: main.HasPendingCandidate);
+        Assert.Equal(
+            actual: runtime.RetiredProducers,
+            expected: 0
+        );
+        Assert.Equal(
+            actual: sampled!.DisposeCount,
+            expected: 1
+        );
+    }
     [Fact]
     public void ARefusedReconfigurationLeavesTheRuntimeAsItWas() {
         var gpu = new FakePipelineGpu();

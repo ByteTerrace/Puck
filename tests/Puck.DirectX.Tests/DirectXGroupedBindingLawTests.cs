@@ -12,7 +12,8 @@ namespace Puck.DirectX.Tests;
 /// grain layout's pass group takes its constant buffer, its separate image and its sampler through
 /// <see cref="IGpuBindings"/>, and a write of a kind the group does not declare at that binding, or a constant buffer
 /// view of an unaligned size, is refused by name. A recorded bind sets a group's view table and sampler table at that
-/// group and refuses a set bound at a group other than its own, or at a group the pipeline does not have. A pool's sets
+/// group and refuses a set bound at a group other than its own, or at a group the pipeline does not have. An image write
+/// naming no view, or a view whose image was destroyed, is refused by name. A pool's sets
 /// release with it: a thousand cycles of creating a pool, allocating a set of each kind and destroying the pool leave
 /// the bindings holding the handles they began with.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -144,6 +145,59 @@ public sealed unsafe class DirectXGroupedBindingLawTests {
         } finally {
             bindings.DestroyPool(poolHandle: pool);
             layoutHandle.Free();
+        }
+    }
+    // A write naming no view, or a view whose image was destroyed, is refused by name before it reaches the device,
+    // never read through the freed token.
+    [Fact]
+    public void An_image_write_naming_no_view_or_a_destroyed_one_is_refused_by_name() {
+        using var context = DirectXTestDevices.Warp();
+        var services = context.Services;
+        var bindings = services.Bindings;
+        var filmGrain = GpuGroupLayoutTables.FilmGrain(pushesIndex: true);
+        using var layout = DirectXRootSignatures.CreateLayout(
+            description: filmGrain,
+            device: ((ID3D12Device*)context.Device.Handle)
+        );
+        var pool = bindings.CreatePool(sizes: GpuDescriptorPoolSizes.ForGroups(groups: filmGrain.Groups), name: default);
+
+        try {
+            var pass = bindings.AllocateSet(
+                descriptorSetLayoutHandle: layout.GroupHandles[3],
+                poolHandle: pool,
+                name: default
+            );
+            var image = services.ImageFactory.Create(
+                format: GpuPixelFormat.R8G8B8A8Unorm,
+                height: 4,
+                name: default,
+                usage: GpuImageUsage.Sampled,
+                width: 4
+            );
+            var view = image.ImageViewHandle;
+
+            image.Dispose();
+
+            Assert.Equal(
+                actual: Assert.Throws<InvalidOperationException>(testCode: () => bindings.WriteSampledImage(
+                    arrayElement: 0,
+                    binding: 1,
+                    descriptorSetHandle: pass,
+                    imageViewHandle: 0
+                )).Message,
+                expected: "An image descriptor write names no image view (handle 0)."
+            );
+            Assert.StartsWith(
+                actualString: Assert.Throws<ObjectDisposedException>(testCode: () => bindings.WriteSampledImage(
+                    arrayElement: 0,
+                    binding: 1,
+                    descriptorSetHandle: pass,
+                    imageViewHandle: view
+                )).Message,
+                expectedStartString: $"An image descriptor write names image view 0x{view:X}, which has been destroyed."
+            );
+        } finally {
+            bindings.DestroyPool(poolHandle: pool);
         }
     }
     [Fact]
