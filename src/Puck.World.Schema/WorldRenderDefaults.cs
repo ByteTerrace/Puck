@@ -41,9 +41,12 @@ public sealed record WorldCamera(
                 return true;
             }
 
-            foreach (var candidate in (Anchors ?? [])) {
-                if (candidate?.Anchor is WorldAnchor.Seat) {
-                    return true;
+            // By index: a per-frame caller reads this, and an interface enumerator would allocate.
+            if (Anchors is { } anchors) {
+                for (var index = 0; (index < anchors.Count); index++) {
+                    if (anchors[index]?.Anchor is WorldAnchor.Seat) {
+                        return true;
+                    }
                 }
             }
 

@@ -435,6 +435,8 @@ public static class WorldBootComposition {
                 producers: [.. sp.GetServices<IWorldImageProducer>()]
             );
         });
+        // The slice of the binder the frame presenter drives each frame.
+        services.AddSingleton<IWorldScreenPresenter>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
 
         // The participant/census and authoritative-diagnostic surface — world.players/.devices/.population plus
         // world.navigation/.budget. Split out of WorldCommandModule (which stays presentation-only) because these
@@ -1105,7 +1107,7 @@ public static class WorldBootComposition {
             client: sp.GetRequiredService<WorldClient>(),
             simulation: sp.GetRequiredService<HeadlessWorldSimulation>(),
             settings: sp.GetRequiredService<WorldRenderSettings>(),
-            binder: sp.GetRequiredService<WorldScreenBinder>(),
+            binder: sp.GetRequiredService<IWorldScreenPresenter>(),
             envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
             animator: sp.GetRequiredService<WorldStampPool>(),
@@ -1459,7 +1461,7 @@ public static class WorldBootComposition {
             client: sp.GetRequiredService<WorldClient>(),
             simulation: sp.GetRequiredService<WorldSimulation>(),
             settings: sp.GetRequiredService<WorldRenderSettings>(),
-            binder: sp.GetRequiredService<WorldScreenBinder>(),
+            binder: sp.GetRequiredService<IWorldScreenPresenter>(),
             envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
             animator: sp.GetRequiredService<WorldStampPool>(),

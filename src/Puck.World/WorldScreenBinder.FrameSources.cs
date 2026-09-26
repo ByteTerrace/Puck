@@ -303,7 +303,7 @@ internal sealed partial class WorldScreenBinder {
     // bare camera name otherwise (and for an undeclared camera, so a fault still names what was asked for).
     private string ViewRegistrationName(string cameraName, int seat) =>
         ((ResolveCamera(name: cameraName) is { } camera)
-            ? WorldSeatAnchors.RegistrationName(
+            ? m_registrationNames.Of(
                 camera: camera,
                 seat: seat
             )

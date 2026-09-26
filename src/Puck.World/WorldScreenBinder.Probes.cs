@@ -7,7 +7,6 @@ using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Hosting;
-using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -252,7 +251,7 @@ internal sealed partial class WorldScreenBinder {
     // OS-version check before reaching here.
     [SupportedOSPlatform("windows10.0.10240")]
     private ViewExportFeed GetOrAddViewExport(WorldCamera camera) {
-        var name = WorldSeatAnchors.RegistrationName(
+        var name = m_registrationNames.Of(
             camera: camera,
             seat: DefaultViewSeat
         );

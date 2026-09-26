@@ -137,7 +137,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
     // runs it as an instance of the registration's name from its next reconciliation. A camera FILMS an already-lit
     // world, so it lights nothing.
     private void RegisterCameraView(WorldCamera camera, int seat) {
-        var name = WorldSeatAnchors.RegistrationName(
+        var name = m_registrationNames.Of(
             camera: camera,
             seat: seat
         );
@@ -405,7 +405,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
             }
 
             if (!string.Equals(
-                a: WorldSeatAnchors.RegistrationName(
+                a: m_registrationNames.Of(
                     camera: next,
                     seat: registration.Seat
                 ),
@@ -479,7 +479,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
         }
 
         var previousView = slot.View;
-        var registrationName = WorldSeatAnchors.RegistrationName(
+        var registrationName = m_registrationNames.Of(
             camera: camera,
             seat: DefaultViewSeat
         );

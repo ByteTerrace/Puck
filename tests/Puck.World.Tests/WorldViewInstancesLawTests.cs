@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 /// Laws for the views a world renders beside its own: a declared extent past the display keeps its aspect, a camera reads
 /// only the views a screen shows (so its previous-frame reads, and the leases the runtime acquires for them each refresh,
 /// scale with the views shown rather than with every view), and a presentation that sets its views as they were allocates
-/// nothing and publishes nothing.
+/// nothing and publishes nothing, a seat-relative camera's registration name included.
 /// </summary>
 public sealed class WorldViewInstancesLawTests {
     private static WorldView View(string name, WorldViewDemand demand, bool filmsWorld = true) => new(
@@ -74,15 +74,29 @@ public sealed class WorldViewInstancesLawTests {
     [Fact]
     public void ASteadyFrameOfViewsAllocatesNothingAndPublishesNothing() {
         var set = new WorldViewSet();
+        var names = new WorldViewRegistrationNames();
         var shown = View(name: "shown", demand: WorldViewDemand.Screen);
         var session = View(demand: WorldViewDemand.Screen, filmsWorld: false, name: "session$0");
         var hud = View(name: "hud", demand: WorldViewDemand.Root);
+        // A camera riding the seat, whose view a probe polls every frame under its seat view name.
+        var chase = new WorldCamera(
+            Anchor: new WorldAnchor.Seat(),
+            Name: "chase",
+            RenderHeight: 72U,
+            RenderWidth: 128U,
+            Rig: new WorldCameraProgram(
+                Name: "chase-rig",
+                Operations: [],
+                Version: WorldCameraProgram.CurrentVersion
+            )
+        );
 
         bool Frame() {
             set.Begin();
             set.Set(view: in session);
             set.Set(view: in shown);
             set.Set(view: in hud);
+            set.Set(view: View(demand: WorldViewDemand.Root, name: names.Of(camera: chase, seat: 1)));
 
             return set.TryPublish(instances: out _);
         }
@@ -91,7 +105,7 @@ public sealed class WorldViewInstancesLawTests {
         // Cameras before sessions, each group by name.
         Assert.Equal(
             actual: set.Instances.Views.Select(selector: static view => view.Name),
-            expected: ["hud", "shown", "session$0"]
+            expected: [WorldSeatAnchors.RegistrationName(camera: chase, seat: 1), "hud", "shown", "session$0"]
         );
         Assert.False(condition: Frame());
         Assert.Equal(

@@ -161,6 +161,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // that poses it, so a re-point reuses the same registration and a camera mutation diffs against the row the live view
     // embodies. The render graph runs each as a view instance of that name.
     private readonly Dictionary<string, CameraRegistration> m_cameraViews = new(comparer: StringComparer.Ordinal);
+    // The registration name each camera renders under per seat, resolved once, so a probe polling a seat-relative
+    // camera's view every frame allocates no name.
+    private readonly WorldViewRegistrationNames m_registrationNames = new();
     private readonly HashSet<string> m_parkedViews = new(comparer: StringComparer.Ordinal);
     // Reused scratch for ReconcileCameras (the registered names snapshot walked while m_cameraViews mutates).
     private readonly List<string> m_cameraReconcileScratch = new();
@@ -265,7 +268,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     // unknown name is a loud fault (unbound); a known one holds a ViewFeed whose registration is deferred
                     // to ConfigureViews (the render envelope is not known until the frame source has probed it).
                     if (ResolveCamera(name: view.CameraName) is { } camera) {
-                        slot.View = new ViewFeed(Name: WorldSeatAnchors.RegistrationName(
+                        slot.View = new ViewFeed(Name: m_registrationNames.Of(
                             camera: camera,
                             seat: DefaultViewSeat
                         ));

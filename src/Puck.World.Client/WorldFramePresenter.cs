@@ -1140,8 +1140,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// the image it republishes); or <see langword="null"/> before the first frame.</summary>
     public ulong? RegionTick { get; private set; }
 
-    /// <summary>Prepares the render graph's frame before its runtime schedules it: publishes the screens' content for the
-    /// frame first (<see cref="IWorldScreenPresenter.Publish"/>), so every source the frame acquires sees one answer from
+    /// <summary>Prepares the render graph's frame before its runtime schedules it: reconciles a definition delivered since
+    /// the last frame first, so the screens and cameras the instances' reads are declared from are the delivered ones and a
+    /// screen retargeted to a view shows it on the frame of the change, then publishes the screens' content for the
+    /// frame (<see cref="IWorldScreenPresenter.Publish"/>), so every source the frame acquires sees one answer from
     /// the capture gate, then reconciles the document's <c>views.graphs</c> rows and the screens' source instances onto
     /// the runtime, hands every graph instance this frame's presented tick and
     /// presentation time, then places each view of the world the last composed frame rendered in its rect at its render
@@ -1164,6 +1166,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             width: context.TargetWidth,
             height: context.TargetHeight
         );
+        // A delivered screen or camera change reaches the binder before it publishes and before the graph host declares
+        // the world instance's reads, so a screen retargeted to a view the frame already renders (a HUD root) reads it
+        // this frame instead of showing dark glass until the next. The capture's own call is then a no-op.
+        ReconcileDelivery();
         RegionTick = m_client.StateMirror.Tick;
         m_binder.Publish(context: in context);
 
@@ -1324,6 +1330,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_animator.Tick(deltaSeconds: deltaSeconds);
         m_emitter.Tick(deltaSeconds: deltaSeconds);
 
+        // A no-op after PrepareGraph reconciled this frame's delivery; a capture no graph prepares reconciles here.
         ReconcileDelivery();
         m_bakes?.Pump(definition: m_client.Definition);
 
