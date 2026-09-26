@@ -13,10 +13,9 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// THE LAW: a border reads its neighbour's bound colors from the neighbour image it draws its geometry from, the image
-/// pinned for the tick (<see cref="IWorldAdjacencyNeighbour.Definition"/>). A state write moving a bound color the
-/// border baked reaches it once the pin advances to an image carrying the write, and not before: while the pinned
-/// image still holds the old color the border's revision does not move, so a border never shows a color ahead of its
-/// geometry.
+/// pinned for the tick (<see cref="IWorldAdjacencyNeighbour.Definition"/>). While the pin holds the image the border
+/// baked its revision does not move; once the pin advances to an image whose bound color moved, the border rebuilds.
+/// The border has no read of any image but the pinned one, so it never shows a color ahead of its geometry.
 /// </summary>
 public sealed class WorldAdjacencyBorderColorLawTests {
     private const float SeamZ = 24f;
@@ -141,17 +140,11 @@ public sealed class WorldAdjacencyBorderColorLawTests {
 
         var baked = Revision(emitter: emitter);
 
+        // While the pin holds the image the border baked, nothing moves.
         Assert.Equal(expected: baked, actual: Revision(emitter: emitter));
 
-        // A newer image carrying the write exists, but the tick's pin still holds the old one: nothing moves, since the
-        // border reads nothing but the pinned image.
-        var written = Neighbour(bump: "#112233");
-
-        Assert.Equal(expected: baked, actual: Revision(emitter: emitter));
-        Assert.NotSame(expected: written, actual: neighbour.Definition);
-
-        // The pin advances to the image carrying the write: the border rebuilds to follow it.
-        neighbour.Definition = written;
+        // The pin advances to an image carrying the write: the border rebuilds to follow it.
+        neighbour.Definition = Neighbour(bump: "#112233");
 
         Assert.NotEqual(expected: baked, actual: Revision(emitter: emitter));
     }

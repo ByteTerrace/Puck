@@ -163,9 +163,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         return (mappedPosition, mappedOrientation);
     }
 
-    // A plain indexed copy of the first `count` entries — the ONLY place EmitCurrent allocates a fresh
-    // m_emittedProjections array, reached only when a live edit authors more adjacency projections than this
-    // composition reserved at boot.
     // The bound colors a projection's neighbour bakes, read from definition, the neighbour image the caller read once
     // and draws the border's geometry from, so geometry and colors always come from one image.
     private WorldBakedColors ColorsOf(WorldAdjacencyProjection projection, WorldDefinition definition) {
@@ -216,6 +213,9 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         }
     }
 
+    // A plain indexed copy of the first `count` entries — the ONLY place EmitCurrent allocates a fresh
+    // m_emittedProjections array, reached only when a live edit authors more adjacency projections than this
+    // composition reserved at boot.
     private static WorldAdjacencyProjection[] CopyProjections(IReadOnlyList<WorldAdjacencyProjection> source, int count) {
         var copy = new WorldAdjacencyProjection[count];
 
