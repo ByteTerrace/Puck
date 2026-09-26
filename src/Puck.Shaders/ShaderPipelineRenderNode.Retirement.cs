@@ -66,6 +66,15 @@ public sealed partial class ShaderPipelineRenderNode {
                     bytes = checked((bytes + (((ulong)region.ByteCount) * ((ulong)region.SlotCount))));
                 }
             }
+            foreach (var region in (pass?.Regions ?? [])) {
+                if (region is not null) {
+                    bytes = checked((bytes + GpuRegion.BytesOf(
+                        byteCount: region.ByteCount,
+                        policy: region.Policy,
+                        slotCount: region.SlotCount
+                    )));
+                }
+            }
         }
 
         foreach (var resource in resources) {

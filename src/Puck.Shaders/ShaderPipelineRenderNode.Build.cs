@@ -325,10 +325,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
         public PassObjects?[] Passes { get; }
         public PreviewObjects? Preview { get; set; }
-        // The staged regions of each package pass that states any, in pass order: one reserved copy pool each
-        // (DescriptorPools' regionCopies). When there is one, the build holds a lease on the device's region-copy
-        // pipeline, taken ready.
-        public int[] RegionCopies { get; private set; } = [];
+        // The graph's staged regions, its package passes' in pass order and then its host buffer ports, whose copy sets
+        // the graph's one copy pool reserves (DescriptorPools' stagedRegions). When there is one, the build holds a lease
+        // on the device's region-copy pipeline, taken ready.
+        public int StagedRegions { get; private set; }
         public GpuRegionCopyPipeline? CopyPipeline { get; private set; }
         public GpuRegionCopyPipelineLease? RegionCopy { get; set; }
 
@@ -359,6 +359,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
                 build.StateRegions(
                     cancellationToken: cancellationToken,
+                    plan: plan,
                     request: request
                 );
 
@@ -394,28 +395,28 @@ public sealed partial class ShaderPipelineRenderNode {
             CopyPipeline = null;
         }
 
-        // States the graph's package regions under the device's residency choice and, when one stages, takes the
-        // region-copy pipeline ready, so the install on the frame thread never waits for it.
-        private void StateRegions(BuildRequest request, CancellationToken cancellationToken) {
-            var copies = new List<int>();
+        // States the graph's staged regions under the device's residency choice, its package regions' and its host buffer
+        // ports', and, when one stages, takes the region-copy pipeline ready, so the install on the frame thread never
+        // waits for it.
+        private void StateRegions(ShaderPipelinePlan plan, BuildRequest request, CancellationToken cancellationToken) {
+            var staged = 0;
 
             foreach (var pass in Passes) {
-                var staged = 0;
-
                 foreach (var region in (pass?.Regions ?? [])) {
                     if (Staged(device: request.Device, byteCount: ((ulong)region.ByteCount))) {
                         staged++;
                     }
                 }
-
-                if (staged > 0) {
-                    copies.Add(item: staged);
+            }
+            foreach (var port in HostBufferPorts(plan: plan)) {
+                if (Staged(device: request.Device, byteCount: port.SizeBytes!.Value)) {
+                    staged++;
                 }
             }
 
-            RegionCopies = [.. copies];
+            StagedRegions = staged;
 
-            if (copies.Count == 0) {
+            if (staged == 0) {
                 return;
             }
 

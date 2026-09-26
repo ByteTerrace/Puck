@@ -352,6 +352,123 @@ public sealed class GpuResidencyLawTests {
                 : [])
         );
     }
+    /// <summary>A region's buffers hold exactly the bytes <see cref="GpuRegion.BytesOf"/> states for its policy, and
+    /// disposing it releases them.</summary>
+    [InlineData(GpuResidencyPolicy.InPlace)]
+    [InlineData(GpuResidencyPolicy.Ring)]
+    [InlineData(GpuResidencyPolicy.Staged)]
+    [Theory]
+    public void ARegionOwnsTheBytesItsPolicyStates(GpuResidencyPolicy policy) {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        using var copy = CopyPipeline(gpu: gpu);
+        var before = gpu.BufferBytes;
+        var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 96,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: policy,
+            recorder: gpu.Services.Recorder,
+            slotCount: 3,
+            name: default
+        );
+
+        Assert.Equal(
+            actual: (gpu.BufferBytes - before),
+            expected: GpuRegion.BytesOf(
+                byteCount: 96,
+                policy: policy,
+                slotCount: 3
+            )
+        );
+        region.Dispose();
+        Assert.Equal(expected: before, actual: gpu.BufferBytes);
+    }
+    /// <summary>A staged region on reserved copy sets moves to a share of another pool, as a bound host buffer port does
+    /// when a replacement graph installs: its next copies go through the new share, the old pool can be disposed at
+    /// once, and the destination stays byte-exact. A region under another policy, or one that owns its pool, refuses a
+    /// move, as does a share of another number of slots.</summary>
+    [Fact]
+    public void AStagedRegionMovesToAnotherShareAndCopiesThroughIt() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        using var copy = CopyPipeline(gpu: gpu);
+        var first = new GpuRegionCopyPool(
+            bindings: gpu.Services.Bindings,
+            copyPipeline: copy,
+            name: default,
+            regions: [default],
+            slotCount: 2
+        );
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            copySets: first.Region(index: 0),
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        _ = region.Write(bytes: [1, 2, 3, 4], offset: 8);
+        region.Flush(slot: 0);
+        region.RecordCopy(commandBuffer: 2, slot: 0);
+
+        using var second = new GpuRegionCopyPool(
+            bindings: gpu.Services.Bindings,
+            copyPipeline: copy,
+            name: default,
+            regions: [default, default],
+            slotCount: 2
+        );
+
+        region.MoveCopySets(copySets: second.Region(index: 1));
+        first.Dispose();
+
+        for (var slot = 0; (slot < 2); slot++) {
+            _ = region.Write(bytes: [((byte)(5 + slot)), 6, 7, 8], offset: (16 + (slot * 4)));
+            region.Flush(slot: slot);
+            region.RecordCopy(commandBuffer: 2, slot: slot);
+            Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: slot).BufferHandle));
+        }
+
+        using var three = new GpuRegionCopyPool(
+            bindings: gpu.Services.Bindings,
+            copyPipeline: copy,
+            name: default,
+            regions: [default],
+            slotCount: 3
+        );
+        using var ring = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: null,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Ring,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        using var owning = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        _ = Assert.Throws<ArgumentException>(testCode: () => region.MoveCopySets(copySets: three.Region(index: 0)));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => ring.MoveCopySets(copySets: second.Region(index: 0)));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => owning.MoveCopySets(copySets: second.Region(index: 0)));
+    }
     /// <summary>Regions created on their shares of one reserved copy pool create no pool of their own, whatever number
     /// of regions the pool serves, and a region whose set another region wrote since (a replacement its owner abandoned)
     /// rewrites it before it records that slot's copy, so the copy lands in its own destination; a region writing its

@@ -3,11 +3,13 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-// The node's memory account. Every byte count the node reports or refuses by comes from the plan through Footprint and
-// GraphBytes, which mirror what Allocate and the build create: one image or buffer per frame slot of each storage the
-// node owns (the images a graphics pass draws into among them), one geometry buffer per geometry pass and per
-// fullscreen pass that reads the Position input, one constant buffer per frame slot for the frame group's block and for
-// each pass's pass block (ConstantBytes), and one float-preview image per frame slot.
+// The node's memory account. Every byte count the node reports or refuses by comes from the plan through Footprint,
+// GraphBytes and RegionBytesOf, which mirror what Allocate and the build create: one image or buffer per frame slot of
+// each storage the node owns (the images a graphics pass draws into among them), one geometry buffer per geometry pass
+// and per fullscreen pass that reads the Position input, one constant buffer per frame slot for the frame group's block
+// and for each pass's pass block (ConstantBytes), the buffers of every host-written region the graph reads (each package
+// pass's regions and each host buffer port's, GpuRegion.BytesOf under the device's residency choice, a port's whether or
+// not a host has bound it yet), and one float-preview image per frame slot.
 // ShaderPipelineRenderNode.Retirement.cs's LiveBytes counts the same kinds from a replaced graph's objects. The capture
 // readback is the node's, not a graph's: it creates its staging buffer on the first capture, sized to the published
 // surface, and OwnedBytes counts it from then on, so every later replacement's peak includes it. Like every other count
@@ -16,6 +18,8 @@ public sealed partial class ShaderPipelineRenderNode {
     private const ulong FullscreenVertexBytes = (FullscreenTriangle.StrideBytes * FullscreenTriangle.VertexCount);
 
     private ulong? m_budgetCapBytes;
+    // The installed graph's region bytes (RegionBytesOf), which m_allocationBytes includes.
+    private ulong m_regionBytes;
     // The capture readback's staging buffer, counted like every other resource at its logical size: the published RGBA8
     // surface's width times its height times four. Zero until the first capture creates it.
     private ulong m_readbackBytes;
@@ -47,6 +51,13 @@ public sealed partial class ShaderPipelineRenderNode {
             m_budgetCapBytes = value;
         }
     }
+    /// <summary>Gets the bytes of the installed graph's host-written regions: every package pass's regions
+    /// (<see cref="IRenderGraphPackageFactory.Regions"/>) and every host buffer port's
+    /// (<see cref="ShaderPipelineInitialization.Host"/>), each <see cref="GpuRegion.BytesOf"/> under the policy
+    /// <see cref="GpuResidency.Select"/> picks with a reader in flight, a port's whether or not a host has bound it yet.
+    /// <see cref="OwnedBytes"/> and the installed graph's steady-state bytes include them; zero when no graph is
+    /// installed.</summary>
+    public ulong RegionBytes => m_regionBytes;
     /// <summary>Gets the device's budget, in bytes: <see cref="ShaderPipelineMemoryBudget.For"/> over the device's
     /// memory profile.</summary>
     public ulong DeviceBudgetBytes => ShaderPipelineMemoryBudget.For(profile: m_device.MemoryProfile);
@@ -156,11 +167,14 @@ public sealed partial class ShaderPipelineRenderNode {
     // owns now. History the graph carries from the installed one is moved, not allocated, so the peak holds its bytes
     // once.
     private ShaderPipelineMemoryAccount Account(ShaderPipelinePlan plan, (uint Width, uint Height) extent, (uint Width, uint Height)? preview) {
-        var steady = checked((GraphBytes(
+        var steady = checked(((GraphBytes(
             extent: extent,
             inFlight: m_inFlight,
             plan: plan
-        ) + PreviewBytes(
+        ) + RegionBytesOf(
+            extent: extent,
+            plan: plan
+        )) + PreviewBytes(
             extent: preview,
             inFlight: m_inFlight
         )));
@@ -183,6 +197,65 @@ public sealed partial class ShaderPipelineRenderNode {
             SteadyBytes: steady
         );
     }
+    // The bytes of the host-written regions a graph planned at an extent reads: each package pass's regions, which its
+    // package's factory states for the pass's context, and each host buffer port's, every one under the policy the
+    // device picks for its size with a reader in flight.
+    private ulong RegionBytesOf(ShaderPipelinePlan plan, (uint Width, uint Height) extent) {
+        var bytes = 0UL;
+        Dictionary<string, ShaderPipelineResource>? specs = null;
+        BuildRequest? request = null;
+
+        foreach (var planned in plan.Passes) {
+            if (planned.Package is not { } step) {
+                continue;
+            }
+
+            specs ??= VersionSpecs(plan: plan);
+            request ??= new BuildRequest(
+                Device: m_device,
+                DirectX: m_directX,
+                Gpu: m_gpu,
+                InFlight: m_inFlight,
+                Instance: m_descriptor.Name,
+                Key: default,
+                Packages: m_packages
+            );
+
+            var factory = m_packages.FactoryFor(
+                instance: m_descriptor.Name,
+                package: step.Package,
+                pass: planned.Name
+            );
+
+            foreach (var region in factory.Regions(context: PackageContextOf(
+                extent: planned.ResolveExtent(
+                    frameHeight: extent.Height,
+                    frameWidth: extent.Width
+                ),
+                planned: planned,
+                request: request,
+                specs: specs
+            ))) {
+                bytes = checked((bytes + RegionBytesOf(byteCount: ((ulong)region.ByteCount))));
+            }
+        }
+        foreach (var port in HostBufferPorts(plan: plan)) {
+            bytes = checked((bytes + RegionBytesOf(byteCount: port.SizeBytes!.Value)));
+        }
+
+        return bytes;
+    }
+    // The bytes of one region of byteCount bytes the node creates: a ring or a staged copy, as Staged decides.
+    private ulong RegionBytesOf(ulong byteCount) => GpuRegion.BytesOf(
+        byteCount: checked((int)byteCount),
+        policy: (Staged(
+            byteCount: byteCount,
+            device: m_device
+        )
+            ? GpuResidencyPolicy.Staged
+            : GpuResidencyPolicy.Ring),
+        slotCount: ((int)m_inFlight)
+    );
     // The history a graph planned at an extent carries from the installed graph, by the index of the storage that
     // receives it: a history storage of the same name, shape and resolved extent, whose instances were created with every
     // usage the graph gives it. A carried storage allocates nothing.

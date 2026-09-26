@@ -90,7 +90,7 @@ public sealed partial class OverlayPackageLawTests {
                 inFlight: InFlight,
                 plan: rig.Node.Plan!,
                 preview: false,
-                regionCopies: [1]
+                stagedRegions: 1
             )
         );
 

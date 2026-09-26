@@ -189,10 +189,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
         _ => GpuPixelFormat.R8G8B8A8Unorm,
     });
-    // Validates one instance's graph against its instance and resolves its inputs to producer indices.
-    // An uploaded source's graph (hosted) binds its one external version, its region, to a host buffer port, not to an
-    // instance's output.
-    private static bool TryResolve(RenderGraphInstanceSet set, int index, RenderGraphRuntimeGraph graph, bool hosted, RenderGraphPackageRecorders packages, Published?[] published, [NotNullWhen(returnValue: true)] out Binding[]? bindings, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal) {
+    // Validates one instance's graph against its instance and resolves its inputs to producer indices. A host buffer port
+    // (an uploaded source's region) is the host's to bind, never an instance's output.
+    private static bool TryResolve(RenderGraphInstanceSet set, int index, RenderGraphRuntimeGraph graph, RenderGraphPackageRecorders packages, Published?[] published, [NotNullWhen(returnValue: true)] out Binding[]? bindings, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal) {
         var instance = set.Instances[index];
         var plan = graph.Pipeline.Plan;
 
@@ -233,7 +232,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             return false;
         }
 
-        var external = plan.Storages.Where(predicate: static storage => storage.IsExternal).ToDictionary(
+        var external = plan.Storages.Where(predicate: static storage => (storage.IsExternal && !storage.Declaration.IsHostBuffer)).ToDictionary(
             comparer: StringComparer.Ordinal,
             keySelector: static storage => storage.Name
         );
@@ -321,10 +320,16 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             );
         }
 
+        var unbound = external.Keys.FirstOrDefault(predicate: name => !bound.Contains(item: name));
+
+        // Only an uploaded source's upload binds a host buffer port; any other instance would leave it unbound.
         if (
-            !hosted &&
-            (external.Keys.FirstOrDefault(predicate: name => !bound.Contains(item: name)) is { } unbound)
+            (unbound is null) &&
+            (instance.Kind != RenderGraphInstanceKind.External)
         ) {
+            unbound = plan.Storages.FirstOrDefault(predicate: static storage => storage.Declaration.IsHostBuffer)?.Name;
+        }
+        if (unbound is not null) {
             refusal = Refuse(
                 RenderGraphRuntimeRefusalCode.InputVersion,
                 $"Instance '{instance.Name}' leaves the external version '{unbound}' of its graph '{plan.Definition.Name}' unbound.",
@@ -560,7 +565,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             if (!TryResolve(
                 bindings: out var bindings,
                 graph: graph,
-                hosted: (set.Instances[index].Kind == RenderGraphInstanceKind.External),
                 index: index,
                 packages: packages,
                 published: published,
@@ -1151,6 +1155,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <param name="instance">The instance's index in <see cref="Instances"/>.</param>
     /// <returns>The instance's work source.</returns>
     public IGpuWorkSource Work(int instance) => (((IGpuWorkSource?)m_nodes[instance]) ?? m_producers[instance]!.Work);
+    /// <summary>Returns the bytes of the host-written regions an instance's installed graph reads
+    /// (<see cref="ShaderPipelineRenderNode.RegionBytes"/>), for inspection.</summary>
+    /// <param name="instance">The instance's index in <see cref="Instances"/>.</param>
+    /// <returns>The bytes, or <see langword="null"/> for an instance that renders through an external producer.</returns>
+    public ulong? RegionBytes(int instance) => m_nodes[instance]?.RegionBytes;
 
     // One instance's capture target: a capture armed on it arms the runtime's one slot for the instance of its name, and is
     // refused once a reconfiguration has removed that instance.

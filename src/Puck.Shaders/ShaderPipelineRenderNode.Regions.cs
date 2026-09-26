@@ -6,7 +6,10 @@ namespace Puck.Shaders;
 // Every region the host writes and the node's passes read: the regions a package pass's package states
 // (IRenderGraphPackageFactory.Regions), created with the graph, and the region a host binds to a host buffer port
 // (BindRegion). Each is created under the policy GpuResidency.Select picks with a reader in flight, so a ring or a staged
-// copy. The node owns them all through one mechanism: after the frame's passes have recorded (a package writes its
+// copy. The installed graph holds one copy pool reserving every staged region's sets, its package regions' in pass
+// order and then its ports' in declaration order (DescriptorPools), admitted with the graph and owned by its first pass,
+// so it retires with the graph; a bound port's region moves to the next installed graph's share. The node owns them all
+// through one mechanism: after the frame's passes have recorded (a package writes its
 // regions while it records), it flushes every region's share of the slot and records every owed staged copy in one
 // command buffer it submits ahead of the frame's passes, between a barrier ordering the earlier submissions' reads before
 // the copies' writes and one buffer barrier per copied buffer making the writes visible to the shader stages that read
@@ -20,30 +23,34 @@ public sealed partial class ShaderPipelineRenderNode {
     private readonly Dictionary<string, GpuRegion> m_externalRegions = new(comparer: StringComparer.Ordinal);
     private readonly List<IGpuBuffer> m_copiedRegions = [];
 
-    // The device's region-copy pipeline, leased by the build of the first graph whose package stages a region, or by the
-    // first host buffer port that stages, and each slot's command pool the frame's copies are recorded in; all held until a
-    // device loss or disposal.
+    // The device's region-copy pipeline, leased by the build of the first graph with a staged region, and each slot's
+    // command pool the frame's copies are recorded in; all held until a device loss or disposal.
     private GpuRegionCopyPipelineLease? m_regionCopy;
     private GpuRegionCopyPipeline? m_copyPipeline;
     private IGpuCommandPool[]? m_copyPools;
+    // The installed graph's copy pool, owned by its first pass, and the share each of its staged host buffer ports
+    // takes. While a graph allocates, the pool it created belongs to m_regionCopiesOwner until its first pass takes it,
+    // and m_nextRegionShare is the share its next staged package region takes.
+    private GpuRegionCopyPool? m_regionCopies;
+    private GpuRegionCopyPool? m_regionCopiesOwner;
+    private int m_nextRegionShare;
 
-    /// <summary>Creates the region the host writes for a named external buffer, a host buffer port, and binds it. The
-    /// region holds the buffer's declared size and takes the policy <see cref="GpuResidency.Select"/> picks for it with a
-    /// reader in flight; a staged one creates its own copy pool, admitted into the device's heap here. The node owns the
-    /// region from here: each frame it records, it binds the slot's buffer, flushes what the slot owes once the frame's
-    /// passes have recorded and records the staged copy ahead of them, and it disposes the region on device loss and at
-    /// disposal, the only way a name takes another region. The host writes the region's contents at any time.</summary>
-    /// <param name="name">The external buffer's version name.</param>
-    /// <returns>The region, or <see langword="null"/> while it would stage and the device's region-copy pipeline, which the
-    /// first staged binding leases from the host's <see cref="RenderGraphPackageRecorders.RegionCopy"/>, is still being
-    /// built; the host asks again on a later frame.</returns>
+    private Dictionary<string, int> m_portShares = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Creates the region the host writes for a host buffer port (<see cref="ShaderPipelineInitialization.Host"/>)
+    /// and binds it. The region holds the port's declared size and takes the policy <see cref="GpuResidency.Select"/> picks
+    /// for it with a reader in flight; a staged one takes the copy sets the installed graph's copy pool reserved for the
+    /// port, so binding takes no descriptor range. The node owns the region from here: each frame it records, it binds
+    /// the slot's buffer, flushes what the slot owes once the frame's passes have recorded and records the staged copy
+    /// ahead of them, moves it to each later graph's share, and disposes it on device loss and at disposal, the only way a
+    /// name takes another region. The host writes the region's contents at any time.</summary>
+    /// <param name="name">The host buffer port's name.</param>
+    /// <returns>The region, or <see langword="null"/> while it would stage and no installed graph reserves its copy sets
+    /// yet, which binding advances as a produced frame does (the candidate's build starts, and installs once finished);
+    /// the host asks again on a later frame.</returns>
     /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or not a declared external buffer of positive
-    /// size in the candidate graph, or a region is already bound to it.</exception>
-    /// <exception cref="InvalidOperationException">The region would stage and the host offers no region-copy
-    /// pipeline.</exception>
-    /// <exception cref="GpuDescriptorHeapRefusalException">The device's heap cannot admit a staged region's copy
-    /// pool.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or not a declared host buffer port of the
+    /// candidate graph, or a region is already bound to it.</exception>
     public GpuRegion? BindRegion(string name) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -56,9 +63,13 @@ public sealed partial class ShaderPipelineRenderNode {
             name: name
         );
 
-        if ((declaration?.SizeBytes is not { } sizeBytes) || (sizeBytes == 0UL) || (sizeBytes > int.MaxValue)) {
+        if (
+            (declaration is not { IsHostBuffer: true, SizeBytes: { } sizeBytes }) ||
+            (sizeBytes == 0UL) ||
+            (sizeBytes > int.MaxValue)
+        ) {
             throw new ArgumentException(
-                message: $"External buffer '{name}' declares no size a region can hold.",
+                message: $"Resource '{name}' is not a host buffer port of a size a region can hold.",
                 paramName: nameof(name)
             );
         }
@@ -73,36 +84,30 @@ public sealed partial class ShaderPipelineRenderNode {
             byteCount: sizeBytes,
             device: m_device
         );
+        var share = -1;
 
         if (staged) {
-            if (m_copyPipeline is null) {
-                // A lease acquired on the frame thread polls its build rather than waiting for it.
-                m_regionCopy ??= RegionCopyOf(
-                    device: m_device,
-                    instance: m_descriptor.Name,
-                    packages: m_packages
-                ).Acquire(device: m_device);
-                m_copyPipeline = m_regionCopy.Poll();
-
-                if (m_copyPipeline is null) {
-                    return null;
-                }
+            // A port's copy sets are the installed graph's, so until a graph reserving them installs, binding advances the
+            // candidate's build and install as a produced frame does: a host that produces only once its region is bound
+            // would otherwise never install one.
+            if (!m_portShares.ContainsKey(key: name)) {
+                EnsureBuild();
+                InstallPending();
             }
-            if (!m_gpu.Bindings.CanAdmit(
-                owner: $"shader pipeline {m_descriptor.Name} region '{name}'",
-                pools: [GpuRegionCopyPool.SizesOf(regionCount: 1, slotCount: ((int)m_inFlight))],
-                refusal: out var refusal
+            if (!m_portShares.TryGetValue(
+                key: name,
+                value: out share
             )) {
-                throw new GpuDescriptorHeapRefusalException(message: refusal);
+                return null;
             }
-
-            EnsureCopyPools();
         }
 
         var region = CreateRegion(
             byteCount: ((int)sizeBytes),
             copyPipeline: m_copyPipeline,
-            copySets: null,
+            copySets: (staged
+                ? m_regionCopies!.Region(index: share)
+                : null),
             name: new GpuObjectName(
                 owner: m_descriptor.Name,
                 part: name
@@ -144,6 +149,64 @@ public sealed partial class ShaderPipelineRenderNode {
             m_copyPipeline ??= built.CopyPipeline;
         }
     }
+    // The host buffer ports a graph declares, in declaration order.
+    private static List<ShaderPipelineResource> HostBufferPorts(ShaderPipelinePlan plan) => [
+        .. plan.Resources
+            .Select(selector: static resource => resource.Declaration)
+            .Where(predicate: static declaration => declaration.IsHostBuffer),
+    ];
+    // Creates the installing graph's copy pool when any of its regions stages: one copy set per slot for each staged
+    // package region, in pass order, then for each staged host buffer port, in declaration order. The pool belongs to
+    // m_regionCopiesOwner until the graph's first pass takes it.
+    private void CreateRegionCopies(GraphBuild built, ShaderPipelinePlan plan) {
+        var names = new List<GpuObjectName>();
+        var ports = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+
+        foreach (var planned in plan.Passes) {
+            foreach (var region in (built.Passes[planned.Index]?.Regions ?? [])) {
+                if (Staged(byteCount: ((ulong)region.ByteCount), device: m_device)) {
+                    names.Add(item: NameOf(pass: planned.Name, region: region));
+                }
+            }
+        }
+        foreach (var port in HostBufferPorts(plan: plan)) {
+            if (Staged(byteCount: port.SizeBytes!.Value, device: m_device)) {
+                ports.Add(
+                    key: port.Name,
+                    value: names.Count
+                );
+                names.Add(item: new GpuObjectName(
+                    owner: m_descriptor.Name,
+                    part: port.Name
+                ));
+            }
+        }
+
+        m_nextRegionShare = 0;
+        m_portShares = ports;
+        m_regionCopies = ((names.Count == 0)
+            ? null
+            : new GpuRegionCopyPool(
+                bindings: m_gpu.Bindings,
+                copyPipeline: (built.CopyPipeline ?? throw new InvalidOperationException(message: $"Instance '{m_descriptor.Name}' stages a region, but its build holds no region-copy pipeline.")),
+                name: new GpuObjectName(
+                    owner: m_descriptor.Name,
+                    part: "region copies"
+                ),
+                regions: [.. names],
+                slotCount: ((int)m_inFlight)
+            ));
+        m_regionCopiesOwner = m_regionCopies;
+    }
+    // Moves each bound port's staged region to the share the graph just installed reserved for it; RequireSwappable keeps
+    // every bound port declared, at its size, by each graph a node installs.
+    private void MovePortRegions() {
+        foreach (var (name, region) in m_externalRegions) {
+            if (region.Policy == GpuResidencyPolicy.Staged) {
+                region.MoveCopySets(copySets: m_regionCopies!.Region(index: m_portShares[name]));
+            }
+        }
+    }
     // Creates each slot's command pool the frame's region copies are recorded in, once; a failure partway releases the
     // pools it created.
     private void EnsureCopyPools() {
@@ -177,55 +240,30 @@ public sealed partial class ShaderPipelineRenderNode {
             m_externalBuffers[name] = region.Buffer(slot: slot);
         }
     }
-    // Creates the regions a package pass's package states, in its order, and one copy pool reserving the staged ones'
-    // sets, which DescriptorPools states for the pass. Each is stored as soon as it exists, so a failure partway leaves
-    // it where RuntimePass.Dispose releases it.
+    // Creates the regions a package pass's package states, in its order, each staged one taking the next share of the
+    // graph's copy pool, which CreateRegionCopies reserved in the same order. Each is stored as soon as it exists, so a
+    // failure partway leaves it where RuntimePass.Dispose releases it.
     private void CreatePackageRegions(RuntimePass runtime, RenderGraphPackageRegion[] declared, IGpuComputePipeline? copyPipeline) {
         if (declared.Length == 0) {
             return;
         }
 
-        var staged = new bool[declared.Length];
-        var stagedNames = new List<GpuObjectName>();
+        runtime.Regions = new GpuRegion[declared.Length];
 
         for (var index = 0; (index < declared.Length); index++) {
-            staged[index] = Staged(
+            var staged = Staged(
                 byteCount: ((ulong)declared[index].ByteCount),
                 device: m_device
             );
 
-            if (staged[index]) {
-                stagedNames.Add(item: NameOf(pass: runtime, region: declared[index]));
-            }
-        }
-
-        if (stagedNames.Count > 0) {
-            runtime.RegionCopySets = new GpuRegionCopyPool(
-                bindings: m_gpu.Bindings,
-                copyPipeline: (copyPipeline ?? throw new InvalidOperationException(message: $"Pass '{runtime.Name}' stages a region, but its build holds no region-copy pipeline.")),
-                name: new GpuObjectName(
-                    detail: "region copies",
-                    owner: m_descriptor.Name,
-                    part: runtime.Name
-                ),
-                regions: [.. stagedNames],
-                slotCount: ((int)m_inFlight)
-            );
-        }
-
-        runtime.Regions = new GpuRegion[declared.Length];
-
-        var share = 0;
-
-        for (var index = 0; (index < declared.Length); index++) {
             runtime.Regions[index] = CreateRegion(
                 byteCount: declared[index].ByteCount,
                 copyPipeline: copyPipeline,
-                copySets: (staged[index]
-                    ? runtime.RegionCopySets!.Region(index: share++)
+                copySets: (staged
+                    ? m_regionCopies!.Region(index: m_nextRegionShare++)
                     : null),
-                name: NameOf(pass: runtime, region: declared[index]),
-                staged: staged[index]
+                name: NameOf(pass: runtime.Name, region: declared[index]),
+                staged: staged
             );
         }
     }
@@ -245,10 +283,10 @@ public sealed partial class ShaderPipelineRenderNode {
         recorder: m_gpu.Recorder,
         slotCount: ((int)m_inFlight)
     );
-    private GpuObjectName NameOf(RuntimePass pass, RenderGraphPackageRegion region) => new(
+    private GpuObjectName NameOf(string pass, RenderGraphPackageRegion region) => new(
         detail: region.Name,
         owner: m_descriptor.Name,
-        part: pass.Name
+        part: pass
     );
     // Flushes every region's share of the slot, now that the frame's passes have written theirs, and records each owed
     // staged copy in the graph's copy command buffer for the slot, which goes ahead of the frame's passes.
@@ -346,6 +384,8 @@ public sealed partial class ShaderPipelineRenderNode {
         m_regionCopy?.Release();
         m_regionCopy = null;
         m_copyPipeline = null;
+        m_regionCopies = null;
+        m_portShares = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
     }
     // Disposes every bound region, once no submission can read it: after the node waited its submissions, after a device
     // loss, or when a retired node's host has seen its readers complete.

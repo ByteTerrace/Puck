@@ -809,7 +809,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_blitVertexModule = vertexModule;
         m_blitFragmentModule = fragmentModule;
         m_blitPipeline = pipeline;
-    }    private void CreateCommandInfrastructure(ID3D12Device* device) {
+    }
+    private void CreateCommandInfrastructure(ID3D12Device* device) {
         for (var i = 0u; (i < FrameCount); i++) {
             device->CreateCommandAllocator(
                 ppCommandAllocator: out var allocator,

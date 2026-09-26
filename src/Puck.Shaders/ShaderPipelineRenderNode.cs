@@ -238,6 +238,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             runtime.FrameRegion = frameRegion;
             m_frameRegionOwner = null;
         }
+        if (m_regionCopiesOwner is { } regionCopies) {
+            runtime.RegionCopySets = regionCopies;
+            m_regionCopiesOwner = null;
+        }
 
         var objects = built.TakePass(index: planned.Index);
 
@@ -508,11 +512,15 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     }
                 }
             }
-            m_allocationBytes = GraphBytes(
+            m_regionBytes = RegionBytesOf(
+                extent: (m_width, m_height),
+                plan: plan
+            );
+            m_allocationBytes = checked((GraphBytes(
                 extent: (m_width, m_height),
                 inFlight: m_inFlight,
                 plan: plan
-            );
+            ) + m_regionBytes));
             m_resourceLookup = map;
             m_resources = storages;
             m_passLabels = plan.Passes.Select(selector: static pass => pass.Name).ToArray();
@@ -544,6 +552,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 )
                 : null);
             m_frameRegionOwner = m_frameRegion;
+            CreateRegionCopies(
+                built: built,
+                plan: plan
+            );
 
             for (var i = 0; (i < plan.Passes.Count); i++) {
                 InstallPass(
@@ -582,7 +594,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     part: "final"
                 ));
             }
-            if (built.RegionCopies.Length > 0) {
+            if (built.StagedRegions > 0) {
                 EnsureCopyPools();
             }
             m_preview = preview;
@@ -599,6 +611,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             m_frameRegionOwner = null;
             m_frameRegion = null;
             m_frameLayout = null;
+            // So is a copy pool no pass took yet.
+            m_regionCopiesOwner?.Dispose();
+            m_regionCopiesOwner = null;
             if (m_resources.Length == 0) {
                 foreach (var resource in storages) {
                     resource?.Dispose();
@@ -608,6 +623,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             m_resources = [];
             m_resourceLookup = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
             m_allocationBytes = 0;
+            m_regionBytes = 0;
             throw;
         }
     }
@@ -737,7 +753,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     inFlight: m_inFlight,
                     plan: next.Plan,
                     preview: key.Preview.HasValue,
-                    regionCopies: built.RegionCopies
+                    stagedRegions: built.StagedRegions
                 ),
                 refusal: out var refusal
             )
@@ -755,6 +771,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         var previousResources = m_resources;
         var previousLookup = m_resourceLookup;
         var previousAllocation = m_allocationBytes;
+        var previousRegionBytes = m_regionBytes;
         var previousPasses = m_passes;
         var previousLabels = m_passLabels;
         var previousReady = m_ready;
@@ -764,6 +781,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         var previousExtent = (m_width, m_height);
         var previousFrameLayout = m_frameLayout;
         var previousFrameRegion = m_frameRegion;
+        var previousRegionCopies = m_regionCopies;
+        var previousPortShares = m_portShares;
         var hadFences = m_slots.Any(predicate: static slot => (slot.Fence is not null));
         var carried = CarriedHistoryOf(
             extent: (key.Width, key.Height),
@@ -826,11 +845,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             m_passLabels = previousLabels;
             m_ready = previousReady;
             m_allocationBytes = previousAllocation;
+            m_regionBytes = previousRegionBytes;
             m_preview = previousPreview;
             m_selectedOutput = previousSelectedOutput;
             (m_width, m_height) = previousExtent;
             m_frameLayout = previousFrameLayout;
             m_frameRegion = previousFrameRegion;
+            m_regionCopies = previousRegionCopies;
+            m_portShares = previousPortShares;
             if (!hadFences) {
                 foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.Final?.Dispose(); slot.Final = null; }
             }
@@ -845,6 +867,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             return;
         }
         AdoptRegionCopy(built: built);
+        MovePortRegions();
         // The graph installed with the desired selection's preview, so no separate preview is wanted; a preview build
         // still running for it is disposed when it is taken.
         m_previewRequest = null;
@@ -1234,6 +1257,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         m_resources = [];
         m_resourceLookup = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
         m_allocationBytes = 0;
+        m_regionBytes = 0;
         m_passLabels = [];
         m_frameLayout = null;
         m_frameRegion = null;
@@ -1364,7 +1388,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
     }
 
-    /// <summary>Binds a host-owned buffer for a named external resource. The node never disposes it.</summary>
+    /// <summary>Binds a host-owned buffer for a named external resource other than a host buffer port, which binds a
+    /// region the node owns (<see cref="BindRegion"/>). The node never disposes it.</summary>
     public void BindBuffer(string name, IGpuBuffer buffer) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -1372,10 +1397,15 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(buffer);
-        _ = ValidateExternalBinding(
+        if (ValidateExternalBinding(
             kind: ShaderPipelineResourceKind.Buffer,
             name: name
-        );
+        ) is { IsHostBuffer: true }) {
+            throw new ArgumentException(
+                message: $"Resource '{name}' is a host buffer port, which binds a region the node owns (BindRegion).",
+                paramName: nameof(name)
+            );
+        }
         ReleaseBindingHold(name: name);
         m_externalBuffers[name] = buffer;
     }
@@ -1681,7 +1711,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="pipeline"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The candidate's compilation failed, its plan is not one a node runs, it
-    /// names a package no recorder serves, or it keeps history on a node with fewer than two frame slots.</exception>
+    /// names a package no recorder serves, it keeps history on a node with fewer than two frame slots, or it does not
+    /// declare a bound host buffer port (<see cref="BindRegion"/>) as a host buffer port of the bound region's
+    /// size.</exception>
     public void RequireSwappable(CompiledShaderPipeline pipeline) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -1693,6 +1725,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
         ValidatePlan(plan: pipeline.Plan);
         ValidatePackages(plan: pipeline.Plan);
+        foreach (var (name, region) in m_externalRegions) {
+            if ((pipeline.Plan.FindResource(name: name)?.Declaration is not { IsHostBuffer: true } port) || (port.SizeBytes != ((ulong)region.ByteCount))) {
+                throw new InvalidDataException(message: $"Host buffer port '{name}' is bound; the candidate must declare it at its {region.ByteCount} bytes, since a name takes another region only after a device loss.");
+            }
+        }
         if (
             (m_inFlight < 2) &&
             pipeline.Plan.Resources.Any(predicate: static resource => resource.Declaration.History)
