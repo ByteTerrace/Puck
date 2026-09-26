@@ -1858,8 +1858,9 @@ bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuComputeServices`, `IFullscreenPassServices` and
 `WorldPostRenderExtensionServices`, `OverlayServices`, and
 `SdfViewGpuServices` are deleted. The pipeline factories have merged into the
-one `IGpuPipelineFactory`: the Vulkan swapchain compositor creates its blit
-through it, for the swapchain's render pass (`VulkanGpuRenderPass.Borrow`).
+one `IGpuPipelineFactory`: both swapchain compositors lease their blit from the
+pass-pipeline cache, which creates it through it for a render pass in the
+swapchain's format.
 The closed set of binding kinds replaces `GpuComputeBindingKind`,
 `ShaderSetManifestBindingKind` and every binding index set by hand, such as the
 SDF engine's binding constants; a graphics description states its groups alone
@@ -2392,35 +2393,43 @@ Phase 3, the groups, follows phase 2:
 21. The owning guides and the `rendering` skill describe the result.
 22. In progress: the P7 deletions no earlier step owns. Done: Vulkan has one
     pipeline factory, `VulkanGpuPipelineFactory`, which creates graphics
-    pipelines through `IVulkanGraphicsPipelineApi` itself, and the swapchain
-    compositor creates its blit through `IGpuPipelineFactory` for the
-    swapchain's render pass (`VulkanGpuRenderPass.Borrow`), opaque and with the
-    neutral dynamic viewport the presenter's recorder sets. A graphics
-    description states its groups alone: `GpuGraphicsPipelineDescription.Layout`
-    is required, and its `TextureSamplerCount`, `EnableStorageBuffer` and push
-    range are deleted with both backends' non-layout graphics paths, and
+    pipelines through `IVulkanGraphicsPipelineApi` itself. Both swapchain
+    compositors bind one group, `SurfaceBlitLayout` (the source at `t0` and its
+    sampler at `s1`, space 3), and lease their blit from the device's
+    `GpuPassPipelineCache` for a render pass in the swapchain's format
+    (`VulkanGpuFormats.FromVkFormat` on Vulkan), opaque and with the neutral
+    dynamic viewport the presenter's recorder sets; the Direct3D 12 compositor's
+    hand-built root signature and pipeline state and `VulkanGpuRenderPass.Borrow`
+    are deleted. The Direct3D 12 compositor keeps a one-SRV and a one-sampler
+    shader-visible heap until P16, and `DirectXDrawCommand` names the group, both
+    heaps and both tables. A graphics description states its groups alone:
+    `GpuGraphicsPipelineDescription.Layout` is required, and its
+    `TextureSamplerCount`, `EnableStorageBuffer` and push range are deleted with
+    both backends' non-layout graphics paths, and
     `VulkanGraphicsPipelineCreateRequest` takes its caller's layout and a
     dynamic viewport alone (its fixed viewport, descriptor bindings, push range
-    and the native API's owned-layout branch are deleted). The overlay's
-    host-written buffer is a `GpuRegion` through one node mechanism: a package
-    states its regions (`IRenderGraphPackageFactory.Regions`), and
+    and the native API's owned-layout branch are deleted). Every host-written
+    buffer a graph reads is a `GpuRegion` through one node mechanism: a package
+    states its regions (`IRenderGraphPackageFactory.Regions`) and a graph
+    declares its host buffer ports (`ShaderPipelineInitialization.Host`), and
     `ShaderPipelineRenderNode` creates them under `GpuResidency.Select`, takes
-    the region-copy pipeline in the candidate's build, states and admits a
-    reserved copy pool per staged pass in `DescriptorPools`, and records every
-    owed copy with its barriers in one command buffer ahead of the frame's
-    passes; recorders record no barrier. `BindRegion`'s host buffer ports go
-    through the same mechanism, so a staged uploaded source is no longer
-    refused. On Direct3D 12 a buffer the fragment stage reads is in
-    `ALL_SHADER_RESOURCE`. Laws: `OverlayPackageLawTests` (a steady drawn frame
-    uploads nothing under a ring or staged; the staged copy pool stated and
-    copies recorded), `RenderGraphRuntimeLawTests.AStagedSourceRegionReachesItsConversionByteExact`
-    and `DirectXBufferStatesLawTests`. Remaining: the Direct3D 12 surface
-    compositor's hand-built root signature and pipeline state move onto
-    `IGpuPipelineFactory`, as Vulkan's blit did, with its surface-blit shader on
-    the group registers; its shader-visible heaps stay until P16.
-    `VulkanGpuRenderPass.Borrow` keeps its stated format until P17's pixel-format
-    fold gives it the swapchain's.
-
+    the region-copy pipeline in the candidate's build, states and admits one
+    copy pool per graph reserving every staged region's sets in
+    `DescriptorPools`, moves a bound port to each later graph's share
+    (`GpuRegion.MoveCopySets`), and records every owed copy with its barriers in
+    one command buffer ahead of the frame's passes; recorders record no barrier.
+    Every region counts in the node's account (`GpuRegion.BytesOf`,
+    `RegionBytes`) and in `world.budget`'s live rows. On Direct3D 12 a buffer
+    the fragment stage reads is in `ALL_SHADER_RESOURCE`. Laws:
+    `OverlayPackageLawTests` (a steady drawn frame uploads nothing under a ring
+    or staged; the staged copy pool stated and copies recorded),
+    `RenderGraphRuntimeLawTests.AStagedSourceRegionReachesItsConversionByteExact`
+    (one pool stated and created for the port, its region bytes and budget
+    row), `GpuResidencyLawTests` (`BytesOf` per policy, a staged region moved
+    across pools) and `DirectXBufferStatesLawTests`. Remaining: a device law
+    that runs a node pass over a region staged by explicit choice on Vulkan
+    hardware and on Direct3D 12 hardware and WARP and reads it back byte-exact,
+    since a device with an aperture rings by default.
 **Decisions.** Root parameter indices are dense, and the push index sits at
 `b0` in space 4, outside every group's space. The spike's frame group is the
 generated frame block, the only generated include, and previous-frame inputs
@@ -2843,9 +2852,9 @@ except step 8.
    `WorldImageProducers.RegisterPackages`), and the runtime renders each
    instance of it through a node running the one-pass graph its upload's
    descriptor names (`RenderGraphRuntime.Sources.cs`): the region, an external
-   buffer bound as the node's host buffer port (`ShaderPipelineRenderNode.BindRegion`,
-   which flushes the frame slot's share of a ring `GpuRegion` after that slot's
-   fence), and one package pass, the conversion `ImageSourceConversion.PassOf`
+   buffer the graph declares as a host buffer port and binds with
+   `ShaderPipelineRenderNode.BindRegion` (a ring or staged `GpuRegion` the node
+   owns on the copy sets the graph reserved), and one package pass, the conversion `ImageSourceConversion.PassOf`
    names (`SourceConversionPackage`, one catalog package per shipped kernel),
    writing the image every consumer reads. The runtime declares each upload's
    cadence and extent to the scheduler, so one conversion runs per source a
@@ -2862,10 +2871,7 @@ except step 8.
    palette and NV12 kernels, and `uploaded-sources` captures a test-pattern
    source instance before composition and shows it and a QR code in panes.
    The conversion packages bind the frame and pass groups as every package
-   does. Still open: regions are host-visible rings, and the device-local
-   residency P7's policy chooses, which P7b-17 and P7b-19 make available, needs
-   the node to record a staged region's copy, so `BindRegion` refuses a staged
-   region until it does. Screens
+   does. The node records a staged region's copy (P7b-22). Still open: screens
    still read the binder's `CpuSurfaceSource` uploads of the same feeds until
    step 2 connects them; the capture and camera CPU tiers and the capture fills
    move onto `source-rgba` and static sources after that, and
