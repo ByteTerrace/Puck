@@ -197,6 +197,9 @@ public static class ShaderFrameInterface {
 /// <param name="CameraUp">The paired camera's up direction, or zero with no paired camera.</param>
 /// <param name="CameraFov">The paired camera's vertical field of view in radians, or zero with no paired camera, which
 /// a pass reads as having none.</param>
+/// <param name="StateTick">The simulation tick of the state the frame shows, or <see langword="null"/> when the host
+/// names none. No pass reads it: a node records it with each image it renders, and a capture served from that image
+/// records it, however many frames later the image is served.</param>
 public readonly record struct ShaderFrameValues(
     ulong Tick,
     double Time,
@@ -207,5 +210,6 @@ public readonly record struct ShaderFrameValues(
     Vector3 CameraPosition,
     Vector3 CameraTarget,
     Vector3 CameraUp,
-    float CameraFov
+    float CameraFov,
+    ulong? StateTick = null
 );

@@ -2804,18 +2804,22 @@ follow it.
    delivered engine tick divided, in whole numbers, by the engine rate over
    that rate, `tickRate` the rate; the planner refuses a rate that does not
    divide the engine rate exactly as `SHADERPIPE_TICK_RATE`, naming the graph
-   and the rate. A capture request carries a tick source
-   (`FrameCaptureRequest`'s `tick`, `FrameCaptureResult.Tick`), which the
-   capture scheduler points at the presenter's `RegionTick`, the state mirror's
-   tick when the frame wrote its bound parameters and rows, so each landed
-   manifest entry records the `regionTick` its frame refreshed its regions at.
+   and the rate. Each landed manifest entry records the `regionTick` of the
+   image that served it (`FrameCaptureResult.Tick`): a graph node records the
+   host's `ShaderFrameValues.StateTick` with each image it renders and serves a
+   capture with it, so a paused instance republishing an older image reports
+   that image's tick; a node that renders the image it serves (the engine)
+   leaves the request's tick source, the presenter's `RegionTick`, to name it.
    `puck parity` holds it to the armed tick in a tick verdict between the state
    and pixel verdicts (`TICK-OK`, `TICK-FAILED` naming both sides' ticks). The
    offscreen host composes at most one frame per step
    (`OffscreenTickHostedService.ComposesFrame`), and the owed frame again only
-   while a capture waits for it. Laws: `ShaderPipelineRenderNodeLawTests.Tick`
-   (one delivered tick writes identical bytes at three presentation clocks; a
-   non-dividing rate refuses by name), `ParityComparatorTests` (a mid-burst
+   while a capture waits for it, each frame's interval spanning every host
+   iteration since the frame before it (`OffscreenFrameInterval`). Laws:
+   `ShaderPipelineRenderNodeLawTests.Tick` (one delivered tick writes identical
+   bytes at three presentation clocks; a non-dividing rate refuses by name; a
+   paused instance's capture records the tick its image was rendered at),
+   `ParityComparatorTests` (a mid-burst
    capture fails the tick verdict rather than the pixel verdict),
    `WorldCaptureSchedulerLawTests` (a landed entry records its region tick) and
    `OffscreenFrameCadenceLawTests`; every `puck parity` station holds its tick

@@ -322,11 +322,15 @@ These are one-line cautions; the owning pages hold the derivations.
   reaches the disposal refusal. `WorldCaptureScheduler`
   (`Puck.World.Console`) writes every armed capture as one manifest entry: the
   frame, or a named refusal. It never skips one silently. A landed entry
-  records `regionTick`, the tick its frame refreshed its bound regions at (the
-  request's tick source, `WorldFramePresenter.RegionTick`), which `puck parity`'s
-  tick verdict holds to the armed tick; the offscreen host composes at most one
-  frame per step (`OffscreenTickHostedService.ComposesFrame`), the owed frame
-  again only while a capture waits for it.
+  records `regionTick`, the tick of the state the serving image was rendered
+  from: a graph node records `ShaderFrameValues.StateTick` with each image it
+  renders and passes it to `CaptureRequestSlot.Serve`, so a republished image
+  keeps its own tick; a node serving an image it renders that frame leaves the
+  request's tick source (`WorldFramePresenter.RegionTick`) to name it. `puck
+  parity`'s tick verdict holds it to the armed tick. The offscreen host
+  composes at most one frame per step (`OffscreenTickHostedService.ComposesFrame`),
+  the owed frame again only while a capture waits for it, and each frame's
+  interval spans every iteration since the one before (`OffscreenFrameInterval`).
 - **Buffer hazards are declared, not barriered.** A dispatch's device-local buffer
   uses live in `SdfFrameBufferPlan`; see
   [references/kernels.md](references/kernels.md#buffer-hazards).

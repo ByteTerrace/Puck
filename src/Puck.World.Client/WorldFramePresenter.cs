@@ -1131,8 +1131,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <see langword="null"/> before a render root is attached, when no view is shown.</summary>
     public Func<int, bool>? ViewRendered { get; set; }
     /// <summary>Gets the simulation tick the frame being composed refreshed its bound regions at: the state mirror's
-    /// delivered tick when <see cref="PrepareGraph"/> wrote every row's bound parameters, which a capture that frame
-    /// serves records; or <see langword="null"/> before the first frame.</summary>
+    /// delivered tick when <see cref="PrepareGraph"/> wrote every row's bound parameters, which a capture served from an
+    /// image rendered this frame records when its serving node names no tick of its own (a graph node names the tick of
+    /// the image it republishes); or <see langword="null"/> before the first frame.</summary>
     public ulong? RegionTick { get; private set; }
 
     /// <summary>Prepares the render graph's frame before its runtime schedules it: reconciles the document's

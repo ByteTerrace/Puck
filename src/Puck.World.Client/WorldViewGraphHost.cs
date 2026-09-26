@@ -420,6 +420,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             Pointer: Vector2.Zero,
             PointerDown: false,
             PointerPresses: 0,
+            StateTick: mirror.Tick,
             Tick: mirror.EngineTick,
             Time: seconds,
             TimeDelta: Math.Max(

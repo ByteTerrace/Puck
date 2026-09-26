@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
@@ -7,7 +8,8 @@ namespace Puck.Shaders.Tests;
 /// <summary>
 /// Deterministic-tick laws for <see cref="ShaderPipelineRenderNode"/>: a graph requesting a tick rate reads the engine
 /// tick divided by the engine rate over that rate, so one delivered tick writes identical tick bytes at every
-/// presentation clock, and a rate that does not divide the engine rate is refused by name before anything is planned.
+/// presentation clock, and a rate that does not divide the engine rate is refused by name before anything is planned;
+/// and a capture records the tick of the state its image was rendered from, however many paused frames republish it.
 /// </summary>
 public sealed partial class ShaderPipelineRenderNodeLawTests {
     private const uint RequestedTickRate = 30U;
@@ -105,6 +107,52 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                 expected: expected
             );
         }
+    }
+    /// <summary>A capture records the tick of the state the image it reads was rendered from: a paused instance
+    /// republishing an image it rendered at tick 5 serves a capture armed while the host presents tick 9 with tick 5, not
+    /// the request's own source, so the tick verdict holds it to the armed tick 9 and fails; once the node renders
+    /// again, its capture records the tick that frame rendered.</summary>
+    [Fact]
+    public void APausedInstancesCaptureRecordsTheTickItsImageWasRenderedAt() {
+        var gpu = new FakePipelineGpu { ReadbackSupported = true };
+        using var node = InstalledNode(gpu: gpu);
+        var hostTick = 5UL;
+
+        FrameCaptureResult CaptureAt() {
+            var request = new FrameCaptureRequest(
+                path: Path.Combine(
+                    path1: Path.GetTempPath(),
+                    path2: $"{Guid.NewGuid():N}.png"
+                ),
+                tick: () => hostTick
+            );
+
+            node.RequestCapture(request: request);
+            _ = Produce(node: node);
+            Assert.True(condition: request.Completion.IsCompleted);
+
+            var result = request.Completion.Result;
+
+            File.Delete(path: result.Path);
+
+            return result;
+        }
+
+        node.Frame = (node.Frame with { StateTick = hostTick });
+        _ = Produce(node: node);
+        node.Paused = true;
+        hostTick = 9UL;
+        node.Frame = (node.Frame with { StateTick = hostTick });
+
+        var paused = CaptureAt();
+
+        Assert.Null(@object: paused.Error);
+        Assert.Equal(expected: 5UL, actual: paused.Tick);
+        Assert.NotEqual(expected: hostTick, actual: paused.Tick);
+
+        node.Paused = false;
+
+        Assert.Equal(expected: 9UL, actual: CaptureAt().Tick);
     }
     /// <summary>A graph requesting a tick rate that does not divide the engine rate exactly, or none a second, is refused
     /// by name, naming the graph and the rate; a dividing rate plans, and a graph requesting none reads the engine

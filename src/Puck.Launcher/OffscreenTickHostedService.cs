@@ -170,6 +170,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 writeLine: m_bufferedOutput.WriteErrorLine
             );
             var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
+            var frameInterval = new OffscreenFrameInterval();
             var hostFrame = 0UL;
             var nextDeadline = Stopwatch.GetTimestamp();
             var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
@@ -215,16 +216,23 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 // steps just run, or again for a frame a step still owes. A capture armed by world.screenshot is served
                 // from inside this call, so the returned surface needs no further handling — it is simply not presented
                 // anywhere.
-                if (ComposesFrame(
+                var composes = ComposesFrame(
                     awaitsFrame: (m_simulation?.AwaitsFrame ?? false),
                     hasSimulation: (pump is not null),
                     stepsAdvanced: stepsAdvanced
-                )) {
+                );
+                var frameDeltaTicks = frameInterval.Take(
+                    composes: composes,
+                    deltaTicks: deltaTicks,
+                    maxFrameTicks: maxFrameTicks
+                );
+
+                if (composes) {
                     var frameContext = new FrameContext(
                         AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
                         DeltaTicks: (((ulong)stepsAdvanced) * stepTicks),
                         ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
-                        FrameDeltaTicks: deltaTicks,
+                        FrameDeltaTicks: frameDeltaTicks,
                         Host: m_rootHostContext,
                         StepTicks: stepTicks,
                         TargetHeight: m_renderOptions.Height,

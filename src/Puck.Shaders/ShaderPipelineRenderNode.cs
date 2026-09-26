@@ -45,6 +45,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     // without rendering, so until that graph renders, the replaced graph's last image stays published.
     private bool m_installedUnrendered;
     private Surface m_lastSurface;
+    // The simulation tick the host named for the frame that rendered the published image (ShaderFrameValues.StateTick),
+    // which a capture served from that image records, however many paused frames republish it; null while nothing
+    // rendered is published.
+    private ulong? m_publishedStateTick;
     private Exception? m_lastSwapError;
     // Whether a device loss destroyed the published image. Nothing is published then, but no initialization frame is
     // owed: a paused node presents nothing, and refuses a capture, until its next step, resume or reset renders.
@@ -350,6 +354,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
         m_capture.Serve(
             failureLabel: "[capture] failed",
+            tick: m_publishedStateTick,
             writer: (m_captureWriter ??= path => {
                 m_capturePng.ThrowIfUnavailable(path: path);
                 if (
@@ -1254,6 +1259,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         ReleaseRegionCopy();
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
+        m_publishedStateTick = null;
         m_previousSurface = default;
         m_preview?.Dispose();
         m_preview = null;
@@ -1587,6 +1593,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         m_frameLeases.MoveTo(destination: slot.Leases);
         Publish(surface: Output(slot: slotIndex));
+        m_publishedStateTick = Frame.StateTick;
         m_outputRefreshRequested = false;
         m_installedUnrendered = false;
         m_frame++;
@@ -1620,6 +1627,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         m_steps = 0;
         m_outputRefreshRequested = false;
         Publish(surface: default);
+        m_publishedStateTick = null;
         SeedPassRegions();
         ResetWork();
     }
