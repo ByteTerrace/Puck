@@ -15,9 +15,50 @@ namespace Puck.World.Transpiler.Lowering;
 public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = null) : IDocumentVocabulary {
     /// <summary>The canonical schema URI for world definitions.</summary>
     public const string Schema = "puck.world.definition.v1";
+    /// <summary>The annotation holding the directory the lowered document's relative file paths resolve against.</summary>
+    public const string DocumentDirectoryAnnotation = "DocumentDirectory";
+
+    // The position a file-path member's value fills: its value is re-expressed from the writing source's directory.
+    private static readonly object FileReferencePosition = new();
+
+    /// <summary>Re-expresses a file path written relative to one source's directory for the document being
+    /// lowered: the one relocation every file reference takes, whichever source uses the module that wrote it
+    /// (<see cref="WorldDocumentPaths.RelocateBetween"/>).</summary>
+    /// <param name="path">The path as its source writes it.</param>
+    /// <param name="writtenBeside">The directory of the source that wrote the path, or <see langword="null"/> for the
+    /// document's own.</param>
+    /// <param name="scope">A scope of the lowering pass, carrying the document's directory.</param>
+    /// <returns>The path relative to the document's directory, or <paramref name="path"/> unchanged when it was written
+    /// in the document's own directory or either directory is unknown.</returns>
+    public static string RelocateFileReference(string path, string? writtenBeside, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(argument: path);
+        ArgumentNullException.ThrowIfNull(argument: scope);
+
+        return (((writtenBeside is not null) &&
+            (scope.Annotations.GetValueOrDefault(key: DocumentDirectoryAnnotation) is string document) &&
+            !Puck.Abstractions.PuckPaths.Comparer.Equals(x: WorldDocumentPaths.FullDirectory(directory: writtenBeside), y: document))
+            ? WorldDocumentPaths.RelocateBetween(path: path, sourceDirectory: writtenBeside, targetDirectory: document)
+            : path
+        );
+    }
+    /// <inheritdoc />
+    /// <remarks>A string written in a source outside the document's directory is recorded with that source's
+    /// directory on the compilation's budget, which carries the record through every copy, so a file path reaching a
+    /// file-path member through a <c>let</c>, a module argument, a collection or any other expression is re-expressed
+    /// from where its literal was written.</remarks>
+    public void NoteWrittenString(System.Text.Json.Nodes.JsonValue value, DocumentScope scope) {
+        if (
+            (scope.BasePath is { } written) &&
+            !((scope.Annotations.GetValueOrDefault(key: DocumentDirectoryAnnotation) is string document) &&
+            Puck.Abstractions.PuckPaths.Comparer.Equals(x: WorldDocumentPaths.FullDirectory(directory: written), y: document))
+        ) {
+            scope.Budget.NoteWrittenBeside(directory: WorldDocumentPaths.FullDirectory(directory: written), value: value);
+        }
+    }
 
     /// <summary>The shared instance; the vocabulary is a pure lookup and carries no per-pass state.</summary>
     public static WorldDocumentVocabulary Instance { get; } = new();
+
     /// <summary>Gets the described constructs this pass parses and lowers against.</summary>
     public WorldConstructTable Constructs { get; } = (constructs ?? WorldConstructs.Table);
 
@@ -46,9 +87,28 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
             value = null;
             if ((scope.Annotations.GetValueOrDefault(key: "AssetContext") is not Assets.AssetCompilationContext context) || (scope.BasePath is null)) {
                 scope.Diagnostics.ReportError(code: Puck.Transpiler.Diagnostics.PuckDiagnosticCodes.InvalidValue, message: "An asset reference requires a source path and its sibling asset lock.", span: asset.Span);
-            } else if (context.TryResolve(asset.Path, scope.BasePath, asset.Span, scope.Diagnostics, out var path)) {
-                value = System.Text.Json.Nodes.JsonValue.Create(path);
+            } else if (context.TryResolve(asset.Path, scope.BasePath, asset.Span, scope.Diagnostics, out _)) {
+                value = System.Text.Json.Nodes.JsonValue.Create(value: RelocateFileReference(path: asset.Path, scope: scope, writtenBeside: scope.BasePath));
             }
+            return true;
+        }
+        // A file path is written relative to the source that wrote its literal, which a module used from another
+        // directory is not the document's own, so the value is re-expressed from there whatever expression carries it.
+        if (ReferenceEquals(objA: DocumentLowering.MemberContext(scope: scope), objB: FileReferencePosition)) {
+            var borrowed = DocumentLowering.At(
+                context: null,
+                lower: () => DocumentLowering.EvaluateValue(expr: expression, fieldKey: fieldKey, scope: scope),
+                scope: scope
+            );
+
+            value = (((borrowed is System.Text.Json.Nodes.JsonValue written) && written.TryGetValue<string>(value: out var path) && (path.Length > 0))
+                ? System.Text.Json.Nodes.JsonValue.Create(value: RelocateFileReference(
+                    path: path,
+                    scope: scope,
+                    writtenBeside: (scope.Budget.TryGetWrittenBeside(directory: out var beside, value: borrowed) ? beside : null)
+                ))
+                : scope.Budget.Copy(span: expression.Span, value: borrowed)
+            );
             return true;
         }
         if (WorldDocumentEmitter.TryLowerInteractionValue(expression: expression, fieldKey: fieldKey, scope: scope, value: out value)) {
@@ -83,8 +143,12 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     /// model does not declare (a template, a builtin) has no position.</remarks>
     public object? CallContext(object? context, string callName) => WorldCallArguments.ArmType(baseType: (context as Type), discriminator: callName);
     /// <inheritdoc />
+    /// <remarks>A member holding a file path (<see cref="WorldArgumentForm.Path"/>) is positioned as a file reference,
+    /// so the value written there is re-expressed for the document being lowered.</remarks>
     public object? MemberContext(object? context, string memberName) => ((context is Type owner)
-        ? WorldCallArguments.MemberType(member: memberName, owner: owner)
+        ? ((WorldCallArguments.Classify(member: memberName, owner: owner) == WorldArgumentForm.Path)
+            ? FileReferencePosition
+            : WorldCallArguments.MemberType(member: memberName, owner: owner))
         : null
     );
     /// <inheritdoc />
@@ -98,7 +162,7 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
         WorldArgumentForm.Key => DocumentValueForm.Key,
         WorldArgumentForm.Expression => DocumentValueForm.Expression,
         WorldArgumentForm.Choice => DocumentValueForm.Choice,
-        WorldArgumentForm.Text => DocumentValueForm.Text,
+        WorldArgumentForm.Text or WorldArgumentForm.Path => DocumentValueForm.Text,
         _ => DocumentValueForm.Unclassified,
     });
     /// <inheritdoc />
