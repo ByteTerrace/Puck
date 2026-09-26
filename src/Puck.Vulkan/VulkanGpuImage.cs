@@ -57,14 +57,11 @@ public sealed class VulkanGpuImage : IGpuImage {
     /// <param name="height">The height in pixels.</param>
     /// <param name="usage">The declared usages; <see cref="GpuImageUsages.Validate"/> refuses a request that breaks a
     /// rule before anything is created.</param>
-    /// <param name="clearDepth">The depth a depth attachment is cleared to; Vulkan records the clear with the render pass,
-    /// so it is only validated here.</param>
     /// <returns>The image, owned by the caller.</returns>
-    public static VulkanGpuImage Create(IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi, VulkanDeviceCommands device, VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, float clearDepth = 1f) {
+    public static VulkanGpuImage Create(IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi, VulkanDeviceCommands device, VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
         ArgumentNullException.ThrowIfNull(offscreenImageApi);
         ArgumentNullException.ThrowIfNull(framebufferSetApi);
         GpuImageUsages.Validate(
-            clearDepth: clearDepth,
             format: format,
             height: height,
             usage: usage,
@@ -144,11 +141,45 @@ public sealed class VulkanGpuImage : IGpuImage {
 /// <param name="naming">The naming every created object is handed to.</param>
 public sealed class VulkanGpuImageFactory(IVulkanDeviceContext deviceContext, IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi, GpuObjectNaming naming) : IGpuImageFactory {
     /// <inheritdoc/>
-    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name, float clearDepth = 1f) {
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
+        GpuImageUsages.ValidateCreate(
+            format: format,
+            height: height,
+            usage: usage,
+            width: width
+        );
+
+        return Named(
+            format: format,
+            height: height,
+            name: in name,
+            usage: usage,
+            width: width
+        );
+    }
+    /// <inheritdoc/>
+    /// <remarks>Vulkan records a clear with the render pass that begins, so the image keeps no clear of its own.</remarks>
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
+        GpuImageUsages.ValidateDepth(
+            attachment: in attachment,
+            height: height,
+            width: width
+        );
+
+        return Named(
+            format: attachment.Format,
+            height: height,
+            name: in name,
+            usage: GpuImageUsage.DepthAttachment,
+            width: width
+        );
+    }
+
+    // Creates an image and names it and its view.
+    private VulkanGpuImage Named(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
         var vkContext = deviceContext;
         var logicalDevice = vkContext.LogicalDevice;
         var image = VulkanGpuImage.Create(
-            clearDepth: clearDepth,
             device: logicalDevice.Commands,
             format: format,
             framebufferSetApi: framebufferSetApi,

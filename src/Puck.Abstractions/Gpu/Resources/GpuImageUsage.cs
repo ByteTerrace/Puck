@@ -31,29 +31,69 @@ public static class GpuImageUsages {
     /// <summary>The usages an image may declare.</summary>
     public const GpuImageUsage All = GpuImageUsage.Sampled | GpuImageUsage.Storage | GpuImageUsage.ColorAttachment | GpuImageUsage.DepthAttachment;
 
-    /// <summary>Refuses an image request whose extent is empty, whose usage is empty or undefined, whose usage does not fit
-    /// its format, or whose clear depth lies outside [0, 1].</summary>
+    /// <summary>Refuses a depth attachment image request (<see cref="IGpuImageFactory.CreateDepth"/>): an empty extent, a
+    /// format that is not a depth format, or a clear depth outside [0, 1].</summary>
+    /// <param name="attachment">The depth attachment the image is created for.</param>
+    /// <param name="width">The width, in pixels.</param>
+    /// <param name="height">The height, in pixels.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The extent is zero, the format is undefined, or the clear depth lies
+    /// outside [0, 1].</exception>
+    /// <exception cref="ArgumentException">The format is not a depth format.</exception>
+    public static void ValidateDepth(in GpuDepthAttachment attachment, uint width, uint height) {
+        if (!(attachment.ClearDepth is >= 0f and <= 1f)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: attachment.ClearDepth,
+                message: "A depth attachment clears to a depth in [0, 1].",
+                paramName: nameof(attachment)
+            );
+        }
+
+        Validate(
+            format: attachment.Format,
+            height: height,
+            usage: GpuImageUsage.DepthAttachment,
+            width: width
+        );
+    }
+    /// <summary>Refuses an image request <see cref="IGpuImageFactory.Create"/> takes: one <see cref="Validate"/> refuses,
+    /// or a depth attachment's, which is created from its attachment (<see cref="IGpuImageFactory.CreateDepth"/>) so that
+    /// the depth it is cleared to has one statement.</summary>
     /// <param name="format">The image format.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
     /// <param name="usage">The declared usages.</param>
-    /// <param name="clearDepth">The depth a depth attachment is cleared to (<see cref="IGpuImageFactory.Create"/>).</param>
-    /// <exception cref="ArgumentOutOfRangeException">The extent is zero, the usage is empty or undefined, the format is undefined,
-    /// or the clear depth lies outside [0, 1].</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The extent is zero, the usage is empty or undefined, or the format is
+    /// undefined.</exception>
+    /// <exception cref="ArgumentException">The usage does not fit the format, or declares a depth attachment.</exception>
+    public static void ValidateCreate(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
+        Validate(
+            format: format,
+            height: height,
+            usage: usage,
+            width: width
+        );
+
+        if ((usage & GpuImageUsage.DepthAttachment) != 0) {
+            throw new ArgumentException(
+                message: $"A depth attachment image is created from its attachment (IGpuImageFactory.CreateDepth), which states the depth it clears to; {format} was asked for through Create.",
+                paramName: nameof(usage)
+            );
+        }
+    }
+    /// <summary>Refuses an image request whose extent is empty, whose usage is empty or undefined, or whose usage does not
+    /// fit its format.</summary>
+    /// <param name="format">The image format.</param>
+    /// <param name="width">The width, in pixels.</param>
+    /// <param name="height">The height, in pixels.</param>
+    /// <param name="usage">The declared usages.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The extent is zero, the usage is empty or undefined, or the format is
+    /// undefined.</exception>
     /// <exception cref="ArgumentException">A depth format declares a usage other than
     /// <see cref="GpuImageUsage.DepthAttachment"/>, a color format declares it, or a block-compressed format declares a
     /// usage other than <see cref="GpuImageUsage.Sampled"/>.</exception>
-    public static void Validate(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, float clearDepth = 1f) {
+    public static void Validate(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
-
-        if (!(clearDepth is >= 0f and <= 1f)) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: clearDepth,
-                message: "A depth attachment clears to a depth in [0, 1].",
-                paramName: nameof(clearDepth)
-            );
-        }
 
         if (!Enum.IsDefined(value: format)) {
             throw new ArgumentOutOfRangeException(

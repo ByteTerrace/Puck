@@ -53,12 +53,10 @@ public sealed partial class SdfWorldEngine {
             usage: GpuImageUsage.Sampled | GpuImageUsage.ColorAttachment,
             width: m_width
         ));
-        var depth = scope.Own(created: m_gpu.ImageFactory.Create(
-            clearDepth: SdfMeshRasterPass.ClearDepth,
-            format: SdfMeshRasterPass.DepthFormat,
+        var depth = scope.Own(created: m_gpu.ImageFactory.CreateDepth(
+            attachment: SdfMeshRasterPass.DepthAttachment,
             height: m_height,
             name: NameOf(part: "mesh-depth"),
-            usage: GpuImageUsage.DepthAttachment,
             width: m_width
         ));
         var framebuffer = scope.Own(created: m_gpu.RenderPassFactory.CreateFramebuffer(

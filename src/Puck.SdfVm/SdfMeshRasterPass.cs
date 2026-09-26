@@ -73,6 +73,14 @@ public sealed class SdfMeshRasterPass {
             StrideBytes: 0
         )
     );
+    /// <summary>Gets the pass's depth attachment: cleared to <see cref="ClearDepth"/> and discarded, the one statement of
+    /// its clear that the render pass and the engine's depth image (<see cref="IGpuImageFactory.CreateDepth"/>) share.</summary>
+    public static GpuDepthAttachment DepthAttachment { get; } = new(
+        ClearDepth: ClearDepth,
+        Format: DepthFormat,
+        Load: GpuAttachmentLoad.Clear,
+        Store: GpuAttachmentStore.Discard
+    );
     /// <summary>Gets the render pass the pipeline draws in: the target cleared and stored, left in its attachment
     /// layout, and the depth attachment cleared to <see cref="ClearDepth"/> and discarded.</summary>
     public static GpuRenderPassDescription RenderPass { get; } = new(
@@ -82,12 +90,7 @@ public sealed class SdfMeshRasterPass {
             Load: GpuAttachmentLoad.Clear,
             Store: GpuAttachmentStore.Store
         )],
-        Depth: new GpuDepthAttachment(
-            ClearDepth: ClearDepth,
-            Format: DepthFormat,
-            Load: GpuAttachmentLoad.Clear,
-            Store: GpuAttachmentStore.Discard
-        )
+        Depth: DepthAttachment
     );
     /// <summary>Gets the pipeline's key in <see cref="Pipelines"/>.</summary>
     public GpuPassPipelineKey Key { get; }

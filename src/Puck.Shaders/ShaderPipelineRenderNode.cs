@@ -475,18 +475,36 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                         storage: planned
                     );
 
+                    var format = ParseFormat(format: declaration.Format);
+                    // A depth storage's images are created for the depth attachment a pass draws it as.
+                    GpuDepthAttachment? depth = ((usage == GpuImageUsage.DepthAttachment)
+                        ? DepthAttachmentOf(
+                            attachment: plan.Passes.SelectMany(selector: static pass => pass.Attachments).First(predicate: attachment => (attachment.Depth && (attachment.Storage == planned.Index))),
+                            format: format
+                        )
+                        : null);
+
                     for (var i = 0; (i < m_inFlight); i++) {
-                        resource.Images[i] = m_gpu.ImageFactory.Create(
-                            ParseFormat(format: declaration.Format),
-                            extent.Width,
-                            extent.Height,
-                            usage,
-                            name: new GpuObjectName(
-                                index: i,
-                                owner: m_descriptor.Name,
-                                part: declaration.Name
-                            )
+                        var name = new GpuObjectName(
+                            index: i,
+                            owner: m_descriptor.Name,
+                            part: declaration.Name
                         );
+
+                        resource.Images[i] = ((depth is { } attachment)
+                            ? m_gpu.ImageFactory.CreateDepth(
+                                attachment: in attachment,
+                                height: extent.Height,
+                                name: in name,
+                                width: extent.Width
+                            )
+                            : m_gpu.ImageFactory.Create(
+                                format: format,
+                                height: extent.Height,
+                                name: in name,
+                                usage: usage,
+                                width: extent.Width
+                            ));
                     }
                 } else if (
                     (declaration.Kind == ShaderPipelineResourceKind.Buffer) &&

@@ -931,7 +931,7 @@ decision and its rejected alternatives are in
 It deletes the SDF engine's composite, and it has landed.
 
 - 10a: each view renders through its own dispatch set. `Record` records sky,
-  mask, beam, cull-args, primary, surface, ambient and views once per view, one
+  mask, beam, cull-args, mesh, primary, surface, ambient and views once per view, one
   deep in Z, and the view's views set names its view (the world block's
   `viewBase`). `viewportCount` stays every view of the frame, so the
   per-view buffer strides do not move. `sdf-cull-args` reduces its own view's
@@ -1728,6 +1728,8 @@ engine's groups (P7b-20).
    clears to in `GpuDepthAttachment.ClearDepth` (1 by default, refused outside
    [0, 1]), and both backends clear to it, so a reversed-Z attachment clears to
    0. The value belongs to the render pass's attachment, not to the recorder.
+   A depth image is created from that attachment (`IGpuImageFactory.CreateDepth`),
+   so its optimized clear on Direct3D 12 is the same statement.
 2. P4-1a, landed, the shared record: `sdf-visibility.hlsli` declares visibility
    (ray parameter; identity, with its kind in bits 31 and 30 — background, SDF
    or mesh — and a source index; material; flags), coverage (terminal radius,
@@ -1781,19 +1783,45 @@ engine's groups (P7b-20).
    mirror, yaw and position), and `WorldFramePresenter` hands them to
    `SdfFrame.MeshDraws`. The SDF engine uploads them into its mesh region
    (P7b-17): a `GpuRegion` in `SdfMeshRegion`'s raw layout, an 80-byte record a
-   draw naming its matrix, material and mesh (first index, index count, base
-   vertex), then each distinct mesh's positions and indices once, copied by
-   the device's region-copy pipeline under the staged policy. `world.budget`
+   draw naming its matrix, material and mesh (the word its first index sits at,
+   its index count, the word its first position sits at), then each distinct
+   mesh's positions and indices once, copied by the device's region-copy
+   pipeline under the staged policy. `world.budget`
    prints the bytes the region holds and the draws they cover.
    `PrototypeMeshLawTests` hold the round trip, the refusals and the
-   placement's draw. Open: the reader, P4-2c's raster pass; and meshes on
-   animated and attached stamps and in session views and neighbour worlds,
-   whose static emitters pass no draw list, which P4-2e owns.
-7. P4-2c, the raster pass and the bounded primary. It deletes
-   `SDF_MONOLITHIC_VIEWS`. Done when parity holds and the mesh fixtures of the
-   check above pass.
-8. P4-2d, the canaries: `sdf-mesh-visibility` and `sdf-mesh-motion` on both
-   backends against an analytic oracle.
+   placement's draw. Open: meshes on animated and attached stamps and in
+   session views and neighbour worlds, whose static emitters pass no draw list,
+   which P4-2e owns.
+7. P4-2c, landed, the raster pass and the bounded primary. The mesh pass
+   (`SdfMeshRasterPass`, the `mesh` ledger pass, recorded per view between
+   cull-args and primary) draws each `SdfMeshDraw` with one draw call, pulling
+   its triangles from the mesh region through the `sdf-mesh` interface: one set
+   per ring slot binding the viewport table and the region, the view and the
+   draw pushed as one index. It projects with `ViewProjection`'s reversed-Z
+   matrices read from the view's viewport row, culls nothing, and turns each
+   face normal toward the camera, so a mirrored copy needs no winding flip. The
+   target is an `RGBA32F` image at the engine extent that rests
+   shader-readable; the depth image is created from the pass's depth attachment
+   (`IGpuImageFactory.CreateDepth`), so Direct3D 12's optimized clear is the
+   attachment's 0. Primary reads the target, bounds its march, and keeps an SDF
+   hit only when strictly nearer, otherwise recording a mesh record (the draw as
+   its source, the draw's material, a coverage threshold of one); surface
+   writes the rasterized normal with neutral ambient occlusion, and views skips
+   the shadow march for a mesh pixel. While a frame draws a mesh (the world
+   block's `meshDraws`), cull-args covers the whole tile grid. The cadence
+   signature folds a mesh revision, `world.budget` prints the attachments'
+   bytes (20 a pixel), `GpuStage.VertexShader` orders the region copies before
+   the vertex stage, and `SDF_MONOLITHIC_VIEWS` is deleted with the views
+   branches only it compiled.
+8. P4-2d, landed, the canaries: `sdf-mesh-visibility` (a mesh in front of a
+   block, a block in front of a wider mesh, a mesh against the sky, and the
+   background; its discriminating leg boots the same world without meshes) and
+   `sdf-mesh-motion` (a mesh moved across the beam's tiles by a row edit; its
+   discriminating leg never moves it), on both backends.
+   `SdfMeshCanaryOracleLawTests` derives every region they judge from the
+   analytic oracle. The rest of the check above (an opening, equal-depth ties,
+   silhouettes, near-plane clipping, small and multiple viewports, reduced render
+   scale and resize) has no fixture yet.
 9. P4-2e, after P4-2c: meshes on animated and attached stamps, which the
    validator refuses today, and in session views and neighbour worlds, whose
    emitters then pass their draw lists.
@@ -1813,8 +1841,8 @@ least-significant bit; the state hash and the record's identity stay exact. Mesh
 pixels shade with neutral shadows and ambient occlusion until P6. P4 carries
 zero jitter and previous transforms, which P15 builds on. `world.budget` reports
 the mesh attachments' memory, about 41 MB at 1920×1080. The unbounded reference
-is the fixed-point law and the canary oracle, an unbounded fixed-point raycast
-beside analytic triangles. P4-2c deletes `SDF_MONOLITHIC_VIEWS`.
+is the fixed-point law and the canary oracle, a fixed-point raycast run to the
+far distance, never to a mesh, beside analytic triangles.
 
 **Depends on:** P3, landed. P4-2c onward follows P7b-7 to P7b-10, which have
 landed, and P7b-20, which follows P4-1. `sdf-world.hlsli` changes in P4 first;
@@ -2374,11 +2402,12 @@ Phase 3, the groups, follows phase 2:
     exactly as before, and never owns it. The engine's pipeline set loses its
     frame-upload pipeline. The engine also creates the mesh region: a
     `GpuRegion` holding `SdfFrame.MeshDraws` in `SdfMeshRegion`'s raw word
-    layout (an 80-byte record a draw: its row-vector matrix, material, first
-    index, index count and base vertex; then each distinct mesh's positions and
-    indices once), created by the first frame that draws a mesh, repacked only
-    when the draw list changes, owing only the words that differ, grown by half
-    again after the frame ring retires, and read by nothing until P4-2c. The
+    layout (an 80-byte record a draw: its row-vector matrix, material, the word
+    its first index sits at, index count and the word its first position sits at;
+    then each distinct mesh's positions and indices once), created with the engine
+    one record long, repacked only when the draw list changes, owing only the words
+    that differ, grown by half again after the frame ring retires, and read by the
+    mesh pass and primary (P4-2c). The
     engine admits one copy pool for all its regions with its own and reserves
     every region's sets in it at construction (`GpuRegionCopyPool`, a
     `GpuRegionCopySets` a region), whatever policy the device selects, whose
@@ -3612,9 +3641,9 @@ packaging, and compiled worlds in the runtime and delivery programme.
 ## Sequencing
 
 **Foundation.** P2, P3 and P5 are complete. P1a and P1b stay open beside the
-rest: neither blocks P4 or releasing the foundation. P4-0, P4-1a to P4-1c,
-P4-2a and P4-2b have landed; the SDF engine's groups (P7b-20), which P4-2c
-waited on, have landed too, and P4-2c joins P14-6. P6 follows P4.
+rest: neither blocks P4 or releasing the foundation. P4-0, P4-1a to P4-1c and
+P4-2a to P4-2d have landed; P4-2e and the visibility record's names remain. P6
+follows P4.
 Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
@@ -3653,7 +3682,7 @@ which have landed. It also follows P11b's graph wiring, because the rows it
 binds are `views.graphs` rows.
 
 The SDF engine's groups (P7b-20) have landed, so the longest remaining chain now
-runs P12b-2, P11b-13, P14-5, then P14-6 (which P4-2c joins), P14-7 to P14-13,
+runs P12b-2, P11b-13, P14-5, then P14-6, P14-7 to P14-13,
 and ends with P15. P16 follows P14-10's float working targets, and drawing a
 bake (P17) comes before P6's choice between a bake and the field.
 

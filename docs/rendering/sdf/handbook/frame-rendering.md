@@ -15,7 +15,7 @@ precede culling; camera traversal, surface evaluation, AO and lighting have sepa
 Every pass after the upload runs once per view, into that view's own output image:
 
 ```text
-   upload → sky → mask → beam → cull-args → primary → surface → ambient → views
+   upload → sky → mask → beam → cull-args → mesh → primary → surface → ambient → views
 ```
 
 These are the engine's `world.counters gpu` pass labels — the columns its per-pass work
@@ -46,6 +46,14 @@ performed along the representative cone.
 indirect-dispatch arguments for primary, surface, ambient and views. A parallel min/max reduction
 finds the bounding rectangle of surviving tiles. Empty margins outside that
 rectangle launch no threads; holes inside it remain in the dispatch.
+
+**mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
+each, into the mesh visibility target at the engine extent: per pixel the ray parameter the march records,
+the draw plus one, and an octahedral normal turned toward the camera, kept nearest by a reversed-Z depth
+test. A frame with no mesh draws records nothing here. Primary bounds its march by that ray parameter
+and keeps an SDF surface only when it is strictly nearer, so a mesh pixel becomes a mesh visibility
+record; while a mesh draws, cull-args covers the whole view, and a mesh pixel shades with neutral shadows
+and ambient occlusion.
 
 **primary** (`sdf-world-primary.comp.hlsl`) traces camera rays from their tile's entry
 depth and records accepted hits. **surface** computes geometric normals and

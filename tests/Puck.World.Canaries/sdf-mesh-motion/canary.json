@@ -11,14 +11,15 @@
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "imageRegion", "name": "before-quad-is-mesh", "capture": "before.png", "extent": [256, 144], "region": [0.435, 0.447, 0.483, 0.54], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": true },
@@ -31,13 +32,14 @@
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "imageRegion", "name": "before-quad-is-mesh", "capture": "before.png", "extent": [256, 144], "region": [0.435, 0.447, 0.483, 0.54], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": true },

@@ -96,12 +96,13 @@ register.
 - **Know which dispatch owns the code.** Primary traversal, surface (normals,
   curvature), ambient (AO), and views (shadows, materials, lighting) are
   separate dispatches sharing `sdf-world-views.comp.hlsl`'s entry point through
-  pass macros. Inside `renderView`'s views branch, the `#ifndef SDF_PRIMARY_READ`
-  normal and AO blocks compile only when `SDF_MONOLITHIC_VIEWS` is defined by
-  hand for an A/B comparison; no build defines it, so an edit there never
-  ships. AO lives in `sdf-occlusion.hlsli` (called from the ambient pass's
-  `sdfResolveAmbient` in `sdf-surface.hlsli`); normals and curvature in
-  `sdfResolveSurface`.
+  pass macros; `renderView` compiles only into those four kernels. The mesh pass
+  before primary is a graphics pass (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`)
+  whose target bounds primary's march; a mesh pixel's record carries the mesh
+  kind, and views skips its shadow march. AO lives in `sdf-occlusion.hlsli`
+  (called from the ambient pass's `sdfResolveAmbient` in `sdf-surface.hlsli`);
+  normals and curvature in `sdfResolveSurface`, a mesh pixel's in
+  `sdfResolveMeshSurface`.
 - **Make sure the image is an SDF image.** A `views.graphs` pane (the
   moth studio's side-by-side reference, for one) is a render-graph instance
   with its own shader, placed over the world by the root graph's `place` pass;

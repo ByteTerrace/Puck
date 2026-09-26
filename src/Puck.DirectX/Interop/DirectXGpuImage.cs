@@ -24,14 +24,14 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
     /// <param name="format">The neutral format, which <paramref name="request"/> carries translated.</param>
     /// <param name="usage">The declared usages; <see cref="GpuImageUsages.Validate"/> refuses a request that breaks a
     /// rule before anything is created.</param>
-    /// <param name="clearDepth">The depth a depth attachment is cleared to, which it is created with as its optimized
-    /// clear value.</param>
-    public DirectXGpuImage(DirectXGpuImageRequest request, GpuPixelFormat format, GpuImageUsage usage, float clearDepth = 1f) {
+    /// <param name="clearDepth">The depth a depth attachment is cleared to (its attachment's
+    /// <see cref="GpuDepthAttachment.ClearDepth"/>, which the factory validated), which it is created with as its optimized
+    /// clear value; unused for any other usage.</param>
+    public DirectXGpuImage(DirectXGpuImageRequest request, GpuPixelFormat format, GpuImageUsage usage, float clearDepth) {
         var (deviceContext, dxgiFormat, width, height) = request;
 
         ArgumentNullException.ThrowIfNull(deviceContext);
         GpuImageUsages.Validate(
-            clearDepth: clearDepth,
             format: format,
             height: height,
             usage: usage,

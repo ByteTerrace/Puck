@@ -274,7 +274,36 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         sizeBytes: sizeBytes,
         usage: usage
     );
-    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name, float clearDepth = 1f) => new FakeImage(
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
+        GpuImageUsages.ValidateCreate(
+            format: format,
+            height: height,
+            usage: usage,
+            width: width
+        );
+
+        return Image(
+            format: format,
+            height: height,
+            usage: usage,
+            width: width
+        );
+    }
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
+        GpuImageUsages.ValidateDepth(
+            attachment: in attachment,
+            height: height,
+            width: width
+        );
+
+        return Image(
+            format: attachment.Format,
+            height: height,
+            usage: GpuImageUsage.DepthAttachment,
+            width: width
+        );
+    }
+    private FakeImage Image(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) => new(
         created: Create(
             bytes: ((((ulong)width) * height) * TexelBytes(format: format)),
             kind: $"{format} image"
