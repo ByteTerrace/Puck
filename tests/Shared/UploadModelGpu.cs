@@ -46,6 +46,7 @@ internal sealed class UploadModelGpu :
     // The command buffers recorded since a barrier whose first scope holds the compute stage, which orders every earlier
     // compute read of a staged destination before a copy writes it; a copy recorded in any other is refused.
     private readonly HashSet<nint> m_readsOrdered = [];
+    private readonly nint[] m_boundSets = new nint[8];
 
     private nint m_boundPipeline;
     private nint m_boundSet;
@@ -122,6 +123,15 @@ internal sealed class UploadModelGpu :
         hostVisible: true,
         sizeBytes: sizeBytes
     ).Memory;
+    /// <summary>Returns the set most recently bound at a group, or zero before one was.</summary>
+    /// <param name="group">The group.</param>
+    /// <returns>The set's handle.</returns>
+    public nint BoundSet(uint group) => m_boundSets[group];
+    /// <summary>Returns the handle of the buffer a set's binding names.</summary>
+    /// <param name="set">The set.</param>
+    /// <param name="binding">The binding.</param>
+    /// <returns>The buffer's handle.</returns>
+    public nint BufferAt(nint set, uint binding) => m_bindings[(set, binding)];
     /// <summary>Gets the bytes of the live buffer whose handle is <paramref name="bufferHandle"/>.</summary>
     /// <param name="bufferHandle">The buffer's handle.</param>
     /// <returns>The buffer's current contents.</returns>
@@ -250,7 +260,10 @@ internal sealed class UploadModelGpu :
             _ = m_readsOrdered.Add(item: commandBufferHandle);
         }
     }
-    void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) => m_boundSet = descriptorSetHandle;
+    void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) {
+        m_boundSet = descriptorSetHandle;
+        m_boundSets[group] = descriptorSetHandle;
+    }
     void IGpuRecorder.BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => m_boundPipeline = pipelineHandle;
     void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
         if (!m_uploadPipelines.ContainsKey(key: m_boundPipeline)) {

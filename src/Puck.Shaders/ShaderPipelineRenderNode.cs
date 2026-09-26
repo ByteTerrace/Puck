@@ -244,6 +244,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             runtime.FrameRegion = frameRegion;
             m_frameRegionOwner = null;
         }
+        TakeRowRegions(pass: runtime);
         if (m_regionCopiesOwner is { } regionCopies) {
             runtime.RegionCopySets = regionCopies;
             m_regionCopiesOwner = null;
@@ -437,10 +438,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             }
         }
     }
-    // Allocates the installed pipeline's resources on the frame thread and takes the built pipeline and module set into
-    // them. The budget was checked against the plan before the build started. A storage whose instances carry over from
-    // the replaced graph gets none of its own; PreserveCompatibleHistory moves the carried ones in.
-    private void Allocate(GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried) {
+    // Allocates the installed pipeline's resources on the frame thread, its arrays bound to rows, and takes the built
+    // pipeline and module set into them. The budget was checked against the plan and the rows before the build started. A
+    // storage whose instances carry over from the replaced graph gets none of its own; PreserveCompatibleHistory moves the
+    // carried ones in.
+    private void Allocate(GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried, RowBindings rows) {
         var plan = m_pipeline!.Plan;
         var map = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
         FloatPreviewPass? preview = null;
@@ -518,9 +520,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     }
                 }
             }
+            m_installingRows = RowPlan.Of(
+                plan: plan,
+                rows: rows
+            );
             m_regionBytes = RegionBytesOf(
                 extent: (m_width, m_height),
-                plan: plan
+                plan: plan,
+                rows: rows
             );
             m_allocationBytes = checked((GraphBytes(
                 extent: (m_width, m_height),
@@ -562,6 +569,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 built: built,
                 plan: plan
             );
+            CreateRowRegions(copyPipeline: built.CopyPipeline);
 
             for (var i = 0; (i < plan.Passes.Count); i++) {
                 InstallPass(
@@ -605,6 +613,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             }
             m_preview = preview;
             m_initializationPending = true;
+            m_installingRows = null;
             m_ready = true;
         } catch {
             preview?.Dispose();
@@ -617,9 +626,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             m_frameRegionOwner = null;
             m_frameRegion = null;
             m_frameLayout = null;
-            // So is a copy pool no pass took yet.
+            // So is a copy pool no pass took yet, and are the row regions.
             m_regionCopiesOwner?.Dispose();
             m_regionCopiesOwner = null;
+            foreach (var region in (m_rowRegionsOwner ?? [])) {
+                region?.Region.Dispose();
+            }
+            m_rowRegionsOwner = null;
+            m_installingRows = null;
             if (m_resources.Length == 0) {
                 foreach (var resource in storages) {
                     resource?.Dispose();
@@ -789,6 +803,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         var previousFrameRegion = m_frameRegion;
         var previousRegionCopies = m_regionCopies;
         var previousPortShares = m_portShares;
+        var previousRowRegions = m_rowRegions;
         var hadFences = m_slots.Any(predicate: static slot => (slot.Fence is not null));
         var carried = CarriedHistoryOf(
             extent: (key.Width, key.Height),
@@ -813,7 +828,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         try {
             Allocate(
                 built: built,
-                carried: carried
+                carried: carried,
+                rows: key.Rows
             );
             PreserveCompatibleHistory(
                 carried: carried,
@@ -830,9 +846,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             m_installedUnrendered = true;
             // A rebuild of the installed pipeline after a device loss keeps its revision: the loss already withdrew the
             // sample, and the passes are the ones it had.
+            m_installedRows = key.Rows;
             if (key.Candidate) {
                 m_pending = null;
                 m_resizePending = false;
+                m_rebindPending = false;
                 ConfigureWork();
                 ReleaseUndeclaredBindingHolds();
             }
@@ -859,6 +877,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             m_frameRegion = previousFrameRegion;
             m_regionCopies = previousRegionCopies;
             m_portShares = previousPortShares;
+            m_rowRegions = previousRowRegions;
             if (!hadFences) {
                 foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.Final?.Dispose(); slot.Final = null; }
             }
@@ -1267,6 +1286,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         m_passLabels = [];
         m_frameLayout = null;
         m_frameRegion = null;
+        m_rowRegions = [];
         m_ready = false;
         m_work.Invalidate();
     }

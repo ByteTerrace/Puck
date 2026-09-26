@@ -101,55 +101,6 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         Assert.False(condition: node.TryWriteParameter(field: "gain", passName: "missing", value: 1d));
         Assert.False(condition: node.TryWriteParameter(field: "gain", passName: "convert", value: double.NaN));
     }
-    /// <summary>An array write reaches the World set: the convert pass binds a set at group 1 on every frame, whose
-    /// constant buffer holds the World block, zeros before any write and each written element in its row's first word
-    /// after one, rows past the values reading zero; no other pass binds group 1, and an array the pass does not declare
-    /// is refused.</summary>
-    [Fact]
-    public void AnArrayWriteReachesTheWorldSetThePassBinds() {
-        const int Length = 8;
-        var gpu = new FakePipelineGpu();
-        using var node = InstalledNode(
-            gpu: gpu,
-            pipeline: Feedback(convertArrays: new Dictionary<string, ShaderArrayField>(comparer: StringComparer.Ordinal) {
-                ["tiles"] = new(Length: Length, Type: ShaderValueType.Int),
-            })
-        );
-        var blockBytes = (Length * 16);
-
-        int[] Elements() {
-            var world = gpu.BoundSets.Where(predicate: static bound => (bound.Group == ((uint)ShaderInterfaceGroup.World))).ToArray();
-
-            // One pass of three binds the World group, once a frame.
-            Assert.Single(collection: world);
-
-            var block = gpu.ConstantBlock(
-                set: world[0].Set,
-                sizeBytes: blockBytes
-            );
-
-            return [.. Enumerable.Range(count: Length, start: 0).Select(selector: index => BinaryPrimitives.ReadInt32LittleEndian(source: block.AsSpan(start: (index * 16))))];
-        }
-
-        gpu.Recording = true;
-        Produce(node: node);
-        Assert.Equal(actual: Elements(), expected: new int[Length]);
-
-        Assert.True(condition: node.TryWriteArray(
-            array: "tiles",
-            passName: "convert",
-            values: [5d, 0d, 17d, 3d]
-        ));
-        Assert.False(condition: node.TryWriteArray(array: "missing", passName: "convert", values: [1d]));
-        Assert.False(condition: node.TryWriteArray(array: "tiles", passName: "accumulate", values: [1d]));
-
-        // Every slot's set reads the write on its next frame.
-        for (var frame = 0; (frame < ((int)InFlight)); frame++) {
-            gpu.BoundSets.Clear();
-            Produce(node: node);
-            Assert.Equal(actual: Elements(), expected: [5, 0, 17, 3, 0, 0, 0, 0]);
-        }
-    }
     [Fact]
     public void ParameterWritesAllocateNothing() {
         var gpu = new FakePipelineGpu();

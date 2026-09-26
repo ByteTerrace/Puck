@@ -579,13 +579,16 @@ These are one-line cautions; the owning pages hold the derivations.
   with that pipeline (its holder leases it beside the set, and the engine takes
   it at construction). A `ShaderPipelineRenderNode` owns every host-written
   region its graph reads: a package states the regions its recorder writes
-  (`IRenderGraphPackageFactory.Regions`, the overlay's buffer) and a graph
-  declares its host buffer ports (`ShaderPipelineInitialization.Host`, a
-  fixed-size buffer), whose region a host takes from `BindRegion` (an uploaded
+  (`IRenderGraphPackageFactory.Regions`, the overlay's buffer), a graph's
+  arrays read one row region per bound row and element type
+  (`ShaderPipelineRenderNode.Rows.cs`: rows bound by `BindRows` before install,
+  written by `TryWriteRow`, a structured buffer each pass's World set binds),
+  and a graph declares its host buffer ports (`ShaderPipelineInitialization.Host`,
+  a fixed-size buffer), whose region a host takes from `BindRegion` (an uploaded
   source's); the node creates each under `GpuResidency.Select` with a reader in
   flight, takes the copy pipeline in the candidate's build (`GpuBuildLease.Wait`
   on its `GpuRegionCopyPass` entry), states one `GpuRegionCopyPool` per graph
-  reserving every staged package region's and port's sets in `DescriptorPools`
+  reserving every staged package region's, row region's and port's sets in `DescriptorPools`
   (`stagedRegions`, admitted with the graph, owned by its first pass), moves a
   bound port to each later graph's share (`GpuRegion.MoveCopySets`), and records
   every owed copy through the same `GpuRegionCopyRecording` in one command buffer

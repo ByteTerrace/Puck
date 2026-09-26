@@ -37,7 +37,8 @@ public sealed record ShaderInterfaceMember(
             Name: name,
             Type: type
         );
-    /// <summary>Creates a fixed-length array member.</summary>
+    /// <summary>Creates a fixed-length array member: a read-only structured buffer of its element type, which a pass
+    /// reads through its generated accessor.</summary>
     /// <param name="name">The member's name.</param>
     /// <param name="group">The member's frequency group.</param>
     /// <param name="type">The element type.</param>
@@ -116,7 +117,8 @@ public sealed record ShaderInterfaceMember(
             Type: element
         );
 
-    /// <summary>Gets a value indicating whether the member lives in its group's constant block.</summary>
+    /// <summary>Gets a value indicating whether the member lives in its group's constant block: a value does, and every
+    /// other kind, an array included, is a binding of its own.</summary>
     [JsonIgnore]
-    public bool IsBlockMember => (Kind is ShaderInterfaceMemberKind.Value or ShaderInterfaceMemberKind.Array);
+    public bool IsBlockMember => (Kind == ShaderInterfaceMemberKind.Value);
 }

@@ -101,11 +101,12 @@ public sealed partial class ShaderPipelineRenderNode {
         // block region; and where each of a document pass's ports binds in its pass group.
         public nint[]? FrameSets;
         public GpuRegion? PassRegion;
-        // A document pass's World group: the block holding its arrays as the host last wrote them, the region each slot
-        // reads it from, and each slot's set; all null for a pass that declares no array.
-        public byte[]? WorldBlock;
-        public GpuRegion? WorldRegion;
+        // A document pass's World group: the row region each of its arrays reads, in the order of its Arrays, and each
+        // slot's set; both null for a pass that declares no array. The graph's row regions, on the pass that took them;
+        // null on every other pass.
+        public GpuRegion[]? ArrayRegions;
         public nint[]? WorldSets;
+        public RowRegion[]? RowRegions;
         public PortBinding[]? PortBindings;
         // The graph's frame region, on the pass that created it; null on every other pass.
         public GpuRegion? FrameRegion;
@@ -176,8 +177,11 @@ public sealed partial class ShaderPipelineRenderNode {
             RegionCopySets = null;
             PassRegion?.Dispose();
             PassRegion = null;
-            WorldRegion?.Dispose();
-            WorldRegion = null;
+            foreach (var region in (RowRegions ?? [])) {
+                region.Region.Dispose();
+            }
+
+            RowRegions = null;
             FrameRegion?.Dispose();
             FrameRegion = null;
             gpu.Bindings.DestroyPool(poolHandle: DescriptorPool);

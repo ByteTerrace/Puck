@@ -1,8 +1,8 @@
 namespace Puck.Shaders;
 
-/// <summary>One array a pass declares in its <c>arrays</c>: an interface array in the World group, which a world binds to
-/// a whole state row with a <c>parameters</c> entry and the pass reads through its generated accessor,
-/// <c>worldGroup.&lt;name&gt;At(i)</c>. An array no row binds reads zeros.</summary>
+/// <summary>One array a pass declares in its <c>arrays</c>: an interface array in the World group, a read-only structured
+/// buffer of its element type, which a world binds to a whole state row with a <c>parameters</c> entry and the pass
+/// reads through its generated accessor, <c>&lt;name&gt;At(i)</c>. An array no row binds reads zeros.</summary>
 /// <param name="Type">The element type: <c>float</c>, <c>int</c> or <c>uint</c>. A bound row must fill it: an integer
 /// element takes a row whose declared bounds fit its range.</param>
 /// <param name="Length">The element count, from one to <see cref="MaxLength"/>. A bound row's cell count must not exceed
@@ -13,8 +13,7 @@ public sealed record ShaderArrayField(
     uint Length,
     string? Description = null
 ) {
-    /// <summary>The most elements an array holds: a World block stores each element in a 16-byte row, and 4096 rows fill
-    /// the 65,536-byte constant buffer every backend guarantees.</summary>
+    /// <summary>The most elements an array holds, which bounds the region one bound row uploads to 16 KiB.</summary>
     public const uint MaxLength = 4096;
 
     /// <summary>Checks a pass's arrays: each a scalar element type and a length from one to <see cref="MaxLength"/>.</summary>

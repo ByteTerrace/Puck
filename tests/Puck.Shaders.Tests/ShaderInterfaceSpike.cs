@@ -79,11 +79,10 @@ internal static class ShaderInterfaceSpike {
                 name: "cellSize",
                 type: ShaderValueType.Uint
             ),
-            ShaderInterfaceMember.Array(
+            ShaderInterfaceMember.Value(
                 group: ShaderInterfaceGroup.Pass,
-                length: 3,
                 name: "channelLevels",
-                type: ShaderValueType.Uint
+                type: ShaderValueType.Uint4
             ),
             ShaderInterfaceMember.StorageImage(
                 format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -101,7 +100,8 @@ internal static class ShaderInterfaceSpike {
         name: "pixelate"
     );
     // Structured buffers of a 4-byte and a 16-byte element and a raw buffer it reads, a structured and a raw buffer it
-    // writes, and a pushed index beside its bound frame group, which SPIR-V reports at the same set and binding.
+    // writes, an array it reads through its accessor, and a pushed index beside its bound frame group, which SPIR-V
+    // reports at the same set and binding.
     internal static ShaderInterface TypedBuffers { get; } = new(
         members: [
             ShaderInterfaceMember.Value(
@@ -136,6 +136,12 @@ internal static class ShaderInterfaceSpike {
             ShaderInterfaceMember.ReadWriteBuffer(
                 group: ShaderInterfaceGroup.Pass,
                 name: "rawOutput"
+            ),
+            ShaderInterfaceMember.Array(
+                group: ShaderInterfaceGroup.Pass,
+                length: 4,
+                name: "offsets",
+                type: ShaderValueType.Uint
             ),
         ],
         name: "typed-buffers",

@@ -92,7 +92,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 (Account(
                     extent: extent,
                     plan: pipeline.Plan,
-                    preview: key.Preview
+                    preview: key.Preview,
+                    rows: key.Rows
                 ) is { Fits: false } account)
             ) {
                 throw account.Refusal();
@@ -179,14 +180,15 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private void Refuse(bool candidate, Exception error) {
         if (candidate) {
-            m_hasRefusal = ((m_pending is not null) || m_resizePending);
+            m_hasRefusal = ((m_pending is not null) || m_resizePending || m_rebindPending);
             m_refusedByHeap = (error is GpuDescriptorHeapRefusalException);
             m_refusedFaultsRevision = FaultsRevision;
             m_refusedHeapRevision = m_device.Services.Bindings.HeapReleaseRevision;
             m_refusedPending = m_pending;
-            m_refusedResize = m_resizePending;
+            m_refusedResize = (m_resizePending || m_rebindPending);
             m_pending = null;
             m_resizePending = false;
+            m_rebindPending = false;
         }
 
         m_lastSwapError = error;
@@ -208,6 +210,7 @@ public sealed partial class ShaderPipelineRenderNode {
             !m_hasRefusal ||
             (m_pending is not null) ||
             m_resizePending ||
+            m_rebindPending ||
             (
                 (FaultsRevision == m_refusedFaultsRevision) &&
                 (
@@ -243,13 +246,14 @@ public sealed partial class ShaderPipelineRenderNode {
             request: request
         ));
     }
-    // What the node should install next: a queued candidate, or the installed pipeline again at a requested extent, both
-    // at the requested extent; or, after a device loss released the installed graph, the installed pipeline at its own.
+    // What the node should install next: a queued candidate, or the installed pipeline again at a requested extent or
+    // with its arrays bound to other rows, both at the requested extent; or, after a device loss released the installed
+    // graph, the installed pipeline at its own.
     private bool TryDesiredCandidate(out CompiledShaderPipeline pipeline, out (uint Width, uint Height) extent, out bool candidate) {
         if (m_pending is { } pending) {
             (pipeline, extent, candidate) = (pending, (m_requestedWidth, m_requestedHeight), true);
         } else if (
-            m_resizePending &&
+            (m_resizePending || m_rebindPending) &&
             (m_pipeline is { } resized)
         ) {
             (pipeline, extent, candidate) = (resized, (m_requestedWidth, m_requestedHeight), true);
@@ -289,7 +293,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return true;
     }
-    // The build of a pipeline at an extent, with the float preview its selected output needs.
+    // The build of a pipeline at an extent, with the float preview its selected output needs and the rows bound now.
     private BuildKey KeyFor(CompiledShaderPipeline pipeline, (uint Width, uint Height) extent, bool candidate) =>
         new(
             Candidate: candidate,
@@ -299,12 +303,14 @@ public sealed partial class ShaderPipelineRenderNode {
                 extent: extent,
                 plan: pipeline.Plan
             ),
+            Rows: m_rows,
             Width: extent.Width
         );
 
-    // What one build makes: the pipeline, the extent it is planned at, whether it is a candidate (a queued pipeline or a
-    // resize) rather than the installed pipeline rebuilt after a device loss, and the float preview it needs.
-    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview) {
+    // What one build makes: the pipeline, the extent it is planned at, whether it is a candidate (a queued pipeline, a
+    // resize or a rebinding) rather than the installed pipeline rebuilt after a device loss, the float preview it needs,
+    // and the rows its arrays read, which BindRows replaces whole whenever they change.
+    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview, RowBindings Rows) {
         public bool Matches(BuildKey other) =>
             (
                 ReferenceEquals(
@@ -314,7 +320,11 @@ public sealed partial class ShaderPipelineRenderNode {
                 (Width == other.Width) &&
                 (Height == other.Height) &&
                 (Candidate == other.Candidate) &&
-                (Preview == other.Preview)
+                (Preview == other.Preview) &&
+                ReferenceEquals(
+                    objA: Rows,
+                    objB: other.Rows
+                )
             );
     }
     // Everything a build reads, captured on the frame thread when it starts; a build never touches the node.
@@ -327,8 +337,8 @@ public sealed partial class ShaderPipelineRenderNode {
 
         public PassObjects?[] Passes { get; }
         public PreviewObjects? Preview { get; set; }
-        // The graph's staged regions, its package passes' in pass order and then its host buffer ports, whose copy sets
-        // the graph's one copy pool reserves (DescriptorPools' stagedRegions). When there is one, the build holds a lease
+        // The graph's staged regions, its package passes' in pass order, then its row regions, then its host buffer ports,
+        // whose copy sets the graph's one copy pool reserves (DescriptorPools' stagedRegions). When there is one, the build holds a lease
         // on the device's region-copy pipeline, taken ready.
         public int StagedRegions { get; private set; }
         public IGpuComputePipeline? CopyPipeline { get; private set; }
@@ -399,9 +409,9 @@ public sealed partial class ShaderPipelineRenderNode {
             CopyPipeline = null;
         }
 
-        // States the graph's staged regions under the device's residency choice, its package regions' and its host buffer
-        // ports', and, when one stages, takes the region-copy pipeline ready, so the install on the frame thread never
-        // waits for it.
+        // States the graph's staged regions under the device's residency choice, its package regions', its row regions' and
+        // its host buffer ports', and, when one stages, takes the region-copy pipeline ready, so the install on the frame
+        // thread never waits for it.
         private void StateRegions(ShaderPipelinePlan plan, BuildRequest request, CancellationToken cancellationToken) {
             var staged = 0;
 
@@ -410,6 +420,11 @@ public sealed partial class ShaderPipelineRenderNode {
                     if (Staged(device: request.Device, byteCount: ((ulong)region.ByteCount))) {
                         staged++;
                     }
+                }
+            }
+            foreach (var region in RowPlan.Of(plan: plan, rows: request.Key.Rows).Regions) {
+                if (Staged(device: request.Device, byteCount: region.ByteCount)) {
+                    staged++;
                 }
             }
             foreach (var port in HostBufferPorts(plan: plan)) {

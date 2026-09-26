@@ -135,8 +135,10 @@ public static class ShaderInterfaceHlsl {
             );
         }
 
-        var arrays = layout.Groups.SelectMany(selector: static group => group.BlockMembers.Select(selector: member => (Group: group, Member: member)))
-            .Where(predicate: static entry => (entry.Member.Length != 0))
+        // An array reads zero past its declared length, whatever the buffer bound for it holds there.
+        var arrays = layout.Groups.SelectMany(selector: static group => group.Resources)
+            .Select(selector: static resource => resource.Member)
+            .Where(predicate: static member => (member.Kind == ShaderInterfaceMemberKind.Array))
             .ToArray();
 
         if (arrays.Length != 0) {
@@ -146,16 +148,11 @@ public static class ShaderInterfaceHlsl {
             );
         }
 
-        foreach (var (group, member) in arrays) {
-            var declared = shaderInterface.Members.Single(predicate: candidate => string.Equals(
-                a: candidate.Name,
-                b: member.Name,
-                comparisonType: StringComparison.Ordinal
-            ));
-            var type = declared.Type!.Value;
+        foreach (var member in arrays) {
+            var type = member.Type!.Value.Spelling();
 
             Line(
-                line: $"{type.Spelling()} {ShaderInterface.AccessorName(member: declared)}(uint index) {{ return {group.BlockVariableName}.{member.Name}[index].{"xyzw"[..((int)type.ComponentCount())]}; }}",
+                line: $"{type} {ShaderInterface.AccessorName(member: member)}(uint index) {{ return ((index < {Number(value: member.Length!.Value)}u) ? {member.Name}[index] : (({type})0)); }}",
                 text: text
             );
         }

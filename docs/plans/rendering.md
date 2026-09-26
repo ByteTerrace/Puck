@@ -2731,23 +2731,32 @@ follow it.
    as one read and sized at install, so a refresh allocates nothing. A keyless
    token naming a keyed row joins the manifest as a row read. A pass declares
    `arrays` (`ShaderArrayField`: a scalar element type and a length up to
-   4,096), which lay out as the World group's block, set 1, at 16 bytes an
-   element, read through the generated `<name>At(i)` accessor. A parameter
+   4,096), each a read-only structured buffer of its element type in the
+   World group, set 1, read through the generated `<name>At(i)` accessor,
+   which reads zero past the array's length. A parameter
    binds an array to `state.<row>`; the load gate refuses a row that is not
    keyed, is longer than the array, or holds values the element type cannot
    hold exactly (an integer element takes only an Int or Bool row whose
    declared bounds lie in its range), and a scalar field bound to a keyless
-   keyed row. The node holds each pass's World block in a region per bound set
-   under `GpuResidency.Select` (a staged selection held in a host ring, as a
-   pass block is), writes the row slot's elements into it only when the slot
-   changed (`TryWriteArray`), and an unbound array reads zeros. Laws:
-   `WorldStateMirrorRowLawTests` (one row's World block reads the same bytes
-   under all three residency policies), `ShaderArrayFieldLawTests`,
-   `PipelineOverrideLawTests.Parameters` (a load-gate law per array refusal)
-   and `ShaderPipelineRenderNodeLawTests.Parameters` (an array write reaches
-   the World set the pass binds). Open: one region a bound row and element
-   type shared by every pass that reads the row the same way, instead of one
-   World block a pass; a staged World block through the node's region copies.
+   keyed row. The host binds each array to the row its token names before a
+   graph installs (`ShaderPipelineRenderNode.BindRows`), and the node holds one
+   region per bound row and element type, which every pass of the instance
+   reading the row the same way binds, as long as the longest array reading
+   it; an unbound array reads its element type's one zero region. Each region
+   takes `GpuResidency.Select`'s policy, and a staged one is copied through the
+   node's region copies (`GpuRegionCopyRecording`), which a structured buffer,
+   unlike a constant buffer, can be the destination of. The host writes the
+   row slot's elements by row only when the slot changed (`TryWriteRow`); the
+   node keeps each row's values and writes them into every graph it installs,
+   and a rebinding that moves what an installed graph reads rebuilds it
+   beside the installed one. Laws: `WorldStateMirrorRowLawTests` (one row's
+   region reads the same bytes under all three residency policies),
+   `ShaderArrayFieldLawTests`, `PipelineOverrideLawTests.Parameters` (a
+   load-gate law per array refusal) and
+   `ShaderPipelineRenderNodeLawTests.Rows` (an array reads its row through the
+   World set; two passes reading one row the same way read one region, counted
+   by the buffers the graph creates; a rebinding regroups and keeps the rows;
+   a staged row region reads the ring's bytes frame by frame).
 3. Done, pending its first device run: the forcing case. The rulepush rules
    keep a `tiles` lattice (`rules.puck`), each cell the look of the last token
    standing on it, written by the `classify` rule and retained for undo. The
@@ -2759,8 +2768,7 @@ follow it.
    way, so the pushed row's pixels cannot match. An array cannot bind a
    literal, which the load gate refuses, so a board state stands in for the
    literal leg. `puck test worlds/rulepush --reproduce` holds the row's cells to
-   the turns that write them. Open: every pass bound to the row still holds its
-   own World block (step 2's shared region).
+   the turns that write them.
 4. The `parameter` statement: `parameter <pass>.<member> = <value>` inside a
    `graph` block lowers to `parameters`, and the decompiler prints it back.
 5. The deterministic tick and the tick verdict. A pass reading a requested tick

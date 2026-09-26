@@ -1,10 +1,14 @@
+using Puck.Shaders;
+
 namespace Puck.World.Client;
 
 // A row's bound parameters (WorldViewGraph.Parameters): each scalar config field a row binds takes its value from the
 // state mirror, the one presentation read of state, through the slot the presentation manifest registered for its token
 // at install. A literal is written once; a state binding is read every frame and written only when its value moved, and
 // a binding that does not resolve draws the field's source default, read back from the pass after the row's config is
-// bound. Presentation reads state and never writes it.
+// bound. An array reads a whole row: the node binds every array to the row its token names before a graph installs
+// (ShaderPipelineRenderNode.BindRows), so arrays reading one row alike share one region, and the host writes the row by
+// its token. Presentation reads state and never writes it.
 public sealed partial class WorldViewGraphHost {
     /// <summary>Writes every row's bound parameters into its installed graph's passes from the state mirror, before the
     /// runtime schedules the frame. A value that has not moved since the last write is not written again, so a still
@@ -114,15 +118,20 @@ public sealed partial class WorldViewGraphHost {
             }
         }
 
-        // An array takes its row slot's elements whenever the slot changed since the last write: a row read whole, never
+        // An array's row takes its slot's elements whenever the slot changed since the last write: a row read whole, never
         // a second read of the document. A binding that does not resolve writes zeros.
         private void WriteArray(WorldStateMirror mirror, BoundParameter parameter) {
-            var slot = ((parameter.Value.State is { } binding)
-                ? mirror.SlotOf(
-                    binding: in binding,
-                    conversion: WorldStateConversion.Row
-                )
-                : -1);
+            if (
+                (parameter.Value.State is not { } binding) ||
+                (parameter.Value.Binding is not { } row)
+            ) {
+                return;
+            }
+
+            var slot = mirror.SlotOf(
+                binding: in binding,
+                conversion: WorldStateConversion.Row
+            );
             var changed = mirror.Changed(slot: slot);
 
             if (
@@ -132,9 +141,8 @@ public sealed partial class WorldViewGraphHost {
             ) {
                 return;
             }
-            if (Node.TryWriteArray(
-                array: parameter.Field,
-                passName: parameter.Pass,
+            if (Node.TryWriteRow(
+                row: row,
                 values: mirror.RowValues(slot: slot)
             )) {
                 parameter.Changed = changed;
@@ -143,6 +151,18 @@ public sealed partial class WorldViewGraphHost {
             }
         }
     }
+
+    // Each keyless state token a row binds, as the row its pass's field reads whole when the field is an array; the node
+    // ignores a binding of a field that is not one.
+    private static ShaderPipelineRowBinding[] RowsOf(WorldViewGraph row) => [
+        .. (row.Parameters ?? new Dictionary<string, IReadOnlyDictionary<string, BindableScalar>>()).SelectMany(selector: static pass => pass.Value
+            .Where(predicate: static field => ((field.Value.State is { Key: null }) && (field.Value.Binding is not null)))
+            .Select(selector: field => new ShaderPipelineRowBinding(
+                Array: field.Key,
+                Pass: pass.Key,
+                Row: field.Value.Binding!
+            ))),
+    ];
 
     // One bound field or array and what was last written to it: a scalar's value, an array's slot revision and the
     // mirror generation it was read under.

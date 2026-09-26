@@ -8,8 +8,9 @@ namespace Puck.Shaders;
 // each storage the node owns (the images a graphics pass draws into among them), one geometry buffer per geometry pass
 // and per fullscreen pass that reads the Position input, one constant buffer per frame slot for the frame group's block
 // and for each pass's pass block (ConstantBytes), the buffers of every host-written region the graph reads (each package
-// pass's regions and each host buffer port's, GpuRegion.BytesOf under the device's residency choice, a port's whether or
-// not a host has bound it yet), and one float-preview image per frame slot.
+// pass's regions, its row regions under the rows bound when it is built, and each host buffer port's, GpuRegion.BytesOf
+// under the device's residency choice, a port's whether or not a host has bound it yet), and one float-preview image per
+// frame slot.
 // ShaderPipelineRenderNode.Retirement.cs's LiveBytes counts the same kinds from a replaced graph's objects. The capture
 // readback is the node's, not a graph's: it creates its staging buffer on the first capture, sized to the published
 // surface, and OwnedBytes counts it from then on, so every later replacement's peak includes it. Like every other count
@@ -52,8 +53,8 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
     /// <summary>Gets the bytes of the installed graph's host-written regions: every package pass's regions
-    /// (<see cref="IRenderGraphPackageFactory.Regions"/>) and every host buffer port's
-    /// (<see cref="ShaderPipelineInitialization.Host"/>), each <see cref="GpuRegion.BytesOf"/> under the policy
+    /// (<see cref="IRenderGraphPackageFactory.Regions"/>), its row regions (<see cref="RowRegionCount"/>) and every host
+    /// buffer port's (<see cref="ShaderPipelineInitialization.Host"/>), each <see cref="GpuRegion.BytesOf"/> under the policy
     /// <see cref="GpuResidency.Select"/> picks with a reader in flight, a port's whether or not a host has bound it yet.
     /// <see cref="OwnedBytes"/> and the installed graph's steady-state bytes include them; zero when no graph is
     /// installed.</summary>
@@ -70,7 +71,8 @@ public sealed partial class ShaderPipelineRenderNode {
             preview: ((m_preview is { } preview)
                 ? (preview.Width, preview.Height)
                 : null
-            )
+            ),
+            rows: m_installedRows
         )
         : new ShaderPipelineMemoryAccount(
             BudgetBytes: BudgetBytes,
@@ -133,7 +135,7 @@ public sealed partial class ShaderPipelineRenderNode {
         )));
     }
     // The bytes of the constant buffers a graph's passes bind, one per frame slot: the frame group's block, which every
-    // pass shares, and each pass's own pass block and World block, each in whole constant-buffer views.
+    // pass shares, and each pass's own pass block, each in whole constant-buffer views.
     private static ulong ConstantBytes(ShaderPipelinePlan plan, uint inFlight) {
         var grouped = plan.Passes;
 
@@ -145,9 +147,6 @@ public sealed partial class ShaderPipelineRenderNode {
 
         foreach (var pass in grouped) {
             views = checked((views + ((ulong)UniformBytes(blockBytes: pass.Parameters.SizeBytes))));
-            if (pass.Parameters.WorldBlockSizeBytes != 0U) {
-                views = checked((views + ((ulong)UniformBytes(blockBytes: pass.Parameters.WorldBlockSizeBytes))));
-            }
         }
 
         return checked((views * inFlight));
@@ -166,17 +165,18 @@ public sealed partial class ShaderPipelineRenderNode {
         GpuPixelFormat.R32G32B32A32Float => 16UL,
         _ => throw new InvalidDataException(message: $"Unsupported format '{format}'.")
     };
-    // What installing a graph planned at an extent, with the float preview its selection needs, costs from what the node
-    // owns now. History the graph carries from the installed one is moved, not allocated, so the peak holds its bytes
-    // once.
-    private ShaderPipelineMemoryAccount Account(ShaderPipelinePlan plan, (uint Width, uint Height) extent, (uint Width, uint Height)? preview) {
+    // What installing a graph planned at an extent, with the float preview its selection needs and its arrays bound to
+    // rows, costs from what the node owns now. History the graph carries from the installed one is moved, not allocated,
+    // so the peak holds its bytes once.
+    private ShaderPipelineMemoryAccount Account(ShaderPipelinePlan plan, (uint Width, uint Height) extent, (uint Width, uint Height)? preview, RowBindings rows) {
         var steady = checked(((GraphBytes(
             extent: extent,
             inFlight: m_inFlight,
             plan: plan
         ) + RegionBytesOf(
             extent: extent,
-            plan: plan
+            plan: plan,
+            rows: rows
         )) + PreviewBytes(
             extent: preview,
             inFlight: m_inFlight
@@ -201,10 +201,13 @@ public sealed partial class ShaderPipelineRenderNode {
         );
     }
     // The bytes of the host-written regions a graph planned at an extent reads: each package pass's regions, which its
-    // package's factory states for the pass's context, and each host buffer port's, every one under the policy the
-    // device picks for its size with a reader in flight.
-    private ulong RegionBytesOf(ShaderPipelinePlan plan, (uint Width, uint Height) extent) {
-        var bytes = 0UL;
+    // package's factory states for the pass's context, its row regions under a binding of its arrays to rows, and each
+    // host buffer port's, every one under the policy the device picks for its size with a reader in flight.
+    private ulong RegionBytesOf(ShaderPipelinePlan plan, (uint Width, uint Height) extent, RowBindings rows) {
+        var bytes = RowRegionBytesOf(
+            plan: plan,
+            rows: rows
+        );
         Dictionary<string, ShaderPipelineResource>? specs = null;
         BuildRequest? request = null;
 
@@ -352,7 +355,8 @@ public sealed partial class ShaderPipelineRenderNode {
     }
 
     /// <summary>Accounts installing a compiled pipeline now: at the requested extent, with the float preview the current
-    /// selection needs, from everything the node owns. It is the account a candidate is refused by.</summary>
+    /// selection needs and its arrays bound to the rows <see cref="BindRows"/> bound, from everything the node owns. It
+    /// is the account a candidate is refused by.</summary>
     /// <param name="pipeline">The compiled pipeline.</param>
     /// <returns>The pipeline's steady-state bytes and the replacement peak, against <see cref="BudgetBytes"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="pipeline"/> is <see langword="null"/>.</exception>
@@ -369,7 +373,8 @@ public sealed partial class ShaderPipelineRenderNode {
             preview: PreviewFor(
                 extent: extent,
                 plan: pipeline.Plan
-            )
+            ),
+            rows: m_rows
         );
     }
 }

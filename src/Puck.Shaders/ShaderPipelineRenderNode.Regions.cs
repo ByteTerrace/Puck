@@ -4,10 +4,11 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 // Every region the host writes and the node's passes read: the regions a package pass's package states
-// (IRenderGraphPackageFactory.Regions), created with the graph, and the region a host binds to a host buffer port
-// (BindRegion). Each is created under the policy GpuResidency.Select picks with a reader in flight, so a ring or a staged
-// copy. The installed graph holds one copy pool reserving every staged region's sets, its package regions' in pass
-// order and then its ports' in declaration order (DescriptorPools), admitted with the graph and owned by its first pass,
+// (IRenderGraphPackageFactory.Regions) and the row regions its arrays read (ShaderPipelineRenderNode.Rows.cs), created
+// with the graph, and the region a host binds to a host buffer port (BindRegion). Each is created under the policy
+// GpuResidency.Select picks with a reader in flight, so a ring or a staged copy. The installed graph holds one copy pool
+// reserving every staged region's sets, its package regions' in pass order, then its row regions', then its ports' in
+// declaration order (DescriptorPools), admitted with the graph and owned by its first pass,
 // so it retires with the graph; a bound port's region moves to the next installed graph's share. The node owns them all
 // through one mechanism: after the frame's passes have recorded (a package writes its
 // regions while it records), it flushes every region's share of the slot and records every owed staged copy in one
@@ -158,8 +159,8 @@ public sealed partial class ShaderPipelineRenderNode {
             .Where(predicate: static declaration => declaration.IsHostBuffer),
     ];
     // Creates the installing graph's copy pool when any of its regions stages: one copy set per slot for each staged
-    // package region, in pass order, then for each staged host buffer port, in declaration order. The pool belongs to
-    // m_regionCopiesOwner until the graph's first pass takes it.
+    // package region, in pass order, then for each staged row region, in its plan's order, then for each staged host
+    // buffer port, in declaration order. The pool belongs to m_regionCopiesOwner until the graph's first pass takes it.
     private void CreateRegionCopies(GraphBuild built, ShaderPipelinePlan plan) {
         var names = new List<GpuObjectName>();
         var ports = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
@@ -169,6 +170,23 @@ public sealed partial class ShaderPipelineRenderNode {
                 if (Staged(byteCount: ((ulong)region.ByteCount), device: m_device)) {
                     names.Add(item: NameOf(pass: planned.Name, region: region));
                 }
+            }
+        }
+
+        var rows = m_installingRows!.Regions;
+
+        m_rowShares = new int[rows.Length];
+
+        for (var index = 0; (index < rows.Length); index++) {
+            m_rowShares[index] = -1;
+
+            if (Staged(byteCount: rows[index].ByteCount, device: m_device)) {
+                m_rowShares[index] = names.Count;
+                names.Add(item: new GpuObjectName(
+                    detail: rows[index].Name,
+                    owner: m_descriptor.Name,
+                    part: "rows"
+                ));
             }
         }
         foreach (var port in HostBufferPorts(plan: plan)) {
@@ -314,6 +332,14 @@ public sealed partial class ShaderPipelineRenderNode {
                     slot: slot
                 );
             }
+        }
+        // No pass plans an access to a row region, so the copy hands its buffer to the readers.
+        foreach (var region in m_rowRegions) {
+            m_copyRecording.Record(
+                handsToReaders: true,
+                region: region.Region,
+                slot: slot
+            );
         }
         // A host buffer port's readers' planned barriers start from the host's state, which covers the copy's write, and
         // they are recorded before this list though submitted after it, so the port's buffer is theirs to hand over.

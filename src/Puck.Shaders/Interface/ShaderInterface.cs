@@ -201,6 +201,12 @@ public sealed partial class ShaderInterface {
         if (member.Length == 0) {
             throw new InvalidDataException(message: $"{where}: an array holds at least one element.");
         }
+        if (
+            (member.Kind == ShaderInterfaceMemberKind.Array) &&
+            (member.Type?.ComponentCount() != 1)
+        ) {
+            throw new InvalidDataException(message: $"{where}: an array's element is a scalar, not {member.Type?.Spelling()}.");
+        }
         if ((member.Kind == ShaderInterfaceMemberKind.StorageImage) != member.Format.HasValue) {
             throw new InvalidDataException(message: ((member.Kind == ShaderInterfaceMemberKind.StorageImage)
                 ? $"{where}: a storage image names its format."

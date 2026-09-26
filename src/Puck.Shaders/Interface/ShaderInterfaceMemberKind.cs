@@ -3,14 +3,14 @@ using Puck.Abstractions.Documents;
 
 namespace Puck.Shaders;
 
-/// <summary>What one pass interface member is. Values and arrays live in their group's constant block; images, buffers and
+/// <summary>What one pass interface member is. Values live in their group's constant block; arrays, images, buffers and
 /// samplers are bindings of their own.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderInterfaceMemberKind>))]
 public enum ShaderInterfaceMemberKind {
     /// <summary>A scalar or vector in the group's constant block.</summary>
     Value,
-    /// <summary>A fixed-length array of scalars or vectors in the group's constant block, read through a generated
-    /// accessor that hides how an element is stored.</summary>
+    /// <summary>A fixed-length array of scalars: a read-only <c>StructuredBuffer&lt;T&gt;</c> of its element type, read
+    /// through a generated accessor that reads zero past its length.</summary>
     Array,
     /// <summary>A two-dimensional image read through a sampler.</summary>
     SampledImage,

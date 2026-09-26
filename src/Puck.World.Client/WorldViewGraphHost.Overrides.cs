@@ -46,6 +46,7 @@ public sealed partial class WorldViewGraphHost {
             var revision = WorldDefinitionFingerprint.ComputeGraph(graph: row);
 
             Row = row;
+            Node.BindRows(rows: RowsOf(row: row));
             if (string.Equals(
                 a: revision,
                 b: Revision,

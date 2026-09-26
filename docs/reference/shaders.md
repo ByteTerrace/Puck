@@ -1556,14 +1556,23 @@ at most 4,096, which a parameter binds to a whole keyed state row:
 "parameters": { "board": { "tiles": "state.tiles" } }
 ```
 
-The arrays are the World group's block, set 1, laid out in ordinal name order
-at 16 bytes an element, and a pass reads element `i` through its generated
-accessor, `tilesAt(i)`. Element `i` holds the row's cell keyed `i`: a lattice
-row presents one element per cell of its topology, any other keyed row its cell
-ceiling, and an absent cell and every element past the row read zero, as an
-unbound array does. The state mirror reads the row whole through one row slot
-when a tick moves it, and the host writes the slot's elements into the pass's
-World block only when the slot changed. The load gate refuses a row that is not
+Each array is a read-only structured buffer of its element type in the World
+group, set 1, bound in ordinal name order, and a pass reads element `i` through
+its generated accessor, `tilesAt(i)`, which reads zero past the array's
+length. Element `i` holds the row's cell keyed `i`: a lattice row presents one
+element per cell of its topology, any other keyed row its cell ceiling, and an
+absent cell and every element past the row read zero, as an unbound array does.
+
+The buffer an array reads is a region the instance's node keeps per row and
+element type, so every pass of the instance that reads one row as one element
+type reads one copy of it, as long as the longest array reading it. A row read
+eased and the same row read with `.$target` are two rows. The region takes the
+residency policy the device selects for its size; a staged region reaches its
+device-local buffer through the node's region copies. The state mirror reads
+the row whole through one row slot when a tick moves it, and the host writes
+the slot's elements into the row's regions only when the slot changed. A change
+to which row an installed graph's array reads rebuilds the graph beside the
+installed one, as a resize does. The load gate refuses a row that is not
 keyed, one longer than the array, and one whose values the element type cannot
 hold exactly: an integer element takes only an Int or Bool row whose declared
 bounds lie in its range, and a Fixed row fills only a float element. A scalar

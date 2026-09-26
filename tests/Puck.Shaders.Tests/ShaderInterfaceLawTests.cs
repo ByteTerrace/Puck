@@ -5,9 +5,9 @@ namespace Puck.Shaders.Tests;
 /// <summary>The pass interface model with no compiler: the layout rule, the strict document, the hash, and the
 /// generated text.</summary>
 public sealed class ShaderInterfaceLawTests {
-    private static ShaderInterfaceBlockMember Member(string name, uint offset, ShaderValueType type, uint length = 0) =>
+    private static ShaderInterfaceBlockMember Member(string name, uint offset, ShaderValueType type) =>
         new(
-            Length: length,
+            Length: 0,
             Name: name,
             Offset: offset,
             Type: type
@@ -69,7 +69,7 @@ public sealed class ShaderInterfaceLawTests {
         );
         Assert.Equal(
             actual: ShaderInterfaceSpike.Pixelate.Layout().Groups.Select(selector: static group => group.BlockSizeBytes),
-            expected: [16u, 64u]
+            expected: [16u, 32u]
         );
         Assert.Equal(
             actual: ShaderInterfaceSpike.Pixelate.Layout().Bindings[1].Members,
@@ -78,7 +78,7 @@ public sealed class ShaderInterfaceLawTests {
                 Pad(offset: 4),
                 Pad(offset: 8),
                 Pad(offset: 12),
-                Member(length: 3, name: "channelLevels", offset: 16, type: ShaderValueType.Uint4),
+                Member(name: "channelLevels", offset: 16, type: ShaderValueType.Uint4),
             ]
         );
     }
@@ -166,6 +166,7 @@ public sealed class ShaderInterfaceLawTests {
         Refused(members: [ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "x", type: ShaderValueType.Float), ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: "passGroup")], name: "block");
         Refused(members: [ShaderInterfaceMember.StorageImage(format: GpuPixelFormat.B8G8R8A8Unorm, group: ShaderInterfaceGroup.Pass, name: "o", type: ShaderValueType.Float4)], name: "bgra");
         Refused(members: [ShaderInterfaceMember.Array(group: ShaderInterfaceGroup.Pass, length: 0, name: "a", type: ShaderValueType.Float)], name: "empty-array");
+        Refused(members: [ShaderInterfaceMember.Array(group: ShaderInterfaceGroup.Pass, length: 2, name: "a", type: ShaderValueType.Float2)], name: "vector-array");
         Refused(members: [new ShaderInterfaceMember(Group: ShaderInterfaceGroup.Pass, Kind: ShaderInterfaceMemberKind.Sampler, Name: "s", Type: ShaderValueType.Float)], name: "typed-sampler");
         Refused(members: [new ShaderInterfaceMember(Group: ShaderInterfaceGroup.Pass, Kind: ShaderInterfaceMemberKind.Value, Name: "v")], name: "untyped-value");
         Refused(members: [new ShaderInterfaceMember(Group: ShaderInterfaceGroup.Pass, Kind: ShaderInterfaceMemberKind.StorageImage, Name: "o", Type: ShaderValueType.Float4)], name: "unformatted");
@@ -272,6 +273,7 @@ public sealed class ShaderInterfaceLawTests {
                 ("raw", 3u, 2u, false, ShaderInterfaceLayout.SpirvRawBufferStride),
                 ("output", 3u, 3u, false, 8u),
                 ("rawOutput", 3u, 4u, false, ShaderInterfaceLayout.SpirvRawBufferStride),
+                ("offsets", 3u, 5u, false, 4u),
             ]
         );
         Assert.Equal(
@@ -283,6 +285,7 @@ public sealed class ShaderInterfaceLawTests {
                 ("raw", 3u, 2u, false, ShaderInterfaceLayout.DxilRawBufferStride),
                 ("output", 3u, 3u, false, 8u),
                 ("rawOutput", 3u, 4u, false, ShaderInterfaceLayout.DxilRawBufferStride),
+                ("offsets", 3u, 5u, false, 4u),
                 ("pushedIndex", GpuPipelineLayoutDescription.PushIndexSpace, 0u, false, 0u),
             ]
         );
@@ -340,12 +343,15 @@ public sealed class ShaderInterfaceLawTests {
                 [[vk::binding(2, 3)]] ByteAddressBuffer raw : register(t2, space3);
                 [[vk::binding(3, 3)]] RWStructuredBuffer<uint2> output : register(u3, space3);
                 [[vk::binding(4, 3)]] RWByteAddressBuffer rawOutput : register(u4, space3);
+                [[vk::binding(5, 3)]] StructuredBuffer<uint> offsets : register(t5, space3);
 
                 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
                 struct TypedBuffersPushedIndex {
                     [[vk::offset(0)]] uint index;
                 };
                 [[vk::push_constant]] ConstantBuffer<TypedBuffersPushedIndex> pushedIndex : register(b0, space4);
+
+                uint offsetsAt(uint index) { return ((index < 4u) ? offsets[index] : ((uint)0)); }
 
                 #endif // PUCK_SHADER_INTERFACE_TYPED_BUFFERS
 
@@ -381,13 +387,11 @@ public sealed class ShaderInterfaceLawTests {
                     [[vk::offset(4)]] uint _pad4;
                     [[vk::offset(8)]] uint _pad8;
                     [[vk::offset(12)]] uint _pad12;
-                    [[vk::offset(16)]] uint4 channelLevels[3];
+                    [[vk::offset(16)]] uint4 channelLevels;
                 };
                 [[vk::binding(0, 3)]] ConstantBuffer<PixelatePass> passGroup : register(b0, space3);
                 [[vk::binding(1, 3)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> output : register(u1, space3);
                 [[vk::binding(2, 3)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> source : register(u2, space3);
-
-                uint channelLevelsAt(uint index) { return passGroup.channelLevels[index].x; }
 
                 #endif // PUCK_SHADER_INTERFACE_PIXELATE
 

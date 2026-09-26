@@ -1,6 +1,5 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
-using Puck.Hosting;
 using Puck.Shaders;
 using Puck.Testing;
 using Puck.World.Client;
@@ -14,7 +13,7 @@ namespace Puck.World.Tests;
 /// Laws for the mirror's row slots (<see cref="WorldStateConversion.Row"/>), the read a pass's array binds: a keyed row
 /// read whole, cell <c>i</c> at element <c>i</c> and an absent cell as zero, over the element count its shape states; a
 /// tick moving the row re-reads it as one read and moves the slot's revision, a tick moving another row reads nothing,
-/// and a steady refresh allocates nothing; one row's World block reads the same bytes under every residency policy; and
+/// and a steady refresh allocates nothing; one row's region reads the same bytes under every residency policy; and
 /// a keyless token naming a keyed row joins the manifest as a row read.
 /// </summary>
 public sealed class WorldStateMirrorRowLawTests {
@@ -121,33 +120,13 @@ public sealed class WorldStateMirrorRowLawTests {
 
         Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - allocated));
     }
-    /// <summary>One row's World block reads the same bytes under every residency policy: the row slot's values, written
-    /// into a pass's array through its layout and into a region under each policy, read back identical frame by frame
-    /// over the device-free memory model that runs the staged copy. The node holds a World block as a uniform region, which
-    /// is never staged, so the staged leg here is a storage region; the bytes it carries are the same block.</summary>
+    /// <summary>One row's region reads the same bytes under every residency policy: the row slot's values, written as an
+    /// int array's elements (<see cref="ShaderPipelineParameterLayout.WriteArray"/>) into a region under each policy, read
+    /// back identical frame by frame over the device-free memory model that runs the staged copy.</summary>
     [Fact]
-    public void OneRowsWorldBlockReadsTheSameBytesUnderEveryPolicy() {
+    public void OneRowsRegionReadsTheSameBytesUnderEveryPolicy() {
         const int Slots = 3;
-        var layout = ShaderPipelineParameterLayout.Resolve(
-            pass: new ShaderPipelinePass(
-                Arrays: new Dictionary<string, ShaderArrayField>(comparer: StringComparer.Ordinal) {
-                    ["tiles"] = new(Length: 8, Type: ShaderValueType.Int),
-                },
-                EntryPoint: "main",
-                Kind: ShaderPipelineDocumentPassKind.Compute,
-                Name: "draw",
-                Outputs: [new ResourceReference(Name: "image")],
-                Source: "board.hlsl"
-            ),
-            resources: new Dictionary<string, ShaderPipelineResource>(comparer: StringComparer.Ordinal) {
-                ["image"] = new ShaderPipelineResource(
-                    Format: "R8G8B8A8Unorm",
-                    Kind: ShaderPipelineResourceKind.Image,
-                    Name: "image"
-                ),
-            }
-        );
-        var byteCount = ((int)layout.WorldBlockSizeBytes);
+        var byteCount = (8 * 4);
         var readings = new Dictionary<GpuResidencyPolicy, List<byte[]>>();
 
         foreach (var policy in Enum.GetValues<GpuResidencyPolicy>()) {
@@ -194,9 +173,9 @@ public sealed class WorldStateMirrorRowLawTests {
                     mirror.Refresh(stamp: Stamp(moved: [tiles], tick: ((ulong)frame)));
                 }
 
-                layout.WriteArray(
-                    array: layout.Arrays[0],
-                    block: block,
+                ShaderPipelineParameterLayout.WriteArray(
+                    elements: block,
+                    type: ShaderValueType.Int,
                     values: mirror.RowValues(slot: slot)
                 );
                 _ = region.Write(bytes: block, offset: 0);
@@ -219,7 +198,7 @@ public sealed class WorldStateMirrorRowLawTests {
                 var read = gpu.Memory(bufferHandle: region.Buffer(slot: (frame % Slots)).BufferHandle)[..byteCount];
 
                 Assert.Equal(actual: read, expected: block);
-                Assert.Equal(expected: ((int)third), actual: System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(source: read.AsSpan(start: 32)));
+                Assert.Equal(expected: ((int)third), actual: System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(source: read.AsSpan(start: 8)));
                 frames.Add(item: read);
             }
 

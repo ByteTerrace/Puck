@@ -63,15 +63,16 @@ public static class ShaderFrameInterface {
     ];
 
     /// <summary>Creates the interface of a document pass: the frame group (<see cref="FrameGroupMembers"/>), bound at set
-    /// 0; the World group at set 1, whose block holds the pass's arrays; then the pass group at set 3, whose block holds the pass's <see cref="Extent"/> and each config field in
-    /// ordinal name order, followed by the pass's ports in the order given. No block is pushed, so a pass reads
+    /// 0; the World group at set 1, one read-only structured buffer per array in ordinal name order; then the pass group
+    /// at set 3, whose block holds the pass's <see cref="Extent"/> and each config field in ordinal name order, followed
+    /// by the pass's ports in the order given. No block is pushed, so a pass reads
     /// <c>frameGroup.time</c>, <c>passGroup.extent</c> or a config field such as <c>passGroup.decay</c>, its ports by
     /// their generated names, and a pushed index, when it has one, as <c>pushedIndex.index</c>.</summary>
     /// <param name="name">The interface's name (<see cref="NameOf"/>).</param>
     /// <param name="config">The pass's config schema, or <see langword="null"/> when it has none.</param>
     /// <param name="ports">The pass's port members, each in <see cref="ShaderInterfaceGroup.Pass"/>, in document order.</param>
-    /// <param name="arrays">The pass's arrays, laid out in the World group's block in ordinal name order, or
-    /// <see langword="null"/> for none.</param>
+    /// <param name="arrays">The pass's arrays, bound in the World group in ordinal name order, or <see langword="null"/>
+    /// for none.</param>
     /// <param name="pushesIndex">Whether the pass's pipeline pushes one 4-byte index
     /// (<see cref="ShaderInterface.PushesIndex"/>), which it reads as <c>pushedIndex.index</c>.</param>
     /// <returns>The interface.</returns>
@@ -83,8 +84,8 @@ public static class ShaderFrameInterface {
 
         var members = new List<ShaderInterfaceMember>(collection: FrameGroupMembers);
 
-        // A pass's arrays are the World group's block, in ordinal name order: the rows a world binds change at most once a
-        // tick, so they bind apart from the pass block's config and extent.
+        // A pass's arrays are the World group's bindings, in ordinal name order: the rows a world binds change at most once
+        // a tick, and a row every pass reads alike is one buffer the node binds to each of them.
         foreach (var (field, array) in (arrays ?? new Dictionary<string, ShaderArrayField>()).OrderBy(
             comparer: StringComparer.Ordinal,
             keySelector: static pair => pair.Key

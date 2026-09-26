@@ -9,16 +9,17 @@ namespace Puck.Shaders;
 /// <list type="bullet">
 /// <item><description>Each group is Vulkan descriptor set and Direct3D 12 register space
 /// <see cref="ShaderInterfaceGroup"/>'s ordinal.</description></item>
-/// <item><description>A group with values or arrays owns one constant block at binding 0; its images, buffers and
+/// <item><description>A group with values owns one constant block at binding 0; its images, buffers, arrays and
 /// samplers follow at bindings 1, 2, … in declaration order, or from 0 when the group has no block. A binding's Direct3D 12
 /// register number equals its Vulkan binding number, in the register class its kind takes (<c>b</c>, <c>t</c>,
 /// <c>u</c> or <c>s</c>).</description></item>
-/// <item><description>A block places its members in declaration order: a scalar on a 4-byte boundary, a two-component
-/// vector on an 8-byte boundary, a three- or four-component vector and every array on a 16-byte boundary. An array
-/// element is stored as one whole 16-byte row, so an array's stride is 16 on both backends, and the member after an
-/// array starts past its last row. Every gap is filled with a named <c>uint</c> padding member, so Direct3D 12's
-/// sequential constant-buffer packing lands each member exactly where the explicit Vulkan offset puts
-/// it.</description></item>
+/// <item><description>A block places its values in declaration order: a scalar on a 4-byte boundary, a two-component
+/// vector on an 8-byte boundary, and a three- or four-component vector on a 16-byte boundary. Every gap is filled with a
+/// named <c>uint</c> padding member, so Direct3D 12's sequential constant-buffer packing lands each member exactly where
+/// the explicit Vulkan offset puts it.</description></item>
+/// <item><description>An array is a binding of its own: a read-only structured buffer of its scalar element type
+/// (<see cref="GpuBindingKind.ReadOnlyBuffer"/>), whose stride is the element's size on both backends, so element
+/// <c>i</c> lies at byte <c>4i</c> of the buffer bound there.</description></item>
 /// <item><description>A pushed group's block (<see cref="ShaderInterface.PushConstants"/>) is a
 /// pushed <see cref="GpuBindingKind.ConstantBuffer"/> binding (<see cref="ShaderInterfaceBinding.Pushed"/>) at binding 0 of
 /// its set, placed by the same rule.</description></item>
@@ -239,7 +240,7 @@ public sealed class ShaderInterfaceLayout {
         kind switch {
             ShaderInterfaceMemberKind.SampledImage => GpuBindingKind.SampledImage,
             ShaderInterfaceMemberKind.StorageImage => GpuBindingKind.StorageImage,
-            ShaderInterfaceMemberKind.ReadOnlyBuffer => GpuBindingKind.ReadOnlyBuffer,
+            ShaderInterfaceMemberKind.ReadOnlyBuffer or ShaderInterfaceMemberKind.Array => GpuBindingKind.ReadOnlyBuffer,
             ShaderInterfaceMemberKind.ReadWriteBuffer => GpuBindingKind.ReadWriteBuffer,
             ShaderInterfaceMemberKind.Sampler => GpuBindingKind.Sampler,
             _ => throw new ArgumentOutOfRangeException(
@@ -255,14 +256,11 @@ public sealed class ShaderInterfaceLayout {
 
         foreach (var member in members.Where(predicate: static member => member.IsBlockMember)) {
             var type = member.Type!.Value;
-            var isArray = (member.Kind == ShaderInterfaceMemberKind.Array);
-            var alignment = (isArray
-                ? RowBytes
-                : type.ComponentCount() switch {
-                    1 => 4u,
-                    2 => 8u,
-                    _ => RowBytes,
-                });
+            var alignment = type.ComponentCount() switch {
+                1 => 4u,
+                2 => 8u,
+                _ => RowBytes,
+            };
             var offset = AlignUp(
                 alignment: alignment,
                 value: cursor
@@ -277,23 +275,13 @@ public sealed class ShaderInterfaceLayout {
                 ));
             }
 
-            if (isArray) {
-                blockMembers.Add(item: new ShaderInterfaceBlockMember(
-                    Length: member.Length!.Value,
-                    Name: member.Name,
-                    Offset: offset,
-                    Type: RowType(type: type)
-                ));
-                cursor = (offset + (RowBytes * member.Length.Value));
-            } else {
-                blockMembers.Add(item: new ShaderInterfaceBlockMember(
-                    Length: 0,
-                    Name: member.Name,
-                    Offset: offset,
-                    Type: type
-                ));
-                cursor = (offset + type.SizeBytes());
-            }
+            blockMembers.Add(item: new ShaderInterfaceBlockMember(
+                Length: 0,
+                Name: member.Name,
+                Offset: offset,
+                Type: type
+            ));
+            cursor = (offset + type.SizeBytes());
         }
 
         var bindings = new List<ShaderInterfaceBinding>();
@@ -354,13 +342,8 @@ public sealed class ShaderInterfaceLayout {
             Set: set
         );
     }
-    private static ShaderValueType RowType(ShaderValueType type) =>
-        ShaderValueTypes.FromComponents(
-            count: 4,
-            kind: type.ScalarKind()
-        );
 }
-/// <summary>One image, buffer or sampler member placed at its binding.</summary>
+/// <summary>One image, buffer, array or sampler member placed at its binding.</summary>
 /// <param name="Member">The interface member.</param>
 /// <param name="Binding">The Vulkan binding number, which is also the Direct3D 12 register number.</param>
 /// <param name="Kind">The binding kind.</param>
@@ -373,13 +356,13 @@ public sealed record ShaderInterfaceResourceLayout(
 /// <param name="Group">The frequency group.</param>
 /// <param name="Set">The Vulkan descriptor set and Direct3D 12 register space.</param>
 /// <param name="BlockTypeName">The HLSL struct name of the group's constant block, or <see langword="null"/> when the
-/// group has no values or arrays.</param>
+/// group has no values.</param>
 /// <param name="BlockVariableName">The HLSL variable name of the group's constant block, or <see langword="null"/>
-/// when the group has no values or arrays.</param>
+/// when the group has no values.</param>
 /// <param name="BlockMembers">The block's members in offset order, padding included; empty when the group has no
 /// block.</param>
 /// <param name="BlockSizeBytes">The block's size in bytes, a multiple of 16; zero when the group has no block.</param>
-/// <param name="Resources">The group's images, buffers and samplers in binding order.</param>
+/// <param name="Resources">The group's images, buffers, arrays and samplers in binding order.</param>
 /// <param name="Bindings">Every binding of the group, block first, in binding order.</param>
 /// <param name="Pushed">Whether the group's block is delivered as push constants rather than bound as a constant
 /// buffer.</param>

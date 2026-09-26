@@ -1,8 +1,8 @@
 // A pixelate/posterize pass read through its generated pass interface instead of a push constant and hand-numbered
 // bindings. pixelate.interface.hlsli is generated from the interface ShaderInterfaceSpikeTests declares and written
 // beside this file at test time; it is never checked in. The frame group carries the extent, the pass group the cell
-// size, a per-channel level count read through the generated array accessor, and the two storage images. Equal levels
-// on every channel quantize exactly as a single level count would.
+// size, a per-channel level count in a four-component value, and the two storage images. Equal levels on every channel
+// quantize exactly as a single level count would.
 #include "pixelate.interface.hlsli"
 
 [numthreads(8, 8, 1)]
@@ -19,7 +19,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     [unroll]
     for (uint channel = 0u; (channel < 3u); channel++) {
-        uint levels = channelLevelsAt(channel);
+        uint levels = passGroup.channelLevels[channel];
 
         if (levels > 1u) {
             float steps = ((float)levels - 1.0);

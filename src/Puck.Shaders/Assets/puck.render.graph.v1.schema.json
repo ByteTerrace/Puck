@@ -544,7 +544,7 @@
               "null"
             ],
             "additionalProperties": {
-              "description": "One array a pass declares in its arrays: an interface array in the World group, which a world binds to a whole state row with a parameters entry and the pass reads through its generated accessor, worldGroup.\u003Cname\u003EAt(i). An array no row binds reads zeros.",
+              "description": "One array a pass declares in its arrays: an interface array in the World group, a read-only structured buffer of its element type, which a world binds to a whole state row with a parameters entry and the pass reads through its generated accessor, \u003Cname\u003EAt(i). An array no row binds reads zeros.",
               "type": [
                 "object",
                 "null"

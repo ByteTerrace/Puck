@@ -23,6 +23,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     private readonly Dictionary<nint, GpuDescriptorAdmission> m_poolRanges = [];
     private readonly Lock m_gate = new();
     private readonly Dictionary<(nint Set, uint Binding), nint> m_constantBuffers = [];
+    private readonly Dictionary<(nint Set, uint Binding), nint> m_storageBuffers = [];
     private readonly Dictionary<nint, FakeHostBuffer> m_hostBuffers = [];
 
     private long m_sets;
@@ -473,6 +474,9 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         Record(text: "device drain");
     }
     public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
+        lock (m_gate) {
+            m_storageBuffers[(descriptorSetHandle, binding)] = bufferHandle;
+        }
         if (Recording) {
             DescriptorWrites.Add(item: (descriptorSetHandle, binding, bufferHandle));
         }
@@ -490,6 +494,26 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public byte[] ConstantBlock(nint set, int sizeBytes) {
         lock (m_gate) {
             return m_hostBuffers[m_constantBuffers[(set, 0U)]].Contents[..sizeBytes];
+        }
+    }
+    /// <summary>Returns the handle of the buffer last written at a binding of <paramref name="set"/>.</summary>
+    /// <param name="set">The descriptor set.</param>
+    /// <param name="binding">The binding.</param>
+    /// <returns>The buffer's handle.</returns>
+    public nint StorageBuffer(nint set, uint binding) {
+        lock (m_gate) {
+            return m_storageBuffers[(set, binding)];
+        }
+    }
+    /// <summary>Returns the first <paramref name="sizeBytes"/> bytes of the host-visible buffer last written at a binding
+    /// of <paramref name="set"/>: what a dispatch binding that set reads there.</summary>
+    /// <param name="set">The descriptor set.</param>
+    /// <param name="binding">The binding.</param>
+    /// <param name="sizeBytes">The bytes to read.</param>
+    /// <returns>The buffer's bytes.</returns>
+    public byte[] StorageBytes(nint set, uint binding, int sizeBytes) {
+        lock (m_gate) {
+            return m_hostBuffers[m_storageBuffers[(set, binding)]].Contents[..sizeBytes];
         }
     }
     public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {

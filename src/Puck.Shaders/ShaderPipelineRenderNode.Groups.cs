@@ -3,9 +3,10 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Shaders;
 
 // A document pass binds groups (ShaderFrameInterface.ForPass): the frame group at set 0, whose block the node writes once
-// a frame into its frame region, and its pass group at set 3, whose block (the pass's extent and config) lives in the
-// pass's own region and whose bindings are its ports. Each slot's frame and pass sets take their constant buffers and
-// the pass's samplers once, when they are allocated; a frame writes only the ports. A package pass binds the same two
+// a frame into its frame region; the World group at set 1 when it declares arrays, each bound to the row region it reads
+// (ShaderPipelineRenderNode.Rows.cs); and its pass group at set 3, whose block (the pass's extent and config) lives in the
+// pass's own region and whose bindings are its ports. Each slot's frame, World and pass sets take their buffers and the
+// pass's samplers once, when they are allocated; a frame writes only the ports. A package pass binds the same two
 // groups: the node creates and seeds its pass region, and its recorder allocates its sets (RenderGraphPackageSets).
 public sealed partial class ShaderPipelineRenderNode {
     private const uint FrameGroup = ((uint)ShaderInterfaceGroup.Frame);
@@ -88,47 +89,9 @@ public sealed partial class ShaderPipelineRenderNode {
             slotCount: ((int)m_inFlight),
             usage: GpuBufferUsage.Uniform
         );
-
-        var worldBytes = pass.ParametersLayout.WorldBlockSizeBytes;
-
-        if (worldBytes == 0U) {
-            return;
-        }
-
-        // The World block changes at most once a tick, when a row it binds moves, and a write owes each slot only the words
-        // that moved. It takes the policy the device selects for its size with the frame ring's reader in flight, except
-        // that a staged selection holds it in a host ring as the pass block is held, since the node records staged copies
-        // only for the regions a package states.
-        var worldRegionBytes = UniformBytes(blockBytes: worldBytes);
-        var policy = GpuResidency.Select(
-            byteCount: ((ulong)worldRegionBytes),
-            profile: m_device.MemoryProfile,
-            readersInFlight: true
-        );
-
-        pass.WorldBlock = new byte[worldRegionBytes];
-        pass.WorldRegion = new GpuRegion(
-            bindings: m_gpu.Bindings,
-            buffers: m_gpu.BufferFactory,
-            byteCount: worldRegionBytes,
-            copyPipeline: null,
-            memory: GpuResidency.RingMemory(profile: m_device.MemoryProfile),
-            name: new GpuObjectName(
-                detail: "world block",
-                owner: m_descriptor.Name,
-                part: pass.Name
-            ),
-            policy: ((policy == GpuResidencyPolicy.Staged)
-                ? GpuResidencyPolicy.Ring
-                : policy),
-            recorder: m_gpu.Recorder,
-            slotCount: ((int)m_inFlight),
-            usage: GpuBufferUsage.Uniform
-        );
-        pass.WorldSets = new nint[m_inFlight];
     }
     // Allocates a document pass's per-slot sets and sampler, and writes what never changes into each set: the frame and
-    // pass blocks' constant buffers and the pass's samplers.
+    // pass blocks' constant buffers, each array's row region and the pass's samplers.
     private void AllocateGroupSets(RuntimePass pass, nint descriptorPool) {
         var bindings = m_gpu.Bindings;
         var layouts = ((pass.Kind == ShaderPipelinePassKind.Compute)
@@ -171,7 +134,9 @@ public sealed partial class ShaderPipelineRenderNode {
                 bufferSize: ((ulong)pass.PassRegion.ByteCount),
                 descriptorSetHandle: pass.Sets[slot]
             );
-            if (pass.WorldRegion is { } world) {
+            if (pass.ArrayRegions is { } regions) {
+                var arrays = pass.ParametersLayout.Arrays;
+
                 pass.WorldSets![slot] = bindings.AllocateSet(
                     descriptorPool,
                     layouts[((int)WorldGroup)],
@@ -182,13 +147,16 @@ public sealed partial class ShaderPipelineRenderNode {
                         part: pass.Name
                     )
                 );
-                bindings.WriteConstantBuffer(
-                    arrayElement: 0,
-                    binding: 0,
-                    bufferHandle: world.Buffer(slot: slot).BufferHandle,
-                    bufferSize: ((ulong)world.ByteCount),
-                    descriptorSetHandle: pass.WorldSets[slot]
-                );
+                for (var index = 0; (index < regions.Length); index++) {
+                    bindings.WriteBuffer(
+                        binding: arrays[index].Binding,
+                        bufferHandle: regions[index].Buffer(slot: slot).BufferHandle,
+                        bufferSize: ((ulong)regions[index].ByteCount),
+                        descriptorSetHandle: pass.WorldSets[slot],
+                        elementStride: ShaderValueTypes.ComponentBytes,
+                        kind: GpuBindingKind.ReadOnlyBuffer
+                    );
+                }
             }
 
             foreach (var port in pass.PortBindings!) {
@@ -205,7 +173,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Sends every pass's current block to every slot, so each slot's next frame uploads only what changes after this, as
     // every later one does, however many frames ran before: an install seeds the blocks once the live config is preserved
-    // into them, and a reset seeds them again.
+    // into them, and a reset seeds them again. The row regions take their rows' kept values.
     private void SeedPassRegions() {
         foreach (var pass in m_passes) {
             if (pass.PassRegion is not { } region) {
@@ -216,40 +184,11 @@ public sealed partial class ShaderPipelineRenderNode {
             for (var slot = 0; (slot < m_inFlight); slot++) {
                 region.Flush(slot: slot);
             }
-            if (pass.WorldRegion is { } world) {
-                WriteWorldBlock(pass: pass);
-                for (var slot = 0; (slot < m_inFlight); slot++) {
-                    world.Flush(slot: slot);
-                }
-            }
-        }
-    }
-    // Writes a pass's World block into its region, the arrays as the host last wrote them or, with sentinels on, every
-    // member's echo sentinel; the region owes a slot only the words that changed.
-    private void WriteWorldBlock(RuntimePass pass) {
-        var region = pass.WorldRegion!;
-
-        if (Sentinels) {
-            Span<byte> block = stackalloc byte[region.ByteCount];
-
-            ShaderInterfaceEcho.WriteSentinels(
-                block: block,
-                group: pass.ParametersLayout.Layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.World))
-            );
-            _ = region.Write(
-                bytes: block,
-                offset: 0
-            );
-
-            return;
         }
 
-        _ = region.Write(
-            bytes: pass.WorldBlock,
-            offset: 0
-        );
+        SeedRowRegions();
     }
-    // Binds a grouped pass's frame and pass sets for this slot.
+    // Binds a grouped pass's frame, World and pass sets for this slot.
     private void BindGroupSets(RuntimePass pass, int slot, nint command, GpuBindPoint bindPoint, nint layout) {
         var recorder = m_gpu.Recorder;
 
@@ -269,13 +208,11 @@ public sealed partial class ShaderPipelineRenderNode {
             group: PassGroup,
             pipelineLayoutHandle: layout
         );
-        if (pass.WorldRegion is { } world) {
-            WriteWorldBlock(pass: pass);
-            world.Flush(slot: slot);
+        if (pass.WorldSets is { } world) {
             recorder.BindDescriptorSet(
                 bindPoint: bindPoint,
                 commandBufferHandle: command,
-                descriptorSetHandle: pass.WorldSets![slot],
+                descriptorSetHandle: world[slot],
                 group: WorldGroup,
                 pipelineLayoutHandle: layout
             );
