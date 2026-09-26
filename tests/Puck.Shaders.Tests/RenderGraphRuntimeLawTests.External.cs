@@ -878,7 +878,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
                     ImageViewHandle: image.ImageViewHandle,
                     Release: m_release,
                     ReleaseToken: Acquired
-                )
+                ),
+                Tainted: false
             );
 
             return true;

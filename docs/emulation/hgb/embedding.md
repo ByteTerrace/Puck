@@ -165,7 +165,8 @@ The bus hosts a cartridge (`RomOnlyCartridge`/`Mbc1`–`Mbc7`/`HuC1`/`HuC3`/
 port, infrared port, and OAM/HDMA DMA controllers. `InfraredPort` is the one
 infrared transceiver the CGB RP register and the HuC1/HuC3 cartridge IR windows
 share; it carries a light level rather than a clocked bit, so it is a medium of
-its own beside the serial cable. `GamePrinterDevice`/`GamePrinterLinkSession`
+its own beside the serial cable. `LightGunComponent` puts a light gun on its
+receive line, aimed through `MachinePadState.Pointer`. `GamePrinterDevice`/`GamePrinterLinkSession`
 model the thermal printer as a device peer on the serial cable.
 `CameraCartridge`/`GradientCameraSensor`/`SensorImage` and
 `TiltSensorComponent` model the sensor-cartridge peripherals; `BootDivPrediction`
@@ -184,7 +185,7 @@ that has to satisfy it read the same data.
 | Video | `Ppu`, `HdmaController`, `Framebuffer` | The STAT-accurate pixel pipeline and DMA-driven video RAM transfer. |
 | Audio | `ApuComponent`, `ApuGeneratorClock`, `AudioOutputComponent` | The four-channel APU and its host-facing output ring. |
 | Cartridges | `Cartridge`, `CartridgeHeader`, `CartridgeBase`, `MapperKind`, `RomOnlyCartridge`, `Mbc1Cartridge`…`Mbc7Cartridge`, `HuC1Cartridge`, `HuC3Cartridge`, `Mmm01Cartridge`, `CameraCartridge` | Header-selected mapper implementations and the camera peripheral. |
-| Link | `LinkSession<TPort>`, `LinkResumeToken`, `SerialComponent`, `SerialLinkSession`, `InfraredPort`, `IrLinkSession`, `IInfraredPeer`, `IInfraredCartridge`, `GamePrinterDevice`, `GamePrinterLinkSession` | The deterministic serial/infrared/printer link sessions. |
+| Link | `LinkSession<TPort>`, `LinkResumeToken`, `SerialComponent`, `SerialLinkSession`, `InfraredPort`, `IrLinkSession`, `IInfraredPeer`, `IInfraredCartridge`, `LightGunComponent`, `ILightGun`, `GamePrinterDevice`, `GamePrinterLinkSession` | The deterministic serial/infrared/printer link sessions and the light gun on the infrared receiver. |
 | Hosting | `MachineHost`, `GamingBrickEngine`, `HumbleGamingBrickCore`, `BrickPad`, `HumbleGamingBrickLookahead`, `SerialLinkGroupCore` | The `IMachineEngine`/`IMachineLinkingEngine` adapter over `Puck.GamingBricks`'s queued-host and cable-link substrate. |
 
 ## Verification and further reading

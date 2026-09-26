@@ -1077,6 +1077,27 @@ casts the OS pointer through its seat's published camera with
 `IntentRayWireLawTests`, `PointerWorldRuleFactLawTests`,
 `WorldSeatViewportsLocateLawTests` and `SourcePointerCommandLawTests`.
 
+A machine reads the pointer as a light gun. `MachinePadState.Pointer` is a
+`MachinePointer`, off the screen or on it at an exact fraction of the output in
+1/65536 units, and it rides the one pad path every applied intent reaches a
+machine by: `WorldEngagement.FoldTick` aims each screen application's pad with
+`WorldEngagement.Aim`, which maps the applied body's ray through the row's
+`WorldScreenMappings.Normalized` mapping, the one the `$pointer:` read runs, and
+leaves the gun off for no ray, a miss, the bezel or a screen that is not
+`Simulation`. The Humble brick wires the gun, `LightGunComponent`, to its
+infrared receive line: a game reads RP bit 1 or a HuC IR window and sees light
+while the aim lands on a pixel the LCD shows at least half bright, and the
+gun's trigger is an ordinary kit-mapped button. The aim is snapshot state and
+the queued checkpoint carries it (`puck.queued-machine.v2`); the advanced brick
+has no light gun and ignores the pointer. `screen.state` echoes the tick's aim
+as `gun=`. The laws are the Humble battery's `light-gun` stage and
+`LightGunLawTests`, whose probe cartridge (`LightGunProbeCartridge`) draws a
+white and a black half and publishes what it senses: a lit aim reads light in
+the running program, a dark aim, a miss, no ray and no application read dark,
+and a recorded tape of pointer intents replays to the same machine state and
+state hash. No canary drives it: `puck.cartridge.v1` has no light read, so no
+authored cartridge a headless World boots can see the gun.
+
 Panes publish their mappings from the live renderer (P13b-1's pane half, P13b-3's
 host half and P13b-6). `WorldFramePresenter.PrepareGraph` ends with
 `WorldViewGraphHost.PublishPanes`, which writes one mapping per placement the
@@ -1140,7 +1161,7 @@ and `Win32PassthroughWindowTests`.
 
 P13b owes the rest. The screen shading still reads its own bezel constant,
 which `WorldScreenMappings` mirrors, and the GPU does not yet draw from the
-mapping. No machine reads a mapped pointer. The pointer's pane hover reads the
+mapping. The pointer's pane hover reads the
 picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
 outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
 `hovered=`); GPU picking follows P4. The recorded Windows run, a click reaching
@@ -1209,8 +1230,9 @@ exists. The machine, view, probe and
 session arms stay typed because each names a document row; an emulator joins as
 a machine engine. External content resolves through `WorldCaptureGate`, so a
 capture shows its declared fill and never its pixels. That covers every frame of
-an offscreen host, which serves captures and `puck parity`, and a windowed frame
-from a `world.screenshot` for two frames after. A deterministic source states the
+an offscreen host, which serves captures and `puck parity`, and every windowed
+frame produced while a capture is armed on the render graph, which renders every
+tainted instance the capture reads again (P12b-5). A deterministic source states the
 exact image it shows (`IImageSourceReference`) for the exact verdict
 `ImageSourceVerdict`, which the `uploaded-sources` canary applies to a
 test-pattern source instance before composition.
@@ -3329,15 +3351,29 @@ except step 8.
    the WARP case orders its write by the fence rather than a CPU wait, and the
    WARP reader reads the pattern. A recorded camera run on both backends on real hardware is
    [deferred to the end](#deferred-to-the-end).
-5. The capture gate over the graph. Can land now, after step 2. The gate
-   reads the capture armed on `RenderGraphRuntime` rather than
-   `WorldRenderProbe`'s pending path, and its fixed `HoldFrames` gives way to
-   taint. An instance whose latest output read an unfilled external source is
-   tainted, and a capture frame renders every tainted instance it reads again,
-   whatever its divisor, before the root composes, so a slow view cannot carry
-   external pixels into a capture. Laws: a view at divisor 8 that read a
+5. The capture gate over the graph. Landed. The gate fills while a capture is
+   pending on `RenderGraphRuntime` (`PendingCapturePath`, which the binder reads
+   through its `Runtime`), read at each resolve, and its fixed hold is gone:
+   an image resolved unfilled is handed out tainted
+   (`RenderGraphExternalOutput.Tainted`, set by `WorldCaptureGate.Resolve` and
+   the probe source), an external producer that read one hands out tainted
+   outputs (`RenderGraphExternalReads.Tainted`; each `SdfEngineNode` view output
+   keeps the taint of the frame that last rendered it, `SdfViewOutput.Tainted`),
+   and a graph instance whose latest render bound one is tainted. A frame
+   begun with a capture pending names every tainted instance the captured
+   instance reads, directly or through others, in `RenderGraphFrame.Rerender`,
+   which the scheduler renders whatever its divisor and the budget, before the
+   instances reading it, so a slow view cannot carry external pixels into a
+   capture; a capture moves to its instance, a graph instance or an external
+   producer, only over untainted inputs, and `UnservedCaptureReasonOf` names the
+   tainted read a capture frame could not clear.
+   Laws in `RenderGraphRuntimeLawTests.Taint`: a view at divisor 8 that read a
    camera renders again in the capture frame and reads the fill; a capture
-   never reads a tainted output. `puck parity` is unchanged, since an
+   never reads a tainted output; a capture of an external producer over a
+   tainted read waits and names it. `SdfEngineNodeLeaseLawTests` holds a view
+   output to the taint of the frame that last rendered it.
+   `RenderGraphSchedulerLawTests` pins the
+   rerender's due and budget rules. `puck parity` is unchanged, since an
    offscreen host always fills.
 6. Machine outputs are sources, with the exact verdict. Landed. A machine
    source instance is an uploaded source: `IMachineVideoOutput` declares its
@@ -3491,7 +3527,17 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      the wire and the tape bit for bit and an absent one costs one byte; a
      three-tick burst gives three snapshots, each carrying the ray; and
      `Locate` answers what the cursor's own mapping answered.
-   A machine that reads a pointer, a light gun, is still owed.
+   - A machine reads the pointer as a light gun, landed:
+     `MachinePadState.Pointer` carries the aim through the one pad path,
+     `WorldEngagement.Aim` maps the applied body's ray through the row's
+     normalized mapping, and the Humble brick's `LightGunComponent` puts the
+     aimed LCD pixel's brightness on the infrared receive line. Laws: the
+     `light-gun` Post stage and `LightGunLawTests` (a lit aim changes the
+     running program's state, a dark aim, a miss, no ray and no application
+     read dark, and a tape replays to the same machine state and hash).
+     Remaining: a `puck.cartridge.v1` light read, with its measured cost
+     weight, so an authored cartridge can see the gun and a headless canary
+     can drive one.
 3. The presentation destination. The CPU half has landed: the World host
    publishes its panes to its `SourcePanePicker` every frame, from the
    placements `place` draws, and the drawn cursor's feed (`WorldCursorFeed`)

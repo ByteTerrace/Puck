@@ -67,8 +67,8 @@ public static class QueuedHostContractProbe {
             );
         }
     }
-    // A deterministic varying full-input image for frame f: cycling face/dpad buttons plus a swept tilt and light level,
-    // so the recorded ring carries — and a rewind replays — the whole sensor image, not just the buttons.
+    // A deterministic varying full-input image for frame f: cycling face/dpad buttons plus a swept tilt, light level and
+    // pointer, so the recorded ring carries — and a rewind replays — the whole sensor image, not just the buttons.
     private static MachinePadState ScheduledInput(int frame) {
         var buttons = ((MachineButtons)(1 << (frame % 8)));
         var tilt = new System.Numerics.Vector2(
@@ -81,6 +81,13 @@ public static class QueuedHostContractProbe {
             LeftStick: default,
             LeftTrigger: 0f,
             LightLevel: ((byte)((frame * 7) & 0xFF)),
+            Pointer: (((frame % 4) == 3)
+                ? MachinePointer.Off
+                : new MachinePointer(
+                    x: ((ushort)((frame * 4099) & 0xFFFF)),
+                    y: ((ushort)((frame * 1031) & 0xFFFF))
+                )
+            ),
             RightStick: default,
             RightTrigger: 0f,
             Tilt: tilt

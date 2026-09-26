@@ -89,8 +89,8 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
         _ = request.TryFail(error: new NotSupportedException(message: $"Source '{Opening.Context.Instance}' is captured through the instance that shows it."));
     }
     /// <inheritdoc/>
-    /// <remarks>The image is the feed's acquired frame, or its capture fill while the gate fills its content class; the
-    /// output's image is empty and its lease carries the image view.</remarks>
+    /// <remarks>The image is the feed's acquired frame, tainted when its content is external, or its capture fill while
+    /// the gate fills its content class; the output's image is empty and its lease carries the image view.</remarks>
     public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
         if (Feed is not { } feed) {
             output = default;
@@ -100,7 +100,8 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
 
         var lease = m_gate.Resolve(
             feed: feed,
-            fill: m_fill
+            fill: m_fill,
+            tainted: out var tainted
         );
 
         if (lease.ImageViewHandle == 0) {
@@ -113,7 +114,8 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
         output = new RenderGraphExternalOutput(
             Image: default,
             Layout: GpuImageLayout.ShaderReadOnly,
-            Lease: lease
+            Lease: lease,
+            Tainted: tainted
         );
 
         return true;

@@ -333,28 +333,38 @@ public sealed class ImageProducerLawTests {
 
             return ((nint)0xF111);
         }
+        (nint Handle, bool Tainted) Resolved(WorldCaptureGate gate) {
+            var lease = gate.Resolve(
+                feed: ((IWorldImportFeed)feed!),
+                fill: Fill,
+                tainted: out var tainted
+            );
 
-        gate.BeginFrame();
-        Assert.Equal(expected: FakeFeed.DesktopHandle, actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
+            return (lease.ImageViewHandle, tainted);
+        }
+
+        // Unarmed, the desktop's own frame resolves, tainted.
+        Assert.Equal(
+            actual: Resolved(gate: gate),
+            expected: (FakeFeed.DesktopHandle, true)
+        );
         Assert.Equal(expected: 1, actual: desktop.Feed!.Acquisitions);
 
         armed = true;
-        gate.BeginFrame();
-        Assert.Equal(expected: ((nint)0xF111), actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
+        Assert.Equal(
+            actual: Resolved(gate: gate),
+            expected: (((nint)0xF111), false)
+        );
         Assert.Equal(actual: filled, expected: [ImageSourceDescriptor.DefaultCaptureFill]);
 
-        // The capture is served: the gate keeps filling for its hold, then shows the desktop again.
+        // The capture is served: the gate shows the desktop again at once, since the runtime renders every instance that
+        // read it again on the next capture frame rather than the gate holding its fill.
         armed = false;
-
-        for (var frame = 0; (frame < WorldCaptureGate.HoldFrames); frame++) {
-            gate.BeginFrame();
-            Assert.Equal(expected: ((nint)0xF111), actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
-        }
-
-        Assert.Equal(expected: 1, actual: desktop.Feed.Acquisitions);
-
-        gate.BeginFrame();
-        Assert.Equal(expected: FakeFeed.DesktopHandle, actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
+        Assert.Equal(
+            actual: Resolved(gate: gate),
+            expected: (FakeFeed.DesktopHandle, true)
+        );
+        Assert.Equal(expected: 2, actual: desktop.Feed.Acquisitions);
 
         // An offscreen host fills every frame, and deterministic content is never filled.
         var offscreen = new WorldCaptureGate(
@@ -362,7 +372,10 @@ public sealed class ImageProducerLawTests {
             captureArmed: static () => false
         );
 
-        Assert.Equal(expected: ((nint)0xF111), actual: offscreen.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
+        Assert.Equal(
+            actual: Resolved(gate: offscreen),
+            expected: (((nint)0xF111), false)
+        );
         Assert.False(condition: offscreen.Fills(content: ImageContentClass.Deterministic));
         Assert.False(condition: offscreen.Fills(content: ImageContentClass.Presentation));
         Assert.Equal(expected: 2, actual: desktop.Feed.Acquisitions);
@@ -415,24 +428,23 @@ public sealed class ImageProducerLawTests {
         for (var frame = 0; (frame < 3); frame++) {
             Assert.True(condition: source.TryAcquireOutput(output: out var output));
             Assert.Equal(
-                actual: (output.Lease.ImageViewHandle, output.Lease.RequiresRetirement, output.Layout),
-                expected: (((nint)0xF111), false, GpuImageLayout.ShaderReadOnly)
+                actual: (output.Lease.ImageViewHandle, output.Lease.RequiresRetirement, output.Layout, output.Tainted),
+                expected: (((nint)0xF111), false, GpuImageLayout.ShaderReadOnly, false)
             );
         }
 
         Assert.Equal(expected: 0, actual: desktop.Feed!.Acquisitions);
         Assert.Equal(actual: filled, expected: [ImageSourceDescriptor.DefaultCaptureFill, ImageSourceDescriptor.DefaultCaptureFill, ImageSourceDescriptor.DefaultCaptureFill]);
 
-        // Once the gate stops filling, each acquisition is the feed's own.
+        // Once the gate stops filling, each acquisition is the feed's own, tainted.
         filling = false;
         Assert.True(condition: source.TryAcquireOutput(output: out var shown));
         Assert.Equal(
-            actual: (shown.Lease.ImageViewHandle, desktop.Feed.Acquisitions),
-            expected: (FakeFeed.DesktopHandle, 1)
+            actual: (shown.Lease.ImageViewHandle, desktop.Feed.Acquisitions, shown.Tainted),
+            expected: (FakeFeed.DesktopHandle, 1, true)
         );
         Assert.Null(@object: source.Fault);
     }
-
     // A camera source is scheduled and mapped at its descriptor's extent, so the descriptor states the extent the seat's
     // sensor delivers: the requested one before the seat holds a camera, the negotiated one after, and each new one as the
     // device, its profile or its tier changes.
@@ -495,6 +507,7 @@ public sealed class ImageProducerLawTests {
             expected: [(2, WorldCameraSensor.Infrared)]
         );
     }
+
     // A producer standing in for a real one: every feed it opens answers one fixed handle and counts acquisitions. Its
     // feed declares the registration's producer, class and transport unless a law overrides one to disagree.
     private sealed class FakeProducer(string id, ImageContentClass content, ImageSourceTransport transport, string? feedProducer = null, ImageContentClass? feedContent = null, ImageSourceTransport? feedTransport = null) : IWorldImageProducer {

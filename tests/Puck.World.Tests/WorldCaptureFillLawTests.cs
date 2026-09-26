@@ -176,8 +176,8 @@ public sealed class WorldCaptureFillLawTests {
         public void Publish(in FrameContext context) { }
     }
     // One screen showing a source, run as the binder runs it: the source is a render-graph instance whose producer reads
-    // through the capture gate and the fills, and each frame begins the gate and then the fills, on a device of its own
-    // whose every pipeline creation can be held.
+    // through the capture gate and the fills, and each frame converts the fills it needs before its source resolves, on a
+    // device of its own whose every pipeline creation can be held.
     private sealed class Scene : IDisposable {
         private readonly FakeGpuDevice m_gpu = new(reportVersion: 1);
         private readonly ManualResetEventSlim m_held = new(initialState: true);
@@ -254,15 +254,11 @@ public sealed class WorldCaptureFillLawTests {
             m_held.Dispose();
             PipelineEntered.Dispose();
         }
-        // One produced frame's publish, as the binder's: the gate advances, then the fills the frame needs convert.
-        public bool Frame() {
-            Gate.BeginFrame();
-
-            return Fills.Begin(
-                context: default,
-                runtime: Runtime
-            );
-        }
+        // One produced frame's publish, as the binder's: the fills the frame needs convert.
+        public bool Frame() => Fills.Begin(
+            context: default,
+            runtime: Runtime
+        );
         // Holds every pipeline creation from here on until ReleasePipelines, counting from zero.
         public void HoldPipelines() {
             m_held.Reset();

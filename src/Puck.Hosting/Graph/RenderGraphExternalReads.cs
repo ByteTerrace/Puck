@@ -11,7 +11,9 @@ namespace Puck.Hosting;
 /// <param name="Layout">The layout the image is in between its producer's submissions; a sampling submission hands it
 /// back in this layout.</param>
 /// <param name="Lease">The acquisition that keeps the image alive; handle-only for an instance that needs none.</param>
-public readonly record struct RenderGraphExternalInput(string Producer, Surface Image, GpuImageLayout Layout, GpuImageLease Lease);
+/// <param name="Tainted">Whether the image holds external content the capture gate did not fill
+/// (<see cref="RenderGraphExternalOutput.Tainted"/>).</param>
+public readonly record struct RenderGraphExternalInput(string Producer, Surface Image, GpuImageLayout Layout, GpuImageLease Lease, bool Tainted);
 /// <summary>The images one external producer reads in one produced frame, in the order its instance declares the reads.
 /// The render-graph runtime binds each read's latest completed output and hands the list to
 /// <see cref="IRenderGraphExternalProducer.Produce"/>; the producer takes the leases of the images its submission
@@ -36,13 +38,27 @@ public sealed class RenderGraphExternalReads {
                 Image: default,
                 Layout: default,
                 Lease: default,
-                Producer: producers[index]
+                Producer: producers[index],
+                Tainted: false
             );
         }
     }
 
     /// <summary>Gets the number of reads.</summary>
     public int Count => m_inputs.Length;
+    /// <summary>Gets whether any read bound this frame is tainted (<see cref="RenderGraphExternalInput.Tainted"/>), so the
+    /// producer's output rendered from them is too.</summary>
+    public bool Tainted {
+        get {
+            foreach (var input in m_inputs) {
+                if (input.Tainted) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 
     /// <summary>Gets one read.</summary>
     /// <param name="index">The read's position, from zero.</param>
@@ -54,11 +70,13 @@ public sealed class RenderGraphExternalReads {
     /// <param name="image">The image, or an empty surface when the instance read has none.</param>
     /// <param name="layout">The layout the image rests in.</param>
     /// <param name="lease">The acquisition that keeps it alive.</param>
-    public void Bind(int index, Surface image, GpuImageLayout layout, GpuImageLease lease) {
+    /// <param name="tainted">Whether the image holds external content the capture gate did not fill.</param>
+    public void Bind(int index, Surface image, GpuImageLayout layout, GpuImageLease lease, bool tainted) {
         m_inputs[index] = (m_inputs[index] with {
             Image = image,
             Layout = layout,
             Lease = lease,
+            Tainted = tainted,
         });
         m_taken[index] = false;
     }
@@ -97,6 +115,7 @@ public sealed class RenderGraphExternalReads {
                 Image = default,
                 Layout = default,
                 Lease = default,
+                Tainted = false,
             });
             m_taken[index] = false;
         }

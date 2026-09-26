@@ -60,9 +60,9 @@ public sealed class WorldCaptureFills : IDisposable {
         ? fill.Acquire()
         : 0
     );
-    /// <summary>Converts the fills a frame needs, after the gate has begun the frame
-    /// (<see cref="WorldCaptureGate.BeginFrame"/>): while the gate fills, or whenever a consumer shows external content, it
-    /// converts the default fill (<see cref="ImageSourceDescriptor.DefaultCaptureFill"/>), and otherwise converts nothing.</summary>
+    /// <summary>Converts the fills a frame needs, before any source of the frame resolves: while the gate fills, or whenever
+    /// a consumer shows external content, it converts the default fill (<see cref="ImageSourceDescriptor.DefaultCaptureFill"/>),
+    /// and otherwise converts nothing.</summary>
     /// <param name="context">The host's frame context.</param>
     /// <param name="runtime">The runtime whose converters convert the fills, or <see langword="null"/> before one runs,
     /// when nothing converts.</param>

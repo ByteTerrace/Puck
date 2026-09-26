@@ -8,7 +8,7 @@ namespace Puck.GamingBricks;
 
 internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState, ulong CycleRemainder,
     long CompletedSteps, int FastForwardFactor, int RunaheadFrames) {
-    private const string Format = "puck.queued-machine.v1";
+    private const string Format = "puck.queued-machine.v2";
     private const int MaximumBytes = ((128 * 1024) * 1024);
 
     public static (QueuedMachineCheckpoint Checkpoint, MachinePadState Input) Decode(ReadOnlyMemory<byte> bytes) {
@@ -48,11 +48,29 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
             y: reader.ReadSingle()
         );
         var light = reader.ReadByte();
+        var onScreen = reader.ReadBoolean();
+        var pointerX = reader.ReadUInt16();
+        var pointerY = reader.ReadUInt16();
+
+        if (
+            !onScreen &&
+            ((pointerX != 0) || (pointerY != 0))
+        ) {
+            throw new InvalidDataException(message: "machine checkpoint carries an off-screen pointer with a position");
+        }
+
         var input = new MachinePadState(
             Buttons: buttons,
             LeftStick: left,
             LeftTrigger: leftTrigger,
             LightLevel: light,
+            Pointer: (onScreen
+                ? new MachinePointer(
+                    x: pointerX,
+                    y: pointerY
+                )
+                : MachinePointer.Off
+            ),
             RightStick: right,
             RightTrigger: rightTrigger,
             Tilt: tilt
@@ -100,6 +118,7 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
             writer.Write(value: input.LeftTrigger); writer.Write(value: input.RightTrigger);
             writer.Write(value: input.Tilt.X); writer.Write(value: input.Tilt.Y);
             writer.Write(value: input.LightLevel);
+            writer.Write(value: input.Pointer.OnScreen); writer.Write(value: input.Pointer.X); writer.Write(value: input.Pointer.Y);
             writer.Write(value: CoreState.Length);
             writer.Write(buffer: CoreState);
         }

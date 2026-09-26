@@ -8,13 +8,14 @@ namespace Puck.HumbleGamingBrick.Interfaces;
 /// window here rather than each modelling a private line.
 /// <para>
 /// The received-light line (<see cref="ReceivedLight"/>) reflects a linked peer transceiver's emitted light (see
-/// <c>IrLinkSession</c>); with no peer it is always dark, so an unpaired machine reads exactly its lone-hardware value.
+/// <c>IrLinkSession</c>) and the <see cref="ILightGun"/> photodiode; with no peer and the gun seeing no light an
+/// unpaired machine reads exactly its lone-hardware value.
 /// </para>
 /// </summary>
 public interface IInfrared {
     /// <summary>Reads the RP register (<c>0xFF56</c>): the last-written data-enable bits 7-6 and LED bit 0 read back, the
     /// unused bits read 1, and bit 1 (received light, 0 = light detected) is only meaningful — and only ever driven to 0
-    /// by a lit peer — while the data-read-enable bits 7-6 are both set. The bus gates this to Color machines.</summary>
+    /// by received light — while the data-read-enable bits 7-6 are both set. The bus gates this to Color machines.</summary>
     /// <returns>The RP register value.</returns>
     byte ReadRegister();
     /// <summary>Writes the RP register (<c>0xFF56</c>): bit 0 drives this machine's IR LED and bits 7-6 arm the light
@@ -23,9 +24,10 @@ public interface IInfrared {
     void WriteRegister(byte value);
 
     /// <summary>Gets whether a linked peer's IR LED is currently lit, OR-ed with this machine's own emitted light when
-    /// hardware self-sensing applies for the current model/cartridge — the received-light line the RP and cart IR read
-    /// windows both report identically. <see langword="false"/> with no cable attached and self-sensing not applicable
-    /// (the lone-hardware dark reading); see <c>InfraredPort.ReceivedLight</c> for the exact self-sensing gate.</summary>
+    /// hardware self-sensing applies for the current model/cartridge, and with the light gun's sensed light — the
+    /// received-light line the RP and cart IR read windows both report identically. <see langword="false"/> with no
+    /// cable attached, self-sensing not applicable and the gun seeing no light (the lone-hardware dark reading); see
+    /// <c>InfraredPort.ReceivedLight</c> for the exact self-sensing gate.</summary>
     bool ReceivedLight { get; }
     /// <summary>Gets or sets whether a HuC1/HuC3 cartridge IR window is currently driving the shared IR LED (its bit 0).
     /// OR-ed with the RP LED bit into the light this machine emits to a peer, exactly as the two register views share the

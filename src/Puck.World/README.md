@@ -1192,12 +1192,17 @@ soon as a screen shows or a HUD frame names an external source, before any
 capture is armed. The gate
 covers screen slots, jumbotron renders of those screens, and HUD `Frame`
 elements. An offscreen host, which serves scheduled captures and `puck parity`,
-fills every frame. A windowed host fills from the frame a `world.screenshot`
-is armed for until two frames after it. On the first frame it fills with an
-external source bound, the jumbotron views render again, so no view shows an
-image it rendered from that source before; a view beyond that frame's
-offscreen budget (`OffscreenRenderBudget`) waits for its round-robin turn and
-may still show its older image. Simulation never
+fills every frame. A windowed host fills while a capture is armed on the
+render graph and not yet served. An image resolved outside a fill is tainted,
+and so is every render-graph instance whose latest output read one: a frame
+produced while a capture is armed renders every tainted instance the capture
+reads again, whatever its refresh, and the capture waits for a frame whose
+inputs are all untainted, so a slow view never carries external pixels into
+it. On the first frame the gate fills with an external source bound, the
+jumbotron views render again, so no view shows an image it rendered from that
+source before; a view beyond that frame's offscreen budget
+(`OffscreenRenderBudget`) waits for its round-robin turn and may still show
+its older image. Simulation never
 reads the gate, and no external pixel reaches simulation state, a replay or the
 state hash.
 

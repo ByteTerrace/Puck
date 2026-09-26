@@ -216,7 +216,8 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
                 return false;
             }
 
-            var lease = (binder.FillsExternal
+            var fills = binder.FillsExternal;
+            var lease = (fills
                 ? binder.m_fills.Acquire(rgba: ImageSourceDescriptor.DefaultCaptureFill)
                 : feed.AcquireFrame());
 
@@ -230,7 +231,8 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
             output = new RenderGraphExternalOutput(
                 Image: default,
                 Layout: GpuImageLayout.ShaderReadOnly,
-                Lease: lease
+                Lease: lease,
+                Tainted: !fills
             );
 
             return true;

@@ -308,11 +308,25 @@ These are one-line cautions; the owning pages hold the derivations.
   view or a session), taking each read's lease once
   however many screens show it, and binds every read before the offscreen views
   render, which sample the same images (`BoundScreenSource`). The binder
-  publishes before the runtime schedules (`WorldFramePresenter.PrepareGraph`),
-  so the gate answers once per frame. An external image (camera, capture,
-  probe output) is resolved through the binder's `WorldCaptureGate`, never
-  directly: a new path that samples one without the gate leaks it into
-  captures. An uploaded producer registers an upload for its source package
+  publishes before the runtime schedules (`WorldFramePresenter.PrepareGraph`).
+  An external image (camera, capture, probe output) is resolved through the
+  binder's `WorldCaptureGate`, never directly: a new path that samples one
+  without the gate leaks it into captures. A windowed gate fills while a
+  capture is pending on the runtime (`RenderGraphRuntime.PendingCapturePath`),
+  and an image it resolves unfilled is handed out tainted
+  (`RenderGraphExternalOutput.Tainted`). An instance whose latest render bound a
+  tainted image is tainted (an external producer that read one hands out
+  tainted outputs: `RenderGraphExternalReads.Tainted`, which `SdfEngineNode`
+  hands the engine as `SdfWorldEngine.ScreenSourcesTainted`, and each view
+  output keeps the taint of the frame that last rendered it,
+  `SdfViewOutput.Tainted`), a frame begun with a capture pending names
+  every tainted instance the captured one reads to render again
+  (`RenderGraphFrame.Rerender`, due and admitted whatever its refresh and the
+  budget), and a capture moves to its instance only over untainted inputs,
+  a graph instance's or an external producer's, whose blocking read
+  `UnservedCaptureReasonOf` names. A
+  new producer of external content states its taint; never hold the gate open
+  for a count of frames. An uploaded producer registers an upload for its source package
   (`RenderGraphPackageRecorders.RegisterSource`), never an external producer:
   the runtime renders the instance through a node running the one-pass graph
   its descriptor names (`RenderGraphRuntime.Sources.cs`), the region bound as
@@ -1108,8 +1122,9 @@ root instance is the runtime's output and its default capture target; the root
 may be an external producer when nothing is drawn over it.
 `RenderGraphRuntime.CaptureTarget` arms a capture of any instance. A graph
 instance serves one only on a frame it renders with every image input it shows
-bound to a completed output, never a stand-in, and an external producer from
-the next frame it produces; until then `UnservedCaptureReasonOf` names why.
+bound to a completed output, never a stand-in, and never a tainted output
+(see image sources above), and an external producer from the next frame it
+produces over untainted reads; until then `UnservedCaptureReasonOf` names why.
 `RenderGraphRuntimeLawTests` pin the P11 checks on the fake, a steady frame
 at zero allocations included.
 The main view runs through the runtime. `WorldRootGraph`

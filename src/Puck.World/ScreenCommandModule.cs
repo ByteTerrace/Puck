@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Puck.Commands;
+using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.Assets.Qr;
 using Puck.World.Server;
@@ -741,6 +742,11 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             )
             : "none"
         );
+        var pointer = m_engagement.PointerOn(screenIndex: index);
+        var gunText = (pointer.OnScreen
+            ? $"({FixedQ4816.FromRawBits(value: pointer.X)}, {FixedQ4816.FromRawBits(value: pointer.Y)})"
+            : "off"
+        );
         var builder = new StringBuilder();
 
         _ = builder.Append(
@@ -753,14 +759,14 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
                 provider: CultureInfo.InvariantCulture,
                 handler: $"assigned {(state.Engine ?? "?")} {((state.Handle != 0)
                 ? "bound"
-                : "unbound")} frames={state.FramesStepped} pending={state.PendingSteps}/{state.MaximumPendingSteps} backpressure={state.BackpressureEvents} engaged={engagedText}"
+                : "unbound")} frames={state.FramesStepped} pending={state.PendingSteps}/{state.MaximumPendingSteps} backpressure={state.BackpressureEvents} engaged={engagedText} gun={gunText}"
             );
         } else {
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
                 handler: $"empty {((state.Handle != 0)
                 ? "bound"
-                : "unbound")} engaged={engagedText}"
+                : "unbound")} engaged={engagedText} gun={gunText}"
             );
         }
 

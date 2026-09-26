@@ -77,9 +77,8 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
-    /// <summary>Publishes the screens' content for this produced frame, before the render graph schedules it: it advances
-    /// the capture gate first, so every source this frame resolves sees the same answer, uploads the fills a filled
-    /// external source resolves to, and services the shared camera feeds, the probe outputs and the HUD's captures. A
+    /// <summary>Publishes the screens' content for this produced frame, before the render graph schedules it: it uploads
+    /// the fills a filled external source resolves to, and services the shared camera feeds, the probe outputs and the HUD's captures. A
     /// producer, machine or probe source a screen shows is a source instance the runtime publishes at its cadence when it
     /// renders the instance. It ends by publishing every screen's mapping (<see cref="Mappings"/>) at the extents its
     /// images now have.</summary>
@@ -94,7 +93,6 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        m_captureGate.BeginFrame();
         ReconcileSessionLifecycles();
         RetireParkedCaptures();
 
