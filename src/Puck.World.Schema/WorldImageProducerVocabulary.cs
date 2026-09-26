@@ -111,9 +111,18 @@ public static class WorldImageProducerVocabulary {
     /// <summary>Registers a producer's shape under its id.</summary>
     /// <param name="shape">The shape.</param>
     /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The shape's id is not a producer id or is already registered.</exception>
+    /// <exception cref="ArgumentException">The shape's id is not a producer id, is already registered, or is the id a
+    /// typed machine or probe source's render-graph instance names (<see cref="WorldImageProducerSettings.MachineId"/>,
+    /// <see cref="WorldImageProducerSettings.ProbeId"/>).</exception>
     public static void Register(WorldImageProducerShape shape) {
         ArgumentNullException.ThrowIfNull(argument: shape);
+
+        if (shape.Id is WorldImageProducerSettings.MachineId or WorldImageProducerSettings.ProbeId) {
+            throw new ArgumentException(
+                message: $"Image producer id '{shape.Id}' is the source package a typed '{shape.Id}' screen source's instance names; a producer takes another id.",
+                paramName: nameof(shape)
+            );
+        }
 
         lock (Gate) {
             Registry.Register(producer: shape);

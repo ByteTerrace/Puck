@@ -35,7 +35,6 @@ internal sealed partial class WorldScreenBinder {
         if (!m_producers.TryOpen(
             fault: out var fault,
             feed: out var feed,
-            screenIndex: slot.Index,
             source: source
         )) {
             slot.DeclaredFault = fault;
@@ -147,7 +146,7 @@ internal sealed partial class WorldScreenBinder {
         public string Id => WorldImageProducerSettings.CameraId;
         public ImageSourceTransport Transport => ImageSourceTransport.Imported;
 
-        public bool TryOpen(WorldScreenSource.Producer source, int screenIndex, out IWorldImageFeed? feed, out string? fault) {
+        public bool TryOpen(WorldScreenSource.Producer source, out IWorldImageFeed? feed, out string? fault) {
             var (settings, refusal) = WorldImageProducerSettings.Bind<WorldCameraSettings>(producer: source);
 
             if (settings is null) {
@@ -227,7 +226,7 @@ internal sealed partial class WorldScreenBinder {
         public string Id => WorldImageProducerSettings.CaptureId;
         public ImageSourceTransport Transport => ImageSourceTransport.Imported;
 
-        public bool TryOpen(WorldScreenSource.Producer source, int screenIndex, out IWorldImageFeed? feed, out string? fault) {
+        public bool TryOpen(WorldScreenSource.Producer source, out IWorldImageFeed? feed, out string? fault) {
             var (settings, refusal) = WorldImageProducerSettings.Bind<WorldCaptureSettings>(producer: source);
 
             if (settings is null) {
