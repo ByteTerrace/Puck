@@ -291,6 +291,19 @@ because it leaves two mechanisms for one decision. Changing the default later
 moves camera and pipeline pixels and the parity contract, and moves no state
 hash, because easing is presentation-side over the exported rows.
 
+**A member is bound or overridden, never both.** A `views.graphs` row's
+`parameters` bind a pass's config field to a literal or a state token, and its
+`overrides` set the field's authored value, which a live `pipeline.set`
+previews and `pipeline.commit` records. A row naming one field of one pass in
+both is refused at validation, naming the row, the pass and the field. Letting
+one win silently was rejected: an override that a binding overwrites every
+frame is a commit that changes nothing on screen, and a binding an override
+masks is state that never reaches the pass, and neither shows the author why.
+An unbound field keeps the value its source's default and the row's override
+give it; a bound field's fallback is its source's default, which it draws while
+its binding does not resolve. A live `pipeline.set` of a bound field is refused
+by the same rule.
+
 **Residency is chosen from what the adapter reports.** The properties a policy
 needs — whether device-local memory is host-visible and coherent, and how much of
 it there is — are the memory profile `IGpuDeviceContext` reports, filled by each
