@@ -8,7 +8,6 @@ namespace Puck.Abstractions.Gpu;
 /// under-provisions throws at <c>AllocateSet</c>.
 /// </summary>
 /// <param name="MaxSets">The number of descriptor sets allocated from the pool (one per pipeline whose bindings were summed).</param>
-/// <param name="CombinedImageSamplerCount">Total combined image-sampler descriptors — graphics texture bindings and any compute <see cref="GpuComputeBindingKind.SampledImage"/> source.</param>
 /// <param name="StorageBufferCount">Total storage-buffer descriptors (read + read-write).</param>
 /// <param name="StorageImageCount">Total storage-image descriptors.</param>
 /// <param name="ConstantBufferCount">Total constant-buffer descriptors, which only a group's sets hold.</param>
@@ -18,7 +17,6 @@ namespace Puck.Abstractions.Gpu;
 /// device's shader-visible sampler heap rather than of its view heap.</param>
 public readonly record struct GpuDescriptorPoolSizes(
     uint MaxSets,
-    uint CombinedImageSamplerCount,
     uint StorageBufferCount,
     uint StorageImageCount,
     uint ConstantBufferCount = 0,
@@ -27,7 +25,7 @@ public readonly record struct GpuDescriptorPoolSizes(
 ) {
     /// <summary>Gets the shader-visible view-heap slots the pool occupies on a backend that packs every view kind into
     /// one heap: the sum of the per-kind counts other than samplers.</summary>
-    public uint HeapDescriptors => checked(((((CombinedImageSamplerCount + StorageBufferCount) + StorageImageCount) + ConstantBufferCount) + SampledImageCount));
+    public uint HeapDescriptors => checked((((StorageBufferCount + StorageImageCount) + ConstantBufferCount) + SampledImageCount));
     /// <summary>Gets the shader-visible sampler-heap slots the pool occupies on a backend whose samplers live in a heap
     /// of their own: <see cref="SamplerCount"/>.</summary>
     public uint SamplerHeapDescriptors => SamplerCount;
@@ -39,7 +37,6 @@ public readonly record struct GpuDescriptorPoolSizes(
     /// <exception cref="OverflowException">A count overflows.</exception>
     public static GpuDescriptorPoolSizes operator +(GpuDescriptorPoolSizes left, GpuDescriptorPoolSizes right) =>
         new(
-            CombinedImageSamplerCount: checked((left.CombinedImageSamplerCount + right.CombinedImageSamplerCount)),
             ConstantBufferCount: checked((left.ConstantBufferCount + right.ConstantBufferCount)),
             MaxSets: checked((left.MaxSets + right.MaxSets)),
             SampledImageCount: checked((left.SampledImageCount + right.SampledImageCount)),
@@ -101,7 +98,6 @@ public readonly record struct GpuDescriptorPoolSizes(
         }
 
         return new GpuDescriptorPoolSizes(
-            CombinedImageSamplerCount: 0,
             ConstantBufferCount: constantBufferCount,
             MaxSets: ((uint)groups.Count),
             SampledImageCount: sampledImageCount,
@@ -119,7 +115,6 @@ public readonly record struct GpuDescriptorPoolSizes(
     public static GpuDescriptorPoolSizes ForSets(params IReadOnlyList<GpuComputeBinding>[] sets) {
         ArgumentNullException.ThrowIfNull(sets);
 
-        var combinedImageSamplerCount = 0u;
         var storageBufferCount = 0u;
         var storageImageCount = 0u;
 
@@ -131,19 +126,13 @@ public readonly record struct GpuDescriptorPoolSizes(
                 var count = binding.Count;
 
                 switch (binding.Kind) {
-                    case GpuComputeBindingKind.StorageImage:
+                    case GpuBindingKind.StorageImage:
                         storageImageCount = checked((storageImageCount + count));
 
                         break;
-                    case GpuComputeBindingKind.StorageBufferRead:
-                    case GpuComputeBindingKind.StorageBufferReadWrite:
+                    case GpuBindingKind.ReadOnlyBuffer:
+                    case GpuBindingKind.ReadWriteBuffer:
                         storageBufferCount = checked((storageBufferCount + count));
-
-                        break;
-                    case GpuComputeBindingKind.SampledImage:
-                        // A sampled image is a combined-image-sampler descriptor on Vulkan; on Direct3D 12 it is one
-                        // SRV heap slot. Either way it must be provisioned, or the pool/heap under-counts.
-                        combinedImageSamplerCount = checked((combinedImageSamplerCount + count));
 
                         break;
                     default:
@@ -154,7 +143,6 @@ public readonly record struct GpuDescriptorPoolSizes(
 
         return new GpuDescriptorPoolSizes(
             MaxSets: ((uint)sets.Length),
-            CombinedImageSamplerCount: combinedImageSamplerCount,
             StorageBufferCount: storageBufferCount,
             StorageImageCount: storageImageCount
         );

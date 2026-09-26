@@ -79,7 +79,7 @@ public sealed class GpuPassPipelineCacheLawTests {
         GpuPassPipelineKey.OfCompute(
             bytecode: (kernel ?? Kernel),
             description: new GpuComputePipelineDescription(
-                Bindings: [new GpuComputeBinding(Binding: binding, Kind: GpuComputeBindingKind.StorageBufferReadWrite)],
+                Bindings: [new GpuComputeBinding(Binding: binding, Kind: GpuBindingKind.ReadWriteBuffer)],
                 Name: name,
                 PushConstantBinding: push
             )

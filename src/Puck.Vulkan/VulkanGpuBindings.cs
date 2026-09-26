@@ -17,10 +17,9 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
 
     // One pool size per descriptor type the pool holds any of.
     private static ReadOnlyMemory<VulkanDescriptorPoolSize> BuildPoolSizes(in GpuDescriptorPoolSizes sizes) {
-        var poolSizes = new List<VulkanDescriptorPoolSize>(capacity: 6);
+        var poolSizes = new List<VulkanDescriptorPoolSize>(capacity: 5);
 
         foreach (var (count, type) in ((ReadOnlySpan<(uint, uint)>)[
-            (sizes.CombinedImageSamplerCount, VulkanDescriptorType.CombinedImageSampler),
             (sizes.StorageBufferCount, VulkanDescriptorType.StorageBuffer),
             (sizes.StorageImageCount, VulkanDescriptorType.StorageImage),
             (sizes.ConstantBufferCount, VulkanDescriptorType.UniformBuffer),
@@ -164,16 +163,6 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
             device: Device
         );
     }
-    /// <inheritdoc/>
-    public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) =>
-        allocator.WriteCombinedImageSampler(
-            arrayElement: arrayElement,
-            binding: binding,
-            descriptorSetHandle: descriptorSetHandle,
-            device: Device,
-            imageViewHandle: imageViewHandle,
-            samplerHandle: samplerHandle
-        );
     /// <inheritdoc/>
     public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
         IGpuBindings.RequireConstantBufferSize(bufferSize: bufferSize);

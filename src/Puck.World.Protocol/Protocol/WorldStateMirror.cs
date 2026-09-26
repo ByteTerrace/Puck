@@ -13,6 +13,10 @@ public enum WorldStateConversion : byte {
 
     /// <summary>A Text cell holding a <c>#RRGGBB</c> or <c>#RRGGBBAA</c> color.</summary>
     Color,
+
+    /// <summary>A whole keyed row read as numbers, cell <c>i</c> at element <c>i</c> (<see cref="WorldBoundRow"/>), as
+    /// stored or eased per cell by the binding's target flag; an absent or non-numeric cell reads zero.</summary>
+    Row,
 }
 /// <summary>
 /// The presentation's state mirror: one flat table of slots, each a bound row ordinal, a cell key, a target flag and
@@ -418,6 +422,13 @@ public sealed class WorldStateMirror : IWorkCounterSource {
 
         return entry.HasNumber;
     }
+    /// <summary>Reads a row slot's elements (<see cref="WorldStateConversion.Row"/>) as its last refresh read them.</summary>
+    /// <param name="slot">The slot's index, or -1, which reads nothing.</param>
+    /// <returns>The elements, cell <c>i</c> at element <c>i</c>; empty for -1, a slot of another conversion, or a row
+    /// the installed document does not declare.</returns>
+    public ReadOnlySpan<double> RowValues(int slot) => (((slot >= 0) && m_slots[slot].HasNumber)
+        ? m_slots[slot].Elements
+        : default);
     /// <summary>Reads a slot's current text.</summary>
     /// <param name="slot">The slot's index, or -1, which reads nothing.</param>
     /// <param name="value">The cell's text, or <see langword="null"/> when the cell holds no text.</param>
@@ -663,6 +674,16 @@ public sealed class WorldStateMirror : IWorkCounterSource {
         entry.Ordinal = ordinal;
         m_nextSlotOfOrdinal[slot] = m_firstSlotByOrdinal[ordinal];
         m_firstSlotByOrdinal[ordinal] = slot;
+
+        // A row slot's elements are sized once, when the slot is linked to an installed row, so a refresh allocates
+        // nothing.
+        if (entry.Conversion == WorldStateConversion.Row) {
+            var length = m_view.RowLength(ordinal: ordinal);
+
+            if (entry.Elements?.Length != length) {
+                entry.Elements = new double[length];
+            }
+        }
     }
     private void Retire(int slot) {
         ref var entry = ref m_slots[slot];
@@ -781,6 +802,13 @@ public sealed class WorldStateMirror : IWorkCounterSource {
     }
     private void Read(int slot) {
         ref var entry = ref m_slots[slot];
+
+        if (entry.Conversion == WorldStateConversion.Row) {
+            ReadRow(entry: ref entry);
+
+            return;
+        }
+
         var hadNumber = entry.HasNumber;
         var previousMotion = entry.Sample.Motion;
         var previousValue = entry.Sample.Value;
@@ -842,6 +870,58 @@ public sealed class WorldStateMirror : IWorkCounterSource {
             }
         }
     }
+    // Reads every element of a row slot, cell i under the decimal key i, as one read. The slot presents its current
+    // elements whole, never interpolated, and stays restless while any cell is still moving.
+    private void ReadRow(ref Slot entry) {
+        var elements = (entry.Elements ?? []);
+        var motion = WorldStateMotion.Still;
+        var changed = false;
+
+        for (var index = 0; (index < elements.Length); index++) {
+            var number = 0d;
+
+            if (
+                (entry.Ordinal >= 0) &&
+                m_view.TryRead(
+                engineTick: m_engineTick,
+                key: IndexKeyCache.Get(index: index),
+                ordinal: entry.Ordinal,
+                sample: out var sample,
+                target: entry.Binding.Target,
+                tick: m_tick
+            )
+            ) {
+                _ = TryConvertNumber(
+                    number: out number,
+                    value: sample.Value
+                );
+                if (sample.Motion != WorldStateMotion.Still) {
+                    motion = sample.Motion;
+                }
+            }
+            if (elements[index] != number) {
+                elements[index] = number;
+                changed = true;
+            }
+        }
+
+        m_reads.Increment();
+        entry.HasNumber = (entry.Ordinal >= 0);
+        entry.Interpolates = false;
+        entry.Sample = new WorldStateSample(
+            Max: null,
+            Min: null,
+            Motion: motion,
+            Value: default
+        );
+        if (
+            changed ||
+            (entry.Changed == 0)
+        ) {
+            m_revision++;
+            entry.Changed = m_revision;
+        }
+    }
     private static bool TryConvertNumber(CellValue value, out double number) {
         if (!value.HasValue) {
             number = 0d;
@@ -878,6 +958,7 @@ public sealed class WorldStateMirror : IWorkCounterSource {
         public Vector4 Color;
         public WorldStateConversion Conversion;
         public double Current;
+        public double[]? Elements;
         public bool Free;
         public bool HasColor;
         public bool HasNumber;

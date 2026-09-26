@@ -18,7 +18,6 @@ namespace Puck.DirectX.Tests;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXShaderVisibleHeapsLawTests {
     private static GpuDescriptorPoolSizes Pool(uint buffers) => new(
-        CombinedImageSamplerCount: 0,
         MaxSets: 1,
         StorageBufferCount: buffers,
         StorageImageCount: 0

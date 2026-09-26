@@ -25,7 +25,7 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
         ViewHeapSize = views,
     });
     private static GpuDescriptorPoolSizes Pool(uint sampled, uint buffers = 0, uint images = 0) => new(
-        CombinedImageSamplerCount: sampled,
+        SampledImageCount: sampled,
         MaxSets: 1,
         StorageBufferCount: buffers,
         StorageImageCount: images
@@ -155,7 +155,6 @@ public sealed class GpuDescriptorHeapBudgetLawTests {
         }));
 
         GpuDescriptorPoolSizes Grouped(uint views, uint samplers) => new(
-            CombinedImageSamplerCount: 0,
             ConstantBufferCount: views,
             MaxSets: 1,
             SamplerCount: samplers,

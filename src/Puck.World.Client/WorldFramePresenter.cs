@@ -1159,6 +1159,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var panesCover = false;
 
         graphs.Present(frame: in presented);
+        graphs.WriteParameters(mirror: m_client.StateMirror);
 
         var slots = m_composer.Slots;
 

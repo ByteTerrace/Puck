@@ -133,7 +133,7 @@ public sealed partial class ShaderPipelineRenderNode {
         )));
     }
     // The bytes of the constant buffers a graph's passes bind, one per frame slot: the frame group's block, which every
-    // pass shares, and each pass's own pass block, each in whole constant-buffer views.
+    // pass shares, and each pass's own pass block and World block, each in whole constant-buffer views.
     private static ulong ConstantBytes(ShaderPipelinePlan plan, uint inFlight) {
         var grouped = plan.Passes;
 
@@ -145,6 +145,9 @@ public sealed partial class ShaderPipelineRenderNode {
 
         foreach (var pass in grouped) {
             views = checked((views + ((ulong)UniformBytes(blockBytes: pass.Parameters.SizeBytes))));
+            if (pass.Parameters.WorldBlockSizeBytes != 0U) {
+                views = checked((views + ((ulong)UniformBytes(blockBytes: pass.Parameters.WorldBlockSizeBytes))));
+            }
         }
 
         return checked((views * inFlight));

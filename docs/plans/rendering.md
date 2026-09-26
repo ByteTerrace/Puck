@@ -2091,11 +2091,10 @@ Phase 3, the groups, follows phase 2:
     visible to the pipeline's stages. The plans carry everything 14b needs to
     create root signatures and pipeline layouts. `DirectXRootLayoutLawTests`,
     `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
-    planners and the spike's interfaces to the same tables. The combined image
-    sampler that `GpuComputeBindingKind` still states is not in the closed
-    set, and no source declares `vk::combinedImageSampler`: every pass reads a
-    separate image and sampler through 14b's sampler tables, and 14b-7 deletes
-    the enum.
+    planners and the spike's interfaces to the same tables. No combined
+    image sampler is in the closed set, and no source declares
+    `vk::combinedImageSampler`: every pass reads a separate image and sampler
+    through 14b's sampler tables.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
     of it (14a). Both backends then realize several groups, with sampler
     tables and one 4-byte push range (14b), the riskiest step, which lands as
@@ -2197,8 +2196,7 @@ Phase 3, the groups, follows phase 2:
     to the commit's sources, by text rather than a `puck affected` run, so
     they are unverified; Direct3D 12 files are unmapped, so a commit that
     touches one also runs its canaries on Direct3D 12. Each owner's commit
-    also moves its binding lists from `GpuComputeBindingKind` to
-    `GpuBindingKind`, so the last one leaves the old enum unused.
+    also moved its binding lists onto `GpuBindingKind`.
     - 14b-1, done: layouts from the plans. A pipeline description names its
       groups through `Layout` (`GpuComputePipelineDescription.Layout`,
       `GpuGraphicsPipelineDescription.Layout`), and `RequireLayout` refuses by
@@ -2314,12 +2312,15 @@ Phase 3, the groups, follows phase 2:
       `sdf-visibility-fresh` and `world-counters` among them. The package library's `place.comp.hlsl`,
       which took the SDF-side kernel's place, is a package pass and moved
       onto groups with the other package passes in step 18.
-    - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
-      then states a `GpuBindingKind`, and
-      `GpuDescriptorPoolSizes.CombinedImageSamplerCount`, with their last
-      users in `GpuRegion`, the backends' pipeline factories and the
-      contract and wire-name laws. Canaries: the 19 `GpuDescriptorPoolSizes`
-      and `GpuRegion` map to.
+    - 14b-7, done: the deletions. `GpuComputeBinding` states a
+      `GpuBindingKind` and refuses any kind but a buffer or a storage image,
+      so a positional binding list holds no sampled image, and neither
+      backend's pipeline factory adds a static or combined sampler for one;
+      a compute description carries no sampler filter.
+      `GpuDescriptorPoolSizes` counts no combined image sampler, and
+      `IGpuBindings` writes none. The bake-sampling device law reads its
+      probe table and image through a pass group and a pushed index.
+      Canaries: the 19 `GpuDescriptorPoolSizes` and `GpuRegion` map to.
 15. Done: pipelines are on groups. `WriteFrame` writes the frame group, set 0,
     into a per-node frame `GpuRegion` of uniform usage, a ring of whole
     constant-buffer views; each pass's extent and config form its pass block at
@@ -2699,6 +2700,81 @@ cell, is refused as the substitute. The board's look is designed for Puck from
 the world's own nouns (imp, hedge, boulder, flower, mire, thorn), with original
 art, palette, and tile shapes; nothing in it takes the likeness of the game
 whose mechanic rulepush keeps.
+
+**Build sequence.** P10 lands as the commits below, in order, each green on
+its own. The forcing case follows the World group directly, because its canary
+is what makes the bound array observable; the tick, the cost and the tiers
+follow it.
+
+1. Done: scalar parameters. A `views.graphs` row gains `parameters`, keyed by pass
+   and then by config field like `overrides`, each value a `BindableScalar`: a
+   number, or a `state.<row>[.<key>][.$target]` token. The manifest walk
+   reaches it through `BindableScalar` as it reaches a HUD gauge, so a bound
+   parameter's slot is registered at install and read with `SlotOf`. The
+   validator refuses a parameter on a `package` row, a value that is not
+   authorable, and a field a row both binds and overrides, naming the row, the
+   pass and the field. The server's source bind refuses a parameter naming a
+   pass or a field the source does not declare, or a field that is not a
+   scalar, as `pipeline.overrides` refusals. The host writes each bound value
+   into its pass's parameter block at the field's offset
+   (`ShaderPipelineRenderNode.TryWriteParameter`) only when its value moved, an
+   unresolved binding draws the field's source default, a live `pipeline.set`
+   of a bound field is refused, and `pipeline.overrides` echoes each bound
+   field with the value its pass holds. Laws: `WorldViewGraphParameterLawTests`,
+   `PipelineOverrideLawTests.Parameters` and
+   `ShaderPipelineRenderNodeLawTests.Parameters`.
+2. Done: row slots, array members and the World group. The mirror gains a row
+   slot (`WorldStateConversion.Row`) holding a whole keyed row as numbers, cell
+   `i` at element `i` over the element count its shape states
+   (`WorldBoundRow`: a lattice row's topology cells, any other keyed row's cell
+   ceiling, `IWorldStateView.RowLength`), refreshed by the same moved-row stamp
+   as one read and sized at install, so a refresh allocates nothing. A keyless
+   token naming a keyed row joins the manifest as a row read. A pass declares
+   `arrays` (`ShaderArrayField`: a scalar element type and a length up to
+   4,096), which lay out as the World group's block, set 1, at 16 bytes an
+   element, read through the generated `<name>At(i)` accessor. A parameter
+   binds an array to `state.<row>`; the load gate refuses a row that is not
+   keyed, is longer than the array, or holds values the element type cannot
+   hold exactly (an integer element takes only an Int or Bool row whose
+   declared bounds lie in its range), and a scalar field bound to a keyless
+   keyed row. The node holds each pass's World block in a region per bound set
+   under `GpuResidency.Select` (a staged selection held in a host ring, as a
+   pass block is), writes the row slot's elements into it only when the slot
+   changed (`TryWriteArray`), and an unbound array reads zeros. Laws:
+   `WorldStateMirrorRowLawTests` (one row's World block reads the same bytes
+   under all three residency policies), `ShaderArrayFieldLawTests`,
+   `PipelineOverrideLawTests.Parameters` (a load-gate law per array refusal)
+   and `ShaderPipelineRenderNodeLawTests.Parameters` (an array write reaches
+   the World set the pass binds). Open: one region a bound row and element
+   type shared by every pass that reads the row the same way, instead of one
+   World block a pass; a staged World block through the node's region copies.
+3. Done, pending its first device run: the forcing case. The rulepush rules
+   keep a `tiles` lattice (`rules.puck`), each cell the look of the last token
+   standing on it, written by the `classify` rule and retained for undo. The
+   board pass (`worlds/rulepush/board.graph.json` and `board.hlsl`) reads it
+   through a world-group `tiles` array, and each level names the graph as an
+   `asset` and shows it in a pane beside the room (`level.puck`). The
+   `rulepush-board` GPU canary boots Hedges offscreen, presses once, and holds
+   the captured cells to the move; its discriminating leg presses the other
+   way, so the pushed row's pixels cannot match. An array cannot bind a
+   literal, which the load gate refuses, so a board state stands in for the
+   literal leg. `puck test worlds/rulepush --reproduce` holds the row's cells to
+   the turns that write them. Open: every pass bound to the row still holds its
+   own World block (step 2's shared region).
+4. The `parameter` statement: `parameter <pass>.<member> = <value>` inside a
+   `graph` block lowers to `parameters`, and the decompiler prints it back.
+5. The deterministic tick and the tick verdict. A pass reading a requested tick
+   rate gets the tick divided by the engine rate over that rate, refused unless
+   the rate divides the engine rate exactly; a capture records the tick its
+   regions were refreshed at, and `puck parity` holds it to the armed tick
+   between the state and pixel verdicts.
+6. The presentation dimension. The cost report prices every binding in bytes
+   per tick and per frame, with a per-document ceiling refusing by pipeline and
+   binding; `world.budget` prints it, and the browser report carries it.
+7. Tiers. A package builds its variants beyond `default`, and a row names its
+   tier from `low`, `medium` and `high`.
+8. The field lattice as a region kind, replacing `WorldClientFieldLattice`'s
+   second path, and the materials a program bakes join the mirror.
 
 ### P11 — The frame graph document and nested views
 
@@ -3497,8 +3573,8 @@ independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
 **Contracts.** P7's memory profile and residency selector have landed, and P7b
-is under way: steps 1 to 13, 14a, 14b-1 to 14b-6, 15 to 20 and 22 have
-landed. What remains is 14b-7's deletions and step 21. P8 is
+is under way: steps 1 to 13, 14a, 14b-1 to 14b-7, 15 to 20 and 22 have
+landed. What remains is step 21. P8 is
 complete but for a GPU run of its echo of every shipped interface family, and its frame
 group
 became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not

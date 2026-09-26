@@ -10914,6 +10914,14 @@ export type WorldViewGraph = {
   settings?: {
     [k: string]: unknown;
   } | null;
+  /**
+   * This instance's bound parameters, keyed by pass name and then by config field: a number, or a state.<row>[.<key>][.$target] token naming a Fixed or Int cell whose value the pass reads through its state mirror slot, eased by default. A field a row names both here and in Overrides is refused by name, and a binding that does not resolve leaves the field at its source's default. null binds nothing.
+   */
+  parameters?: {
+    [k: string]: {
+      [k: string]: BindableScalar;
+    } | null;
+  } | null;
 };
 
 export type WorldViewGraphBudget = {

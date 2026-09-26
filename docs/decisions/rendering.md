@@ -170,9 +170,10 @@ interface, both backends' layout planners, and `IGpuBindings.WriteBuffer` all
 read it, and whether a buffer is read or written is part of its kind, so it is
 the one statement of buffer access. Keeping another binding-kind type beside it
 with translations between them is rejected, because each translation is a
-second statement of the same access that can drift from the first.
-`GpuComputeBindingKind` goes once the SDF engine's combined image samplers have
-moved to a separate image and sampler.
+second statement of the same access that can drift from the first. A
+positional compute binding (`GpuComputeBinding`) states it too, and holds only
+buffers and storage images: a sampled image is always read through a separate
+sampler in a group, so no combined image sampler exists anywhere.
 
 **A binding is visible to the pipeline's stages, never to its own.** A
 pipeline's stages come from its pass kind, compute or vertex and fragment, and
@@ -289,6 +290,19 @@ for the eased value. Giving pipelines their own default is rejected
 because it leaves two mechanisms for one decision. Changing the default later
 moves camera and pipeline pixels and the parity contract, and moves no state
 hash, because easing is presentation-side over the exported rows.
+
+**A member is bound or overridden, never both.** A `views.graphs` row's
+`parameters` bind a pass's config field to a literal or a state token, and its
+`overrides` set the field's authored value, which a live `pipeline.set`
+previews and `pipeline.commit` records. A row naming one field of one pass in
+both is refused at validation, naming the row, the pass and the field. Letting
+one win silently was rejected: an override that a binding overwrites every
+frame is a commit that changes nothing on screen, and a binding an override
+masks is state that never reaches the pass, and neither shows the author why.
+An unbound field keeps the value its source's default and the row's override
+give it; a bound field's fallback is its source's default, which it draws while
+its binding does not resolve. A live `pipeline.set` of a bound field is refused
+by the same rule.
 
 **Residency is chosen from what the adapter reports.** The properties a policy
 needs — whether device-local memory is host-visible and coherent, and how much of

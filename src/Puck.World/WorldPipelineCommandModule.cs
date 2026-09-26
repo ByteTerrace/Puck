@@ -89,6 +89,21 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
 
             result.Append(value: $"\n  {pass}.{field} committed={committedValue} pending={pendingValue}");
         }
+        // One line per bound field: what it binds and the value its pass block holds, "-" before a graph installs.
+        foreach (var (pass, bound) in (row.Parameters ?? new Dictionary<string, IReadOnlyDictionary<string, BindableScalar>>()).OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
+            foreach (var (field, value) in bound.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
+                var shown = (((entry is not null) && entry.Node.TryReadParameter(
+                    field: field,
+                    passName: pass,
+                    value: out var current
+                ))
+                    ? current.ToString(format: "0.######", provider: CultureInfo.InvariantCulture)
+                    : "-");
+                var binding = (value.Binding ?? (value.Literal?.ToString(format: "0.######", provider: CultureInfo.InvariantCulture) ?? "-"));
+
+                result.Append(value: $"\n  {pass}.{field} bound={binding} value={shown}");
+            }
+        }
         result.Append(value: string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"\n  timeScale committed={row.TimeScale:0.###} pending={((entry is null) ? "-" : entry.ClockScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture))}"
@@ -449,7 +464,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
         yield return Immediate(
             "pipeline.overrides",
-            "pipeline.overrides <name> — show the instance's committed overrides, time scale and output beside its uncommitted preview, the row revision the preview is based on, and the source identity of the installed graph.",
+            "pipeline.overrides <name> — show the instance's committed overrides, time scale and output beside its uncommitted preview, each bound parameter with the value its pass holds, the row revision the preview is based on, and the source identity of the installed graph.",
             (_, args) => {
                 if (args.Count != 1) {
                     return CommandResult.Usage(

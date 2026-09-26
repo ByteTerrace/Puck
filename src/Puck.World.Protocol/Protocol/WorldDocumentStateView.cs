@@ -40,6 +40,23 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         return false;
     }
     /// <inheritdoc/>
+    public int RowLength(int ordinal) {
+        var document = m_definition();
+        var rows = document.State;
+
+        return ((
+            (((uint)ordinal) < ((uint)rows.Count)) &&
+            WorldBoundRow.TryResolve(
+                definition: document,
+                length: out var length,
+                row: out _,
+                rowName: rows[ordinal].Name.Value
+            )
+        )
+            ? length
+            : 0);
+    }
+    /// <inheritdoc/>
     public bool TryRead(int ordinal, string? key, bool target, ulong tick, ulong engineTick, out WorldStateSample sample) {
         var document = m_definition();
         var rows = document.State;

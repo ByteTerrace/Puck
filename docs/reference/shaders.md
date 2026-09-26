@@ -1522,6 +1522,53 @@ the file the row names; its pass sources and includes are outside it. For a
 package, it is the content pin of the canonical manifest, which pins every file
 of the source closure, so an edit anywhere in a package is a changed source.
 
+A row can also bind a pass's scalar config fields to state. `parameters` is
+keyed by pass name and then by field, like `overrides`, and each value is a
+number or a `state.<row>[.<key>][.$target]` token naming a Fixed or Int cell,
+the grammar a HUD gauge and a camera operand read:
+
+```json
+{ "name": "cistern", "source": "../pipelines/water.graph.json",
+  "parameters": { "water": { "level": "state.cisternLevel" } } }
+```
+
+The token joins the presentation manifest, so the state mirror registers its
+slot when the document installs, and the host reads it through that slot each
+frame, eased by default and as stored truth with `.$target`, and writes it into
+the pass's parameter block at the field's offset only when it moved
+(`ShaderPipelineRenderNode.TryWriteParameter`). A float field takes the value as
+it presents; an int or uint field takes it rounded to the nearest integer, so an
+integer cell arrives exactly. A binding that does not resolve draws the field's
+source default. A field a row names in both `parameters` and `overrides` is
+refused at validation naming the row, the pass and the field, and a live
+`pipeline.set` of a bound field is refused the same way. When the server binds
+the row, a parameter naming a pass or field the source does not declare, or a
+vector field, is refused as `pipeline.overrides/ParameterUnbound`.
+
+A pass can also declare `arrays`, each a scalar element type and a length of
+at most 4,096, which a parameter binds to a whole keyed state row:
+
+```json
+"arrays": { "tiles": { "type": "int", "length": 64 } }
+```
+
+```json
+"parameters": { "board": { "tiles": "state.tiles" } }
+```
+
+The arrays are the World group's block, set 1, laid out in ordinal name order
+at 16 bytes an element, and a pass reads element `i` through its generated
+accessor, `tilesAt(i)`. Element `i` holds the row's cell keyed `i`: a lattice
+row presents one element per cell of its topology, any other keyed row its cell
+ceiling, and an absent cell and every element past the row read zero, as an
+unbound array does. The state mirror reads the row whole through one row slot
+when a tick moves it, and the host writes the slot's elements into the pass's
+World block only when the slot changed. The load gate refuses a row that is not
+keyed, one longer than the array, and one whose values the element type cannot
+hold exactly: an integer element takes only an Int or Bool row whose declared
+bounds lie in its range, and a Fixed row fills only a float element. A scalar
+field bound to a keyed row with no key is refused the same way.
+
 A replay tape records the directory the server's source reader resolves rows
 against, and `replay.verify` gives its shadow server a reader over the same
 directory, so a recorded commit binds there as it did live.

@@ -1,0 +1,53 @@
+{
+  "$schema": "puck.render.graph.v1",
+  "name": "board",
+  "resources": [
+    {
+      "name": "board",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Relative",
+        "width": 1,
+        "height": 1
+      }
+    }
+  ],
+  "passes": [
+    {
+      "name": "draw",
+      "source": "board.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [
+        {
+          "name": "board"
+        }
+      ],
+      "config": {
+        "width": {
+          "default": 1,
+          "description": "The board's cell count along a row.",
+          "max": 64,
+          "min": 1,
+          "type": "uint"
+        },
+        "height": {
+          "default": 1,
+          "description": "The board's cell count along a column.",
+          "max": 64,
+          "min": 1,
+          "type": "uint"
+        }
+      },
+      "arrays": {
+        "tiles": {
+          "description": "The look of the last token standing on each cell, in reading order: 0 empty, noun + 1 for an object, 16 + word for a word tile.",
+          "length": 256,
+          "type": "int"
+        }
+      }
+    }
+  ],
+  "outputs": ["board"]
+}
