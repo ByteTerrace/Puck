@@ -13,3 +13,10 @@ world.wait 30
 world.counters gpu
 world.screenshot {run}/frame.png
 world.wait 10
+# The views render at three-quarter scale, so the room's view is a pane a display point walks into.
+world.render-scale three-quarter
+world.wait 10
+# Each screen's published mapping, and a walk from each screen's centre on the display through the screen.
+world.screens
+world.view.panes 96.5 70.5
+world.view.panes 160.5 70.5

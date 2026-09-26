@@ -19,7 +19,12 @@
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.render-scale", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.screens", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "line", "name": "one-camera-view-registered", "stream": "stdout", "match": "exact", "text": "[world.view-refresh: every 1 produced frame(s); 1 camera view(s) registered]", "present": true },
@@ -56,7 +61,12 @@
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.render-scale", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.screens", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.panes", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "line", "name": "two-camera-views-registered", "stream": "stdout", "match": "exact", "text": "[world.view-refresh: every 1 produced frame(s); 2 camera view(s) registered]", "present": true },

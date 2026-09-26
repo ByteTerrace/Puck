@@ -11,3 +11,8 @@ world.wait 30
 world.counters gpu
 world.screenshot {run}/frame.png
 world.wait 10
+world.render-scale three-quarter
+world.wait 10
+world.screens
+world.view.panes 96.5 70.5
+world.view.panes 160.5 70.5
