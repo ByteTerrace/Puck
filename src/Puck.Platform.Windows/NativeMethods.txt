@@ -40,7 +40,8 @@ DISPLAYCONFIG_SOURCE_DEVICE_NAME
 DISPLAYCONFIG_TARGET_DEVICE_NAME
 
 // D3D11 platform feeds: Media Foundation camera conversion (including the native FaceAuth YUY2/L8 compute path) and
-// Windows Graphics Capture staging/readback, with DXGI adapter/device access and GPU copy/sync objects. The Media
+// Windows Graphics Capture staging/readback, with DXGI adapter/device access and GPU copy/sync objects,
+// including the Direct3D 12 shared fence a producer opens (ID3D11Device5::OpenSharedFence) and signals after each write. The Media
 // Foundation DXGI device manager and WinRT graphics-device bridge stay hand-rolled beside the generated interop.
 CreateDXGIFactory1
 D3D11CreateDevice
@@ -48,7 +49,10 @@ D3D11_SDK_VERSION
 IUnknown
 ID3D10Multithread
 ID3D11Device1
+ID3D11Device5
 ID3D11DeviceContext
+ID3D11DeviceContext4
+ID3D11Fence
 ID3D11ComputeShader
 ID3D11Resource
 ID3D11Query

@@ -22,7 +22,7 @@ public sealed class LatestSlotPublicationTests {
             expected: 0
         );
 
-        publication.Publish(slot: 0);
+        publication.Publish(fenceValue: 0UL, slot: 0);
 
         Assert.Equal(
             actual: publication.LatestSlot,
@@ -39,7 +39,7 @@ public sealed class LatestSlotPublicationTests {
             expected: 1
         );
 
-        publication.Publish(slot: 2);
+        publication.Publish(fenceValue: 0UL, slot: 2);
 
         Assert.True(condition: publication.TryReserveWriteSlot(slot: out var wrapped));
         Assert.Equal(
@@ -53,15 +53,15 @@ public sealed class LatestSlotPublicationTests {
         var publication = new LatestSlotPublication();
 
         publication.Configure(targetCount: 2);
-        publication.Publish(slot: 0);
-        Assert.True(condition: publication.TryAcquireLatest(slot: out var first));
-        Assert.True(condition: publication.TryAcquireLatest(slot: out var second));
+        publication.Publish(fenceValue: 0UL, slot: 0);
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var first));
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var second));
         Assert.Equal(
             actual: second,
             expected: first
         );
         Assert.True(condition: publication.TryReserveWriteSlot(slot: out var writable));
-        publication.Publish(slot: writable);
+        publication.Publish(fenceValue: 0UL, slot: writable);
         Assert.False(condition: publication.TryReserveWriteSlot(slot: out _));
 
         publication.Release(slot: first);
@@ -72,7 +72,7 @@ public sealed class LatestSlotPublicationTests {
             actual: released,
             expected: first
         );
-        _ = Assert.Throws<InvalidOperationException>(testCode: () => publication.Publish(slot: writable));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => publication.Publish(fenceValue: 0UL, slot: writable));
         _ = Assert.Throws<InvalidOperationException>(testCode: () => publication.Release(slot: first));
     }
     [Fact]
@@ -80,16 +80,16 @@ public sealed class LatestSlotPublicationTests {
         var publication = new LatestSlotPublication();
 
         publication.Configure(targetCount: 3);
-        publication.Publish(slot: 0);
-        Assert.True(condition: publication.TryAcquireLatest(slot: out var firstLease));
+        publication.Publish(fenceValue: 0UL, slot: 0);
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var firstLease));
 
         Assert.True(condition: publication.TryReserveWriteSlot(slot: out var second));
-        publication.Publish(slot: second);
-        Assert.True(condition: publication.TryAcquireLatest(slot: out var secondLease));
+        publication.Publish(fenceValue: 0UL, slot: second);
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var secondLease));
 
         Assert.True(condition: publication.TryReserveWriteSlot(slot: out var third));
-        publication.Publish(slot: third);
-        Assert.True(condition: publication.TryAcquireLatest(slot: out var thirdLease));
+        publication.Publish(fenceValue: 0UL, slot: third);
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var thirdLease));
         Assert.False(condition: publication.TryReserveWriteSlot(slot: out _));
 
         publication.Release(slot: firstLease);
@@ -101,5 +101,37 @@ public sealed class LatestSlotPublicationTests {
 
         publication.Release(slot: secondLease);
         publication.Release(slot: thirdLease);
+    }
+    [Fact]
+    public void Each_acquisition_carries_the_fence_value_its_slot_was_published_with() {
+        var publication = new LatestSlotPublication();
+
+        publication.Configure(targetCount: 3);
+        Assert.True(condition: publication.TryReserveWriteSlot(slot: out var first));
+        publication.Publish(
+            fenceValue: 7UL,
+            slot: first
+        );
+        Assert.True(condition: publication.TryAcquireLatest(
+            fenceValue: out var firstValue,
+            slot: out var firstLease
+        ));
+        Assert.True(condition: publication.TryReserveWriteSlot(slot: out var second));
+        publication.Publish(
+            fenceValue: 0UL,
+            slot: second
+        );
+        Assert.True(condition: publication.TryAcquireLatest(
+            fenceValue: out var secondValue,
+            slot: out var secondLease
+        ));
+
+        Assert.Equal(
+            actual: (firstLease, firstValue, secondLease, secondValue),
+            expected: (first, 7UL, second, 0UL)
+        );
+
+        publication.Release(slot: firstLease);
+        publication.Release(slot: secondLease);
     }
 }

@@ -350,11 +350,13 @@ internal sealed partial class WorldScreenBinder {
             adapterLuid: adapterLuid,
             deviceContext: deviceContext,
             fault: out var fault,
+            fence: out var fence,
             format: SurfaceFormat.R8G8B8A8Unorm,
             height: height,
             images: out var images,
             importedViews: out var views,
             imports: out var imports,
+            sharedFence: false,
             width: width
         )) {
             feed.Fault = fault;
@@ -367,6 +369,7 @@ internal sealed partial class WorldScreenBinder {
         slots.Configure(targetCount: images.Count);
 
         var targets = new CameraGpuTargetSet(
+            fence: fence,
             images: images,
             importedViews: views,
             imports: imports,
@@ -558,7 +561,10 @@ internal sealed partial class WorldScreenBinder {
                 spinner.SpinOnce();
             }
         }
-        public bool TryAcquireLatest(out int slot) {
+        // The producer drains its queue before it publishes, so a slot never carries a fence value.
+        public bool TryAcquireLatest(out int slot, out ulong fenceValue) {
+            fenceValue = 0UL;
+
             while (true) {
                 var state = Volatile.Read(location: ref m_state);
 

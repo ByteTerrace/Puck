@@ -45,7 +45,9 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
     private readonly ID3D11Texture2D*[] m_outputTargets;
     private readonly ID3D11UnorderedAccessView* m_outputUav;
     private readonly long m_periodTicks;
-    private readonly ID3D11Query* m_query;
+    // The kernel reads its channels back on the CPU each cycle, so it keeps the CPU wait, and its output slot has
+    // finished when it is published.
+    private readonly Win32D3D11CompletionSignal m_completion;
     private readonly int m_registerCount;
     private readonly ProbeReadingRing m_ring;
     private readonly LatestSlotPublication? m_slots;
@@ -125,7 +127,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         ID3D11Buffer* channelsStaging = null;
         ID3D11ComputeShader* accumulateShader = null;
         ID3D11ComputeShader* finalizeShader = null;
-        ID3D11Query* query = null;
+        Win32D3D11CompletionSignal? completion = null;
         ID3D11Texture2D* output = null;
         ID3D11UnorderedAccessView* outputUav = null;
         var outputTargets = new ID3D11Texture2D*[0];
@@ -313,14 +315,13 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
                 entry: request.FinalizeEntry
             );
 
-            var queryDescription = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
-
-            device->CreateQuery(
-                pQueryDesc: &queryDescription,
-                ppQuery: &query
+            completion = new Win32D3D11CompletionSignal(
+                context: ((nint)context),
+                device: ((nint)device),
+                sharedFenceHandle: 0
             );
         } catch {
-            Release(value: query);
+            completion?.Dispose();
             Release(value: finalizeShader);
             Release(value: accumulateShader);
             Release(values: outputTargets);
@@ -348,7 +349,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         m_output = output;
         m_outputTargets = outputTargets;
         m_outputUav = outputUav;
-        m_query = query;
+        m_completion = completion!;
     }
 
     public long Cycles => Interlocked.Read(location: ref m_cycles);
@@ -422,7 +423,10 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         );
 
         if (m_slots is { } publication) {
-            publication.Publish(slot: slot);
+            publication.Publish(
+                fenceValue: 0UL,
+                slot: slot
+            );
         }
 
         _ = Interlocked.Increment(location: ref m_cycles);
@@ -444,7 +448,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         }
 
         m_disposed = true;
-        Release(value: m_query);
+        m_completion.Dispose();
         Release(value: m_finalizeShader);
         Release(value: m_accumulateShader);
         Release(values: m_outputTargets);
@@ -565,10 +569,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             pDstResource: ((ID3D11Resource*)m_channelsStaging),
             pSrcResource: ((ID3D11Resource*)m_channelsBuffer)
         );
-        Win32D3D11.WaitForCompletion(
-            context: m_context,
-            query: m_query
-        );
+        _ = m_completion.Complete();
 
         var mapped = default(D3D11_MAPPED_SUBRESOURCE);
 

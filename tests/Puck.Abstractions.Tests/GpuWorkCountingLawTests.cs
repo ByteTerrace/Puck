@@ -166,6 +166,7 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuBindings.WriteSampler"] = (rig => rig.Services.Bindings.WriteSampler(arrayElement: 0, binding: 2, descriptorSetHandle: 4, samplerHandle: 6), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuBindings.WriteStorageImage"] = (rig => rig.Services.Bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuPipelineFactory.Create(graphics)"] = (rig => rig.Pipelines.Create(description: null!, fragmentShaderModule: null!, name: default, renderPass: null!, vertexShaderModule: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
+            ["IGpuQueueSubmitter.AddExternalWait"] = (rig => rig.Services.QueueSubmitter.AddExternalWait(wait: new GpuExternalWait(Fence: new SignalledFence(), Value: 1UL)), none),
             ["IGpuQueueSubmitter.CreateSubmissionFence"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(), none),
             ["IGpuQueueSubmitter.Submit"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: []), none),
             ["IGpuQueueSubmitter.Submit(fence)"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: [], fence: rig.Services.QueueSubmitter.CreateSubmissionFence()), none),
@@ -198,6 +199,12 @@ public sealed class GpuWorkCountingLawTests {
             ? method.Name[4..]
             : method.Name);
 
+    // A shared fence another device has already signalled; an external wait counts no work.
+    private sealed class SignalledFence : IGpuSharedFence {
+        public ulong CompletedValue => 1UL;
+
+        public void Dispose() { }
+    }
     private sealed record Rig(FakeGpuDevice Gpu, GpuWorkLedger Ledger, GpuDeviceServices Services, IGpuPipelineFactory Pipelines) {
         public static Rig Create() {
             var gpu = new FakeGpuDevice(countCalls: true, holdFences: true);

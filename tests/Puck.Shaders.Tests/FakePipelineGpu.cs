@@ -24,8 +24,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     private readonly Lock m_gate = new();
     private readonly Dictionary<(nint Set, uint Binding), nint> m_constantBuffers = [];
     private readonly Dictionary<nint, FakeHostBuffer> m_hostBuffers = [];
-    private long m_sets;
 
+    private long m_sets;
     private int m_gateThread;
 
     private long m_nextHandle = 0x1000;
@@ -415,6 +415,13 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         gpu: this
     );
     public IGpuSurfaceUpload CreateUpload() => throw new NotSupportedException();
+    public bool TryImportFence(nint sharedHandle, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IGpuSharedFence? fence, out string refusal) {
+        fence = null;
+        refusal = "the fake device imports no fence";
+
+        return false;
+    }
+    public void AddExternalWait(GpuExternalWait wait) => throw new NotSupportedException();
     public void DestroyPool(nint poolHandle) {
         if (0 == poolHandle) {
             return;
@@ -606,7 +613,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
                 count: ((int)(layout.Groups.Max(selector: static group => group.Ordinal) + 1)),
                 start: 0
             ).Select(selector: ordinal => (layout.Groups.Any(predicate: group => (group.Ordinal == ordinal))
-                ? (created.Handle + 4 + ordinal)
+                ? ((created.Handle + 4) + ordinal)
                 : 0))]);
         public nint Handle => created.Handle;
         public nint LayoutHandle => (created.Handle + 2);

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Puck.Vulkan.Interfaces;
 
 namespace Puck.Vulkan;
@@ -28,6 +29,20 @@ public sealed class VulkanGpuSurfaceTransferFactory(
     IVulkanOffscreenImageApi offscreenImageApi,
     VulkanQueueSubmitter queueSubmitter
 ) : IGpuSurfaceTransferFactory {
+    /// <inheritdoc/>
+    /// <remarks>Imports the handle into a timeline semaphore as a <see cref="VulkanSharedFence"/>.</remarks>
+    public bool TryImportFence(nint sharedHandle, [NotNullWhen(true)] out IGpuSharedFence? fence, out string refusal) {
+        var imported = VulkanSharedFence.TryImport(
+            device: deviceContext.LogicalDevice.Commands,
+            fence: out var shared,
+            refusal: out refusal,
+            sharedHandle: sharedHandle
+        );
+
+        fence = shared;
+
+        return imported;
+    }
     /// <inheritdoc/>
     public IGpuSurfaceImport CreateImport() =>
         new VulkanGpuSurfaceImport(inner: new VulkanSurfaceImport(

@@ -24,8 +24,8 @@ public sealed unsafe class DirectXCommandCallsLawTests {
     /// <summary>The translated calls, each named by the operation its failure reports: the command pool's, the surface
     /// upload's and the readback's allocator and list creates; every committed buffer and texture create; the surface
     /// upload's map, reset pair and close; the buffer factory's and the readback's map; the recorder's reset pair and
-    /// close; the queue submitter's, the device context's and the compositor's signal; and the fence wait's
-    /// event.</summary>
+    /// close; the queue submitter's, the device context's and the compositor's signal; the queue submitter's wait on a
+    /// shared fence; and the fence wait's event.</summary>
     public static TheoryData<string, string> Sites => new() {
         { nameof(IDirectXCommandCalls.CreateCommandAllocator), "ID3D12Device::CreateCommandAllocator" },
         { nameof(IDirectXCommandCalls.CreateCommandList), "ID3D12Device::CreateCommandList" },
@@ -35,6 +35,7 @@ public sealed unsafe class DirectXCommandCallsLawTests {
         { nameof(IDirectXCommandCalls.ResetList), "ID3D12GraphicsCommandList::Reset" },
         { nameof(IDirectXCommandCalls.Close), "ID3D12GraphicsCommandList::Close" },
         { nameof(IDirectXCommandCalls.Signal), "ID3D12CommandQueue::Signal" },
+        { nameof(IDirectXCommandCalls.QueueWait), "ID3D12CommandQueue::Wait" },
         { nameof(IDirectXCommandCalls.SetEventOnCompletion), "ID3D12Fence::SetEventOnCompletion" },
     };
 
@@ -218,6 +219,14 @@ public sealed unsafe class DirectXCommandCallsLawTests {
                     commandList: null
                 );
                 break;
+            case nameof(IDirectXCommandCalls.QueueWait):
+                DirectXCommandCalls.QueueWait(
+                    calls: calls,
+                    fence: null,
+                    queue: null,
+                    value: 1UL
+                );
+                break;
             case nameof(IDirectXCommandCalls.Signal):
             case nameof(IDirectXCommandCalls.SetEventOnCompletion):
                 DirectXCommandCalls.SignalAndWait(
@@ -263,6 +272,7 @@ public sealed unsafe class DirectXCommandCallsLawTests {
 
             return Answer(call: nameof(Signal));
         }
+        public HRESULT QueueWait(ID3D12CommandQueue* queue, ID3D12Fence* fence, ulong value) => Answer(call: nameof(QueueWait));
         public ulong CompletedValue(ID3D12Fence* fence) => ((Failing == nameof(SetEventOnCompletion))
             ? 0UL
             : Signalled

@@ -156,6 +156,8 @@ public sealed unsafe class VulkanDeviceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, in VkMemoryGetWin32HandleInfoKHR, out nint, VkResult> GetMemoryWin32HandleKhr;
     /// <summary>The <c>vkGetMemoryWin32HandlePropertiesKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_external_memory_win32</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, nint, out VkMemoryWin32HandlePropertiesKHR, VkResult> GetMemoryWin32HandlePropertiesKhr;
+    /// <summary>The <c>vkGetSemaphoreCounterValue</c> entry point (core in Vulkan 1.2).</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, nint, out ulong, VkResult> GetSemaphoreCounterValue;
     /// <summary>The <c>vkGetPipelineCacheData</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, nuint*, void*, VkResult> GetPipelineCacheData;
     /// <summary>The <c>vkGetPipelineExecutablePropertiesKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_pipeline_executable_properties</c> is enabled.</summary>
@@ -164,6 +166,8 @@ public sealed unsafe class VulkanDeviceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, VkPipelineExecutableInfoKhr*, uint*, VkPipelineExecutableStatisticKhr*, VkResult> GetPipelineExecutableStatisticsKhr;
     /// <summary>The <c>vkGetSwapchainImagesKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_swapchain</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult> GetSwapchainImagesKhr;
+    /// <summary>The <c>vkImportSemaphoreWin32HandleKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_external_semaphore_win32</c> is enabled.</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, in VkImportSemaphoreWin32HandleInfoKhr, VkResult> ImportSemaphoreWin32HandleKhr;
     /// <summary>The <c>vkMapMemory</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult> MapMemory;
     /// <summary>The <c>vkQueuePresentKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_swapchain</c> is enabled.</summary>
@@ -494,6 +498,10 @@ public sealed unsafe class VulkanDeviceCommands {
             deviceHandle: deviceHandle,
             functionName: "vkGetMemoryWin32HandlePropertiesKHR"u8
         ));
+        GetSemaphoreCounterValue = ((delegate* unmanaged[Cdecl]<nint, nint, out ulong, VkResult>)procedures.ResolveDeviceProc(
+            deviceHandle: deviceHandle,
+            functionName: "vkGetSemaphoreCounterValue"u8
+        ));
         GetPipelineCacheData = ((delegate* unmanaged[Cdecl]<nint, nint, nuint*, void*, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkGetPipelineCacheData"u8
@@ -509,6 +517,10 @@ public sealed unsafe class VulkanDeviceCommands {
         GetSwapchainImagesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkGetSwapchainImagesKHR"u8
+        ));
+        ImportSemaphoreWin32HandleKhr = ((delegate* unmanaged[Cdecl]<nint, in VkImportSemaphoreWin32HandleInfoKhr, VkResult>)procedures.ResolveOptionalDeviceProc(
+            deviceHandle: deviceHandle,
+            functionName: "vkImportSemaphoreWin32HandleKHR"u8
         ));
         MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,

@@ -203,6 +203,11 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 )}"
                 : ""
             );
+            // How a camera or capture image crosses devices: the shared fence, or the producer's CPU wait and why.
+            var orderText = ((screens.FenceOrderAt(index: screen.Index) is { } order)
+                ? $" order:{order}"
+                : ""
+            );
 
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
@@ -212,7 +217,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 ? "bound"
                 : "unbound")} {(screen.Route.Engageable
                 ? "engageable"
-                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{engagedText}"
+                : "fixed")} input:{(screen.Route.Input ?? SourceDestination.Presentation)}{engagedText}{orderText}"
             );
         }
 
@@ -342,7 +347,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.screens",
-            description: "Lists every declared diegetic screen, one segment each — index, source kind (test-pattern|none|machine|camera|view|capture; a machine reads machine:<engine>), bound/unbound (a nonzero live provider handle this frame), and its engage policy (engageable|fixed). No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen falls back to the engine's procedural no-signal card (never black). A query — its listing always echoes, even under wire.ack quiet.",
+            description: "Lists every declared diegetic screen, one segment each — index, source kind (test-pattern|none|machine|camera|view|capture; a machine reads machine:<engine>), bound/unbound (a nonzero live provider handle this frame), its engage policy (engageable|fixed), and, for a camera on its GPU tier or a capture on its GPU route, order:fence (the render device waits on the producer's shared fence) or order:cpu-wait (reason) (a device that cannot share the fence waits on the CPU). No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen falls back to the engine's procedural no-signal card (never black). A query — its listing always echoes, even under wire.ack quiet.",
             handler: ScreensHandler
         );
         yield return CommandDefinition.WithWireArgs(

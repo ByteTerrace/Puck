@@ -56,10 +56,13 @@ and a shared-texture leaf; the leaves differ only in reader configuration and
 in where a frame goes (`Win32PixelStream`'s latest-frame buffer, or a
 consumer-provisioned shared ring published through `Win32SharedStream`). CPU
 frames are normalized from the negotiated signed stride into tightly packed,
-top-down BGRA before publication. A shared-ring consumer explicitly acquires a
-completed slot until its GPU submission retires; the camera drops an incoming
-frame when every other slot remains acquired instead of overwriting a texture
-still being sampled.
+top-down BGRA before publication. A shared-ring leaf signals the consumer's
+Direct3D 12 shared fence after each copy (`Win32D3D11CompletionSignal`, which
+keeps an event-query CPU wait on a device that cannot open the fence) and
+publishes the slot with the value its copy signals. A shared-ring consumer
+explicitly acquires a slot until its GPU submission retires, waiting for that
+value on the GPU; the camera drops an incoming frame when every other slot
+remains acquired instead of overwriting a texture still being sampled.
 
 `Win32MediaFoundationCameraServiceTests` exercises attached-camera enumeration
 and pixel delivery whenever a color camera is present. A machine without one

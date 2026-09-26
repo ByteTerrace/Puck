@@ -991,12 +991,15 @@ There is no jitter, motion vector, or history in the SDF kernels; render scale
 is a bilinear-to-Catmull-Rom upsample in the composite pass.
 
 P12's source contract, producer registration and conversion passes have
-landed; the graph wiring, the uploads through P7's residency, and
-synchronization across devices are owed. The camera and probe GPU tiers, and
-desktop capture on a Direct3D 12 host, already share their images without a
-copy, as simultaneous-access Direct3D 12 textures that a Vulkan host imports.
-Nothing orders the devices on the GPU: each producer ends a write with a CPU
-wait on its Direct3D 11 device and then publishes a slot index, and the
+landed, and so has synchronization across devices; the graph wiring and the
+uploads through P7's residency are owed. The camera and probe GPU tiers, and
+desktop capture on a Direct3D 12 host, share their images without a copy, as
+simultaneous-access Direct3D 12 textures that a Vulkan host imports. A camera
+or capture producer signals the consumer's Direct3D 12 shared fence after each
+Direct3D 11 write and publishes the slot with the value, and the consuming
+submission waits for it on the GPU (a Vulkan host through the fence imported as
+a timeline semaphore); a device that cannot share the fence, and the probe
+kernel, which reads its channels on the CPU, wait on the CPU instead. The
 consumer holds a CPU slot lease until its submission retires. The capture GPU
 route and the offscreen views' renders sample a slot with no lease at all.
 Every image that enters rendering from outside a pass is
@@ -2589,8 +2592,7 @@ source. Four facts shape the order:
   source instance through a graph edge until external producers take image
   reads or P14-6 makes the engine a package. P12b takes the first path, so it
   does not wait on P14.
-- Nothing orders the producing and consuming devices on the GPU, and two paths
-  sample a shared slot with no lease (see the implementation status).
+- Two paths sample a shared slot with no lease (see the implementation status).
 - No producer writes an upload region, and no graph runs `source-rgba` or
   `source-transfer`.
 - Few canaries reach this path. The coverage index maps no canary to the
@@ -2667,24 +2669,39 @@ except step 8.
    `IGpuWorkSource`; `source-conversion` gains `source-rgba` and
    `source-transfer`; a new canary shows a test-pattern screen and a QR
    screen on both backends.
-4. Fences across devices. Can land now; it needs nothing from P7b's groups.
-   Each producer's Direct3D 11 CPU wait gives way to a shared fence. The
-   producer opens a `D3D12_FENCE_FLAG_SHARED` fence (Direct3D 11 through
-   `ID3D11Device5::OpenSharedFence`, signalling on its immediate context),
-   each published slot carries the value its write signals, and the consuming
-   submission waits for that value on the GPU: `ID3D12CommandQueue::Wait` on
-   Direct3D 12, and on Vulkan the same fence imported as a timeline semaphore
-   (`VK_KHR_external_semaphore_win32`, the Direct3D 12 fence handle type) in
-   the submission's wait list. The consumer-to-producer order stays the CPU
-   slot lease released after the consumer's fence, so a producer never writes
-   a slot a submission still samples. No keyed mutex. The queue submitter
-   gains a list of external waits. A device that cannot share a fence keeps
-   the CPU wait and says so in `world.screens`. Checks: a law on one adapter
-   in which a Direct3D 11 writer and a Direct3D 12 reader, ordered only by the
-   shared fence, read the written pattern; the Vulkan import on a device that
-   reports the extension; a recorded camera run on both backends on real
-   hardware. Whether WARP's Direct3D 11 device opens a shared fence is
-   unverified.
+4. Fences across devices. Landed. The consumer creates a
+   `D3D12_FENCE_FLAG_SHARED` fence beside the shared targets it provisions
+   (`DirectXGpuSurfaceExportFactory.CreateExportableFence`, an
+   `IGpuExportableFence`) and hands its NT handle to the producer with them
+   (`ICameraSharedStream.Start`, `NativeImageGpuCaptureTargets.SharedFenceHandle`).
+   The producer opens it through `ID3D11Device5::OpenSharedFence`
+   (`Win32D3D11CompletionSignal`, the one completion primitive of every Direct3D
+   11 producer), signals the next value on its immediate context after each
+   write and flushes, and publishes the slot with that value
+   (`LatestSlotPublication.Publish`, `INativeImageCaptureFeed.GpuSlotFenceValue`).
+   The consumer acquires the slot with its value and adds a `GpuExternalWait`
+   to the render device's queue submitter (`IGpuQueueSubmitter.AddExternalWait`),
+   whose next submission carries it: `ID3D12CommandQueue::Wait` before the
+   execute on Direct3D 12, and on Vulkan the fence imported as a timeline
+   semaphore (`IGpuSurfaceTransferFactory.TryImportFence`, `VulkanSharedFence`,
+   `VK_KHR_external_semaphore_win32` and the timeline-semaphore feature, both
+   enabled when the device reports them) in the submission's wait list at
+   every stage. The consumer-to-producer order stays the CPU slot lease
+   released after the consumer's fence. No keyed mutex. A device that cannot
+   open the fence, and a Vulkan device that cannot import it, keep the CPU wait
+   and publish zero, which the consumer never waits for; `world.screens` says
+   which order each camera or capture screen has (`order:fence`, or
+   `order:cpu-wait (reason)`). The probe kernel keeps its CPU wait, since it
+   reads its channels back on the CPU every cycle, and publishes zero.
+   `SharedFenceLawTests` holds a Direct3D 11 writer and a Direct3D 12 reader on
+   one adapter, and on WARP, to the written pattern: the reader's submission is
+   made before the writer writes, cannot retire until the signal, and then reads
+   the pattern; the Vulkan law imports the fence and holds a submission waiting
+   on it unretired until the Direct3D 11 signal, and skips by name on a device
+   without the extension. Whether WARP's Direct3D 11 device opens a shared fence
+   is what the law's WARP case answers; it has not run yet. Still open: a recorded camera run on
+   both backends on real hardware, and the capture GPU route, which publishes
+   its slot's value but acquires no lease until step 2.
 5. The capture gate over the graph. Can land now, after step 2. The gate
    reads the capture armed on `RenderGraphRuntime` rather than
    `WorldRenderProbe`'s pending path, and its fixed `HoldFrames` gives way to

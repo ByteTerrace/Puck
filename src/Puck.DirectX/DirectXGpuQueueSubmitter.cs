@@ -15,10 +15,29 @@ namespace Puck.DirectX;
 /// a GCHandle token pointing to a <see cref="DirectXCommandBufferState"/>; the underlying command list is
 /// extracted and passed to <c>ExecuteCommandLists</c>. <see cref="SubmitAndWait"/> additionally calls
 /// <see cref="IGpuDeviceContext.WaitIdle"/> on the device context. A submission fence is an
-/// <c>ID3D12Fence</c> + event pair signaled on the queue right after the fenced execute.
+/// <c>ID3D12Fence</c> + event pair signaled on the queue right after the fenced execute. An external wait is an
+/// <c>ID3D12CommandQueue::Wait</c> issued immediately before the next submission's execute, so that submission and every
+/// later one on the queue wait for the shared fence on the GPU.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceContext) : IGpuQueueSubmitter {
+    private readonly List<GpuExternalWait> m_externalWaits = [];
+
+    /// <inheritdoc/>
+    /// <remarks>Takes a <see cref="DirectXSharedFence"/> or a <see cref="DirectXExportableFence"/> of this
+    /// device.</remarks>
+    public void AddExternalWait(GpuExternalWait wait) {
+        ArgumentOutOfRangeException.ThrowIfZero(wait.Value);
+
+        if (wait.Fence is not (DirectXSharedFence or DirectXExportableFence)) {
+            throw new ArgumentException(
+                message: $"A Direct3D 12 submission waits only on a Direct3D 12 fence, not a {(wait.Fence?.GetType().Name ?? "null")}.",
+                paramName: nameof(wait)
+            );
+        }
+
+        m_externalWaits.Add(item: wait);
+    }
     /// <inheritdoc/>
     public void Submit(ReadOnlySpan<nint> commandBufferHandles) =>
         Execute(commandBufferHandles: commandBufferHandles);
@@ -39,6 +58,31 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
 
     private void Execute(ReadOnlySpan<nint> commandBufferHandles) {
         var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
+
+        if (commandBufferHandles.IsEmpty) {
+            return;
+        }
+
+        if (m_externalWaits.Count != 0) {
+            var calls = DirectXDeviceCommandCalls.Of(deviceContext: deviceContext);
+
+            // The list is spent even when a wait fails, so a device loss never carries a lost device's fence onward.
+            try {
+                foreach (var wait in m_externalWaits) {
+                    DirectXCommandCalls.QueueWait(
+                        calls: calls,
+                        fence: ((ID3D12Fence*)((wait.Fence is DirectXSharedFence opened)
+                            ? opened.FenceHandle
+                            : ((DirectXExportableFence)wait.Fence).FenceHandle)),
+                        queue: queue,
+                        value: wait.Value
+                    );
+                }
+            } finally {
+                m_externalWaits.Clear();
+            }
+        }
+
         var lists = stackalloc ID3D12CommandList*[commandBufferHandles.Length];
 
         for (var i = 0; (i < commandBufferHandles.Length); i++) {

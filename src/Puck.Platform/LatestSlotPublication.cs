@@ -4,8 +4,10 @@ namespace Puck.Platform;
 
 /// <summary>The slot-ring counterpart of <see cref="LatestFrameBuffer"/>: a single producer publishes which
 /// consumer-owned shared texture holds the newest completed frame; the consumer reads the slot and version without
-/// copying or blocking.</summary>
+/// copying or blocking. Each publication carries the shared-fence value the slot's write signals, or zero when the write
+/// completed before it was published.</summary>
 public sealed class LatestSlotPublication : ISharedSlotRing {
+    private ulong[]? m_fenceValues;
     private volatile int m_latestSlot = -1;
     private int[]? m_readers;
     private long m_timestamp;
@@ -29,6 +31,13 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
         );
 
         var readers = new int[targetCount];
+
+        _ = Interlocked.CompareExchange(
+            comparand: null,
+            location1: ref m_fenceValues,
+            value: new ulong[targetCount]
+        );
+
         var existing = Interlocked.CompareExchange(
             comparand: null,
             location1: ref m_readers,
@@ -42,9 +51,11 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
             throw new InvalidOperationException(message: $"the slot publication is already configured for {existing.Length} targets");
         }
     }
-    /// <summary>Publishes a completed slot (called from the producer thread).</summary>
-    /// <param name="slot">The slot whose copy has completed.</param>
-    public void Publish(int slot) {
+    /// <summary>Publishes a written slot (called from the producer thread).</summary>
+    /// <param name="slot">The slot whose write was submitted.</param>
+    /// <param name="fenceValue">The shared-fence value the write signals, which a consumer's submission waits for on the
+    /// GPU; zero when the write completed before this call.</param>
+    public void Publish(int slot, ulong fenceValue) {
         var readers = (Volatile.Read(location: ref m_readers) ?? throw new InvalidOperationException(message: "the slot publication has not been configured"));
 
         ArgumentOutOfRangeException.ThrowIfNegative(slot);
@@ -60,6 +71,11 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
             throw new InvalidOperationException(message: $"slot {slot} is not writable");
         }
 
+        // Written before the slot is published: a consumer that acquires the slot reads it after the volatile read.
+        Volatile.Write(
+            location: ref m_fenceValues![slot],
+            value: fenceValue
+        );
         m_latestSlot = slot;
         _ = Interlocked.Exchange(
             location1: ref m_timestamp,
@@ -87,9 +103,13 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
     /// <summary>Acquires the latest completed slot for asynchronous consumption. The caller must pair a successful
     /// acquisition with <see cref="Release"/> after the GPU work that samples the slot has retired.</summary>
     /// <param name="slot">When this returns <see langword="true"/>, the stable slot to consume.</param>
+    /// <param name="fenceValue">When this returns <see langword="true"/>, the shared-fence value the slot's write
+    /// signals, or zero when it completed before publication.</param>
     /// <returns>Whether a frame has been published.</returns>
-    public bool TryAcquireLatest(out int slot) {
+    public bool TryAcquireLatest(out int slot, out ulong fenceValue) {
         var readers = Volatile.Read(location: ref m_readers);
+
+        fenceValue = 0UL;
 
         if (readers is null) {
             slot = -1;
@@ -110,6 +130,7 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
 
             if (latest == m_latestSlot) {
                 slot = latest;
+                fenceValue = Volatile.Read(location: ref m_fenceValues![latest]);
 
                 return true;
             }

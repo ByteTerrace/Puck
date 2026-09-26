@@ -546,11 +546,9 @@ internal sealed partial class WorldScreenBinder {
                     key: source,
                     value: out var captureFeed
                 )) {
-                    var handle = captureFeed.Handle();
+                    frame = captureFeed.AcquireFrame();
 
-                    frame = handle;
-
-                    return (0 != handle);
+                    return (0 != frame.ImageViewHandle);
                 }
 
                 break;

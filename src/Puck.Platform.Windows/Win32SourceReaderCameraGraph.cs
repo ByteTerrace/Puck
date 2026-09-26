@@ -785,6 +785,8 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
             m_targetViews[index] = m_device.CreateShaderResourceView(texture: m_targets[index]);
         }
 
+        m_stream.FenceOrder = m_device!.OpenSignal(sharedFenceHandle: m_stream.SharedFenceHandle);
+
         return true;
     }
     protected override void Deliver(IMFSample sample) {
@@ -825,12 +827,16 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
                     return;
                 }
 
-                m_device!.CopyToTarget(
+                var fenceValue = m_device!.CopyToTarget(
                     sourceSubresource: subresource,
                     sourceTexture: frameTexture,
                     targetTexture: m_targets[slot]
                 );
-                m_stream.Slots.Publish(slot: slot);
+
+                m_stream.Slots.Publish(
+                    fenceValue: fenceValue,
+                    slot: slot
+                );
                 m_latestSlot = slot;
                 m_bench.OnFrame(
                     captureTimestamp: m_stream.LastFrameTimestamp,

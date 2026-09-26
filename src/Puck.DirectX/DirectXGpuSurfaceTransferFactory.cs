@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.DirectX.Apis;
@@ -26,6 +27,25 @@ public sealed class DirectXGpuSurfaceTransferFactory(DirectXDeviceContext device
     /// <inheritdoc/>
     public IGpuSurfaceImport CreateImport() =>
         new DirectXGpuSurfaceImport(deviceContext: deviceContext);
+    /// <inheritdoc/>
+    /// <remarks>Opens the handle with <c>ID3D12Device::OpenSharedHandle</c> as a <see cref="DirectXSharedFence"/>; a
+    /// refusal names the failed call's result.</remarks>
+    public unsafe bool TryImportFence(nint sharedHandle, [NotNullWhen(true)] out IGpuSharedFence? fence, out string refusal) {
+        try {
+            fence = DirectXSharedFence.Open(
+                device: ((ID3D12Device*)deviceContext.Device.Handle),
+                sharedHandle: sharedHandle
+            );
+            refusal = "";
+
+            return true;
+        } catch (COMException exception) {
+            fence = null;
+            refusal = $"ID3D12Device::OpenSharedHandle refused the fence (0x{exception.HResult:X8})";
+
+            return false;
+        }
+    }
 }
 
 [SupportedOSPlatform("windows10.0.10240")]

@@ -1269,6 +1269,12 @@ color and L8 IR are converted by D3D11 compute with the native format's declared
 matrix, range, and chroma siting into private RGBA textures, copied into two
 shared three-slot rings, and sampled directly by either renderer without host
 pixels.
+Each copy signals the ring's Direct3D 12 shared fence, and the frame that
+samples the slot waits for that value on the GPU (on a Vulkan host through the
+fence imported as a timeline semaphore); a device that cannot share the fence
+waits on the CPU before it publishes, and `world.screens` shows which as
+`order:fence` or `order:cpu-wait (reason)`, as it does for a desktop capture on
+its GPU route.
 Each sampled slot stays acquired until the SDF frame-ring fence proves that GPU
 submission retired, so camera and renderer cadence cannot race an overwrite;
 closing a graph likewise defers the ring's destruction across those frames.

@@ -407,11 +407,15 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
                 return;
             }
 
-            converter.Convert(
+            var fenceValue = converter.Convert(
                 sourceTexture: texture,
                 targetSlot: slot
             );
-            stream.Slots.Publish(slot: slot);
+
+            stream.Slots.Publish(
+                fenceValue: fenceValue,
+                slot: slot
+            );
             m_bench.OnFrame(
                 captureTimestamp: stream.LastFrameTimestamp,
                 device: converter,
@@ -438,8 +442,17 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
         }
 
         // Both attachments run on this one thread; if either fails, the exception ends both streams together.
-        m_colorConverter.AttachTargets(sharedTargetHandles: StreamFor(sensor: CameraSensor.Color).Targets.Result);
-        m_infraredConverter!.AttachTargets(sharedTargetHandles: StreamFor(sensor: CameraSensor.Infrared).Targets.Result);
+        var color = StreamFor(sensor: CameraSensor.Color);
+        var infrared = StreamFor(sensor: CameraSensor.Infrared);
+
+        color.FenceOrder = m_colorConverter.AttachTargets(
+            sharedFenceHandle: color.SharedFenceHandle,
+            sharedTargetHandles: color.Targets.Result
+        );
+        infrared.FenceOrder = m_infraredConverter!.AttachTargets(
+            sharedFenceHandle: infrared.SharedFenceHandle,
+            sharedTargetHandles: infrared.Targets.Result
+        );
     }
     protected override void OnStopping() {
         foreach (var stream in Streams) {
