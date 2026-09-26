@@ -247,6 +247,14 @@ public sealed class SourcePassthroughRouterLawTests {
             phase: CommandPhase.Started
         )));
         Assert.True(condition: router.Route(inputEvent: WindowInputEvent.LetterDown(character: 'x')));
+        // The button drags past the editor's pane: display point (1280, 128) is its client point (636, 48).
+        Assert.False(condition: router.Route(inputEvent: WindowInputEvent.PointerAbsolute(position: OnNotes)));
+
+        var dragged = new Vector2(
+            x: 636f,
+            y: 48f
+        );
+
         editor.Deliveries.Clear();
 
         // The editor's pane is withdrawn while its capture keeps running: only the notes' pane is published.
@@ -261,16 +269,18 @@ public sealed class SourcePassthroughRouterLawTests {
             ]
         );
 
-        // The next key is the game's, and before it routed the editor heard the release of what it held.
+        // The next key is the game's, and before it routed the editor heard the release of what it held, the button's
+        // where its drag last reached.
         Assert.False(condition: router.Route(inputEvent: WindowInputEvent.LetterDown(character: 'y')));
         Assert.Null(@object: router.Focus.Focused);
         Assert.Equal(
             expected: [
                 Delivery.Pointer(
                     button: 0,
+                    inClient: false,
                     kind: WindowInputKind.PointerButton,
                     phase: CommandPhase.Completed,
-                    point: OnEditorClient
+                    point: dragged
                 ),
                 Delivery.OfKey(
                     character: 'x',
@@ -280,8 +290,25 @@ public sealed class SourcePassthroughRouterLawTests {
             actual: editor.Deliveries
         );
 
-        // The physical release of a key the game never saw pressed reaches nobody; the editor hears nothing more.
+        // The physical releases of a key and a button the game never saw pressed reach nobody; the editor hears nothing
+        // more, and the button's next press and release are the game's again.
         Assert.True(condition: router.Route(inputEvent: WindowInputEvent.LetterUp(character: 'x')));
+        Assert.True(condition: router.Route(inputEvent: WindowInputEvent.PointerButton(
+            button: 0,
+            phase: CommandPhase.Completed
+        )));
+        Assert.False(condition: router.Route(inputEvent: WindowInputEvent.PointerAbsolute(position: new Vector2(
+            x: 1500f,
+            y: 900f
+        ))));
+        Assert.False(condition: router.Route(inputEvent: WindowInputEvent.PointerButton(
+            button: 0,
+            phase: CommandPhase.Started
+        )));
+        Assert.False(condition: router.Route(inputEvent: WindowInputEvent.PointerButton(
+            button: 0,
+            phase: CommandPhase.Completed
+        )));
         Assert.False(condition: router.Route(inputEvent: WindowInputEvent.TypedText(text: "z")));
         Assert.Equal(
             expected: 2,

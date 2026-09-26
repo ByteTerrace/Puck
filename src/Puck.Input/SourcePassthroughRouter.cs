@@ -59,6 +59,8 @@ public interface ISourcePassthroughWindows {
 /// <param name="windows">Resolves a focused or pressed source to its window.</param>
 public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
     private readonly Dictionary<int, ButtonPress> m_buttons = [];
+    // Buttons whose press reached a source that was revoked before their release.
+    private readonly HashSet<int> m_suppressedButtons = [];
     private readonly Dictionary<(KeyCode Key, char Character), SourceHandle> m_keys = [];
     private readonly ISourcePassthroughWindows m_windows = (windows ?? throw new ArgumentNullException(paramName: nameof(windows)));
     private int m_displayHeight = 1;
@@ -100,7 +102,10 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
     /// never saw their presses.</summary>
     /// <param name="source">The source.</param>
     public void Revoke(SourceHandle source) {
-        ReleaseHeld(source: source);
+        ReleaseHeld(
+            source: source,
+            suppress: true
+        );
 
         if (Focus.Focused == source) {
             Focus.ReturnToGame();
@@ -119,8 +124,10 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
         return RouteShown(inputEvent: in inputEvent);
     }
 
-    // Releases every key and button whose press reached a source's window, to that window.
-    private void ReleaseHeld(SourceHandle source) {
+    // Releases every key and button whose press reached a source's window, to that window, at the point its drag last
+    // reached. A suppressed button's later physical release reaches nobody, as a revoked key's does, since the game never
+    // saw its press.
+    private void ReleaseHeld(SourceHandle source, bool suppress) {
         _ = m_windows.TryGet(
             source: source,
             window: out var window
@@ -131,6 +138,10 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
             press: out var press,
             source: source
         )) {
+            if (suppress) {
+                _ = m_suppressedButtons.Add(item: button);
+            }
+
             if (press.Delivered) {
                 window?.DeliverPointer(
                     inputEvent: WindowInputEvent.PointerButton(
@@ -403,7 +414,7 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
     }
     private void RoutePointerPosition(in WindowInputEvent inputEvent) {
         // A drag goes to the source its button was pressed on, wherever the pointer has moved since.
-        foreach (var press in m_buttons.Values) {
+        foreach (var (button, press) in m_buttons) {
             if (
                 press.Delivered &&
                 m_windows.TryGet(
@@ -420,6 +431,8 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
                     inputEvent: in inputEvent,
                     point: dragPoint
                 );
+                // A release the router makes itself goes where the drag last reached.
+                m_buttons[button] = (press with { Point = dragPoint });
 
                 return;
             }
@@ -450,6 +463,9 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
     }
     private bool RouteButtonPress(in WindowInputEvent inputEvent) {
         var button = inputEvent.ButtonIndex;
+
+        // A new press means the suppressed release went missing; this press's release is its own.
+        _ = m_suppressedButtons.Remove(item: button);
         SourceMapping? mapping = null;
         SourceHit hit = default;
 
@@ -506,6 +522,9 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
         return true;
     }
     private bool RouteButtonRelease(in WindowInputEvent inputEvent) {
+        if (m_suppressedButtons.Remove(item: inputEvent.ButtonIndex)) {
+            return true;
+        }
         if (!m_buttons.Remove(
             key: inputEvent.ButtonIndex,
             value: out var press
@@ -582,10 +601,17 @@ public sealed class SourcePassthroughRouter(ISourcePassthroughWindows windows) {
         return true;
     }
     // Losing the window's focus leaves no key or button held on a source's window, as it leaves none held in the game.
+    // Like SourceFocus forgetting where each key went, it forgets the suppressed buttons, whose releases the window may
+    // never report now.
     private void ReleaseEverything() {
         while (TryAnyHeld(source: out var source)) {
-            ReleaseHeld(source: source);
+            ReleaseHeld(
+                source: source,
+                suppress: false
+            );
         }
+
+        m_suppressedButtons.Clear();
     }
     private bool TryAnyHeld(out SourceHandle source) {
         foreach (var press in m_buttons.Values) {
