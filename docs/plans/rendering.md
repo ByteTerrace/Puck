@@ -2661,7 +2661,7 @@ its own. The forcing case follows the World group directly, because its canary
 is what makes the bound array observable; the tick, the cost and the tiers
 follow it.
 
-1. Scalar parameters. A `views.graphs` row gains `parameters`, keyed by pass
+1. Done: scalar parameters. A `views.graphs` row gains `parameters`, keyed by pass
    and then by config field like `overrides`, each value a `BindableScalar`: a
    number, or a `state.<row>[.<key>][.$target]` token. The manifest walk
    reaches it through `BindableScalar` as it reaches a HUD gauge, so a bound
@@ -2671,9 +2671,13 @@ follow it.
    pass and the field. The server's source bind refuses a parameter naming a
    pass or a field the source does not declare, or a field that is not a
    scalar, as `pipeline.overrides` refusals. The host writes each bound value
-   into its pass's parameter block at the field's offset, only when its slot
-   moved, and an unresolved binding leaves the field at the value the source
-   and the overrides give it.
+   into its pass's parameter block at the field's offset
+   (`ShaderPipelineRenderNode.TryWriteParameter`) only when its value moved, an
+   unresolved binding draws the field's source default, a live `pipeline.set`
+   of a bound field is refused, and `pipeline.overrides` echoes each bound
+   field with the value its pass holds. Laws: `WorldViewGraphParameterLawTests`,
+   `PipelineOverrideLawTests.Parameters` and
+   `ShaderPipelineRenderNodeLawTests.Parameters`.
 2. Row slots. The mirror gains a slot holding a whole lattice or keyed row as
    numbers, cell `i` at element `i`, refreshed by the same moved-row stamp and
    read through `SlotOf` with the row conversion. `IWorldStateView` reads a row

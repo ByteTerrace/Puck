@@ -39,6 +39,10 @@ public enum WorldPipelineOverrideRefusal : byte {
     /// <summary>The selected output names no image version of the source.</summary>
     [Refusal(door: "pipeline.overrides", condition: "the selected output names no image version of the source", kind: RefusalKind.Verdict)]
     OutputUndeclared,
+
+    /// <summary>A bound parameter names no scalar config field of its pass.</summary>
+    [Refusal(door: "pipeline.overrides", condition: "a bound parameter names no scalar config field of its pass", kind: RefusalKind.Verdict)]
+    ParameterUnbound,
 }
 /// <summary>Reads the sources <c>views.graphs</c> rows name, for the server's override gate: a graph document, a
 /// one-off shader, or a package directory, read by <see cref="ShaderPipelineSource.TryRead"/>. Rows resolve against
@@ -160,7 +164,7 @@ public sealed partial class WorldDocument {
         foreach (var row in (candidate.Views.Graphs ?? [])) {
             if (
                 (row.Source is not null) &&
-                ((row.Overrides is not null) || (row.Output is not null)) &&
+                ((row.Overrides is not null) || (row.Output is not null) || (row.Parameters is not null)) &&
                 !TryBindPipelineRow(
                 commit: null,
                 reason: out reason,
@@ -271,7 +275,7 @@ public sealed partial class WorldDocument {
 
             if (
                 !committing &&
-                ((row.Overrides is null) && (row.Output is null))
+                ((row.Overrides is null) && (row.Output is null) && (row.Parameters is null))
             ) {
                 continue;
             }
@@ -281,6 +285,10 @@ public sealed partial class WorldDocument {
                 ReferenceEquals(
                 objA: previous.Overrides,
                 objB: row.Overrides
+            ) &&
+                ReferenceEquals(
+                objA: previous.Parameters,
+                objB: row.Parameters
             ) &&
                 string.Equals(
                 a: previous.Output,
@@ -367,6 +375,22 @@ public sealed partial class WorldDocument {
             );
 
             return false;
+        }
+        foreach (var (pass, fields) in (row.Parameters ?? new Dictionary<string, IReadOnlyDictionary<string, BindableScalar>>())) {
+            foreach (var field in fields.Keys) {
+                if (!source.TryCheckParameter(
+                    field: field,
+                    passName: pass,
+                    reason: out var parameterReason
+                )) {
+                    reason = RefuseOverride(
+                        detail: $"'{row.Name}' parameter {pass}.{field}: {parameterReason}",
+                        refusal: WorldPipelineOverrideRefusal.ParameterUnbound
+                    );
+
+                    return false;
+                }
+            }
         }
         if (
             (row.Output is { } output) &&

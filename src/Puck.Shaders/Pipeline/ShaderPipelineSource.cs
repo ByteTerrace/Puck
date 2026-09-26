@@ -151,6 +151,45 @@ public sealed class ShaderPipelineSource {
             comparisonType: StringComparison.Ordinal
         )
     ));
+    /// <summary>Checks that a bound parameter names a scalar config field of one of the definition's passes, the only
+    /// member a state binding fills.</summary>
+    /// <param name="passName">The pass the parameter binds.</param>
+    /// <param name="field">The config field it binds.</param>
+    /// <param name="reason">Why the parameter cannot bind, naming the pass and the field, or empty.</param>
+    /// <returns><see langword="true"/> when the pass declares the field as a scalar.</returns>
+    public bool TryCheckParameter(string passName, string field, out string reason) {
+        var pass = Definition.ShaderPasses.FirstOrDefault(predicate: candidate => string.Equals(
+            a: candidate.Name,
+            b: passName,
+            comparisonType: StringComparison.Ordinal
+        ));
+
+        if (pass is null) {
+            reason = $"'{passName}' is not a pass of pipeline '{Definition.Name}'.";
+
+            return false;
+        }
+        if (
+            (pass.Config is not { } config) ||
+            !config.TryGetValue(
+                key: field,
+                value: out var declared
+            )
+        ) {
+            reason = $"pass '{passName}' declares no config field '{field}'.";
+
+            return false;
+        }
+        if (declared.Type.ComponentCount() != 1) {
+            reason = $"pass '{passName}' field '{field}' is {declared.Type}; a parameter binds a scalar field.";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Binds per-pass parameter overrides through each pass's config schema, the same binder a live
     /// parameter change and an installed graph use: every key names a pass that declares config, and every value is
     /// that pass's config object, whose absent fields keep the pass's declared defaults.</summary>

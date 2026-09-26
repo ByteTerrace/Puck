@@ -218,6 +218,27 @@
             "additionalProperties": {
               "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
             }
+          },
+          "parameters": {
+            "description": "This instance\u0027s bound parameters, keyed by pass name and then by config field: a number, or a state.\u003Crow\u003E[.\u003Ckey\u003E][.$target] token naming a Fixed or Int cell whose value the pass reads through its state mirror slot, eased by default. A field a row names both here and in Overrides is refused by name, and a binding that does not resolve leaves the field at its source\u0027s default. null binds nothing.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": {
+                "title": "BindableScalar",
+                "type": [
+                  "number",
+                  "string"
+                ]
+              }
+            },
+            "default": null
           }
         },
         "required": [
