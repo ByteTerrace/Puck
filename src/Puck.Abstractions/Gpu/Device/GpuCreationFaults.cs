@@ -355,14 +355,6 @@ file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults)
             elementStride: elementStride,
             kind: kind
         );
-    public void WriteCombinedImageSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) =>
-        inner.WriteCombinedImageSampler(
-            arrayElement: arrayElement,
-            binding: binding,
-            descriptorSetHandle: descriptorSetHandle,
-            imageViewHandle: imageViewHandle,
-            samplerHandle: samplerHandle
-        );
     public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) =>
         inner.WriteConstantBuffer(
             arrayElement: arrayElement,

@@ -871,8 +871,9 @@ name on both backends. A pool's sets release with it
 (`DirectXGpuBindings.LiveHandles`). `DirectXGroupedBindingLawTests` and
 `VulkanGroupedBindingLawTests` hold the writes and binds. Every pipeline pass and
 package pass is created from its interface's layout
-(`ShaderInterfaceLayout.PipelineLayout`); `GpuComputeBindingKind` still carries
-the combined image sampler for the SDF engine until it moves onto groups.
+(`ShaderInterfaceLayout.PipelineLayout`). A description's positional binding list
+(`GpuComputeBinding`) states a `GpuBindingKind` and holds only buffers and
+storage images; a sampled image or a sampler belongs to a group.
 
 The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
 [frame graphs](../../../docs/reference/shaders.md#frame-graphs)) and the one

@@ -367,11 +367,11 @@ public sealed class GpuRegion : IDisposable {
     public static IReadOnlyList<GpuComputeBinding> CopyBindings { get; } = [
         new GpuComputeBinding(
             Binding: CopySourceBinding,
-            Kind: GpuComputeBindingKind.StorageBufferRead
+            Kind: GpuBindingKind.ReadOnlyBuffer
         ),
         new GpuComputeBinding(
             Binding: CopyDestinationBinding,
-            Kind: GpuComputeBindingKind.StorageBufferReadWrite
+            Kind: GpuBindingKind.ReadWriteBuffer
         ),
     ];
     /// <summary>Gets the copy kernel's pipeline description: <see cref="CopyBindings"/>, no push constants, and each

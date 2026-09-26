@@ -134,8 +134,7 @@ public sealed unsafe class DirectXGroupedLayoutLawTests {
         Assert.Equal(
             actual: GpuDescriptorPoolSizes.ForGroups(groups: filmGrain.Groups),
             expected: new GpuDescriptorPoolSizes(
-                CombinedImageSamplerCount: 0,
-                ConstantBufferCount: 2,
+                    ConstantBufferCount: 2,
                 MaxSets: 2,
                 SampledImageCount: 1,
                 SamplerCount: 1,

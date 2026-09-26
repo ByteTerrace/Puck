@@ -11,11 +11,10 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
     /// The descriptor table holds one range per binding, with each range's slot in the heap fixed at its binding
     /// index (<c>OffsetInDescriptorsFromTableStart = binding</c>, matching how <see cref="DirectXGpuBindings"/> writes a
     /// descriptor at <c>CpuBase + binding * size</c>). A UAV binding (a storage image or a read-write buffer) takes a
-    /// <c>u#</c> register and an SRV binding (a read-only buffer or a sampled image) a <c>t#</c>, each at its binding
-    /// number. An array binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes that many consecutive registers
-    /// and heap slots. Every parameter is <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class); each SampledImage
-    /// binding adds its own CLAMP static sampler at the <c>s#</c> matching its texture's number, with the pipeline's one
-    /// requested filter; the input-layout flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
+    /// <c>u#</c> register and an SRV binding (a read-only buffer) a <c>t#</c>, each at its binding number. An array
+    /// binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes that many consecutive registers and heap slots. Every
+    /// parameter is <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class), the root signature holds no sampler, and
+    /// the input-layout flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
     /// <para>A description with a <see cref="GpuComputePipelineDescription.Layout"/> takes none of that: its root
     /// signature is <see cref="DirectXRootSignatures.CreateLayout"/>'s, with its samplers in sampler tables rather than
     /// static samplers.</para>
@@ -59,7 +58,6 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
 
         var bindings = description.Bindings;
         var pushConstantBinding = description.PushConstantBinding;
-        var samplerFilter = description.SamplerFilter;
 
         ArgumentNullException.ThrowIfNull(bindings);
         GpuComputeBinding.ValidateSet(bindings: bindings);
@@ -89,7 +87,6 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
             hasDescriptorTable: hasDescriptorTable,
             hasRootConstants: hasRootConstants,
             rootConstantsCount: layout.RootConstantsCount,
-            samplerFilter: samplerFilter,
             serialized: out layout.RootSignatureBlob,
             slotByBinding: layout.SlotByBinding
         );
@@ -139,7 +136,6 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
         bool hasDescriptorTable,
         bool hasRootConstants,
         uint rootConstantsCount,
-        GpuSamplerFilter samplerFilter,
         uint[] slotByBinding,
         out byte[] serialized
     ) {
@@ -160,9 +156,8 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
         // consuming `Count` consecutive registers and heap slots.
         for (var index = 0; (index < bindings.Count); index++) {
             var binding = bindings[index];
-            // A read-only storage buffer and a sampled image bind as SRVs (t#); a storage image or a read-write buffer binds
-            // as a UAV (u#). A sampled image is an SRV read through the static sampler added to the root signature below.
-            var isSrv = ((binding.Kind == GpuComputeBindingKind.StorageBufferRead) || (binding.Kind == GpuComputeBindingKind.SampledImage));
+            // A read-only buffer binds as an SRV (t#); a storage image or a read-write buffer binds as a UAV (u#).
+            var isSrv = (binding.Kind == GpuBindingKind.ReadOnlyBuffer);
             var count = binding.Count;
             var rangeType = (isSrv
                 ? D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV
@@ -206,48 +201,14 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
             parameters[paramIndex++] = constantsParam;
         }
 
-        // Each SampledImage binding reads its SRV through its own static sampler at its binding number: DXC's
-        // vk::combinedImageSampler fuses only a scalar Texture2D and SamplerState pair. Each has the requested filter, is
-        // clamp-addressed and visible to all stages; a pipeline with no SampledImage binding has no static sampler.
-        var sampledImageCount = 0u;
-
-        for (var index = 0; (index < bindings.Count); index++) {
-            if (bindings[index].Kind == GpuComputeBindingKind.SampledImage) {
-                sampledImageCount++;
-            }
-        }
-
-        var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[((sampledImageCount > 0)
-            ? (int)sampledImageCount
-            : 1)];
-        var samplerIndex = 0u;
-
-        for (var index = 0; (index < bindings.Count); index++) {
-            if (bindings[index].Kind != GpuComputeBindingKind.SampledImage) {
-                continue;
-            }
-
-            staticSamplers[((int)samplerIndex)] = DirectXRootSignatures.ClampStaticSampler(
-                filter: ((samplerFilter == GpuSamplerFilter.Nearest)
-                ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
-                : D3D12_FILTER.D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT),
-                shaderRegister: bindings[index].Binding,
-                shaderVisibility: D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL
-            );
-
-            samplerIndex++;
-        }
-
         var desc = new D3D12_ROOT_SIGNATURE_DESC {
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_NONE,
             NumParameters = ((uint)paramCount),
-            NumStaticSamplers = sampledImageCount,
+            NumStaticSamplers = 0,
             pParameters = ((0 < paramCount)
             ? parameters
             : null),
-            pStaticSamplers = ((sampledImageCount > 0)
-            ? staticSamplers
-            : null),
+            pStaticSamplers = null,
         };
 
         return DirectXRootSignatures.Create(

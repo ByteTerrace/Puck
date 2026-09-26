@@ -170,9 +170,10 @@ interface, both backends' layout planners, and `IGpuBindings.WriteBuffer` all
 read it, and whether a buffer is read or written is part of its kind, so it is
 the one statement of buffer access. Keeping another binding-kind type beside it
 with translations between them is rejected, because each translation is a
-second statement of the same access that can drift from the first.
-`GpuComputeBindingKind` goes once the SDF engine's combined image samplers have
-moved to a separate image and sampler.
+second statement of the same access that can drift from the first. A
+positional compute binding (`GpuComputeBinding`) states it too, and holds only
+buffers and storage images: a sampled image is always read through a separate
+sampler in a group, so no combined image sampler exists anywhere.
 
 **A binding is visible to the pipeline's stages, never to its own.** A
 pipeline's stages come from its pass kind, compute or vertex and fragment, and
