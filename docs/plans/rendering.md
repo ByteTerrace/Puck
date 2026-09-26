@@ -2770,8 +2770,8 @@ retirements listed below.
 **Delivers:** first, a capability matrix that lists every feature the SDF engine
 provides, the graph equivalent that replaces it, and the check that proves the
 equivalent works. The list is generated from the engine's public surface and
-console verbs, not written from memory. It covers screen slots, decals, child
-slots, viewports, render scale, tonemap, captures, pass labels, kernel
+console verbs, not written from memory. It covers screen slots, decals,
+viewports, render scale, tonemap, captures, pass labels, kernel
 variants, brick baking, the glyph atlas, volumes, lights, far field, and debug
 views, plus anything else the code shows. No part of the old engine is deleted
 until its row is green.
@@ -2793,13 +2793,12 @@ Then:
 - Working targets move to a float format such as `R16G16B16A16Float`, so HDR
   and temporal accumulation have headroom. The tonemap moves into P16's
   display transform.
-- Composition of panes and child views moves to the graph (P11), and screens
-  read sources through P12.
+- Screens read sources through P12. Panes compose in the graph, since P11b
+  commit 9 deleted the engine's child path.
 
 This retires `render.extensions` as a separate document section, because a
 post-process pass becomes a graph node. It also retires `FullscreenPassNode`,
-`WorldPostRenderExtensionPasses`, the child plumbing in `SdfEngineNode`,
-`ViewStack`'s fixed budget, and the shaders README lines that name consumers
+`WorldPostRenderExtensionPasses`, `ViewStack`'s fixed budget, and the shaders README lines that name consumers
 which no longer exist. Every internal caller and world
 document is updated in the same change.
 
@@ -2938,8 +2937,7 @@ layered views return only if the counts call for them.
 most four group layouts, separate sampler tables, the world group at a fixed
 root parameter, one recorder with indirect dispatch and debug groups, an index
 as the only push constant, and SDF uploads through regions. From P11b: one view
-per `sdf.world` pass with the child map, `ViewStack`, `WorldPipelineRuntime`
-and the composite gone; a first-class package pass kind, which P14 extends to
+per `sdf.world` pass with `ViewStack` and the composite gone; a first-class package pass kind, which P14 extends to
 fragments; one pass-pipeline cache per device, built off the frame thread;
 captures from the graph's root output; per-instance pass counts; render scale
 as a reduced extent and a resample pass; and buffer edges.
