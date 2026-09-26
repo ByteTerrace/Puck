@@ -593,9 +593,10 @@ public sealed partial class WorldServer : IWorldServerHost {
             solids: population.SolidField
         );
         // The engagement fold — over the population and THIS server's own grant table (m_grants was assigned earlier
-        // in this constructor body, at the WorldGrants construction above). Never rebuilt: channels are boot-fixed.
+        // in this constructor body, at the WorldGrants construction above). Never rebuilt: channels are boot-fixed, and
+        // it reads each screen's and kit's policy from the live document, recompiling a row only after an edit replaces it.
         m_engagement = new WorldEngagement(
-            definition: definition,
+            definition: () => m_document.Definition,
             grants: m_grants,
             population: population
         );
