@@ -136,9 +136,11 @@ public readonly record struct OverlayHudPanel(
 /// <param name="Panel">The profile's authored panel (its own <see cref="OverlayHudPanel.Rect"/> is normalized to
 /// this viewport's local space, not the whole screen — the same local-space convention an element's rect uses
 /// against its owning panel).</param>
+/// <param name="Seat">The owning seat's 0-based local roster slot, which the panel's bindings resolve for.</param>
 public readonly record struct OverlayHudSeatPanel(
     OverlayHudRect Viewport,
-    OverlayHudPanel Panel
+    OverlayHudPanel Panel,
+    int Seat
 );
 /// <summary>The per-revision HUD structure snapshot <see cref="HudWriter"/> renders — <see cref="Panels"/> reconciled
 /// from the delivered world definition only when its revision moves (the <c>WorldFramePresenter</c> revision-reconcile
@@ -163,13 +165,15 @@ public interface IHudSource {
 /// keeps binding resolution out of Puck.Overlays (which cannot know what <c>world.tick</c> or a seat position means)
 /// while keeping the actual per-frame resolve inside the writer (presentation float; no document round-trip).</summary>
 public interface IHudBindingResolver {
-    /// <summary>Resolves a binding token.</summary>
+    /// <summary>Resolves a binding token for a panel's scope.</summary>
     /// <param name="binding">The token (e.g. <c>world.tick</c>).</param>
+    /// <param name="seat">The 0-based local roster slot whose player-scope panel the token is on, which reads the
+    /// world that seat is routed to; -1 for a world-scope panel.</param>
     /// <param name="fraction">The value normalized to 0..1 (a gauge's fill), when resolved.</param>
     /// <param name="text">The value's formatted text form (a text element's display), when resolved.</param>
     /// <returns><see langword="true"/> when the token resolved (always true for a document-validated token; a
     /// resolver still reports honestly rather than assuming).</returns>
-    bool TryResolve(string binding, out float fraction, out string text);
+    bool TryResolve(string binding, int seat, out float fraction, out string text);
 }
 /// <summary>
 /// The HUD structure store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>. The world feed
