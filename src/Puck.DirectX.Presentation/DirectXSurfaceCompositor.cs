@@ -18,8 +18,9 @@ using static Puck.DirectX.DirectXConstants;
 namespace Puck.DirectX.Presentation;
 
 /// <summary>
-/// Owns the DXGI flip-model swap chain, back-buffer RTVs, a shader-visible SRV slot for the blit texture,
-/// and the blit pipeline (root signature + PSO). On every frame it:
+/// Owns the DXGI flip-model swap chain, back-buffer RTVs, a shader-visible SRV slot for the blit texture and a
+/// shader-visible sampler slot for its sampler, and the blit pipeline, which the device's
+/// <see cref="IGpuPipelineFactory"/> creates from <see cref="SurfaceBlitLayout"/>. On every frame it:
 /// <list type="bullet">
 ///   <item>resets the per-frame command allocator and command list,</item>
 ///   <item>delegates recording to the injected <see cref="IDirectXCommandListRecorder"/>,</item>
@@ -50,6 +51,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
     private readonly string m_shaderDirectory;
+    private readonly GpuPixelFormat m_surfaceFormat;
     private readonly DXGI_FORMAT m_swapChainFormat;
     private readonly PresentMode m_presentMode;
     private readonly uint m_syncInterval;
@@ -65,7 +67,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private readonly nint[] m_commandLists = new nint[FrameCount];
     private readonly ulong[] m_frameFenceValues = new ulong[FrameCount];
 
-    private GCHandle m_blitLayoutToken;
+    private IGpuShaderModule? m_blitFragmentModule;
+    private IGpuPipeline? m_blitPipeline;
+    private IGpuShaderModule? m_blitVertexModule;
     private DirectXDrawCommand[]? m_blitDrawCommands;
     private DirectXSurfaceUpload? m_cpuUpload;
     private nint m_frameFence;
@@ -81,6 +85,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private uint m_presentFlags;
     private nint m_rtvHeap;
     private uint m_rtvStride;
+    private nint m_samplerHeap;
     private nint m_srvHeap;
     private uint m_swapChainFlags;
     private nint m_swapChain;
@@ -117,8 +122,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_presentMode = presentationOptions.PresentMode;
         // Map the neutral surface format to the back-buffer DXGI format (both are valid flip-model formats);
         // Vsync presents with sync interval 1, the other modes with 0.
-        m_swapChainFormat = presentationOptions.SurfaceFormat switch {
-            SurfaceFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
+        m_surfaceFormat = ((SurfaceFormat.B8G8R8A8Unorm == presentationOptions.SurfaceFormat)
+            ? GpuPixelFormat.B8G8R8A8Unorm
+            : GpuPixelFormat.R8G8B8A8Unorm
+        );
+        m_swapChainFormat = m_surfaceFormat switch {
+            GpuPixelFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
             _ => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
         };
         m_syncInterval = ((PresentMode.Vsync == m_presentMode)
@@ -126,21 +135,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             : 0u
         );
     }
-
-    /// <summary>Gets the blit pipeline layout handle (a <see cref="GCHandle"/>-as-<see cref="nint"/> token to
-    /// the internal <see cref="DirectXPipelineLayout"/>), valid after <see cref="Initialize"/>. Callers that
-    /// build their own <see cref="DirectXDrawCommand"/> lists can reference it as the default blit pipeline.</summary>
-    public nint BlitPipelineLayoutHandle => (m_blitLayoutToken.IsAllocated
-        ? GCHandle.ToIntPtr(value: m_blitLayoutToken)
-        : 0
-    );
-    /// <summary>Gets the GPU descriptor handle (<c>D3D12_GPU_DESCRIPTOR_HANDLE.ptr</c>) for the compositor's
-    /// single SRV slot; valid after <see cref="Initialize"/>. The handle points at whatever texture was last
-    /// written via <see cref="Blit"/>.</summary>
-    public ulong BlitDescriptorGpuHandle { get; private set; }
-    /// <summary>Gets the native <c>ID3D12DescriptorHeap*</c> for the compositor's shader-visible SRV heap;
-    /// valid after <see cref="Initialize"/>.</summary>
-    public nint BlitDescriptorHeapHandle => m_srvHeap;
 
     /// <summary>
     /// Creates the DXGI swap chain, blit pipeline, and all supporting D3D12 objects against the shared device.
@@ -173,25 +167,25 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         CreateRtvHeap(device: device);
         AcquireBackBuffers(device: device);
         CreateSrvHeap(device: device);
-        CreateBlitPipeline(
-            device: device,
-            library: deviceContext.PipelineLibrary
-        );
+        CreateSamplerHeap(device: device);
+        CreateBlitPipeline(deviceContext: deviceContext);
         CreateCommandInfrastructure(device: device);
 
-        // The blit draw command is invariant for the compositor's whole activation lifetime — every field it
-        // reads (m_srvHeap, BlitDescriptorGpuHandle, BlitPipelineLayoutHandle) is set once, above, and never
-        // reassigned. Building it once here (parity with the Vulkan compositor's cached per-set draw-command
-        // arrays) removes a per-present heap allocation from Blit.
+        // The blit draw command is invariant for the compositor's whole activation lifetime: every field it reads is
+        // set once, above, and never reassigned. Building it once here (parity with the Vulkan compositor's cached
+        // per-set draw-command arrays) removes a per-present heap allocation from Blit.
         m_blitDrawCommands = [
             new DirectXDrawCommand(
                 DrawParameters: new DirectXDrawParameters(
                     instanceCount: 1,
-                    vertexCount: 3
+                    vertexCount: FullscreenTriangle.VertexCount
                 ),
-                DescriptorHeapHandle: m_srvHeap,
-                DescriptorTableGpuHandle: BlitDescriptorGpuHandle,
-                PipelineLayoutHandle: BlitPipelineLayoutHandle
+                Group: SurfaceBlitLayout.Group,
+                PipelineLayoutHandle: m_blitPipeline!.LayoutHandle,
+                SamplerHeapHandle: m_samplerHeap,
+                SamplerTableGpuHandle: GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_samplerHeap)).ptr,
+                ViewHeapHandle: m_srvHeap,
+                ViewTableGpuHandle: GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_srvHeap)).ptr
             ),
         ];
     }
@@ -315,8 +309,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     }
     /// <summary>
     /// Submits a caller-supplied list of draw commands to the current back buffer and presents. Each command
-    /// specifies its own pipeline, descriptor heap, descriptor table, vertex buffer, and root constants; zero
-    /// values mean "no change". Commands are replayed in list order (use <see cref="DirectXDrawCommand.SequenceKey"/>
+    /// specifies its own pipeline, group, descriptor heaps and descriptor tables; zero values mean "no change". Commands are replayed in list order (use <see cref="DirectXDrawCommand.SequenceKey"/>
     /// to pre-sort for painter's order).
     /// </summary>
     /// <param name="deviceContext">The shared device context.</param>
@@ -544,13 +537,13 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             m_frameFenceEvent = HANDLE.Null;
         }
 
-        if (m_blitLayoutToken.IsAllocated) {
-            var layout = ((DirectXPipelineLayout)m_blitLayoutToken.Target!);
-
-            layout.Dispose();
-            m_blitLayoutToken.Free();
-        }
-
+        m_blitPipeline?.Dispose();
+        m_blitPipeline = null;
+        m_blitFragmentModule?.Dispose();
+        m_blitFragmentModule = null;
+        m_blitVertexModule?.Dispose();
+        m_blitVertexModule = null;
+        Release(pointer: ref m_samplerHeap);
         Release(pointer: ref m_srvHeap);
         Release(pointer: ref m_rtvHeap);
         Release(pointer: ref m_swapChain);
@@ -742,178 +735,81 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         );
 
         m_srvHeap = ((nint)srvHeap);
-        BlitDescriptorGpuHandle = GetGpuHeapStart(heap: srvHeap).ptr;
         // A fresh SRV heap has no descriptor written yet; force the next Blit to write one.
         m_lastBlitResource = 0;
     }
-    private void CreateBlitPipeline(ID3D12Device* device, DirectXPipelineLibrary? library) {
-        var vertexBytecode = File.ReadAllBytes(path: Path.Combine(
-            path1: m_shaderDirectory,
-            path2: BlitVertexFileName
-        ));
-        var pixelBytecode = File.ReadAllBytes(path: Path.Combine(
-            path1: m_shaderDirectory,
-            path2: BlitPixelFileName
-        ));
-        var rootSig = CreateBlitRootSignature(
+    // The blit's sampler: one clamp-addressed, linear-filtered descriptor in a one-slot shader-visible sampler heap beside
+    // the SRV heap, which the draw binds together.
+    private void CreateSamplerHeap(ID3D12Device* device) {
+        var samplerHeap = DirectXDescriptorHeaps.Create(
+            count: 1,
             device: device,
-            serialized: out var rootSigBlob
+            shaderVisible: true,
+            type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
         );
-        nint pso;
+        var sampler = DirectXGpuBindings.ClampSampler(filter: GpuSamplerFilter.Linear);
 
-        fixed (byte* pVs = vertexBytecode)
-        fixed (byte* pPs = pixelBytecode) {
-            pso = CreateBlitPso(
-                device: device,
-                library: library,
-                pixelBytecode: pixelBytecode,
-                rootSignature: rootSig,
-                rootSignatureBlob: rootSigBlob,
-                vertexBytecode: vertexBytecode,
-                renderTargetFormat: m_swapChainFormat,
-                vsHandle: ((nint)pVs),
-                vsLength: ((nuint)vertexBytecode.Length),
-                psHandle: ((nint)pPs),
-                psLength: ((nuint)pixelBytecode.Length)
-            );
-        }
-
-        m_blitLayoutToken = GCHandle.Alloc(value: new DirectXPipelineLayout {
-            DescriptorSlotCount = 1,
-            // One SRV at table slot 0 (the source texture). The compositor writes that descriptor into its own heap
-            // directly rather than through the shared allocator, but the map is filled for consistency so a future
-            // AllocateSet against this layout resolves binding 0 to slot 0 like every other layout.
-            DescriptorTableParamIndex = 0,
-            PsoHandle = pso,
-            RootSignatureHandle = rootSig,
-            SlotByBinding = [0],
-        });
-    }
-    private static nint CreateBlitRootSignature(ID3D12Device* device, out byte[] serialized) {
-        var srvRange = new D3D12_DESCRIPTOR_RANGE {
-            BaseShaderRegister = 0,
-            NumDescriptors = 1,
-            OffsetInDescriptorsFromTableStart = 0,
-            RangeType = D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-            RegisterSpace = 0,
-        };
-        var tableParam = new D3D12_ROOT_PARAMETER {
-            ParameterType = D3D12_ROOT_PARAMETER_TYPE.D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-            ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL,
-        };
-
-        tableParam.Anonymous.DescriptorTable = new D3D12_ROOT_DESCRIPTOR_TABLE {
-            NumDescriptorRanges = 1,
-            pDescriptorRanges = &srvRange,
-        };
-
-        var staticSampler = DirectXRootSignatures.ClampStaticSampler(
-            filter: D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-            shaderRegister: 0,
-            shaderVisibility: D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL
-        );
-        var rootSigDesc = new D3D12_ROOT_SIGNATURE_DESC {
-            Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
-            NumParameters = 1,
-            NumStaticSamplers = 1,
-            pParameters = &tableParam,
-            pStaticSamplers = &staticSampler,
-        };
-
-        return DirectXRootSignatures.Create(
-            description: in rootSigDesc,
-            device: device,
-            serialized: out serialized
+        m_samplerHeap = ((nint)samplerHeap);
+        device->CreateSampler(
+            DestDescriptor: GetCpuHeapStart(heap: samplerHeap),
+            pDesc: &sampler
         );
     }
-    private static nint CreateBlitPso(
-        ID3D12Device* device,
-        DirectXPipelineLibrary? library,
-        nint rootSignature,
-        byte[] rootSignatureBlob,
-        byte[] vertexBytecode,
-        byte[] pixelBytecode,
-        DXGI_FORMAT renderTargetFormat,
-        nint vsHandle,
-        nuint vsLength,
-        nint psHandle,
-        nuint psLength
-    ) {
-        var psoDesc = new D3D12_GRAPHICS_PIPELINE_STATE_DESC {
-            BlendState = new D3D12_BLEND_DESC {
-                AlphaToCoverageEnable = false,
-                IndependentBlendEnable = false,
-            },
-            DepthStencilState = new D3D12_DEPTH_STENCIL_DESC {
-                DepthEnable = false,
-                StencilEnable = false,
-            },
-            InputLayout = new D3D12_INPUT_LAYOUT_DESC {
-                NumElements = 0,
-                pInputElementDescs = null,
-            },
-            NumRenderTargets = 1,
-            PS = new D3D12_SHADER_BYTECODE {
-                BytecodeLength = psLength,
-                pShaderBytecode = ((void*)psHandle),
-            },
-            PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
-            RasterizerState = new D3D12_RASTERIZER_DESC {
-                AntialiasedLineEnable = false,
-                ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE.D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF,
-                CullMode = D3D12_CULL_MODE.D3D12_CULL_MODE_NONE,
-                DepthBias = 0,
-                DepthBiasClamp = 0f,
-                DepthClipEnable = true,
-                FillMode = D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID,
-                ForcedSampleCount = 0,
-                FrontCounterClockwise = false,
-                MultisampleEnable = false,
-                SlopeScaledDepthBias = 0f,
-            },
-            SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
-            SampleMask = uint.MaxValue,
-            VS = new D3D12_SHADER_BYTECODE {
-                BytecodeLength = vsLength,
-                pShaderBytecode = ((void*)vsHandle),
-            },
-            pRootSignature = ((ID3D12RootSignature*)rootSignature),
-        };
+    // Creates the blit through the device's pipeline factory from the shared layout, for a render pass of one color
+    // attachment in the swap chain's format; its vertex stage draws the fullscreen triangle from SV_VertexID, so the
+    // pipeline reads no vertex input. A failure releases what was created before it.
+    private void CreateBlitPipeline(DirectXDeviceContext deviceContext) {
+        var services = deviceContext.Services;
 
-        psoDesc.BlendState.RenderTarget._0 = new D3D12_RENDER_TARGET_BLEND_DESC {
-            BlendEnable = false,
-            BlendOp = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD,
-            BlendOpAlpha = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD,
-            DestBlend = D3D12_BLEND.D3D12_BLEND_ZERO,
-            DestBlendAlpha = D3D12_BLEND.D3D12_BLEND_ZERO,
-            LogicOp = D3D12_LOGIC_OP.D3D12_LOGIC_OP_NOOP,
-            LogicOpEnable = false,
-            RenderTargetWriteMask = 15,
-            SrcBlend = D3D12_BLEND.D3D12_BLEND_ONE,
-            SrcBlendAlpha = D3D12_BLEND.D3D12_BLEND_ONE,
-        };
-        psoDesc.RTVFormats._0 = renderTargetFormat;
-
-        if (library is not null) {
-            return library.CreateGraphicsPipeline(
-                description: in psoDesc,
-                device: device,
-                identity: [vertexBytecode, pixelBytecode, rootSignatureBlob, BitConverter.GetBytes(value: ((int)renderTargetFormat))]
-            );
-        }
-
-        void* pso;
-        var psoIid = ID3D12PipelineState.IID_Guid;
-
-        device->CreateGraphicsPipelineState(
-            pDesc: in psoDesc,
-            ppPipelineState: out pso,
-            riid: in psoIid
+        using var scope = new GpuCreationScope();
+        var vertexModule = scope.Own(created: services.ShaderModuleFactory.Create(
+            bytecode: File.ReadAllBytes(path: Path.Combine(
+                path1: m_shaderDirectory,
+                path2: BlitVertexFileName
+            )),
+            stage: GpuShaderStage.Vertex
+        ));
+        var fragmentModule = scope.Own(created: services.ShaderModuleFactory.Create(
+            bytecode: File.ReadAllBytes(path: Path.Combine(
+                path1: m_shaderDirectory,
+                path2: BlitPixelFileName
+            )),
+            stage: GpuShaderStage.Fragment
+        ));
+        var name = new GpuObjectName(
+            owner: "surface-compositor",
+            part: "blit"
         );
 
-        return ((nint)pso);
-    }
-    private void CreateCommandInfrastructure(ID3D12Device* device) {
+        using var presentPass = services.RenderPassFactory.Create(
+            description: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
+                FinalLayout: GpuImageLayout.RenderTarget,
+                Format: m_surfaceFormat,
+                Load: GpuAttachmentLoad.Clear,
+                Store: GpuAttachmentStore.Store
+            )]),
+            name: name
+        );
+        var pipeline = services.PipelineFactory.Create(
+            description: new GpuGraphicsPipelineDescription(
+                Layout: SurfaceBlitLayout.Layout,
+                Name: "surface-blit",
+                VertexInput: new GpuVertexInputLayout(
+                    Attributes: [],
+                    StrideBytes: 0U
+                )
+            ),
+            fragmentShaderModule: fragmentModule,
+            name: name,
+            renderPass: presentPass,
+            vertexShaderModule: vertexModule
+        );
+
+        scope.Complete();
+        m_blitVertexModule = vertexModule;
+        m_blitFragmentModule = fragmentModule;
+        m_blitPipeline = pipeline;
+    }    private void CreateCommandInfrastructure(ID3D12Device* device) {
         for (var i = 0u; (i < FrameCount); i++) {
             device->CreateCommandAllocator(
                 ppCommandAllocator: out var allocator,

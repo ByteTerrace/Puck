@@ -8,8 +8,8 @@ namespace Puck.DirectX.Presentation;
 /// <summary>
 /// Default <see cref="IDirectXCommandListRecorder"/> for Direct3D 12: transitions the back buffer to
 /// render-target state, sets up the RTV, viewport, scissor, and primitive topology, replays each
-/// <see cref="DirectXDrawCommand"/> (binding pipeline, descriptor heap, root table, vertex buffer, and root
-/// constants as indicated by non-zero fields), then transitions back to present state.
+/// <see cref="DirectXDrawCommand"/> (binding the pipeline, the view and sampler heaps, and the group's view and sampler
+/// tables as indicated by non-zero fields), then transitions back to present state.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecorder {
@@ -70,17 +70,19 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
         );
         commandList->IASetPrimitiveTopology(PrimitiveTopology: D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+        // A command binds at most one view heap and one sampler heap.
+        var heaps = stackalloc ID3D12DescriptorHeap*[2];
         nint currentPso = 0;
         nint currentRootSig = 0;
 
         foreach (var command in drawCommands) {
-            // A zero handle on a field means "leave the currently bound state unchanged" (see the doc). The
-            // pipeline layout supplies the descriptor-table and root-constant parameter indices, so those two
-            // bindings require a layout; the descriptor heap and vertex buffer bind independently of it.
-            DirectXPipelineLayout? layout = null;
+            // A zero handle on a field means "leave the currently bound state unchanged" (see the doc). The pipeline
+            // layout's group supplies the view and sampler tables' root parameter indices, so the tables require a
+            // layout; the heaps bind independently of it, together in one call as Direct3D 12 requires.
+            DirectXGroupLayout? group = null;
 
             if (command.PipelineLayoutHandle != 0) {
-                layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: command.PipelineLayoutHandle).Target!);
+                var layout = ((DirectXPipelineLayout)GCHandle.FromIntPtr(value: command.PipelineLayoutHandle).Target!);
 
                 if (
                     (layout.PsoHandle != currentPso) ||
@@ -91,46 +93,45 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
                     currentPso = layout.PsoHandle;
                     currentRootSig = layout.RootSignatureHandle;
                 }
-            }
-
-            if (command.DescriptorHeapHandle != 0) {
-                var heap = ((ID3D12DescriptorHeap*)command.DescriptorHeapHandle);
-
-                commandList->SetDescriptorHeaps(
-                    NumDescriptorHeaps: 1,
-                    ppDescriptorHeaps: &heap
-                );
-            }
-
-            if (
-                (command.DescriptorTableGpuHandle != 0) &&
-                (layout is not null) &&
-                (layout.DescriptorTableParamIndex >= 0)
-            ) {
-                var gpuHandle = new D3D12_GPU_DESCRIPTOR_HANDLE { ptr = command.DescriptorTableGpuHandle, };
-
-                commandList->SetGraphicsRootDescriptorTable(
-                    BaseDescriptor: gpuHandle,
-                    RootParameterIndex: ((uint)layout.DescriptorTableParamIndex)
-                );
-            }
-
-            var rootConstants = command.RootConstants;
-
-            if (
-                (rootConstants is not null) &&
-                (layout is not null) &&
-                (layout.RootConstantsParamIndex >= 0) &&
-                (0 < rootConstants.Data.Length)
-            ) {
-                fixed (byte* pData = rootConstants.Data.Span) {
-                    commandList->SetGraphicsRoot32BitConstants(
-                        RootParameterIndex: ((uint)layout.RootConstantsParamIndex),
-                        Num32BitValuesToSet: ((uint)(rootConstants.Data.Length / sizeof(uint))),
-                        pSrcData: pData,
-                        DestOffsetIn32BitValues: (rootConstants.Offset / sizeof(uint))
-                    );
+                if (
+                    (command.Group < layout.GroupHandles.Length) &&
+                    (layout.GroupHandles[command.Group] != 0)
+                ) {
+                    group = ((DirectXGroupLayout)GCHandle.FromIntPtr(value: layout.GroupHandles[command.Group]).Target!);
                 }
+            }
+
+            var heapCount = 0U;
+
+            if (command.ViewHeapHandle != 0) {
+                heaps[heapCount++] = ((ID3D12DescriptorHeap*)command.ViewHeapHandle);
+            }
+            if (command.SamplerHeapHandle != 0) {
+                heaps[heapCount++] = ((ID3D12DescriptorHeap*)command.SamplerHeapHandle);
+            }
+            if (heapCount != 0) {
+                commandList->SetDescriptorHeaps(
+                    NumDescriptorHeaps: heapCount,
+                    ppDescriptorHeaps: heaps
+                );
+            }
+            if (
+                (command.ViewTableGpuHandle != 0) &&
+                (group is { ViewTableIndex: >= 0 })
+            ) {
+                commandList->SetGraphicsRootDescriptorTable(
+                    BaseDescriptor: new D3D12_GPU_DESCRIPTOR_HANDLE { ptr = command.ViewTableGpuHandle, },
+                    RootParameterIndex: ((uint)group.ViewTableIndex)
+                );
+            }
+            if (
+                (command.SamplerTableGpuHandle != 0) &&
+                (group is { SamplerTableIndex: >= 0 })
+            ) {
+                commandList->SetGraphicsRootDescriptorTable(
+                    BaseDescriptor: new D3D12_GPU_DESCRIPTOR_HANDLE { ptr = command.SamplerTableGpuHandle, },
+                    RootParameterIndex: ((uint)group.SamplerTableIndex)
+                );
             }
 
             var p = command.DrawParameters;

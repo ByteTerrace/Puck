@@ -24,30 +24,8 @@ public sealed class SurfaceCompositor : IDisposable {
     // (WaitForFrameSlot) has already proven retired. A single set was updated while a pending blit still referenced
     // it (VUID-vkUpdateDescriptorSets-None-03047, caught by the validation layer once the per-frame drain left).
     private const int DescriptorSetRingSize = 2;
-    // The blit's source in blit.frag.hlsl: a separate image and sampler in the pass group.
-    private const uint PassGroup = 3;
-    private const uint SamplerBinding = 1;
-    private const uint SourceImageBinding = 0;
     private const string VertexShaderFileName = "fullscreen.vert.spv";
 
-    // The blit's one group, which VulkanGroupLayouts plans into set layouts and a pipeline layout.
-    private static readonly GpuPipelineLayoutDescription BlitLayout = new(
-        groups: [new GpuGroupLayoutDescription(
-            bindings: [
-                new GpuGroupBinding(
-                    binding: SourceImageBinding,
-                    kind: GpuBindingKind.SampledImage
-                ),
-                new GpuGroupBinding(
-                    binding: SamplerBinding,
-                    kind: GpuBindingKind.Sampler
-                ),
-            ],
-            ordinal: PassGroup
-        )],
-        pushesIndex: false,
-        stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
-    );
     private static readonly byte[] FullscreenTriangleVertexData = FullscreenTriangle.CreateVertexData();
     // The swapchain's render pass as the pipeline factory reads it: one color attachment and no depth. Its format and
     // present layout are the swapchain's, which the native render pass carries.
@@ -237,7 +215,7 @@ public sealed class SurfaceCompositor : IDisposable {
 
         m_resourceDevice = device;
 
-        // The blit is created through the device's one pipeline factory from BlitLayout; the pool holds exactly one
+        // The blit is created through the device's one pipeline factory from SurfaceBlitLayout; the pool holds exactly one
         // source image and one sampler per ring set, the pass group's two bindings.
         using (var presentPass = VulkanGpuRenderPass.Borrow(
             description: PresentPass,
@@ -245,7 +223,7 @@ public sealed class SurfaceCompositor : IDisposable {
         )) {
             m_blitPipeline = m_renderer.Services.PipelineFactory.Create(
                 description: new GpuGraphicsPipelineDescription(
-                    Layout: BlitLayout,
+                    Layout: SurfaceBlitLayout.Layout,
                     Name: "surface-blit",
                     VertexInput: new GpuVertexInputLayout(
                         Attributes: [new GpuVertexAttribute(
@@ -290,19 +268,19 @@ public sealed class SurfaceCompositor : IDisposable {
         for (var setIndex = 0; (setIndex < DescriptorSetRingSize); setIndex++) {
             m_descriptorSets[setIndex] = m_descriptorAllocator.AllocateSet(
                 device: device.Commands,
-                descriptorSetLayoutHandle: m_blitPipeline.GroupLayoutHandles[((int)PassGroup)],
+                descriptorSetLayoutHandle: m_blitPipeline.GroupLayoutHandles[((int)SurfaceBlitLayout.Group)],
                 poolHandle: m_descriptorPool
             );
             m_descriptorAllocator.WriteSampler(
                 arrayElement: 0,
-                binding: SamplerBinding,
+                binding: SurfaceBlitLayout.SamplerBinding,
                 descriptorSetHandle: m_descriptorSets[setIndex],
                 device: device.Commands,
                 samplerHandle: m_sampler
             );
             drawCommandsPerSet[setIndex] = [
                 new VulkanDrawCommand(
-                    DescriptorSetGroup: PassGroup,
+                    DescriptorSetGroup: SurfaceBlitLayout.Group,
                     DescriptorSetHandle: m_descriptorSets[setIndex],
                     DrawParameters: new VulkanDrawParameters(
                         firstInstance: 0,
@@ -395,7 +373,7 @@ public sealed class SurfaceCompositor : IDisposable {
             m_descriptorSetIndex = ((m_descriptorSetIndex + 1) % DescriptorSetRingSize);
             m_descriptorAllocator.WriteSampledImage(
                 arrayElement: 0,
-                binding: SourceImageBinding,
+                binding: SurfaceBlitLayout.SourceImageBinding,
                 descriptorSetHandle: m_descriptorSets[m_descriptorSetIndex],
                 device: m_renderer.Device.Commands,
                 imageViewHandle: imageViewHandle

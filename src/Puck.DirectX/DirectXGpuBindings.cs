@@ -47,6 +47,24 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     /// pool not yet destroyed.</summary>
     public long LiveHandles => Interlocked.Read(location: ref m_liveHandles);
 
+    /// <summary>Returns the sampler descriptor a group's sampler is: clamp-to-edge addressing on every axis, no comparison,
+    /// no anisotropy and the full mip range, with the filter the sampler names. It is the sampler a pipeline created
+    /// without a layout description states as a static sampler.</summary>
+    /// <param name="filter">The sampler's filter.</param>
+    /// <returns>The sampler description.</returns>
+    public static D3D12_SAMPLER_DESC ClampSampler(GpuSamplerFilter filter) => new() {
+        AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+        ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
+        Filter = ((filter == GpuSamplerFilter.Nearest)
+            ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
+            : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
+        MaxAnisotropy = 1,
+        MaxLOD = float.MaxValue,
+        MinLOD = 0f,
+        MipLODBias = 0f,
+    };
     /// <summary>Creates the shader-visible heaps of a device just brought up, at the sizes its capabilities report.
     /// Its context calls it once per device, before any pool is created on it.</summary>
     /// <param name="device">The device.</param>
@@ -313,19 +331,9 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             kind: GpuBindingKind.Sampler
         );
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
-        var samplerDesc = new D3D12_SAMPLER_DESC {
-            AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
-            Filter = ((samplerHandle == NearestSampler)
-                ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
-                : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
-            MaxAnisotropy = 1,
-            MaxLOD = float.MaxValue,
-            MinLOD = 0f,
-            MipLODBias = 0f,
-        };
+        var samplerDesc = ClampSampler(filter: ((samplerHandle == NearestSampler)
+            ? GpuSamplerFilter.Nearest
+            : GpuSamplerFilter.Linear));
 
         device->CreateSampler(
             DestDescriptor: new D3D12_CPU_DESCRIPTOR_HANDLE {
