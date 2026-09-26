@@ -8,7 +8,7 @@ namespace Puck.Shaders;
 /// The pass pipelines of a composition: one <see cref="GpuPassPipeline"/> per device and <see cref="GpuPassPipelineKey"/>,
 /// however many graph nodes, package passes and region owners record with it. Every pass pipeline a
 /// <see cref="ShaderPipelineRenderNode"/> installs comes from here — its document passes, its float preview, and each
-/// package pass its package builds.
+/// package pass its package builds — and so does each device's region-copy pipeline (<see cref="GpuRegionCopyPass"/>).
 /// It is a <see cref="GpuBuildCache{TKey, T}"/>: the first lease on a key builds the pipeline on the thread pool, a
 /// second node or a reinstall of the same graph joins it, and the pipeline is disposed when its last lease is released,
 /// so a reload of a changed shader makes a new entry while the replaced graph's lease keeps the old one until that graph

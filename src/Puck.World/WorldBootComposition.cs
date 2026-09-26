@@ -967,8 +967,11 @@ public static class WorldBootComposition {
     /// files.</summary>
     /// <param name="services">The service collection a presentation shape composes.</param>
     private static void AddWorldPipelineCache(IServiceCollection services) {
-        services.TryAddSingleton(implementationFactory: static sp => new GpuRegionCopyPipelineCache(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)));
         services.TryAddSingleton<GpuPassPipelineCache>();
+        services.TryAddSingleton(implementationFactory: static sp => new GpuRegionCopyPass(
+            bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX),
+            pipelines: sp.GetRequiredService<GpuPassPipelineCache>()
+        ));
         services.TryAddSingleton<SdfWorldPipelineCache>();
         services.TryAddSingleton(implementationFactory: static sp => new GpuPipelineCacheStore(
             contentKey: sp.GetRequiredService<SdfWorldPipelineCache>().LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)).ContentKey(),
@@ -978,9 +981,8 @@ public static class WorldBootComposition {
     /// <summary>Registers the shader compiler every presentation shape's pipelines compile through, under the state
     /// root's <c>pipelines</c> cache with the document's toolchain, and the shader work sources a counters report reads:
     /// the compiler's <c>shaders.compiler</c> counts, the process's kernel-set and shader-set manifest load counts,
-    /// the SDF pipeline cache every node and view shares with its <c>gpu.sdf-pipelines</c> creation counts, and the
-    /// device's region-copy pipeline with its <c>gpu.region-copy</c> counts, and the pass pipelines every graph node and
-    /// package pass leases with its <c>gpu.pass-pipelines</c> counts.</summary>
+    /// the SDF pipeline cache every node and view shares with its <c>gpu.sdf-pipelines</c> creation counts, and the pass
+    /// pipelines every graph node, package pass and region copy leases with its <c>gpu.pass-pipelines</c> counts.</summary>
     /// <param name="services">The service collection a presentation shape composes.</param>
     private static void AddWorldShaderWork(IServiceCollection services) {
         services.TryAddSingleton(implementationFactory: static sp => new ShaderCompiler(
@@ -991,7 +993,6 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfWorldKernels.LoadWork);
         services.TryAddSingleton<SdfWorldPipelineCache>();
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<SdfWorldPipelineCache>().Work);
-        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<GpuRegionCopyPipelineCache>().Work);
         services.TryAddSingleton<GpuPassPipelineCache>();
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<GpuPassPipelineCache>().Work);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: ShaderSetManifest.LoadWork);

@@ -243,7 +243,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         // A release that leaves another holder cancels nothing and returns while the build is still held.
         first.Release();
         Assert.Equal(
-            actual: (cache.SharedSets, last.Progress.Describe()),
+            actual: (cache.SharedSets, last.Key.Progress.Describe()),
             expected: (1, "building (0 of 10 pipelines created)")
         );
 
@@ -258,7 +258,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         release.Join();
 
         Assert.Equal(
-            actual: (driver.Entered, PipelinesCreated(cache: cache), last.Progress.Created),
+            actual: (driver.Entered, PipelinesCreated(cache: cache), last.Key.Progress.Created),
             expected: (SdfWorldPipelines.BuildConcurrency, ((long)SdfWorldPipelines.BuildConcurrency), SdfWorldPipelines.BuildConcurrency)
         );
         Assert.Null(@object: last.Current);
