@@ -662,8 +662,13 @@ break, and nothing wider:
   the canaries that executed it, directly or through the stand-ins the base's
   own tree gave it: a deleted shader stands for the loader of each base kernel
   whose closure reached it, read through `git show <since>:<path>` and never
-  from the working tree. One neither places is listed as `deleted`, and its
-  project's suites still run. Nothing reads a deleted file from disk.
+  from the working tree. It is also placed by document reach in the base's
+  tree: each canary's worlds and graph documents are read as the base recorded
+  them, through the same readers, so a deleted pass source that a base graph
+  document declared, or an asset a base world named, chooses the canaries whose
+  documents reached it there. The canaries are today's, since only a canary
+  that exists now can run. One none of these places is listed as `deleted`, and
+  its project's suites still run. Nothing reads a deleted file from disk.
 
 - Build infrastructure (`build/`, `Directory.Build.*`, `global.json`,
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`

@@ -6,9 +6,10 @@ namespace Puck.Cli.Tests;
 
 /// <summary>
 /// Laws for <see cref="AffectedDocuments"/>: a graph document reaches the pass sources it declares, resolved beside it as
-/// the loader resolves them, and the includes they reach, and nothing it does not name; a canary reaches the graph documents and shader sources its
-/// worlds and fixtures name, so on the real tree a graph pass source chooses the canary that runs it; and the Direct3D 11
-/// camera kernel, compiled through its own item, reaches the C# that loads it.
+/// the loader resolves them, and the includes they reach, and nothing it does not name; a canary reaches the graph
+/// documents and shader sources its worlds and fixtures name, so on the real tree a graph pass source chooses the canary
+/// that runs it, whether the documents are read from the disk or from a revision through git; and the Direct3D 11 camera
+/// kernel, compiled through its own item, reaches the C# that loads it.
 /// </summary>
 public sealed class AffectedDocumentsLawTests {
     [Fact]
@@ -40,10 +41,12 @@ public sealed class AffectedDocumentsLawTests {
                 path: graph
             );
 
-            Assert.Equal(actual: AffectedDocuments.PassSources(graphPath: graph), expected: [Path.GetFullPath(path: named)]);
+            var tree = new AffectedWorkingTree(root: directory.FullName);
+
+            Assert.Equal(actual: AffectedDocuments.PassSources(graph: "fill.graph.json", tree: tree), expected: ["passes/fill.hlsl"]);
             Assert.Equal(
-                actual: AffectedDocuments.Reach(path: graph).Order(comparer: StringComparer.OrdinalIgnoreCase),
-                expected: [Path.GetFullPath(path: graph), Path.GetFullPath(path: include), Path.GetFullPath(path: named)]
+                actual: AffectedDocuments.Reach(path: "fill.graph.json", tree: tree).Order(comparer: StringComparer.Ordinal),
+                expected: ["fill.graph.json", "passes/common.hlsli", "passes/fill.hlsl"]
             );
         } finally {
             directory.Delete(recursive: true);
@@ -75,7 +78,7 @@ public sealed class AffectedDocumentsLawTests {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
         Assert.True(condition: AffectedCommand.TryCanaries(canaries: out var canaries, error: out var error, repositoryRoot: repositoryRoot), userMessage: error);
 
-        var reachedBy = AffectedDocuments.ReachedBy(canaries: canaries, repositoryRoot: repositoryRoot);
+        var reachedBy = AffectedDocuments.ReachedBy(canaries: canaries, tree: new AffectedWorkingTree(root: repositoryRoot));
 
         Assert.Contains(collection: reachedBy["src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl"], expected: "resample-reconstruction");
 
@@ -84,6 +87,16 @@ public sealed class AffectedDocumentsLawTests {
         }
 
         Assert.Contains(collection: reachedBy["src/Puck.Shaders/Assets/Shaders/Sources/image-source.hlsli"], expected: "source-conversion");
+
+        // The same reach read from a revision's tree through git rather than the disk: the committed documents of two
+        // real canaries reach the same pass sources.
+        var recorded = AffectedDocuments.ReachedBy(
+            canaries: [.. canaries.Where(predicate: static canary => (canary.Id is "resample-reconstruction" or "pipeline-ink"))],
+            tree: new AffectedRevisionTree(revision: "HEAD", root: repositoryRoot)
+        );
+
+        Assert.Contains(collection: recorded["src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl"], expected: "resample-reconstruction");
+        Assert.Contains(collection: recorded["src/Puck.World/Assets/pipelines/ink-finish.hlsl"], expected: "pipeline-ink");
 
         var kernels = AffectedStandIns.Kernels(
             projects: AffectedCommand.Projects(model: ArchitectureModel.Load(repositoryRoot: repositoryRoot), repositoryRoot: repositoryRoot),
