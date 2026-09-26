@@ -21,3 +21,24 @@ pipeline.wait tint submitted 1 10
 pipeline.capture tint {run}/package.png
 pipeline.wait tint captured 10
 world.save {run}/package.world.json
+# The same package at the high tier: the host loads the package's high variant, compiled with PUCK_QUALITY_TIER
+# defined, so the blue reads 0.75 where the variant no tier names reads 0.5.
+world.row.set views.graphs {"name":"tint","source":"{run}/tint","overrides":{"tint":{"gain":0.25}},"tier":"high"}
+pipeline.reload tint
+pipeline.wait tint compiled 40
+pipeline.wait tint installed 10
+pipeline.status
+pipeline.reset tint
+pipeline.wait tint submitted 1 10
+pipeline.capture tint {run}/tiered.png
+pipeline.wait tint captured 10
+# The low tier, which the graph does not declare, falls back to the default variant, and pipeline.status says so.
+world.row.set views.graphs {"name":"tint","source":"{run}/tint","overrides":{"tint":{"gain":0.25}},"tier":"low"}
+pipeline.reload tint
+pipeline.wait tint compiled 40
+pipeline.wait tint installed 10
+pipeline.status
+pipeline.reset tint
+pipeline.wait tint submitted 1 10
+pipeline.capture tint {run}/fallback.png
+pipeline.wait tint captured 10

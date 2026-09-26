@@ -1,6 +1,7 @@
 {
   "$schema": "puck.render.graph.v1",
   "name": "tint",
+  "tiers": ["high"],
   "resources": [
     {
       "name": "image",

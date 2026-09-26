@@ -667,6 +667,23 @@
         "null"
       ],
       "default": null
+    },
+    "tiers": {
+      "description": "The quality tiers the graph\u0027s shader passes vary by, each a variant a package of the graph compiles beside default with Define set, or null for none, which builds default alone. A tier the graph does not declare loads default (VariantOf).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "title": "QualityTier",
+        "type": "string",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
     }
   },
   "required": [

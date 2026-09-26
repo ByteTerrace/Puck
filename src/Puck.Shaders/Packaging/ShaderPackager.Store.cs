@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Puck.Abstractions.Presentation;
 using Puck.Assets;
 
 namespace Puck.Shaders;
@@ -154,12 +155,13 @@ public sealed partial class ShaderPackager {
     // A source file's load: its store package when the store holds one keyed by it, which compiles nothing, and the
     // loader's compile otherwise. A store package that fails its load is the load's outcome; nothing compiles in its
     // place. A source that does not survey is left to the loader, which reports the same fault by name.
-    private ShaderPipelineLoadResult LoadSourceFile(string name, string path, CancellationToken cancellationToken) {
+    private ShaderPipelineLoadResult LoadSourceFile(string name, string path, CancellationToken cancellationToken, QualityTier? tier) {
         if (Store is not { } store) {
             return m_loader.Load(
                 cancellationToken: cancellationToken,
                 name: name,
-                path: path
+                path: path,
+                tier: tier
             );
         }
 
@@ -180,7 +182,8 @@ public sealed partial class ShaderPackager {
             if (IsPackage(path: package)) {
                 var loaded = LoadAsync(
                     cancellationToken: cancellationToken,
-                    package: package
+                    package: package,
+                    tier: tier
                 ).GetAwaiter().GetResult();
 
                 if (
@@ -208,7 +211,8 @@ public sealed partial class ShaderPackager {
         var compiled = m_loader.Load(
             cancellationToken: cancellationToken,
             name: name,
-            path: path
+            path: path,
+            tier: tier
         );
 
         return ((compiled.Status == ShaderPipelineLoadStatus.Unsupported)
