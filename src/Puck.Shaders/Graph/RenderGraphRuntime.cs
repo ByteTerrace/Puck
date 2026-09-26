@@ -949,6 +949,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             instance: this
         );
 
+        RebuildDriftedSources();
+
         var schedule = m_schedules[m_turn];
         var prior = m_history;
         var scheduled = WithSourceStates(frame: in frame);

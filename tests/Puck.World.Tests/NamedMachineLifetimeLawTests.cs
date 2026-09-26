@@ -1,7 +1,7 @@
 using Puck.Commands;
 using System.Numerics;
 using System.Text.Json;
-using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Sources;
 using Puck.Abstractions.Machines;
 using Puck.World.Machines;
 using Puck.World.Protocol;
@@ -1231,11 +1231,10 @@ public sealed class NamedMachineLifetimeLawTests {
     }
     private sealed class CounterOutput : IMachineVideoOutput {
         public Vector3 EmittedLight => Vector3.Zero;
+        public ImagePixelFormat Format => ImagePixelFormat.R8G8B8A8Unorm;
         public int Height => 1;
-        public nint NativeImageViewHandle => 0;
         public int Width => 1;
 
-        public void NotifyDeviceLost() { }
-        public void PublishFrame(IGpuDeviceContext deviceContext) { }
+        public long WriteFrame(Span<byte> region) => 0L;
     }
 }

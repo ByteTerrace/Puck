@@ -48,8 +48,10 @@ the same change.
 
 Every armed capture is exactly one manifest entry. Either it carries the
 `frame` and `census` of the frame that showed its armed tick, with the
-`regionTick` that frame refreshed its bound regions at, or it carries a
-`refusal` and a `detail` naming the ticks involved:
+`regionTick` that frame refreshed its bound regions at (and, for a capture of a
+source instance whose source states its image, the `sourceVerdict` that holds
+the frame exactly to that image), or it carries a `refusal` and a `detail`
+naming the ticks involved:
 
 | `refusal` | Meaning |
 |---|---|

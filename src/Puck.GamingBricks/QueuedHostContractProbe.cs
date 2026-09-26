@@ -1,5 +1,5 @@
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Sources;
 using Puck.Hosting;
 
 namespace Puck.GamingBricks;
@@ -23,8 +23,8 @@ public readonly record struct QueuedHostProbeResult(bool Passed, string Detail) 
 /// <summary>
 /// The machine-neutral contract prover for the <see cref="QueuedMachineWorker"/> substrate — the single source of truth
 /// each core's Post battery exercises against its own host. It pins the observable behavior the substrate owns: the
-/// bounded pending-segment window with producer backpressure, exactly-once completion, an immutable frame lease across a
-/// blocked GPU upload, and device-loss/disposal serialization with the uploader. A host supplies factories that build it
+/// bounded pending-segment window with producer backpressure, exactly-once completion, and whole frames written into an
+/// uploaded source's region while the worker keeps completing newer ones. A host supplies factories that build it
 /// with the core's own synthetic content; the probe drives the shared <see cref="QueuedMachineHost"/> substrate,
 /// including its standalone tick/input API and optional media capabilities, so both hosts run identical checks.
 /// </summary>
@@ -36,6 +36,10 @@ public static class QueuedHostContractProbe {
     private const int RewindBackFrames = 30;
     private const int RewindDriveFrames = 90;
     private const int RunaheadFrames = 6;
+    // The steps VerifyWholeFrameWrites runs on its own thread while it writes frames on the probe's.
+    private const int WholeFrameSteps = 30;
+    // What a frame write must leave in the region's header.
+    private const byte HeaderSentinel = 0xA5;
 
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(value: 15);
 
@@ -93,6 +97,25 @@ public static class QueuedHostContractProbe {
 
         return region;
     }
+    // A region laid out for the host's frames, its header bytes set to a sentinel a frame write must leave alone.
+    private static (byte[] Region, ImageSourceUploadHeader Header) FrameRegion(QueuedMachineHost host) {
+        var header = ImageSourceUploadLayout.HeaderOf(
+            color: ImageColorEncoding.Srgb,
+            format: host.Format,
+            height: ((uint)host.Height),
+            width: ((uint)host.Width)
+        );
+        var region = new byte[ImageSourceUploadLayout.ByteCount(header: in header)];
+
+        region.AsSpan(
+            length: ImageSourceUploadLayout.HeaderBytes,
+            start: 0
+        ).Fill(value: HeaderSentinel);
+
+        return (region, header);
+    }
+    private static bool HeaderIntact(ReadOnlySpan<byte> region) =>
+        !region[..ImageSourceUploadLayout.HeaderBytes].ContainsAnyExcept(value: HeaderSentinel);
     private static QueuedHostProbeResult? VerifyConcurrentPokeStress<THost>(Func<THost> withContent, ulong budget, in MachinePadState input, int scratchAddress, int hammers)
         where THost : QueuedMachineHost, IQueuedMachineRuntime, IMachineMemoryPeek {
         var padState = input;
@@ -159,148 +182,67 @@ public static class QueuedHostContractProbe {
             : null
         );
     }
-    private static QueuedHostProbeResult? VerifyDeviceLossSerialization<THost>(Func<THost> empty)
+    // An empty host writes the opaque black frame it stages with no core: every pixel black and opaque, the header left
+    // alone, a positive sequence that an unchanged frame repeats, and a region shorter than the layout refused.
+    private static QueuedHostProbeResult? VerifyEmptyFrameWrite<THost>(Func<THost> empty)
         where THost : QueuedMachineHost {
         using var host = empty();
-        using var firstUpload = new BlockingSurfaceUpload();
-        using var replacementUpload = new BlockingSurfaceUpload(blockFirstCall: false);
-        var factory = new TestSurfaceTransferFactory(
-            firstUpload,
-            replacementUpload
+
+        if (host.Format != ImagePixelFormat.R8G8B8A8Unorm) {
+            return QueuedHostProbeResult.Fail(detail: $"the queued host declares {host.Format}; its worker writes R8G8B8A8Unorm frames");
+        }
+
+        var (region, header) = FrameRegion(host: host);
+        var sequence = host.WriteFrame(region: region);
+
+        if (sequence <= 0L) {
+            return QueuedHostProbeResult.Fail(detail: $"an empty host wrote no frame (sequence {sequence})");
+        }
+
+        if (!HeaderIntact(region: region)) {
+            return QueuedHostProbeResult.Fail(detail: "a frame write changed the region's header");
+        }
+
+        var plane = ImageSourceUploadLayout.PlaneOf(
+            header: in header,
+            plane: 0,
+            region: region
         );
-        var device = new TestGpuDeviceContext(factory: factory);
-        Exception? publishFault = null;
-        Exception? deviceLossFault = null;
-        var publish = new Thread(start: () => {
-            try {
-                host.PublishFrame(deviceContext: device);
-            } catch (Exception exception) {
-                publishFault = exception;
+
+        for (var offset = 0; (offset < plane.Length); offset += 4) {
+            if (
+                (plane[offset] != 0) ||
+                (plane[(offset + 1)] != 0) ||
+                (plane[(offset + 2)] != 0) ||
+                (plane[(offset + 3)] != 0xFF)
+            ) {
+                return QueuedHostProbeResult.Fail(detail: $"an empty host's frame is not opaque black at pixel {(offset / 4)}");
             }
-        });
-        var deviceLoss = new Thread(start: () => {
-            try {
-                host.NotifyDeviceLost();
-            } catch (Exception exception) {
-                deviceLossFault = exception;
-            }
-        });
-
-        publish.Start();
-
-        if (!firstUpload.WaitUntilEntered(timeout: OperationTimeout)) {
-            firstUpload.Release();
-            publish.Join();
-
-            return QueuedHostProbeResult.Fail(detail: "device-loss proof never entered the blocking uploader");
         }
 
-        deviceLoss.Start();
-        var deviceLossBlocked = !deviceLoss.Join(millisecondsTimeout: 50);
-        var disposedDuringUpload = firstUpload.DisposedDuringCall;
+        var again = new byte[region.Length];
 
-        firstUpload.Release();
-        var publishJoined = publish.Join(millisecondsTimeout: ((int)OperationTimeout.TotalMilliseconds));
-        var deviceLossJoined = deviceLoss.Join(millisecondsTimeout: ((int)OperationTimeout.TotalMilliseconds));
+        again.AsSpan().Fill(value: HeaderSentinel);
+
+        var repeated = host.WriteFrame(region: again);
 
         if (
-            !publishJoined ||
-            !deviceLossJoined
+            (repeated != sequence) ||
+            !again.AsSpan().SequenceEqual(other: region)
         ) {
-            return QueuedHostProbeResult.Fail(detail: "publish/device-loss serialization did not retire after upload release");
+            return QueuedHostProbeResult.Fail(detail: $"an unchanged frame wrote sequence {repeated} after {sequence}, or other bytes");
         }
 
-        if (publishFault is not null) {
-            return QueuedHostProbeResult.Fail(detail: $"device-loss-proof publish faulted: {publishFault.GetType().Name}: {publishFault.Message}");
+        try {
+            _ = host.WriteFrame(region: region.AsSpan(
+                length: (region.Length - 1),
+                start: 0
+            ));
+
+            return QueuedHostProbeResult.Fail(detail: "a region one byte shorter than the layout was written");
+        } catch (ArgumentException) {
+            return null;
         }
-
-        if (deviceLossFault is not null) {
-            return QueuedHostProbeResult.Fail(detail: $"device loss faulted: {deviceLossFault.GetType().Name}: {deviceLossFault.Message}");
-        }
-
-        if (
-            !deviceLossBlocked ||
-            disposedDuringUpload ||
-            !firstUpload.IsDisposed
-        ) {
-            return QueuedHostProbeResult.Fail(detail: $"device loss escaped upload serialization (blocked={deviceLossBlocked}, disposed-during-call={disposedDuringUpload}, disposed={firstUpload.IsDisposed})");
-        }
-
-        host.PublishFrame(deviceContext: device);
-
-        if (
-            (replacementUpload.CallCount != 1) ||
-            (0 == host.NativeImageViewHandle)
-        ) {
-            return QueuedHostProbeResult.Fail(detail: $"post-loss publish did not create a replacement upload (calls={replacementUpload.CallCount}, view={host.NativeImageViewHandle})");
-        }
-
-        return null;
-    }
-    private static QueuedHostProbeResult? VerifyDisposalSerialization<THost>(Func<THost> empty)
-        where THost : QueuedMachineHost {
-        var host = empty();
-        using var upload = new BlockingSurfaceUpload();
-        var device = new TestGpuDeviceContext(factory: new TestSurfaceTransferFactory(upload));
-        Exception? publishFault = null;
-        Exception? disposeFault = null;
-        var publish = new Thread(start: () => {
-            try {
-                host.PublishFrame(deviceContext: device);
-            } catch (Exception exception) {
-                publishFault = exception;
-            }
-        });
-        var dispose = new Thread(start: () => {
-            try {
-                host.Dispose();
-            } catch (Exception exception) {
-                disposeFault = exception;
-            }
-        });
-
-        publish.Start();
-
-        if (!upload.WaitUntilEntered(timeout: OperationTimeout)) {
-            upload.Release();
-            publish.Join();
-            host.Dispose();
-
-            return QueuedHostProbeResult.Fail(detail: "disposal proof never entered the blocking uploader");
-        }
-
-        dispose.Start();
-        var disposeBlocked = !dispose.Join(millisecondsTimeout: 50);
-        var disposedDuringUpload = upload.DisposedDuringCall;
-
-        upload.Release();
-        var publishJoined = publish.Join(millisecondsTimeout: ((int)OperationTimeout.TotalMilliseconds));
-        var disposeJoined = dispose.Join(millisecondsTimeout: ((int)OperationTimeout.TotalMilliseconds));
-
-        if (
-            !publishJoined ||
-            !disposeJoined
-        ) {
-            return QueuedHostProbeResult.Fail(detail: "publish/dispose serialization did not retire after upload release");
-        }
-
-        if (publishFault is not null) {
-            return QueuedHostProbeResult.Fail(detail: $"disposal-proof publish faulted: {publishFault.GetType().Name}: {publishFault.Message}");
-        }
-
-        if (disposeFault is not null) {
-            return QueuedHostProbeResult.Fail(detail: $"dispose faulted: {disposeFault.GetType().Name}: {disposeFault.Message}");
-        }
-
-        if (
-            !disposeBlocked ||
-            disposedDuringUpload ||
-            !upload.IsDisposed
-        ) {
-            return QueuedHostProbeResult.Fail(detail: $"upload lifetime escaped serialization (dispose-blocked={disposeBlocked}, disposed-during-call={disposedDuringUpload}, disposed={upload.IsDisposed})");
-        }
-
-        return null;
     }
     private static QueuedHostProbeResult? VerifyFastForwardCap<THost>(Func<THost> withContent, ulong budget)
         where THost : QueuedMachineHost, IQueuedMachineRuntime, ITimeTravelMachine {
@@ -442,117 +384,83 @@ public static class QueuedHostContractProbe {
 
         return null;
     }
-    private static QueuedHostProbeResult? VerifyPublicationLease<THost>(Func<THost> withContent)
+    // The worker completes frames on its own thread while the probe writes them: every write of one sequence carries the
+    // same bytes, so no write tears a frame; the sequence never falls; the header is never touched; and frames kept
+    // completing while the writes ran.
+    private static QueuedHostProbeResult? VerifyWholeFrameWrites<THost>(Func<THost> withContent)
         where THost : QueuedMachineHost, IQueuedMachineRuntime {
         using var host = withContent();
-        using var upload = new BlockingSurfaceUpload();
-        var device = new TestGpuDeviceContext(factory: new TestSurfaceTransferFactory(upload));
-        var accepted = 0L;
-        var input = MachinePadState.Neutral;
 
-        for (var index = 0; (index < host.MaximumPendingSteps); ++index) {
-            var submission = host.Submit(
-                deltaTicks: EngineTicks.PerSecond,
-                input: in input
-            );
-
-            if (submission == QueuedMachineSubmission.Rejected) {
-                return QueuedHostProbeResult.Fail(detail: $"healthy assigned host rejected priming segment {(index + 1)}");
-            }
-
-            ++accepted;
-        }
-
-        Exception? firstPublishFault = null;
-        Exception? secondPublishFault = null;
-        var firstPublish = new Thread(start: () => {
+        var (region, _) = FrameRegion(host: host);
+        var first = host.WriteFrame(region: region);
+        var frames = new Dictionary<long, byte[]> {
+            [first] = region.ToArray(),
+        };
+        Exception? stepFault = null;
+        var stepping = new Thread(start: () => {
             try {
-                host.PublishFrame(deviceContext: device);
+                var input = MachinePadState.Neutral;
+
+                for (var step = 0; (step < WholeFrameSteps); step++) {
+                    _ = host.Step(
+                        deltaTicks: (EngineTicks.PerSecond / 30UL),
+                        input: in input
+                    );
+                }
             } catch (Exception exception) {
-                firstPublishFault = exception;
-            }
-        });
-        var secondPublish = new Thread(start: () => {
-            try {
-                host.PublishFrame(deviceContext: device);
-            } catch (Exception exception) {
-                secondPublishFault = exception;
+                stepFault = exception;
             }
         });
 
-        firstPublish.Start();
+        stepping.Start();
 
-        if (!upload.WaitUntilEntered(timeout: OperationTimeout)) {
-            upload.Release();
-            firstPublish.Join();
+        var previous = first;
+        var writes = 0L;
 
-            return QueuedHostProbeResult.Fail(detail: "first publish never entered the blocking uploader");
-        }
+        while (stepping.IsAlive || (writes == 0L)) {
+            var sequence = host.WriteFrame(region: region);
 
-        var completedAtLease = host.CompletedSteps;
+            writes++;
 
-        while ((accepted - completedAtLease) < 2L) {
-            var submission = host.Submit(
-                deltaTicks: EngineTicks.PerSecond,
-                input: in input
-            );
+            if (sequence < previous) {
+                stepping.Join();
 
-            if (submission == QueuedMachineSubmission.Rejected) {
-                upload.Release();
-                firstPublish.Join();
-
-                return QueuedHostProbeResult.Fail(detail: "host rejected the additional lease-proof segment");
+                return QueuedHostProbeResult.Fail(detail: $"a frame write returned sequence {sequence} after {previous}");
             }
 
-            ++accepted;
+            if (!HeaderIntact(region: region)) {
+                stepping.Join();
+
+                return QueuedHostProbeResult.Fail(detail: "a frame write changed the region's header");
+            }
+
+            if (frames.TryGetValue(
+                key: sequence,
+                value: out var earlier
+            )) {
+                if (!earlier.AsSpan().SequenceEqual(other: region)) {
+                    stepping.Join();
+
+                    return QueuedHostProbeResult.Fail(detail: $"two writes of frame {sequence} differ: a write tore a frame");
+                }
+            } else {
+                frames.Add(
+                    key: sequence,
+                    value: region.ToArray()
+                );
+            }
+
+            previous = sequence;
         }
 
-        secondPublish.Start();
-        var progressed = SpinWait.SpinUntil(
-            condition: () => (host.CompletedSteps >= (completedAtLease + 2L)),
-            timeout: OperationTimeout
-        );
-        var serializedWhileBlocked = (upload.CallCount == 1);
-
-        upload.Release();
-        var firstJoined = firstPublish.Join(millisecondsTimeout: ((int)OperationTimeout.TotalMilliseconds));
-        var secondJoined = secondPublish.Join(millisecondsTimeout: ((int)OperationTimeout.TotalMilliseconds));
-
-        if (
-            !firstJoined ||
-            !secondJoined
-        ) {
-            return QueuedHostProbeResult.Fail(detail: "publish thread did not retire after the blocking uploader was released");
+        if (stepFault is not null) {
+            return QueuedHostProbeResult.Fail(detail: $"stepping faulted: {stepFault.GetType().Name}: {stepFault.Message}");
         }
 
-        if (firstPublishFault is not null) {
-            return QueuedHostProbeResult.Fail(detail: $"first publish faulted: {firstPublishFault.GetType().Name}: {firstPublishFault.Message}");
-        }
+        var last = host.WriteFrame(region: region);
 
-        if (secondPublishFault is not null) {
-            return QueuedHostProbeResult.Fail(detail: $"second publish faulted: {secondPublishFault.GetType().Name}: {secondPublishFault.Message}");
-        }
-
-        if (!progressed) {
-            return QueuedHostProbeResult.Fail(detail: "worker could not publish two newer frames while upload was blocked");
-        }
-
-        if (upload.SourceChanged) {
-            return QueuedHostProbeResult.Fail(detail: "leased upload bytes changed before Upload returned");
-        }
-
-        if (
-            !serializedWhileBlocked ||
-            (upload.MaximumConcurrentCalls != 1)
-        ) {
-            return QueuedHostProbeResult.Fail(detail: $"publish calls overlapped (calls={upload.CallCount}, max-concurrent={upload.MaximumConcurrentCalls})");
-        }
-
-        if (
-            (upload.CallCount != 2) ||
-            (0 == host.NativeImageViewHandle)
-        ) {
-            return QueuedHostProbeResult.Fail(detail: $"expected two serialized changed-frame uploads and a bound view; calls={upload.CallCount}, view={host.NativeImageViewHandle}");
+        if (last <= first) {
+            return QueuedHostProbeResult.Fail(detail: $"no frame completed while {writes} writes ran (sequence {first} before, {last} after)");
         }
 
         return null;
@@ -1168,30 +1076,25 @@ public static class QueuedHostContractProbe {
 
         return (stress ?? QueuedHostProbeResult.Pass(detail: $"marshaled poke schedule reproducible; {Hammers} concurrent poke/peek round-trips coherent and fault-free; peek-hammering left state replay-identical"));
     }
-    /// <summary>Verifies a blocked CPU-to-GPU upload leases an immutable complete frame without holding the worker's frame
-    /// lock, that later native frames keep completing, that concurrent publishes serialize, and that device loss and
-    /// disposal wait until the uploader has finished consuming its caller-owned pixels.</summary>
+    /// <summary>Verifies frames are written into an uploaded source's region whole: an empty host writes its opaque black
+    /// frame and leaves the header alone, an unchanged frame repeats its sequence, a short region is refused, and while
+    /// the worker completes newer frames on its own thread every write of one sequence carries the same bytes and the
+    /// sequence never falls.</summary>
     /// <typeparam name="THost">The queued host under test.</typeparam>
     /// <param name="withContent">Builds a fresh assigned host (with the core's synthetic content).</param>
     /// <param name="empty">Builds a fresh empty (unassigned) host.</param>
     /// <returns>The contract result.</returns>
     public static QueuedHostProbeResult VerifyFramePublication<THost>(Func<THost> withContent, Func<THost> empty)
         where THost : QueuedMachineHost, IQueuedMachineRuntime {
-        var publication = VerifyPublicationLease(withContent: withContent);
+        var empties = VerifyEmptyFrameWrite(empty: empty);
 
-        if (publication is not null) {
-            return publication.Value;
+        if (empties is not null) {
+            return empties.Value;
         }
 
-        var deviceLoss = VerifyDeviceLossSerialization(empty: empty);
+        var whole = VerifyWholeFrameWrites(withContent: withContent);
 
-        if (deviceLoss is not null) {
-            return deviceLoss.Value;
-        }
-
-        var disposal = VerifyDisposalSerialization(empty: empty);
-
-        return (disposal ?? QueuedHostProbeResult.Pass(detail: "blocked upload bytes stayed immutable across worker publications; publish, device loss, and disposal serialized"));
+        return (whole ?? QueuedHostProbeResult.Pass(detail: "frames written whole into an uploaded source's region, header untouched, sequences monotonic while the worker kept completing frames"));
     }
     /// <summary>Verifies the machine-neutral time-travel contract the <see cref="MachineTimeTravel{TInput}"/> layer owns
     /// over the queued host: durable checkpoints preserve complete state and matching continuation in a fresh host;
@@ -1318,138 +1221,5 @@ public static class QueuedHostContractProbe {
             );
         }
         public void RunCycles(long cycles) => Advance(frames: cycles);
-    }
-    private sealed class BlockingSurfaceUpload(bool blockFirstCall = true) : IGpuSurfaceUpload {
-        private readonly ManualResetEventSlim m_entered = new(initialState: false);
-        private readonly ManualResetEventSlim m_release = new(initialState: false);
-
-        private int m_activeCalls;
-        private int m_callCount;
-        private int m_disposed;
-        private int m_disposedDuringCall;
-        private int m_maximumConcurrentCalls;
-        private int m_sourceChanged;
-
-        public int CallCount => Volatile.Read(location: ref m_callCount);
-        public bool DisposedDuringCall => (0 != Volatile.Read(location: ref m_disposedDuringCall));
-        public bool IsDisposed => (0 != Volatile.Read(location: ref m_disposed));
-        public int MaximumConcurrentCalls => Volatile.Read(location: ref m_maximumConcurrentCalls);
-        public bool SourceChanged => (0 != Volatile.Read(location: ref m_sourceChanged));
-
-        private void SetMaximumConcurrentCalls(int value) {
-            var observed = Volatile.Read(location: ref m_maximumConcurrentCalls);
-
-            while (
-                (observed < value) &&
-                (observed != Interlocked.CompareExchange(
-                comparand: observed,
-                location1: ref m_maximumConcurrentCalls,
-                value: value
-            ))
-            ) {
-                observed = Volatile.Read(location: ref m_maximumConcurrentCalls);
-            }
-        }
-
-        public void Dispose() {
-            if (0 != Interlocked.Exchange(
-                location1: ref m_disposed,
-                value: 1
-            )) {
-                return;
-            }
-
-            if (0 != Volatile.Read(location: ref m_activeCalls)) {
-                _ = Interlocked.Exchange(
-                    location1: ref m_disposedDuringCall,
-                    value: 1
-                );
-            }
-
-            m_release.Set();
-            m_entered.Dispose();
-            m_release.Dispose();
-        }
-        public void Release() => m_release.Set();
-        public nint Upload(
-            ReadOnlyMemory<byte> pixels,
-            GpuPixelFormat format,
-            uint width,
-            uint height,
-            uint levels = 1U
-        ) {
-            var call = Interlocked.Increment(location: ref m_callCount);
-            var active = Interlocked.Increment(location: ref m_activeCalls);
-
-            SetMaximumConcurrentCalls(value: active);
-
-            try {
-                if (
-                    blockFirstCall &&
-                    (call == 1)
-                ) {
-                    var baseline = pixels.ToArray();
-
-                    m_entered.Set();
-
-                    while (!m_release.Wait(millisecondsTimeout: 1)) {
-                        if (!pixels.Span.SequenceEqual(other: baseline)) {
-                            _ = Interlocked.Exchange(
-                                location1: ref m_sourceChanged,
-                                value: 1
-                            );
-                        }
-                    }
-
-                    if (!pixels.Span.SequenceEqual(other: baseline)) {
-                        _ = Interlocked.Exchange(
-                            location1: ref m_sourceChanged,
-                            value: 1
-                        );
-                    }
-                }
-
-                return call;
-            } finally {
-                _ = Interlocked.Decrement(location: ref m_activeCalls);
-            }
-        }
-        public bool WaitUntilEntered(TimeSpan timeout) => m_entered.Wait(timeout: timeout);
-    }
-    // A device whose only service is the surface-transfer factory a publish uploads through.
-    private sealed class TestGpuDeviceContext(IGpuSurfaceTransferFactory factory) : IGpuDeviceContext {
-        public long AdapterLuid => 0;
-        public GpuDeviceIdentity? Identity => null;
-        public GpuDeviceCapabilities? Capabilities => null;
-        public GpuMemoryProfile MemoryProfile => default;
-        public GpuDeviceServices Services { get; } = new() {
-            Bindings = null!,
-            BufferFactory = null!,
-            CommandPoolFactory = null!,
-            ImageFactory = null!,
-            PipelineFactory = null!,
-            QueueSubmitter = null!,
-            Recorder = null!,
-            RenderPassFactory = null!,
-            ShaderModuleFactory = null!,
-            SurfaceTransferFactory = factory,
-        };
-
-        public void WaitIdle() { }
-    }
-    private sealed class TestSurfaceTransferFactory(params IGpuSurfaceUpload[] uploads) : IGpuSurfaceTransferFactory {
-        private readonly Queue<IGpuSurfaceUpload> m_uploads = new(collection: uploads);
-
-        public IGpuSurfaceImport CreateImport() =>
-            throw new NotSupportedException();
-        public IGpuSurfaceReadback CreateReadback() =>
-            throw new NotSupportedException();
-        public bool TryImportFence(nint sharedHandle, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IGpuSharedFence? fence, out string refusal) =>
-            throw new NotSupportedException();
-        public IGpuSurfaceUpload CreateUpload() {
-            lock (m_uploads) {
-                return m_uploads.Dequeue();
-            }
-        }
     }
 }
