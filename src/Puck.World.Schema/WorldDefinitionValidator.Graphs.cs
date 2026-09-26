@@ -26,6 +26,13 @@ public static partial class WorldDefinitionValidator {
                 reason: out var nameReason
             )) {
                 errors.Add(item: $"{path}.name {nameReason}");
+            } else if (!GeneratedName.TryValidateAuthored(
+                name: graph.Name,
+                reason: out var reservedReason
+            )) {
+                // The synthesized root names its own versions and passes in the generated form, so an instance, whose
+                // name is also its version and place pass there, can never collide with one.
+                errors.Add(item: $"{path}.name {reservedReason}");
             } else if (!names.Add(item: graph.Name)) {
                 errors.Add(item: $"{path}.name '{graph.Name}' is duplicated.");
             } else if (

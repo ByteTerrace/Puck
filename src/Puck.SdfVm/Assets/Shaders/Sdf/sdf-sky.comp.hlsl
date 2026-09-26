@@ -26,11 +26,13 @@
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    if (id.z >= params.viewportCount) {
+    uint viewIndex = worldViewOf(id.z);
+
+    if (viewIndex >= params.viewportCount) {
         return;
     }
 
-    ViewportData view = viewports[id.z];
+    ViewportData view = viewports[viewIndex];
     uint2 rectDims = worldRenderDims((uint2)(view.region.zw * float2(params.imageExtent)), view.renderScale.x);
 
     if ((id.x >= rectDims.x) || (id.y >= rectDims.y)) {
@@ -58,5 +60,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // tile's ray that clears the field) are bit-identical, and a screenshot across the tile seam shows no step.
     color += ((sdfR2Dither(id.xy) - 0.5) * DitherQuantum);
 
-    sources[id.z][id.xy] = float4(color, 1.0);
+    sources[viewIndex][id.xy] = float4(color, 1.0);
 }

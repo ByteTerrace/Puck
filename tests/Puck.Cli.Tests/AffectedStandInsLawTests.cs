@@ -85,7 +85,7 @@ public sealed class AffectedStandInsLawTests {
                 model: ArchitectureModel.Load(repositoryRoot: repositoryRoot),
                 repositoryRoot: repositoryRoot
             ),
-            repositoryRoot: repositoryRoot
+            tree: new AffectedWorkingTree(root: repositoryRoot)
         );
 
         Assert.Contains(collection: standInsFor(arg: "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-visibility.hlsli"), expected: "src/Puck.SdfVm/SdfWorldEngine.Pipelines.cs");

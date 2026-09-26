@@ -132,10 +132,13 @@ public sealed partial class ShaderSourceClosure {
     /// <param name="limits">The limits the closure must fit.</param>
     /// <param name="root">The directory every file must lie within, or <see langword="null"/> for none.</param>
     /// <param name="generated">The text of each generated include by full path, or <see langword="null"/> for none.</param>
+    /// <param name="readInclude">Reads an include's text by full path, <see langword="null"/> when no file holds it, in
+    /// place of the file system, for a caller reading another tree than the working one; or <see langword="null"/> to read
+    /// the file system.</param>
     /// <returns>The closure.</returns>
     /// <exception cref="ShaderClosureRefusedException">An include is missing, a file lies outside
     /// <paramref name="root"/>, or a limit is exceeded; the code names which.</exception>
-    public static ShaderSourceClosure Collect(IReadOnlyList<(string Path, string Text)> sources, ShaderSourceLimits limits, string? root = null, IReadOnlyDictionary<string, string>? generated = null) {
+    public static ShaderSourceClosure Collect(IReadOnlyList<(string Path, string Text)> sources, ShaderSourceLimits limits, string? root = null, IReadOnlyDictionary<string, string>? generated = null, Func<string, string?>? readInclude = null) {
         ArgumentNullException.ThrowIfNull(argument: sources);
         ArgumentNullException.ThrowIfNull(argument: limits);
 
@@ -226,24 +229,31 @@ public sealed partial class ShaderSourceClosure {
                         value: out var included
                     )
                 ) {
-                    var info = new FileInfo(fileName: includePath);
-
-                    if (!info.Exists) {
-                        throw new ShaderClosureRefusedException(
+                    if (readInclude is not null) {
+                        included = (readInclude(arg: includePath) ?? throw new ShaderClosureRefusedException(
                             code: ShaderClosureRefusedException.IncludeMissing,
                             message: $"'{path}' includes '{match.Groups[1].Value}', and no file exists at '{includePath}'."
-                        );
-                    }
+                        ));
+                    } else {
+                        var info = new FileInfo(fileName: includePath);
 
-                    // A file's UTF-8 text is never longer than its bytes, so an oversized file is refused before it is read.
-                    if (info.Length > limits.MaxFileBytes) {
-                        throw new ShaderClosureRefusedException(
-                            code: ShaderClosureRefusedException.FileBytes,
-                            message: $"'{includePath}' holds {info.Length} bytes; one file may hold at most {limits.MaxFileBytes}."
-                        );
-                    }
+                        if (!info.Exists) {
+                            throw new ShaderClosureRefusedException(
+                                code: ShaderClosureRefusedException.IncludeMissing,
+                                message: $"'{path}' includes '{match.Groups[1].Value}', and no file exists at '{includePath}'."
+                            );
+                        }
 
-                    included = File.ReadAllText(path: includePath);
+                        // A file's UTF-8 text is never longer than its bytes, so an oversized file is refused before it is read.
+                        if (info.Length > limits.MaxFileBytes) {
+                            throw new ShaderClosureRefusedException(
+                                code: ShaderClosureRefusedException.FileBytes,
+                                message: $"'{includePath}' holds {info.Length} bytes; one file may hold at most {limits.MaxFileBytes}."
+                            );
+                        }
+
+                        included = File.ReadAllText(path: includePath);
+                    }
                 }
 
                 Admit(

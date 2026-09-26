@@ -215,6 +215,83 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.True(condition: (recorders.Of(instance: "camera").Records > 0));
         Assert.Null(@object: runtime.UnservedCaptureReasonOf(instance: "main"));
     }
+    // An instance whose inputs move to another producer while its graph stays is handed its own pipeline with the new
+    // inputs: the set's reads follow the move, the node keeps the graph it has installed and builds nothing, and the
+    // new producer renders for it from the next frame.
+    [Fact]
+    public void AGraphKeepingItsPipelineRebindsItsInputsWithoutBuilding() {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders(Camera);
+        var screens = Graph(ScreensGraph(false, "screen"), ("screen", "camera"));
+
+        using var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                Instance(name: "camera"),
+                Instance(name: "other"),
+                Instance(
+                    name: "main",
+                    reads: new RenderGraphRead(Producer: "camera")
+                )
+            ),
+            "main",
+            Graph(pipeline: CameraGraph()),
+            Graph(pipeline: CameraGraph()),
+            screens
+        );
+        var roots = new[] { new RenderGraphRoot(Height: 1.0, Instance: "main", Width: 1.0) };
+
+        new Frames(
+            footprints: [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0)],
+            roots: roots,
+            runtime: runtime
+        ).Settle();
+
+        var main = runtime.NodeOf(instance: "main")!;
+        var plan = main.Plan;
+
+        Assert.True(condition: (recorders.Of(instance: "camera").Records > 0L));
+        Assert.Equal(
+            actual: recorders.Of(instance: "other").Records,
+            expected: 0L
+        );
+        Assert.True(
+            condition: runtime.TryReconfigure(
+                graphs: [null, null, (screens with { Inputs = [new RenderGraphRuntimeInput(Producer: "other", Version: "screen")] })],
+                refusal: out var refusal,
+                root: "main",
+                set: Set(
+                    Instance(name: "camera"),
+                    Instance(name: "other"),
+                    Instance(
+                        name: "main",
+                        reads: new RenderGraphRead(Producer: "other")
+                    )
+                )
+            ),
+            userMessage: refusal?.Message
+        );
+        Assert.Same(
+            actual: main.Plan,
+            expected: plan
+        );
+        Assert.False(condition: main.HasPendingCandidate);
+
+        var records = recorders.Of(instance: "camera").Records;
+
+        new Frames(
+            footprints: [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "other", Width: 1.0)],
+            roots: roots,
+            runtime: runtime
+        ).Settle();
+        Assert.True(condition: (recorders.Of(instance: "other").Records > 0L));
+        Assert.Equal(
+            actual: recorders.Of(instance: "camera").Records,
+            expected: records
+        );
+        Assert.Null(@object: runtime.UnservedCaptureReasonOf(instance: "main"));
+    }
     [Fact]
     public void AnInstalledGraphIsRefusedWhenItsInputsDoNotResolve() {
         var gpu = new FakePipelineGpu();

@@ -74,6 +74,9 @@ internal static class AffectedSelection {
     /// them, and one no index places is listed in <see cref="AffectedPlan.Deleted"/>, never as unmapped.</param>
     /// <param name="recorded">The index as the base recorded it, which places a deleted file the current index no longer
     /// names, or <see langword="null"/> for none.</param>
+    /// <param name="recordedStandInsFor">The stand-ins a deleted file had in the tree the base recorded
+    /// (<see cref="AffectedStandIns"/> over <see cref="AffectedRevisionTree"/>), looked up in <paramref name="recorded"/>
+    /// and then the current index, or <see langword="null"/> for none.</param>
     /// <returns>The plan.</returns>
     public static AffectedPlan Select(
         IReadOnlyList<string> changed,
@@ -87,7 +90,8 @@ internal static class AffectedSelection {
         Func<string, IReadOnlyList<string>> standInsFor,
         Func<string, IReadOnlySet<string>> canariesReaching,
         IReadOnlySet<string>? deleted = null,
-        IReadOnlyDictionary<string, IReadOnlySet<string>>? recorded = null
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? recorded = null,
+        Func<string, IReadOnlyList<string>>? recordedStandInsFor = null
     ) {
         var catalog = false;
         var everything = false;
@@ -146,8 +150,17 @@ internal static class AffectedSelection {
             if (executedBy is not null) {
                 selected.UnionWith(other: executedBy);
             } else {
-                foreach (var standIn in standInsFor(arg: path)) {
-                    if (coverage.TryGetValue(key: standIn, value: out var standInExecutedBy)) {
+                // A deleted file stands for what the tree the base recorded said it stood for, in the index that base
+                // recorded; a file the working tree holds stands for what it says now, in the current index.
+                var standIns = (isDeleted
+                    ? (recordedStandInsFor?.Invoke(arg: path) ?? [])
+                    : standInsFor(arg: path));
+
+                foreach (var standIn in standIns) {
+                    if (
+                        (isDeleted && (recorded?.TryGetValue(key: standIn, value: out var standInExecutedBy) ?? false)) ||
+                        coverage.TryGetValue(key: standIn, value: out standInExecutedBy)
+                    ) {
                         mapped = true;
                         selected.UnionWith(other: standInExecutedBy);
                     }

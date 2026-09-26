@@ -51,15 +51,15 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: [$"{FilmGrain}:post.{FilmGrain}", $"{FilmGrain}-2:post.{FilmGrain}", "overlay:overlay"]
+            expected: [$"main$post${FilmGrain}:post.{FilmGrain}", $"main$post${FilmGrain}$2:post.{FilmGrain}", "main$overlay:overlay"]
         );
         Assert.Equal(
             actual: graph.PostPasses[FilmGrain],
-            expected: [FilmGrain, $"{FilmGrain}-2"]
+            expected: [$"main$post${FilmGrain}", $"main$post${FilmGrain}$2"]
         );
         Assert.Equal(
             actual: (graph.Root, plan.Inputs.Single(), plan.Outputs.Single()),
-            expected: (WorldViewGraphs.MainInstance, "world", "frame")
+            expected: (WorldViewGraphs.MainInstance, "main$world", "main$frame")
         );
 
         var main = graph.Instances.Single(predicate: static instance => (instance.Name == WorldViewGraphs.MainInstance));
@@ -79,7 +79,7 @@ public sealed class WorldRootGraphLawTests {
         );
         Assert.Equal(
             actual: graph.Graphs().Select(selector: static installed => installed?.Inputs.Single()),
-            expected: [null, new RenderGraphRuntimeInput(Producer: WorldViewGraphs.WorldInstance, Version: "world")]
+            expected: [null, new RenderGraphRuntimeInput(Producer: WorldViewGraphs.WorldInstance, Version: "main$world")]
         );
     }
     [Fact]
@@ -95,7 +95,7 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["left:place", "right:place", $"{FilmGrain}:post.{FilmGrain}"]
+            expected: ["left:place", "right:place", $"main$post${FilmGrain}:post.{FilmGrain}"]
         );
         Assert.Equal(
             actual: (graph.Root, string.Join(separator: ",", values: main.Reads.Select(selector: static read => read.Producer))),
@@ -104,7 +104,7 @@ public sealed class WorldRootGraphLawTests {
         Assert.Equal(
             actual: graph.Graphs()[1]!.Inputs,
             expected: [
-                new RenderGraphRuntimeInput(Producer: WorldViewGraphs.WorldInstance, Version: "world"),
+                new RenderGraphRuntimeInput(Producer: WorldViewGraphs.WorldInstance, Version: "main$world"),
                 new RenderGraphRuntimeInput(Producer: "left", Version: "left"),
                 new RenderGraphRuntimeInput(Producer: "right", Version: "right"),
             ]
@@ -146,9 +146,25 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: Assert.Single(collection: graph.Plan!.Steps).Name,
-            expected: RenderGraphPackageCatalog.Overlay
+            expected: "main$overlay"
         );
         Assert.Empty(collection: graph.PostPasses);
+    }
+    // A pane takes its authored name as its version and its place pass, and the root declares its own versions and
+    // passes in the generated form, so a pane may be named what those once were.
+    [Fact]
+    public void APaneNamedLikeTheRootsOwnVersionsAndPassesComposes() {
+        var graph = WorldRootGraph.Compose(
+            extensions: [new WorldRenderExtensionEntry(Id: FilmGrain)],
+            overlay: true,
+            packages: RenderGraphPackageCatalog.Shipped,
+            panes: ["frame", "stage1", "overlay", FilmGrain]
+        );
+
+        Assert.Equal(
+            actual: graph.Plan!.Steps.Select(selector: static step => step.Name),
+            expected: ["frame", "stage1", "overlay", FilmGrain, $"main$post${FilmGrain}", "main$overlay"]
+        );
     }
     [Fact]
     public void AnEntryWhoseConfigDoesNotBindIsTheCompilersRefusalNamingTheEntry() {

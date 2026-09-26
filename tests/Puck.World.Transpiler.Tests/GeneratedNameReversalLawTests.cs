@@ -50,7 +50,7 @@ public sealed class GeneratedNameReversalLawTests {
         new(Calls: 1, File: Sessions, Mints: "a freshly started instance's name"),
         new(Calls: 1, File: Extensions, Mints: "an extension runtime's directory"),
         new(Calls: 1, File: Captures, Mints: "a capture's frame file"),
-        new(Calls: 2, File: Views, Mints: "a session screen's and a camera seat's view name, which exist only at run time"),
+        new(Calls: 3, File: Views, Mints: "a session screen's and a camera seat's view name, and the synthesized root graph's own versions and passes, which exist only at run time"),
         new(Calls: 1, File: Probes, Mints: "a seat-relative probe's instance key, which exists only at run time"),
     ];
     private static readonly Regex MintingCall = new(
@@ -427,8 +427,7 @@ public sealed class GeneratedNameReversalLawTests {
         new(Label: "fresh instance name", Site: Sessions, Check: static () => FileBacked(site: Sessions)),
         new(Label: "extension directory", Site: Extensions, Check: static () => FileBacked(site: Extensions)),
         new(Label: "capture frame file", Site: Captures, Check: static () => FileBacked(site: Captures)),
-        new(Label: "view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("session", "0")), name: GeneratedName.Join("session", "0"))),
-        new(Label: "probe instance key a hand document spells", Site: Probes, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("head", "2")), name: GeneratedName.Join("head", "2"))),
+        new(Label: "view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("session", "0")), name: GeneratedName.Join("session", "0"))),        new(Label: "probe instance key a hand document spells", Site: Probes, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("head", "2")), name: GeneratedName.Join("head", "2"))),
     ];
 
     public static TheoryData<string> RowLabels() => [.. Rows.Select(selector: static row => row.Label)];
