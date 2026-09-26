@@ -54,7 +54,7 @@ public sealed class WorldStampPoolCompactionLawTests {
             BodyIndex: body,
             Creation: creation,
             Scale: 1f,
-            Motion: WorldLookMotion.Default
+            Look: WorldLook.Implicit
         )).ToArray()
     );
     private static ShapeDocument Shape(int id, int? group = null, SdfBlendOp blend = SdfBlendOp.Union) => new(
@@ -210,7 +210,7 @@ public sealed class WorldStampPoolCompactionLawTests {
             0,
             creation,
             1f,
-            WorldLookMotion.Default
+            WorldLook.Implicit
         ) };
 
         pool.Reconcile(

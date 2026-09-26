@@ -1,5 +1,4 @@
 using Puck.Abstractions.Gpu;
-using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -187,7 +186,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // Writes this frame's frame group block into the node's frame region and sends the whole region to the slot, or, with
     // sentinels on, every member's echo sentinel. The block is rewritten every frame, so each slot takes all of it rather
     // than what differs from the frame it last held, and a frame's upload never depends on how many frames ran before.
-    private void WriteFrameGroup(in FrameContext context, int slot) {
+    private void WriteFrameGroup(int slot) {
         if (m_frameRegion is not { } region) {
             return;
         }
@@ -204,7 +203,6 @@ public sealed partial class ShaderPipelineRenderNode {
             layout.WriteFrame(
                 block: block,
                 frame: m_frame,
-                tick: context.ElapsedTicks,
                 values: Frame
             );
         }

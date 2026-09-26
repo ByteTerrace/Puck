@@ -27,6 +27,12 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
 
     /// <summary>Gets the instance set of the latest accepted reconfiguration, or <see langword="null"/> before one.</summary>
     public RenderGraphInstanceSet? Set { get; private set; }
+    /// <inheritdoc/>
+    public RenderGraphInstanceSet Instances => (Set ?? throw new InvalidOperationException(message: "The fake has accepted no reconfiguration."));
+    /// <inheritdoc/>
+    /// <remarks>A law sets it to the schedule it stands for the runtime's latest frame; a reconfiguration clears it, as
+    /// the runtime's does.</remarks>
+    public RenderGraphSchedule? Latest { get; set; }
 
     /// <summary>Attaches a host to a new fake whose nodes render nothing, over the default graph a world with no
     /// extensions and no overlay synthesizes.</summary>
@@ -141,6 +147,7 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
         }
 
         Reconfigurations++;
+        Latest = null;
         Root = root;
         Set = set;
         refusal = null;

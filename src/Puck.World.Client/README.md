@@ -222,7 +222,10 @@ separate constraint on dense populations; reusable appearances do not remove it.
   the client observes, and that authority's followed session mirror otherwise.
 - `WorldStateLease.cs` is one holder's acquired slots: a stamp registration's
   lanes, drivers, gates, poses and effectors, a body's scale, a seat's
-  state-backed binding contexts. A `$body` key names the lease's body, and the
+  state-backed binding contexts. A body's holder calls `Arrive` with what the
+  body wears (its creation and look, or the document for its scale), which
+  acquires the presentation manifest's templates for them before the first
+  frame reads them. A `$body` key names the lease's body, and the
   lease releases its slots when the body leaves, its binding moves, or the
   mirror installs a document, so the mirror retires what nothing reads.
 - `WorldWheelRings.cs` is one seat's drawn radial: each sector's label and icon

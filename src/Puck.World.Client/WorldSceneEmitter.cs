@@ -318,6 +318,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             bodyIndex: index,
             mirror: m_client.StateMirror
         );
+        reads.Arrive(
+            first: definition,
+            second: null
+        );
 
         return WorldGaitDrivers.LiveBodyScale(
             reads: reads,
@@ -395,7 +399,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                     BodyIndex: index,
                     Creation: creation,
                     Scale: ((placement.Scale * look.Scale) * liveScale),
-                    Motion: look.Motion
+                    Look: look
                 )
                 : null
             );
@@ -410,7 +414,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                     BodyIndex: index,
                     Creation: creation,
                     Scale: (look.Scale * liveScale),
-                    Motion: look.Motion
+                    Look: look
                 )
                 : null
             );

@@ -13,8 +13,10 @@ namespace Puck.World.Tests;
 /// the state bindings a document's presentation sections author, with per-body templates kept apart and their
 /// <c>$body</c> key as authored; a mirror installing a document registers the manifest's slots, and installing it again
 /// — or installing a reloaded copy of it — registers nothing new, keeps every slot index, and allocates nothing; a
-/// manifest slot on a cell advancing at the install presents its installed value whole before the next tick; and the
-/// walk over the shipped flagship world completes with a plausible count.
+/// manifest slot on a cell advancing at the install presents its installed value whole before the next tick; each
+/// template is recorded under the look, creation or population section that carries it, and a body's lease acquires
+/// exactly those when the body arrives, so its first frame's reads read no cell and allocate no slot, and arriving
+/// again allocates nothing; and the walk over the shipped flagship world completes with a plausible count.
 /// </summary>
 public sealed class WorldPresentationManifestLawTests {
     private const int Repetitions = 64;
@@ -41,6 +43,31 @@ public sealed class WorldPresentationManifestLawTests {
         Number(key: StateBinding.BodyKey, row: "armed2", target: true),
     ];
 
+    private static long Reads(WorldStateMirror mirror) {
+        Assert.True(condition: ((IWorkCounterSource)mirror).TryRead(
+            kind: WorldStateMirror.Reads,
+            value: out var value
+        ));
+
+        return value;
+    }
+    // Every read a body wearing the fixture's dancer look and creation makes on its first frame, through the authored
+    // objects that name them: the look's pose references and lane operand, and the creation's driver signal, gates and
+    // effector target.
+    private static void ReadAsBody(WorldStateLease lease, InstructionPayload.State lane) {
+
+        Assert.True(condition: (lease.Slot(reference: "state.pose.$body", truth: true) >= 0));
+        Assert.True(condition: (lease.Slot(reference: "state.swayClock", truth: false) >= 0));
+        Assert.True(condition: (lease.Slot(reference: "state.armed.$body", truth: true) >= 0));
+        Assert.True(condition: (lease.Slot(reference: "state.aim.$body", truth: false) >= 0));
+        Assert.True(condition: (lease.Slot(reference: "state.armed2.$body", truth: true) >= 0));
+        Assert.True(condition: (lease.Slot(
+            key: lane.Key?.Spelling,
+            row: lane.Name.Spelling,
+            source: lane,
+            target: false
+        ) >= 0));
+    }
     private static WorldPresentationBinding Number(string row, string? key = null, bool target = false) => new(
         Binding: new StateBinding(
             Key: key,
@@ -334,6 +361,99 @@ public sealed class WorldPresentationManifestLawTests {
         Assert.Equal(
             actual: mirror.SlotCount,
             expected: ExpectedBindings.Length
+        );
+    }
+    [Fact]
+    public void EachTemplateIsRecordedUnderTheObjectThatCarriesIt() {
+        var definition = BoundDocument();
+        var manifest = WorldPresentationManifest.Compile(definition: definition);
+
+        Assert.Equal(
+            actual: manifest.TemplatesOf(owner: definition).ToArray(),
+            expected: [Number(row: "scale", key: StateBinding.BodyKey)]
+        );
+        Assert.Equal(
+            actual: manifest.TemplatesOf(owner: definition.Looks[0]).ToArray().Select(selector: static entry => entry.ToString()).Order(),
+            expected: new[] {
+                Number(key: StateBinding.BodyKey, row: "pose", target: true),
+                Number(row: "tint"),
+            }.Select(selector: static entry => entry.ToString()).Order()
+        );
+        Assert.Equal(
+            actual: manifest.TemplatesOf(owner: definition.Creations[0]).ToArray().Select(selector: static entry => entry.ToString()).Order(),
+            expected: new[] {
+                Number(row: "swayClock"),
+                Number(key: StateBinding.BodyKey, row: "armed", target: true),
+                Number(row: "aim", key: StateBinding.BodyKey),
+                Number(key: StateBinding.BodyKey, row: "armed2", target: true),
+            }.Select(selector: static entry => entry.ToString()).Order()
+        );
+        Assert.True(condition: manifest.TemplatesOf(owner: new object()).IsEmpty);
+    }
+    [Fact]
+    public void ABodysLeaseAcquiresItsTemplatesOnArrival_SoItsFirstFrameReadsNothingAndArrivingAgainAllocatesNothing() {
+        var definition = BoundDocument();
+        var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
+        var lease = new WorldStateLease();
+        var creation = definition.Creations[0];
+        var look = definition.Looks[0];
+        var lane = look.Motion.Lanes![0]!.Instructions.Select(selector: static instruction => instruction.Payload).OfType<InstructionPayload.State>().First();
+
+        mirror.Install(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+        lease.Bind(
+            bodyIndex: 0,
+            mirror: mirror
+        );
+
+        // Arrival acquires the six templates the body wears, each a new slot read once.
+        var beforeArrival = Reads(mirror: mirror);
+
+        lease.Arrive(
+            first: creation,
+            second: look
+        );
+        Assert.Equal(
+            actual: (lease.TemplateCount, mirror.SlotCount, (Reads(mirror: mirror) - beforeArrival)),
+            expected: (6, (ExpectedBindings.Length + 6), 6L)
+        );
+
+        // The first frame's reads find every slot already held: no cell read, no slot allocated.
+        var beforeFrame = Reads(mirror: mirror);
+
+        ReadAsBody(
+            lane: lane,
+            lease: lease
+        );
+        Assert.Equal(
+            actual: (mirror.SlotCount, (Reads(mirror: mirror) - beforeFrame)),
+            expected: ((ExpectedBindings.Length + 6), 0L)
+        );
+
+        // Arriving again with what the body already wears, and reading, allocates nothing.
+        Assert.Equal(
+            actual: AllocationWindow.Least(window: () => {
+                for (var repetition = 0; (repetition < Repetitions); repetition++) {
+                    lease.Arrive(
+                        first: creation,
+                        second: look
+                    );
+                    ReadAsBody(
+                        lane: lane,
+                        lease: lease
+                    );
+                }
+            }),
+            expected: 0L
+        );
+
+        // The body leaves: its templates retire and only the manifest's registered slots remain.
+        lease.Release();
+        Assert.Equal(
+            actual: (lease.TemplateCount, mirror.SlotCount),
+            expected: (0, ExpectedBindings.Length)
         );
     }
     [Fact]

@@ -68,9 +68,10 @@ public sealed partial class WorldStampPool {
     /// <param name="BodyIndex">The population entity index whose interpolated pose roots the stamp.</param>
     /// <param name="Creation">The creation whose geometry the body wears.</param>
     /// <param name="Scale">The uniform render scale (a placement's scale, or a look's scale).</param>
-    /// <param name="Motion">The look's motion — cues, timeline replay, and the root/part second-order followers
-    /// (<see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>).</param>
-    public readonly record struct BodyStamp(int BodyIndex, WorldPrototype Creation, float Scale, WorldLookMotion Motion);
+    /// <param name="Look">The look the body wears, whose motion carries the cues, timeline replay, and the root/part
+    /// second-order followers (<see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>), and
+    /// whose state reads the registration's lease acquires when the body arrives.</param>
+    public readonly record struct BodyStamp(int BodyIndex, WorldPrototype Creation, float Scale, WorldLook Look);
 
     // One live registration: the resolved creation, its root source (a placement row — static or attached — OR a body
     // index), and the replay cursor state.
@@ -87,6 +88,9 @@ public sealed partial class WorldStampPool {
 
         public float Clock;
         public required WorldPrototype Creation;
+        // The look a body-rooted registration wears, or null for a row-rooted one: with Creation, the document objects
+        // whose manifest templates Reads acquires when the body arrives.
+        public WorldLook? Look;
         public int FrameCursor;
         // Cue state: the look's cues, each cue's timeline frame (1-based cursor, 0 = unresolved), when each next
         // self-fires on the cue clock, its fire count (the draw's seed), and the cue frame holding now (0 = none).
@@ -998,15 +1002,16 @@ public sealed partial class WorldStampPool {
         var registration = new Registration {
             BodyIndex = stamp.BodyIndex,
             Creation = stamp.Creation,
+            Look = stamp.Look,
             Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
             Scale = stamp.Scale,
             FramePoses = new Dictionary<int, FrameTransformDocument>?[((stamp.Creation.Document.Frames?.Count ?? 0) + 1)],
-            Cues = stamp.Motion.Cues,
-            Replay = stamp.Motion.ReplayFrames,
-            Lanes = stamp.Motion.Lanes,
+            Cues = stamp.Look.Motion.Cues,
+            Replay = stamp.Look.Motion.ReplayFrames,
+            Lanes = stamp.Look.Motion.Lanes,
         };
 
-        if (stamp.Motion.Poses is { Count: > 0 } poses) {
+        if (stamp.Look.Motion.Poses is { Count: > 0 } poses) {
             var frames = (stamp.Creation.Document.Frames ?? []);
 
             ResolvePoses(
@@ -1017,7 +1022,7 @@ public sealed partial class WorldStampPool {
             );
         }
 
-        if (stamp.Motion.Cues is { Count: > 0 } cues) {
+        if (stamp.Look.Motion.Cues is { Count: > 0 } cues) {
             var frames = (stamp.Creation.Document.Frames ?? []);
 
             registration.CueFrames = new int[cues.Count];
@@ -1454,7 +1459,7 @@ public sealed partial class WorldStampPool {
 
                         ApplyMotion(
                             live: fresh,
-                            motion: stamp.Motion,
+                            motion: stamp.Look.Motion,
                             dynamics: dynamics
                         );
 
@@ -1462,10 +1467,11 @@ public sealed partial class WorldStampPool {
                     },
                     update: (entry, stamp) => {
                         entry.Creation = stamp.Creation;
+                        entry.Look = stamp.Look;
                         entry.Scale = stamp.Scale;
                         ApplyMotion(
                             live: entry,
-                            motion: stamp.Motion,
+                            motion: stamp.Look.Motion,
                             dynamics: dynamics
                         );
                     }
@@ -1551,7 +1557,7 @@ public sealed partial class WorldStampPool {
             m_pool[slot] = fresh;
             ApplyMotion(
                 live: fresh,
-                motion: stamp.Motion,
+                motion: stamp.Look.Motion,
                 dynamics: dynamics
             );
         }

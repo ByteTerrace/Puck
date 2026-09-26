@@ -1018,10 +1018,23 @@ pointer-to-pane mapping, so a pipeline's frame-block pointer
 screen pointer path reads a mapping rather than scaling a rect by hand. A warp
 pass is an input path only with a declared exact inverse; a new warp kind is a
 new `SourceWarpInverse` arm. The screen glass bezel is a sync pair
-([references/sync-pairs.md](references/sync-pairs.md)). A hit on a rendered
-source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`) up to
-`RenderGraphInstanceSet.NestingDepth`. Nothing in the live renderer publishes or
-draws from a mapping until P13b.
+([references/sync-pairs.md](references/sync-pairs.md)). Panes publish their
+mappings from the placements `place` draws: `WorldFramePresenter.PrepareGraph`
+ends with `WorldViewGraphHost.PublishPanes`, which writes one whole-image
+mapping per shown view and pane, in drawing order, named by the instance's
+`RenderGraphInstance.Handle` at the extent the runtime's latest schedule
+renders it at (`IRenderGraphInstances.Latest`), into `Panes` and the host's
+`SourcePanePicker`. A steady frame publishes the mappings it published before
+and allocates nothing (`WorldViewPaneMappingLawTests`); a view the root stands
+for is no pane. The pane pointer reads its instance's published mapping
+(`TryGetPane`), so it maps the pane as the display last showed it. A hit on a
+rendered source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`)
+up to `RenderGraphInstanceSet.NestingDepth`; `WorldViewGraphHost.Walk` runs it
+over the runtime's live set, with each view's seat camera and each pane's
+paired camera, and `world.view.panes` echoes the panes, a pick and a walk.
+Screens publish no mapping and no instance reports the surfaces in its world
+yet, so a walk ends on the first instance's world, and the GPU does not draw
+from a mapping (P13b-1's screen half and P13b-5).
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
 declares a language, and a one-off source is an `.hlsl` compute pass read as a
@@ -1038,7 +1051,12 @@ binding: a load refuses a module whose reflected bindings differ from its layout
 (`SHADERPIPE_INTERFACE`). The host writes the frame group through
 `ShaderPipelineParameterLayout.WriteFrame` and the extent through `WriteExtent`
 alone, so a new frame value is a row in `ShaderFrameInterface.FrameGroupMembers`
-and a write there, nothing else. `ShaderFrameBlockLawTests` compiles every shipped pipeline source
+and a write there, nothing else. The node writes `ShaderPipelineRenderNode.Frame`
+whole and derives no value of it: `tick` and `time` come from the World's one
+presentation clock, the state mirror (`WorldViewGraphHost.PresentedFrame` over
+`WorldStateMirror.PresentedEngineTick`), never the frame context or a wall
+clock, and a pane's time is that clock through its `timeScale` and the
+`pipeline.time` controls (`WorldPresentedFrameLawTests`). `ShaderFrameBlockLawTests` compiles every shipped pipeline source
 and holds the offsets DXC assigned in both bytecodes to the host writer's, so a
 new shipped pass joins its data; `ShaderInterfaceEcho` generates the echo pass
 the `pipeline-echo` canary runs with `pipeline.sentinels` on.
@@ -1112,7 +1130,7 @@ puck canary world-counters                                  # world.counters gpu
 puck canary source-conversion uploaded-sources              # the four shipped conversion kernels against their CPU reference; uploaded source instances converted and shown in panes, offscreen on both backends
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
-puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo no-device-compile    # shader pipelines offscreen on both backends
+puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo interface-echo no-device-compile    # shader pipelines offscreen on both backends
 dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
 ```
 

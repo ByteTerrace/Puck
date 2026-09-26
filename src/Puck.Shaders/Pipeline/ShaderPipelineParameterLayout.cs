@@ -291,20 +291,19 @@ public sealed class ShaderPipelineParameterLayout {
     /// <summary>Writes every frame group value into the frame block at the offset the interface places it, leaving the
     /// padding as it is.</summary>
     /// <param name="block">The block, at least <see cref="FrameBlockSizeBytes"/> long.</param>
-    /// <param name="values">The host's frame values.</param>
-    /// <param name="tick">The engine tick the frame presents.</param>
+    /// <param name="values">The host's frame values, the presented tick among them.</param>
     /// <param name="frame">The frames the node submitted before this one; only the low 32 bits are written.</param>
     /// <exception cref="ArgumentException"><paramref name="block"/> is shorter than
     /// <see cref="FrameBlockSizeBytes"/>.</exception>
-    public void WriteFrame(Span<byte> block, in ShaderFrameValues values, ulong tick, ulong frame) {
+    public void WriteFrame(Span<byte> block, in ShaderFrameValues values, ulong frame) {
         Require(
             block: block,
             sizeBytes: FrameBlockSizeBytes
         );
         WriteSingle(block: block, offset: m_pointer, value: values.Pointer.X);
         WriteSingle(block: block, offset: (m_pointer + 4), value: values.Pointer.Y);
-        WriteUInt32(block: block, offset: m_tick, value: unchecked((uint)tick));
-        WriteUInt32(block: block, offset: (m_tick + 4), value: ((uint)(tick >> 32)));
+        WriteUInt32(block: block, offset: m_tick, value: unchecked((uint)values.Tick));
+        WriteUInt32(block: block, offset: (m_tick + 4), value: ((uint)(values.Tick >> 32)));
         WriteSingle(block: block, offset: m_time, value: ((float)values.Time));
         WriteSingle(block: block, offset: m_timeDelta, value: ((float)values.TimeDelta));
         WriteUInt32(block: block, offset: m_frame, value: unchecked((uint)frame));

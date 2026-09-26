@@ -312,9 +312,9 @@ One leg stays open, and is not yet proven: one build on Linux compared byte for
 byte with the Windows build of the same commit. CI runs it as `verify.yml`'s
 `shader-bytecode` job (see P7's gate).
 
-P8 is complete but for one item of its check: the generated echo runs on both
-backends for one interface, the `pipeline-echo` canary's own, rather than for
-every shipped package's (see P8's check). The frame group is a descriptor set,
+P8 is complete but for one item of its check: the `interface-echo` canary
+echoes every shipped interface family, and has not yet run on a GPU (see P8's
+check). The frame group is a descriptor set,
 set 0, since P7b step 15 put pipelines on groups. HLSL is the one source
 language. `ShaderCompiler` runs DXC alone, a pass document names no
 language, and the Shadertoy adapter, the GLSL front end, the translation back
@@ -370,12 +370,25 @@ binaries, while an unpackaged source is refused. Both canaries pass on both
 backends under the debug layers, and `pipeline-echo`'s discriminating leg,
 which expects two members to hold each other's sentinel, turns red.
 
-Open: the generated echo reaches the GPU for the canary's own interface only,
-where P8's check asks for every shipped package's. The worlds under the
+The `interface-echo` canary runs one echo per shipped interface family in one
+world: the ink simulation, visualize and finish passes, the package canary's
+tint, the film grain set, and the `place` and `overlay` packages. The Moth's
+blocks are ink finish's, and the `post.sdf-film-grain` package's are the film
+grain set's. Its discriminating leg reloads every row onto an echo whose last
+member's first word expects the next word's sentinel.
+`InterfaceEchoCanaryFixtureTests` hold each echo's blocks to its targets' and
+fail when a shipped package or shader set with frame data has no echo. The
+SDF engine's `sdf-world` and `sdf-brick-bake` interfaces join the canary in
+the change that lands them (S16). The overlay
+echo holds the overlay's types at their offsets, but a document orders config
+fields by name, so its `misc` and `sdf` names trade places.
+
+Open: the `interface-echo` canary has not yet run on a GPU, which is what P8's
+check asks for. The worlds under the
 repository's `worlds/` tree, the genesis card among them, are not part of the
 game's build, so their source rows compile where DXC is present. Only the
 `default` variant is built, which is all P8 closes with.
-P9's CPU half has landed; its frame-group half is open. Every presentation
+P9's CPU half and its frame-group half have landed. Every presentation
 read of state goes through one state mirror, `WorldStateMirror` in
 `Puck.World.Protocol`: a flat table of slots, each a row ordinal, a key, a
 target flag, and a conversion. When the mirror installs a document it
@@ -390,7 +403,14 @@ a bindable member needs no new walker; re-installing a document whose manifest
 the mirror already holds registers nothing and allocates nothing. Its per-body
 half is a list of templates — the population scale row, a look's pose
 references and lane operands, a creation driver's state signal and gate tokens,
-an effector's gate tokens and state target — each keeping its `$body` key as authored. The
+an effector's gate tokens and state target — each keeping its `$body` key as
+authored, and each also recorded under the document object that carries it
+(`WorldPresentationManifest.TemplatesOf`): the document for the scale row, a
+`WorldLook` for its motion's reads, a `WorldPrototype` for its creation's. A
+body's lease acquires those templates when the body arrives
+(`WorldStateLease.Arrive`, from the stamp registration and the scene emitter's
+body-scale read), so the body's first frame reads slots the mirror already holds
+and read at the tick boundary, and arriving again allocates nothing. The
 consumers still register their own slots on first read and find the manifest's
 slot already there: the HUD resolver, camera rigs, markers, render colors, the
 theme, the binding bar, overlay predicates, the radial wheel and the binding
@@ -427,8 +447,9 @@ frame's interpolation fraction before the program build and the transform
 pack: an easing or advancing slot presents between its previous and current
 tick samples, a plain or cycling slot steps, and the offscreen presentation
 pins the fraction to one. Presentation time is that fraction and the delivered
-tick, computed on the presentation side; nothing writes it into a frame group
-yet. The same moved set reaches the SDF renderer:
+tick: `WorldStateMirror.PresentedEngineTick` is the engine tick between the last
+two deliveries at the frame's fraction, the moment every eased slot presents
+at, and it is the World's one presentation clock. The same moved set reaches the SDF renderer:
 `SdfCompositionFrameSource` keeps its dynamic-transform table across frames,
 emitters repack only owners whose inputs moved or that are still settling, and
 `SdfMovedTransforms` hands each engine the ranges owed since the frame it last
@@ -437,10 +458,15 @@ consumed, so a still frame packs and stages no transform rows, and
 frame source and the one each session view composes for itself. A material
 color still resolves at program build.
 
-A pipeline row reads no state row. Its frame block carries the frame's engine
-tick from the frame context and presentation time from the entry's own
-presentation clock; P9 fills both from the mirror's delivered tick and
-interpolation fraction. Every shipped shader binding declares descriptor set
+A pipeline row reads no state row. Its frame block's `tick` is the mirror's
+delivered engine tick and its `time` the mirror's presented engine tick in
+seconds (`WorldViewGraphHost.PresentedFrame`), which the host hands every graph
+instance each frame and the node writes whole through
+`ShaderPipelineParameterLayout.WriteFrame`; a pane's own time is that clock
+through its row's `timeScale` and the `pipeline.time` and `pipeline.step`
+controls, re-anchored at the frame last presented, never a clock of its own.
+`WorldPresentedFrameLawTests` pins the tick bytes, low word then high word, and
+the time. Every shipped shader binding declares descriptor set
 zero and no shipped source names a Direct3D register space, so the resource
 layout is one flat set with hand-assigned register numbers documented in
 banner comments.
@@ -989,16 +1015,31 @@ casts the OS pointer through its seat's published camera with
 `IntentRayWireLawTests`, `PointerWorldRuleFactLawTests`,
 `WorldSeatViewportsLocateLawTests` and `SourcePointerCommandLawTests`.
 
-P13b owes the rest. Nothing publishes a mapping from the live renderer, so the
-screen shading still reads its own bezel constant, which `WorldScreenMappings`
-mirrors, and the GPU does not yet draw from the mapping. A `SourceHandle` names
-a source by its render-graph instance (`RenderGraphInstance.Handle`), but no
-live screen publishes one until P13b-1. No host feeds
+Panes publish their mappings from the live renderer (P13b-1's pane half, P13b-3's
+host half and P13b-6). `WorldFramePresenter.PrepareGraph` ends with
+`WorldViewGraphHost.PublishPanes`, which writes one mapping per placement the
+root's `place` passes draw, each shown view and then each `views.graphs` pane,
+in drawing order: the instance's whole image, named by its
+`RenderGraphInstance.Handle`, over the placement's rect, at the extent the
+runtime's latest schedule renders it at. It hands them to the host's
+`SourcePanePicker`, and a steady frame publishes the mappings it published
+before without allocating. The pipeline pane's pointer maps through its
+instance's published mapping (`TryGetPane`), and `WorldViewGraphHost.Walk` runs
+`RenderGraphHitWalk.WalkDisplay` over the runtime's live instance set, with
+each view's seat camera and each pane's paired camera. `world.view.panes`
+echoes the published mappings, a pick and a walk; the laws are
+`WorldViewPaneMappingLawTests`, and the `pane-display` canary maps a display
+point to the pane's pixel and moves it with the slot.
+
+P13b owes the rest. No screen publishes a mapping, so the screen shading still
+reads its own bezel constant, which `WorldScreenMappings` mirrors, and the GPU
+does not yet draw from the mapping. No instance reports the surfaces standing
+in its world (`IRenderGraphHitScene.Placements` is empty on the live host), so
+a walk that continues into an instance ends on its world. No host feeds
 `SourceFocus` or delivers a focused source's input to its window, no machine
-reads a mapped pointer, and no host publishes its panes to `SourcePanePicker`
-yet. The recorded Windows run, a click reaching a
-captured editor window at the mapped point and the chord returning input to the
-game, belongs to P13b.
+reads a mapped pointer, and nothing reads the picker for hover yet. The
+recorded Windows run, a click reaching a captured editor window at the mapped
+point and the chord returning input to the game, belongs to P13b.
 
 Rendering today runs the default render graph `WorldRootGraph` composes,
 through `RenderGraphRuntime` behind `RenderGraphRuntimeNode`, the host's render
@@ -2451,11 +2492,10 @@ the shipped-world state baselines unmoved and the `rim-drop` and
 `traveller-kit` canaries green; the parity contract re-recorded in the same
 change when the eased default moves a station's pixels.
 
-**Open:** filling the generated frame group's `tick` and `time` from the
-mirror's delivered tick and interpolation fraction; the consumers reading the
-manifest's pre-registered slots rather than registering on first read, with a
-body's lease acquiring its templates when the body arrives, which P10's tier law
-needs; the reads the manifest does not yet record — a seat's binding contexts,
+**Open:** the consumers reading the manifest's pre-registered slots through a
+lookup that registers nothing, rather than registering on first read, which P10's
+tier law needs and which waits on the manifest recording every read; the reads
+the manifest does not yet record — a seat's binding contexts,
 whose row comes from a family resolved at run time, the radial wheel's and the
 icon row's keyed cells, whose keys are action names, and a binding bar a player
 profile authors rather than the world; retiring a manifest slot a later document
@@ -2463,8 +2503,8 @@ no longer binds; and the materials a program bakes at build, which join the
 mirror when the field lattice becomes a region kind. The
 `WorldStateMirrorLawTests`, `WorldPresentationManifestLawTests`,
 `WorldStateReadRoutingLawTests`, `SeatRouteDeliveryLawTests`,
-`WorldWheelRingsLawTests` and `WorldSceneMovedTransformsLawTests` laws cover the
-landed half.
+`WorldWheelRingsLawTests`, `WorldSceneMovedTransformsLawTests` and
+`WorldPresentedFrameLawTests` laws cover what has landed.
 
 ### P10 — Bound rows reach a pass
 
@@ -2900,20 +2940,24 @@ pick through a portal reaches the nested world's surface.
 
 **Depends on:** P11 and P12.
 
-**P13b, the rest of the package.** P13's CPU model has no live caller:
-`WorldScreenMappings.Of`, `RenderGraphHitWalk` and `SourceFocus` are called
-only by their laws, `SourceHandle.Producer` only by tests, and the screen
-shading reads its own bezel constant. The pipeline pane's pointer is the one
-live mapping. Each commit is marked with what it waits on; only step 5 waits
-on P7b's groups.
+**P13b, the rest of the package.** Panes publish live mappings and the hit walk
+runs over the live instance set, but `WorldScreenMappings.Of` and `SourceFocus`
+are called only by their laws, `SourceHandle.Producer` only by tests, and the
+screen shading reads its own bezel constant. Each commit is marked with what it
+waits on; only step 5 waits on P7b's groups.
 
-1. Mappings are published from the live renderer. GPU-free, in two halves,
-   neither landed. The pane half is in progress: each pane publishes its
-   mapping through its graph instance. The screens half follows P12b-3: the
+1. Mappings are published from the live renderer. The pane half has landed:
+   `WorldViewGraphHost.PublishPanes` publishes each shown view's and pane's
+   `SourceMapping` through its graph instance, named by the instance's
+   `RenderGraphInstance.Handle`, at the extent the runtime's latest schedule
+   renders it at, and `world.view.panes` reports the mappings it publishes.
+   Laws: `WorldViewPaneMappingLawTests` over the live host's placements; the
+   `pane-display` canary. The screen half is owed, GPU-free, after P12b-3: the
    binder publishes each screen's `SourceMapping` through
-   `WorldScreenMappings.Of`, with the source instance's `SourceHandle` in
-   place of the stand-in, and `world.screens` reports the mapping it
-   publishes. Laws: `WorldScreenInputLawTests` over the live binder's rows.
+   `WorldScreenMappings.Of`, with the source instance's `SourceHandle` in place
+   of the stand-in, and `world.screens` reports the mapping it publishes
+   (`SourceMapping.Describe`, the line `world.view.panes` prints). Laws:
+   `WorldScreenInputLawTests` over the live binder's rows.
 2. The simulation destination, landed. A tick's command snapshot never reaches
    the server, which integrates each seat's `PlayerIntent`, so the intent
    carries the ray:
@@ -2954,9 +2998,10 @@ on P7b's groups.
      three-tick burst gives three snapshots, each carrying the ray; and
      `Locate` answers what the cursor's own mapping answered.
    A machine that reads a pointer, a light gun, is still owed.
-3. The presentation destination. The CPU picker has landed
-   (`SourcePanePicker`); a host publishing its panes to it moves with the views
-   the graph root now owns, and GPU picking follows P4's visibility record.
+3. The presentation destination. The CPU picker and its host half have landed:
+   the World host publishes its panes to its `SourcePanePicker` every frame,
+   from the placements `place` draws. Nothing reads the picker for hover or
+   highlight yet, and GPU picking follows P4's visibility record.
 4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
    `SourceFocus`, a focused capture source's window receives pointer and key
    events at `SourcePassthrough.ToClient`'s client coordinates, and the chord
@@ -2968,10 +3013,15 @@ on P7b's groups.
    `WorldScreenMappings.Bezel`, is deleted. It adds a per-screen buffer to the
    SDF engine, so it waits for the engine's groups rather than adding a
    binding P7b-20 would move again.
-6. Hits continue through live instances. Can land after P11b wires the graph
-   root and P12b-1. `RenderGraphHitWalk` walks the runtime's instance set, and
-   the pane pointer maps through its instance. The portal check needs a nested world rendered as an instance,
-   which no live world does yet.
+6. Hits continue through live instances. Landed, except the portal check:
+   `WorldViewGraphHost.Walk` runs `RenderGraphHitWalk` over the runtime's
+   instance set from the published panes, with each view's seat camera and each
+   pane's paired camera, and the pane pointer maps through its instance's
+   published mapping. The live host reports no surface placements inside an
+   instance's world, so a walk ends on the first instance it continues into
+   until screens publish (step 1's screen half). The portal check, a pick
+   through a portal reaching the nested world's surface, needs a nested world
+   rendered as an instance, which no live world does yet.
 
 ### P14 — The SDF engine as a pass package
 
@@ -3309,7 +3359,7 @@ owner at a time.
 is under way: steps 1 to 13, 14a, 14b-1 to 14b-5 and 15 to 19 have landed, and
 step 22 is in progress. What remains is the SDF engine's groups (14b-6 and
 step 20, which also follows P4-1), 14b-7's deletions, and step 21. P8 is
-complete but for its echo of every shipped package's interface, and its frame
+complete but for a GPU run of its echo of every shipped interface family, and its frame
 group
 became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not
 read simulation state, so they do not wait on the state rebuild.
@@ -3330,8 +3380,8 @@ in this group, needs P14's float working targets. P17's CPU half, the bakes and
 their texture codecs, has landed; drawing a bake follows P4 and choosing
 between a bake and the field follows P6.
 
-**Bound state.** P9's CPU half has landed; its frame-group half fills the
-frame group P8 declares. It is written against the state interface of
+**Bound state.** P9's CPU half and its frame-group half, which fills the
+frame group P8 declares, have landed. It is written against the state interface of
 [the presentation view](runtime-and-delivery.md#the-presentation-view), which
 the runtime and delivery programme owns. P10 is last in this group: a bound
 member and an overridden member have to compose by a stated rule, so it needs

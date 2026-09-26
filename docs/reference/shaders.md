@@ -152,15 +152,27 @@ the name must be lowercase ASCII words joined by hyphens
 |--------|------|-------|
 | `extent` | `uint2` | The pass's width and height in pixels: its first output's, else its first input's, else the frame's. In the pass block. |
 | `pointer` | `float2` | The pointer's position during its most recent press over the instance, in the pass's pixels with the origin at the top-left corner; zero before the first press. |
-| `tick` | `uint2` | The deterministic engine tick the frame presents, low word then high word. |
-| `time` | `float` | The instance's presentation clock, in seconds. |
-| `timeDelta` | `float` | Presentation seconds since the previous frame. |
+| `tick` | `uint2` | The deterministic engine tick the frame presents, low word then high word: the state mirror's delivered engine tick. |
+| `time` | `float` | The instance's time, in seconds: the presentation clock through the instance's time scale, pauses, steps and resets. |
+| `timeDelta` | `float` | The seconds the instance's time moved since its previous frame. |
 | `frame` | `uint` | The frames the pass's node submitted before this one—pacing-dependent, presentation only. |
 | `tickRate` | `uint` | Engine ticks per second, the rate `tick` counts in. |
 | `pointerDown` | `uint` | One while the pointer is pressed. |
 | `pointerPresses` | `uint` | How many presses the pointer has made over the instance. |
 | `cameraPosition`, `cameraTarget`, `cameraUp` | `float3` | The paired camera. |
 | `cameraFov` | `float` | The paired camera's vertical field of view in radians; zero when none is paired. |
+
+A World has one presentation clock, its state mirror
+(`WorldStateMirror.PresentedEngineTick`): the engine tick between the last two
+delivered ticks at the frame's interpolation fraction, the moment every eased
+state read presents at. An offscreen World pins the fraction to one, so its
+frames present exactly the delivered tick. The host hands every instance that
+clock in seconds and the delivered tick (`WorldViewGraphHost.PresentedFrame`),
+so no pass reads a wall clock. A pane's own time follows the clock at its
+row's `timeScale`: `pipeline.time` pauses it, sets it or changes the scale, a
+`pipeline.step` advances it by one sixtieth of a second, and a reset starts it
+from zero, each from the frame last presented, so the time a pane showed never
+jumps. An instance no layout slot shows reads the clock itself.
 
 A pass's ports follow its block in the pass group, in document order: each
 input, then a compute pass's outputs. A graphics pass's outputs are
@@ -517,7 +529,14 @@ the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
 `main`, producer the pane, at the slot's width and height) so the scheduler
 renders the pane at that extent, advances the pane's clock, and feeds its
 camera, pointer and time. A pane the active layout does not show is not shown:
-its place pass draws nothing and its instance is not scheduled.
+its place pass draws nothing and its instance is not scheduled. Once every
+slot is placed, the host publishes the mapping of each view and pane the
+`place` passes draw (`WorldViewGraphHost.PublishPanes`): the instance's whole
+image over its rect, at the extent the runtime's latest schedule
+(`IRenderGraphInstances.Latest`) renders it at. A pane's pointer maps through
+that mapping, which a steady frame publishes without allocating;
+[pointing at a displayed source](commands.md#pointing-at-a-displayed-source)
+covers what reads it.
 
 The layout composer runs inside the world producer's frame, so a layout change
 places panes one frame later. A
@@ -675,7 +694,13 @@ pixel *i* of a one-row image green when member *i* reads back exactly. A
 package build compiles each interface's echo and holds its reflection to the
 layout; the `pipeline-echo` canary runs one on both backends with
 `pipeline.sentinels` on, and an echo expecting two members' sentinels swapped
-fails it.
+fails it. The `interface-echo` canary runs one echo per shipped interface
+family the same way: the ink simulation, visualize and finish passes (finish's
+blocks are also the Moth's), the package canary's tint, the film grain set
+(whose blocks are also the `post.sdf-film-grain` package's), and the `place`
+and `overlay` packages. Each echo document declares its target's blocks, and
+its perturbed twin expects its last member's first word to hold the next
+word's sentinel.
 
 ## API
 
@@ -1311,8 +1336,8 @@ parameters for its one instance; a `package` row takes no override. `overrides` 
 config object, keyed by field. A field the row does not name keeps the default
 the source declares, and the source file itself is never written, so two rows
 that name one source share its defaults and keep their own overrides. `output`
-names the image version the instance shows, and `timeScale` sets its clock
-rate:
+names the image version the instance shows, and `timeScale` sets the rate its
+time follows the presentation clock at:
 
 ```json
 { "name": "ink", "source": "../pipelines/ink.graph.json", "timeScale": 0,
@@ -1668,7 +1693,7 @@ match its render pass and a pipeline whose depth test disagrees with it.
 `vertex` member. `puck canary pipeline-feedback pipeline-ink pipeline-edit
 pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override
 pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
-no-device-compile` runs the real World
+interface-echo no-device-compile` runs the real World
 offscreen on Vulkan and on Direct3D 12. It checks a float
 history against an arithmetic oracle across pause, reset, step and paused
 capture, and checks the shipped ink pipeline's exposure parameter in the
