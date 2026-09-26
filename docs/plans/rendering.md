@@ -1936,21 +1936,29 @@ passes without P4 or an importer.
 individually scoped.
 
 **Delivers:** representations chosen by editing needs, silhouette, repetition,
-animation, and measured cost, never "all environments are SDFs". Three
+animation, and measured cost, never "all environments are SDFs". Five
 experiments are in scope:
 
 - a per-placement choice between the field, a bake, and a mesh, decided by
   counted cost;
 - shadows and ambient occlusion on meshes, which P4 shades neutral;
 - capsule or ellipsoid proxies on a character's bones for approximate shadows
-  and ambient occlusion that never silently become the contact surface.
+  and ambient occlusion that never silently become the contact surface;
+- glossy reflections marched through the field, one bounce;
+- short-range soft global illumination gathered from the field.
+
+The last two start once P14-5 has put the SDF passes on their declared
+interfaces, and stay off the critical path. Each lands with a counted-cost
+report, the deterministic counters P14's ceilings use, and a quality-tier
+switch that turns it off, so a floor-tier world pays nothing for it.
 
 Distance-field particle collision, destructible fields, mesh import, skinning,
 foliage, and hair stay out until a scene shows the need. When one returns,
 field evaluation is priced as many operations with no zero-penetration
 guarantee assumed, import is a bounded subset that follows the procedural
-geometry proof, and static geometry comes before skinning. Reflections,
-volumes, and transparency remain distinct contracts after opaque visibility,
+geometry proof, and static geometry comes before skinning. Reflections beyond
+one glossy bounce, volumes, and transparency remain distinct contracts after
+opaque visibility,
 and facial deformation and richer materials remain separate measured slices.
 Every representation preserves identity, transforms, authority, and editing
 relationships. Transient aliasing, output-selected specialization,
@@ -1959,7 +1967,9 @@ considered only against a demonstrated need, with simple allocation kept as
 the correctness reference.
 
 **Check:** each addition demonstrates a useful scene, its fidelity limits, and
-its measured cost before becoming a default.
+its measured cost before becoming a default. The reflection and global
+illumination experiments each show their counted-cost report and a capture with
+their tier switch off matching the capture without them.
 
 ### P7 — The binding contract and the adapter memory profile
 
@@ -3627,7 +3637,30 @@ per-pass work counts recorded on both backends before and after the move, with
 every changed count explained in the change and no speedup promised; the
 layering check shown failing once on a deliberate upward include; `puck search
 -M 0` finding no consumer of any retired type, including `SdfWorldEngine`
-itself.
+itself. Each pass is held under a counted-cost ceiling: its deterministic
+counters (dispatches, march steps, texels written and bytes uploaded) are
+recorded over `puck counters`' pinned workload
+(`tests/Puck.Counters/counters.world.json`, its camera and views) at the floor
+tier and the resolution the RTX 2060 runs, and held as calibrated ceilings that
+workload may not exceed. A ceiling is re-recorded only in the change that
+explains why the count moved, and never from wall-clock or GPU timing. Two of
+those counters do not exist yet, and P14 adds them as `GpuWork` kinds the
+ledger reports per pass: march steps and texels written. Its uploads count per
+pass too, the brick uploads included under the pass that records them, since
+`gpu.uploads.host-visible` counts only CPU writes to host-visible buffers
+today. The ledger counts host-side API calls, and a march's step count is
+decided inside the shader's data-dependent loop, so the kernels count their own
+steps into a per-pass counter buffer that the completed sample reads back. The
+march runs in floats, so that kind is `PerBackendDeterministic`, held per
+backend like the SDF engine's `upload` pass. Texels written come from the same
+kernel counters, not from host extents, because an indirectly dispatched pass
+writes only the tiles culling leaves it. The workload does not run at the floor tier
+yet: its script selects no quality and its world authors no render preset, so
+it renders at native scale. `world.quality` applies a preset from the world's
+own render table, which the counters world does not author, so P14 pins the
+floor tier by authoring its `low` preset in `tests/Puck.Counters/counters.world.json`
+and selecting it with `world.quality low` in
+`tests/Puck.Counters/counters.script.txt`, before any ceiling is recorded.
 
 **Target shape.** `sdf.world` is a package fragment that `RenderGraphCompiler`
 splices into the graph, so `ShaderPipelineCompiler` orders, versions and
@@ -3812,7 +3845,12 @@ alternative pass.
 stated tolerance; an object moving across SDF tile boundaries stays under a
 stated ghosting metric; a set of disocclusion scenes; history reset on a cut;
 parity captures pin the jitter index so pixel verdicts stay meaningful; P2's
-work counts recorded on both reference machines. The recorded Steam Deck run,
+work counts recorded on both reference machines. The reconstruction passes are
+held under counted-cost ceilings as P14's are, over the same pinned workload
+and with the counters P14 adds: each pass's dispatches, march steps, texels
+written and bytes uploaded, recorded at the floor tier and the resolution the
+RTX 2060 runs, re-recorded only in the change that explains the move, never
+from wall-clock timing. The recorded Steam Deck run,
 with dynamic resolution on and render scale responding to the pacing signal,
 is [deferred to the end](#deferred-to-the-end). Whether the run holds its
 frame-time target is not checked while wall-clock and GPU timing are deferred.
