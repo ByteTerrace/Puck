@@ -8,6 +8,7 @@ namespace Puck.Cli.Parity;
 /// pinned contract — a comparator this strict about its own inputs cannot silently misread a producer's
 /// output as agreement.</summary>
 internal static class ParityManifestLoader {
+    private const string BindingReferenceKind = "binding";
     private const string ContractSchema = "puck.parity.contract.v1";
     private const int DefaultTileSize = 16;
     private const string ManifestSchema = "puck.parity.manifest.v1";
@@ -198,7 +199,67 @@ internal static class ParityManifestLoader {
 
         return result;
     }
-    private static ParityStationContract ReadStationContract(JsonElement element, string context) {
+    private static ParityBindingReference ReadReference(JsonElement element, string context, string contractDirectory) {
+        var row = CliStrictJson.RequireObject(
+            context: context,
+            element: element,
+            refusal: Refusal
+        );
+
+        CliStrictJson.RequireOnlyMembers(
+            element: row,
+            context: context,
+            unknownMemberDetail: "strict documents refuse fields the comparator does not read.",
+            refusal: Refusal,
+            "kind",
+            "graph",
+            "world"
+        );
+
+        var kind = CliStrictJson.ReadRequiredString(
+            context: context,
+            element: row,
+            member: "kind",
+            refusal: Refusal
+        );
+
+        if (!string.Equals(
+            a: kind,
+            b: BindingReferenceKind,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw new ParityDocumentRefusal(message: $"{context} kind '{kind}' is not a reference the comparator computes; the one it knows is '{BindingReferenceKind}'.");
+        }
+
+        var graph = Path.GetFullPath(
+            basePath: contractDirectory,
+            path: CliStrictJson.ReadRequiredString(
+                context: context,
+                element: row,
+                member: "graph",
+                refusal: Refusal
+            )
+        );
+        var world = Path.GetFullPath(
+            basePath: contractDirectory,
+            path: CliStrictJson.ReadRequiredString(
+                context: context,
+                element: row,
+                member: "world",
+                refusal: Refusal
+            )
+        );
+
+        return (ParityBindingReference.TryLoad(
+            graphPath: graph,
+            reference: out var reference,
+            error: out var error,
+            worldPath: world
+        )
+            ? reference
+            : throw new ParityDocumentRefusal(message: $"{context}: {error}"));
+    }
+    private static ParityStationContract ReadStationContract(JsonElement element, string context, string contractDirectory) {
         var row = CliStrictJson.RequireObject(
             context: context,
             element: element,
@@ -212,7 +273,8 @@ internal static class ParityManifestLoader {
             refusal: Refusal,
             "tileMeanDelta",
             "tileMaxDelta",
-            "censusFloor"
+            "censusFloor",
+            "reference"
         );
 
         var tileMeanDelta = CliStrictJson.ReadRequiredFiniteNumber(
@@ -263,6 +325,16 @@ internal static class ParityManifestLoader {
 
         return new ParityStationContract(
             CensusFloor: censusFloor,
+            Reference: (row.TryGetProperty(
+                propertyName: "reference",
+                value: out var referenceElement
+            )
+                ? ReadReference(
+                    context: $"{context} reference",
+                    contractDirectory: contractDirectory,
+                    element: referenceElement
+                )
+                : null),
             TileMaxDelta: tileMaxDelta,
             TileMeanDelta: tileMeanDelta
         );
@@ -337,6 +409,7 @@ internal static class ParityManifestLoader {
             foreach (var property in stationsElement.EnumerateObject()) {
                 stations[property.Name] = ReadStationContract(
                     context: $"contract stations.{property.Name}",
+                    contractDirectory: (Path.GetDirectoryName(path: Path.GetFullPath(path: path)) ?? "."),
                     element: property.Value
                 );
             }

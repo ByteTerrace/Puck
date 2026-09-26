@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Diagnostics;
+using System.Text.Json;
 using Puck.World;
 
 namespace Puck.Cli.Parity;
@@ -82,33 +83,67 @@ internal static class ParityCommand {
             )
         );
     }
+    // The tick the leg waits to, past the last tick the world's captures rows schedule, read from the document itself
+    // so a station added there is captured without a second statement of its schedule here. A world that cannot be
+    // read, or whose last tick leaves no room for the margin, is refused by name.
+    internal static bool TryReadWaitTick(string worldPath, out ulong waitTick, out string error) {
+        waitTick = 0UL;
+        error = string.Empty;
+
+        ulong lastTick;
+
+        try {
+            lastTick = (WorldDefinitionSerialization.Deserialize(
+                documentDirectory: Path.GetDirectoryName(path: worldPath),
+                utf8Json: File.ReadAllBytes(path: worldPath)
+            ).Captures?.Rows.SelectMany(selector: static row => row.Ticks).DefaultIfEmpty().Max() ?? 0UL);
+        } catch (Exception exception) when ((exception is InvalidDataException or JsonException or IOException or UnauthorizedAccessException or InvalidOperationException or FormatException or NotSupportedException)) {
+            error = $"the parity world '{worldPath}' could not be read for its capture schedule: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        if (lastTick > (ulong.MaxValue - WaitMarginTicks)) {
+            error = $"the parity world '{worldPath}' schedules a capture at tick {lastTick}, which leaves no room for the {WaitMarginTicks}-tick wait margin.";
+
+            return false;
+        }
+
+        waitTick = checked(lastTick + WaitMarginTicks);
+
+        return true;
+    }
     // Boots one offscreen leg on the named backend; the parity world's own captures rows land every scheduled
     // frame and write the manifest. Returns CliExit.Success with the manifest written, or CliExit.Refused with the
     // refusal already reported.
-    // The last tick the world's captures rows schedule, read from the document itself so a station added there is
-    // captured without a second statement of its schedule here.
-    private static ulong LastCaptureTick(string worldPath) => (WorldDefinitionSerialization.Deserialize(
-        documentDirectory: Path.GetDirectoryName(path: worldPath),
-        utf8Json: File.ReadAllBytes(path: worldPath)
-    ).Captures?.Rows.SelectMany(selector: static row => row.Ticks).DefaultIfEmpty().Max() ?? 0UL);
     private static int RunBackend(string artifact, string backend, string repositoryRoot, string runDirectory, Stopwatch suiteClock) {
         var captureDirectory = Path.Combine(
             path1: runDirectory,
             path2: $"captures-{backend}"
         );
+
+        if (!TryReadWaitTick(
+            error: out var scheduleError,
+            waitTick: out var waitTick,
+            worldPath: Path.Combine(
+                path1: repositoryRoot,
+                path2: WorldPath
+            )
+        )) {
+            Console.Error.WriteLine(value: $"ERROR: {scheduleError}");
+
+            return CliExit.Refused;
+        }
+
         // The parity world drives no seats and reads no input, so no controller-clearing guard is needed; the script
         // only composes the world's companion SDF document and waits past the last tick its captures rows schedule.
-        var lastTick = LastCaptureTick(worldPath: Path.Combine(
-            path1: repositoryRoot,
-            path2: WorldPath
-        ));
         var script = $"world.sdf.load {Path.Combine(
             path1: repositoryRoot,
             path2: SdfDocumentPath
         ).Replace(
             newChar: '\\',
             oldChar: '/'
-        )}\nworld.wait {(lastTick + WaitMarginTicks)}\n";
+        )}\nworld.wait {waitTick}\n";
         var leg = WorldOffscreenLeg.Run(
             arguments: ["--capture-dir", captureDirectory],
             artifact: artifact,
