@@ -587,6 +587,80 @@ public sealed class ParityComparatorTests : IDisposable {
             expected: "armed at tick 1; the left frame refreshed its regions at tick 1, the right at tick 5"
         );
     }
+    /// <summary>A capture of a source instance carries its exact verdict against the image its source states it shows.
+    /// The comparator reads it from both manifests: both holding pass <c>SOURCE-OK</c>, and one failing fails
+    /// <c>SOURCE-FAILED</c> naming each side's verdict, even when the frames and state agree.</summary>
+    [Fact]
+    public void ASourceVerdictThatFailsOnEitherSideFailsTheSourceVerdictThroughTheCliVerb() {
+        foreach (var rightHolds in ((bool[])[true, false])) {
+            var leftDir = CreateSubdirectory(name: "left");
+            var rightDir = CreateSubdirectory(name: "right");
+            var rgba = BuildGradientRgba(
+                height: 16,
+                width: 16
+            );
+
+            foreach (var directory in ((string[])[leftDir, rightDir])) {
+                WritePng(
+                    directory: directory,
+                    fileName: "s~1.png",
+                    height: 16,
+                    rgba: rgba,
+                    width: 16
+                );
+            }
+
+            string Line(bool holds) => CaptureJson(
+                censusMaterial0: 10,
+                frame: "s~1.png",
+                stateHash: ValidStateHash,
+                station: "s",
+                tick: 1
+            ).Replace(
+                newValue: $"}},\"sourceVerdict\":{{\"holds\":{(holds ? "true" : "false")},\"detail\":\"{(holds ? "law 16x16 exact" : "law 16x16 1 pixel(s) differ")}\"}}}}",
+                oldValue: "}}"
+            );
+
+            WriteManifestFile(
+                backend: "vulkan",
+                captureLine: Line(holds: true),
+                path: Path.Combine(
+                    path1: leftDir,
+                    path2: "manifest.json"
+                )
+            );
+            WriteManifestFile(
+                backend: "directx",
+                captureLine: Line(holds: rightHolds),
+                path: Path.Combine(
+                    path1: rightDir,
+                    path2: "manifest.json"
+                )
+            );
+
+            var exitCode = RunCompareCommand(
+                args: [leftDir, rightDir, "--contract", WriteContractFile(censusFloorMaterial0: 1, tileMaxDelta: 12, tileMeanDelta: 0.35, tileSize: 16)],
+                stderr: out _,
+                stdout: out var stdout
+            );
+
+            Assert.Equal(
+                actual: exitCode,
+                expected: (rightHolds ? CliExit.Success : CliExit.Failed)
+            );
+            Assert.Contains(
+                actualString: stdout,
+                expectedSubstring: (rightHolds ? "SOURCE-OK" : "SOURCE-FAILED")
+            );
+
+            if (!rightHolds) {
+                Assert.Contains(
+                    actualString: stdout,
+                    expectedSubstring: "left law 16x16 exact; right law 16x16 1 pixel(s) differ"
+                );
+            }
+        }
+    }
     [Fact]
     public void CameraInsideGatesBeforeAnyPixelOrStateComparison() {
         var leftDir = CreateSubdirectory(name: "left");
@@ -769,7 +843,7 @@ public sealed class ParityComparatorTests : IDisposable {
         );
         Assert.Contains(
             actualString: stderr,
-            expectedSubstring: "carries a refusal, so frame, census and regionTick must be absent"
+            expectedSubstring: "carries a refusal, so frame, census, regionTick and sourceVerdict must be absent"
         );
     }
     public void Dispose() {

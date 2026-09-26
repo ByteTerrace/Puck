@@ -1,7 +1,7 @@
 using System.Collections.Frozen;
 using System.Numerics;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Sources;
 
 namespace Puck.GamingBricks;
 
@@ -55,7 +55,8 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     public float MotorLevel =>
         m_worker.MotorLevel;
     /// <inheritdoc/>
-    public nint NativeImageViewHandle => m_worker.NativeImageViewHandle;
+    /// <remarks>The worker writes RGBA8 frames.</remarks>
+    public ImagePixelFormat Format => ImagePixelFormat.R8G8B8A8Unorm;
     /// <inheritdoc/>
     public int Height => m_worker.Height;
     /// <inheritdoc/>
@@ -118,12 +119,6 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
         ));
     }
     /// <inheritdoc/>
-    public void NotifyDeviceLost() =>
-        m_worker.NotifyDeviceLost();
-    /// <inheritdoc/>
-    public void PublishFrame(IGpuDeviceContext deviceContext) =>
-        m_worker.PublishFrame(deviceContext: deviceContext);
-    /// <inheritdoc/>
     public int ReadSamples(Span<short> destination) =>
         m_worker.ReadAudioSamples(destination: destination);
     /// <inheritdoc/>
@@ -170,4 +165,7 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
             deltaTicks: deltaTicks,
             input: in input
         );
+    /// <inheritdoc/>
+    public long WriteFrame(Span<byte> region) =>
+        m_worker.WriteFrame(region: region);
 }

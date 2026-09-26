@@ -16,7 +16,13 @@ A world may author a `captures` section:
 tick-scheduled capture rows that arm the `world.screenshot` path at exact
 sim ticks. A row captures the render graph's root, the frame the display
 shows, unless it names `instance: "world"`, the SDF world beneath the root's
-`views.post` passes and overlay. Each capture stamps a per-station
+`views.post` passes and overlay, a `views.graphs` row, or `screen: <index>`,
+the source instance that screen reads (a machine output, a producer or a probe;
+the validator refuses any other screen, and a row naming both). A landed capture
+of a source instance whose source states its image (a test pattern, a QR code,
+a machine output) carries `sourceVerdict`, its exact verdict against that image
+of the captured tick, narrated as `[captures] <station> tick <t>: verdict …`.
+Each capture stamps a per-station
 material census and a `world.state.hash`-matching state hash. The rows write a
 `puck.parity.manifest.v1` into `captures.directory` (resolved beside the
 document; absent: `captures/` under the run's state root, never the working

@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Abstractions.Machines;
 using Puck.Commands;
 using Puck.Platform;
 using Puck.Hosting;
@@ -26,11 +25,9 @@ namespace Puck.World;
 /// engine. A shared singleton so the render factory, the screen verbs, and <c>world.screens</c> read one instance.
 /// </summary>
 /// <remarks>
-/// This type is a pure reader of <see cref="Server.WorldMachineHost"/>'s outputs
-/// (<see cref="Server.WorldMachineHost.Handle"/>/<see cref="Server.WorldMachineHost.Light"/> for the room), and
-/// <see cref="Publish"/> calls <see cref="IMachineVideoOutput.PublishFrame"/> on the host's optional output — the one
-/// GPU call this project makes on a machine's behalf, since <c>Puck.World.Server</c> cannot reach a GPU device
-/// context. It also facades several read-only <see cref="WorldMachineHost"/> members (<c>HasMachine</c>,
+/// This type is a pure reader of <see cref="Server.WorldMachineHost"/>'s outputs: a machine source instance's upload
+/// (<see cref="MachineSource"/>) writes an output's frames into its region, and <see cref="Server.WorldMachineHost.Light"/>
+/// lights the room. It also facades several read-only <see cref="WorldMachineHost"/> members (<c>HasMachine</c>,
 /// <c>HasEngine</c>, <c>TryReadMachineInsert</c>, <c>TryMagazine</c>, <c>AudioMachine</c>, <c>TryPeek</c>,
 /// <c>LinkOf</c>, <c>DescribeLinks</c>, <c>TryReadLinkMembers</c>) so presentation-side
 /// callers (<c>PlayerCommandModule</c>, <c>WorldAudioDirector</c>,
@@ -162,9 +159,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // The boot indices in ascending order, the screens the engine node binds every frame.
     private readonly int[] m_screenIndices;
 
-    // Every machine output a machine source instance has published on the current device; RetireMachineOutputs releases
-    // their uploads.
-    private readonly PublishedMachineOutputs m_presentedMachineOutputs = new();
     // Reused scratch for ReconcileScreens' removal pass, so a screen mutation collects the vanished indices without
     // allocating and never mutates m_slots while enumerating it.
     private readonly List<int> m_reconcileRemovals = new();
@@ -424,13 +418,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_cameraTargetDevice?.Retire();
         m_cameraTargetDevice = null;
     }
-    // Releases the upload every machine output a machine source published holds on the current device. An instance
-    // removed since it was published resolves to nothing, because its host released the upload when the instance went.
-    private void RetireMachineOutputs() =>
-        m_presentedMachineOutputs.Retire(resolve: (instance, output) => m_machines.VideoOutput(
-            instance: instance,
-            output: output
-        ));
 
     /// <summary>Applies a non-machine magazine entry (a producer, a view, a probe, a session, text, or none) as a screen's live
     /// source, through the same dispatch <see cref="ReconcileScreens"/>'s declared-source-change path uses.
@@ -474,10 +461,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         m_disposed = true;
 
-        // The machines and links belong to Server.WorldMachineHost, which outlives the render device; only the
-        // uploads this binder published on that device are released here.
-        RetireMachineOutputs();
-
         foreach (var slot in m_slots.Values) {
             slot.Session?.Dispose();
         }
@@ -505,8 +488,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         if (m_disposed) {
             return;
         }
-
-        RetireMachineOutputs();
 
         foreach (var fill in m_fills.Values) {
             fill.OnDeviceLost();
