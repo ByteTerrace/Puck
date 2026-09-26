@@ -554,7 +554,6 @@ internal sealed class FakeGpuDevice :
             )
         );
     }
-
     IGpuImage IGpuImageFactory.CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
         Hit(key: "IGpuImageFactory.CreateDepth");
         GpuImageUsages.ValidateDepth(
@@ -578,6 +577,7 @@ internal sealed class FakeGpuDevice :
             )
         );
     }
+
     // Hands a created object to the device's naming, as a backend's creating members do, under the fake's fixed handle
     // for its kind.
     private Resource Named(Resource resource, GpuObjectKind kind, in GpuObjectName name) {

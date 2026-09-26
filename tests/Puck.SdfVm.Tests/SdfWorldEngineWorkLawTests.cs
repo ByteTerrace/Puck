@@ -418,8 +418,8 @@ public sealed class SdfWorldEngineWorkLawTests {
         public SdfWorldEngine Engine { get; }
         public SdfFrame Frame { get; }
         public FakeGpuDevice Gpu { get; }
-        public SdfWorldPipelines Pipelines { get; }
         public GpuPassPipeline MeshRaster { get; }
+        public SdfWorldPipelines Pipelines { get; }
         public GpuPassPipeline RegionCopy { get; }
 
         public void Dispose() {
