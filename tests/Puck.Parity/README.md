@@ -11,6 +11,12 @@ own `prototypes`/`placements` sections carry the `vocabulary` station's
 creation content directly (a `puck.creation.v1` document, not a raw SDF op
 stream).
 
+The SDF stations' `captures` rows name the `world` instance, the SDF world as the
+station camera sees it. The layout also shows the `binding` graph instance
+(`binding.graph.json`, a `views.graphs` row) in a quarter-size corner pane, so
+the scheduler renders it every frame, and the `binding` row captures that
+instance's own output.
+
 | Station | Stresses |
 |---|---|
 | `sky` | The procedural sky gradient and stars—smooth broad-band shading. |
@@ -18,6 +24,7 @@ stream).
 | `lattice` | A `state.lattices` height-field—the fields-to-pixels path. |
 | `noise` | `noiseDisplace` + `cellJitter`—`sdfPcg3d` agreement on SPIR-V and DXIL. |
 | `vocabulary` | The `vocabRig` creation (`prototypes`/`placements`): a chamfered Box, a Prism with a `ChamferedRectangle` profile and a recessed panel, a Cylinder with a chamfer and a raised panel, a `symmetry`-folded pair riding a `parent`'s swing, and a `repeat` (with an `origin`) plate—placed twice, at placement scale 1 and 2. The swing reads `state.station` with immediate weight, so both backends render the same nonzero pose at the scheduled ticks. A wall-time driver would integrate different phases as the backends render at different rates. Separate static prototypes add a recessed `GrooveUnion` seam, a `PipeUnion` joint, and `cells` relief in both `F1` and `F2MinusF1` modes at their supported randomness limits. |
+| `binding` | The binding groups on both backends: every pass reads a frame group at set 0 and a pass group at set 3 through its generated interface. A compute pass seeds an integer pattern, a compute pass pixelates it (the pass group's config `cellSize` and a `uint3` of `levels`, a formatted load, a storage image), and a fullscreen pass samples it through the pass group's image and sampler and adds grain hashed from the frame group's tick. The 96x96 output is compared directly. |
 
 `parity.contract.json` is the per-station comparison contract (tile size,
 per-tile mean/max delta ceilings, census floors). It is versioned beside the
