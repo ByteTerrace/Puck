@@ -21,6 +21,9 @@ public sealed class ShadersGenerateLawTests {
     // The SDF engine kernels' includes, each with the text its interface generates: owned whatever the tree holds.
     private static readonly (string Path, string Text)[] EngineKernels = [.. SdfWorldInterfaces.Includes.Select(selector: static include => (include.Path, ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface)))];
 
+    // Each conversion package's interface include, beside its kernel.
+    private static (string Path, string Text)[] SourceIncludes => [.. RenderGraphPackageCatalog.SourceConversions.Select(selector: static id => ($"src/Puck.Shaders/Assets/Shaders/Sources/{id}.interface.hlsli", InterfaceOf(id: id)))];
+
     private static string InterfaceOf(string id) {
         Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(id: id, package: out var package));
 
@@ -60,22 +63,24 @@ public sealed class ShadersGenerateLawTests {
 
     [Fact]
     public void ATreeWhoseIncludesMatchPasses() {
-        var (exitCode, error) = Check(
+        var (exitCode, error) = Check([
             (IsaPath, SdfIsaHlsl.Generate()),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
-            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place))
-        );
+            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
+            .. SourceIncludes
+        ]);
 
         Assert.Equal(actual: exitCode, expected: 0);
         Assert.Empty(collection: error.Trim());
     }
     [Fact]
     public void ADriftedPackageIncludeFailsByName() {
-        var (exitCode, error) = Check(
+        var (exitCode, error) = Check([
             (IsaPath, SdfIsaHlsl.Generate()),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay).Replace(comparisonType: StringComparison.Ordinal, newValue: "staleSampler", oldValue: "linearSampler")),
-            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place))
-        );
+            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
+            .. SourceIncludes
+        ]);
 
         Assert.Equal(actual: exitCode, expected: 1);
         Assert.Contains(actualString: error, expectedSubstring: OverlayPath);
@@ -106,26 +111,33 @@ public sealed class ShadersGenerateLawTests {
     [Fact]
     public void ADriftedEngineKernelIncludeFailsByName() {
         var world = EngineKernels.Single(predicate: static kernel => string.Equals(a: kernel.Path, b: WorldPath, comparisonType: StringComparison.Ordinal));
-        var (exitCode, error) = Check(
+        var (exitCode, error) = Check([
             (IsaPath, SdfIsaHlsl.Generate()),
             (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
             (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
-            (WorldPath, world.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: "staleSampler", oldValue: "screenSampler"))
-        );
-
-        Assert.Equal(actual: exitCode, expected: 1);
-        Assert.Contains(actualString: error, expectedSubstring: WorldPath);
-    }
-    [Fact]
-    public void AMissingEngineKernelIncludeFailsByName() {
-        var (exitCode, error) = CheckTree(files: [
-            (IsaPath, SdfIsaHlsl.Generate()),
-            (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
-            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
+            (WorldPath, world.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: "staleSampler", oldValue: "screenSampler")),
+            .. SourceIncludes
         ]);
 
         Assert.Equal(actual: exitCode, expected: 1);
         Assert.Contains(actualString: error, expectedSubstring: WorldPath);
+        Assert.DoesNotContain(actualString: error, expectedSubstring: OverlayPath);
+    }
+    [Fact]
+    public void AMissingEngineKernelIncludeFailsByName() {
+        // Every include but the world kernels' is in the tree, so the missing one is the only problem.
+        var (exitCode, error) = CheckTree(files: [
+            (IsaPath, SdfIsaHlsl.Generate()),
+            (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
+            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
+            .. EngineKernels.Where(predicate: static kernel => !string.Equals(a: kernel.Path, b: WorldPath, comparisonType: StringComparison.Ordinal)),
+            .. SourceIncludes,
+        ]);
+
+        Assert.Equal(actual: exitCode, expected: 1);
+        Assert.Contains(actualString: error, expectedSubstring: WorldPath);
+        Assert.DoesNotContain(actualString: error, expectedSubstring: "brick-bake");
+        Assert.DoesNotContain(actualString: error, expectedSubstring: "package '");
     }
     [Fact]
     public void OnTheTreeEveryGeneratedInterfaceIsChecked() {
@@ -143,7 +155,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.Empty(collection: problems);
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-brick-bake.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.interface.hlsli", WorldPath, PlacePath]
+            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-brick-bake.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.interface.hlsli", WorldPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
         );
     }
 }

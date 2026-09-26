@@ -121,13 +121,10 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             cancellationToken.ThrowIfCancellationRequested();
             built.Pipeline = services.PipelineFactory.Create(
                 description: new GpuGraphicsPipelineDescription(
-                    EnableStorageBuffer: false,
                     Layout: context.Parameters.Layout.PipelineLayout(
                         stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
                     ),
                     Name: Manifest.Name,
-                    PushConstantBinding: null,
-                    TextureSamplerCount: 0,
                     VertexInput: new GpuVertexInputLayout(
                         FullscreenTriangle.StrideBytes,
                         [new GpuVertexAttribute(

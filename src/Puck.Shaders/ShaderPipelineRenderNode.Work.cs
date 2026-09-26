@@ -65,10 +65,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
     private void RecordPasses(List<nint> commands, in FrameContext context, int slot) {
         var passes = m_passes;
 
-        WriteFrameGroup(
-            context: in context,
-            slot: slot
-        );
+        WriteFrameGroup(slot: slot);
 
         try {
             for (var index = 0; (index < passes.Length); index++) {

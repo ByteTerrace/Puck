@@ -89,7 +89,7 @@ internal static class WorldRenderRoot {
                 ViewportCapacity = WorldRootGraph.ViewsOf(views: definition.Views),
             }
         );
-        var packages = new RenderGraphPackageRecorders();
+        var packages = new RenderGraphPackageRecorders(regionCopy: sp.GetRequiredService<GpuRegionCopyPipelineCache>());
 
         // The world's external instances are its views: the first is the engine node, which renders them all, and each
         // later one the node's producer for that view. The runtime owns the engine node from here on.
@@ -119,6 +119,15 @@ internal static class WorldRenderRoot {
                 package: RenderGraphPackageCatalog.Overlay
             );
         }
+
+        // An uploaded producer's source instance converts the region its feed writes through the conversion its
+        // descriptor names. An imported producer's instance has no external producer yet, so an instance of one is
+        // refused by name.
+        SourceConversionPackage.RegisterAll(packages: packages);
+        binder.Producers.RegisterPackages(
+            adapt: null,
+            packages: packages
+        );
 
         if (!RenderGraphRuntime.TryCreate(
             deviceContext: device,

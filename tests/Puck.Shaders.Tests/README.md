@@ -39,7 +39,10 @@ pipeline pass and hold the offsets DXC gave each frame member in both bytecodes
 to the bytes the host writer puts there, and the film grain set's checked-in
 declarations to the generator. `EchoCanaryFixtureTests` hold the `pipeline-echo`
 canary's generated fixtures to the generator and show reflection catching its
-hand-perturbed offset.
+hand-perturbed offset. `InterfaceEchoCanaryFixtureTests` hold each
+`interface-echo` document's blocks to the shipped interfaces it stands for,
+each echo file to the generator, and every shipped package and shader set with
+frame data to some echo.
 
 `ShaderPackageLawTests` cover the source closure and `puck.shader.package.v1`
 packages over the fixtures in `Assets/ShaderPackages`: transitive, missing and

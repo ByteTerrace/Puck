@@ -361,12 +361,13 @@ public sealed class OverlayFrameComposer {
         m_theme.Publish(theme: in theme);
         m_builder.UpdateTokenBlock(theme: in theme);
     }
-    /// <summary>Uploads only what this frame wrote, per region, never the capacity-sized region behind it: the
-    /// shader's loops are bounded by the same counts, so a region's untouched tail holds nothing it reads.</summary>
-    /// <param name="buffer">The storage buffer the fragment shader reads, which holds the regions at the builder's own
+    /// <summary>Writes only what this frame wrote, per region, never the capacity-sized region behind it: the shader's
+    /// loops are bounded by the same counts, so a region's untouched tail holds nothing it reads. The region owes only the
+    /// words that differ from what it holds, so a frame that repeats the last one uploads nothing.</summary>
+    /// <param name="buffer">The region the fragment shader reads, which holds the packed words at the builder's own
     /// bases.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <see langword="null"/>.</exception>
-    public void UploadFrameRegions(IGpuStorageBuffer buffer) {
+    public void UploadFrameRegions(GpuRegion buffer) {
         ArgumentNullException.ThrowIfNull(argument: buffer);
 
         Upload(
@@ -391,10 +392,10 @@ public sealed class OverlayFrameComposer {
         );
     }
     /// <summary>Writes the pass block's three per-frame values (<see cref="RenderGraphPackageCatalog.OverlayMembers"/>):
-    /// <c>counts</c>, <c>sdf</c> and <c>misc</c>, the counts, glyph and outline figures and region bases the shader reads.
-    /// Every slot's buffer holds the regions at the same bases, so a steady frame writes the same values.</summary>
+    /// <c>counts</c>, <c>misc</c> and <c>sdf</c>, the counts, region bases and glyph and outline figures the shader reads.
+    /// The region holds the records at the same bases every frame, so a steady frame writes the same values.</summary>
     /// <param name="values">The destination: the pass block from <c>counts</c>' offset, where the three float4 values lie
-    /// one after another, at least <see cref="PassValueBytes"/> long.</param>
+    /// one after another in that order, at least <see cref="PassValueBytes"/> long.</param>
     public void WritePassValues(Span<byte> values) {
         var floats = MemoryMarshal.Cast<byte, float>(span: values);
 
@@ -402,28 +403,28 @@ public sealed class OverlayFrameComposer {
         floats[1] = m_builder.ElementCount;
         floats[2] = m_builder.Glyphs.AtlasCellWidth;
         floats[3] = m_builder.Glyphs.AtlasCellHeight;
-        floats[4] = m_builder.Glyphs.DistanceRange;
-        floats[5] = OutlineBand;
-        floats[6] = m_builder.PanelBaseWords;
-        floats[7] = m_builder.ElementBaseWords;
-        floats[8] = m_builder.TextBaseWords;
+        floats[4] = m_builder.TextBaseWords;
         // The glyph pack's base word: the atlas sits after the token slab, in the static prefix.
-        floats[9] = OverlayTokenBlock.WordCount;
-        floats[10] = m_builder.ClipBaseWords;
-        floats[11] = m_builder.Glyphs.GlyphCount;
+        floats[5] = OverlayTokenBlock.WordCount;
+        floats[6] = m_builder.ClipBaseWords;
+        floats[7] = m_builder.Glyphs.GlyphCount;
+        floats[8] = m_builder.Glyphs.DistanceRange;
+        floats[9] = OutlineBand;
+        floats[10] = m_builder.PanelBaseWords;
+        floats[11] = m_builder.ElementBaseWords;
     }
 
-    private void Upload(IGpuStorageBuffer buffer, int baseWords, int length) {
+    private void Upload(GpuRegion buffer, int baseWords, int length) {
         if (length <= 0) {
             return;
         }
 
-        buffer.Write<uint>(
-            data: m_builder.Scratch.Slice(
+        _ = buffer.Write(
+            bytes: MemoryMarshal.AsBytes(span: m_builder.Scratch.Slice(
                 length: length,
                 start: baseWords
-            ),
-            destinationOffsetBytes: ((ulong)(baseWords * sizeof(uint)))
+            )),
+            offset: (baseWords * sizeof(uint))
         );
     }
 }

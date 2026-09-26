@@ -123,8 +123,9 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
         return true;
     }
 
-    // One test-pattern screen: the pattern's pixels, re-rendered and uploaded every published tick.
-    private sealed class Feed : IWorldImageFeed, IImageSourceReference {
+    // One test-pattern source: the pattern's pixels, rendered for every published tick, uploaded for a screen and written
+    // into a source instance's region.
+    private sealed class Feed : IWorldUploadFeed, IImageSourceReference {
         private readonly byte[] m_pixels;
         private readonly CpuSurfaceSource m_surface = new();
 
@@ -171,6 +172,32 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
                 Sequence: (m_stamp.Sequence + 1UL),
                 Tick: tick
             );
+        }
+        public bool TryWrite(long tick, GpuRegion region) {
+            ArgumentNullException.ThrowIfNull(argument: region);
+
+            Render(
+                bgra: m_pixels,
+                height: ((int)Descriptor.Height),
+                tick: ((ulong)Math.Max(
+                    val1: 0L,
+                    val2: tick
+                )),
+                width: ((int)Descriptor.Width)
+            );
+            _ = region.Write(
+                bytes: m_pixels,
+                offset: ImageSourceUploadLayout.HeaderBytes
+            );
+            m_stamp = new ImageSourceStamp(
+                Sequence: (m_stamp.Sequence + 1UL),
+                Tick: ((ulong)Math.Max(
+                    val1: 0L,
+                    val2: tick
+                ))
+            );
+
+            return true;
         }
         public bool TryWriteReference(Span<byte> rgba, out ImageSourceStamp stamp) {
             stamp = m_stamp;

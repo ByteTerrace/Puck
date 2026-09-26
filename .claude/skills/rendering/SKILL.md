@@ -250,7 +250,18 @@ These are one-line cautions; the owning pages hold the derivations.
   identity, never the producer id. An external image (camera, capture,
   probe output) is resolved through the binder's `WorldCaptureGate`, never
   directly: a new path that samples one without the gate leaks it into
-  captures. An uploaded source's region layout and the conversion kernels are a
+  captures. An uploaded producer registers an upload for its source package
+  (`RenderGraphPackageRecorders.RegisterSource`), never an external producer:
+  the runtime renders the instance through a node running the one-pass graph
+  its descriptor names (`RenderGraphRuntime.Sources.cs`), the region bound as
+  the node's host buffer port (`ShaderPipelineRenderNode.BindRegion`, a ring
+  `GpuRegion` the node owns and flushes per slot after its fence) and the
+  conversion a catalog package per shipped kernel (`SourceConversionPackage`,
+  its interface generated beside the kernel). The runtime declares the
+  upload's cadence and extent to the scheduler itself. A new uploaded producer
+  writes its planes in `IWorldUploadFeed.TryWrite`; screens still read the
+  binder's `CpuSurfaceSource` uploads until P12b-2 connects them. An uploaded
+  source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`, the
   `source-conversion` canary and `SourceConversionCanaryFixtureTests` together.
@@ -527,8 +538,19 @@ These are one-line cautions; the owning pages hold the derivations.
   are `GpuUploadRuns`. The copy takes no push constants: the staging buffer
   leads with a header and a run table. The SDF engine records every region copy
   with that pipeline (its holder leases it beside the set, and the engine takes
-  it at construction). The overlay's buffer still uploads by hand, so a new host
-  upload goes through a region rather than a second hand-built path. A ring's
+  it at construction). A `ShaderPipelineRenderNode` owns every host-written
+  region its graph reads: a package states the regions its recorder writes
+  (`IRenderGraphPackageFactory.Regions`, the overlay's buffer) and a host buffer
+  port takes one from `BindRegion` (an uploaded source's); the node creates each
+  under `GpuResidency.Select` with a reader in flight, takes the copy pipeline in
+  the candidate's build (`GpuRegionCopyPipelineLease.Take`), states and admits a
+  reserved copy pool per staged package pass in `DescriptorPools`
+  (`regionCopies`), and records every owed copy in one command buffer ahead of the
+  frame's passes, behind a memory barrier and followed by a buffer barrier per
+  copied buffer to the compute and fragment stages. A new host upload is a
+  region, never a hand-written buffer. On Direct3D 12 a buffer the fragment stage
+  reads is in `ALL_SHADER_RESOURCE` (`DirectXBufferStates.RequiredState` reads the
+  barrier's stages). A ring's
   buffers live where `GpuResidency.RingMemory(profile)` says: in the
   device-local aperture on a discrete adapter that exposes one
   (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, a Vulkan
@@ -858,7 +880,9 @@ clock, and the scheduler's `.Sources` laws pin each. The runtime withdraws a
 render an external producer could not produce (`RenderGraphHistory.Withdraw`),
 so a static source is asked again. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
-priced by `WorldPresentationCost` in the cost report and `world.budget`.
+priced by `WorldPresentationCost` in the cost report and `world.budget`, which
+also reads the live schedule back per instance through `RenderGraphLiveBudget`
+(`RenderGraphRuntime.Latest` and `Work`: counts, never timing).
 `RenderGraphRuntime` (`src/Puck.Shaders/Graph`, since `Puck.Hosting` cannot
 reach the node) runs a set: it alternates two schedules, renders each
 scheduled instance through its own `ShaderPipelineRenderNode` at the
@@ -873,7 +897,8 @@ node's one pool (`RenderGraphPackageSets`; the pool's statement,
 `ShaderPipelineRenderNode.DescriptorPools`, counts both for every pass), and
 creates its framebuffers there, and a recorder records
 into the command buffer it is handed and never submits, waits, creates a
-pipeline or records a barrier: the node records the pass's planned barriers
+pipeline, records a barrier or copies a region (it writes the regions it states;
+the node flushes and copies them): the node records the pass's planned barriers
 first, so a drawing package's target arrives in `RenderTarget` and its sampled
 inputs in `ShaderReadOnly`, and its render pass leaves the target in
 `RenderTarget` (`ObservedPackageFactory` in `tests/Shared` counts a package's
@@ -964,7 +989,12 @@ graph still binds is held through `ShaderPipelineRenderNode.HoldBinding` until
 that consumer installs a graph that no longer reads it, rebinds the name or is
 released: a graph instance as the consumer bound it, an external producer
 through one more acquisition of its latest output, bound for every frame, and
-`RenderGraphRuntime.RetiredProducers` counts what is held),
+`RenderGraphRuntime.RetiredProducers` counts what is held; a consumer that never
+bound the name, `ShaderPipelineRenderNode.IsBound`, holds nothing. The
+reconfiguration prepares its nodes, checks every graph it hands one
+(`RequireSwappable`) and plans its holds before it changes anything, so a
+failure leaves the running set intact and disposes what it created; a new step
+that can fail joins that preparation, never the commit after it),
 compiles each source row in the background through
 `ShaderPackager.LoadSource`, and installs it with `TryInstall`, inputs taken
 from the row's `inputs`. A row naming an engine `package` (such as `sdf.world`)
@@ -992,7 +1022,10 @@ and a lone full-display view at native scale is not shown, so `main` stands for
 placed one frame after a layout change. The first view's place pass carries
 the `place` config's `letterbox`, so pixels no view or pane covers show the
 letterbox color `place.comp.hlsl` states, and a layout covering the whole
-display pays nothing for it. Screens still render through `ViewStack` until
+display pays nothing for it. While the first view is not shown, its pass still
+letterboxes the whole output when `RenderGraphPlacement.Uncovered` says part of
+the display lies outside every shown rect (`WorldViewGraphHost.PlaceViews`
+counts it covered only when one shown view or pane covers it whole). Screens still render through `ViewStack` until
 later P11b work moves them.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
@@ -1004,10 +1037,23 @@ pointer-to-pane mapping, so a pipeline's frame-block pointer
 screen pointer path reads a mapping rather than scaling a rect by hand. A warp
 pass is an input path only with a declared exact inverse; a new warp kind is a
 new `SourceWarpInverse` arm. The screen glass bezel is a sync pair
-([references/sync-pairs.md](references/sync-pairs.md)). A hit on a rendered
-source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`) up to
-`RenderGraphInstanceSet.NestingDepth`. Nothing in the live renderer publishes or
-draws from a mapping until P13b.
+([references/sync-pairs.md](references/sync-pairs.md)). Panes publish their
+mappings from the placements `place` draws: `WorldFramePresenter.PrepareGraph`
+ends with `WorldViewGraphHost.PublishPanes`, which writes one whole-image
+mapping per shown view and pane, in drawing order, named by the instance's
+`RenderGraphInstance.Handle` at the extent the runtime's latest schedule
+renders it at (`IRenderGraphInstances.Latest`), into `Panes` and the host's
+`SourcePanePicker`. A steady frame publishes the mappings it published before
+and allocates nothing (`WorldViewPaneMappingLawTests`); a view the root stands
+for is no pane. The pane pointer reads its instance's published mapping
+(`TryGetPane`), so it maps the pane as the display last showed it. A hit on a
+rendered source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`)
+up to `RenderGraphInstanceSet.NestingDepth`; `WorldViewGraphHost.Walk` runs it
+over the runtime's live set, with each view's seat camera and each pane's
+paired camera, and `world.view.panes` echoes the panes, a pick and a walk.
+Screens publish no mapping and no instance reports the surfaces in its world
+yet, so a walk ends on the first instance's world, and the GPU does not draw
+from a mapping (P13b-1's screen half and P13b-5).
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
 declares a language, and a one-off source is an `.hlsl` compute pass read as a
@@ -1024,7 +1070,12 @@ binding: a load refuses a module whose reflected bindings differ from its layout
 (`SHADERPIPE_INTERFACE`). The host writes the frame group through
 `ShaderPipelineParameterLayout.WriteFrame` and the extent through `WriteExtent`
 alone, so a new frame value is a row in `ShaderFrameInterface.FrameGroupMembers`
-and a write there, nothing else. `ShaderFrameBlockLawTests` compiles every shipped pipeline source
+and a write there, nothing else. The node writes `ShaderPipelineRenderNode.Frame`
+whole and derives no value of it: `tick` and `time` come from the World's one
+presentation clock, the state mirror (`WorldViewGraphHost.PresentedFrame` over
+`WorldStateMirror.PresentedEngineTick`), never the frame context or a wall
+clock, and a pane's time is that clock through its `timeScale` and the
+`pipeline.time` controls (`WorldPresentedFrameLawTests`). `ShaderFrameBlockLawTests` compiles every shipped pipeline source
 and holds the offsets DXC assigned in both bytecodes to the host writer's, so a
 new shipped pass joins its data; `ShaderInterfaceEcho` generates the echo pass
 the `pipeline-echo` canary runs with `pipeline.sentinels` on.
@@ -1095,10 +1146,10 @@ dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~World
 puck parity                                                 # parity world, offscreen, Vulkan then Direct3D 12
 puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
 puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends
-puck canary source-conversion                               # the shipped palette and NV12 conversion kernels against their CPU reference, offscreen on both backends
+puck canary source-conversion uploaded-sources              # the four shipped conversion kernels against their CPU reference; uploaded source instances converted and shown in panes, offscreen on both backends
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
-puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo no-device-compile    # shader pipelines offscreen on both backends
+puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo interface-echo no-device-compile    # shader pipelines offscreen on both backends
 dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
 ```
 

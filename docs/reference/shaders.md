@@ -152,15 +152,27 @@ the name must be lowercase ASCII words joined by hyphens
 |--------|------|-------|
 | `extent` | `uint2` | The pass's width and height in pixels: its first output's, else its first input's, else the frame's. In the pass block. |
 | `pointer` | `float2` | The pointer's position during its most recent press over the instance, in the pass's pixels with the origin at the top-left corner; zero before the first press. |
-| `tick` | `uint2` | The deterministic engine tick the frame presents, low word then high word. |
-| `time` | `float` | The instance's presentation clock, in seconds. |
-| `timeDelta` | `float` | Presentation seconds since the previous frame. |
+| `tick` | `uint2` | The deterministic engine tick the frame presents, low word then high word: the state mirror's delivered engine tick. |
+| `time` | `float` | The instance's time, in seconds: the presentation clock through the instance's time scale, pauses, steps and resets. |
+| `timeDelta` | `float` | The seconds the instance's time moved since its previous frame. |
 | `frame` | `uint` | The frames the pass's node submitted before this one—pacing-dependent, presentation only. |
 | `tickRate` | `uint` | Engine ticks per second, the rate `tick` counts in. |
 | `pointerDown` | `uint` | One while the pointer is pressed. |
 | `pointerPresses` | `uint` | How many presses the pointer has made over the instance. |
 | `cameraPosition`, `cameraTarget`, `cameraUp` | `float3` | The paired camera. |
 | `cameraFov` | `float` | The paired camera's vertical field of view in radians; zero when none is paired. |
+
+A World has one presentation clock, its state mirror
+(`WorldStateMirror.PresentedEngineTick`): the engine tick between the last two
+delivered ticks at the frame's interpolation fraction, the moment every eased
+state read presents at. An offscreen World pins the fraction to one, so its
+frames present exactly the delivered tick. The host hands every instance that
+clock in seconds and the delivered tick (`WorldViewGraphHost.PresentedFrame`),
+so no pass reads a wall clock. A pane's own time follows the clock at its
+row's `timeScale`: `pipeline.time` pauses it, sets it or changes the scale, a
+`pipeline.step` advances it by one sixtieth of a second, and a reset starts it
+from zero, each from the frame last presented, so the time a pane showed never
+jumps. An instance no layout slot shows reads the clock itself.
 
 A pass's ports follow its block in the pass group, in document order: each
 input, then a compute pass's outputs. A graphics pass's outputs are
@@ -294,6 +306,7 @@ offers:
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
 | `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source) and `sharpness`; a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `post.<set id>` | one fragment-sampled image input, one color-attachment image output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
+| `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
 
 `RenderGraphCompiler` checks the schema tag and the package passes against the
 catalog, then plans the whole graph with `ShaderPipelineCompiler`, the one
@@ -499,7 +512,10 @@ an instance that survives keeps its node, its graph and its history, and a
 removed one retires. A surviving instance whose replacement graph is still
 building keeps presenting its installed graph, so a removed instance that graph
 reads stays alive until the replacement installs, the name is bound again, or
-the survivor is released. The host compiles each source row in the background
+the survivor is released; a survivor that never rendered bound nothing of it,
+so nothing holds it. A reconfiguration prepares everything that can fail
+before it changes the running set, so a failure leaves that set running as it
+was and releases what the attempt created. The host compiles each source row in the background
 through `ShaderPackager.LoadSource` and installs the result with `TryInstall`,
 its inputs taken from the row's `inputs`. The `pipeline.*` console verbs
 address these rows by name.
@@ -513,7 +529,14 @@ the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
 `main`, producer the pane, at the slot's width and height) so the scheduler
 renders the pane at that extent, advances the pane's clock, and feeds its
 camera, pointer and time. A pane the active layout does not show is not shown:
-its place pass draws nothing and its instance is not scheduled.
+its place pass draws nothing and its instance is not scheduled. Once every
+slot is placed, the host publishes the mapping of each view and pane the
+`place` passes draw (`WorldViewGraphHost.PublishPanes`): the instance's whole
+image over its rect, at the extent the runtime's latest schedule
+(`IRenderGraphInstances.Latest`) renders it at. A pane's pointer maps through
+that mapping, which a steady frame publishes without allocating;
+[pointing at a displayed source](commands.md#pointing-at-a-displayed-source)
+covers what reads it.
 
 The layout composer runs inside the world producer's frame, so a layout change
 places panes one frame later. A
@@ -535,8 +558,13 @@ The first view's place pass sets the `place` config's `letterbox`, so outside
 its rect it writes the letterbox color, `(0.015, 0.016, 0.02)`, which the
 kernel states, rather than its base; every later place pass keeps its base
 there. Pixels no view or pane covers show that color, and a layout that covers
-the whole display pays no pass for it. When the first view is not shown and its
-pass must still draw, it copies its base everywhere.
+the whole display pays no pass for it. The letterbox does not wait for the
+first view: while it is not shown and part of the display lies outside every
+rect the root shows (`RenderGraphPlacement.Uncovered`), its pass writes the
+letterbox color everywhere, and the later passes place what is shown over it.
+The display counts as covered only when one shown rect covers it whole, a lone
+full-display view or a full-display pane, and then the unshown pass stands for
+the world and dispatches nothing.
 
 Screens still render through `ViewStack`; moving them onto graph instances is
 the rest of P11b in
@@ -686,7 +714,13 @@ pixel *i* of a one-row image green when member *i* reads back exactly. A
 package build compiles each interface's echo and holds its reflection to the
 layout; the `pipeline-echo` canary runs one on both backends with
 `pipeline.sentinels` on, and an echo expecting two members' sentinels swapped
-fails it.
+fails it. The `interface-echo` canary runs one echo per shipped interface
+family the same way: the ink simulation, visualize and finish passes (finish's
+blocks are also the Moth's), the package canary's tint, the film grain set
+(whose blocks are also the `post.sdf-film-grain` package's), and the `place`
+and `overlay` packages. Each echo document declares its target's blocks, and
+its perturbed twin expects its last member's first word to hold the next
+word's sentinel.
 
 ### Buffer elements
 
@@ -838,6 +872,25 @@ block's word 0 lands at) and a run table.
 a device from it, on the thread pool, and every owner leases that pipeline
 rather than creating its own: the SDF engine records every region's copy with
 it, its brick staging into the brick pool included. The cache counts what it creates under `gpu.region-copy`.
+
+A shader pipeline instance owns every host-written region its graph reads. A
+package states the regions its recorder writes
+(`IRenderGraphPackageFactory.Regions`; the overlay's one storage buffer), and the
+instance creates them at install under the policy `GpuResidency.Select` picks
+with a reader in flight, hands them to the recorder in
+`RenderGraphPackageGroups.Regions`, and, when any stages, states and admits one
+reserved copy pool per such pass (`ShaderPipelineRenderNode.DescriptorPools`'
+`regionCopies`) and takes the device's copy pipeline in the candidate's build,
+off the frame thread (`GpuRegionCopyPipelineLease.Take`). A host buffer port's
+region is created by `ShaderPipelineRenderNode.BindRegion` at the port's declared
+size under the same choice; a staged one leases the pipeline on its first bind,
+returns no region until the pipeline is built, and admits its own copy pool.
+After a frame's passes have recorded, the instance flushes every region's share
+of the slot and records each owed copy in one command buffer submitted ahead of
+the frame's passes: a memory barrier ordering earlier submissions' reads before
+the copies' writes, the copies, then a buffer barrier per copied buffer to the
+compute and fragment stages. A recorder only writes a region's contents and binds
+its slot's `GpuRegion.Buffer`; it records no copy and no barrier.
 
 ## Probe kinds (`puck.probe.manifest.v1`)
 
@@ -1378,8 +1431,8 @@ parameters for its one instance; a `package` row takes no override. `overrides` 
 config object, keyed by field. A field the row does not name keeps the default
 the source declares, and the source file itself is never written, so two rows
 that name one source share its defaults and keep their own overrides. `output`
-names the image version the instance shows, and `timeScale` sets its clock
-rate:
+names the image version the instance shows, and `timeScale` sets the rate its
+time follows the presentation clock at:
 
 ```json
 { "name": "ink", "source": "../pipelines/ink.graph.json", "timeScale": 0,
@@ -1735,7 +1788,7 @@ match its render pass and a pipeline whose depth test disagrees with it.
 `vertex` member. `puck canary pipeline-feedback pipeline-ink pipeline-edit
 pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override
 pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
-no-device-compile` runs the real World
+interface-echo no-device-compile` runs the real World
 offscreen on Vulkan and on Direct3D 12. It checks a float
 history against an arithmetic oracle across pause, reset, step and paused
 capture, and checks the shipped ink pipeline's exposure parameter in the

@@ -26,6 +26,9 @@ namespace Puck.DirectX.Interop;
 public sealed unsafe class DirectXPipelineLibrary : IDisposable {
     private readonly GpuPipelineCacheFile m_file;
     private readonly Lock m_gate = new();
+    // The names this library stored since it was created: two threads that both missed one name each create its
+    // pipeline, and only the first stores it, since storing a name twice is a debug-layer warning.
+    private readonly HashSet<string> m_stored = new(comparer: StringComparer.Ordinal);
 
     private void* m_blob;
     private bool m_disposed;
@@ -266,12 +269,16 @@ public sealed unsafe class DirectXPipelineLibrary : IDisposable {
             state: this
         );
     }
-    // Stores a pipeline just created; a name another thread stored first is refused harmlessly.
+    // Stores a pipeline just created, unless another thread that missed the same name stored it first.
     private void Store(char* name, void* pipeline) {
         m_file.Count(cacheHit: false);
 
         lock (m_gate) {
-            if (m_disposed || (null == m_library)) {
+            if (
+                m_disposed ||
+                (null == m_library) ||
+                !m_stored.Add(item: new string(value: name))
+            ) {
                 return;
             }
 

@@ -17,12 +17,13 @@ public sealed partial class OverlayPackageLawTests {
     // A steady drawn frame, once every slot has drawn twice. The overlay pass: one command buffer, the planned transition
     // of its target back to render target from the layout publication left it in, one render pass and draw, one pipeline
     // bind, the frame and pass set binds, nothing pushed, nine sampled-image writes (the world image and the eight frame
-    // slots, unbound ones given the world image), and 112 uploaded bytes, the frame's packed cursor records: every slot's
-    // storage buffer holds the regions at the same bases, so the pass block's values are the same every steady frame and
-    // none of them uploads. Outside it: the command buffer, the output's transition to the publish layout, the world
-    // image handed back to its host's layout, and the frame group's one 256-byte constant-buffer view.
+    // slots, unbound ones given the world image), and nothing uploaded: the region holds the regions at the same bases, so
+    // the pass block's values are the same every steady frame, and the frame's packed cursor records repeat what every
+    // slot's share already holds, so the region owes nothing and no copy is recorded, under a ring or staged. Outside it:
+    // the command buffer, the output's transition to the publish layout, the world image handed back to its host's
+    // layout, and the frame group's one 256-byte constant-buffer view.
     private const string DrawnPass =
-        "work overlay executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=9 uploads.host-visible=112 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=256 clears=0";
+        "work overlay executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=9 uploads.host-visible=0 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=256 clears=0";
 
     // The fake as a device context whose services pass through creation faults, as a backend's do.
     private sealed class FaultingDevice(FakeGpuDevice gpu, GpuCreationFaults faults) : IGpuDeviceContext {
@@ -69,6 +70,46 @@ public sealed partial class OverlayPackageLawTests {
             _ = rig.Node.ProduceFrame(context: default);
         }
 
+        Assert.Equal(
+            actual: CompletedWork(node: rig.Node),
+            expected: DrawnPass
+        );
+    }
+    /// <summary>On a device that stages the overlay's region, the node leases the region-copy pipeline with the graph's
+    /// build, states and creates the region's reserved copy pool beside the graph's, and records the region's copy ahead
+    /// of the pass while it owes words: the first frames copy the static prefix into the device-local destination, a
+    /// cursor that appears copies its records, and a steady frame owes nothing, so its counts are the ring's.</summary>
+    [Fact]
+    public void AStagedRegionIsCopiedAheadOfThePassAndASteadyFrameCopiesNothing() {
+        using var rig = new Rig(staged: true);
+
+        _ = ProduceUntilPublished(node: rig.Node);
+        Assert.Equal(
+            actual: rig.Gpu.PoolsCreated,
+            expected: ShaderPipelineRenderNode.DescriptorPools(
+                inFlight: InFlight,
+                plan: rig.Node.Plan!,
+                preview: false,
+                regionCopies: [1]
+            )
+        );
+
+        var copies = rig.Gpu.Count(key: "IGpuRecorder.Dispatch");
+
+        Assert.True(
+            condition: (copies > 0),
+            userMessage: "The staged region's first frame recorded no copy."
+        );
+        rig.ShowCursor();
+
+        for (var frame = 0; (frame < 8); frame++) {
+            _ = rig.Node.ProduceFrame(context: default);
+        }
+
+        Assert.True(
+            condition: (rig.Gpu.Count(key: "IGpuRecorder.Dispatch") > copies),
+            userMessage: "The cursor's records were never copied."
+        );
         Assert.Equal(
             actual: CompletedWork(node: rig.Node),
             expected: DrawnPass

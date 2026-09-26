@@ -282,14 +282,14 @@ public sealed class RenderGraphPackageCatalog {
     );
 
     /// <summary>Gets what <see cref="Overlay"/>'s fragment stage reads from its pass group beside the extent: three
-    /// per-frame values its recorder writes (<c>counts</c>: panel and element counts and the atlas cell's width and
-    /// height; <c>sdf</c>: the distance range, the outline band and the panel and element bases; <c>misc</c>: the text,
-    /// atlas and clip bases and the glyph count), then its input image, its frame slot images, the one sampler they are
-    /// all read through, and its storage buffer.</summary>
+    /// per-frame values its recorder writes, in name order as a document writes config fields (<c>counts</c>: panel and
+    /// element counts and the atlas cell's width and height; <c>misc</c>: the text, atlas and clip bases and the glyph
+    /// count; <c>sdf</c>: the distance range, the outline band and the panel and element bases), then its input image, its
+    /// frame slot images, the one sampler they are all read through, and its storage buffer.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> OverlayMembers { get; } = [
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "counts", type: ShaderValueType.Float4),
-        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "sdf", type: ShaderValueType.Float4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "misc", type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "sdf", type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: OverlaySource, type: ShaderValueType.Float4),
         .. Enumerable.Range(
             count: OverlayFrameSlotCount,
@@ -302,8 +302,46 @@ public sealed class RenderGraphPackageCatalog {
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: OverlaySampler),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: OverlayData),
     ];
-    /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>
-    /// and <see cref="Place"/>.</summary>
+
+    /// <summary>The name of a conversion package's region in its pass group, its input: the uploaded source's
+    /// <c>ImageSourceUploadLayout</c> header and planes, read as raw 32-bit words.</summary>
+    public const string SourceRegion = "region";
+    /// <summary>The name of a conversion package's image in its pass group, its output: the storage image every consumer of
+    /// the source reads.</summary>
+    public const string SourceImage = "image";
+
+    /// <summary>Returns what a conversion package's kernel reads from its pass group beside the extent: the region at
+    /// binding 1 and the image it writes at binding 2, as the kernels in <c>Assets/Shaders/Sources</c> declare them.</summary>
+    /// <param name="format">The image's format.</param>
+    /// <returns>The members.</returns>
+    public static IReadOnlyList<ShaderInterfaceMember> SourceMembers(GpuPixelFormat format) => [
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: SourceRegion),
+        ShaderInterfaceMember.StorageImage(format: format, group: ShaderInterfaceGroup.Pass, name: SourceImage, type: ShaderValueType.Float4),
+    ];
+    /// <summary>Returns the format of the image a conversion package writes: half-float RGBA for
+    /// <see cref="Puck.Abstractions.Sources.ImageSourceConversion.TransferPass"/>, which writes linear light, and RGBA8
+    /// for every other.</summary>
+    /// <param name="package">The conversion package's id, one of <see cref="SourceConversions"/>.</param>
+    /// <returns>The format.</returns>
+    public static GpuPixelFormat SourceFormatOf(string package) => (string.Equals(
+        a: package,
+        b: Puck.Abstractions.Sources.ImageSourceConversion.TransferPass,
+        comparisonType: StringComparison.Ordinal
+    )
+        ? GpuPixelFormat.R16G16B16A16Float
+        : GpuPixelFormat.R8G8B8A8Unorm);
+
+    /// <summary>Gets the conversion packages, one per pass <see cref="Puck.Abstractions.Sources.ImageSourceConversion"/>
+    /// names, each package id the pass's name: one compute dispatch of the build-compiled kernel of that name reading an
+    /// uploaded source's region and writing its image.</summary>
+    public static IReadOnlyList<string> SourceConversions { get; } = [
+        Puck.Abstractions.Sources.ImageSourceConversion.Nv12Pass,
+        Puck.Abstractions.Sources.ImageSourceConversion.PalettePass,
+        Puck.Abstractions.Sources.ImageSourceConversion.RgbaPass,
+        Puck.Abstractions.Sources.ImageSourceConversion.TransferPass,
+    ];
+    /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>,
+    /// <see cref="Place"/> and the <see cref="SourceConversions"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
     /// <summary>Gets the catalog of a host that offers no package, whose graphs are shader passes alone.</summary>
     public static RenderGraphPackageCatalog None { get; } = new(packages: []);
@@ -350,6 +388,19 @@ public sealed class RenderGraphPackageCatalog {
             Members: PlaceMembers,
             Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom by sharpness."
         ),
+        .. SourceConversions.Select(selector: static id => new RenderGraphPackage(
+            Id: id,
+            Inputs: [
+                RenderGraphPackagePort.Buffer(
+                    access: RenderGraphPortAccess.ComputeRead,
+                    count: null,
+                    strideBytes: null
+                ),
+            ],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
+            Members: SourceMembers(format: SourceFormatOf(package: id)),
+            Summary: $"The uploaded source's region converted by the shipped '{id}' kernel into the image its consumers read."
+        )),
     ];
 
     /// <summary>Creates the engine's catalog extended with one <c>post.&lt;id&gt;</c> package per shipped post-process

@@ -75,7 +75,7 @@ stability matrix boots the flagship world, so its workload is `flagship`.
 Keeping the forcing world's name on it was rejected, because a reader would
 take a cell's verdict as evidence about a world the cell never ran. The
 functional set holds every `pipeline-*` canary, `pipeline-geometry` and
-`pipeline-echo` included, plus `no-device-compile`, and a law fails when a
+`pipeline-echo` included, plus `interface-echo` and `no-device-compile`, and a law fails when a
 `pipeline-*` canary is missing from it, so a canary that lands cannot sit
 outside qualification unnoticed.
 

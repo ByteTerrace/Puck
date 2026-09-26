@@ -624,10 +624,17 @@ A mapped point goes to one `SourceDestination`:
 instance a registered producer supplies, whose hit ends at its pixels, or a
 rendered instance, whose hit continues into its camera. It is the instance's
 identity (`RenderGraphInstance.Handle`), so two sources of one producer opened
-with different settings are two handles. Nothing publishes mappings from the
-live renderer yet: the renderer's
-screens and panes read them when the frame graph wires sources, and delivery of
-passthrough input to a window is Windows-specific host work. Both are open in
+with different settings are two handles.
+
+A World host publishes a mapping for every pane its render graph's root draws:
+each shown view of the world and each `views.graphs` pane a layout slot places,
+in drawing order, showing the instance's whole image at the extent it last
+rendered at. The host hands them to its `SourcePanePicker`, a pipeline pane's
+pointer maps through its pane's mapping, and the hit walk starts from them.
+`world.view.panes` echoes each mapping and, given a display point, what the
+picker and the walk answer there. Screens in the world publish no mapping yet,
+the GPU does not yet draw from one, and delivery of passthrough input to a
+window is Windows-specific host work. These are open in
 [the rendering programme](../plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
 
 ## Core types

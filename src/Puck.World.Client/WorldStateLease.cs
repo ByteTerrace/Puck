@@ -6,9 +6,11 @@ namespace Puck.World.Client;
 
 /// <summary>
 /// One holder's reads of a <see cref="WorldStateMirror"/>: the slots a body, a stamp registration or a seat reads
-/// through, acquired on first read and released together. A reference's <c>$body</c> key names the body the lease is
-/// bound to (<see cref="StateBinding.BodyKey"/>), so two bodies reading one authored reference read two
-/// slots, and a lease bound to no body reads nothing through such a reference.
+/// through, released together. A body's holder acquires the templates the presentation manifest records for what the
+/// body wears when it arrives (<see cref="Arrive"/>), so its first frame reads slots the mirror already holds and
+/// read at the tick boundary; any other read acquires its slot on first read. A reference's <c>$body</c> key names the
+/// body the lease is bound to (<see cref="StateBinding.BodyKey"/>), so two bodies reading one authored reference read
+/// two slots, and a lease bound to no body reads nothing through such a reference.
 /// <para>
 /// A slot is found by the authored object that names it — a reference or family string, compared by its text, or a
 /// lane instruction's state payload, compared by reference — so a steady-state read costs one table probe and no
@@ -20,6 +22,12 @@ namespace Puck.World.Client;
 /// </summary>
 public sealed class WorldStateLease {
     private readonly Dictionary<(object Source, bool Target), int> m_slots = new(comparer: SourceComparer.Instance);
+    private readonly List<int> m_templates = [];
+
+    private bool m_arrived;
+    private object? m_arrivedFirst;
+    private object? m_arrivedSecond;
+
     private int m_bodyIndex = -1;
 
     private int m_installs;
@@ -76,6 +84,8 @@ public sealed class WorldStateLease {
     public int BodyIndex => m_bodyIndex;
     /// <summary>Gets the number of references the lease has resolved, whether or not each resolved to a slot.</summary>
     public int Count => m_slots.Count;
+    /// <summary>Gets the number of manifest templates the lease holds since its body last arrived.</summary>
+    public int TemplateCount => m_templates.Count;
     /// <summary>Gets the mirror the lease reads, or <see langword="null"/> before the first <see cref="Bind"/>.</summary>
     public WorldStateMirror? Mirror => m_mirror;
 
@@ -102,7 +112,49 @@ public sealed class WorldStateLease {
         m_bodyIndex = bodyIndex;
         m_installs = mirror.Installs;
     }
-    /// <summary>Releases every slot the lease holds, keeping its binding; the next read acquires afresh.</summary>
+    /// <summary>Acquires, for the lease's body, every template the mirror's manifest records under the document
+    /// objects the body presents (<see cref="WorldPresentationManifest.TemplatesOf"/>), so the body's first frame reads
+    /// slots the mirror already holds. Arriving again with the same objects, body and installed document changes
+    /// nothing and allocates nothing; any other arrival first releases the templates held. A lease bound to no mirror
+    /// acquires nothing, and a template whose <c>$body</c> key names a body the lease has none of is skipped.</summary>
+    /// <param name="first">The first document object the body presents, such as its creation's
+    /// <see cref="WorldPrototype"/> or the document, whose templates every body reads, or <see langword="null"/>.</param>
+    /// <param name="second">The second document object, such as the body's <see cref="WorldLook"/>, or
+    /// <see langword="null"/>.</param>
+    public void Arrive(object? first, object? second) {
+        if (
+            (Current() is not { } mirror) ||
+            (
+                m_arrived &&
+                ReferenceEquals(
+                    objA: first,
+                    objB: m_arrivedFirst
+                ) &&
+                ReferenceEquals(
+                    objA: second,
+                    objB: m_arrivedSecond
+                )
+            )
+        ) {
+            return;
+        }
+
+        ReleaseTemplates(mirror: mirror);
+        m_arrived = true;
+        m_arrivedFirst = first;
+        m_arrivedSecond = second;
+
+        var manifest = mirror.Manifest;
+
+        if (first is not null) {
+            AcquireTemplates(templates: manifest.TemplatesOf(owner: first));
+        }
+        if (second is not null) {
+            AcquireTemplates(templates: manifest.TemplatesOf(owner: second));
+        }
+    }
+    /// <summary>Releases every slot the lease holds, its arrived templates among them, keeping its binding; the next
+    /// read acquires afresh.</summary>
     public void Release() {
         if (m_mirror is { } mirror) {
             foreach (var slot in m_slots.Values) {
@@ -110,6 +162,8 @@ public sealed class WorldStateLease {
                     mirror.Release(slot: slot);
                 }
             }
+
+            ReleaseTemplates(mirror: mirror);
         }
 
         m_slots.Clear();
@@ -275,6 +329,29 @@ public sealed class WorldStateLease {
         }
 
         return m_mirror;
+    }
+    private void AcquireTemplates(ReadOnlySpan<WorldPresentationBinding> templates) {
+        foreach (ref readonly var template in templates) {
+            var slot = Acquire(
+                key: template.Binding.Key,
+                row: template.Binding.Row,
+                target: template.Binding.Target
+            );
+
+            if (slot >= 0) {
+                m_templates.Add(item: slot);
+            }
+        }
+    }
+    private void ReleaseTemplates(WorldStateMirror mirror) {
+        foreach (var slot in m_templates) {
+            mirror.Release(slot: slot);
+        }
+
+        m_templates.Clear();
+        m_arrived = false;
+        m_arrivedFirst = null;
+        m_arrivedSecond = null;
     }
     private int Acquire(string row, string? key, bool target) {
         if (

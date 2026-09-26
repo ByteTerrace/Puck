@@ -1,4 +1,6 @@
+using Puck.Abstractions.Gpu;
 using Puck.Assets;
+using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
 using Puck.Vulkan.Messages;
@@ -7,7 +9,9 @@ namespace Puck.Vulkan.Presentation;
 
 /// <summary>Records a single swapchain image's command buffer for the immediate-mode compositor: one
 /// render pass replaying caller-supplied draw commands (bind pipeline, vertex buffer, push constants,
-/// descriptor set, draw). Scissor is the full framebuffer; viewport is baked into the pipeline.</summary>
+/// descriptor set, draw). The viewport and scissor cover the whole framebuffer, the viewport at negative height so
+/// clip-space +y is the top of the image, as <see cref="VulkanGpuRecorder.BeginRenderPass"/> sets it for every pipeline
+/// <see cref="IGpuPipelineFactory"/> creates.</summary>
 public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
 
@@ -17,8 +21,8 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
         m_commandBufferRecordingApi = commandBufferRecordingApi;
     }
 
-    private static VulkanGraphicsPipeline SelectPipeline(
-        IReadOnlyDictionary<AssetContentHash, VulkanGraphicsPipeline> graphicsPipelines,
+    private static IGpuPipeline SelectPipeline(
+        IReadOnlyDictionary<AssetContentHash, IGpuPipeline> graphicsPipelines,
         AssetContentHash pipelineId
     ) {
         if (graphicsPipelines.TryGetValue(
@@ -36,7 +40,7 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
         int imageIndex,
         VulkanFramebufferSet framebufferSet,
         VulkanRenderPass renderPass,
-        IReadOnlyDictionary<AssetContentHash, VulkanGraphicsPipeline> graphicsPipelines,
+        IReadOnlyDictionary<AssetContentHash, IGpuPipeline> graphicsPipelines,
         VulkanSwapchain swapchain,
         IReadOnlyList<VulkanDrawCommand> drawCommands
     ) {
@@ -90,7 +94,18 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
             device: request.Device,
             label: "surface-blit"
         );
-        // Dynamic scissor over the whole framebuffer; the pipeline bakes the matching viewport.
+        m_commandBufferRecordingApi.SetViewport(
+            commandBufferHandle: request.CommandBufferHandle,
+            device: request.Device,
+            viewport: new VkViewport(
+                height: -((float)request.Height),
+                maxDepth: 1f,
+                minDepth: 0f,
+                width: request.Width,
+                x: 0f,
+                y: request.Height
+            )
+        );
         m_commandBufferRecordingApi.SetScissor(
             commandBufferHandle: request.CommandBufferHandle,
             device: request.Device,

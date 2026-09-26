@@ -1,6 +1,7 @@
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -203,7 +204,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         return set;
     }
-    private static RenderGraphRuntime Runtime(FakePipelineGpu gpu, Recorders recorders, RenderGraphInstanceSet set, string root, params RenderGraphRuntimeGraph[] graphs) {
+    private static RenderGraphRuntime Runtime(IGpuDeviceContext gpu, Recorders recorders, RenderGraphInstanceSet set, string root, params RenderGraphRuntimeGraph[] graphs) {
         Assert.True(
             condition: RenderGraphRuntime.TryCreate(
                 deviceContext: gpu,
@@ -243,7 +244,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => Create(context: context);
 
         public Dictionary<string, Counter> ByInstance { get; } = new(comparer: StringComparer.Ordinal);
-        public RenderGraphPackageRecorders Registry { get; } = new();
+        // A fake's default profile stages a host buffer port's region, which copies through this kernel's pipeline, the
+        // one UploadModelGpu runs.
+        public RenderGraphPackageRecorders Registry { get; } = new(regionCopy: new GpuRegionCopyPipelineCache(kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }));
 
         public Counter Of(string instance) => (ByInstance.TryGetValue(
             key: instance,

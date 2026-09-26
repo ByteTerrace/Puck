@@ -12,7 +12,11 @@ namespace Puck.Shaders;
 /// <param name="Width">The rect's width, as a fraction of the output's width.</param>
 /// <param name="Height">The rect's height, as a fraction of the output's height.</param>
 /// <param name="Sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
-public readonly record struct RenderGraphPlacement(bool Shown, float Left, float Top, float Width, float Height, float Sharpness);
+/// <param name="Uncovered">Whether some of the output lies outside every rect the host shows this frame, so those
+/// pixels owe the letterbox. A pass whose config sets <see cref="RenderGraphPackageCatalog.PlaceLetterbox"/> and whose
+/// source is not shown then writes the letterbox color everywhere, so pixels no later pass covers show it rather than
+/// the base; over a covered output it stands for its base as any unshown pass does.</param>
+public readonly record struct RenderGraphPlacement(bool Shown, float Left, float Top, float Width, float Height, float Sharpness, bool Uncovered = false);
 /// <summary>Answers where a host shows each <c>place</c> pass's source this frame. The recorder asks once per recorded
 /// frame, on the frame thread.</summary>
 public interface IRenderGraphPlacements {
@@ -33,8 +37,10 @@ public interface IRenderGraphPlacements {
 /// the sharpness) and the images the catalog declares (<see cref="RenderGraphPackageCatalog.PlaceMembers"/>). A host
 /// that places the source per frame (<see cref="IRenderGraphPlacements"/>) overrides the rect and sharpness in the pass
 /// block without rebinding anything, and one that shows the source nowhere this frame has the pass draw nothing, so the
-/// output stands for the base; when the pass may not stand in, it copies the base everywhere, letterbox or not. Its build creates the shader module and the compute pipeline on the thread pool; its recorder allocates its
-/// sets from the instance's pool and one sampler, which the kernel never reads through but its interface binds. Its
+/// output stands for the base; when the pass may not stand in, it copies the base everywhere. A letterboxing pass whose
+/// source is not shown writes the letterbox color everywhere instead when the host says part of the output is
+/// uncovered (<see cref="RenderGraphPlacement.Uncovered"/>). Its build creates the shader module and the compute
+/// pipeline on the thread pool; its recorder allocates its sets from the instance's pool and one sampler, which the kernel never reads through but its interface binds. Its
 /// ports are compute reads and a compute write, so the node's planned barriers leave the inputs shader-readable and the
 /// output in the storage layout; it records no barrier.</para>
 /// </summary>
@@ -236,8 +242,17 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                     placement: out var placement
                 )
             ) {
+                // A letterboxing pass whose source is not shown still owes the letterbox wherever nothing else shows,
+                // unless what the host shows covers the output.
+                var letterboxes = (
+                    !placement.Shown &&
+                    placement.Uncovered &&
+                    (BinaryPrimitives.ReadUInt32LittleEndian(source: recording.PassBlock[m_letterboxOffset..]) != 0u)
+                );
+
                 if (
                     !placement.Shown &&
+                    !letterboxes &&
                     recording.MayStandIn
                 ) {
                     return RenderGraphPackageOutcome.DrewNothing;
@@ -254,8 +269,12 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                     value: placement.Sharpness
                 );
 
-                // A source shown nowhere that must still draw copies its base everywhere, letterboxed or not.
-                if (!placement.Shown) {
+                // A source shown nowhere that must still draw writes the letterbox everywhere when it owes it, its empty
+                // rect covering nothing, and otherwise copies its base everywhere.
+                if (
+                    !placement.Shown &&
+                    !letterboxes
+                ) {
                     BinaryPrimitives.WriteUInt32LittleEndian(
                         destination: recording.PassBlock[m_letterboxOffset..],
                         value: 0u

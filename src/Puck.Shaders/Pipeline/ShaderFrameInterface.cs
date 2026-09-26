@@ -157,8 +157,11 @@ public static class ShaderFrameInterface {
         );
 }
 /// <summary>The frame values a host supplies to a pipeline pass each frame. The node adds the rest of the frame group
-/// itself: the pass's extent, the engine tick from the frame's <c>FrameContext</c>, the tick rate, and its own frame
-/// count.</summary>
+/// itself: the pass's extent, the tick rate, and its own frame count. A world host fills <see cref="Tick"/> and
+/// <see cref="Time"/> from its state mirror's delivered engine tick and interpolation fraction, the one presentation
+/// clock, so no pass reads a wall clock or a clock of its node's own.</summary>
+/// <param name="Tick">The deterministic engine tick the frame presents: the engine tick of the state the frame
+/// shows.</param>
 /// <param name="Time">The presentation time, in seconds.</param>
 /// <param name="TimeDelta">The presentation seconds since the previous frame.</param>
 /// <param name="Pointer">The pointer's position during its most recent press, in the pass's pixels with the origin at
@@ -171,6 +174,7 @@ public static class ShaderFrameInterface {
 /// <param name="CameraFov">The paired camera's vertical field of view in radians, or zero with no paired camera, which
 /// a pass reads as having none.</param>
 public readonly record struct ShaderFrameValues(
+    ulong Tick,
     double Time,
     double TimeDelta,
     Vector2 Pointer,

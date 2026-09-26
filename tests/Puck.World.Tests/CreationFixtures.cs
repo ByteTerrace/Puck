@@ -107,7 +107,7 @@ internal static class CreationFixtures {
                 BodyIndex: 0,
                 Creation: creation,
                 Scale: bodyScale,
-                Motion: WorldLookMotion.Default
+                Look: WorldLook.Implicit
             )]
         );
 

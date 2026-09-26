@@ -4,8 +4,8 @@ namespace Puck.Abstractions.Tests;
 
 /// <summary>
 /// Laws for a pipeline description created from a <see cref="GpuPipelineLayoutDescription"/>: a compute description's
-/// layout is a compute pipeline's and a graphics description's a graphics pipeline's, and a description that states its
-/// bindings twice, a layout beside the bindings it replaces, is refused by name before any backend plans it.
+/// layout is a compute pipeline's and a graphics description's a graphics pipeline's, and a compute description that
+/// states its bindings twice, a layout beside the bindings it replaces, is refused by name before any backend plans it.
 /// </summary>
 public sealed class GpuPipelineDescriptionLayoutLawTests {
     private static GpuPipelineLayoutDescription Layout(GpuShaderStage stages) => new(
@@ -16,12 +16,9 @@ public sealed class GpuPipelineDescriptionLayoutLawTests {
         pushesIndex: true,
         stages: stages
     );
-    private static GpuGraphicsPipelineDescription Graphics(GpuPipelineLayoutDescription layout, uint textures = 0, bool storage = false) => new(
-        EnableStorageBuffer: storage,
+    private static GpuGraphicsPipelineDescription Graphics(GpuPipelineLayoutDescription layout) => new(
         Layout: layout,
         Name: "graphics",
-        PushConstantBinding: null,
-        TextureSamplerCount: textures,
         VertexInput: new GpuVertexInputLayout(Attributes: [], StrideBytes: 0)
     );
 
@@ -53,7 +50,6 @@ public sealed class GpuPipelineDescriptionLayoutLawTests {
     [Fact]
     public void A_layout_beside_the_bindings_it_replaces_is_refused_by_name() {
         var compute = Layout(stages: GpuShaderStage.Compute);
-        var graphics = Layout(stages: GpuShaderStage.Fragment);
         var push = new GpuPushConstantBinding(data: new byte[4], offset: 0, stageFlags: GpuShaderStage.Compute);
 
         foreach (var description in ((GpuComputePipelineDescription[])[
@@ -63,13 +59,6 @@ public sealed class GpuPipelineDescriptionLayoutLawTests {
             Assert.StartsWith(
                 actualString: Assert.Throws<ArgumentException>(testCode: () => description.RequireLayout()).Message,
                 expectedStartString: "Compute pipeline 'compute' states its bindings twice"
-            );
-        }
-
-        foreach (var description in ((GpuGraphicsPipelineDescription[])[Graphics(layout: graphics, textures: 1), Graphics(layout: graphics, storage: true)])) {
-            Assert.StartsWith(
-                actualString: Assert.Throws<ArgumentException>(testCode: () => description.RequireLayout()).Message,
-                expectedStartString: "Graphics pipeline 'graphics' states its bindings twice"
             );
         }
     }

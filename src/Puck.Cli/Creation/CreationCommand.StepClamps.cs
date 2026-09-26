@@ -46,7 +46,7 @@ internal static partial class CreationCommand {
                     0,
                     prototype,
                     1f,
-                    WorldLookMotion.Default
+                    WorldLook.Implicit
                 )]
         );
         var pooled = new SdfProgramBuilder();

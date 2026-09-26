@@ -8,20 +8,11 @@ using Windows.Win32.Graphics.Dxgi.Common;
 namespace Puck.DirectX;
 
 /// <summary>
-/// Implements <see cref="IGpuPipelineFactory"/> for Direct3D 12 on its device context. A graphics pipeline is a root
-/// signature and an opaque PSO:
-/// <c>POSITIONn</c> vertex attributes, the render pass's formats and depth test, a descriptor table with N SRV slots and
-/// an optional UAV slot, root constants for push data, and one static linear-clamp sampler PER texture SRV
-/// (<c>s0..sN-1</c>, matching <c>t0..tN-1</c> one-for-one) — every one of those static samplers carries the SAME
-/// fixed filter/address description, so in effect the whole table shares one sampler configuration.
+/// Implements <see cref="IGpuPipelineFactory"/> for Direct3D 12 on its device context. A graphics pipeline is the root
+/// signature <c>DirectXRootSignatures.CreateLayout</c> creates from its description's groups, with their samplers in
+/// sampler tables, and an opaque PSO over <c>POSITIONn</c> vertex attributes and the render pass's formats and depth
+/// test.
 /// </summary>
-/// <remarks>
-/// Graphics root signature layout (always the same slot ordering):
-/// <list type="bullet">
-/// <item>Parameter 0: descriptor table (SRVs t0..tN-1, optional UAV u0) — omitted when both counts are zero</item>
-/// <item>Parameter 0 or 1: root constants (b0) — omitted when no push-constant binding is supplied</item>
-/// </list>
-/// </remarks>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContext deviceContext) : IGpuPipelineFactory {
     private const byte ColorWriteEnableAll = 15;
@@ -64,19 +55,12 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
         // The render pass's formats are the PSO's render-target and depth-stencil formats, as a Vulkan pipeline takes
         // them from its render pass.
         var pass = ((DirectXGpuRenderPass)renderPass);
-        // A description with a layout binds its groups through DirectXRootSignatures.CreateLayout's root signature, with
-        // its samplers in sampler tables rather than static samplers.
-        var layout = ((description.Layout is null)
-            ? BuildLayout(
-                device: device,
-                enableStorageBuffer: description.EnableStorageBuffer,
-                pushConstantBinding: description.PushConstantBinding,
-                textureSamplerCount: description.TextureSamplerCount
-            )
-            : DirectXRootSignatures.CreateLayout(
-                description: description.RequireLayout(),
-                device: device
-            ));
+        // The groups bind through DirectXRootSignatures.CreateLayout's root signature, with their samplers in sampler
+        // tables rather than static samplers.
+        var layout = DirectXRootSignatures.CreateLayout(
+            description: description.RequireLayout(),
+            device: device
+        );
         var attributes = description.VertexInput.Attributes;
         var inputElements = stackalloc D3D12_INPUT_ELEMENT_DESC[attributes.Count];
 
@@ -131,159 +115,6 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
             "The vertex attribute format is not defined."
         ),
         };
-    }
-    private static DirectXPipelineLayout BuildLayout(
-        ID3D12Device* device,
-        uint textureSamplerCount,
-        bool enableStorageBuffer,
-        GpuPushConstantBinding? pushConstantBinding
-    ) {
-        var hasDescriptorTable = ((textureSamplerCount > 0) || enableStorageBuffer);
-        var hasRootConstants = (pushConstantBinding is not null);
-        var layout = DirectXPipelineLayout.CreateForParameters(
-            hasDescriptorTable: hasDescriptorTable,
-            pushConstantBinding: pushConstantBinding
-        );
-
-        // The descriptor table packs SRVs t0..tN-1 then the optional storage-buffer SRV — contiguous from slot 0 — so
-        // the slot span is just their count (lets AllocateSet sub-allocate one pool across multiple sets). Each binding
-        // maps to the identically-numbered slot: the texture array starts at binding 0 and the storage-buffer SRV sits
-        // at binding textureSamplerCount, both inside this contiguous range, so the map is the identity.
-        var slotCount = (textureSamplerCount + (enableStorageBuffer
-            ? 1u
-            : 0u));
-
-        layout.DescriptorSlotCount = slotCount;
-        layout.SlotByBinding = new uint[slotCount];
-
-        for (var slot = 0u; (slot < slotCount); slot++) {
-            layout.SlotByBinding[slot] = slot;
-        }
-
-        layout.RootSignatureHandle = CreateRootSignature(
-            device: device,
-            enableStorageBuffer: enableStorageBuffer,
-            hasDescriptorTable: hasDescriptorTable,
-            hasRootConstants: hasRootConstants,
-            rootConstantsCount: layout.RootConstantsCount,
-            serialized: out layout.RootSignatureBlob,
-            textureSamplerCount: textureSamplerCount
-        );
-
-        return layout;
-    }
-    private static nint CreateRootSignature(
-        ID3D12Device* device,
-        uint textureSamplerCount,
-        bool enableStorageBuffer,
-        bool hasDescriptorTable,
-        bool hasRootConstants,
-        uint rootConstantsCount,
-        out byte[] serialized
-    ) {
-        var rangeCount = (((textureSamplerCount > 0)
-            ? 1
-            : 0) + (enableStorageBuffer
-            ? 1
-            : 0));
-        var paramCount = ((hasDescriptorTable
-            ? 1
-            : 0) + (hasRootConstants
-            ? 1
-            : 0));
-        var ranges = stackalloc D3D12_DESCRIPTOR_RANGE[2];
-        var parameters = stackalloc D3D12_ROOT_PARAMETER[2];
-        var rangeIndex = 0;
-        var paramIndex = 0;
-
-        if (textureSamplerCount > 0) {
-            ranges[rangeIndex++] = new D3D12_DESCRIPTOR_RANGE {
-                BaseShaderRegister = 0,
-                NumDescriptors = textureSamplerCount,
-                OffsetInDescriptorsFromTableStart = 0,
-                RangeType = D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-                RegisterSpace = 0,
-            };
-        }
-
-        if (enableStorageBuffer) {
-            ranges[rangeIndex++] = new D3D12_DESCRIPTOR_RANGE {
-                // A read-only program/storage buffer is an SRV (a StructuredBuffer at t{textureSamplerCount}), not
-                // a UAV: the buffer lives on an upload heap, where D3D12 forbids UAVs, and a pixel-shader UAV would
-                // also collide with the render-target output at u0. The SRV register follows the sampler SRVs.
-                BaseShaderRegister = textureSamplerCount,
-                NumDescriptors = 1,
-                OffsetInDescriptorsFromTableStart = textureSamplerCount,
-                RangeType = D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-                RegisterSpace = 0,
-            };
-        }
-
-        if (hasDescriptorTable) {
-            var tableParam = new D3D12_ROOT_PARAMETER {
-                ParameterType = D3D12_ROOT_PARAMETER_TYPE.D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-                ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL,
-            };
-
-            tableParam.Anonymous.DescriptorTable = new D3D12_ROOT_DESCRIPTOR_TABLE {
-                NumDescriptorRanges = ((uint)rangeCount),
-                pDescriptorRanges = ranges,
-            };
-
-            parameters[paramIndex++] = tableParam;
-        }
-
-        if (hasRootConstants) {
-            var constantsParam = new D3D12_ROOT_PARAMETER {
-                ParameterType = D3D12_ROOT_PARAMETER_TYPE.D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
-                ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL,
-            };
-
-            constantsParam.Anonymous.Constants = new D3D12_ROOT_CONSTANTS {
-                Num32BitValues = rootConstantsCount,
-                RegisterSpace = 0,
-                ShaderRegister = 0,
-            };
-
-            parameters[paramIndex++] = constantsParam;
-        }
-
-        // One static sampler PER texture register (s0..s{textureSamplerCount-1}, matching t0..t{textureSamplerCount-1}
-        // one-for-one): a Texture2D.Sample call is free to name any register, so a shader with several textures needs
-        // a register bound at each one it uses (mirrors the compute pipeline's per-SampledImage-binding
-        // static sampler). Every entry carries the same fixed linear-clamp description, so this is one sampler
-        // configuration replicated across registers, not several distinct ones.
-        var staticSamplerCount = ((textureSamplerCount > 0)
-            ? textureSamplerCount
-            : 1u
-        );
-        var staticSamplers = stackalloc D3D12_STATIC_SAMPLER_DESC[((int)staticSamplerCount)];
-
-        for (var register = 0u; (register < textureSamplerCount); register++) {
-            staticSamplers[((int)register)] = DirectXRootSignatures.ClampStaticSampler(
-                filter: D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-                shaderRegister: register,
-                shaderVisibility: D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL
-            );
-        }
-
-        var desc = new D3D12_ROOT_SIGNATURE_DESC {
-            Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
-            NumParameters = ((uint)paramCount),
-            NumStaticSamplers = textureSamplerCount,
-            pParameters = ((0 < paramCount)
-            ? parameters
-            : null),
-            pStaticSamplers = ((textureSamplerCount > 0)
-            ? staticSamplers
-            : null),
-        };
-
-        return DirectXRootSignatures.Create(
-            description: in desc,
-            device: device,
-            serialized: out serialized
-        );
     }
     private static D3D12_COMPARISON_FUNC ToComparisonFunc(GpuDepthCompare compare) => compare switch {
         GpuDepthCompare.Less => D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS,

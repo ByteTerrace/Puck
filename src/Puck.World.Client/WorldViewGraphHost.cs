@@ -13,7 +13,8 @@ namespace Puck.World.Client;
 public readonly record struct WorldPipelinePointerSample(Vector2 ClientPosition, bool HasPosition, bool Pressed);
 /// <summary>Hosts a world's <c>views.graphs</c> rows on its render-graph runtime: it composes the runtime's instance set
 /// from the rows and the default graph it synthesizes, compiles each row's source in the background and installs the
-/// graph on the row's instance, and places the panes a layout shows. Clocks and history are presentation state.</summary>
+/// graph on the row's instance, places the panes a layout shows and publishes their mappings. Clocks and history are
+/// presentation state.</summary>
 public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDisposable {
     /// <summary>Gets the directory against which authored graph source paths resolve — the same directory the
     /// server's override gate resolves <c>views.graphs</c> rows against. See <see cref="Rebase"/>.</summary>
@@ -37,9 +38,29 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         /// <summary>The currently requested document-relative source.</summary>
         public string Source { get; internal set; } = string.Empty;
-        /// <summary>The non-negative presentation rate multiplier.</summary>
-        public float ClockScale { get; set; } = 1f;
 
+        /// <summary>Gets or sets the non-negative rate the instance's time follows the presentation clock at. A change
+        /// takes effect from the frame last presented, so the instance's time never jumps.</summary>
+        public float ClockScale {
+            get => m_clockScale;
+            set {
+                Rebase();
+                m_clockScale = value;
+            }
+        }
+
+        // The instance's time is a function of the host's one presentation clock, never a clock of its own:
+        // m_clockBase + scale × (presented − m_clockAnchor) while running, m_clockBase while paused. Every control
+        // re-anchors the mapping at the frame last presented, so a change never moves the time already shown.
+        private double m_clockAnchor;
+        private bool m_clockAnchored;
+        private double m_clockBase;
+        private bool m_clockPaused;
+
+        private float m_clockScale = 1f;
+
+        private double m_clockSeconds;
+        private double m_presentedSeconds;
         private long m_changedAt;
         private long m_lastPolledAt;
         private long m_retryAt;
@@ -57,10 +78,24 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         public int CapturesRequested { get; private set; }
         /// <summary>The failure of the most recently reported capture, or <see langword="null"/> when it was written.</summary>
         public string? LastCaptureError { get; private set; }
-        /// <summary>Whether time and feedback advancement are paused.</summary>
-        public bool ClockPaused { get; set; }
-        /// <summary>The presentation clock in seconds.</summary>
-        public double ClockSeconds { get; set; }
+        /// <summary>Gets or sets whether time and feedback advancement are paused.</summary>
+        public bool ClockPaused {
+            get => m_clockPaused;
+            set {
+                Rebase();
+                m_clockPaused = value;
+            }
+        }
+        /// <summary>Gets or sets the instance's time in seconds, the value its passes read as <c>frameGroup.time</c>:
+        /// the host's presentation clock mapped through the instance's scale, pauses, steps and resets. Setting it
+        /// moves the time the next frame presents from.</summary>
+        public double ClockSeconds {
+            get => m_clockSeconds;
+            set {
+                m_clockSeconds = value;
+                Rebase();
+            }
+        }
         /// <summary>Whether a background compilation is still pending installation.</summary>
         public bool IsCompiling => Compilation.IsPending;
         /// <summary>The most recently completed compilation, including any diagnostics.</summary>
@@ -72,9 +107,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         public bool PointerWasDown { get; set; }
         /// <summary>How many presses the pointer has made over the instance.</summary>
         public uint PointerPresses { get; set; }
-        /// <summary>The published mapping of the pane the instance is shown in, kept while its region and extent hold,
-        /// or <see langword="null"/> before the instance is first shown.</summary>
-        public Puck.Commands.SourceMapping? Pane { get; set; }
         /// <summary>Gets the node the runtime renders the instance through, which the runtime owns.</summary>
         public required ShaderPipelineRenderNode Node { get; init; }
         /// <summary>Gets why the instance can show nothing, or <see langword="null"/> while it has a graph installed or on
@@ -152,6 +184,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
         internal void ScheduleRetry() => m_retryAt = Stopwatch.GetTimestamp();
 
+        // Re-anchors the time mapping at the frame last presented, holding the time it showed.
+        private void Rebase() {
+            m_clockBase = m_clockSeconds;
+            m_clockAnchor = m_presentedSeconds;
+        }
         private static (DateTime, long) ReadStamp(string path) {
             try {
                 var info = new FileInfo(fileName: path);
@@ -167,24 +204,42 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
 
-        /// <summary>Advances this instance once for a produced host frame and returns its shader time delta.</summary>
-        public double AdvanceClock(double deltaSeconds) {
-            Node.Paused = (ClockPaused || (ClockScale == 0));
-            if (!Node.IsReady) { return 0; }
-            double delta;
+        /// <summary>Presents this instance once for a produced host frame at the host's presentation clock and returns
+        /// the seconds its time moved since the frame before. A running instance's time follows the clock at its scale;
+        /// a paused one, or one not yet ready, holds, except that a pending step advances it by exactly one
+        /// development frame.</summary>
+        /// <param name="presentedSeconds">The presentation clock the frame presents at, in seconds: the host state
+        /// mirror's presented engine tick.</param>
+        /// <returns>The seconds the instance's time moved, which its passes read as <c>frameGroup.timeDelta</c>.</returns>
+        public double AdvanceClock(double presentedSeconds) {
+            var previous = m_clockSeconds;
 
-            if (PendingSteps > 0) {
-                PendingSteps--;
-                delta = (1.0 / 60.0);
-                Node.Step();
-            } else {
-                delta = (Node.Paused
-                    ? 0
-                    : (deltaSeconds * ClockScale)
-                );
+            Node.Paused = (m_clockPaused || (m_clockScale == 0));
+            if (
+                !m_clockAnchored ||
+                (presentedSeconds < m_clockAnchor)
+            ) {
+                m_clockAnchor = presentedSeconds;
+                m_clockBase = m_clockSeconds;
+                m_clockAnchored = true;
             }
-            ClockSeconds += delta;
-            return delta;
+            if (!Node.IsReady) {
+                m_clockAnchor = presentedSeconds;
+            } else if (PendingSteps > 0) {
+                PendingSteps--;
+                m_clockBase = (m_clockSeconds + StepSeconds);
+                m_clockAnchor = presentedSeconds;
+                m_clockSeconds = m_clockBase;
+                Node.Step();
+            } else if (Node.Paused) {
+                m_clockAnchor = presentedSeconds;
+            } else {
+                m_clockSeconds = (m_clockBase + (m_clockScale * (presentedSeconds - m_clockAnchor)));
+            }
+
+            m_presentedSeconds = presentedSeconds;
+
+            return (m_clockSeconds - previous);
         }
         /// <summary>Resets time, pending steps, and GPU feedback to their initial values.</summary>
         public void Reset() {
@@ -192,6 +247,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             PendingSteps = 0;
             Node.Reset();
         }
+
+        /// <summary>The seconds one <see cref="Step"/> advances the instance's time by: one frame at the standard
+        /// development rate of 60 hertz.</summary>
+        public const double StepSeconds = (1.0 / 60.0);
+
         /// <summary>Pauses and schedules exactly one logical frame at the standard development rate.</summary>
         public void Step() {
             ClockPaused = true;
@@ -332,15 +392,72 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_synthesized = synthesized;
         ResetFootprints();
     }
+    /// <summary>Returns the frame values every graph instance presents at a frame before its own pointer, camera and
+    /// clock, read from the state mirror, the one presentation clock: the mirror's delivered engine tick as
+    /// <c>tick</c>, and its presented engine tick at the frame's interpolation fraction, in seconds, as <c>time</c>,
+    /// with the seconds it moved since the frame before as <c>timeDelta</c>. Nothing here reads a wall clock, so a
+    /// frame at a given delivered tick and fraction presents the same bytes on every run.</summary>
+    /// <param name="mirror">The state mirror the frame presents.</param>
+    /// <param name="fraction">The frame's interpolation fraction in <c>[0, 1]</c>; an offscreen presentation passes
+    /// one.</param>
+    /// <param name="previousSeconds">The time the frame before presented, in seconds; a later time never reads a
+    /// negative delta.</param>
+    /// <returns>The frame values, with no pointer and no paired camera.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
+    public static ShaderFrameValues PresentedFrame(WorldStateMirror mirror, float fraction, double previousSeconds) {
+        ArgumentNullException.ThrowIfNull(argument: mirror);
+
+        var seconds = (mirror.PresentedEngineTick(fraction: fraction) / EngineTicks.PerSecond);
+
+        return new ShaderFrameValues(
+            CameraFov: 0f,
+            CameraPosition: Vector3.Zero,
+            CameraTarget: Vector3.Zero,
+            CameraUp: Vector3.Zero,
+            Pointer: Vector2.Zero,
+            PointerDown: false,
+            PointerPresses: 0,
+            Tick: mirror.EngineTick,
+            Time: seconds,
+            TimeDelta: Math.Max(
+                val1: 0d,
+                val2: (seconds - previousSeconds)
+            )
+        );
+    }
+    /// <summary>Hands every graph instance the runtime renders for this host the frame values the frame presents: each
+    /// synthesized instance's node and each row's. A pane the frame shows is handed its own pointer, camera and clock
+    /// over them afterwards. Does nothing before a runtime is attached.</summary>
+    /// <param name="frame">The frame values: the presented tick and presentation time, with no pointer and no paired
+    /// camera.</param>
+    public void Present(in ShaderFrameValues frame) {
+        if (m_runtime is not { } runtime) {
+            return;
+        }
+
+        if (m_synthesized is { } synthesized) {
+            foreach (var instance in synthesized.Instances) {
+                if (runtime.NodeOf(instance: instance.Name) is { } node) {
+                    node.Frame = frame;
+                }
+            }
+        }
+
+        foreach (var entry in m_entries.Values) {
+            entry.Node.Frame = frame;
+        }
+    }
     /// <summary>Starts a frame before the runtime schedules it: reconciles the accepted <c>views</c> section, installs
-    /// complete candidates and polls dependency watches, and clears the previous frame's placements, leaving the
-    /// footprints the synthesized root always shows.</summary>
+    /// complete candidates and polls dependency watches, and clears the previous frame's placements and cameras, leaving
+    /// the footprints the synthesized root always shows. The panes published last stay published until
+    /// <see cref="PublishPanes"/> replaces them.</summary>
     /// <param name="views">The accepted document's <c>views</c> section.</param>
     public void BeginFrame(WorldViewDefaults views) {
         Reconcile(views: views);
         PumpWatches();
         ResetFootprints();
         m_placements.Clear();
+        m_cameras.Clear();
     }
     /// <summary>Places a pane this frame: the synthesized root shows the instance inside a normalized rect of the display,
     /// renders it at that rect's extent, and reconstructs it at the given sharpness. An instance the root does not place
@@ -393,8 +510,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="renderScale">The view's render scale in (0, 1]; any other value renders native.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
     /// <param name="shown">Whether the root draws the view's output into its rect this frame.</param>
+    /// <param name="uncovered">Whether part of the display lies outside everything the root shows this frame, so the
+    /// first view's place pass, when the view is not shown, writes the letterbox color everywhere rather than standing
+    /// for its base (<see cref="RenderGraphPlacement.Uncovered"/>).</param>
     /// <returns><see langword="true"/> when the root places the view this frame.</returns>
-    public bool PlaceView(int view, NormalizedRect region, float renderScale, float sharpness, bool shown) {
+    public bool PlaceView(int view, NormalizedRect region, float renderScale, float sharpness, bool shown, bool uncovered) {
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
@@ -407,6 +527,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             : 1f);
 
         m_placements[synthesized.ViewPasses[view]] = new RenderGraphPlacement(
+            Uncovered: uncovered,
             Height: region.Height,
             Left: region.X,
             Sharpness: sharpness,
@@ -419,7 +540,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             m_footprints.Add(item: new RenderGraphFootprint(
                 Consumer: WorldViewGraphs.MainInstance,
                 Height: (region.Height * scale),
-                Producer: WorldRootGraph.ProducerOf(view: view),
+                Producer: synthesized.Producers[view].Name,
                 Width: (region.Width * scale)
             ));
         }
@@ -427,17 +548,20 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return true;
     }
     /// <summary>Places every view a composed frame of the world rendered (<see cref="PlaceView"/>), each in its rect at
-    /// its render scale. A view is shown once the world has rendered it, except a lone view covering the whole display at
+    /// its render scale, and records each view's camera for its producer (<see cref="SetCamera"/>). A view is shown once the world has rendered it, except a lone view covering the whole display at
     /// native scale, which is never shown, so the root stands for the world itself. Before the world has composed a frame
     /// there are no views, but the world must still be scheduled, since it composes inside its own frame, so the first
     /// view is placed, not shown, over the whole display at native scale, which it renders at until its first frame names
-    /// its views.</summary>
+    /// its views. The display counts as covered only when one rect covers it whole: a lone whole-display view, a shown
+    /// view over the whole display, or a pane that covers it (<paramref name="panesCover"/>); otherwise pixels no rect
+    /// covers show the letterbox color, even while the first view is not shown.</summary>
     /// <param name="views">The views of the world's last composed frame, in view order.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
     /// <param name="rendered">Whether the world has rendered a view into its output, by 0-based view, or
     /// <see langword="null"/> when no view has an output yet.</param>
+    /// <param name="panesCover">Whether a pane the root shows this frame covers the whole display.</param>
     /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
-    public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered) {
+    public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered, bool panesCover) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
@@ -448,6 +572,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 renderScale: 1f,
                 sharpness: sharpness,
                 shown: false,
+                uncovered: !panesCover,
                 view: 0
             );
 
@@ -459,19 +584,49 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             (views[0].Region == whole) &&
             !((views[0].RenderScale > 0f) && (views[0].RenderScale < 1f))
         );
+        var covered = (panesCover || lone);
 
+        for (var view = 0; (view < views.Count); view++) {
+            covered |= (
+                (views[view].Region == whole) &&
+                Shows(
+                    lone: lone,
+                    rendered: rendered,
+                    view: view
+                )
+            );
+        }
         for (var view = 0; (view < views.Count); view++) {
             var snapshot = views[view];
 
+            if (
+                (m_synthesized is { } synthesized) &&
+                (view < synthesized.Producers.Count)
+            ) {
+                SetCamera(
+                    camera: snapshot.Camera,
+                    instance: synthesized.Producers[view].Name
+                );
+            }
+
             _ = PlaceView(
+                uncovered: !covered,
                 region: snapshot.Region,
                 renderScale: snapshot.RenderScale,
                 sharpness: sharpness,
-                shown: (!lone && (rendered?.Invoke(arg: view) ?? false)),
+                shown: Shows(
+                    lone: lone,
+                    rendered: rendered,
+                    view: view
+                ),
                 view: view
             );
         }
     }
+
+    // Whether a view of a composed frame is shown: once rendered, unless it is the lone whole-display view.
+    private static bool Shows(bool lone, Func<int, bool>? rendered, int view) => (!lone && (rendered?.Invoke(arg: view) ?? false));
+
     /// <inheritdoc/>
     /// <remarks>A pane or view of the synthesized root the host did not place this frame is not shown, so its pass
     /// draws nothing.</remarks>
@@ -758,6 +913,20 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return;
         }
 
+        ReconcileChanged(
+            runtime: runtime,
+            views: views
+        );
+    }
+    /// <summary>Looks up an instance the host runs without creating one.</summary>
+    public bool TryGet(string name, out Entry entry) => m_entries.TryGetValue(
+        key: name,
+        value: out entry!
+    );
+
+    // Reconciles a views section that differs from the one last accepted. Apart from Reconcile, so the closures its
+    // rebinding captures are allocated only when the section moved, never on a steady frame.
+    private void ReconcileChanged(IRenderGraphInstances runtime, WorldViewDefaults views) {
         var synthesized = m_synthesized;
 
         if (views.Root is null) {
@@ -909,12 +1078,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             m_entries.Remove(key: name);
         }
     }
-    /// <summary>Looks up an instance the host runs without creating one.</summary>
-    public bool TryGet(string name, out Entry entry) => m_entries.TryGetValue(
-        key: name,
-        value: out entry!
-    );
-
     // Installs a compiled graph on its row's instance, binding each input the row declares to the instance it names.
     private bool Install(string name, CompiledShaderPipeline pipeline, out string reason) {
         if (

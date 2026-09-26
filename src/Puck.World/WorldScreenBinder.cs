@@ -90,6 +90,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // The producers every producer source opens through: the four the engine ships, then any the host registers.
     private readonly WorldImageProducers m_producers = new();
 
+    /// <summary>Gets the image producers the binder opens screen sources through, which the render root registers with its
+    /// render-graph packages so a source instance opens through the same producers.</summary>
+    internal WorldImageProducers Producers => m_producers;
+
     // Whether the host exports shared Direct3D 12 surfaces: a Direct3D 12 host on a platform that has them.
     private readonly bool m_exportsSurfaces;
     // The backend-neutral surface-transfer factory — the Vulkan host's camera GPU tier imports its shared camera

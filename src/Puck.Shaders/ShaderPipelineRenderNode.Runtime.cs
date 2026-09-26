@@ -104,6 +104,10 @@ public sealed partial class ShaderPipelineRenderNode {
         public PortBinding[]? PortBindings;
         // The graph's frame region, on the pass that created it; null on every other pass.
         public GpuRegion? FrameRegion;
+        // The regions a package pass's package states, which the node flushes and copies (ShaderPipelineRenderNode.Regions.cs),
+        // and the copy sets reserved for the staged ones; null for a pass that states none.
+        public GpuRegion[]? Regions;
+        public GpuRegionCopyPool? RegionCopySets;
 
         public bool Grouped => (PortBindings is not null);
 
@@ -159,6 +163,15 @@ public sealed partial class ShaderPipelineRenderNode {
                     pool?.Dispose();
                 }
             }
+            if (Regions is not null) {
+                foreach (var region in Regions) {
+                    region?.Dispose();
+                }
+
+                Regions = null;
+            }
+            RegionCopySets?.Dispose();
+            RegionCopySets = null;
             PassRegion?.Dispose();
             PassRegion = null;
             FrameRegion?.Dispose();

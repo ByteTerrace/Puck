@@ -111,7 +111,20 @@ public interface IRenderGraphPackageFactory {
     /// buffers its frame group and pass group blocks live in, one per frame slot.</param>
     /// <returns>The recorder, which the instance disposes with its graph.</returns>
     IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups);
+    /// <summary>States the host-written regions a pass's recorder writes, which the instance creates for it when its graph
+    /// installs and hands over in <see cref="RenderGraphPackageGroups.Regions"/>, in this order. The instance chooses each
+    /// region's residency (<see cref="GpuResidency.Select"/>, with a reader in flight), flushes each frame slot's share
+    /// after the frame's recordings and records every staged copy with its buffer barriers ahead of the frame's passes,
+    /// so a recorder only writes a region's contents and binds <see cref="GpuRegion.Buffer"/>. It runs on the thread
+    /// pool with <see cref="Build"/>; a package that writes no region states none.</summary>
+    /// <param name="context">The pass it states the regions of.</param>
+    /// <returns>The regions, in the order the recorder receives them.</returns>
+    IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) => [];
 }
+/// <summary>A host-written region a package pass's recorder writes (<see cref="IRenderGraphPackageFactory.Regions"/>).</summary>
+/// <param name="Name">The region's part name, which names its buffers after the instance and the pass.</param>
+/// <param name="ByteCount">The region's size, in bytes; positive and a whole number of uints.</param>
+public readonly record struct RenderGraphPackageRegion(string Name, int ByteCount);
 /// <summary>What a recorder is built and created for: one package pass of one instance's graph, on one device.</summary>
 /// <param name="Instance">The instance's name.</param>
 /// <param name="Pass">The pass's name in the instance's graph.</param>
@@ -138,35 +151,75 @@ public sealed record RenderGraphPackageRecorderContext(string Instance, string P
 /// producer opens the image with, or <see langword="null"/> for its defaults and for any other instance.</param>
 public sealed record RenderGraphExternalProducerContext(string Instance, string Package, IGpuDeviceContext Device, bool HostsOnDirectX, IReadOnlyDictionary<string, JsonElement>? Settings = null);
 /// <summary>The engine work a host offers render graphs, by package id: the recorders that run a package pass inside a
-/// graph instance's submission, and the external producers that render an external instance
-/// (<see cref="RenderGraphInstanceKind.External"/>) through submissions of their own. A graph whose package pass names an
-/// id no recorder serves, and an external instance whose package no producer serves, are refused by name when they are
-/// installed.</summary>
-public sealed class RenderGraphPackageRecorders {
+/// graph instance's submission, the external producers that render an external instance
+/// (<see cref="RenderGraphInstanceKind.External"/>) through submissions of their own, and the uploads an uploaded
+/// source instance's graph converts. A package id has at most one producer or upload. A graph whose package pass names an
+/// id no recorder serves, and an external instance whose package neither a producer nor an upload serves, are refused by
+/// name when they are installed.</summary>
+/// <param name="regionCopy">The device's region-copy pipelines, which an instance leases when a region it records selects
+/// the staged policy, or <see langword="null"/> for a host whose regions never stage; an instance refuses a staged
+/// region by name then.</param>
+public sealed class RenderGraphPackageRecorders(GpuRegionCopyPipelineCache? regionCopy = null) {
     private readonly Dictionary<string, IRenderGraphPackageFactory> m_factories = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphExternalProducer>> m_producers = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphSourceUpload>> m_sources = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Gets the device's region-copy pipelines the host offers, or <see langword="null"/> for none.</summary>
+    public GpuRegionCopyPipelineCache? RegionCopy { get; } = regionCopy;
 
     /// <summary>Gets the package ids a recorder serves, in ordinal order.</summary>
     public IReadOnlyList<string> Ids => [.. m_factories.Keys.Order(comparer: StringComparer.Ordinal)];
     /// <summary>Gets the package ids an external producer serves, in ordinal order.</summary>
     public IReadOnlyList<string> ProducerIds => [.. m_producers.Keys.Order(comparer: StringComparer.Ordinal)];
+    /// <summary>Gets the package ids an upload serves, in ordinal order.</summary>
+    public IReadOnlyList<string> SourceIds => [.. m_sources.Keys.Order(comparer: StringComparer.Ordinal)];
 
     /// <summary>Registers the external producer factory for a package id.</summary>
     /// <param name="package">The package id.</param>
     /// <param name="factory">Creates the producer for one external instance; the runtime that installs the instance
     /// owns it.</param>
-    /// <exception cref="ArgumentException"><paramref name="package"/> is empty or already has a producer.</exception>
+    /// <exception cref="ArgumentException"><paramref name="package"/> is empty or already has a producer or an
+    /// upload.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="factory"/> is <see langword="null"/>.</exception>
     public void RegisterProducer(string package, Func<RenderGraphExternalProducerContext, IRenderGraphExternalProducer> factory) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
         ArgumentNullException.ThrowIfNull(argument: factory);
 
-        if (!m_producers.TryAdd(
-            key: package,
-            value: factory
-        )) {
+        if (
+            m_sources.ContainsKey(key: package) ||
+            !m_producers.TryAdd(
+                key: package,
+                value: factory
+            )
+        ) {
             throw new ArgumentException(
-                message: $"Package '{package}' already has an external producer.",
+                message: $"Package '{package}' already has an external producer or an upload.",
+                paramName: nameof(package)
+            );
+        }
+    }
+    /// <summary>Registers the upload factory for an uploaded source's package id (<c>source.&lt;producer id&gt;</c>): the
+    /// runtime renders each instance of it through the one-pass conversion graph its upload's descriptor names, reading
+    /// the region the upload writes.</summary>
+    /// <param name="package">The package id.</param>
+    /// <param name="factory">Opens the upload for one source instance from its settings; the runtime that installs the
+    /// instance owns it.</param>
+    /// <exception cref="ArgumentException"><paramref name="package"/> is empty or already has a producer or an
+    /// upload.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="factory"/> is <see langword="null"/>.</exception>
+    public void RegisterSource(string package, Func<RenderGraphExternalProducerContext, IRenderGraphSourceUpload> factory) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
+        ArgumentNullException.ThrowIfNull(argument: factory);
+
+        if (
+            m_producers.ContainsKey(key: package) ||
+            !m_sources.TryAdd(
+                key: package,
+                value: factory
+            )
+        ) {
+            throw new ArgumentException(
+                message: $"Package '{package}' already has an external producer or an upload.",
                 paramName: nameof(package)
             );
         }
@@ -175,6 +228,10 @@ public sealed class RenderGraphPackageRecorders {
     /// <param name="package">The package id.</param>
     /// <returns><see langword="true"/> when a producer is registered for it.</returns>
     public bool ServesProducer(string package) => m_producers.ContainsKey(key: package);
+    /// <summary>Returns whether an upload serves a package id.</summary>
+    /// <param name="package">The package id.</param>
+    /// <returns><see langword="true"/> when an upload is registered for it.</returns>
+    public bool ServesSource(string package) => m_sources.ContainsKey(key: package);
     /// <summary>Registers the recorder factory for a package id.</summary>
     /// <param name="package">The package id.</param>
     /// <param name="factory">Builds and creates the recorder for one pass of one installed graph.</param>
@@ -242,6 +299,7 @@ public sealed class RenderGraphPackageRecorders {
             pass: pass
         )));
     internal IRenderGraphExternalProducer CreateProducer(RenderGraphExternalProducerContext context) => (m_producers[context.Package](arg: context) ?? throw new InvalidOperationException(message: $"The external producer factory for package '{context.Package}' returned null."));
+    internal IRenderGraphSourceUpload CreateSource(RenderGraphExternalProducerContext context) => (m_sources[context.Package](arg: context) ?? throw new InvalidOperationException(message: $"The upload factory for package '{context.Package}' returned null."));
     internal static string Unserved(string instance, string pass, string package) =>
         $"Instance '{instance}' pass '{pass}' names package '{package}', which no recorder serves.";
 }

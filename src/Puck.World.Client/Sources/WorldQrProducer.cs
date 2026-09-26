@@ -46,7 +46,7 @@ public sealed class WorldQrProducer : IWorldImageProducer {
 }
 /// <summary>One QR screen: the rasterized B8G8R8A8 code, its upload, and the encoder's decisions (version and mask)
 /// <c>screen.source &lt;index&gt; qr</c> reads back. The code never changes, so it uploads once per device.</summary>
-public sealed class WorldQrFeed : IWorldImageFeed, IImageSourceReference {
+public sealed class WorldQrFeed : IWorldUploadFeed, IImageSourceReference {
     // The module pixel size lands the rendered image near this many pixels square whatever version the payload chose,
     // clamped so each module stays legibly crisp and even a version-10 grid with a generous quiet zone stays far under
     // the validator's surface-dimension ceiling.
@@ -187,6 +187,19 @@ public sealed class WorldQrFeed : IWorldImageFeed, IImageSourceReference {
             width: Descriptor.Width
         );
         m_published = true;
+    }
+    /// <inheritdoc/>
+    /// <remarks>The code never changes, so a region that already holds it owes nothing.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="region"/> is <see langword="null"/>.</exception>
+    public bool TryWrite(long tick, GpuRegion region) {
+        ArgumentNullException.ThrowIfNull(argument: region);
+
+        _ = region.Write(
+            bytes: m_pixels,
+            offset: ImageSourceUploadLayout.HeaderBytes
+        );
+
+        return true;
     }
     /// <inheritdoc/>
     public bool TryWriteReference(Span<byte> rgba, out ImageSourceStamp stamp) {

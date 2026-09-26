@@ -33,6 +33,7 @@ public sealed class ShaderFrameBlockLawTests {
         ),
         PointerDown: true,
         PointerPresses: 12,
+        Tick: 0x0123456789ABCDEFUL,
         Time: 13.5,
         TimeDelta: 0.25
     );
@@ -74,7 +75,6 @@ public sealed class ShaderFrameBlockLawTests {
         layout.WriteFrame(
             block: frame,
             frame: 77,
-            tick: 0x0123456789ABCDEFUL,
             values: Values
         );
 
