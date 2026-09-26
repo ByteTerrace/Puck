@@ -3937,26 +3937,49 @@ and P14.
 
 ### P16 — Display output
 
-**Starts from:** 8-bit UNORM swapchains in the default color space on both
-backends, no HDR selection, and the tonemap inside the SDF view pass.
+**Starts from:** 8-bit UNORM SDR swapchains on both backends and the tonemap
+inside the SDF view pass. The pieces that need no float working target are in
+place:
+
+- The Direct3D 12 compositor and surface upload keep their descriptors in the
+  device's heaps (P7b-14a). The compositor admits one pool for the
+  `SurfaceBlitLayout` group through `IGpuBindings.CanAdmit` and binds its one
+  set; a CPU surface reaches the blit through the device's `IGpuSurfaceUpload`,
+  which holds no descriptor. `DirectXDescriptorHeaps.Create` makes only CPU-only
+  heaps, and `DirectXGpuBindings.ShaderVisibleHeapsCreated` counts the
+  device's pair, two per device (`DirectXShaderVisibleHeapsLawTests`).
+- HDR swapchain selection. `DisplayOutput`, a `GpuPixelFormat` and a
+  `DisplayColorSpace` (`Srgb`, `Hdr10`, `ScRgb`), is the one description of
+  what a swapchain presents, `DisplayOutput.TrySelect` the one choice, and
+  `ISurfacePresenter.Output` the chosen one on either backend. Vulkan reads the
+  surface's format and color-space pairs with `VK_EXT_swapchain_colorspace`
+  enabled when the loader has it (`VulkanSwapchainFactory.SelectOutput`);
+  Direct3D 12 reports HDR10 and scRGB when the containing `IDXGIOutput6`
+  reports `G2084_NONE_P2020`, and moves the swap chain into a chosen HDR output
+  only when `CheckColorSpaceSupport` allows presenting it. HDR is chosen only
+  when requested and reported; `PresentationOptions.ColorSpace` requests
+  `Srgb`, and no host or document setting requests anything else
+  (`DisplayOutputLawTests`, `VulkanSwapchainFormatLawTests`).
+- Paper white. `PresentationOptions.PaperWhiteNits`, 80 to 10,000 nits and
+  `DisplayOutput.SdrWhiteNits` by default, is the level the HUD and overlays
+  compose at once they read it, and `DisplayOutput.WhiteScale` turns it into an
+  output's UI white: one in SDR at every level.
 
 **Owns:** the scene-linear working space, the display-transform node, HDR
 swapchain selection, and paper white for UI.
 
 **Delivers:** the smallest HDR path that exercises the contracts. That means a
 scene-linear working space and one display-transform node at the end of the
-graph, which tonemaps and encodes for the target. The swapchain compositors,
-`SurfaceCompositor` on Vulkan and `DirectXSurfaceCompositor` on Direct3D 12,
-become that node's writer rather than a blit after it, and the Direct3D 12
-compositor and surface upload, which create shader-visible heaps of their own,
-fold into the device's heaps (P7b-14a). On Windows it adds an
-HDR10 or scRGB swapchain on both backends, chosen from what the display
-reports. The HUD and overlays
-use a paper-white level, and one HDR source, desktop capture on an HDR display,
-converts through P12. SDR stays the default and the fallback. Calibration UI,
-per-display metadata, and HDR on the Steam Deck OLED under Linux are later work
-and stay listed in open items until scheduled.
-
+graph, which tonemaps and encodes for the target; both wait on P14-10's float
+working targets. The swapchain compositors, `SurfaceCompositor` on Vulkan and
+`DirectXSurfaceCompositor` on Direct3D 12, become that node's writer rather
+than a blit after it. On Windows a host setting, named once, then requests
+HDR10 or scRGB, which the selection above takes when the display reports it.
+The HUD and overlays read the paper-white level through
+`DisplayOutput.WhiteScale`, and one HDR source, desktop capture on an HDR
+display, converts through P12. SDR stays the default and the fallback.
+Calibration UI, per-display metadata, and HDR on the Steam Deck OLED under
+Linux are later work and stay listed in open items until scheduled.
 **Check:** on an SDR display the same graph produces the previous image within
 the parity contract. The HDR-display checks, the swapchain reporting an HDR
 color space, a test ramp exceeding SDR white, an HDR desktop capture displayed
@@ -4050,7 +4073,9 @@ generated instruction-set declarations (P14-3), the planner's vocabulary with
 multi-basis counts (P14-4) and post passes as the root graph's own passes
 (P14-12) needed none of them and have landed, and the HLSL module split
 (P14-2) is in progress. P15 and P16 both follow P14: P15 also needs P4, and
-P16, the smallest package in this group, needs P14's float working targets.
+P16, the smallest package in this group, needs P14's float working targets for
+its display transform; its heap fold, HDR swapchain selection and paper-white
+setting needed none and have landed.
 P17's CPU half, the bakes and their texture codecs, has landed, and so have
 their block-compressed upload and sampling check on both backends and the one
 pixel-format vocabulary, `GpuPixelFormat`; drawing a bake follows P4 and
