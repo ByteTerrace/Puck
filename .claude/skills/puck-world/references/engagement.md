@@ -285,15 +285,20 @@ write path for possession.
 
 ## `body.engage` grammar
 
-`body.engage <screen>|screen:<n>|body:<n> [player] [capture:on|off]`. The
+`body.engage <screen>|screen:<n>|body:<n> [body] [capture:on|off]`. The
 bare-integer form is a screen index; `body:<n>`/`screen:<n>` reuse
 `GrantSubject.TryParse`'s own grammar (the same tokens `world.grant`/
 `world.revoke` accept). `capture:on|off`, when present, is ALWAYS the trailing
 token, and maps to `ComposeControl.Exclusive` — on drops the own-body
 application, off retains it. A body target skips every screen-only policy check
 (engageable, auto-insert, machine presence, engage radius); it only needs a live
-body at that index. The player defaults to 1 and is bounded to 1..128.
-`body.disengage [player]` submits `DissolveControl`.
+body at that index. The driving body is an optional 0-based body index, like
+every `body.*` verb's: it defaults to body 0 (seat 1's body), is bounded to
+`0..population.capacity - 1`, and `body.engage <target> 1` is driven by body:1,
+seat 2's body. `body.engage` and `body.disengage [body]` resolve it through the
+one `ResolveTarget` the other `body.*` verbs use, a stripped `capture:` token
+counting as absent (`EngageBodyIndexLawTests`). `body.disengage` submits
+`DissolveControl`.
 
 ## Replay visibility
 
@@ -369,7 +374,7 @@ hit.
 
 ## Verifying
 
-Run the game; drive `body.engage <target> [player] [capture:on|off]` with a
+Run the game; drive `body.engage <target> [body] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. Exercising
