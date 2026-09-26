@@ -416,6 +416,7 @@ shape is core, though every one of these particular messages is raised by the wo
 | PUCK116 | A placement id carrying `:` (it separates a channel's arguments, `$region:<placementId>`) or spelled exactly `$each` (the token `placement:$each` binds to a rule's `forEach` key), on a `placements` row or an `upsertPlacement` effect. The loader and the live mutation door refuse the same ids by name (`WorldPlacement.TryValidateId`). |
 | PUCK117 | A module alias spelled like a row, pool, `let` or module parameter of the scope that uses it (`slot a` beside `use room as a()`). The scope reads a name the instance declares as `a.name`, which would also spell a cell or member of `a`; rename one. |
 | PUCK119 | A `table`/`slot`/`grid` written `: Enum`, a `row { enum: Enum }`, or a record field `field: Enum` naming an enum the composed world does not declare, at the line that names it. |
+| PUCK120 | A graph instance's bound parameter not written `parameter pass.member = value` inside its `graph` block: the statement outside one, one member bound twice, or a raw `parameters { }` block. |
 | PUCK053 | A default/bound literal that does not fit the row's kind. |
 | PUCK054 | `capacity(n)` smaller than the table's/pile's own authored cell/token count. |
 | PUCK055 | A modifier the declaration's shape or kind refuses — `bounds`/`advance` on `Bool`/`Text`, `capacity` on a `slot`. |

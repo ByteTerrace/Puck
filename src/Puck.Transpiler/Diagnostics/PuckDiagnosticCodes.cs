@@ -308,6 +308,10 @@ public static class PuckDiagnosticCodes {
     /// validation of the composed world — or a record field <c>field: Enum</c> names one its document does not declare.
     /// Declare it with <c>enum Enum { … }</c>; a cell kind is never written.</summary>
     public const string StateEnumUndeclared = "PUCK119";
+    /// <summary>PUCK120: a graph instance's bound parameter is not written as <c>parameter pass.member = value</c>
+    /// inside its <c>graph</c> block: the statement stands outside one, binds one member twice, or the block writes
+    /// the raw <c>parameters</c> member the statement lowers to.</summary>
+    public const string GraphParameter = "PUCK120";
     /// <summary>PUCK_LINT_010: a literal mix weight's share is below 1/64; consider mean over a history table.</summary>
     public const string VectorMixStall = "PUCK_LINT_010";
 }
