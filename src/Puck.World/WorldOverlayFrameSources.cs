@@ -252,10 +252,13 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
                     ReleaseToken: frame.ReleaseToken
                 );
 
+                // The relay's lease carries the producer's wait, which the overlay pass's submission adds before it
+                // samples the image.
                 return new GpuImageLease(
                     ImageViewHandle: frame.ImageViewHandle,
                     Release: m_release,
-                    ReleaseToken: token
+                    ReleaseToken: token,
+                    Wait: frame.Wait
                 );
             }
 

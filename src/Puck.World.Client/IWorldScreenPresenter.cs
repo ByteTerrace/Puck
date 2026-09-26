@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
 using Puck.SdfVm;
 using Puck.SignedDistance;
@@ -19,10 +18,10 @@ public interface IWorldScreenPresenter {
     /// <summary>Drops every device-owned upload and offscreen view while preserving CPU sessions, machine
     /// simulation, declarations, and view registrations.</summary>
     void NotifyDeviceLost();
-    /// <summary>Publishes this tick's declared-screen content to the device.</summary>
-    /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
-    /// <param name="deviceContext">The live GPU device context to upload on, through its services.</param>
-    void Publish(ulong tick, IGpuDeviceContext deviceContext);
+    /// <summary>Publishes the screens' content for a produced frame before the render graph schedules it: the capture
+    /// gate's answer for the frame, the fills, the shared feeds and every screen's mapping.</summary>
+    /// <param name="context">The host's frame context, whose host resolves the live GPU device.</param>
+    void Publish(in Puck.Hosting.FrameContext context);
     /// <summary>Reconciles the offscreen camera-view pool against a mutated camera list.</summary>
     /// <param name="cameras">The mutated camera list (the live definition's cameras).</param>
     void ReconcileCameras(IReadOnlyList<WorldCamera> cameras);

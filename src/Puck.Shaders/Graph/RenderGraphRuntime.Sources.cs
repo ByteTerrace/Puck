@@ -104,6 +104,46 @@ public sealed partial class RenderGraphRuntime {
             )
         );
     }
+
+    /// <summary>Creates a converter of CPU pixels a producer holds outside the set, on the runtime's device, packages and
+    /// pipeline cache: a node of its own running the one-pass graph the descriptor names, the conversion an uploaded
+    /// source instance renders through. The caller owns the converter and disposes it before the device goes.</summary>
+    /// <param name="name">The converter's name, which names its node and its GPU objects.</param>
+    /// <param name="descriptor">What the pixels are: their format, color encoding and extent.</param>
+    /// <returns>The converter, whose <see cref="RenderGraphSourceConverter.Fault"/> names a descriptor no conversion
+    /// reads.</returns>
+    /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="descriptor"/> is
+    /// <see langword="null"/>.</exception>
+    public RenderGraphSourceConverter CreateConverter(string name, ImageSourceDescriptor descriptor) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+        ArgumentNullException.ThrowIfNull(argument: name);
+        ArgumentNullException.ThrowIfNull(argument: descriptor);
+
+        var graph = GraphOf(
+            descriptor: descriptor,
+            fault: out var fault,
+            header: out var header
+        );
+
+        return new RenderGraphSourceConverter(
+            fault: fault,
+            graph: graph,
+            header: header,
+            node: CreateNode(
+                deviceContext: m_device,
+                hostsOnDirectX: m_hostsOnDirectX,
+                inFlightFrames: m_inFlightFrames,
+                name: name,
+                packages: m_packages,
+                pipelines: m_pipelines
+            )
+        );
+    }
+
     // Opens an uploaded source instance's upload and makes its graph and its node, which renders nothing when the upload
     // refused or no conversion reads what it declares. The node takes the graph once every graph of the set binds
     // (Install).
@@ -198,8 +238,8 @@ public sealed partial class RenderGraphRuntime {
             source?.Dispose();
         }
     }
-    // The frame the scheduler reads: the host's frame, with each upload's cadence and extent after the host's source
-    // states, unless the host declares that source itself.
+    // The frame the scheduler reads: the host's frame, with each upload's and each source producer's cadence and extent
+    // after the host's source states, unless the host declares that source itself.
     private RenderGraphFrame WithSourceStates(in RenderGraphFrame frame) {
         var uploads = false;
 
@@ -207,7 +247,10 @@ public sealed partial class RenderGraphRuntime {
             uploads |= (source?.State is not null);
         }
 
-        if (!uploads) {
+        if (
+            !uploads &&
+            !HasSourceProducers()
+        ) {
             return frame;
         }
 
@@ -239,6 +282,8 @@ public sealed partial class RenderGraphRuntime {
             }
         }
 
+        AddProducerSourceStates();
+
         return (frame with {
             Sources = m_sourceStates,
         });
@@ -247,7 +292,7 @@ public sealed partial class RenderGraphRuntime {
     // One uploaded source: its upload, the graph its descriptor names, and the region the upload writes, which the node
     // owns once it is bound and releases on device loss, when the next render binds a new one.
     private sealed class SourceGraph(IRenderGraphSourceUpload upload, RenderGraphRuntimeGraph? graph, ImageSourceUploadHeader header, string name, string? fault) : IDisposable {
-        private GpuRegion? m_region;
+        private readonly RenderGraphSourceRegion m_region = new(header: header);
 
         public string? Fault { get; } = fault;
         public RenderGraphRuntimeGraph? Graph { get; } = graph;
@@ -278,37 +323,16 @@ public sealed partial class RenderGraphRuntime {
 
         public void Dispose() => Upload.Dispose();
         // The node lost its device objects, the region among them.
-        public void OnDeviceLost() => m_region = null;
-        // Writes the upload's image for a render into the region, having the node bind a new region first when it has
-        // none, and returns whether the region holds an image to convert: never while the node cannot bind one yet, as a
-        // staged region cannot until its graph installs with the device's region-copy pipeline.
-        public bool TryWrite(long tick, ShaderPipelineRenderNode node) {
-            if (Graph is null) {
-                return false;
-            }
-
-            if (m_region is null) {
-                if (node.BindRegion(name: RenderGraphPackageCatalog.SourceRegion) is not { } region) {
-                    return false;
-                }
-
-                Span<byte> head = stackalloc byte[ImageSourceUploadLayout.HeaderBytes];
-
-                ImageSourceUploadLayout.Write(
-                    header: in header,
-                    region: head
-                );
-                _ = region.Write(
-                    bytes: head,
-                    offset: 0
-                );
-                m_region = region;
-            }
-
-            return Upload.TryWrite(
-                region: m_region,
+        public void OnDeviceLost() => m_region.OnDeviceLost();
+        // Writes the upload's image for a render into the region and returns whether the region holds an image to
+        // convert: never while the node cannot bind one yet.
+        public bool TryWrite(long tick, ShaderPipelineRenderNode node) => (
+            (Graph is not null) &&
+            (m_region.Bind(node: node) is { } region) &&
+            Upload.TryWrite(
+                region: region,
                 tick: tick
-            );
-        }
+            )
+        );
     }
 }

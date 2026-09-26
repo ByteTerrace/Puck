@@ -31,10 +31,12 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// The viewport count follows <see cref="SdfFrame.Views"/>; nothing about the scene, cameras, or layout is baked in.
 /// </para>
 /// <para>
-/// Diegetic screens ride a separate, shading-only seam: a program may declare up to 8 static screen surfaces (see
-/// <see cref="SdfProgramBuilder"/>'s screen-surface <c>ScreenSlab</c> overload), and this node polls the
-/// <c>screenSources</c> constructor argument each frame to bind (or unbind) each one's sampled image — this never adds or
-/// replaces a viewport; it only changes how one shape's lit face shades. A screen's
+/// Diegetic screens ride a separate, shading-only seam: a program may declare up to
+/// <see cref="SdfWorldEngine.MaxScreenSurfaces"/> static screen surfaces (see <see cref="SdfProgramBuilder"/>'s
+/// screen-surface <c>ScreenSlab</c> overload), and each frame this node binds (or unbinds) each one's sampled image as its
+/// <see cref="ISdfScreenSources"/> says: the image the render graph hands it for the source instance the screen reads, or
+/// the image the host renders for it — this never adds or replaces a viewport; it only changes how one shape's lit face
+/// shades. A screen's
 /// world-space sampling frame is normally set once at program build; a screen riding a dynamic transform instead
 /// supplies a <c>screenSurfaceTransforms</c> provider, polled every frame right after <c>screenLights</c>, so its
 /// sampling frame tracks the geometry the dynamic transform already moved (see <see cref="SdfWorldEngine.SetScreenSurface"/>).
@@ -95,16 +97,27 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     // The last captured frame's mesh draw list, which MeshDrawCount reads from another thread.
     private IReadOnlyList<SdfMeshDraw>? m_meshRegionDraws;
 
-    private readonly Dictionary<int, Func<Vector3>> m_screenLights;
+    // The image-view handle each screen index was bound to by the latest produced frame.
+    private readonly nint[] m_boundScreenSources = new nint[SdfWorldEngine.MaxScreenSurfaces];
 
     // This frame's screen-source leases, moved into the frame-ring slot that samples them when the slot's fence has
     // retired the leases it held before.
-    private LeaseRetireList m_pendingScreenSourceFrames = new();
-    private LeaseRetireList[] m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: 0);
-    private Dictionary<int, Func<GpuImageLease>> m_screenSourceFrames = EmptyScreenSourceFrames;
+    private readonly LeaseRetireList m_pendingScreenSourceFrames;
 
-    private readonly Dictionary<int, Func<nint>> m_screenSources;
+    // The frame-ring slot this frame's screen-source leases were adopted into, and the two callbacks the engine's
+    // submission runs, converted once so a frame allocates no delegate.
+    private int m_adoptedScreenSourceSlot;
+
+    private readonly Action<IGpuQueueSubmitter> m_addScreenSourceWaits;
+    private readonly Action<int> m_retireAndAdoptScreenSourceFrames;
+    private readonly LeaseRetireList[] m_retainedScreenSourceFrames;
+    private readonly ISdfScreenSources? m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
+
+    // The images the render graph handed the frame being produced, which the screens reading source instances bind;
+    // null outside Produce.
+    private RenderGraphExternalReads? m_reads;
+
     private readonly int m_viewportCapacity;
 
     private uint m_width;
@@ -137,11 +150,9 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     private SdfGlyphAtlas? m_uploadedGlyphAtlas;
 
     // Concrete Dictionary<,> (not the read-only interface) so the per-frame foreach binds the struct enumerator
-    // instead of boxing IEnumerator on the render thread every ProduceFrame; the ctor copies caller maps to match.
-    private static readonly Dictionary<int, Func<GpuImageLease>> EmptyScreenSourceFrames = new();
-    private static readonly Dictionary<int, Func<nint>> EmptyScreenSources = new();
-    private static readonly Dictionary<int, Func<Vector3>> EmptyScreenLights = new();
+    // instead of boxing IEnumerator on the render thread every ProduceFrame; the ctor copies the caller's map to match.
     private static readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> EmptyScreenSurfaceTransforms = new();
+
     private readonly NodeDescriptor m_descriptor = new(
         Name: "compute-sdf-world",
         SurfaceId: SurfaceId.New()
@@ -270,6 +281,59 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         retained.RetireAll();
         m_pendingScreenSourceFrames.MoveTo(destination: retained);
+        m_adoptedScreenSourceSlot = frameSlot;
+    }
+    // The leases the frame's submission samples are the slot's it adopted them into, so their waits ride that submission.
+    private void AddScreenSourceWaits(IGpuQueueSubmitter submitter) => m_retainedScreenSourceFrames[m_adoptedScreenSourceSlot].AddWaits(submitter: submitter);
+    // Binds either the screens that read a source instance or the ones the host renders, with each one's light. A
+    // screen's read binds the image the graph handed this frame, whose lease is taken once however many screens show it;
+    // a read the frame was not handed (a frame produced outside the graph, or a source the set does not run yet) binds
+    // nothing, which the engine shades with its procedural screen material.
+    private void BindScreenSources(SdfWorldEngine engine, bool rendered) {
+        if (m_screenSources is not { } sources) {
+            return;
+        }
+
+        var screens = sources.Screens;
+
+        for (var position = 0; (position < screens.Count); position++) {
+            var screen = screens[position];
+            var read = sources.ReadOf(screen: screen);
+
+            if ((read is null) != rendered) {
+                continue;
+            }
+
+            nint handle = 0;
+
+            if (read is null) {
+                var lease = sources.Rendered(screen: screen);
+
+                m_pendingScreenSourceFrames.Hold(lease: in lease);
+                handle = lease.ImageViewHandle;
+            } else if (
+                (m_reads is { } reads) &&
+                (reads.IndexOf(producer: read) is var index and >= 0)
+            ) {
+                if (!reads.IsTaken(index: index)) {
+                    var lease = reads.Take(index: index);
+
+                    m_pendingScreenSourceFrames.Hold(lease: in lease);
+                }
+
+                handle = reads[index].Lease.ImageViewHandle;
+            }
+
+            engine.SetScreenSource(
+                imageViewHandle: handle,
+                screenIndex: screen
+            );
+            engine.SetScreenLight(
+                color: sources.Light(screen: screen),
+                screenIndex: screen
+            );
+            m_boundScreenSources[screen] = handle;
+        }
     }
     private void WriteDebugCapture(string path) {
         m_capturePng.ThrowIfUnavailable(path: path);
@@ -322,6 +386,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         // The lost submissions will never sample the leased screen sources, so the leases retire before the frame
         // source is told: a producer retiring its images then releases them at once, on the device that made them.
         RetireAllScreenSourceFrames();
+        Array.Clear(array: m_boundScreenSources);
         m_frameSource.NotifyDeviceLost();
         m_engine?.Dispose();
         m_engine = null;
@@ -387,44 +452,22 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             m_engine.DebugLabel = m_debugLabel;
         }
 
-        // Screen-source PREPARE: hand the frame source the live device so a CPU-pixel source can upload THIS frame's
-        // image through its services to a stable handle before the providers below are polled (they return that
-        // handle). Mirrors AdvanceBricks — an engine seam, default no-op.
-        m_frameSource.PrepareScreenSources(deviceContext: gpuDevice);
+        // Screens reading source instances bind the images the render graph handed this frame before the offscreen views
+        // render, so a view filming a screen samples the same image the room does, under the lease this node holds.
+        m_pendingScreenSourceFrames.RetireAll();
+        BindScreenSources(
+            engine: m_engine!,
+            rendered: false
+        );
 
         // View RENDER: hand the frame source this frame's full context so a source hosting an offscreen ViewStack (a
-        // diegetic camera / jumbotron) renders its views against the live device now — their handles fresh before the
-        // screen-source poll below reads them. Mirrors PrepareScreenSources — an engine seam, default no-op.
+        // diegetic camera / jumbotron) renders its views against the live device now — their images fresh before the
+        // screens showing them bind below. An engine seam, default no-op.
         m_frameSource.RenderViews(context: in context);
-
-        // Screen sources: a provider returning 0 leaves the slot unbound this frame — the engine's material-shaded fallback applies.
-        m_pendingScreenSourceFrames.RetireAll();
-
-        foreach (var (screenIndex, provider) in m_screenSources) {
-            m_engine!.SetScreenSource(
-                screenIndex: screenIndex,
-                imageViewHandle: provider()
-            );
-        }
-
-        foreach (var (screenIndex, provider) in m_screenSourceFrames) {
-            var source = provider();
-
-            m_engine!.SetScreenSource(
-                screenIndex: screenIndex,
-                imageViewHandle: source.ImageViewHandle
-            );
-
-            m_pendingScreenSourceFrames.Hold(lease: in source);
-        }
-
-        // Screen LIGHTS: the colored glow each screen emits into the room (parallel to the source poll above).
-        foreach (var (screenIndex, provider) in m_screenLights) {
-            m_engine!.SetScreenLight(
-                screenIndex: screenIndex,
-                color: provider()
-            );
-        }
+        BindScreenSources(
+            engine: m_engine!,
+            rendered: true
+        );
 
         // Screen surface TRANSFORMS: a screen riding a dynamic entity re-poses its sampling frame every frame its
         // geometry moved (parallel to the polls above); a null result leaves the table untouched this frame.
@@ -490,12 +533,13 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             TimeDelta: context.FrameDeltaSeconds
         );
 
-        if (0 == m_screenSourceFrames.Count) {
+        if (m_screenSources is null) {
             m_engine!.SubmitFrame(frame: frame);
         } else {
             m_engine!.SubmitFrameWithExternalResources(
+                addWaits: m_addScreenSourceWaits,
                 frame: frame,
-                onFrameSlotAvailable: RetireAndAdoptScreenSourceFrames
+                onFrameSlotAvailable: m_retireAndAdoptScreenSourceFrames
             );
         }
 
@@ -537,22 +581,21 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// <param name="kernels">The compiled world kernel set (SPIR-V for Vulkan, DXIL for Direct3D 12).</param>
     /// <param name="width">The engine's extent width in pixels, the widest any view renders.</param>
     /// <param name="height">The engine's extent height in pixels, the tallest any view renders.</param>
-    /// <param name="screenSources">An optional map from a program-declared <see cref="SdfScreenSurface.ScreenIndex"/>
-    /// to a provider of that screen's current same-device storage-image view (General layout, shader-readable),
-    /// called once per produced frame — a provider may close over any GPU image a host owns directly, e.g. an emulator's
-    /// native framebuffer image, unresampled (the screen seam samples the source itself, so no separate resample is
-    /// needed or wanted). A provider returning 0 leaves the slot unbound this frame, which falls back to the
-    /// flat/procedural screen material. See <see cref="SdfWorldEngine.SetScreenSource"/>.</param>
-    /// <param name="screenLights">An optional map, parallel to <paramref name="screenSources"/>, from a screen index to
-    /// a provider of the colored light that screen emits into the room this frame (typically its framebuffer's average
-    /// color). Polled right after <paramref name="screenSources"/>; see <see cref="SdfWorldEngine.SetScreenLight"/>.</param>
-    /// <param name="screenSurfaceTransforms">An optional map, parallel to <paramref name="screenSources"/>, from a
+    /// <param name="screenSources">What each program-declared <see cref="SdfScreenSurface.ScreenIndex"/> shows and the
+    /// light it casts, read once per screen per produced frame, or <see langword="null"/> for a node that binds no
+    /// screen. Every image is a same-device, shader-readable image view, sampled unresampled: the one the render graph
+    /// hands <see cref="Produce"/> for the source instance a screen reads, or <see cref="ISdfScreenSources.Rendered"/>
+    /// for a screen that reads none. The node holds each lease until the fence of the frame-ring slot whose submission
+    /// sampled it, and adds the wait it carries (<see cref="GpuImageLease.Wait"/>) to that submission. A zero handle
+    /// leaves the slot unbound this frame, which falls back to the procedural screen material. See
+    /// <see cref="SdfWorldEngine.SetScreenSource"/> and <see cref="SdfWorldEngine.SetScreenLight"/>.</param>
+    /// <param name="screenSurfaceTransforms">An optional map from a
     /// screen index to a provider of that screen's world-space sampling frame this frame — for a screen slab riding a
     /// dynamic transform (e.g. a slab riding a moving rig), whose sampling frame must move with the geometry every
     /// frame or it goes stale. A provider returning <see langword="null"/> leaves the program-declared (or
     /// program-declared) frame untouched this frame — a screen on static geometry simply omits its entry, or a provider
-    /// may return null on frames where nothing moved to skip the write. Polled right after <paramref name="screenLights"/>;
-    /// see <see cref="SdfWorldEngine.SetScreenSurface"/>.</param>
+    /// may return null on frames where nothing moved to skip the write. Polled right after the screens bind; see
+    /// <see cref="SdfWorldEngine.SetScreenSurface"/>.</param>
     /// <param name="dynamicTransformCapacity">An optional floor on the engine's dynamic-transform slot capacity. The
     /// engine always provisions at least the first frame's transform count; a host whose moving-entity population
     /// grows over the run (hundreds of animated instances appearing later) passes its peak here so the buffer is
@@ -575,7 +618,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// carves (no pool is allocated).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfEngineNode(SdfWorldPipelineCache pipelines, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
+    public SdfEngineNode(SdfWorldPipelineCache pipelines, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, ISdfScreenSources? screenSources = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -587,10 +630,9 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         }
 
         m_debugLabel = debugLabel;
-        // Copy each caller map into a concrete Dictionary<,> (its struct enumerator is what the per-frame foreach binds
-        // — see the Empty* fields) rather than storing the read-only interface; the maps are built once and never
-        // mutated after construction, and every per-frame loop over them writes independent per-slot state, so the copy
-        // is observably identical. A null map shares the empty singleton.
+        // Copy the caller's transform map into a concrete Dictionary<,> (its struct enumerator is what the per-frame
+        // foreach binds) rather than storing the read-only interface; the map is built once and never mutated after
+        // construction, so the copy is observably identical. A null map shares the empty singleton.
         m_dynamicTransformCapacity = dynamicTransformCapacity;
         m_instanceCapacity = instanceCapacity;
         m_viewportCapacity = viewportCapacity;
@@ -599,14 +641,9 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         m_frameSource = frameSource;
         m_height = height;
         m_kernels = kernels;
-        m_screenSources = ((screenSources is null)
-            ? EmptyScreenSources
-            : new Dictionary<int, Func<nint>>(collection: screenSources)
-        );
-        m_screenLights = ((screenLights is null)
-            ? EmptyScreenLights
-            : new Dictionary<int, Func<Vector3>>(collection: screenLights)
-        );
+        m_screenSources = screenSources;
+        m_pendingScreenSourceFrames = new LeaseRetireList(capacity: (screenSources?.Screens.Count ?? 0));
+        m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: (screenSources?.Screens.Count ?? 0));
         m_screenSurfaceTransforms = ((screenSurfaceTransforms is null)
             ? EmptyScreenSurfaceTransforms
             : new Dictionary<int, Func<SdfScreenSurfaceTransform?>>(collection: screenSurfaceTransforms)
@@ -614,21 +651,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         m_pipelines = new SdfWorldPipelineSource(cache: pipelines);
         m_width = width;
         m_writeDebugCapture = WriteDebugCapture;
-    }
-
-    // Builder-only additive seam: keeps the longstanding public constructor's Func<nint> screenSources parameter
-    // source-compatible while a render spec can opt particular indices into fence-retired frame acquisitions.
-    internal void SetScreenSourceFrames(IReadOnlyDictionary<int, Func<GpuImageLease>>? screenSourceFrames) {
-        if (m_engine is not null) {
-            throw new InvalidOperationException(message: "screen-source frame providers must be configured before the first produced frame");
-        }
-
-        m_screenSourceFrames = ((screenSourceFrames is null)
-            ? EmptyScreenSourceFrames
-            : new Dictionary<int, Func<GpuImageLease>>(collection: screenSourceFrames)
-        );
-        m_pendingScreenSourceFrames = new LeaseRetireList(capacity: m_screenSourceFrames.Count);
-        m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: m_screenSourceFrames.Count);
+        m_addScreenSourceWaits = AddScreenSourceWaits;
+        m_retireAndAdoptScreenSourceFrames = RetireAndAdoptScreenSourceFrames;
     }
 
     /// <summary>Gets or sets the SDF debug view mode applied to the next submitted frame.</summary>
@@ -644,6 +668,15 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     }
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
+
+    /// <summary>Returns the image-view handle a screen was bound to by the latest produced frame, which the frame's
+    /// offscreen views sample too: every screen reading a source instance is bound before they render.</summary>
+    /// <param name="screen">The program-declared screen index, below <see cref="SdfWorldEngine.MaxScreenSurfaces"/>.</param>
+    /// <returns>The handle, or zero for a screen bound to nothing, before the first frame and after a device loss.</returns>
+    /// <exception cref="IndexOutOfRangeException"><paramref name="screen"/> is negative or not below
+    /// <see cref="SdfWorldEngine.MaxScreenSurfaces"/>.</exception>
+    public nint BoundScreenSource(int screen) => m_boundScreenSources[screen];
+
     /// <summary>Gets whether the node's engine is ready: its pipeline set is installed and the engine built from it has
     /// produced its first frame. It is false until the pipeline build that the first produced frame starts has completed
     /// and a frame has been submitted, and again after a device loss until the rebuilt engine has submitted one; a

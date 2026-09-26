@@ -102,6 +102,55 @@ public sealed class LatestSlotPublicationTests {
         publication.Release(slot: secondLease);
         publication.Release(slot: thirdLease);
     }
+    // A capture producer publishes faster than the renderer retires its frames, lapping the ring many times, while the
+    // renderer holds each frame's lease until its frame-ring slot comes round again: no slot a lease holds is ever written,
+    // so every lease reads, at its retirement, the write it acquired.
+    [Fact]
+    public void A_lapping_producer_never_writes_a_slot_a_lease_holds() {
+        const int FramesInFlight = 2;
+        const int WritesPerFrame = 3;
+        var publication = new LatestSlotPublication();
+        var written = new int[3];
+        var held = new Queue<(int Slot, int Write)>();
+        var write = 0;
+        var dropped = 0;
+
+        publication.Configure(targetCount: written.Length);
+
+        for (var frame = 0; (frame < 64); frame++) {
+            for (var tick = 0; (tick < WritesPerFrame); tick++) {
+                if (!publication.TryReserveWriteSlot(slot: out var slot)) {
+                    dropped++;
+
+                    continue;
+                }
+
+                written[slot] = ++write;
+                publication.Publish(
+                    fenceValue: ((ulong)write),
+                    slot: slot
+                );
+            }
+
+            Assert.True(condition: publication.TryAcquireLatest(
+                fenceValue: out var fenceValue,
+                slot: out var leased
+            ));
+            Assert.Equal(expected: ((ulong)written[leased]), actual: fenceValue);
+            held.Enqueue(item: (leased, written[leased]));
+
+            if (held.Count > FramesInFlight) {
+                var (slot, acquired) = held.Dequeue();
+
+                Assert.Equal(expected: acquired, actual: written[slot]);
+                publication.Release(slot: slot);
+            }
+        }
+
+        // The producer lapped the ring, and dropped the ticks on which every slot but the latest was held.
+        Assert.True(condition: (write > (3 * written.Length)));
+        Assert.True(condition: (dropped > 0));
+    }
     [Fact]
     public void Each_acquisition_carries_the_fence_value_its_slot_was_published_with() {
         var publication = new LatestSlotPublication();

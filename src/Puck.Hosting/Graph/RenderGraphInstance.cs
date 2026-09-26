@@ -75,8 +75,9 @@ public readonly record struct RenderGraphRead(string Producer, bool PreviousFram
 /// <param name="Output">What the output its consumers read carries. An instance whose output is a buffer renders at no
 /// extent and costs no pass-pixels.</param>
 /// <param name="ExternalPackage">The package id of the external producer that renders the instance through its own
-/// submissions, or <see langword="null"/> for an instance that renders a graph. An external producer reads no other
-/// instance, and hands its consumers only its latest completed output. A package spelled <c>source.&lt;producer id&gt;</c>
+/// submissions, or <see langword="null"/> for an instance that renders a graph. An external producer reads only other
+/// instances' latest completed images, handed to it as it produces, and hands its consumers only its latest completed
+/// output. A package spelled <c>source.&lt;producer id&gt;</c>
 /// (<see cref="SourcePackage"/>) makes the instance an image source (<see cref="IsSource"/>).</param>
 /// <param name="Settings">A source instance's settings object, which its producer opens the image with, or
 /// <see langword="null"/> for its producer's defaults. Only a source carries settings.</param>
@@ -164,8 +165,8 @@ public enum RenderGraphInstanceRefusalCode : byte {
     /// <summary>A read's kind is not what its producer's output carries: an image read of a buffer output, or a buffer
     /// read of an image output.</summary>
     KindMismatch = 8,
-    /// <summary>An external producer declares a read: it renders through its own submissions, so no graph of its binds
-    /// another instance's output.</summary>
+    /// <summary>An external producer declares a buffer read, a previous-frame read or a read of itself: it is handed only
+    /// other instances' latest completed images, as leases, when it produces.</summary>
     ExternalReads = 9,
     /// <summary>An instance reads an external producer's previous frame: the producer hands out only its latest
     /// completed output, which its next render overwrites.</summary>

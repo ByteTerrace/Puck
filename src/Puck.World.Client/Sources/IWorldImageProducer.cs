@@ -7,10 +7,11 @@ using Puck.Shaders;
 namespace Puck.World.Client;
 
 /// <summary>
-/// One open image source on a screen: the feed a <see cref="IWorldImageProducer"/> opened for a
-/// <see cref="WorldScreenSource.Producer"/> source. The screen binder publishes it once per produced frame, samples it
-/// through <see cref="WorldCaptureGate"/> (so an external feed never reaches a capture), and disposes it when the
-/// screen stops showing it. Every member runs on the presentation thread.
+/// One open image source: the feed a <see cref="IWorldImageProducer"/> opened for a
+/// <see cref="WorldScreenSource.Producer"/> source. The source instance that shows it owns it and disposes it when the
+/// render graph's set no longer runs the instance: the runtime's upload for an <see cref="IWorldUploadFeed"/>, or a
+/// <see cref="WorldImageFeedProducer"/> for an <see cref="IWorldImportFeed"/>. Every member runs on the presentation
+/// thread.
 /// </summary>
 public interface IWorldImageFeed : IDisposable {
     /// <summary>Gets the feed's descriptor: its producer, transport, format, cadence, content class and capture fill.</summary>
@@ -19,7 +20,11 @@ public interface IWorldImageFeed : IDisposable {
     string? Fault { get; }
     /// <summary>Gets the image's average emitted color, normalized to 0–1, which lights the room around the screen.</summary>
     Vector3 Light { get; }
-
+}
+/// <summary>A feed whose producer keeps its image on the GPU and hands it out (an imported transport: a camera, a desktop
+/// capture): its <see cref="WorldImageFeedProducer"/> publishes it at its cadence and acquires its image through
+/// <see cref="WorldCaptureGate"/>, so an external feed never reaches a capture.</summary>
+public interface IWorldImportFeed : IWorldImageFeed {
     /// <summary>Acquires the image for one submitted frame. A feed whose image another thread keeps writing returns a
     /// lease the sampling node retires once that submission completes.</summary>
     /// <returns>The lease, or one holding a zero handle while the feed has no image.</returns>
@@ -29,10 +34,9 @@ public interface IWorldImageFeed : IDisposable {
     nint Handle();
     /// <summary>Drops every device-owned resource after a device loss; the next <see cref="Publish"/> recreates them.</summary>
     void NotifyDeviceLost();
-    /// <summary>Publishes the feed's current image for this produced frame, uploading only what its cadence owes.</summary>
-    /// <param name="tick">The world's completed-step ordinal.</param>
-    /// <param name="deviceContext">The live GPU device context, whose services upload the image.</param>
-    void Publish(ulong tick, IGpuDeviceContext deviceContext);
+    /// <summary>Publishes the feed's current image for this produced frame, converting only what its cadence owes.</summary>
+    /// <param name="context">The host's frame context, whose host resolves the live GPU device.</param>
+    void Publish(in FrameContext context);
 }
 /// <summary>An uploaded feed: one whose producer writes CPU pixels, which a source instance's graph reads as a region
 /// (<see cref="IRenderGraphSourceUpload"/>) and converts through the pass its descriptor names.</summary>
@@ -115,12 +119,14 @@ public sealed class WorldImageProducers {
     /// through <see cref="TryOpen"/>, so a feed that disagrees with its registration is refused by name there.</summary>
     /// <param name="packages">The packages the host's render-graph runtime installs instances from.</param>
     /// <param name="adapt">Adapts one opening of a producer that is not uploaded to the render-graph producer the runtime
-    /// owns, which owns the feed, or <see langword="null"/> to leave those producers unregistered.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="packages"/> is <see langword="null"/>.</exception>
+    /// owns, which owns the feed (<see cref="WorldImageFeedProducer"/>).</param>
+    /// <exception cref="ArgumentNullException"><paramref name="packages"/> or <paramref name="adapt"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A producer's source package already has an external producer or an
     /// upload.</exception>
-    public void RegisterPackages(RenderGraphPackageRecorders packages, Func<WorldImageSourceOpening, IRenderGraphExternalProducer>? adapt) {
+    public void RegisterPackages(RenderGraphPackageRecorders packages, Func<WorldImageSourceOpening, IRenderGraphExternalProducer> adapt) {
         ArgumentNullException.ThrowIfNull(argument: packages);
+        ArgumentNullException.ThrowIfNull(argument: adapt);
 
         foreach (var producer in m_registry.Producers) {
             var id = producer.Id;
@@ -134,7 +140,7 @@ public sealed class WorldImageProducers {
                     )),
                     package: package
                 );
-            } else if (adapt is not null) {
+            } else {
                 packages.RegisterProducer(
                     factory: context => adapt(arg: Open(
                         context: context,

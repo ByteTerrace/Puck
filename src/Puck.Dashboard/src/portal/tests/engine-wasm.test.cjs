@@ -140,6 +140,20 @@ if (!fs.existsSync(mainMjs)) {
     }
   });
 
+  test('AnalyzeCosts() prices the presentation dimension exactly as the native baseline', async () => {
+    if (!fs.existsSync(parityFixturePath)) {
+      assert.fail(`no recorded baseline at ${parityFixturePath} — run: dotnet test tests/Puck.World.Browser.Tests, then puck baselines browser-parity`);
+    }
+
+    const expected = JSON.parse(fs.readFileSync(parityFixturePath, 'utf8'));
+    const engine = await engineReady;
+    const document = fs.readFileSync(path.join(path.dirname(parityFixturePath), 'presentation.world.json'), 'utf8');
+    const analysis = JSON.parse(engine.AnalyzeCosts(document));
+
+    assert.equal(analysis.ok, true, JSON.stringify(analysis.errors));
+    assert.deepEqual(analysis.report.presentation, expected['presentation-cost']);
+  });
+
   // The source-workspace tests mount the official tree's sources[] the way the studio does, so they need the source
   // exports.
   async function needsSources(t) {

@@ -4,6 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Assets.Qr;
 using Puck.Hosting;
+using Puck.Shaders;
 using Puck.Testing;
 using Puck.World.Client;
 using Xunit;
@@ -16,7 +17,8 @@ namespace Puck.World.Tests;
 /// and the exact verdict holds against that image and names the first pixel of one that differs. A third producer
 /// registers its shape and its runtime with no change to the document model: a document naming it validates, a settings
 /// member it does not declare is refused by name, and an unregistered id is refused by name. A capture of a world whose
-/// screen shows a desktop capture shows the declared fill and never acquires the desktop's pixels.
+/// screen shows a desktop capture shows the declared fill and never acquires the desktop's pixels. A camera source declares
+/// the extent its seat's sensor delivers.
 /// </summary>
 public sealed class ImageProducerLawTests {
     private const string ThirdId = "lawThird";
@@ -96,14 +98,24 @@ public sealed class ImageProducerLawTests {
 
         Assert.False(condition: reference.TryWriteReference(rgba: rgba, stamp: out _));
 
-        opened.Publish(
-            deviceContext: Gpu,
-            tick: 640UL
+        using var region = new GpuRegion(
+            bindings: Gpu.Services.Bindings,
+            buffers: Gpu.Services.BufferFactory,
+            byteCount: (ImageSourceUploadLayout.HeaderBytes + rgba.Length),
+            copyPipeline: null,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.InPlace,
+            recorder: Gpu.Services.Recorder,
+            slotCount: 1
         );
 
+        Assert.True(condition: Assert.IsAssignableFrom<IWorldUploadFeed>(@object: opened).TryWrite(
+            region: region,
+            tick: 640L
+        ));
         Assert.True(condition: reference.TryWriteReference(rgba: rgba, stamp: out var stamp));
         Assert.Equal(expected: new ImageSourceStamp(Sequence: 1UL, Tick: 640UL), actual: stamp);
-        Assert.NotEqual(expected: 0, actual: ((int)opened.Handle()));
 
         var bgra = new byte[rgba.Length];
 
@@ -117,6 +129,12 @@ public sealed class ImageProducerLawTests {
         for (var offset = 0; (offset < rgba.Length); offset += 4) {
             Assert.Equal(expected: (bgra[(offset + 2)], bgra[(offset + 1)], bgra[offset], bgra[(offset + 3)]), actual: (rgba[offset], rgba[(offset + 1)], rgba[(offset + 2)], rgba[(offset + 3)]));
         }
+
+        // The region holds the same pattern behind its header.
+        Assert.Equal(
+            actual: region.Contents[ImageSourceUploadLayout.HeaderBytes..].ToArray(),
+            expected: bgra
+        );
 
         Assert.True(condition: ImageSourceVerdict.Compare(actual: rgba, descriptor: opened.Descriptor, expected: rgba).Holds);
 
@@ -317,12 +335,12 @@ public sealed class ImageProducerLawTests {
         }
 
         gate.BeginFrame();
-        Assert.Equal(expected: FakeFeed.DesktopHandle, actual: gate.Resolve(feed: feed!, fill: Fill).ImageViewHandle);
+        Assert.Equal(expected: FakeFeed.DesktopHandle, actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
         Assert.Equal(expected: 1, actual: desktop.Feed!.Acquisitions);
 
         armed = true;
         gate.BeginFrame();
-        Assert.Equal(expected: ((nint)0xF111), actual: gate.Resolve(feed: feed!, fill: Fill).ImageViewHandle);
+        Assert.Equal(expected: ((nint)0xF111), actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
         Assert.Equal(actual: filled, expected: [ImageSourceDescriptor.DefaultCaptureFill]);
 
         // The capture is served: the gate keeps filling for its hold, then shows the desktop again.
@@ -330,13 +348,13 @@ public sealed class ImageProducerLawTests {
 
         for (var frame = 0; (frame < WorldCaptureGate.HoldFrames); frame++) {
             gate.BeginFrame();
-            Assert.Equal(expected: ((nint)0xF111), actual: gate.Resolve(feed: feed!, fill: Fill).ImageViewHandle);
+            Assert.Equal(expected: ((nint)0xF111), actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
         }
 
         Assert.Equal(expected: 1, actual: desktop.Feed.Acquisitions);
 
         gate.BeginFrame();
-        Assert.Equal(expected: FakeFeed.DesktopHandle, actual: gate.Resolve(feed: feed!, fill: Fill).ImageViewHandle);
+        Assert.Equal(expected: FakeFeed.DesktopHandle, actual: gate.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
 
         // An offscreen host fills every frame, and deterministic content is never filled.
         var offscreen = new WorldCaptureGate(
@@ -344,12 +362,139 @@ public sealed class ImageProducerLawTests {
             captureArmed: static () => false
         );
 
-        Assert.Equal(expected: ((nint)0xF111), actual: offscreen.Resolve(feed: feed!, fill: Fill).ImageViewHandle);
+        Assert.Equal(expected: ((nint)0xF111), actual: offscreen.Resolve(feed: ((IWorldImportFeed)feed!), fill: Fill).ImageViewHandle);
         Assert.False(condition: offscreen.Fills(content: ImageContentClass.Deterministic));
         Assert.False(condition: offscreen.Fills(content: ImageContentClass.Presentation));
         Assert.Equal(expected: 2, actual: desktop.Feed.Acquisitions);
     }
+    // A source instance's producer is the one place its image is acquired, and it acquires through the gate: while the gate
+    // fills, every acquisition hands out the source's fill and the feed is never acquired, so nothing it holds is leased.
+    [Fact]
+    public void AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed() {
+        var producers = new WorldImageProducers();
+        var desktop = new FakeProducer(
+            content: ImageContentClass.External,
+            id: WorldImageProducerSettings.CaptureId,
+            transport: ImageSourceTransport.Imported
+        );
 
+        producers.Register(producer: desktop);
+        Assert.True(condition: producers.TryOpen(
+            fault: out _,
+            feed: out var feed,
+            source: Desktop()
+        ));
+
+        var filling = true;
+        var filled = new List<uint>();
+
+        GpuImageLease Fill(uint rgba) {
+            filled.Add(item: rgba);
+
+            return ((nint)0xF111);
+        }
+
+        using var source = new WorldImageFeedProducer(
+            fill: Fill,
+            gate: new WorldCaptureGate(
+                alwaysFills: false,
+                captureArmed: () => filling
+            ),
+            opening: new WorldImageSourceOpening(
+                Context: new RenderGraphExternalProducerContext(
+                    Device: null!,
+                    HostsOnDirectX: false,
+                    Instance: "source$capture$0",
+                    Package: RenderGraphInstance.SourcePackage(producer: WorldImageProducerSettings.CaptureId)
+                ),
+                Fault: null,
+                Feed: feed
+            )
+        );
+
+        for (var frame = 0; (frame < 3); frame++) {
+            Assert.True(condition: source.TryAcquireOutput(output: out var output));
+            Assert.Equal(
+                actual: (output.Lease.ImageViewHandle, output.Lease.RequiresRetirement, output.Layout),
+                expected: (((nint)0xF111), false, GpuImageLayout.ShaderReadOnly)
+            );
+        }
+
+        Assert.Equal(expected: 0, actual: desktop.Feed!.Acquisitions);
+        Assert.Equal(actual: filled, expected: [ImageSourceDescriptor.DefaultCaptureFill, ImageSourceDescriptor.DefaultCaptureFill, ImageSourceDescriptor.DefaultCaptureFill]);
+
+        // Once the gate stops filling, each acquisition is the feed's own.
+        filling = false;
+        Assert.True(condition: source.TryAcquireOutput(output: out var shown));
+        Assert.Equal(
+            actual: (shown.Lease.ImageViewHandle, desktop.Feed.Acquisitions),
+            expected: (FakeFeed.DesktopHandle, 1)
+        );
+        Assert.Null(@object: source.Fault);
+    }
+
+    // A camera source is scheduled and mapped at its descriptor's extent, so the descriptor states the extent the seat's
+    // sensor delivers: the requested one before the seat holds a camera, the negotiated one after, and each new one as the
+    // device, its profile or its tier changes.
+    [Fact]
+    public void ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers() {
+        var cameras = new FakeSeatCameras();
+        var feed = new WorldCameraSourceFeed(
+            cameras: cameras,
+            profile: new WorldFeedProfile(
+                Height: 360,
+                RefreshRateHz: 30U,
+                Width: 640
+            ),
+            seat: 2,
+            sensor: WorldCameraSensor.Infrared
+        );
+        using var source = new WorldImageFeedProducer(
+            fill: static _ => default,
+            gate: new WorldCaptureGate(
+                alwaysFills: false,
+                captureArmed: static () => false
+            ),
+            opening: new WorldImageSourceOpening(
+                Context: new RenderGraphExternalProducerContext(
+                    Device: null!,
+                    HostsOnDirectX: false,
+                    Instance: "source$camera$0",
+                    Package: RenderGraphInstance.SourcePackage(producer: WorldImageProducerSettings.CameraId)
+                ),
+                Fault: null,
+                Feed: feed
+            )
+        );
+
+        Assert.Equal(
+            actual: (source.Descriptor!.Width, source.Descriptor.Height, source.Descriptor.Producer, source.Descriptor.Content),
+            expected: (640U, 360U, WorldImageProducerSettings.CameraId, ImageContentClass.External)
+        );
+
+        cameras.Extent = (1280U, 720U);
+
+        var negotiated = source.Descriptor!;
+
+        Assert.Equal(
+            actual: (negotiated.Width, negotiated.Height),
+            expected: (1280U, 720U)
+        );
+        Assert.Same(
+            actual: source.Descriptor,
+            expected: negotiated
+        );
+
+        cameras.Extent = (320U, 240U);
+        Assert.Equal(
+            actual: (source.Descriptor!.Width, source.Descriptor.Height),
+            expected: (320U, 240U)
+        );
+        Assert.Equal(
+            actual: cameras.Reads,
+            expected: [(2, WorldCameraSensor.Infrared)]
+        );
+    }
     // A producer standing in for a real one: every feed it opens answers one fixed handle and counts acquisitions. Its
     // feed declares the registration's producer, class and transport unless a law overrides one to disagree.
     private sealed class FakeProducer(string id, ImageContentClass content, ImageSourceTransport transport, string? feedProducer = null, ImageContentClass? feedContent = null, ImageSourceTransport? feedTransport = null) : IWorldImageProducer {
@@ -377,7 +522,26 @@ public sealed class ImageProducerLawTests {
             return true;
         }
     }
-    private sealed class FakeFeed(ImageSourceDescriptor descriptor) : IWorldImageFeed {
+    // The seats' cameras standing in for real ones: one extent, or none while the seat holds no camera, and the distinct
+    // (seat, sensor) pairs read.
+    private sealed class FakeSeatCameras : IWorldSeatCameras {
+        public (uint Width, uint Height)? Extent { get; set; }
+        public List<(int Seat, WorldCameraSensor Sensor)> Reads { get; } = [];
+
+        public GpuImageLease Acquire(int seat, WorldCameraSensor sensor) => default;
+        public string? Fault(int seat, WorldCameraSensor sensor) => null;
+        public nint Handle(int seat, WorldCameraSensor sensor) => 0;
+        public Vector3 Light(int seat, WorldCameraSensor sensor) => Vector3.Zero;
+
+        (uint Width, uint Height)? IWorldSeatCameras.Extent(int seat, WorldCameraSensor sensor) {
+            if (!Reads.Contains(item: (seat, sensor))) {
+                Reads.Add(item: (seat, sensor));
+            }
+
+            return Extent;
+        }
+    }
+    private sealed class FakeFeed(ImageSourceDescriptor descriptor) : IWorldImportFeed {
         public static readonly nint DesktopHandle = 0xDE5C;
 
         public int Acquisitions { get; private set; }
@@ -394,7 +558,7 @@ public sealed class ImageProducerLawTests {
         public void Dispose() => Disposed = true;
         public nint Handle() => DesktopHandle;
         public void NotifyDeviceLost() { }
-        public void Publish(ulong tick, IGpuDeviceContext deviceContext) { }
+        public void Publish(in FrameContext context) { }
     }
     // The third producer's shape reads its settings without the world serializer's shipped shapes: it names the one
     // member it declares and refuses any other by name.

@@ -92,7 +92,7 @@ public sealed class RenderGraphRuntimeNode : IRenderNode, ICaptureRequestTarget 
             context: in context,
             frame: new RenderGraphFrame(
                 DisplayHeight: m_displayHeight,
-                DisplayHertz: 0,
+                DisplayHertz: context.DisplayHertz,
                 DisplayWidth: m_displayWidth,
                 Footprints: Footprints,
                 Index: m_frame++,

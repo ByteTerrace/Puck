@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -25,23 +24,15 @@ public interface ISdfFrameSource {
     /// <see cref="ScreenDecals"/>) so a host node's type coupling doesn't grow to thread it.</summary>
     /// <param name="bakes">The engine's brick-bake service (poll/request), never null.</param>
     void AdvanceBricks(ISdfBrickBakeService bakes) { }
-    /// <summary>Hands the frame source the live GPU device once per produced frame, right AFTER
-    /// <see cref="CaptureFrame"/> and BEFORE the host polls this frame's screen-source providers — the seam a source
-    /// that feeds a screen from CPU pixels uses to upload this frame's image to a stable handle its provider then
-    /// returns (the provider is polled just after this call). Default no-op: a source with no CPU-fed screen (the vast
-    /// majority) need not override it. Mirrors <see cref="AdvanceBricks"/>: an engine seam handed an engine
-    /// capability, not a host-shaped hook.</summary>
-    /// <param name="deviceContext">The live GPU device context to upload on, through its services.</param>
-    void PrepareScreenSources(IGpuDeviceContext deviceContext) { }
     /// <summary>Hands the frame source this frame's full <see cref="Puck.Hosting.FrameContext"/> once per produced frame,
-    /// right AFTER <see cref="PrepareScreenSources"/> and BEFORE the host polls this frame's screen-source providers — the
-    /// seam a source that hosts its own offscreen view pool (a <see cref="Views.ViewStack"/> of diegetic camera / nested-
-    /// world renders) uses to render those views against the live device this frame, so a screen-source provider that
-    /// returns a view's handle reads a freshly-rendered image. Distinct from <see cref="PrepareScreenSources"/> (which
-    /// hands over the device + compute services alone) because an offscreen view render resolves its own device from the
-    /// frame context's host and renders the SAME world program the host is composing. Default no-op: a source with no
-    /// view pool (the vast majority) need not override it. Mirrors <see cref="PrepareScreenSources"/>/
-    /// <see cref="AdvanceBricks"/>: an engine seam handed an engine-frame capability, not a host-shaped hook.</summary>
+    /// right AFTER <see cref="CaptureFrame"/> and the binding of every screen that reads a source instance, and BEFORE the
+    /// host binds the screens it renders itself (<see cref="ISdfScreenSources.Rendered"/>) — the seam a source that hosts
+    /// its own offscreen view pool (a <see cref="Views.ViewStack"/> of diegetic camera / nested-world renders) uses to
+    /// render those views against the live device this frame, so a screen showing a view reads a freshly-rendered image.
+    /// An offscreen view render resolves its own device from the frame context's host and renders the SAME world program
+    /// the host is composing. Default no-op: a source with no view pool (the vast majority) need not override it.
+    /// Mirrors <see cref="AdvanceBricks"/>: an engine seam handed an engine-frame capability, not a host-shaped
+    /// hook.</summary>
     /// <param name="context">This frame's host frame context (its <see cref="Puck.Hosting.FrameContext.Host"/> resolves
     /// the live GPU device the offscreen views render on).</param>
     void RenderViews(in Puck.Hosting.FrameContext context) { }

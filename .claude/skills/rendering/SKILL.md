@@ -242,21 +242,27 @@ These are one-line cautions; the owning pages hold the derivations.
   frames in flight (`RenderGraphRuntime.DefaultInFlightFrames`); a source that
   counts its outstanding leases (`WorldOverlayFrameSources`) is sized by it. A
   new sampled-lease path holds its leases in that list rather than its own
-  array. Not every image another producer keeps writing is leased yet: the
-  desktop capture's GPU route (`CaptureFeed.Handle`) and the offscreen views'
-  renders (`ScreenSlot.Handle`) bind a shared slot's bare handle, so nothing
-  stops the producer overwriting a slot a submission still samples. Rendering
-  plan P12b-2 leases them. Two devices are ordered by a Direct3D 12 shared
+  array. Every image another producer keeps writing is leased: a camera stream,
+  a desktop capture's GPU route and a probe output each publish through a
+  `SharedTargetRing` over a `LatestSlotPublication`, whose producer reserves
+  write slots through it (`TryReserveWriteSlot`) and so never overwrites a slot
+  a lease holds, and a reattach retires the ring, disposed with its fence by the
+  last lease. A screen reading a source instance is bound
+  under the world node's lease before the offscreen views render, and they
+  sample that image (`SdfEngineNode.BoundScreenSource`). Two devices are ordered by a Direct3D 12 shared
   fence the consumer creates beside the targets: a Direct3D 11 producer signals
   it through `Win32D3D11CompletionSignal`, the one completion primitive every
   Direct3D 11 producer uses, and publishes each slot with the value, and the
-  code that acquires the slot adds a `GpuExternalWait` to the render device's
-  `IGpuQueueSubmitter.AddExternalWait`, which its next submission carries (a
-  Vulkan host imports the fence through `TryImportFence`). A published value
-  of zero means the write finished on the CPU (a device that cannot share the
-  fence, the probe kernel); never add a wait for it. A new path that samples a
-  shared slot adds its wait where it acquires, before the submission that
-  samples it is recorded.
+  code that acquires the slot puts a `GpuExternalWait` on the slot's lease
+  (`GpuImageLease.Wait`; a Vulkan host imports the fence through
+  `TryImportFence`). The node that samples the lease adds the wait to the one
+  submission that samples it (`LeaseRetireList.AddWaits`, right before the
+  submit: `ShaderPipelineRenderNode.SubmitCounted`, and the SDF engine's
+  frame submission through `SubmitFrameWithExternalResources`), never to
+  whichever submission the device makes next. A published value of zero means
+  the write finished on the CPU (a device that cannot share the fence, the
+  probe kernel); never add a wait for it. A new path that samples a shared
+  slot carries its wait on the lease, never through the submitter directly.
 - **Image sources.** An image from outside a pass is described once, by
   `ImageSourceDescriptor`, and a world names its producer by id
   (`WorldScreenSource.Producer`). A new producer registers a
@@ -273,7 +279,28 @@ These are one-line cautions; the owning pages hold the derivations.
   per producer id that opens the instance's feed through `TryOpen`. A typed
   arm's source takes the reserved id `machine` or `probe`, which the vocabulary
   refuses to a document producer. Its `RenderGraphInstance.Handle` is its
-  identity, never the producer id. An external image (camera, capture,
+  identity, never the producer id. The live set runs every source a screen
+  shows, its row's or the one a live `screen.source` verb bound over the row
+  (`WorldScreenMappingSet.Sources`): `WorldViewGraphHost.TryCompose` puts the
+  sources first and adds a read of each to the instance the engine renders its
+  first view through, with a footprint each, and recomposes when they move. A
+  live verb that opens a capture to prove its target parks it for the instance
+  to adopt (`CaptureProducer`), so a capture opens once. A producer's feed is an
+  `IWorldUploadFeed` or an `IWorldImportFeed`, never both. A producer that is not uploaded is adapted to `WorldImageFeedProducer`
+  (`WorldScreenBinder.Adapt`), whose `TryAcquireOutput` is the one place its
+  image is acquired, through `WorldCaptureGate.Resolve`, so a filled source hands
+  out its fill and never acquires the feed; the machine and probe ids register
+  the binder's `MachineSource` and `ProbeSource`. Such a source hands out an
+  image view alone (an empty `RenderGraphExternalOutput.Image`, the view on the
+  lease), so only an external producer samples it, and a graph instance
+  reading it draws a stand-in (`RenderGraphRuntime.Bind`).
+  `SdfEngineNode` maps the reads it is handed to its screens through
+  `ISdfScreenSources` (`ReadOf` names a screen's instance; `Rendered` serves a
+  view or a session), taking each read's lease once
+  however many screens show it, and binds every read before the offscreen views
+  render, which sample the same images (`BoundScreenSource`). The binder
+  publishes before the runtime schedules (`WorldFramePresenter.PrepareGraph`),
+  so the gate answers once per frame. An external image (camera, capture,
   probe output) is resolved through the binder's `WorldCaptureGate`, never
   directly: a new path that samples one without the gate leaks it into
   captures. An uploaded producer registers an upload for its source package
@@ -285,8 +312,13 @@ These are one-line cautions; the owning pages hold the derivations.
   conversion a catalog package per shipped kernel (`SourceConversionPackage`,
   its interface generated beside the kernel). The runtime declares the
   upload's cadence and extent to the scheduler itself. A new uploaded producer
-  writes its planes in `IWorldUploadFeed.TryWrite`; screens still read the
-  binder's `CpuSurfaceSource` uploads until P12b-2 connects them. An uploaded
+  writes its planes in `IWorldUploadFeed.TryWrite`, which a screen showing the
+  source samples as the instance's converted output. CPU pixels a producer
+  holds outside the set (a camera's or a capture's CPU tier, a capture fill)
+  convert through the same one-pass graph on a converter of their own
+  (`RenderGraphRuntime.CreateConverter`, `RenderGraphSourceConverter`, which
+  shares the instance's region binding; the binder's `ConvertedPixels`), handed
+  out under a counted lease; never upload a sampled image by hand. An uploaded
   source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`, the
@@ -982,7 +1014,8 @@ zero-allocation steady frame with a buffer edge in it. A source instance
 by demand at most once a frame, but at the cadence and negotiated extent its
 producer declares in the frame's `RenderGraphSourceState` list (static once,
 tick once per `RenderGraphFrame.Tick`, rate at most its hertz in frames at the
-display's rate), never a refresh or a footprint; cadence is never the wall
+display's rate, `FrameContext.DisplayHertz`, and `Refused` while that is zero),
+never a refresh or a footprint; cadence is never the wall
 clock, and the scheduler's `.Sources` laws pin each. The runtime withdraws a
 render an external producer could not produce (`RenderGraphHistory.Withdraw`),
 so a static source is asked again. A world's instances are
@@ -1041,7 +1074,10 @@ buffer is larger than the producer's (`InputFormat`). An external instance
 through its own submissions, and each consumer binds its latest output under
 a `GpuImageLease` that the consumer node's per-slot `LeaseRetireList` holds
 until that slot's fence (the leased `BindImage` serves one frame). The set
-refuses an external instance's reads and any previous-frame read of one.
+refuses an external instance's buffer, own and previous-frame reads, and any
+previous-frame read of one; its image reads reach `Produce` as a
+`RenderGraphExternalReads`, whose leases the producer `Take`s for what its
+submission samples, the runtime retiring the rest.
 `SdfEngineNode` is the `sdf.world` producer for view 0 (`world`), and
 `SdfEngineNode.ViewProducer(view)` is the producer of each later view
 (`world$2..world$K`, named by `WorldViewNames.World`). The node renders every
@@ -1181,8 +1217,8 @@ camera registration, a session's view), at a view's or session's document
 extent or the running image's (`IWorldScreenImages`, which the binder
 implements), and `WorldScreenBinder.Publish` republishes it each frame without
 allocating while handles and extents hold (`WorldScreenMappingLawTests`). A
-live `screen.source` bind over a row publishes none until the row applies
-again. `world.screens` prints each screen's `Describe` line. Every view's world
+live `screen.source` bind over a row publishes the bound source's mapping
+(`WorldScreenMappingSet.Reconcile`'s `live` map). `world.screens` prints each screen's `Describe` line. Every view's world
 producer reports those mappings as its placements
 (`WorldViewGraphHost.Screens`), so the walk continues through a screen; a
 screen showing a camera view ends `Unread`, since camera views still render
@@ -1244,8 +1280,15 @@ manifest's pin), and a package refusal fails the instance's compilation with
 its code. Every refusal is a
 `ShaderClosureRefusedException` code: `SHADERSRC_*` for a closure,
 `SHADERPKG_*` for a package. A package carries its sources, each pass's
-interface and generated declarations, and SPIR-V and DXIL per stage for the
-`default` variant; the pass entry records the interface hash. A build holds
+interface and generated declarations, and SPIR-V and DXIL per stage for
+`default` and for each tier its graph declares in `tiers`
+(`RenderGraphDefinition.Variants`, each compiled with `QualityTiers.Define` set
+through `ShaderCompiler.StepsOf`; a graph declaring none, and a one-off shader,
+builds `default` alone, so never build a variant the graph does not declare);
+the pass entry records the interface hash, and a load reads the variant a
+`views.graphs` row's `tier` names (`LoadSource`'s `tier`), falling back to
+`default` for an undeclared tier (`RenderGraphDefinition.VariantOf`) and saying
+so as `tier=low->default` (`ShaderPackageVariant.Spell`). A build holds
 every binary's and each interface's echo pass's reflected frame block to the
 layout (`SHADERPKG_INTERFACE`); a load reads the binaries and runs no tool, so
 never make a package load consult the compiler, and the `no-device-compile`

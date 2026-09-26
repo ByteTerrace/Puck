@@ -826,7 +826,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             m_image?.Dispose();
             m_image = null;
         }
-        public bool Produce(in FrameContext context, uint width, uint height) {
+        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             if (Holding) {
                 return false;
             }

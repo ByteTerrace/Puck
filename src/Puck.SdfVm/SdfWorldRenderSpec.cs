@@ -1,5 +1,3 @@
-using System.Numerics;
-using Puck.Hosting;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -39,17 +37,11 @@ public sealed record SdfWorldRenderSpec(
     /// <summary>A floor on the program buffer's packed-word capacity — the capacity envelope for a frame source
     /// that hot-swaps programs larger than the first frame's.</summary>
     public int ProgramWordCapacity { get; init; }
-    /// <summary>Screen-light color providers, parallel to <see cref="ScreenSources"/>: the colored glow each screen
-    /// emits into the room (its framebuffer average), keyed by screen index.</summary>
-    public IReadOnlyDictionary<int, Func<Vector3>>? ScreenLights { get; init; }
-    /// <summary>Frame-scoped screen-source providers keyed by the program-declared screen index. The engine node
-    /// retires each returned acquisition only after the submission that sampled its view has completed. A provider in
-    /// this map replaces a same-index handle provider from <see cref="ScreenSources"/>.</summary>
-    public IReadOnlyDictionary<int, Func<GpuImageLease>>? ScreenSourceFrames { get; init; }
-    /// <summary>Screen-source handle providers keyed by the program-declared screen index (the diegetic-screen seam).
-    /// Use <see cref="ScreenSourceFrames"/> instead for an asynchronously updated source that needs submission-lifetime
-    /// protection.</summary>
-    public IReadOnlyDictionary<int, Func<nint>>? ScreenSources { get; init; }
+    /// <summary>What each program-declared screen shows and the light it casts into the room, or <see langword="null"/>
+    /// for a host with no screens: the source instance a screen reads, whose image the render graph hands the node, or
+    /// the image the host renders for it. The engine node retires each lease only after the submission that sampled it
+    /// has completed, and adds the wait the lease carries to that submission.</summary>
+    public ISdfScreenSources? ScreenSources { get; init; }
     // NOTE: screen-surface TRANSFORM providers are read straight off FrameSource.ScreenSurfaceTransforms (see
     // ISdfFrameSource) rather than threaded through their own spec field — a caller's own type coupling would
     // otherwise grow just to spell SdfScreenSurfaceTransform in its render-assembly call site.

@@ -354,6 +354,93 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
         Assert.Empty(collection: gpu.StateConflicts);
     }
+    /// <summary>A converter the runtime makes for CPU pixels a producer holds outside the set (a camera's or a capture's CPU
+    /// tier, a capture fill) runs the conversion its descriptor names on a node of its own: once its graph installs, each
+    /// conversion leaves the device-local buffer the conversion reads holding exactly the header and the pixels, under the
+    /// model that runs the copy kernel, and hands out the conversion's image. A descriptor no conversion reads is refused
+    /// by name and converts nothing.</summary>
+    [Fact]
+    public void AConverterConvertsPixelsOutsideTheSetThroughItsDescriptorsConversion() {
+        const uint Extent = 8;
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        var recorders = new Recorders();
+
+        SourceConversionPackage.RegisterAll(packages: recorders.Registry);
+        recorders.Registry.RegisterSource(
+            factory: _ => new FakeUpload(format: ImagePixelFormat.B8G8R8A8Unorm),
+            package: Upload
+        );
+
+        using var runtime = Runtime(gpu, recorders, Set(RenderGraphInstance.Source(name: "pattern", producer: "test")), "pattern", new RenderGraphRuntimeGraph[1]);
+
+        var descriptor = new ImageSourceDescriptor(
+            Cadence: ImageSourceCadence.Tick,
+            Color: ImageColorEncoding.Srgb,
+            Content: ImageContentClass.External,
+            Format: ImagePixelFormat.B8G8R8A8Unorm,
+            Height: Extent,
+            Producer: "camera",
+            Transport: ImageSourceTransport.Imported,
+            Width: Extent
+        );
+        var header = ImageSourceUploadLayout.HeaderOf(
+            color: descriptor.Color,
+            format: descriptor.Format,
+            height: Extent,
+            width: Extent
+        );
+        var byteCount = ImageSourceUploadLayout.ByteCount(header: in header);
+        var pixels = new byte[((Extent * Extent) * 4U)];
+        var expected = new byte[byteCount];
+
+        for (var index = 0; (index < pixels.Length); index++) {
+            pixels[index] = ((byte)((index * 7) + 3));
+        }
+
+        ImageSourceUploadLayout.Write(
+            header: in header,
+            region: expected
+        );
+        pixels.CopyTo(array: expected, index: ImageSourceUploadLayout.HeaderBytes);
+
+        using var converter = runtime.CreateConverter(
+            descriptor: descriptor,
+            name: "camera:Color"
+        );
+
+        Assert.Null(@object: converter.Fault);
+        Assert.Equal(expected: 0, actual: converter.ImageViewHandle);
+        Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => converter.TryConvert(
+                    context: default,
+                    planes: pixels
+                ),
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ),
+            userMessage: "The converter's conversion never built."
+        );
+        Assert.NotEqual(expected: 0, actual: converter.ImageViewHandle);
+        Assert.Equal(
+            actual: gpu.DeviceLocal(sizeBytes: ((ulong)byteCount)),
+            expected: expected
+        );
+
+        using var refused = runtime.CreateConverter(
+            descriptor: (descriptor with { Format = ((ImagePixelFormat)0) }),
+            name: "refused"
+        );
+
+        Assert.Contains(
+            actualString: refused.Fault,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "which no conversion reads"
+        );
+        Assert.False(condition: refused.TryConvert(
+            context: default,
+            planes: pixels
+        ));
+    }
     [Fact]
     public void ARefusedUploadRendersNothingAndNamesItsFault() {
         var gpu = new FakePipelineGpu();

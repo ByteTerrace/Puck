@@ -9,8 +9,9 @@ namespace Puck.Hosting;
 /// <see cref="RenderGraphRead.PreviousFrame"/>, takes the producer's previous completed frame, so it orders nothing
 /// and may close a loop; a loop of same-frame reads is refused with every instance in it named. Image and buffer reads
 /// order alike, and a read whose kind is not what its producer's output carries is refused naming both. An external
-/// producer (<see cref="RenderGraphInstanceKind.External"/>) reads nothing and keeps no history, so a declared read of
-/// its own, and another instance's previous-frame read of it, are each refused by name.</summary>
+/// producer (<see cref="RenderGraphInstanceKind.External"/>) reads only other instances' images, each within the frame,
+/// and keeps no history, so its buffer, previous-frame or own read, and another instance's previous-frame read of it,
+/// are each refused by name.</summary>
 public sealed class RenderGraphInstanceSet {
     private readonly Dictionary<string, int> m_indexByName;
 
@@ -229,11 +230,19 @@ public sealed class RenderGraphInstanceSet {
             }
             if (
                 (instance.Kind == RenderGraphInstanceKind.External) &&
-                (instance.Reads is { Count: > 0 })
+                (instance.Reads ?? []).Any(predicate: read => (
+                    read.PreviousFrame ||
+                    (read.Kind != ShaderPipelineResourceKind.Image) ||
+                    string.Equals(
+                        a: read.Producer,
+                        b: instance.Name,
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ))
             ) {
                 refusal = Refuse(
                     RenderGraphInstanceRefusalCode.ExternalReads,
-                    $"Render-graph instance '{instance.Name}' is the external producer '{instance.ExternalPackage}', which renders through its own submissions and reads no instance, but it declares {instance.Reads.Count} reads.",
+                    $"Render-graph instance '{instance.Name}' is the external producer '{instance.ExternalPackage}', which binds only other instances' latest completed images, but it declares a buffer, previous-frame or own read.",
                     instance.Name
                 );
 

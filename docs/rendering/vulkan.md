@@ -438,9 +438,11 @@ callers still re-probe before relying on a path, and fall back otherwise:
 
 A Direct3D 11 producer (a camera, a desktop capture) writes into shared targets and signals a
 Direct3D 12 shared fence after each write; the consumer's submission waits for the value on the
-GPU, with no keyed mutex and no CPU wait on either side. The consumer adds the wait with
-`IGpuQueueSubmitter.AddExternalWait` when it acquires the image, and `VulkanGpuQueueSubmitter`
-puts every wait added since its last submission into the next one's wait list: the imported
+GPU, with no keyed mutex and no CPU wait on either side. The wait rides the image's lease
+(`GpuImageLease.Wait`), and the node that samples the image adds it with
+`IGpuQueueSubmitter.AddExternalWait` immediately before the submission that samples it
+(`LeaseRetireList.AddWaits`). `VulkanGpuQueueSubmitter` puts every wait added since its last
+submission into the next one's wait list: the imported
 semaphore, its value in a chained `VkTimelineSemaphoreSubmitInfo`, and
 `VK_PIPELINE_STAGE_ALL_COMMANDS_BIT`, so no stage of the batch runs early. A submission with no
 command buffers keeps the list. `VulkanQueueSubmitter`'s submits take the wait semaphores and

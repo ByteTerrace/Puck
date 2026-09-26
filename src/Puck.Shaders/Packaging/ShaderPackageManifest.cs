@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Shaders;
 
@@ -8,8 +9,8 @@ namespace Puck.Shaders;
 /// lists, each at its logical path. The package carries sources rather than bytecode, so loading one compiles it with
 /// the compiler it pins.
 /// <para>The compile facts come from the compiler rather than being assembled beside it: <see cref="Compiler"/>'s
-/// revisions and each pass's <see cref="ShaderPackagePass.Stages"/> are the <see cref="ShaderCompileIdentity"/> the
-/// compiler hashed into the pass's cache key, and every file's pin is the content hash that key hashed.</para>
+/// revisions and each variant's <see cref="ShaderPackageVariant.Stages"/> are the <see cref="ShaderCompileIdentity"/>
+/// the compiler hashed into the pass's cache key, and every file's pin is the content hash that key hashed.</para>
 /// </summary>
 /// <param name="Schema">The document's schema, <see cref="SchemaName"/>.</param>
 /// <param name="Name">The pipeline's name.</param>
@@ -52,28 +53,57 @@ public sealed record ShaderPackageTool(string Name, string Version);
 public sealed record ShaderPackageFile(string Path, string Pin, long Bytes);
 /// <summary>How one pass compiled and what it compiled to.</summary>
 /// <param name="Name">The pass's name.</param>
-/// <param name="Stages">Each stage's entry point, profile, and native tool steps, as the compiler identified
-/// them (<see cref="ShaderCompileIdentity.Stages"/>).</param>
 /// <param name="Interface">The pass's interface as its canonical JSON (<see cref="ShaderInterface.ToJson"/>), whose pin
 /// is the interface's hash (<see cref="ShaderInterface.Hash"/>), which versions the declarations and every
 /// binary.</param>
 /// <param name="Declarations">The declarations generated from the interface, at the path the pass's source includes
 /// them from.</param>
-/// <param name="Variants">The pass's precompiled binaries, one entry per variant. Every variant reads the same
-/// interface; the one the engine builds today is <see cref="ShaderPackageVariant.DefaultName"/>.</param>
+/// <param name="Variants">The pass's precompiled binaries, one entry per variant: <see cref="ShaderPackageVariant.DefaultName"/>,
+/// then one for each tier its graph declares (<see cref="RenderGraphDefinition.Variants"/>), cheapest first. Every
+/// variant reads the same interface, so a tier cannot change what a pass reads.</param>
 public sealed record ShaderPackagePass(
     string Name,
-    IReadOnlyList<ShaderCompileStage> Stages,
     ShaderPackageFile Interface,
     ShaderPackageFile Declarations,
     IReadOnlyList<ShaderPackageVariant> Variants
 );
-/// <summary>One variant of a pass: its precompiled binaries.</summary>
+/// <summary>One variant of a pass: how it compiled and its precompiled binaries. Every pass carries
+/// <see cref="DefaultName"/>, compiled with no tier defined, which a <c>views.graphs</c> row naming no tier, or a tier
+/// its graph does not declare, loads; each other variant is a tier the graph declares, named for it
+/// (<see cref="QualityTiers.Name"/>) and compiled with it defined (<see cref="ShaderCompiler.StepsOf"/>).</summary>
 /// <param name="Name">The variant's name.</param>
+/// <param name="Stages">Each stage's entry point, profile, and native tool steps, as the compiler identified
+/// them (<see cref="ShaderCompileIdentity.Stages"/>).</param>
 /// <param name="Binaries">One SPIR-V module and one DXIL container per stage, in stage order, SPIR-V first.</param>
-public sealed record ShaderPackageVariant(string Name, IReadOnlyList<ShaderPackageBinary> Binaries) {
-    /// <summary>The name of the variant every pass carries.</summary>
+public sealed record ShaderPackageVariant(string Name, IReadOnlyList<ShaderCompileStage> Stages, IReadOnlyList<ShaderPackageBinary> Binaries) {
+    /// <summary>The name of the variant compiled for no tier.</summary>
     public const string DefaultName = "default";
+
+    /// <summary>Returns the name of the variant a tier loads.</summary>
+    /// <param name="tier">The tier, or <see langword="null"/> for none.</param>
+    /// <returns><see cref="DefaultName"/> for no tier, and the tier's name otherwise.</returns>
+    public static string NameOf(QualityTier? tier) => ((tier is { } named)
+        ? QualityTiers.Name(tier: named)
+        : DefaultName);
+    /// <summary>Spells the tier a row asked for and the variant it got: the variant's name when they agree, and
+    /// <c>&lt;asked&gt;-&gt;&lt;variant&gt;</c>, such as <c>high-&gt;default</c>, when the graph declares no variant of the tier
+    /// asked for.</summary>
+    /// <param name="requested">The tier the row names, or <see langword="null"/> for none.</param>
+    /// <param name="variant">The variant's tier (<see cref="RenderGraphDefinition.VariantOf"/>), or
+    /// <see langword="null"/> for <see cref="DefaultName"/>.</param>
+    /// <returns>The spelling.</returns>
+    public static string Spell(QualityTier? requested, QualityTier? variant) => ((requested == variant)
+        ? NameOf(tier: variant)
+        : $"{NameOf(tier: requested)}->{NameOf(tier: variant)}");
+    /// <summary>Describes a load's variant as a clause of its outcome message: nothing for a row naming no tier,
+    /// <c> at tier high</c> for a declared tier, and <c> at tier high-&gt;default</c> with the reason when the graph declares
+    /// no variant of it.</summary>
+    /// <param name="requested">The tier the row names, or <see langword="null"/> for none.</param>
+    /// <param name="variant">The variant's tier, or <see langword="null"/> for <see cref="DefaultName"/>.</param>
+    /// <returns>The clause, empty or starting with a space.</returns>
+    public static string Describe(QualityTier? requested, QualityTier? variant) => ((requested is null)
+        ? string.Empty
+        : $" at tier {Spell(requested: requested, variant: variant)}{((requested == variant) ? string.Empty : $" (the graph declares no {NameOf(tier: requested)} variant)")}");
 }
 /// <summary>One precompiled binary of a package.</summary>
 /// <param name="Stage">The stage it runs.</param>

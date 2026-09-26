@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Hosting;
 
@@ -33,19 +34,25 @@ public sealed partial class ShaderCompiler {
     /// manifest records them.</summary>
     /// <param name="stage">The stage.</param>
     /// <param name="entryPoint">The entry point the author declared.</param>
+    /// <param name="tier">The quality tier the stage compiles for, which both steps define as
+    /// <see cref="QualityTiers.Define"/>, or <see langword="null"/> for the variant no tier names, which defines
+    /// nothing.</param>
     /// <returns>The SPIR-V step, then the DXIL step.</returns>
-    public static IReadOnlyList<ShaderCompileStep> StepsOf(ShaderStage stage, string entryPoint) {
+    public static IReadOnlyList<ShaderCompileStep> StepsOf(ShaderStage stage, string entryPoint, QualityTier? tier = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: entryPoint);
 
         var profile = ProfileOf(stage: stage);
+        string[] defines = ((tier is { } named)
+            ? ["-D", $"{QualityTiers.Define}={QualityTiers.DefineValue(tier: named).ToString(provider: CultureInfo.InvariantCulture)}"]
+            : []);
 
         return [
             new ShaderCompileStep(
-                Options: ["-spirv", $"-fspv-target-env=vulkan{VulkanVersion}", "-fspv-entrypoint-name=main", "-T", profile, "-E", entryPoint],
+                Options: ["-spirv", $"-fspv-target-env=vulkan{VulkanVersion}", "-fspv-entrypoint-name=main", "-T", profile, "-E", entryPoint, .. defines],
                 Tool: DxcTool
             ),
             new ShaderCompileStep(
-                Options: ["-T", profile, "-E", entryPoint],
+                Options: ["-T", profile, "-E", entryPoint, .. defines],
                 Tool: DxcTool
             ),
         ];
@@ -62,13 +69,14 @@ public sealed partial class ShaderCompiler {
             Compiler: CompilerVersion,
             Includes: closure.Includes,
             Sources: closure.Sources,
-            Stages: request.Stages.Select(selector: static stage => new ShaderCompileStage(
+            Stages: request.Stages.Select(selector: stage => new ShaderCompileStage(
                 EntryPoint: stage.EntryPoint,
                 Profile: ProfileOf(stage: stage.Stage),
                 Stage: stage.Stage,
                 Steps: StepsOf(
                     entryPoint: stage.EntryPoint,
-                    stage: stage.Stage
+                    stage: stage.Stage,
+                    tier: request.Tier
                 )
             )).ToArray()
         );
