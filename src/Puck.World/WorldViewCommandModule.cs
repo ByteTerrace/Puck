@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -102,6 +103,11 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             : "none")} syscount={status.SystemReleaseCount}]"
         ));
     }
+    // A walk's step as the echo prints it: the source by kind and name, and the pixel the hit maps to, or off-source.
+    private static string DescribeStep(RenderGraphHitStep step) => string.Create(
+        provider: CultureInfo.InvariantCulture,
+        handler: $"{((step.Mapping.Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance")}:{step.Mapping.Source.Name} {(step.Hit.IsOnSource ? $"pixel {step.Hit.PixelX},{step.Hit.PixelY}" : "off-source")}"
+    );
     // Lists the panes the render graph's root last published, in drawing order, and, given a display point, what the
     // presentation picker and the hit walk through the live instance set answer there.
     private CommandResult DescribePanes(WireArgs args) {
@@ -169,7 +175,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
                 ? "no-runtime"
                 : string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"{walk.End} steps={walk.Steps.Count}{((walk.Instance >= 0) ? $" in {host.InstanceName(index: walk.Instance)}" : string.Empty)}"
+                    handler: $"{walk.End} steps={walk.Steps.Count}{((walk.Instance >= 0) ? $" in {host.InstanceName(index: walk.Instance)}" : string.Empty)}{((walk.Steps.Count > 0) ? $" last {DescribeStep(step: walk.Steps[^1])}" : string.Empty)}"
                 ));
 
             _ = builder.Append(
@@ -316,7 +322,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.panes",
-            description: "Echoes the panes the render graph's root last published, in drawing order (the world's shown views, then the views.graphs panes): world.view.panes [<x> <y>] — the display extent and, per pane, its SourceMapping (the source by its instance handle, the pane's normalized rect, the source extent the instance last rendered at, the crop, layout, fit, any warp and the destination). Given a display point in display pixels from the top-left corner, it also echoes what the presentation picker answers there (pick=<kind>:<instance> pixel <x>,<y>, or none off every source) and how the hit walk through the live instance set ends (walk=<end> steps=<n>, and the instance whose world it ended in). The pipeline pane pointer maps through the same published mapping. A query (always echoes); refused by name in a boot with no GPU presentation.",
+            description: "Echoes the panes the render graph's root last published, in drawing order (the world's shown views, then the views.graphs panes): world.view.panes [<x> <y>] — the display extent and, per pane, its SourceMapping (the source by its instance handle, the pane's normalized rect, the source extent the instance last rendered at, the crop, layout, fit, any warp and the destination). Given a display point in display pixels from the top-left corner, it also echoes what the presentation picker answers there (pick=<kind>:<instance> pixel <x>,<y>, or none off every source) and how the hit walk through the live instance set ends (walk=<end> steps=<n>, the instance whose world it ended in, and last <kind>:<source> pixel <x>,<y>, or off-source, for its last hit: a pane, or a screen standing in a view's world, whose mapping world.screens prints). The pipeline pane pointer maps through the same published mapping. A query (always echoes); refused by name in a boot with no GPU presentation.",
             handler: (context, args) => DescribePanes(args: args),
             routing: CommandRouting.Immediate
         );

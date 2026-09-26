@@ -1098,9 +1098,20 @@ rendered source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`
 up to `RenderGraphInstanceSet.NestingDepth`; `WorldViewGraphHost.Walk` runs it
 over the runtime's live set, with each view's seat camera and each pane's
 paired camera, and `world.view.panes` echoes the panes, a pick and a walk.
-Screens publish no mapping and no instance reports the surfaces in its world
-yet, so a walk ends on the first instance's world, and the GPU does not draw
-from a mapping (P13b-1's screen half and P13b-5).
+Screens publish through the binder: `WorldScreenMappingSet`
+(`src/Puck.World.Client/Sources`) builds each row's `WorldScreenMappings.Of`
+mapping named by its source instance's handle (`WorldSourceInstances`, a view's
+camera registration, a session's view), at a view's or session's document
+extent or the running image's (`IWorldScreenImages`, which the binder
+implements), and `WorldScreenBinder.Publish` republishes it each frame without
+allocating while handles and extents hold (`WorldScreenMappingLawTests`). A
+live `screen.source` bind over a row publishes none until the row applies
+again. `world.screens` prints each screen's `Describe` line. Every view's world
+producer reports those mappings as its placements
+(`WorldViewGraphHost.Screens`), so the walk continues through a screen; a
+screen showing a camera view ends `Unread`, since camera views still render
+through `ViewStack` rather than the live set. The GPU does not draw from a
+mapping (P13b-5).
 
 HLSL is the one source language, and `ShaderCompiler` runs DXC alone: no pass
 declares a language, and a one-off source is an `.hlsl` compute pass read as a
