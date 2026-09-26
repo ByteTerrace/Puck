@@ -6,8 +6,8 @@ using Puck.Maths;
 namespace Puck.Input.Tests;
 
 /// <summary>Laws for keyboard focus between the game and a passthrough source: a press on a source the local user opened
-/// focuses it and its keys stop reaching the game; the reserved chord always returns input to the game and its key
-/// reaches nobody; a key's release follows its press across a focus change; and a document's source never takes
+/// focuses it and its keys stop reaching the game; the reserved chord returns input to the game and its Escape reaches
+/// nobody while a source has focus, and is the game's Escape while none does; a key's release follows its press across a focus change; and a document's source never takes
 /// focus.</summary>
 public sealed class SourceFocusLawTests {
     private static readonly SourceMapping Editor = SourceMapping.WholePane(
@@ -105,7 +105,7 @@ public sealed class SourceFocusLawTests {
         );
     }
     [Fact]
-    public void TheChordIsReservedWhileTheGameHasFocusToo() {
+    public void WhileTheGameHasFocusTheChordsEscapeIsTheGames() {
         var focus = new SourceFocus();
 
         Assert.Equal(
@@ -117,11 +117,11 @@ public sealed class SourceFocusLawTests {
             actual: focus.Route(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.AltLeft))
         );
         Assert.Equal(
-            expected: SourceFocusRoute.Consumed,
+            expected: SourceFocusRoute.Game,
             actual: focus.Route(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Escape))
         );
         Assert.Equal(
-            expected: SourceFocusRoute.Consumed,
+            expected: SourceFocusRoute.Game,
             actual: focus.Route(inputEvent: WindowInputEvent.KeyUp(key: KeyCode.Escape))
         );
         Assert.Equal(

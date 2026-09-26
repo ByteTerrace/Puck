@@ -1187,12 +1187,17 @@ capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
 default), a 1×1 upload, and the producer's frame is never acquired. The gate
 covers screen slots, jumbotron renders of those screens, and HUD `Frame`
 elements. An offscreen host, which serves scheduled captures and `puck parity`,
-fills every frame. A windowed host fills from the frame a `world.screenshot`
-is armed for until two frames after it. On the first frame it fills with an
-external source bound, the jumbotron views render again, so no view shows an
-image it rendered from that source before; a view beyond that frame's
-offscreen budget (`OffscreenRenderBudget`) waits for its round-robin turn and
-may still show its older image. Simulation never
+fills every frame. A windowed host fills while a capture is armed on the
+render graph and not yet served. An image resolved outside a fill is tainted,
+and so is every render-graph instance whose latest output read one: a frame
+produced while a capture is armed renders every tainted instance the capture
+reads again, whatever its refresh, and the capture waits for a frame whose
+inputs are all untainted, so a slow view never carries external pixels into
+it. On the first frame the gate fills with an external source bound, the
+jumbotron views render again, so no view shows an image it rendered from that
+source before; a view beyond that frame's offscreen budget
+(`OffscreenRenderBudget`) waits for its round-robin turn and may still show
+its older image. Simulation never
 reads the gate, and no external pixel reaches simulation state, a replay or the
 state hash.
 
@@ -1202,9 +1207,10 @@ emulator joins as a machine engine in `WorldMachineCatalog`, again with no
 schema change. Text is a decal, not an image.
 
 A route's `input` names where a pointer hit on the screen's source goes:
-`Presentation` (the default, hover and highlight) or `Simulation`, where a
-pointer ray arriving as `source.pointer.origin`/`source.pointer.direction`
-command values is mapped in fixed point from the row alone
+`Presentation` (the default: hover and highlight, which only a displayed pane
+receives until GPU picking reaches a screen's surface; see P4) or `Simulation`,
+where a pointer ray arriving as
+`source.pointer.origin`/`source.pointer.direction` command values is mapped in fixed point from the row alone
 (`WorldScreenMappings.Of`, the whole source inset by the glass bezel). The
 validator refuses `Passthrough` by name, because only a source the local user
 opened may send input to a host window. `world.screens` echoes each screen's
@@ -1215,6 +1221,34 @@ seat's camera each frame and holds the two commands on that seat's lane, the
 seat folds them into its intent's `SourceRay`, and a rule reads the mapped hit
 as `$pointer:<seat>:<screenIndex>:x|y|on`. `body.channels` echoes the ray and
 its hit on every `Simulation` screen.
+
+**A window captured into a pane takes input only when the local user opens it.**
+`source.passthrough open <instance> <windowTitle...>` opens the window capture a
+shown `views.graphs` pane draws (a `source.capture` row naming a window) as a
+passthrough source, once the captured window's title contains the title the
+user typed, so the user names the window that will take their input. The pane's
+published mapping then takes the `Passthrough` destination with the local-user
+opener, which `world.view.panes` shows. On a windowed host,
+`WorldSourcePassthrough` offers every raw window event to its
+`SourcePassthroughRouter` before the game sees it: pointer events over the pane
+reach the window at the pane's mapped client point, a click there gives the
+window the keyboard, keys and text then go to it instead of the game, every
+release goes where its press went, and Control+Alt+Escape returns the keyboard
+to the game. `source.passthrough close <instance>` closes one, and
+`source.passthrough` with no argument echoes where the keyboard is and each
+open source's window, captured frame, client area and DPI scale. Only the
+host's own console may run the verb, as typed text; the local operator
+attachment (`world.control`) is that console too. No binding, seat, peer,
+addon, schedule or world document can open a passthrough source or send it
+input. A source whose pane is no longer published, or stops showing the window
+it was opened on (its instance stops, its capture reopens onto another window,
+or a row of the same name replaces it), is closed before the next event routes.
+Closing a source, by the verb or this way, releases every key and button its
+window holds and returns the keyboard to the game. Delivery is Windows-only:
+the capture feed's `Win32PassthroughWindow` sends window messages to the
+captured window, described in
+[Device input](../../docs/reference/input.md#keyboard-focus-and-passthrough-sources).
+A headless or offscreen boot has no window and no such verb.
 
 **A physical camera is an input device, seated like a gamepad, never named by
 hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`
@@ -1264,17 +1298,16 @@ authority; `screen.insert` and `forge.play` use that executor for named producer
 while `screen.eject` detaches the display. Legacy screen operations remain in the
 protocol. Generic provider operations are refused during recording until the tape
 can capture their execution. A screen showing a machine output reads it as a
-render-graph source instance (package `source.machine`), whose producer in
-`WorldScreenBinder.Sources.cs` calls `IMachineVideoOutput.PublishFrame` once
-per completed tick—the one GPU call this project still makes on a machine's
-behalf—and hands the output's image to the SDF world producer, which binds it
-to every screen showing it. The machines outlive the render
-device, so the binder that published an output's upload also retires it: on
-device loss and when the render chain is torn down, it calls
-`IMachineVideoOutput.NotifyDeviceLost` for every output it has published on
-that device (`PublishedMachineOutputs`, which records an output before it
-publishes, so a publish that loses the device still retires its upload).
-Device loss also retires every probe's shared ring, keeping its request so the
+render-graph source instance (package `source.machine`), an uploaded source:
+once per completed tick its upload (`MachineVideoSourceUpload`, made by the
+binder's `MachineSource`) copies the output's latest complete frame into the
+instance's region (`IMachineVideoOutput.WriteFrame`, in the `Format` the output
+declares: RGBA8, or an indexed image and its palette), the instance converts it
+once however many screens show it, and the SDF world producer binds the
+converted image to every screen showing it. A machine touches no GPU object,
+so nothing of a machine's is retired on device loss. The source is
+deterministic and states the image it last wrote, so a `captures` row naming
+the screen (`screen`) is held to it exactly (`sourceVerdict`). Device loss retires every probe's shared ring, keeping its request so the
 next publish provisions a fresh one, and the Vulkan host's headless camera
 device is disposed only after the last image made on it is released
 (`DisposeAfterDependents`), however late a submitted frame's lease releases

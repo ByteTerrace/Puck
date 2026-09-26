@@ -7,7 +7,10 @@ It provides device protocols, player slots, motion fusion, and controller output
 
 `SourceFocus` routes keys and text to a passthrough source the local user
 focused by clicking it, or to the game. Control, Alt and Escape together always
-return focus to the game. The contract is in
+return focus to the game. `SourcePassthroughRouter` hosts it for a window: it
+delivers a passthrough source's pointer and keys to the source's window and
+tells the window pump, through `IWindowInputFilter`, which events the game must
+not see. The contract is in
 [Device input](https://github.com/ByteTerrace/Puck/blob/main/docs/reference/input.md#keyboard-focus-and-passthrough-sources).
 
 ## Documentation

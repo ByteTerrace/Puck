@@ -51,6 +51,10 @@ existing Tune audio compiler and authored boot-ROM tools remain available.
   `BootRomHandoffCases` are the equivalence surface. The POST's
   `boot-rom-handoff` stage is that comparison's only runner; the forge tests pin
   each revision's image to a recorded hash instead.
+- `LightGunProbeCartridge`—the Color cartridge a light gun is aimed at: a white
+  left half, a black right half, and the infrared receiver's light bit
+  published to work RAM. The POST's `light-gun` stage and the World's
+  `LightGunLawTests` both boot it.
 
 ## The authored boot ROMs
 

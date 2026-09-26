@@ -170,7 +170,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Equal(expected: 2, actual: source.Produced);
         }
     }
-
     // A source that hands out an image view alone, as a camera or a capture does, names no image a graph's barriers can
     // name: a graph instance reading it draws a stand-in, and the lease its acquisition returned is retired at once.
     [Fact]
@@ -227,6 +226,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.True(condition: (source.Acquired > 0));
         Assert.Equal(expected: source.Acquired, actual: source.Released);
     }
+
     /// <summary>A source producer over one image, declaring a fixed extent at a cadence, every acquisition and release
     /// counted.</summary>
     private sealed class FakeSource(FakePipelineGpu gpu, ImageSourceCadence cadence) : IRenderGraphSourceProducer {
@@ -299,7 +299,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Lease: new GpuImageLease(
                     ImageViewHandle: image.ImageViewHandle,
                     Release: _ => Released++
-                )
+                ),
+                Tainted: false
             );
 
             return true;

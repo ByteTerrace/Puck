@@ -269,8 +269,10 @@ public sealed class SdfEngineNodeLeaseLawTests {
     }
 
     private sealed class FixedFrameSource(SdfFrame frame, Action? onRenderViews) : ISdfFrameSource {
+        public SdfFrame Frame { get; set; } = frame;
+
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            frame;
+            Frame;
         public void RenderViews(in FrameContext context) => onRenderViews?.Invoke();
     }
 
@@ -347,7 +349,8 @@ public sealed class SdfEngineNodeLeaseLawTests {
                     ImageViewHandle: (0x60 + frame),
                     Release: released.Add,
                     ReleaseToken: frame
-                )
+                ),
+                tainted: false
             );
             Assert.True(condition: rig.Node.Produce(
                 context: rig.Context,
@@ -409,7 +412,8 @@ public sealed class SdfEngineNodeLeaseLawTests {
             lease: new GpuImageLease(
                 ImageViewHandle: 0x61,
                 Release: _ => released++
-            )
+            ),
+            tainted: false
         );
         Assert.True(condition: rig.Node.Produce(
             context: rig.Context,
@@ -429,6 +433,110 @@ public sealed class SdfEngineNodeLeaseLawTests {
             expected: ((nint)((0x70 + before) + 1))
         );
         Assert.Equal(actual: released, expected: 0);
+    }
+    // The node's output carries the taint of the reads its latest submitted frame bound: a frame that read unfilled
+    // external content hands out a tainted output, and the next frame over a filled read an untainted one.
+    [Fact]
+    public void AnOutputRenderedFromATaintedReadIsHandedOutTaintedUntilAFrameReadsItFilled() {
+        const string Source = "source$camera$0";
+        var reads = new RenderGraphExternalReads(producers: [Source]);
+
+        using var rig = new Rig(screenSources: new ScreenSources(
+            readOf: static screen => Source,
+            rendered: static _ => ((nint)0),
+            screens: [0]
+        ));
+
+        rig.ProduceFirst();
+
+        bool ProduceOver(bool tainted) {
+            reads.Bind(
+                image: default,
+                index: 0,
+                layout: GpuImageLayout.ShaderReadOnly,
+                lease: ((nint)0x61),
+                tainted: tainted
+            );
+            Assert.True(condition: rig.Node.Produce(
+                context: rig.Context,
+                height: Extent,
+                reads: reads,
+                width: Extent
+            ));
+            reads.RetireUntaken();
+            Assert.True(condition: rig.Node.TryAcquireOutput(output: out var output));
+            output.Lease.Retire();
+
+            return output.Tainted;
+        }
+
+        Assert.Equal(
+            actual: (ProduceOver(tainted: true), ProduceOver(tainted: false)),
+            expected: (true, false)
+        );
+    }
+    // Each view output keeps the taint of the frame that last rendered it: a second view rendered over a tainted read
+    // stays tainted through a frame that renders the first view alone over a filled one.
+    [Fact]
+    public void AViewOutputKeepsItsTaintUntilAFrameRendersThatViewAgain() {
+        const string Source = "source$camera$0";
+        var reads = new RenderGraphExternalReads(producers: [Source]);
+
+        using var rig = new Rig(screenSources: new ScreenSources(
+            readOf: static screen => Source,
+            rendered: static _ => ((nint)0),
+            screens: [0]
+        ));
+
+        var single = rig.Source.Frame;
+        var view = single.Views[0];
+
+        rig.Source.Frame = (single with {
+            Views = [
+                (view with {
+                    Region = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f),
+                }),
+                (view with {
+                    Region = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f),
+                }),
+            ],
+        });
+        rig.ProduceFirst();
+
+        (bool First, bool Second) ProduceOver(bool tainted) {
+            reads.Bind(
+                image: default,
+                index: 0,
+                layout: GpuImageLayout.ShaderReadOnly,
+                lease: ((nint)0x61),
+                tainted: tainted
+            );
+            Assert.True(condition: rig.Node.Produce(
+                context: rig.Context,
+                height: Extent,
+                reads: reads,
+                width: Extent
+            ));
+            reads.RetireUntaken();
+            Assert.True(condition: rig.Node.TryAcquireOutput(output: out var first));
+            Assert.True(condition: rig.Node.ViewProducer(view: 1).TryAcquireOutput(output: out var second));
+            first.Lease.Retire();
+            second.Lease.Retire();
+
+            return (first.Tainted, second.Tainted);
+        }
+
+        Assert.Equal(
+            actual: ProduceOver(tainted: true),
+            expected: (true, true)
+        );
+
+        rig.Source.Frame = single;
+
+        Assert.Equal(
+            actual: ProduceOver(tainted: false),
+            expected: (false, true)
+        );
     }
 
     private sealed class ScreenSources(IReadOnlyList<int> screens, Func<int, string?> readOf, Func<int, GpuImageLease> rendered) : ISdfScreenSources {
@@ -479,12 +587,13 @@ public sealed class SdfEngineNodeLeaseLawTests {
                 )]
             );
 
+            Source = new FixedFrameSource(
+                frame: frame,
+                onRenderViews: onRenderViews
+            );
             Node = new SdfEngineNode(
                 brickPoolVoxelCapacity: 0,
-                frameSource: new FixedFrameSource(
-                    frame: frame,
-                    onRenderViews: onRenderViews
-                ),
+                frameSource: Source,
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
                 pipelines: SdfTestPipelines.Cache(),
@@ -508,6 +617,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
         public FrameContext Context { get; }
         public FakeGpuDevice Gpu { get; }
         public SdfEngineNode Node { get; }
+        public FixedFrameSource Source { get; }
 
         public void Dispose() => Node.Dispose();
         // The images the device holds now, which a law watches for the one a later frame releases.

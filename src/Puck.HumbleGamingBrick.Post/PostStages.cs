@@ -345,6 +345,10 @@ internal static class PostStages {
             // the peer's pattern exactly, replay- and churn-identical via the credit-preserving resume token (self-contained
             // synthetic ROMs; runs anywhere).
             new InfraredExchangeStage(),
+            // Tier C — the light gun on the infrared receive line: a Color ROM drawing a white and a black half reads
+            // light through RP only while the gun is aimed at a white pixel, the aim survives a snapshot, and a rerun
+            // is identical (self-contained synthetic ROM; runs anywhere).
+            new LightGunStage(),
             // Tier C — the rule-#3/M5 golden replay of a REAL commercial game across a Cgb↔Agb pair (needs a
             // link-capable cartridge via --link-rom; skips cleanly when absent).
             new LinkGameReplayStage(),

@@ -87,10 +87,11 @@ public sealed partial class RenderGraphRuntime {
             var instance = set.Instances[index];
             var old = m_set.IndexOf(name: instance.Name);
 
+            // An uploaded source is kept only while its upload still declares what its graph was made for.
             kept[index] = (((old >= 0) && Keeps(
                 instance: instance,
                 old: m_set.Instances[old]
-            ))
+            ) && !(m_sources[old]?.Drifted ?? false))
                 ? old
                 : -1);
             effective[index] = (graphs[index] ?? ((kept[index] >= 0)
@@ -226,6 +227,7 @@ public sealed partial class RenderGraphRuntime {
         // Nothing below fails before the new set runs.
         var current = new Output[count];
         var previous = new Output[count];
+        var producerTainted = new bool[count];
 
         for (var index = 0; (index < count); index++) {
             var old = kept[index];
@@ -236,6 +238,10 @@ public sealed partial class RenderGraphRuntime {
             previous[index] = ((old >= 0)
                 ? m_previous[old]
                 : Output.None);
+            producerTainted[index] = (
+                (old >= 0) &&
+                m_producerTainted[old]
+            );
 
             // A new uploaded source's node takes its conversion graph at its descriptor's extent; a kept one keeps it.
             if (sources[index] is { } source) {
@@ -277,6 +283,7 @@ public sealed partial class RenderGraphRuntime {
         m_nodes = nodes;
         m_previous = previous;
         m_producers = producers;
+        m_producerTainted = producerTainted;
         m_root = rootIndex;
         m_sources = sources;
         m_schedules = [
@@ -285,6 +292,7 @@ public sealed partial class RenderGraphRuntime {
         ];
         m_set = set;
         m_standInReads = new string?[count];
+        m_taintedReads = new string?[count];
         m_unproduced = 0;
         refusal = null;
 

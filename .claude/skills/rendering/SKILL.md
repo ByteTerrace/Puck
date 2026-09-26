@@ -290,8 +290,16 @@ These are one-line cautions; the owning pages hold the derivations.
   `IWorldUploadFeed` or an `IWorldImportFeed`, never both. A producer that is not uploaded is adapted to `WorldImageFeedProducer`
   (`WorldScreenBinder.Adapt`), whose `TryAcquireOutput` is the one place its
   image is acquired, through `WorldCaptureGate.Resolve`, so a filled source hands
-  out its fill and never acquires the feed; the machine and probe ids register
-  the binder's `MachineSource` and `ProbeSource`. Such a source hands out an
+  out its fill and never acquires the feed; the probe id registers the binder's
+  `ProbeSource`. The machine id registers an upload, the binder's
+  `MachineSource`, a `MachineVideoSourceUpload` (`Puck.Hosting`) that writes the
+  output's latest frame (`IMachineVideoOutput.WriteFrame`, RGBA8 or `Indexed8`)
+  into the instance's region once per completed tick; a machine never uploads
+  an image of its own. An upload's `Descriptor` is what it declares now: when
+  it moves (a machine replaced by one of another extent or format), the runtime
+  rebuilds that source before the frame schedules
+  (`RenderGraphRuntime.RebuildDriftedSources`, the running set reconfigured
+  onto itself, where a drifted source is not kept), never faults the old one. Such an imported source hands out an
   image view alone (an empty `RenderGraphExternalOutput.Image`, the view on the
   lease), so only an external producer samples it, and a graph instance
   reading it draws a stand-in (`RenderGraphRuntime.Bind`).
@@ -300,11 +308,25 @@ These are one-line cautions; the owning pages hold the derivations.
   view or a session), taking each read's lease once
   however many screens show it, and binds every read before the offscreen views
   render, which sample the same images (`BoundScreenSource`). The binder
-  publishes before the runtime schedules (`WorldFramePresenter.PrepareGraph`),
-  so the gate answers once per frame. An external image (camera, capture,
-  probe output) is resolved through the binder's `WorldCaptureGate`, never
-  directly: a new path that samples one without the gate leaks it into
-  captures. An uploaded producer registers an upload for its source package
+  publishes before the runtime schedules (`WorldFramePresenter.PrepareGraph`).
+  An external image (camera, capture, probe output) is resolved through the
+  binder's `WorldCaptureGate`, never directly: a new path that samples one
+  without the gate leaks it into captures. A windowed gate fills while a
+  capture is pending on the runtime (`RenderGraphRuntime.PendingCapturePath`),
+  and an image it resolves unfilled is handed out tainted
+  (`RenderGraphExternalOutput.Tainted`). An instance whose latest render bound a
+  tainted image is tainted (an external producer that read one hands out
+  tainted outputs: `RenderGraphExternalReads.Tainted`, which `SdfEngineNode`
+  hands the engine as `SdfWorldEngine.ScreenSourcesTainted`, and each view
+  output keeps the taint of the frame that last rendered it,
+  `SdfViewOutput.Tainted`), a frame begun with a capture pending names
+  every tainted instance the captured one reads to render again
+  (`RenderGraphFrame.Rerender`, due and admitted whatever its refresh and the
+  budget), and a capture moves to its instance only over untainted inputs,
+  a graph instance's or an external producer's, whose blocking read
+  `UnservedCaptureReasonOf` names. A
+  new producer of external content states its taint; never hold the gate open
+  for a count of frames. An uploaded producer registers an upload for its source package
   (`RenderGraphPackageRecorders.RegisterSource`), never an external producer:
   the runtime renders the instance through a node running the one-pass graph
   its descriptor names (`RenderGraphRuntime.Sources.cs`), the region bound as
@@ -852,6 +874,18 @@ field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, and its
 shader consumer in the same change. What a document field means belongs to
 `puck-world`.
 
+Every state read reaches a program, a decal or a pass through the state
+mirror, never through the document. A color a build bakes (a palette's surface,
+bounce, weathering or inset color, a height field's color, a text screen's ink)
+resolves through `WorldBakedColors`, whose slots the presentation manifest
+registers at install; its builder calls `Begin` at a live build and follows
+`TryTakeMove` in its revision, so a bound color moving rebuilds it. A new baked
+color is a manifest surface resolved the same way. The field lattice is a row
+like any other: the client's state view keeps the cells each snapshot carries,
+`WorldFieldEmitter` bakes a height field's brick from its row slot, and a pass
+binds a field row to an array through the row region a bound row takes; never
+add a second mirror of the lattice.
+
 ## Shader manifests and pipelines
 
 `docs/reference/shaders.md` owns the `puck.render.graph.v1` contract, post
@@ -1084,8 +1118,9 @@ root instance is the runtime's output and its default capture target; the root
 may be an external producer when nothing is drawn over it.
 `RenderGraphRuntime.CaptureTarget` arms a capture of any instance. A graph
 instance serves one only on a frame it renders with every image input it shows
-bound to a completed output, never a stand-in, and an external producer from
-the next frame it produces; until then `UnservedCaptureReasonOf` names why.
+bound to a completed output, never a stand-in, and never a tainted output
+(see image sources above), and an external producer from the next frame it
+produces over untainted reads; until then `UnservedCaptureReasonOf` names why.
 `RenderGraphRuntimeLawTests` pin the P11 checks on the fake, a steady frame
 at zero allocations included.
 The main view runs through the runtime. `WorldRootGraph`
@@ -1115,7 +1150,11 @@ builds the engine node, the packages and the runtime for both GPU shapes, and
 `RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
 what captures, `world.screenshot` and readiness read. A `captures` row may name
 `world` (`WorldCaptureRow.Instance`) to capture the world beneath the root's
-passes.
+passes, or a screen (`WorldCaptureRow.Screen`) to capture the source instance it
+reads; a capture of a source that states its image (`IImageSourceReference`)
+records `ImageSourceVerdict`'s exact verdict (`WorldCaptureManifestEntry.SourceVerdict`,
+resolved through `IWorldCaptureSources`), which `puck parity compare` reads as
+`SOURCE-OK`/`SOURCE-FAILED`.
 
 `views.graphs` rows run on the same runtime. `WorldViewGraphHost`
 (`src/Puck.World.Client/WorldViewGraphHost*.cs`) drives it through
@@ -1325,6 +1364,7 @@ puck canary source-conversion uploaded-sources              # the four shipped c
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
 puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo interface-echo no-device-compile    # shader pipelines offscreen on both backends
+puck canary --capability gpu --backend vulkan               # a per-change GPU check on one backend (vulkan or directx); the verdict names the backend, so it is never the both-backend pass
 dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
 ```
 
@@ -1355,7 +1395,12 @@ hidden from its path, the shipped ink pipeline rendering from its stored
 package and a relocated package from its binaries while an unpackaged source
 row is refused by `SHADERPKG_ABSENT`.
 Each proof runs once per backend, and an absent GPU or compiler is reported as
-unsupported rather than passed, except in a leg that hides the compiler. Under
+unsupported rather than passed, except in a leg that hides the compiler.
+`puck canary --backend vulkan` (or `directx`) runs each proof on that backend
+alone for a per-change check; the plan and verdict lines name the backend
+that ran, and `--merge` refuses the option because the gate holds both. A
+claim that holds on both backends still needs a run without it. `puck parity`
+has no such option: its state and pixel verdicts compare the two backends. Under
 `puck canary --debug-layers` the runner fails every leg on any
 `[vulkan-debug] validation` or `[d3d12-debug]` line, and on
 `[d3d12] debug layer requested but not loaded` (`DebugLayerOutput` in

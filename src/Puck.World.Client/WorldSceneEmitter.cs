@@ -106,6 +106,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The creation-STAMP census, refreshed at each rebuild: the body-rooted stamps handed to the pool, plus the
     // per-entity flag the pack/emit path reads to skip the catalog avatar (the body renders its creation instead).
     private readonly List<WorldStampPool.BodyStamp> m_bodyStamps = new();
+
+    // The palette colors the live build baked, and a counter moved when a bound one moves in the state mirror.
+    private readonly WorldBakedColors m_bakedColors;
+
+    private int m_bakedColorRevision;
+
     private readonly bool[] m_rendersAsStamp = new bool[WorldBodiesLimits.CapacityCeiling];
     // Each active body's reads of the client's state mirror (its live scale), created on first need and released when
     // the body leaves.
@@ -215,14 +221,15 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 textCatalog: m_text.Catalog,
                 tintFor: null,
                 volumes: m_staticVolumes,
-                meshDraws: meshDraws
+                meshDraws: meshDraws,
+                colors: m_bakedColors
             );
             m_staticMeshDraws = meshDraws;
         }
 
         m_animator.Emit(
             builder: builder,
-            definition: client.Definition,
+            colors: m_bakedColors,
             probeWorstCase: probeWorstCase,
             maxPlacementScale: maxPlacementScale,
             slotBase: (slotBase + WorldRigCatalog.DynamicTransformCapacity),
@@ -609,6 +616,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // root on live body poses, so the set follows the active-entity/look census, not just the document.
         var definition = m_client.Definition;
 
+        m_bakedColors.Begin();
         RefreshBodyStamps();
         m_animator.Reconcile(
             placements: definition.Placements,
@@ -845,9 +853,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
     /// <summary>Writes the program-rebuild watch counters this scene composes over: the client's three
     /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the continuum
-    /// watch.
+    /// watch, then a counter that moves when a bound color the live build baked moves in the state mirror
+    /// (<see cref="WorldBakedColors.TryTakeMove"/>).
     /// <para>
-    /// Four components, not their sum, and the client's three stay split too. One of them — the client's server
+    /// Five components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
     /// server revision falling by one while the continuum counter rises by one would leave a sum unmoved and hold a
     /// stale program. Flattening every counter through to the composition host's componentwise compare is what makes
@@ -858,6 +867,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_client.WriteRevision(destination: destination[..WorldClient.RevisionComponentCount]);
 
         destination[WorldClient.RevisionComponentCount] = m_continuum.Revision;
+
+        if (m_bakedColors.TryTakeMove()) {
+            m_bakedColorRevision++;
+        }
+
+        destination[(WorldClient.RevisionComponentCount + 1)] = m_bakedColorRevision;
     }
 
     /// <summary>Initializes a new instance of the <see cref="WorldSceneEmitter"/> class over the boot definition,
@@ -882,6 +897,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         ArgumentNullException.ThrowIfNull(argument: text);
 
         m_client = client;
+        m_bakedColors = new WorldBakedColors(mirror: client.StateMirror);
         m_continuum = continuum;
         m_anchor = anchor;
         m_settings = settings;
@@ -936,7 +952,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 1);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 2);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <summary>Gets one mesh draw per static placement instance of a prototype that carries a mesh, from the last

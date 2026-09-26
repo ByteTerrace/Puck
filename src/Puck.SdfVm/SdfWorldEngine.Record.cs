@@ -352,6 +352,7 @@ public sealed partial class SdfWorldEngine {
             );
             output.Initialized = true;
             output.Rendered = true;
+            output.Tainted = ScreenSourcesTainted;
         }
 
         // A skipped frame runs no view's set: each view's output keeps the frame it last rendered.

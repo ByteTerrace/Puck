@@ -124,7 +124,7 @@ internal static class ParityCompareCommand {
             return CliExit.Failed;
         }
 
-        Console.WriteLine(value: $"PASS: {outcomes.Count} capture(s) held every verdict (content gate, stateHash, region tick, reference where the station names one, per-tile pixel).");
+        Console.WriteLine(value: $"PASS: {outcomes.Count} capture(s) held every verdict (content gate, stateHash, region tick, source where a capture carries one, reference where the station names one, per-tile pixel).");
 
         return CliExit.Success;
     }
@@ -198,10 +198,12 @@ internal static class ParityCompareCommand {
             Per capture, in order: a content gate (a capture its producer refused — cameraInside, busy,
             stale, failed, unserved, deviceLost — a capture or frame absent from either side, or a census below its
             station's floor refuses the capture before any pixel comparison), an exact stateHash check, a tick
-            check (each side's frame refreshed its bound regions at the armed tick, its regionTick), and a
-            per-tile pixel check (any tile exceeding its station's mean or max threshold fails the capture). The
-            gate, state, tick, and pixel checks are independent verdicts — a gate failure skips the others;
-            state, tick, and pixel are always all computed and all printed once the gate holds. Every verdict
+            check (each side's frame refreshed its bound regions at the armed tick, its regionTick), a source
+            check for a capture of a source instance (each side's frame showed exactly the image its source
+            states, its sourceVerdict), and a per-tile pixel check (any tile exceeding its station's mean or max
+            threshold fails the capture). The gate, state, tick, source, and pixel checks are independent
+            verdicts — a gate failure skips the others; state, tick, source, and pixel are always all computed
+            and all printed once the gate holds. Every verdict
             prints one line naming its station, tick, and outcome.
 
             Exit codes: 0 every capture held every verdict, 1 at least one verdict failed, 2 a usage

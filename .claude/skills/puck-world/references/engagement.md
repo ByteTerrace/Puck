@@ -230,8 +230,16 @@ every tick carries the ray. A rule reads the hit as
 is refused for it at compile time. `world.screens` echoes `input:<destination>`
 and the mapping the presentation publishes for the row (named by its source
 instance, at its image's extent) per screen, and `body.channels` echoes the
-seat's ray and hits. No machine reads a mapped pixel yet; the `rendering` skill
-owns the mapping itself.
+seat's ray and hits. A machine reads the hit as a light gun: the fold aims each
+screen application's pad (`MachinePadState.Pointer`, a `MachinePointer` in
+1/65536 fractions of the output) with `WorldEngagement.Aim`, which maps the
+applied body's `SourceRay` through the same `WorldScreenMappings.Normalized`
+mapping, cached per row, and leaves the gun off for no ray, a miss, the bezel or
+a non-`Simulation` screen. So the gun reaches a machine only while the seat holds
+an application onto the screen (mirrored is enough), and its trigger is a kit
+`pad` button. The Humble brick puts the aimed pixel's brightness on its infrared
+receive line (`LightGunComponent`); the advanced brick ignores the pointer. The
+`rendering` skill owns the mapping itself.
 
 ## `Dissolve` — three outcomes, no repair
 
@@ -259,8 +267,9 @@ and addon read pump and before machine stepping, visits EVERY live body once:
 3. For each member: the own-body member routes nowhere (the avatar's own
    integration in `WorldBody.Advance` IS its delivery, which the latch just
    enabled); a screen member masks `body.EngagedIntent` by `Reach`, translates
-   through the kit's compiled pad map, and merges into the screen's pad
-   (`MachinePadState.Merge`: buttons OR, sticks sum+clamp); a body member appends
+   through the kit's compiled pad map, aims the pad's light gun (`Aim`, above),
+   and merges into the screen's pad (`MachinePadState.Merge`: buttons OR, sticks
+   sum+clamp, the first on-screen pointer wins); a body member appends
    a `BodyRouteContribution(TargetBody, Principal, Intent)`.
 
 `body.EngagedIntent` is captured on EVERY `WorldBody.Advance` call, so it is
@@ -353,7 +362,10 @@ read `WorldEngagement.PlayersOn(screenIndex)`,
 membership). `body.channels` prints an
 `applications=<target>[/<kit>](mask=0x…),…` segment ahead of the per-channel fold
 breakdown; the own-body member is listed like any other, so its ABSENCE (capture)
-is legible rather than inferred.
+is legible rather than inferred. `screen.state` ends its engagement segment with
+`gun=off` or `gun=(<x>, <y>)`, the tick's merged aim as source fractions
+(`WorldEngagement.PointerOn`), the same numbers `body.channels` prints for the
+hit.
 
 ## Verifying
 

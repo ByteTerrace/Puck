@@ -283,8 +283,8 @@ P5 is complete. P8 extended the manifest: each pass entry records its
 interface hash, and the package carries its precompiled binaries.
 
 P7's gate spike has run its build-time half and its GPU half, the `binding`
-parity station. P10's steps 1 to 7 have landed, step 2's shared row regions
-included; step 8 remains. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
+parity station. P10 is complete: all eight of its steps have landed, step 2's
+shared row regions and step 8's field rows included. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
 lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
 `sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
 the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
@@ -527,9 +527,13 @@ buffers live
 where `GpuResidency.RingMemory` says: in the device-local aperture
 (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, counted under
 `memory.<backend>`) on a discrete adapter that exposes one, and in host memory
-on unified memory. The one state-shaped path that reaches the GPU is the
-physics field lattice, mirrored on the client by `WorldClientFieldLattice` and
-uploaded by `WorldFieldEmitter` one field per produced frame.
+on unified memory. State reaches the GPU through the state mirror alone. A
+bound row reaches a pass through the row regions P10 adds, and the physics
+field lattice is a row like any other: the client's state view keeps the
+field cells each snapshot carries (`WorldDocumentStateView.ApplyFieldCells`),
+a pass binds a field row to an array as `state.<field>`, and `WorldFieldEmitter`
+bakes each height field's brick from the same mirror slot, uploading one field
+per produced frame through the brick pool's staged region.
 
 P11's CPU half has landed. Its second half, P11b, runs beside P7b. The binding
 groups it waited on have landed: the overlay is a package on groups, and
@@ -1068,6 +1072,27 @@ casts the OS pointer through its seat's published camera with
 `IntentRayWireLawTests`, `PointerWorldRuleFactLawTests`,
 `WorldSeatViewportsLocateLawTests` and `SourcePointerCommandLawTests`.
 
+A machine reads the pointer as a light gun. `MachinePadState.Pointer` is a
+`MachinePointer`, off the screen or on it at an exact fraction of the output in
+1/65536 units, and it rides the one pad path every applied intent reaches a
+machine by: `WorldEngagement.FoldTick` aims each screen application's pad with
+`WorldEngagement.Aim`, which maps the applied body's ray through the row's
+`WorldScreenMappings.Normalized` mapping, the one the `$pointer:` read runs, and
+leaves the gun off for no ray, a miss, the bezel or a screen that is not
+`Simulation`. The Humble brick wires the gun, `LightGunComponent`, to its
+infrared receive line: a game reads RP bit 1 or a HuC IR window and sees light
+while the aim lands on a pixel the LCD shows at least half bright, and the
+gun's trigger is an ordinary kit-mapped button. The aim is snapshot state and
+the queued checkpoint carries it (`puck.queued-machine.v2`); the advanced brick
+has no light gun and ignores the pointer. `screen.state` echoes the tick's aim
+as `gun=`. The laws are the Humble battery's `light-gun` stage and
+`LightGunLawTests`, whose probe cartridge (`LightGunProbeCartridge`) draws a
+white and a black half and publishes what it senses: a lit aim reads light in
+the running program, a dark aim, a miss, no ray and no application read dark,
+and a recorded tape of pointer intents replays to the same machine state and
+state hash. No canary drives it: `puck.cartridge.v1` has no light read, so no
+authored cartridge a headless World boots can see the gun.
+
 Panes publish their mappings from the live renderer (P13b-1's pane half, P13b-3's
 host half and P13b-6). `WorldFramePresenter.PrepareGraph` ends with
 `WorldViewGraphHost.PublishPanes`, which writes one mapping per placement the
@@ -1109,17 +1134,34 @@ renders through `ViewStack` and is no instance of the live set. The laws are
 and the `view-screens` canary prints and holds each screen's mapping and a walk
 through each screen.
 
+Host passthrough runs on a windowed Windows host (P13b-4). The local user opens
+a pane's window capture with `source.passthrough open <instance>
+<windowTitle...>`, which only the host's own console may run as typed text, and
+the pane's published mapping then takes `Passthrough` with the local-user
+opener (`WorldViewGraphHost.OpenPassthrough`). The window pump offers every raw
+event to an `IWindowInputFilter` before anything else sees it, and the World's
+filter, `WorldSourcePassthrough`, hands it to `SourcePassthroughRouter` in
+`Puck.Input`, which hosts `SourceFocus`: pointer events over the pane reach the
+captured window at `SourcePassthrough.ToClient`'s client point, a click focuses
+it, keys and text follow focus, every release goes where its press went, and the
+chord returns focus to the game. `ToClient` maps into the captured frame, whose
+client area sits inside it at an offset, and gives the point in the window's own
+coordinates, DPI included. `Win32PassthroughWindow`, which a window capture's
+feed supplies, sends the window messages. A source whose pane is no longer
+published is revoked: its window hears the release of what it holds, and focus
+returns to the game. The laws are
+`SourcePassthroughRouterLawTests`,
+`WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+and `Win32PassthroughWindowTests`.
+
 P13b owes the rest. The screen shading still reads its own bezel constant,
 which `WorldScreenMappings` mirrors, and the GPU does not yet draw from the
-mapping. No host feeds
-`SourceFocus` or delivers a focused source's input to its window, and no machine
-reads a mapped pointer. The pointer's pane hover reads the picker on the CPU
-(P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`, outlined by the
-overlay's `CursorWriter` and echoed as `world.view.panes`' `hovered=`); GPU
-picking follows P4. The
-recorded Windows run, a click reaching a captured editor window at the mapped
-point and the chord returning input to the game, belongs to P13b-4 and is
-[deferred to the end](#deferred-to-the-end).
+mapping. The pointer's pane hover reads the
+picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
+outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
+`hovered=`); GPU picking follows P4. The recorded Windows run, a click reaching
+a captured editor window at the mapped point and the chord returning input to
+the game, is [deferred to the end](#deferred-to-the-end).
 
 Rendering today runs the default render graph `WorldRootGraph` composes,
 through `RenderGraphRuntime` behind `RenderGraphRuntimeNode`, the host's render
@@ -1177,8 +1219,9 @@ exists. The machine, view, probe and
 session arms stay typed because each names a document row; an emulator joins as
 a machine engine. External content resolves through `WorldCaptureGate`, so a
 capture shows its declared fill and never its pixels. That covers every frame of
-an offscreen host, which serves captures and `puck parity`, and a windowed frame
-from a `world.screenshot` for two frames after. A deterministic source states the
+an offscreen host, which serves captures and `puck parity`, and every windowed
+frame produced while a capture is armed on the render graph, which renders every
+tainted instance the capture reads again (P12b-5). A deterministic source states the
 exact image it shows (`IImageSourceReference`) for the exact verdict
 `ImageSourceVerdict`, which the `uploaded-sources` canary applies to a
 test-pattern source instance before composition.
@@ -1200,10 +1243,11 @@ their tier is chosen per device at run time and the HUD reads them outside the
 set, and hand out counted leases. A fill converts as soon as a screen shows or
 a HUD frame names an external source, because a converter's graph builds off
 the frame thread; a camera source's descriptor states the extent its seat's
-sensor delivers, requested until the device negotiates one. The emulators still publish through
-`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, from the machine source
-instance's producer, and hand the screen a bare handle; P12b-6 moves them onto
-a region. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
+sensor delivers, requested until the device negotiates one. A machine's video
+output is an uploaded source too (`MachineVideoSourceUpload`): once per completed
+tick it writes the output's latest frame into the instance's region, RGBA8 or an
+indexed image and its palette, and the instance converts it once however many
+screens show it. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
 through Media Foundation (`Win32MediaFoundationCameraService`). Linux registers
 null capture services, and there is no POSIX file-descriptor import or
 external semaphore.
@@ -2686,8 +2730,9 @@ registered; and a law that a document swap retires what only the previous
 manifest registered, keeps the index of what both register, never answers a
 lookup with a retired slot, and allocates nothing once warm.
 
-P9 is complete. The materials a program bakes at build join the mirror with
-P10, when the field lattice becomes a region kind. The
+P9 is complete, and the colors a program bakes at build (a creation palette's,
+a height field's, a text screen's ink) read through the mirror too, since P10's
+step 8. The
 `WorldStateMirrorLawTests`, `WorldPresentationManifestLawTests`,
 `WorldPresentationLookupLawTests`, `WorldStateReadRoutingLawTests`,
 `SeatRouteDeliveryLawTests`, `WorldWheelRingsLawTests`,
@@ -2718,8 +2763,8 @@ the declared element format refuses the same way. Scalars land in pass parameter
 blocks at the interface's offsets and arrays in shared regions keyed by row and
 element format, so two passes reading one row the same way read one copy, a row
 bound once is indexed per instance, and the field lattice becomes a region kind
-so a field has one truth on the GPU rather than a second path beside
-`WorldClientFieldLattice`. The frame group carries the deterministic tick from
+so a field reaches a pass through the state mirror rather than a second path
+beside it. The frame group carries the deterministic tick from
 the source the shader push-constant vocabulary already specifies, ticks divided
 by the engine rate over the requested rate, refused unless that rate divides the
 engine rate exactly. A capture records the tick its regions were refreshed at,
@@ -2892,8 +2937,30 @@ follow it.
    `GraphParameterStatementTests` (the round trip). The `pipeline-package`
    canary captures the package's high variant and an undeclared tier's
    fallback.
-8. The field lattice as a region kind, replacing `WorldClientFieldLattice`'s
-   second path, and the materials a program bakes join the mirror.
+8. Done: the field lattice as a region kind, and the materials a program
+   bakes join the mirror. A field row is a row the mirror reads like any other:
+   the client's state view keeps the cells each snapshot carries
+   (`WorldDocumentStateView.ApplyFieldCells`, cell `i` of the row being lattice
+   cell `i`: z, then layer, then x) and names the rows they moved, which the
+   mirror re-reads (`WorldStateMirror.RefreshRows`). `WorldBoundRow` presents a
+   field row as one element per lattice cell, so a pass binds it to a float
+   array as `state.<field>` through the same row region every bound row takes,
+   and the presentation manifest registers each height field's row whole, the
+   slot `WorldFieldEmitter` bakes its brick from. The client's separate mirror
+   of the lattice is gone. The colors a program or a decal bakes (a creation
+   palette's surface, bounce, weathering and inset colors, a height field's
+   color, a text screen's ink) are manifest surfaces, registered in the mirror
+   at install and resolved through it (`WorldBakedColors`); a bound one moving
+   rebuilds the program or rebakes the decal. The brick itself is still baked
+   on the CPU and uploaded through the brick pool, since baking it from the
+   region on the GPU belongs to the SDF engine. Laws:
+   `WorldFieldRowLawTests` (a field row reads the delivered cells and a
+   snapshot moving them reads it once, with no allocation once warm; the row
+   reaches a pass's region with the same bytes under all three residency
+   policies; a height field's brick is baked from its row slot once per move;
+   baked colors are in the mirror at install and followed through it) and
+   `PipelineOverrideLawTests.Parameters` (the load gate binds a field row to an
+   array only as long as its lattice).
 
 ### P11 — The frame graph document and nested views
 
@@ -3265,25 +3332,54 @@ except step 8.
    the WARP case orders its write by the fence rather than a CPU wait, and the
    WARP reader reads the pattern. A recorded camera run on both backends on real hardware is
    [deferred to the end](#deferred-to-the-end).
-5. The capture gate over the graph. Can land now, after step 2. The gate
-   reads the capture armed on `RenderGraphRuntime` rather than
-   `WorldRenderProbe`'s pending path, and its fixed `HoldFrames` gives way to
-   taint. An instance whose latest output read an unfilled external source is
-   tainted, and a capture frame renders every tainted instance it reads again,
-   whatever its divisor, before the root composes, so a slow view cannot carry
-   external pixels into a capture. Laws: a view at divisor 8 that read a
+5. The capture gate over the graph. Landed. The gate fills while a capture is
+   pending on `RenderGraphRuntime` (`PendingCapturePath`, which the binder reads
+   through its `Runtime`), read at each resolve, and its fixed hold is gone:
+   an image resolved unfilled is handed out tainted
+   (`RenderGraphExternalOutput.Tainted`, set by `WorldCaptureGate.Resolve` and
+   the probe source), an external producer that read one hands out tainted
+   outputs (`RenderGraphExternalReads.Tainted`; each `SdfEngineNode` view output
+   keeps the taint of the frame that last rendered it, `SdfViewOutput.Tainted`),
+   and a graph instance whose latest render bound one is tainted. A frame
+   begun with a capture pending names every tainted instance the captured
+   instance reads, directly or through others, in `RenderGraphFrame.Rerender`,
+   which the scheduler renders whatever its divisor and the budget, before the
+   instances reading it, so a slow view cannot carry external pixels into a
+   capture; a capture moves to its instance, a graph instance or an external
+   producer, only over untainted inputs, and `UnservedCaptureReasonOf` names the
+   tainted read a capture frame could not clear.
+   Laws in `RenderGraphRuntimeLawTests.Taint`: a view at divisor 8 that read a
    camera renders again in the capture frame and reads the fill; a capture
-   never reads a tainted output. `puck parity` is unchanged, since an
+   never reads a tainted output; a capture of an external producer over a
+   tainted read waits and names it. `SdfEngineNodeLeaseLawTests` holds a view
+   output to the taint of the frame that last rendered it.
+   `RenderGraphSchedulerLawTests` pins the
+   rerender's due and budget rules. `puck parity` is unchanged, since an
    offscreen host always fills.
-6. Machine outputs are sources, with the exact verdict. Can land now after
-   step 3; it edits `Puck.GamingBricks`. `QueuedMachineWorker.PublishFrame`'s
-   own upload gives way to a region the machine source writes (RGBA or palette
-   indexed, deterministic, tick cadence); the machine arm stays typed because
-   it names a document row. The P12b canary captures a machine source and the
-   test pattern at their instances, before composition, and holds each exactly
-   to its `IImageSourceReference` through `ImageSourceVerdict` on both
-   backends. Canaries: `instrument-clock-source`, the new canary and the
-   emulator batteries.
+6. Machine outputs are sources, with the exact verdict. Landed. A machine
+   source instance is an uploaded source: `IMachineVideoOutput` declares its
+   `Format` (`R8G8B8A8Unorm`, or `Indexed8` with its palette) and writes its
+   latest complete frame into a region's planes (`WriteFrame`), and
+   `MachineVideoSourceUpload` (`Puck.Hosting`), registered under
+   `source.machine`, writes it once per completed tick, deterministic content,
+   and states the image it last wrote through the CPU reference of the
+   conversion its format names. The machine arm stays typed because it names a
+   document row. `QueuedMachineWorker.PublishFrame`, the output's image-view
+   handle and device-loss retirement, `PublishedMachineOutputs` and the binder's
+   machine producer are gone. A `captures` row may name a `screen`, capturing
+   the source instance that screen reads, and a landed capture of a source
+   instance whose source states its image records the exact verdict against it
+   (`WorldCaptureManifestEntry.SourceVerdict`, narrated on stderr), which
+   `puck parity compare` reads as `SOURCE-OK` or `SOURCE-FAILED`. The
+   `uploaded-sources` canary captures the test pattern at its instance and a
+   tune instrument's machine source through its screen, and holds each to its
+   reference on both backends. Laws: `RenderGraphRuntimeLawTests.AMachineSource*`
+   (one region write and one conversion per completed tick however many screens
+   read it, in both formats; the reference is the output's frame through its
+   palette, and the verdict fails on one changed pixel),
+   `WorldCaptureSchedulerLawTests.ACaptureOfASourceThatStatesItsImageRecordsTheExactVerdictAndOneDifferingPixelFailsIt`,
+   and the emulator batteries' `queued-host-frame-publication` stage (whole
+   frames, header untouched, monotonic sequences while the worker runs).
 7. Probe outputs and view exports are sources. Can land now, after step 4. A
    probe kernel's output ring is an imported external source, and a view
    export (a Direct3D 12 image a Direct3D 11 probe reads) signals the same
@@ -3330,7 +3426,8 @@ A mapped point goes to one of three destinations:
 | Presentation | Hover and highlight | GPU picking is allowed |
 
 When a source has keyboard focus, keys go to it instead of the game, and a
-reserved chord always returns focus to the game. Host passthrough exists only
+reserved chord always returns focus to the game; with no source focused, the
+chord's Escape is the game's. Host passthrough exists only
 for a source the local user opened on their own machine. A world document can
 never create a passthrough source or send it input, whether it was authored
 locally or arrived through a portal. A hit on a rendered source continues as a
@@ -3347,8 +3444,9 @@ pick through a portal reaches the nested world's surface.
 **Depends on:** P11 and P12.
 
 **P13b, the rest of the package.** Panes and screens publish live mappings and
-the hit walk runs over the live instance set through both, but `SourceFocus` is
-called only by its laws and the screen shading reads its own bezel constant.
+the hit walk runs over the live instance set through both, and a windowed host
+routes a passthrough source's input to its window, but the screen shading reads
+its own bezel constant.
 Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
 
 1. Mappings are published from the live renderer, landed in both halves. The
@@ -3410,7 +3508,17 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      the wire and the tape bit for bit and an absent one costs one byte; a
      three-tick burst gives three snapshots, each carrying the ray; and
      `Locate` answers what the cursor's own mapping answered.
-   A machine that reads a pointer, a light gun, is still owed.
+   - A machine reads the pointer as a light gun, landed:
+     `MachinePadState.Pointer` carries the aim through the one pad path,
+     `WorldEngagement.Aim` maps the applied body's ray through the row's
+     normalized mapping, and the Humble brick's `LightGunComponent` puts the
+     aimed LCD pixel's brightness on the infrared receive line. Laws: the
+     `light-gun` Post stage and `LightGunLawTests` (a lit aim changes the
+     running program's state, a dark aim, a miss, no ray and no application
+     read dark, and a tape replays to the same machine state and hash).
+     Remaining: a `puck.cartridge.v1` light read, with its measured cost
+     weight, so an authored cartridge can see the gun and a headless canary
+     can drive one.
 3. The presentation destination. The CPU half has landed: the World host
    publishes its panes to its `SourcePanePicker` every frame, from the
    placements `place` draws, and the drawn cursor's feed (`WorldCursorFeed`)
@@ -3428,11 +3536,44 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
    frame allocates nothing in the host, the picker or the writer). The
    outline is checked on the CPU only; no capture has inspected it on either
    backend. GPU picking follows P4's visibility record.
-4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
-   `SourceFocus`, a focused capture source's window receives pointer and key
-   events at `SourcePassthrough.ToClient`'s client coordinates, and the chord
-   returns focus to the game. Its check, the recorded Windows run on real
-   hardware, is [deferred to the end](#deferred-to-the-end).
+4. Host passthrough, landed on Windows except its recorded run.
+   - Only the local user opens a passthrough source: `source.passthrough open
+     <instance> <windowTitle...>` runs only from the host's own console as typed
+     text, and opens a shown pane's window capture once the captured window's
+     title contains the title typed. The pane's mapping then takes
+     `Passthrough` with the local-user opener. The validator still refuses a
+     document's `Passthrough` route, and no document path reaches the verb or
+     the router.
+   - `SourcePassthroughRouter` in `Puck.Input` hosts `SourceFocus` for the
+     window pump, through `IWindowInputFilter`, a held capability the pump offers
+     every raw event before the observers and the command router. Pointer
+     events over the pane reach the captured window at
+     `SourcePassthrough.ToClient`'s client point, a click focuses it, keys and
+     text go to it instead of the game, each release goes where its press went,
+     and the chord returns focus to the game.
+   - `ToClient` maps into the captured frame, whose client area sits inside it,
+     and gives the point in the window's own coordinates, DPI included.
+     `Win32PassthroughWindow`, which a window capture's feed supplies
+     (`INativeImageCaptureFeed.Window`), sends the window messages in order:
+     pointer messages to the deepest child under the point, held by the child
+     a button was pressed on until the last release, and each key as
+     `WM_KEYDOWN`, its text as `WM_CHAR` and `WM_KEYUP` to the window thread's
+     keyboard focus.
+   - A source whose pane is no longer published is revoked before the next
+     event routes, and closing a source revokes it: its window hears the
+     release of every key and button it holds, and focus returns to the game.
+   - Laws: `SourcePassthroughRouterLawTests` (a focused source's pointer and
+     keys reach a fake window at the mapped client point, the chord returns
+     focus and is consumed while a source holds it, its Escape reaches the game
+     while none does, a document-declared source never focuses, releases follow
+     presses, a source whose pane is withdrawn stops taking keys and is
+     released), `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+     and `Win32PassthroughWindowTests` (a hidden Puck window reads the pointer
+     events back at their client points; a recording window reads a key's
+     message sequence, Alt's system messages, each modifier side, and a drag
+     held by the child it was pressed on).
+   - Its check, the recorded Windows run on real hardware, is
+     [deferred to the end](#deferred-to-the-end).
 5. The GPU draws from the mapping. Waits on P7b-20. The screen shading reads
    each screen's UV layout, crop, letterbox and warp inset from the published
    mapping instead of `CrtBezel` in `shade/sdf-environment.hlsli`, and its mirror,

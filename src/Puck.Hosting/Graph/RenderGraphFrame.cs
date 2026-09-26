@@ -43,6 +43,11 @@ public readonly record struct RenderGraphSourceState(string Instance, ImageSourc
 /// rendered at.</param>
 /// <param name="Sources">What each source instance's producer declares this frame, at most one entry per source, or
 /// <see langword="null"/> for none. A source with no entry is not rendered.</param>
+/// <param name="Rerender">The instances the frame renders again whatever their refresh and the pass-pixel budget,
+/// whenever it demands them, or <see langword="null"/> for none: a capture frame's tainted instances, whose latest output
+/// read external content the capture gate did not fill, so no capture reads an image a slower instance rendered from it.
+/// A source is never named, since it renders at its producer's cadence and its consumers resolve its image as they
+/// bind it.</param>
 public readonly record struct RenderGraphFrame(
     long Index,
     int DisplayWidth,
@@ -52,5 +57,6 @@ public readonly record struct RenderGraphFrame(
     IReadOnlyList<RenderGraphFootprint> Footprints,
     long PassPixelBudget = 0,
     long Tick = 0,
-    IReadOnlyList<RenderGraphSourceState>? Sources = null
+    IReadOnlyList<RenderGraphSourceState>? Sources = null,
+    IReadOnlyList<string>? Rerender = null
 );

@@ -101,10 +101,10 @@ public sealed class CreationDomainParentLawTests {
             scale: scale
         ).Emit(
             builder: builder,
-            definition: Definition(
+            colors: WorldBakedColors.Of(definition: Definition(
                 creation: creation,
                 scale: scale
-            ),
+            )),
             maxPlacementScale: scale,
             probeWorstCase: false,
             slotBase: 0
