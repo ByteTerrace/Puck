@@ -7,11 +7,11 @@ namespace Puck.Shaders;
 /// <summary>
 /// The echo pass of an interface: a compute pass that reads every word of every block member through the generated
 /// declarations and compares it with the sentinel <see cref="WriteSentinels"/> writes at that word, so a generator or
-/// packing mistake shows on a real driver. It reads each group's block in set order: a pushed interface's one block, or a
-/// document pass's frame group block and then its pass block. Pixel <c>i</c> of its one-row output image is green when
-/// every word of the <c>i</c>th member (padding excluded) reads back exactly, and red otherwise.
-/// <para>A pushed interface's echo declares its output itself, at set 0, binding 0, register <c>u0</c>. A document
-/// pass's echo writes through its own output port named <see cref="OutputName"/>, which its interface declares.</para>
+/// packing mistake shows on a real driver. It reads each group's block in set order, such as a document pass's frame
+/// group block and then its pass block. Pixel <c>i</c> of its one-row output image is green when every word of the
+/// <c>i</c>th member (padding excluded) reads back exactly, and red otherwise.
+/// <para>The echo writes through its own output port named <see cref="OutputName"/>, which its interface
+/// declares.</para>
 /// <para>The source is a pure function of the interface: the same interface generates the same bytes, with LF line
 /// endings, on every host.</para>
 /// </summary>
@@ -61,7 +61,7 @@ public static class ShaderInterfaceEcho {
         }
     }
     /// <summary>Returns the interface an echo of <paramref name="shaderInterface"/> compiles against: the interface itself
-    /// when it is pushed or already declares its <see cref="OutputName"/> port, and otherwise the same members followed
+    /// when it already declares its <see cref="OutputName"/> port, and otherwise the same members followed
     /// by a pass-group storage image named <see cref="OutputName"/>. The blocks are the interface's either way, so an echo
     /// of any document pass holds its blocks to their layout.</summary>
     /// <param name="shaderInterface">The interface.</param>
@@ -70,14 +70,11 @@ public static class ShaderInterfaceEcho {
     public static ShaderInterface InterfaceOf(ShaderInterface shaderInterface) {
         ArgumentNullException.ThrowIfNull(argument: shaderInterface);
 
-        if (
-            (shaderInterface.PushConstants is not null) ||
-            shaderInterface.Members.Any(predicate: static member => string.Equals(
-                a: member.Name,
-                b: OutputName,
-                comparisonType: StringComparison.Ordinal
-            ))
-        ) {
+        if (shaderInterface.Members.Any(predicate: static member => string.Equals(
+            a: member.Name,
+            b: OutputName,
+            comparisonType: StringComparison.Ordinal
+        ))) {
             return shaderInterface;
         }
 
@@ -96,8 +93,7 @@ public static class ShaderInterfaceEcho {
     /// <param name="shaderInterface">The interface.</param>
     /// <returns>The HLSL text.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shaderInterface"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The interface holds no block, a pushed interface binds set 0, binding 0,
-    /// where its echo writes its verdicts, or an interface that binds groups declares no storage image named
+    /// <exception cref="ArgumentException">The interface holds no block, or declares no storage image named
     /// <see cref="OutputName"/>.</exception>
     public static string Generate(ShaderInterface shaderInterface) {
         var groups = BlockGroups(shaderInterface: shaderInterface);
@@ -119,17 +115,6 @@ public static class ShaderInterfaceEcho {
             line: "",
             text: text
         );
-
-        if (shaderInterface.PushConstants is not null) {
-            Line(
-                line: $"[[vk::binding(0, 0)]] [[vk::image_format(\"rgba8\")]] RWTexture2D<float4> {OutputName} : register(u0, space0);",
-                text: text
-            );
-            Line(
-                line: "",
-                text: text
-            );
-        }
 
         Line(
             line: "[numthreads(8, 8, 1)]",
@@ -202,14 +187,7 @@ public static class ShaderInterfaceEcho {
                 paramName: nameof(shaderInterface)
             );
         }
-        if (shaderInterface.PushConstants is not null) {
-            if (layout.Bindings.Any(predicate: static binding => (!binding.Pushed && (binding.Set == 0) && (binding.Binding == 0)))) {
-                throw new ArgumentException(
-                    message: $"Shader interface '{shaderInterface.Name}' binds set 0, binding 0, where the echo pass writes its verdicts.",
-                    paramName: nameof(shaderInterface)
-                );
-            }
-        } else if (!shaderInterface.Members.Any(predicate: static member => (
+        if (!shaderInterface.Members.Any(predicate: static member => (
             (member.Kind == ShaderInterfaceMemberKind.StorageImage) &&
             string.Equals(
                 a: member.Name,

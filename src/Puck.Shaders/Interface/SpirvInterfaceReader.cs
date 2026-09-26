@@ -9,8 +9,8 @@ namespace Puck.Shaders;
 /// from the module's own decorations: <c>DescriptorSet</c> and <c>Binding</c> on each variable, <c>Offset</c> on each
 /// constant block member, and the <c>OpName</c> and <c>OpMemberName</c> debug names DXC emits. A variable in the
 /// <c>PushConstant</c> storage class carries no set or binding and is reported as a pushed
-/// <see cref="GpuBindingKind.ConstantBuffer"/> block (<see cref="ShaderInterfaceBinding.Pushed"/>) at set 0, binding 0,
-/// whether it is a pushed frame block or a pushed index. A buffer's element stride
+/// <see cref="GpuBindingKind.ConstantBuffer"/> block (<see cref="ShaderInterfaceBinding.Pushed"/>) at set 0, binding 0:
+/// a pushed index. A buffer's element stride
 /// (<see cref="ShaderInterfaceBinding.ElementStride"/>) is the <c>ArrayStride</c> of the runtime array its block ends in.
 /// Pure C#, no GPU and no native tool; it follows the Khronos SPIR-V specification's instruction encoding and nothing
 /// else.
@@ -180,7 +180,7 @@ public static class SpirvInterfaceReader {
     private static uint ElementStride(Module module, uint structId) {
         var members = module.Types[structId].Operands;
 
-        return (
+        return ((
             (members.Length != 0) &&
             module.Types.TryGetValue(
                 key: members[^1],
@@ -189,7 +189,7 @@ public static class SpirvInterfaceReader {
             (last.Kind == OpTypeRuntimeArray)
         )
             ? module.ArrayStrides.GetValueOrDefault(key: members[^1])
-            : 0;
+            : 0);
     }
     private static GpuBindingKind Kind(Module module, uint typeId, uint storageClass, string name) {
         var (kind, operands) = module.Types[typeId];

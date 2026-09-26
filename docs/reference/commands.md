@@ -634,6 +634,17 @@ pointer maps through its pane's mapping, and the hit walk starts from them.
 `world.view.panes` echoes each mapping and, given a display point, what the
 picker and the walk answer there, down to the walk's last hit.
 
+The picker answers hover, the `Presentation` destination, on the CPU. Each
+frame the drawn cursor's feed asks it which pane lies under the pointer's
+display point, whenever the pointer rests on the window, is not steering the
+camera, and the world's cursor policy shows it, whether or not the pointer
+sits inside its own seat's viewport. The overlay outlines the hovered pane's
+rect in the accent hue, the cursor's hover label names the pane when no HUD
+panel is under it, and `world.view.panes` ends with the hovered pane
+(`hovered=pane<i> <kind>:<instance> pixel <x>,<y>`, or `hovered=none`). A
+letterbox bar or a pane the layout does not show hovers nothing, and nothing
+the hover decides reaches simulation state. GPU picking is not built.
+
 Every screen in the world publishes a mapping too. The World's screen binder
 builds each row's mapping through `WorldScreenMappings.Of`, with the screen
 glass's bezel as its warp, and names it by the instance its source is: a

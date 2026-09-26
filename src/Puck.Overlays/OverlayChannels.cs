@@ -138,8 +138,10 @@ public sealed class OverlayChannelLeases {
     private const int ConsoleTitleChars = ConsolePanelWriter.TitleChars;
     // Cursor, per VISIBLE seat — the ring, the center dot, and the hover label, all inside the seat's one clip
     // scope. Text is the label at its character clamp (CursorWriter.MaxLabelChars — the SAME constant the writer
-    // clamps its label WriteText call to, so the two can never drift apart). No panel.
+    // clamps its label WriteText call to, so the two can never drift apart). No panel. Once per frame, unclipped, the
+    // hovered pane's outline (CursorWriter.PaneOutlineElements, the writer's own count).
     private const int CursorElementsPerSeat = 3;
+    private const int CursorPaneElements = CursorWriter.PaneOutlineElements;
     private const int CursorTextWordsPerSeat = CursorWriter.MaxLabelChars;
     // Hud — the AUTHORED-HUD reservation, computed in the constructor from the host's OverlayCapacity: world-scope
     // panels x elements PLUS the seat-scope budget (per-seat panels x elements x seats). Each authored element's
@@ -249,7 +251,7 @@ public sealed class OverlayChannelLeases {
             (seats, (markerElementsPerSeat * seats), 0, 0),
             (0, ToastElements, 1, ToastTextWords),
             (hudPanels, ((hudWorldElements + hudSeatElements) * HudElementCost), hudPanels, ((hudWorldElements + hudSeatElements) * HudTextWordCost)),
-            (seats, (((UInt128)CursorElementsPerSeat) * seats), 0, (((UInt128)CursorTextWordsPerSeat) * seats)),
+            (seats, ((((UInt128)CursorElementsPerSeat) * seats) + CursorPaneElements), 0, (((UInt128)CursorTextWordsPerSeat) * seats)),
             (seats, (wheelElementsPerSeat * seats), 0, (wheelTextWordsPerSeat * seats)),
         ];
 

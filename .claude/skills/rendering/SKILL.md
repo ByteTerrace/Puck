@@ -849,10 +849,8 @@ named `uint` padding that Direct3D 12 needs to land on them. The one value a
 pipeline pushes is an index (`ShaderInterface.PushesIndex`, read as
 `pushedIndex.index`: a 4-byte Vulkan push range, and a Direct3D 12 root
 constant at `b0` in space 4); the SDF brick baker is the one shipped
-interface that declares it, pushing its slice ordinal per dispatch.
-`ShaderInterface.PushConstants` still declares a pushed frame block, but
-`ShaderInterfaceLayout.PipelineLayout` refuses it, so no pipeline is created
-from one; bind the frame group instead. A buffer member with an element type is
+interface that declares it, pushing its slice ordinal per dispatch. A group's
+block is always bound, never pushed. A buffer member with an element type is
 a structured buffer (never a three-component element), and every buffer binding
 carries the stride each bytecode reflects (`ShaderInterfaceBinding.ElementStride`;
 a raw buffer is 4 in SPIR-V and 0 in DXIL), so `Mismatch` holds a module to
@@ -1134,7 +1132,16 @@ for is no pane. The pane pointer reads its instance's published mapping
 rendered source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`)
 up to `RenderGraphInstanceSet.NestingDepth`; `WorldViewGraphHost.Walk` runs it
 over the runtime's live set, with each view's seat camera and each pane's
-paired camera, and `world.view.panes` echoes the panes, a pick and a walk.
+paired camera, and `world.view.panes` echoes the panes, a pick, a walk and the
+hovered pane. The picker is the presentation destination's one hover: each
+frame `WorldCursorFeed` asks `WorldViewGraphHost.Hover` for the pointer's
+display point (cleared by the next `PublishPanes`), and the hovered pane's rect
+rides `OverlayCursorFrame.HoveredPane` to `CursorWriter`, which outlines it with
+four accent `WriteRect` edges charged to the cursor channel
+(`CursorWriter.PaneOutlineElements` in `OverlayChannelLeases`), records the
+overlay kernel already draws. A new hover reader asks the host, never a second hit test, and a
+steady hovered frame allocates nothing in the host, picker or writer
+(`WorldViewPaneMappingLawTests`). GPU picking follows P4.
 Screens publish through the binder: `WorldScreenMappingSet`
 (`src/Puck.World.Client/Sources`) builds each row's `WorldScreenMappings.Of`
 mapping named by its source instance's handle (`WorldSourceInstances`, a view's

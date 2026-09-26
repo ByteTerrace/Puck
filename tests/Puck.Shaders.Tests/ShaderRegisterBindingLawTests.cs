@@ -21,6 +21,7 @@ public sealed partial class ShaderRegisterBindingLawTests {
         "ShaderInclude",
         "VertexShaderSource",
     ];
+
     [GeneratedRegex(pattern: @"vk::binding\(\s*(?<binding>\d+)\s*(?:,\s*(?<set>\d+)\s*)?\)")]
     private static partial Regex BindingAttribute();
     [GeneratedRegex(pattern: @"^\s*#\s*define\s+(?<name>\w+)\s+(?<value>\w+)\s*$")]
@@ -309,7 +310,7 @@ public sealed partial class ShaderRegisterBindingLawTests {
     }
 
     [Fact]
-    public void Every_shipped_register_equals_its_binding_except_the_recorded_violations() {
+    public void Every_shipped_register_equals_its_binding() {
         var root = RepositoryPaths.RequireRoot();
         var checkedFiles = 0;
         var violations = new List<string>();
