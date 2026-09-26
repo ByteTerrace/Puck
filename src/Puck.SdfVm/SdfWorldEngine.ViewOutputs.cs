@@ -13,7 +13,9 @@ namespace Puck.SdfVm;
 /// <param name="Height">The image's height in pixels.</param>
 /// <param name="Identity">The image's identity, unique across every engine in the process, which releases the
 /// acquisition.</param>
-public readonly record struct SdfViewOutput(nint ImageHandle, nint ImageViewHandle, uint Width, uint Height, int Identity);
+/// <param name="Tainted">Whether the frame that last rendered the view bound screen sources holding external content the
+/// capture gate did not fill (<see cref="SdfWorldEngine.ScreenSourcesTainted"/>).</param>
+public readonly record struct SdfViewOutput(nint ImageHandle, nint ImageViewHandle, uint Width, uint Height, int Identity, bool Tainted);
 public sealed partial class SdfWorldEngine {
     // The debug-name detail of each view slot's descriptor sets and output image.
     private static readonly string[] ViewDetails = ["view0", "view1", "view2", "view3", "view4"];
@@ -35,6 +37,10 @@ public sealed partial class SdfWorldEngine {
     // Whether this frame replaced a view's output, whose new image holds nothing yet, so the frame renders.
     private bool m_viewOutputReplaced;
 
+    /// <summary>Gets or sets whether the screen sources the next submitted frame binds hold external content the capture
+    /// gate did not fill. Each view output the frame renders records it, and keeps it until a later frame renders that
+    /// view again (<see cref="SdfViewOutput.Tainted"/>).</summary>
+    public bool ScreenSourcesTainted { get; set; }
     /// <summary>Gets the acquisitions of the engine's view outputs not yet released, over its current outputs and every
     /// replaced output it still keeps.</summary>
     public int ViewOutputHolds {
@@ -280,6 +286,8 @@ public sealed partial class SdfWorldEngine {
         public bool Initialized { get; set; }
         // Whether a submitted frame has rendered into it.
         public bool Rendered { get; set; }
+        // Whether the frame that last rendered into it bound tainted screen sources.
+        public bool Tainted { get; set; }
         // The ring frame count when it was replaced.
         public ulong RetiredAt { get; set; }
 
@@ -290,6 +298,7 @@ public sealed partial class SdfWorldEngine {
             Identity: Identity,
             ImageHandle: Image.ImageHandle,
             ImageViewHandle: Image.ImageViewHandle,
+            Tainted: Tainted,
             Width: Width
         );
     }

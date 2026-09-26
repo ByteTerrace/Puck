@@ -24,6 +24,8 @@ public sealed partial class RenderGraphRuntime {
 
         var edges = m_set.Reads[index];
 
+        m_taintedReads[index] = null;
+
         if (edges.Count == 0) {
             return null;
         }
@@ -39,6 +41,11 @@ public sealed partial class RenderGraphRuntime {
             if (m_producers[producer] is { } external) {
                 if (external.TryAcquireOutput(output: out var output)) {
                     m_producerTainted[producer] = output.Tainted;
+                    NoteTaint(
+                        index: index,
+                        producer: m_set.Instances[producer].Name,
+                        tainted: output.Tainted
+                    );
                     reads.Bind(
                         image: output.Image,
                         index: position,
@@ -66,6 +73,11 @@ public sealed partial class RenderGraphRuntime {
             );
 
             if (completed.Image.IsSameDeviceImage) {
+                NoteTaint(
+                    index: index,
+                    producer: m_set.Instances[producer].Name,
+                    tainted: completed.Tainted
+                );
                 reads.Bind(
                     image: completed.Image,
                     index: position,

@@ -112,8 +112,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     // Each graph instance's producer whose stand-in its latest render bound, or null when every image input it bound was a
     // completed output; a capture of the instance waits until it is null.
     private string?[] m_standInReads;
-    // Each graph instance's producer whose tainted output its latest render bound, or null when every image and buffer it
-    // bound was untainted; a capture of the instance waits until it is null.
+    // Each instance's producer whose tainted output its latest render bound (a graph instance's inputs, an external
+    // producer's reads), or null when everything it bound was untainted; a capture of the instance waits until it is null.
     private string?[] m_taintedReads;
     // The instance the capture armed on the runtime reads.
     private int m_captureInstance;
@@ -897,7 +897,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         if (m_producers[index] is { } producer) {
             return ((producer.NotReadyReason is { } reason)
                 ? $"the instance '{name}' has produced no output: {reason}"
-                : null);
+                : TaintReasonOf(
+                    index: index,
+                    name: name
+                ));
         }
         if (m_sources[index]?.Fault is { } fault) {
             return $"the instance '{name}' has produced no output: {fault}";
@@ -913,11 +916,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             return $"the instance '{name}' has rendered only over a stand-in for '{producerName}', which has produced no output";
         }
 
-        // Outside a capture frame a tainted instance is expected; the capture frame renders it again, so only one it could
-        // not clear keeps a capture waiting.
-        return ((m_capturing && (m_taintedReads[index] is { } tainting))
-            ? $"the instance '{name}' has rendered only over external content from '{tainting}' that the capture gate did not fill"
-            : null);
+        return TaintReasonOf(
+            index: index,
+            name: name
+        );
     }
     // Arms a capture of one instance on the runtime's one slot.
     private void Arm(int index, FrameCaptureRequest request) {
@@ -1029,7 +1031,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
                 if (
                     (index == m_captureInstance) &&
-                    !(reads?.Tainted ?? false)
+                    (m_taintedReads[index] is null)
                 ) {
                     m_capture.Forward(target: producer);
                 }

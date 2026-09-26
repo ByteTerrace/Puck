@@ -537,6 +537,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             TimeDelta: context.FrameDeltaSeconds
         );
 
+        m_engine!.ScreenSourcesTainted = (m_reads?.Tainted ?? false);
+
         if (m_screenSources is null) {
             m_engine!.SubmitFrame(frame: frame);
         } else {

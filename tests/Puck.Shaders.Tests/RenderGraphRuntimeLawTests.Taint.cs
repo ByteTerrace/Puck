@@ -172,6 +172,75 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Null(@object: runtime.UnservedCaptureReason);
         }
     }
+    // An external producer whose reads are tainted serves no capture, and the runtime names the read that holds it, so a
+    // host polling readiness never calls it ready over external content.
+    [Fact]
+    public void ACaptureOfAnExternalProducerOverATaintedReadWaitsAndNamesTheRead() {
+        var gpu = new FakePipelineGpu();
+        var camera = new FakeCamera(gpu: gpu);
+        var recorders = new Recorders();
+        var producers = new Producers(gpu: gpu);
+
+        producers.Register(registry: recorders.Registry);
+        recorders.Registry.RegisterProducer(
+            factory: _ => camera,
+            package: Feed
+        );
+
+        var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                new RenderGraphInstance(
+                    ExternalPackage: Feed,
+                    Name: "camera",
+                    Passes: 1,
+                    Reads: [],
+                    Refresh: RenderGraphRefresh.EveryFrame
+                ),
+                External(name: "world") with {
+                    Reads = [new RenderGraphRead(Producer: "camera")],
+                }
+            ),
+            "world",
+            null!,
+            null!
+        );
+        var frames = new Frames(
+            footprints: [new RenderGraphFootprint(Consumer: "world", Height: 1.0, Producer: "camera", Width: 1.0)],
+            roots: [new RenderGraphRoot(Height: 1.0, Instance: "world", Width: 1.0)],
+            runtime: runtime
+        );
+
+        using (runtime) {
+            var world = producers.Only;
+
+            camera.Filling = static () => false;
+            frames.Settle();
+
+            var request = CaptureRequest();
+
+            runtime.RequestCapture(request: request);
+            frames.Next(count: 3);
+            Assert.Equal(
+                actual: (request.Completion.IsCompleted, world.Captured.Count),
+                expected: (false, 0)
+            );
+            Assert.Equal(
+                actual: runtime.UnservedCaptureReason,
+                expected: "the instance 'world' has rendered only over external content from 'camera' that the capture gate did not fill"
+            );
+
+            // The first frame whose read is the camera's fill serves it.
+            camera.Filling = static () => true;
+            _ = frames.Next();
+            Assert.Equal(
+                actual: (request.Completion.IsCompleted, Assert.Single(collection: world.Captured)),
+                expected: (true, request.Path)
+            );
+            Assert.Null(@object: runtime.UnservedCaptureReason);
+        }
+    }
 
     /// <summary>A camera handed out through a capture gate: its own image, tainted, or while the gate fills its fill,
     /// untainted. Both are same-device images, so a graph instance binds them.</summary>

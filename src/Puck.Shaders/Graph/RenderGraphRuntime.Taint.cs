@@ -27,6 +27,12 @@ public sealed partial class RenderGraphRuntime {
             m_taintedReads[index] = producer;
         }
     }
+    // Why a capture of an instance waits on taint, or null when it does not. Outside a capture frame a tainted instance is
+    // expected; the capture frame renders it again, so only a taint that frame could not clear keeps a capture waiting.
+    private string? TaintReasonOf(int index, string name) => ((m_capturing && (m_taintedReads[index] is { } tainting))
+        ? $"the instance '{name}' has rendered only over external content from '{tainting}' that the capture gate did not fill"
+        : null
+    );
     // Whether an instance's latest output is tainted: an external producer's as its latest acquisition said, a graph
     // instance's as its latest render bound.
     private bool IsTainted(int index) => ((m_producers[index] is not null)

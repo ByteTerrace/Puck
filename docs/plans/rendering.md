@@ -3317,17 +3317,22 @@ except step 8.
    an image resolved unfilled is handed out tainted
    (`RenderGraphExternalOutput.Tainted`, set by `WorldCaptureGate.Resolve` and
    the probe source), an external producer that read one hands out tainted
-   outputs (`RenderGraphExternalReads.Tainted`; `SdfEngineNode` for every view),
+   outputs (`RenderGraphExternalReads.Tainted`; each `SdfEngineNode` view output
+   keeps the taint of the frame that last rendered it, `SdfViewOutput.Tainted`),
    and a graph instance whose latest render bound one is tainted. A frame
    begun with a capture pending names every tainted instance the captured
    instance reads, directly or through others, in `RenderGraphFrame.Rerender`,
    which the scheduler renders whatever its divisor and the budget, before the
    instances reading it, so a slow view cannot carry external pixels into a
-   capture; a capture moves to its instance only over untainted inputs, and
-   `UnservedCaptureReasonOf` names a taint the capture frame could not clear.
+   capture; a capture moves to its instance, a graph instance or an external
+   producer, only over untainted inputs, and `UnservedCaptureReasonOf` names the
+   tainted read a capture frame could not clear.
    Laws in `RenderGraphRuntimeLawTests.Taint`: a view at divisor 8 that read a
    camera renders again in the capture frame and reads the fill; a capture
-   never reads a tainted output. `RenderGraphSchedulerLawTests` pins the
+   never reads a tainted output; a capture of an external producer over a
+   tainted read waits and names it. `SdfEngineNodeLeaseLawTests` holds a view
+   output to the taint of the frame that last rendered it.
+   `RenderGraphSchedulerLawTests` pins the
    rerender's due and budget rules. `puck parity` is unchanged, since an
    offscreen host always fills.
 6. Machine outputs are sources, with the exact verdict. Landed. A machine

@@ -317,10 +317,14 @@ These are one-line cautions; the owning pages hold the derivations.
   (`RenderGraphExternalOutput.Tainted`). An instance whose latest render bound a
   tainted image is tainted (an external producer that read one hands out
   tainted outputs: `RenderGraphExternalReads.Tainted`, which `SdfEngineNode`
-  carries onto every view output), a frame begun with a capture pending names
+  hands the engine as `SdfWorldEngine.ScreenSourcesTainted`, and each view
+  output keeps the taint of the frame that last rendered it,
+  `SdfViewOutput.Tainted`), a frame begun with a capture pending names
   every tainted instance the captured one reads to render again
   (`RenderGraphFrame.Rerender`, due and admitted whatever its refresh and the
-  budget), and a capture moves to its instance only over untainted inputs. A
+  budget), and a capture moves to its instance only over untainted inputs,
+  a graph instance's or an external producer's, whose blocking read
+  `UnservedCaptureReasonOf` names. A
   new producer of external content states its taint; never hold the gate open
   for a count of frames. An uploaded producer registers an upload for its source package
   (`RenderGraphPackageRecorders.RegisterSource`), never an external producer:

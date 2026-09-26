@@ -19,8 +19,6 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
 
     // Created on the first acquisition, so a lease allocates nothing per frame.
     private Action<int>? m_releaseOutput;
-    // Whether the latest submitted frame read a tainted source, so every view output it rendered is tainted.
-    private bool m_outputTainted;
 
     /// <summary>Gets the acquisitions of the node's view outputs not yet released, over its current engine and every
     /// replaced engine still held.</summary>
@@ -162,7 +160,7 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
                 Release: (m_releaseOutput ??= ReleaseOutput),
                 ReleaseToken: acquired.Identity
             ),
-            Tainted: m_outputTainted
+            Tainted: acquired.Tainted
         );
 
         return true;
@@ -178,8 +176,8 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
     /// <param name="reads">The latest completed image of each source instance the world's instance reads: each screen
     /// that reads one binds its image, and the node takes its lease once however many screens show it, holding it until
     /// the frame-ring slot that samples it has passed its fence. When any is tainted
-    /// (<see cref="RenderGraphExternalReads.Tainted"/>), every view output the submitted frame renders is handed out
-    /// tainted.</param>
+    /// (<see cref="RenderGraphExternalReads.Tainted"/>), each view output the submitted frame renders is handed out
+    /// tainted until a later frame renders that view again.</param>
     /// <returns><see langword="true"/> when the frame was submitted; <see langword="false"/> while the engine's
     /// pipelines build or the context resolves no device.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is
@@ -201,13 +199,7 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
         m_reads = reads;
 
         try {
-            var produced = !ProduceFrame(context: in context).IsEmpty;
-
-            if (produced) {
-                m_outputTainted = (reads?.Tainted ?? false);
-            }
-
-            return produced;
+            return !ProduceFrame(context: in context).IsEmpty;
         } finally {
             m_reads = null;
         }
