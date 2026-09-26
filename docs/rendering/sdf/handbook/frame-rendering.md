@@ -1,8 +1,8 @@
 # SDF frame rendering
 
-One world frame turns an SDF program into pixels through a fixed sequence of
-compute passes. Upload and sky filling precede culling; the mask pass builds
-per-tile instance visibility before the beam and primary marches; surface,
+One world frame turns an SDF program and opaque meshes into pixels through a
+fixed sequence of compute and graphics passes. Upload and sky filling precede
+culling; the mask pass builds per-tile instance visibility before the beam and primary marches; surface,
 ambient, and view passes finish each view's image. The sequence exposes
 where the GPU work goes, why mask-first processing keeps beam cost tied to nearby
 instances, how render-scale tiers trade resolution for frame budget, and how two
@@ -12,10 +12,11 @@ frames stay in flight without stalling the whole device.
 
 A world frame records its passes into one command buffer. Upload and sky filling
 precede culling; camera traversal, surface evaluation, AO and lighting have separate dispatches.
-Every pass after the upload runs once per view, into that view's own output image:
+Every pass after the upload runs once per view; the sequence finishes that
+view's own output image:
 
 ```text
-   upload → sky → mask → beam → cull-args → primary → surface → ambient → views
+   upload → sky → mask → beam → cull-args → mesh → primary → surface → ambient → views
 ```
 
 These are the engine's `world.counters gpu` pass labels — the columns its per-pass work
@@ -47,9 +48,18 @@ indirect-dispatch arguments for primary, surface, ambient and views. A parallel 
 finds the bounding rectangle of surviving tiles. Empty margins outside that
 rectangle launch no threads; holes inside it remain in the dispatch.
 
+**mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
+each, into the mesh visibility target at the engine extent: per pixel the ray parameter the march records,
+the draw plus one, and an octahedral normal turned toward the camera, kept nearest by a reversed-Z depth
+test. A frame with no mesh draws records nothing here. Primary bounds its march by that ray parameter
+and keeps an SDF surface only when it is strictly nearer, so a mesh pixel becomes a mesh visibility
+record; while a mesh draws, cull-args covers the whole view, and a mesh pixel shades with neutral shadows
+and ambient occlusion.
+
 **primary** (`sdf-world-primary.comp.hlsl`) traces camera rays from their tile's entry
-depth and records accepted hits. **surface** computes geometric normals and
-curvature. **ambient** evaluates contact occlusion along those normals.
+depth, raised to the mesh projection's near plane when necessary, and records
+accepted hits. **surface** computes geometric normals and curvature.
+**ambient** evaluates contact occlusion along those normals.
 **views** reads these results and computes materials, lighting, shadows and
 volumes. Compare all four passes when measuring per-pixel field cost: moving
 work between kernels can reduce register pressure but adds buffer traffic.
@@ -190,8 +200,9 @@ program is written only by a program upload, into a region sized to the live
 program and grown by half again when a larger one arrives. Mesh draws (`SdfFrame.MeshDraws`)
 are packed into the mesh region (`SdfMeshRegion`: one 80-byte record a draw,
 then each distinct mesh's positions and indices once) only when the frame hands
-a different draw list; the region is created by the first frame that draws a
-mesh and grown by half again when a list outgrows it. No pass reads it yet.
+a different draw list. The region starts with one draw record at engine construction
+and grows by half again when a list outgrows it. The mesh pass reads its triangles,
+and primary reads the winning mesh's material.
 
 A host-baked brick reaches the brick pool through a staged region whose
 destination is the pool itself. Since the carve bake also writes the pool, each

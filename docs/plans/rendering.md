@@ -41,8 +41,8 @@ node, the SDF world engine, its views, and the unified overlay all report
 through that model, and `world.counters`, `pipeline.inspect`, and
 `puck counters` read it. The SDF engine builds its pipelines off the frame
 thread and keeps a persistent pipeline cache per device. Neutral vertex and
-draw infrastructure exists to extend. SDF traversal and shading passes exist
-with no shared mesh visibility path. The live authoring and compiler foundation
+draw infrastructure exists to extend. SDF traversal and rasterized meshes share
+opaque visibility. The live authoring and compiler foundation
 exists, with its relocatable package form and the committed per-instance
 overrides that survive a save and a relaunch, so P5's persistence is complete.
 
@@ -283,8 +283,8 @@ P5 is complete. P8 extended the manifest: each pass entry records its
 interface hash, and the package carries its precompiled binaries.
 
 P7's gate spike has run its build-time half and its GPU half, the `binding`
-parity station. P10's steps 1 to 7 have landed, step 2's shared row regions
-included; step 8 remains. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
+parity station. P10 is complete: all eight of its steps have landed, step 2's
+shared row regions and step 8's field rows included. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
 lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
 `sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
 the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
@@ -527,9 +527,13 @@ buffers live
 where `GpuResidency.RingMemory` says: in the device-local aperture
 (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, counted under
 `memory.<backend>`) on a discrete adapter that exposes one, and in host memory
-on unified memory. The one state-shaped path that reaches the GPU is the
-physics field lattice, mirrored on the client by `WorldClientFieldLattice` and
-uploaded by `WorldFieldEmitter` one field per produced frame.
+on unified memory. State reaches the GPU through the state mirror alone. A
+bound row reaches a pass through the row regions P10 adds, and the physics
+field lattice is a row like any other: the client's state view keeps the
+field cells each snapshot carries (`WorldDocumentStateView.ApplyFieldCells`),
+a pass binds a field row to an array as `state.<field>`, and `WorldFieldEmitter`
+bakes each height field's brick from the same mirror slot, uploading one field
+per produced frame through the brick pool's staged region.
 
 P11's CPU half has landed. Its second half, P11b, runs beside P7b. The binding
 groups it waited on have landed: the overlay is a package on groups, and
@@ -931,7 +935,7 @@ decision and its rejected alternatives are in
 It deletes the SDF engine's composite, and it has landed.
 
 - 10a: each view renders through its own dispatch set. `Record` records sky,
-  mask, beam, cull-args, primary, surface, ambient and views once per view, one
+  mask, beam, cull-args, mesh, primary, surface, ambient and views once per view, one
   deep in Z, and the view's views set names its view (the world block's
   `viewBase`). `viewportCount` stays every view of the frame, so the
   per-view buffer strides do not move. `sdf-cull-args` reduces its own view's
@@ -1109,17 +1113,34 @@ renders through `ViewStack` and is no instance of the live set. The laws are
 and the `view-screens` canary prints and holds each screen's mapping and a walk
 through each screen.
 
+Host passthrough runs on a windowed Windows host (P13b-4). The local user opens
+a pane's window capture with `source.passthrough open <instance>
+<windowTitle...>`, which only the host's own console may run as typed text, and
+the pane's published mapping then takes `Passthrough` with the local-user
+opener (`WorldViewGraphHost.OpenPassthrough`). The window pump offers every raw
+event to an `IWindowInputFilter` before anything else sees it, and the World's
+filter, `WorldSourcePassthrough`, hands it to `SourcePassthroughRouter` in
+`Puck.Input`, which hosts `SourceFocus`: pointer events over the pane reach the
+captured window at `SourcePassthrough.ToClient`'s client point, a click focuses
+it, keys and text follow focus, every release goes where its press went, and the
+chord returns focus to the game. `ToClient` maps into the captured frame, whose
+client area sits inside it at an offset, and gives the point in the window's own
+coordinates, DPI included. `Win32PassthroughWindow`, which a window capture's
+feed supplies, sends the window messages. A source whose pane is no longer
+published is revoked: its window hears the release of what it holds, and focus
+returns to the game. The laws are
+`SourcePassthroughRouterLawTests`,
+`WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+and `Win32PassthroughWindowTests`.
+
 P13b owes the rest. The screen shading still reads its own bezel constant,
 which `WorldScreenMappings` mirrors, and the GPU does not yet draw from the
-mapping. No host feeds
-`SourceFocus` or delivers a focused source's input to its window, and no machine
-reads a mapped pointer. The pointer's pane hover reads the picker on the CPU
-(P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`, outlined by the
-overlay's `CursorWriter` and echoed as `world.view.panes`' `hovered=`); GPU
-picking follows P4. The
-recorded Windows run, a click reaching a captured editor window at the mapped
-point and the chord returning input to the game, belongs to P13b-4 and is
-[deferred to the end](#deferred-to-the-end).
+mapping. No machine reads a mapped pointer. The pointer's pane hover reads the
+picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
+outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
+`hovered=`); GPU picking follows P4. The recorded Windows run, a click reaching
+a captured editor window at the mapped point and the chord returning input to
+the game, is [deferred to the end](#deferred-to-the-end).
 
 Rendering today runs the default render graph `WorldRootGraph` composes,
 through `RenderGraphRuntime` behind `RenderGraphRuntimeNode`, the host's render
@@ -1727,14 +1748,16 @@ promised speedup; expected visible objects verified, not only cross-backend
 agreement; `puck search -M 0` finding no reader of the retired hit-record
 layout outside the test reference.
 
-**Build sequence.** The first six commits have landed; the rest follow P7b's
-device-bound services and its one recorder, which have landed, and the SDF
-engine's groups (P7b-20).
+**Build sequence.** The first eight steps have landed, including the raster pass
+and its canaries, on P7b's device-bound services, shared recorder and SDF engine
+groups. The remaining work follows below.
 
 1. P4-0, landed, the depth clear value: a depth attachment names the depth it
    clears to in `GpuDepthAttachment.ClearDepth` (1 by default, refused outside
    [0, 1]), and both backends clear to it, so a reversed-Z attachment clears to
    0. The value belongs to the render pass's attachment, not to the recorder.
+   A depth image is created from that attachment (`IGpuImageFactory.CreateDepth`),
+   so its optimized clear on Direct3D 12 is the same statement.
 2. P4-1a, landed, the shared record: `sdf-visibility.hlsli` declares visibility
    (ray parameter; identity, with its kind in bits 31 and 30 — background, SDF
    or mesh — and a source index; material; flags), coverage (terminal radius,
@@ -1788,19 +1811,45 @@ engine's groups (P7b-20).
    mirror, yaw and position), and `WorldFramePresenter` hands them to
    `SdfFrame.MeshDraws`. The SDF engine uploads them into its mesh region
    (P7b-17): a `GpuRegion` in `SdfMeshRegion`'s raw layout, an 80-byte record a
-   draw naming its matrix, material and mesh (first index, index count, base
-   vertex), then each distinct mesh's positions and indices once, copied by
-   the device's region-copy pipeline under the staged policy. `world.budget`
+   draw naming its matrix, material and mesh (the word its first index sits at,
+   its index count, the word its first position sits at), then each distinct
+   mesh's positions and indices once, copied by the device's region-copy
+   pipeline under the staged policy. `world.budget`
    prints the bytes the region holds and the draws they cover.
    `PrototypeMeshLawTests` hold the round trip, the refusals and the
-   placement's draw. Open: the reader, P4-2c's raster pass; and meshes on
-   animated and attached stamps and in session views and neighbour worlds,
-   whose static emitters pass no draw list, which P4-2e owns.
-7. P4-2c, the raster pass and the bounded primary. It deletes
-   `SDF_MONOLITHIC_VIEWS`. Done when parity holds and the mesh fixtures of the
-   check above pass.
-8. P4-2d, the canaries: `sdf-mesh-visibility` and `sdf-mesh-motion` on both
-   backends against an analytic oracle.
+   placement's draw. Open: meshes on animated and attached stamps and in
+   session views and neighbour worlds, whose static emitters pass no draw list,
+   which P4-2e owns.
+7. P4-2c, landed, the raster pass and the bounded primary. The mesh pass
+   (`SdfMeshRasterPass`, the `mesh` ledger pass, recorded per view between
+   cull-args and primary) draws each `SdfMeshDraw` with one draw call, pulling
+   its triangles from the mesh region through the `sdf-mesh` interface: one set
+   per ring slot binding the viewport table and the region, the view and the
+   draw pushed as one index. It projects with `ViewProjection`'s reversed-Z
+   matrices read from the view's viewport row, culls nothing, and turns each
+   face normal toward the camera, so a mirrored copy needs no winding flip. The
+   target is an `RGBA32F` image at the engine extent that rests
+   shader-readable; the depth image is created from the pass's depth attachment
+   (`IGpuImageFactory.CreateDepth`), so Direct3D 12's optimized clear is the
+   attachment's 0. Primary reads the target, bounds its march, and keeps an SDF
+   hit only when strictly nearer, otherwise recording a mesh record (the draw as
+   its source, the draw's material, a coverage threshold of one); surface
+   writes the rasterized normal with neutral ambient occlusion, and views skips
+   the shadow march for a mesh pixel. While a frame draws a mesh (the world
+   block's `meshDraws`), cull-args covers the whole tile grid. The cadence
+   signature folds a mesh revision, `world.budget` prints the attachments'
+   bytes (20 a pixel), and region copies are ordered before compute, vertex
+   and fragment readers. `SDF_MONOLITHIC_VIEWS` is deleted with the views
+   branches only it compiled.
+8. P4-2d, landed, the canaries: `sdf-mesh-visibility` (a mesh in front of a
+   block, a block in front of a wider mesh, a mesh against the sky, and the
+   background; its discriminating leg boots the same world without meshes) and
+   `sdf-mesh-motion` (a mesh moved across the beam's tiles by a row edit; its
+   discriminating leg never moves it), on both backends.
+   `SdfMeshCanaryOracleLawTests` derives every region they judge from the
+   analytic oracle. The rest of the check above (an opening, equal-depth ties,
+   silhouettes, near-plane clipping, small and multiple viewports, reduced render
+   scale and resize) has no fixture yet.
 9. P4-2e, after P4-2c: meshes on animated and attached stamps, which the
    validator refuses today, and in session views and neighbour worlds, whose
    emitters then pass their draw lists.
@@ -1810,9 +1859,10 @@ engine's groups (P7b-20).
 **Decisions.** Meshes rasterize first, into a sampled `RGBA32F` target (ray
 parameter, draw id plus one, octahedral normal) and a reversed-Z `D32Float`
 depth cleared to 0, compared `Greater`, with an infinite far plane and the cone
-near distance (0.02) as the near plane. Primary traversal takes the smaller of
-its far bound and the mesh's ray parameter as its bound and skips the march when
-it starts beyond it. At equal depth the mesh wins; the SDF surface wins only
+near distance (0.02) as the near plane. Primary starts no earlier than its ray's
+intersection with that plane, ends at the nearest of the far distance, the tile's
+far bound and the mesh's ray parameter, and skips the march when
+it starts at or beyond it. At equal depth the mesh wins; the SDF surface wins only
 when strictly nearer. While a mesh draws, the cull arguments cover the full
 extent and the resolve runs over it, and the cadence signature includes the mesh
 draws. The compact record may move presentation pixels by at most one
@@ -1820,8 +1870,8 @@ least-significant bit; the state hash and the record's identity stay exact. Mesh
 pixels shade with neutral shadows and ambient occlusion until P6. P4 carries
 zero jitter and previous transforms, which P15 builds on. `world.budget` reports
 the mesh attachments' memory, about 41 MB at 1920×1080. The unbounded reference
-is the fixed-point law and the canary oracle, an unbounded fixed-point raycast
-beside analytic triangles. P4-2c deletes `SDF_MONOLITHIC_VIEWS`.
+is the fixed-point law and the canary oracle, a fixed-point raycast run to the
+far distance, never to a mesh, beside analytic triangles.
 
 **Depends on:** P3, landed. P4-2c onward follows P7b-7 to P7b-10, which have
 landed, and P7b-20, which follows P4-1. `sdf-world.hlsli` changes in P4 first;
@@ -2381,11 +2431,12 @@ Phase 3, the groups, follows phase 2:
     exactly as before, and never owns it. The engine's pipeline set loses its
     frame-upload pipeline. The engine also creates the mesh region: a
     `GpuRegion` holding `SdfFrame.MeshDraws` in `SdfMeshRegion`'s raw word
-    layout (an 80-byte record a draw: its row-vector matrix, material, first
-    index, index count and base vertex; then each distinct mesh's positions and
-    indices once), created by the first frame that draws a mesh, repacked only
-    when the draw list changes, owing only the words that differ, grown by half
-    again after the frame ring retires, and read by nothing until P4-2c. The
+    layout (an 80-byte record a draw: its row-vector matrix, material, the word
+    its first index sits at, index count and the word its first position sits at;
+    then each distinct mesh's positions and indices once), created with the engine
+    one record long, repacked only when the draw list changes, owing only the words
+    that differ, grown by half again after the frame ring retires, and read by the
+    mesh pass and primary (P4-2c). The
     engine admits one copy pool for all its regions with its own and reserves
     every region's sets in it at construction (`GpuRegionCopyPool`, a
     `GpuRegionCopySets` a region), whatever policy the device selects, whose
@@ -2657,8 +2708,9 @@ registered; and a law that a document swap retires what only the previous
 manifest registered, keeps the index of what both register, never answers a
 lookup with a retired slot, and allocates nothing once warm.
 
-P9 is complete. The materials a program bakes at build join the mirror with
-P10, when the field lattice becomes a region kind. The
+P9 is complete, and the colors a program bakes at build (a creation palette's,
+a height field's, a text screen's ink) read through the mirror too, since P10's
+step 8. The
 `WorldStateMirrorLawTests`, `WorldPresentationManifestLawTests`,
 `WorldPresentationLookupLawTests`, `WorldStateReadRoutingLawTests`,
 `SeatRouteDeliveryLawTests`, `WorldWheelRingsLawTests`,
@@ -2689,8 +2741,8 @@ the declared element format refuses the same way. Scalars land in pass parameter
 blocks at the interface's offsets and arrays in shared regions keyed by row and
 element format, so two passes reading one row the same way read one copy, a row
 bound once is indexed per instance, and the field lattice becomes a region kind
-so a field has one truth on the GPU rather than a second path beside
-`WorldClientFieldLattice`. The frame group carries the deterministic tick from
+so a field reaches a pass through the state mirror rather than a second path
+beside it. The frame group carries the deterministic tick from
 the source the shader push-constant vocabulary already specifies, ticks divided
 by the engine rate over the requested rate, refused unless that rate divides the
 engine rate exactly. A capture records the tick its regions were refreshed at,
@@ -2863,8 +2915,30 @@ follow it.
    `GraphParameterStatementTests` (the round trip). The `pipeline-package`
    canary captures the package's high variant and an undeclared tier's
    fallback.
-8. The field lattice as a region kind, replacing `WorldClientFieldLattice`'s
-   second path, and the materials a program bakes join the mirror.
+8. Done: the field lattice as a region kind, and the materials a program
+   bakes join the mirror. A field row is a row the mirror reads like any other:
+   the client's state view keeps the cells each snapshot carries
+   (`WorldDocumentStateView.ApplyFieldCells`, cell `i` of the row being lattice
+   cell `i`: z, then layer, then x) and names the rows they moved, which the
+   mirror re-reads (`WorldStateMirror.RefreshRows`). `WorldBoundRow` presents a
+   field row as one element per lattice cell, so a pass binds it to a float
+   array as `state.<field>` through the same row region every bound row takes,
+   and the presentation manifest registers each height field's row whole, the
+   slot `WorldFieldEmitter` bakes its brick from. The client's separate mirror
+   of the lattice is gone. The colors a program or a decal bakes (a creation
+   palette's surface, bounce, weathering and inset colors, a height field's
+   color, a text screen's ink) are manifest surfaces, registered in the mirror
+   at install and resolved through it (`WorldBakedColors`); a bound one moving
+   rebuilds the program or rebakes the decal. The brick itself is still baked
+   on the CPU and uploaded through the brick pool, since baking it from the
+   region on the GPU belongs to the SDF engine. Laws:
+   `WorldFieldRowLawTests` (a field row reads the delivered cells and a
+   snapshot moving them reads it once, with no allocation once warm; the row
+   reaches a pass's region with the same bytes under all three residency
+   policies; a height field's brick is baked from its row slot once per move;
+   baked colors are in the mirror at install and followed through it) and
+   `PipelineOverrideLawTests.Parameters` (the load gate binds a field row to an
+   array only as long as its lattice).
 
 ### P11 — The frame graph document and nested views
 
@@ -3316,7 +3390,8 @@ A mapped point goes to one of three destinations:
 | Presentation | Hover and highlight | GPU picking is allowed |
 
 When a source has keyboard focus, keys go to it instead of the game, and a
-reserved chord always returns focus to the game. Host passthrough exists only
+reserved chord always returns focus to the game; with no source focused, the
+chord's Escape is the game's. Host passthrough exists only
 for a source the local user opened on their own machine. A world document can
 never create a passthrough source or send it input, whether it was authored
 locally or arrived through a portal. A hit on a rendered source continues as a
@@ -3333,8 +3408,9 @@ pick through a portal reaches the nested world's surface.
 **Depends on:** P11 and P12.
 
 **P13b, the rest of the package.** Panes and screens publish live mappings and
-the hit walk runs over the live instance set through both, but `SourceFocus` is
-called only by its laws and the screen shading reads its own bezel constant.
+the hit walk runs over the live instance set through both, and a windowed host
+routes a passthrough source's input to its window, but the screen shading reads
+its own bezel constant.
 Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
 
 1. Mappings are published from the live renderer, landed in both halves. The
@@ -3414,11 +3490,44 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
    frame allocates nothing in the host, the picker or the writer). The
    outline is checked on the CPU only; no capture has inspected it on either
    backend. GPU picking follows P4's visibility record.
-4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
-   `SourceFocus`, a focused capture source's window receives pointer and key
-   events at `SourcePassthrough.ToClient`'s client coordinates, and the chord
-   returns focus to the game. Its check, the recorded Windows run on real
-   hardware, is [deferred to the end](#deferred-to-the-end).
+4. Host passthrough, landed on Windows except its recorded run.
+   - Only the local user opens a passthrough source: `source.passthrough open
+     <instance> <windowTitle...>` runs only from the host's own console as typed
+     text, and opens a shown pane's window capture once the captured window's
+     title contains the title typed. The pane's mapping then takes
+     `Passthrough` with the local-user opener. The validator still refuses a
+     document's `Passthrough` route, and no document path reaches the verb or
+     the router.
+   - `SourcePassthroughRouter` in `Puck.Input` hosts `SourceFocus` for the
+     window pump, through `IWindowInputFilter`, a held capability the pump offers
+     every raw event before the observers and the command router. Pointer
+     events over the pane reach the captured window at
+     `SourcePassthrough.ToClient`'s client point, a click focuses it, keys and
+     text go to it instead of the game, each release goes where its press went,
+     and the chord returns focus to the game.
+   - `ToClient` maps into the captured frame, whose client area sits inside it,
+     and gives the point in the window's own coordinates, DPI included.
+     `Win32PassthroughWindow`, which a window capture's feed supplies
+     (`INativeImageCaptureFeed.Window`), sends the window messages in order:
+     pointer messages to the deepest child under the point, held by the child
+     a button was pressed on until the last release, and each key as
+     `WM_KEYDOWN`, its text as `WM_CHAR` and `WM_KEYUP` to the window thread's
+     keyboard focus.
+   - A source whose pane is no longer published is revoked before the next
+     event routes, and closing a source revokes it: its window hears the
+     release of every key and button it holds, and focus returns to the game.
+   - Laws: `SourcePassthroughRouterLawTests` (a focused source's pointer and
+     keys reach a fake window at the mapped client point, the chord returns
+     focus and is consumed while a source holds it, its Escape reaches the game
+     while none does, a document-declared source never focuses, releases follow
+     presses, a source whose pane is withdrawn stops taking keys and is
+     released), `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+     and `Win32PassthroughWindowTests` (a hidden Puck window reads the pointer
+     events back at their client points; a recording window reads a key's
+     message sequence, Alt's system messages, each modifier side, and a drag
+     held by the child it was pressed on).
+   - Its check, the recorded Windows run on real hardware, is
+     [deferred to the end](#deferred-to-the-end).
 5. The GPU draws from the mapping. Waits on P7b-20. The screen shading reads
    each screen's UV layout, crop, letterbox and warp inset from the published
    mapping instead of `CrtBezel` in `sdf-world.hlsli`, and its mirror,
@@ -3774,9 +3883,9 @@ packaging, and compiled worlds in the runtime and delivery programme.
 ## Sequencing
 
 **Foundation.** P2, P3 and P5 are complete. P1a and P1b stay open beside the
-rest: neither blocks P4 or releasing the foundation. P4-0, P4-1a to P4-1c,
-P4-2a and P4-2b have landed; the SDF engine's groups (P7b-20), which P4-2c
-waited on, have landed too, and P4-2c joins P14-6. P6 follows P4.
+rest: neither blocks P4 or releasing the foundation. P4-0, P4-1a to P4-1c and
+P4-2a to P4-2d have landed; P4-2e and the visibility record's names remain. P6
+follows P4.
 Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
@@ -3814,8 +3923,8 @@ P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
 which have landed. It also follows P11b's graph wiring, because the rows it
 binds are `views.graphs` rows.
 
-The SDF engine's groups (P7b-20) and P12b-2 have landed, so the longest remaining
-chain now runs P11b-13, P14-5, then P14-6 (which P4-2c joins), P14-7 to P14-13,
+The SDF engine's groups (P7b-20), P12b-2 and P4-2c have landed, so the longest
+remaining chain now runs P11b-13, P14-5, then P14-6, P14-7 to P14-13,
 and ends with P15. P16 follows P14-10's float working targets, and drawing a
 bake (P17) comes before P6's choice between a bake and the field.
 

@@ -16,6 +16,8 @@ namespace Puck.SdfVm;
 /// named with an <c>RW</c> suffix for its writer, and a read-only member for its readers.</para>
 /// <para><see cref="BrickBake"/> serves the carve-bake baker: one pass set per brick slot binding that slot's request
 /// buffer and the brick pool, with the slice ordinal pushed per dispatch.</para>
+/// <para><see cref="Mesh"/> serves the mesh pass's graphics pipeline (<see cref="SdfMeshRasterPass"/>): one pass set per
+/// ring slot binding the viewport table and the mesh region, with the view and the draw pushed per draw call.</para>
 /// </summary>
 public static class SdfWorldInterfaces {
     /// <summary>The <see cref="World"/> pass-group value holding the engine extent in pixels: the largest a view renders,
@@ -37,6 +39,9 @@ public static class SdfWorldInterfaces {
     public const string SampleIndex = "sampleIndex";
     /// <summary>The <see cref="World"/> pass-group value naming the view the set's dispatches render.</summary>
     public const string ViewBase = "viewBase";
+    /// <summary>The <see cref="World"/> pass-group value holding the frame's mesh draws, or zero when no mesh draws: the
+    /// hit passes read the mesh visibility target only when it is non-zero, and cull-args then covers the whole extent.</summary>
+    public const string MeshDraws = "meshDraws";
     /// <summary>The program word stream.</summary>
     public const string ProgramWords = "sdfWords";
     /// <summary>The viewport table, six float4 rows per view.</summary>
@@ -75,6 +80,12 @@ public static class SdfWorldInterfaces {
     public const string BrickPool = "sdfBrickPool";
     /// <summary>The bounded-volume table.</summary>
     public const string Volumes = "sdfVolumes";
+    /// <summary>The mesh region (<see cref="SdfMeshRegion"/>'s raw layout) as a stream of words: the draw records, then
+    /// the positions and indices the mesh pass reads.</summary>
+    public const string MeshRegion = "sdfMeshRegion";
+    /// <summary>The mesh visibility target the mesh pass draws and the hit passes read: per pixel the ray parameter,
+    /// the draw index plus one (zero where no mesh covers it) and the octahedral normal.</summary>
+    public const string MeshVisibility = "meshVisibility";
     /// <summary>The glyph atlas.</summary>
     public const string GlyphAtlas = "sdfGlyphAtlas";
     /// <summary>The one nearest sampler the screen sources and the glyph atlas are sampled through.</summary>
@@ -85,6 +96,9 @@ public static class SdfWorldInterfaces {
     public const string BakeRequest = "bakeRequest";
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
     public const string BakePool = "brickPool";
+    /// <summary>The bit the view starts at in the index a <see cref="Mesh"/> draw call pushes; the bits below it name the
+    /// draw.</summary>
+    public const int MeshViewShift = 24;
     /// <summary>The directory, repository-relative, the kernels and their generated interface includes live in.</summary>
     public const string KernelDirectory = "src/Puck.SdfVm/Assets/Shaders/Sdf";
 
@@ -102,6 +116,7 @@ public static class SdfWorldInterfaces {
             Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
             Value(name: SampleIndex, type: ShaderValueType.Uint),
             Value(name: ViewBase, type: ShaderValueType.Uint),
+            Value(name: MeshDraws, type: ShaderValueType.Uint),
             Read(name: ProgramWords, element: ShaderValueType.Uint4),
             Read(name: Viewports, element: ShaderValueType.Float4),
             Read(name: DynamicTransforms, element: ShaderValueType.Float4),
@@ -126,6 +141,7 @@ public static class SdfWorldInterfaces {
             Read(name: DecalCells, element: ShaderValueType.Uint4),
             Read(name: BrickPool, element: ShaderValueType.Float),
             Read(name: Volumes, element: ShaderValueType.Float4),
+            Read(name: MeshRegion, element: ShaderValueType.Uint),
             .. Enumerable.Range(count: SdfWorldEngine.MaxScreenSurfaces, start: 0).Select(selector: static screen => ShaderInterfaceMember.SampledImage(
                 group: ShaderInterfaceGroup.Pass,
                 name: ScreenSource(screen: screen),
@@ -134,6 +150,11 @@ public static class SdfWorldInterfaces {
             ShaderInterfaceMember.SampledImage(
                 group: ShaderInterfaceGroup.Pass,
                 name: GlyphAtlas,
+                type: ShaderValueType.Float4
+            ),
+            ShaderInterfaceMember.SampledImage(
+                group: ShaderInterfaceGroup.Pass,
+                name: MeshVisibility,
                 type: ShaderValueType.Float4
             ),
             ShaderInterfaceMember.Sampler(
@@ -154,14 +175,28 @@ public static class SdfWorldInterfaces {
         name: "sdf-brick-bake",
         pushesIndex: true
     );
+    /// <summary>Gets the interface the mesh pass draws with: the viewport table and the mesh region, one set per ring slot,
+    /// and the index each draw call pushes, whose bits from <see cref="MeshViewShift"/> up name the view and whose bits
+    /// below it name the draw (<see cref="MeshPushedIndex"/>).</summary>
+    public static ShaderInterface Mesh { get; } = new(
+        members: [
+            Read(name: Viewports, element: ShaderValueType.Float4),
+            Read(name: MeshRegion, element: ShaderValueType.Uint),
+        ],
+        name: "sdf-mesh",
+        pushesIndex: true
+    );
     /// <summary>Gets the layout of <see cref="World"/>.</summary>
     public static ShaderInterfaceLayout WorldLayout => WorldParameters.Layout;
     /// <summary>Gets the layout of <see cref="BrickBake"/>.</summary>
     public static ShaderInterfaceLayout BrickBakeLayout { get; } = new(shaderInterface: BrickBake);
+    /// <summary>Gets the layout of <see cref="Mesh"/>.</summary>
+    public static ShaderInterfaceLayout MeshLayout { get; } = new(shaderInterface: Mesh);
     /// <summary>Gets each interface with the repository-relative path of the include generated from it.</summary>
     public static IReadOnlyList<(string Path, ShaderInterface Interface)> Includes { get; } = [
         (IncludePath(shaderInterface: World), World),
         (IncludePath(shaderInterface: BrickBake), BrickBake),
+        (IncludePath(shaderInterface: Mesh), Mesh),
     ];
 
     private static string IncludePath(ShaderInterface shaderInterface) =>
@@ -185,6 +220,13 @@ public static class SdfWorldInterfaces {
             name: name
         );
 
+    /// <summary>Returns the index a <see cref="Mesh"/> draw call pushes: the view from bit <see cref="MeshViewShift"/> up,
+    /// the draw below it.</summary>
+    /// <param name="view">The view the draw renders into.</param>
+    /// <param name="draw">The draw, below <see cref="SdfMeshRegion.MaxDraws"/>.</param>
+    /// <returns>The pushed index.</returns>
+    public static uint MeshPushedIndex(uint view, uint draw) =>
+        ((view << MeshViewShift) | draw);
     /// <summary>Returns the member name of a screen source: <c>screenSource</c> followed by its screen index.</summary>
     /// <param name="screen">The screen index, below <see cref="SdfWorldEngine.MaxScreenSurfaces"/>.</param>
     /// <returns>The member name.</returns>

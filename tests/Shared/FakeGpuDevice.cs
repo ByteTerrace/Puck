@@ -520,6 +520,12 @@ internal sealed class FakeGpuDevice :
     }
     IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
         Hit(key: "IGpuImageFactory.Create");
+        GpuImageUsages.ValidateCreate(
+            format: format,
+            height: height,
+            usage: usage,
+            width: width
+        );
 
         return Named(
             kind: GpuObjectKind.Image,
@@ -537,6 +543,29 @@ internal sealed class FakeGpuDevice :
         );
     }
 
+    IGpuImage IGpuImageFactory.CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
+        Hit(key: "IGpuImageFactory.CreateDepth");
+        GpuImageUsages.ValidateDepth(
+            attachment: in attachment,
+            height: height,
+            width: width
+        );
+
+        return Named(
+            kind: GpuObjectKind.Image,
+            name: in name,
+            resource: new Resource(
+                creation: Track(
+                    deviceLocal: true,
+                    deviceLocalBytes: ((((ulong)width) * height) * 4UL),
+                    kind: "image"
+                ),
+                gpu: this,
+                height: height,
+                width: width
+            )
+        );
+    }
     // Hands a created object to the device's naming, as a backend's creating members do, under the fake's fixed handle
     // for its kind.
     private Resource Named(Resource resource, GpuObjectKind kind, in GpuObjectName name) {

@@ -61,12 +61,12 @@ public static class WorldScreenTextDecal {
     }
 
     /// <summary>Bakes the authored lines into a decal frame against the resolved catalog font.</summary>
-    /// <param name="definition">The live definition a state-bound foreground/background resolves against.</param>
+    /// <param name="colors">The colors the bake resolves a state-bound foreground or background through.</param>
     /// <param name="text">The authored decal-text source (validated: the grid fits the engine budget).</param>
     /// <param name="catalog">The world's packed font catalog.</param>
     /// <returns>The baked frame, ready for <c>SdfWorldEngine.SetScreenDecal</c>.</returns>
-    public static SdfScreenDecalFrame Bake(WorldDefinition definition, WorldScreenSource.Text text, PackedFontAtlasCatalog catalog) {
-        ArgumentNullException.ThrowIfNull(definition);
+    public static SdfScreenDecalFrame Bake(WorldBakedColors colors, WorldScreenSource.Text text, PackedFontAtlasCatalog catalog) {
+        ArgumentNullException.ThrowIfNull(colors);
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(catalog);
 
@@ -106,13 +106,11 @@ public static class WorldScreenTextDecal {
             );
         }
 
-        var foreground = PackColor(rgb: WorldColor.Resolve(
-            definition: definition,
+        var foreground = PackColor(rgb: colors.Resolve(
             fallback: DefaultForeground,
             value: text.Foreground
         ));
-        var background = PackColor(rgb: WorldColor.Resolve(
-            definition: definition,
+        var background = PackColor(rgb: colors.Resolve(
             fallback: DefaultBackground,
             value: text.Background
         ));

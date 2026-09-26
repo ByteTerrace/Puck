@@ -13,6 +13,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     // frame publishes without allocating.
     private readonly Dictionary<string, SourceMapping> m_mappings = new(comparer: StringComparer.Ordinal);
     private readonly List<SourceMapping> m_panes = [];
+    // The instances the local user opened as passthrough sources.
+    private readonly HashSet<string> m_passthrough = new(comparer: StringComparer.Ordinal);
     private int m_displayHeight = 1;
     private int m_displayWidth = 1;
 
@@ -93,6 +95,22 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             panes: m_panes
         );
     }
+    /// <summary>Marks an instance as a passthrough source the local user opened: from the next
+    /// <see cref="PublishPanes"/>, the mapping of each pane showing it takes <see cref="SourceDestination.Passthrough"/>
+    /// with the <see cref="SourceOpener.LocalUser"/> opener. The host's local-user door is the only caller; nothing a
+    /// world document declares reaches it.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <exception cref="ArgumentException"><paramref name="instance"/> is <see langword="null"/>, empty or white
+    /// space.</exception>
+    public void OpenPassthrough(string instance) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: instance);
+
+        _ = m_passthrough.Add(item: instance);
+    }
+    /// <summary>Returns an instance's panes to the presentation destination from the next <see cref="PublishPanes"/>.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns><see langword="true"/> when the instance was a passthrough source.</returns>
+    public bool ClosePassthrough(string instance) => m_passthrough.Remove(item: instance);
     /// <summary>Forgets the hovered pane: the pointer left the display, or its presentation shows none.</summary>
     public void ClearHover() {
         m_hovered = null;
@@ -259,6 +277,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             Y: placement.Top
         );
         var source = set.Instances[index].Handle;
+        var destination = (m_passthrough.Contains(item: instance)
+            ? SourceDestination.Passthrough
+            : SourceDestination.Presentation
+        );
 
         if (
             !m_mappings.TryGetValue(
@@ -269,14 +291,21 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             (shown != region) ||
             (mapping.SourceWidth != row.Width) ||
             (mapping.SourceHeight != row.Height) ||
-            (mapping.Source != source)
+            (mapping.Source != source) ||
+            (mapping.Destination != destination)
         ) {
             mapping = SourceMapping.WholePane(
                 height: row.Height,
                 region: region,
                 source: source,
                 width: row.Width
-            );
+            ) with {
+                Destination = destination,
+                Opener = ((destination == SourceDestination.Passthrough)
+                    ? SourceOpener.LocalUser
+                    : SourceOpener.Document
+                ),
+            };
 
             // A pane with no area mid-transition shows nothing to map.
             if (!mapping.TryValidate(refusal: out _)) {

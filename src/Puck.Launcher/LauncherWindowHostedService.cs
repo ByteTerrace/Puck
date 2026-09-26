@@ -255,6 +255,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // this observer updates presentation state, while WindowInputMapper independently feeds their
                 // relative motion/buttons/wheel into command bindings. Resolved once: contributions never change.
                 _ = m_rootHostContext.HoldsCapability<IWindowInputObserver>(capability: out var windowInputObserver);
+                // An optional HELD root capability offered every raw event before the observer: an event it consumes
+                // (a key a focused passthrough source takes, for one) reaches neither the observer nor the router.
+                _ = m_rootHostContext.HoldsCapability<IWindowInputFilter>(capability: out var windowInputFilter);
                 // Physical truth for edge-reported window controls. Each frame reasserts held keys and mouse buttons
                 // in original press order, allowing a freshly-installed profile or modality to recover continuous
                 // channels without synthesizing a Started edge.
@@ -400,10 +403,14 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     NoteExternalClockContention(observedElectionGeneration: ref observedElectionGeneration);
 
                     while (inputSource.TryDequeueInput(inputEvent: out var windowInput)) {
+                        if (windowInputFilter?.Intercept(inputEvent: in windowInput) == true) {
+                            continue;
+                        }
+
                         var hasInputFocus = m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var inputFocus);
                         var wasInputActive = (hasInputFocus && inputFocus.IsActiveFor(deviceId: windowInput.DeviceId));
 
-                        // Hand the RAW event to the window input observer first, unconditionally (not focus-gated):
+                        // Hand the RAW event the filter left to the window input observer, unconditionally (not focus-gated):
                         // it captures presentation/session-only state (pointer drag, a console's typed keystrokes)
                         // that never touches CaptureTick/CommandSnapshot below — the focus gate a few lines down is
                         // what stops a captured keystroke from ALSO driving the avatar or firing a bound command

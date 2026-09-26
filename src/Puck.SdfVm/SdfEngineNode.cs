@@ -86,8 +86,11 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// <summary>Gets the bytes the engine allocates for its visibility records, or zero before engine initialization.</summary>
     public ulong VisibilityRecordBytes => (m_engine?.VisibilityRecordBytes ?? 0UL);
     /// <summary>Gets the bytes the engine's mesh region holds (<see cref="SdfWorldEngine.MeshRegionBytes"/>), or zero
-    /// before engine initialization and before a frame draws a mesh.</summary>
+    /// before engine initialization.</summary>
     public ulong MeshRegionBytes => (m_engine?.MeshRegionBytes ?? 0UL);
+    /// <summary>Gets the bytes the engine's mesh pass target and depth attachment hold
+    /// (<see cref="SdfWorldEngine.MeshAttachmentBytes"/>), or zero before engine initialization.</summary>
+    public ulong MeshAttachmentBytes => (m_engine?.MeshAttachmentBytes ?? 0UL);
     /// <summary>Gets the mesh draws of the last captured frame, the ones the mesh region holds once the frame
     /// renders.</summary>
     public int MeshDrawCount => (Volatile.Read(location: ref m_meshRegionDraws)?.Count ?? 0);
@@ -184,7 +187,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         m_deviceContext = gpuDevice;
         m_engine = m_pipelines.TryBuild(
-            construct: static (pipelines, regionCopy, inputs) => {
+            construct: static (pipelines, passes, inputs) => {
                 // The viewport CAPACITY: the first frame's count raised to the declared floor (the split-screen
                 // envelope — the engine itself renders each frame's actual Views.Count, validated against it).
                 if (inputs.Options.ViewportCapacity > SdfWorldEngine.MaxViewports) {
@@ -196,7 +199,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
                     height: inputs.Height,
                     options: inputs.Options,
                     pipelines: pipelines,
-                    regionCopy: regionCopy,
+                    meshRaster: passes.MeshRaster,
+                    regionCopy: passes.RegionCopy,
                     width: inputs.Width
                 );
             },

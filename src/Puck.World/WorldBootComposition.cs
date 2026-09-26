@@ -986,6 +986,10 @@ public static class WorldBootComposition {
             bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX),
             pipelines: sp.GetRequiredService<GpuPassPipelineCache>()
         ));
+        services.TryAddSingleton(implementationFactory: static sp => new SdfMeshRasterPass(
+            bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX),
+            pipelines: sp.GetRequiredService<GpuPassPipelineCache>()
+        ));
         services.TryAddSingleton<SdfWorldPipelineCache>();
         services.TryAddSingleton(implementationFactory: static sp => new GpuPipelineCacheStore(
             contentKey: sp.GetRequiredService<SdfWorldPipelineCache>().LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)).ContentKey(),
@@ -1355,6 +1359,21 @@ public static class WorldBootComposition {
             Instance: sp.GetRequiredService<WorldWindowInputObservers>(),
             IsHeld: true
         ));
+
+        // Host passthrough: the panes the local user opened as passthrough sources with source.passthrough, and the
+        // router the window pump offers every raw event to before the observers above, so a focused source's keys and
+        // the pointer over its pane reach its window instead of the game.
+        services.AddSingleton(implementationFactory: static sp => new WorldSourcePassthrough(
+            binder: sp.GetRequiredService<WorldScreenBinder>(),
+            graphs: sp.GetRequiredService<WorldViewGraphHost>(),
+            viewports: sp.GetRequiredService<WorldSeatViewports>()
+        ));
+        services.AddSingleton(implementationFactory: static sp => new HostCapabilityContribution(
+            CapabilityType: typeof(IWindowInputFilter),
+            Instance: sp.GetRequiredService<WorldSourcePassthrough>(),
+            IsHeld: true
+        ));
+        services.AddSingleton<ICommandModule, WorldPassthroughCommandModule>();
 
         // The authored world-scope AND player-scope HUD's STRUCTURE store (world panels reconciled from the
         // delivered definition on revision move; seat panels recomposed every tick from the roster + each joined

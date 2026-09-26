@@ -80,8 +80,10 @@ public sealed partial class SdfWorldEngine {
     // statics, whatever order the partial files are compiled in.
     internal static class PipelineLayouts {
         // Every per-view pipeline binds the sdf-world interface's groups, and the baker the sdf-brick-bake interface's, so
-        // one frame set and one views set per ring slot and view bind against any of the ten per-view pipelines.
+        // one frame set and one views set per ring slot and view bind against any of the ten per-view pipelines. The mesh
+        // pass draws with the sdf-mesh interface's: one set per ring slot, the view and draw pushed.
         internal static readonly GpuPipelineLayoutDescription World = SdfWorldInterfaces.WorldLayout.PipelineLayout(stages: GpuShaderStage.Compute);
+        internal static readonly GpuPipelineLayoutDescription Mesh = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment);
         internal static readonly GpuPipelineLayoutDescription BrickBake = SdfWorldInterfaces.BrickBakeLayout.PipelineLayout(stages: GpuShaderStage.Compute);
 
         // Indexed by the *PipelineIndex constants.

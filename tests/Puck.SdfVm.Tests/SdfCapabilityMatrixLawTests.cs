@@ -38,6 +38,7 @@ public sealed class SdfCapabilityMatrixLawTests {
         ["mask"] = "sdf.world mask",
         ["beam"] = "sdf.world beam",
         ["cull-args"] = "sdf.world cull arguments",
+        ["mesh"] = "sdf.world mesh, a raster pass writing the mesh visibility target primary is bounded by",
         ["primary"] = "sdf.world primary, dispatched indirectly, writing visibility version 0",
         ["surface"] = "sdf.world surface, visibility version 1",
         ["ambient"] = "sdf.world ambient, visibility version 2",
@@ -56,7 +57,6 @@ public sealed class SdfCapabilityMatrixLawTests {
         "grid overlay",
         "brick baking",
         "output image and export",
-        "mesh draws",
         "assembly and lifetime",
     ];
     private static readonly Row[] Matrix = [
@@ -268,12 +268,13 @@ public sealed class SdfCapabilityMatrixLawTests {
         ),
         new(
             Capability: "mesh draws",
-            Equivalent: "a P3 geometry pass over the shared visibility record",
-            Check: null,
+            Equivalent: "the sdf.world mesh pass, rasterizing the frame's draws into the mesh visibility target that bounds primary over the shared visibility record",
+            Check: "SdfWorldEngineUploadLawTests; SdfWorldEngineWorkLawTests; puck canary sdf-mesh-visibility sdf-mesh-motion",
             Green: false,
             Members: [
-                "SdfFrame.MeshDraws", "SdfEngineNode.MeshRegionBytes", "SdfEngineNode.MeshDrawCount", "SdfWorldEngine.MeshRegionBytes",
-                "SdfWorldEngine.MeshRegionLayout",
+                "SdfFrame.MeshDraws", "SdfEngineNode.MeshRegionBytes", "SdfEngineNode.MeshDrawCount", "SdfEngineNode.MeshAttachmentBytes",
+                "SdfWorldEngine.MeshRegionBytes", "SdfWorldEngine.MeshRegionLayout", "SdfWorldEngine.MeshAttachmentBytes",
+                "SdfWorldEngine.MeshAttachmentBytesOf", "SdfWorldEngine.MeshDrawCount",
             ]
         ),
         new(

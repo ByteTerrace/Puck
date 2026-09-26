@@ -152,7 +152,7 @@ public sealed class CreationEffectorLawTests {
 
         pool.Emit(
             builder: builder,
-            definition: Definition(creation: prototype),
+            colors: WorldBakedColors.Of(definition: Definition(creation: prototype)),
             maxPlacementScale: 1f,
             probeWorstCase: false,
             slotBase: 0

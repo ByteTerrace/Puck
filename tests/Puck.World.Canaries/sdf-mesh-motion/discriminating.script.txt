@@ -1,0 +1,11 @@
+# The same frames, but the slab never moves.
+world.cadence off
+# The engine builds its pipelines before the first capture is armed, so the capture lands on a rendered frame.
+world.wait ready 45
+world.debug-view visibility
+world.wait 30
+world.screenshot {run}/before.png
+world.wait 10
+world.wait 30
+world.screenshot {run}/after.png
+world.wait 10

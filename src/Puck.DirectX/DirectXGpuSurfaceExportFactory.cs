@@ -86,7 +86,45 @@ public sealed class DirectXGpuSurfaceExportFactory(DirectXDeviceContext deviceCo
 public sealed class DirectXGpuImageFactory(DirectXDeviceContext deviceContext) : IGpuImageFactory {
     /// <inheritdoc/>
     public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
+        GpuImageUsages.ValidateCreate(
+            format: format,
+            height: height,
+            usage: usage,
+            width: width
+        );
+
+        return Named(
+            clearDepth: 1f,
+            format: format,
+            height: height,
+            name: in name,
+            usage: usage,
+            width: width
+        );
+    }
+    /// <inheritdoc/>
+    /// <remarks>The texture is created with the attachment's clear depth as its optimized clear value.</remarks>
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
+        GpuImageUsages.ValidateDepth(
+            attachment: in attachment,
+            height: height,
+            width: width
+        );
+
+        return Named(
+            clearDepth: attachment.ClearDepth,
+            format: attachment.Format,
+            height: height,
+            name: in name,
+            usage: GpuImageUsage.DepthAttachment,
+            width: width
+        );
+    }
+
+    // Creates a texture, with the clear depth a depth attachment's optimized clear value takes, and names it.
+    private DirectXGpuImage Named(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, float clearDepth, in GpuObjectName name) {
         var image = new DirectXGpuImage(
+            clearDepth: clearDepth,
             format: format,
             request: DirectXGpuImageRequest.From(
                 deviceContext: deviceContext,
