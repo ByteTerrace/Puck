@@ -37,9 +37,9 @@
         <Content Include="Assets\ShaderPackages\**" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The one shipped set with a config schema, with its bytecode beside it, in a second directory so the catalog
-             scan crosses subdirectories. -->
-        <Content Include="..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-film-grain.puck.shader.json;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-film-grain.frag.spv;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-film-grain.frag.dxil;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\fullscreen.vert.spv;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\fullscreen.vert.dxil" Link="Assets\Shaders\Sdf\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <!-- The film grain package's deployed stages, where its declaration (RenderGraphPackageCatalog.SdfFilmGrain)
+             says they ship. -->
+        <Content Include="..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-film-grain.frag.spv;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-film-grain.frag.dxil;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\fullscreen.vert.spv;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\fullscreen.vert.dxil" Link="Assets\Shaders\Sdf\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <!-- The neutral group layouts the backends' planners and the spike's interfaces are held to. -->

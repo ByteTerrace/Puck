@@ -280,8 +280,8 @@ the world's own authored effects; live submissions still refuse a world actor.
 
 ## Document validation
 
-`WorldSiloDataHookInstaller` installs the shared schema hooks for post-render,
-probe, binding, input, and command vocabularies. Machine registration is separate:
+`WorldSiloDataHookInstaller` installs the shared schema hooks for post-process
+package, probe, binding, input, and command vocabularies. Machine registration is separate:
 dynamic extensions register into the silo's own immutable `WorldMachineCatalog`.
 Decoding a world without a catalog proves its document-local facts; provider
 admission requires the deployment's explicit catalog. Loading the silo assembly

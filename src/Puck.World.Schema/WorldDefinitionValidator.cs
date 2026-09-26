@@ -1050,8 +1050,8 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        ValidateRenderExtensions(
-            extensions: definition.Render.Extensions,
+        ValidatePostPasses(
+            views: definition.Views,
             errors: errors,
             deferred: deferredSink
         );

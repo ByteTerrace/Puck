@@ -103,8 +103,8 @@ rendered image beyond `puck parity`, so a kernel change is judged by running
 
 | Shader | Role | Consumer |
 |---|---|---|
-| `Sdf/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | Overworld overlay, the Vulkan surface compositor, and `sdf-film-grain` |
-| `Sdf/sdf-film-grain.frag.hlsl` | Fullscreen integer-hashed film grain over the inner render node's output, declared by `sdf-film-grain.puck.shader.json`. | The `sdf-film-grain` `render.extensions` entry |
+| `Sdf/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | Overworld overlay, the Vulkan surface compositor, and `sdf.film-grain` |
+| `Sdf/sdf-film-grain.frag.hlsl` | Fullscreen integer-hashed film grain over the frame the pass before it wrote, the fragment stage of the `sdf.film-grain` render graph package (`RenderGraphPackageCatalog.SdfFilmGrain`). | A `views.post` row naming `sdf.film-grain` |
 
 ## Validation rule
 

@@ -3,76 +3,96 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-/// <summary>The <c>post.&lt;id&gt;</c> package of one shipped post-process shader set: a fullscreen draw of the set's
-/// vertex and fragment stages that samples the pass's one input image and writes its one output. It binds the set's
-/// interface (<see cref="ShaderSetManifest.FrameLayout"/>), which the plan lays out for the pass: the frame group, and the
-/// pass group holding the extent, the set's config, the input image and the set's samplers. One type serves every
-/// <c>post.&lt;id&gt;</c>, registered once per set under <see cref="Id"/>.
+/// <summary>The recorder factory of every post-process package (<see cref="RenderGraphPackage.IsPostProcess"/>): a
+/// fullscreen draw of the package's vertex and fragment stages that samples the pass's one input image and writes its one
+/// output. It binds the package's interface, which the plan lays out for the pass from the catalog's declaration
+/// (<see cref="ShaderPipelineParameterLayout.ForPackage"/>): the frame group, and the pass group holding the extent, the
+/// package's config, the input image and its samplers. One type serves every post-process package, registered once per
+/// package under its <see cref="Id"/>.
 /// <para>
-/// Its build leases the graphics pipeline, its two shader modules and the render pass it draws in, through the pass's
-/// pipeline layout, from the pass-pipeline cache on the thread pool, so every pass of one set into one format shares
-/// them. Its recorder takes them when the graph installs, creates the fullscreen triangle's vertex
-/// buffer and one sampler per frame slot, and allocates its frame and pass group sets per frame slot from the instance's
-/// pool (<see cref="RenderGraphPackageSets"/>), writing the slot's sampler into every sampler the set declares. Each frame
-/// it writes the input into the slot's pass set, binds both sets and records the render pass and the draw over a
-/// framebuffer on the output image, created the first time that image is drawn into and kept for the recorder's life.
-/// Its ports are a fragment-sampled input and a color-attachment output, so the input arrives shader-readable and the
-/// output in render-target layout, which its render pass leaves it in; it records no barrier.
+/// Its build reads and validates the stages' deployed bytecode for the backend, then leases the graphics pipeline, its two
+/// shader modules and the render pass it draws in, through the pass's pipeline layout, from the pass-pipeline cache on the
+/// thread pool, so every pass of one package into one format shares them. Its recorder takes them when the graph
+/// installs, creates the fullscreen triangle's vertex buffer and one sampler per frame slot, and allocates its frame and
+/// pass group sets per frame slot from the instance's pool (<see cref="RenderGraphPackageSets"/>), writing the slot's
+/// sampler into every sampler the package declares. Each frame it writes the input into the slot's pass set, binds both
+/// sets and records the render pass and the draw over a framebuffer on the output image, created the first time that
+/// image is drawn into and kept for the recorder's life. Its ports are a fragment-sampled input and a color-attachment
+/// output, so the input arrives shader-readable and the output in render-target layout, which its render pass leaves it
+/// in; it records no barrier.
 /// </para>
 /// </summary>
 public sealed class PostProcessPackage : IRenderGraphPackageFactory {
+    private readonly string m_directory;
     private readonly string m_input;
     private readonly string[] m_samplers;
 
-    /// <summary>Initializes a new instance of the <see cref="PostProcessPackage"/> class for one loaded shader set.</summary>
-    /// <param name="manifest">The loaded graphics set, whose bytecode the build reads.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="manifest"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException"><paramref name="manifest"/> is a compute set, or declares anything but one
-    /// sampled image (the input) and the samplers it is read through.</exception>
-    public PostProcessPackage(ShaderSetManifest manifest) {
-        ArgumentNullException.ThrowIfNull(argument: manifest);
+    /// <summary>Initializes a new instance of the <see cref="PostProcessPackage"/> class for one post-process
+    /// package.</summary>
+    /// <param name="package">The package, whose <see cref="RenderGraphPackage.Stages"/> name the bytecode the build
+    /// reads.</param>
+    /// <param name="root">The directory the stages' directory resolves against, or <see langword="null"/> for the
+    /// directory beside the executable.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="package"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException"><paramref name="package"/> is not a post-process package, or declares
+    /// anything but one sampled image (the input) and the samplers it is read through.</exception>
+    public PostProcessPackage(RenderGraphPackage package, string? root = null) {
+        ArgumentNullException.ThrowIfNull(argument: package);
 
-        if (!manifest.IsGraphics) {
-            throw new InvalidDataException(message: $"'{manifest.Name}' is a compute set; a post-process package needs vertex and fragment stages.");
+        if (package.Stages is not { } stages) {
+            throw new InvalidDataException(message: $"Package '{package.Id}' declares no stages; a post-process package draws with a vertex and a fragment stage.");
         }
 
-        var images = manifest.Bindings.Where(predicate: static binding => (binding.Kind == GpuBindingKind.SampledImage)).ToArray();
+        var images = package.Members.Where(predicate: static member => (member.Kind == ShaderInterfaceMemberKind.SampledImage)).ToArray();
 
         if (
             (images.Length != 1) ||
-            manifest.Bindings.Any(predicate: static binding => (binding.Kind is not (GpuBindingKind.SampledImage or GpuBindingKind.Sampler)))
+            package.Members.Any(predicate: static member => (member.Kind is not (ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler)))
         ) {
-            throw new InvalidDataException(message: $"'{manifest.Name}' must declare exactly one SampledImage binding (the input image) and only Sampler bindings beside it to run as a post-process package.");
+            throw new InvalidDataException(message: $"Package '{package.Id}' must declare exactly one sampled image (the input) and only samplers beside it to run as a post-process package.");
         }
 
-        Manifest = manifest;
+        Package = package;
+        m_directory = Path.Combine(
+            path1: (root ?? AppContext.BaseDirectory),
+            path2: stages.Directory
+        );
         m_input = images[0].Name;
-        m_samplers = [.. manifest.Bindings.Where(predicate: static binding => (binding.Kind == GpuBindingKind.Sampler)).Select(selector: static binding => binding.Name)];
+        m_samplers = [.. package.Members.Where(predicate: static member => (member.Kind == ShaderInterfaceMemberKind.Sampler)).Select(selector: static member => member.Name)];
     }
 
-    /// <summary>Gets the package id the set is registered under: <c>post.&lt;set id&gt;</c>.</summary>
-    public string Id => (RenderGraphPackageCatalog.PostProcessPrefix + Manifest.Name);
-    /// <summary>Gets the shader set the package draws.</summary>
-    public ShaderSetManifest Manifest { get; }
+    /// <summary>Gets the id the package is registered under.</summary>
+    public string Id => Package.Id;
+    /// <summary>Gets the package the factory draws.</summary>
+    public RenderGraphPackage Package { get; }
 
-    // The stage bytecode of the backend the instance records on, read from the manifest's validated bytes.
-    private ReadOnlyMemory<byte> Bytecode(string stem, bool directX) {
-        var key = (stem + (directX
-            ? ".dxil"
-            : ".spv"));
+    // One stage's deployed bytecode for the backend the instance records on, validated as bytecode of its format.
+    private byte[] Bytecode(string stem, bool directX) {
+        var path = Path.Combine(
+            path1: m_directory,
+            path2: (stem + (directX
+                ? ".dxil"
+                : ".spv"))
+        );
+        var bytecode = File.ReadAllBytes(path: path);
 
-        return (Manifest.Bytecode.TryGetValue(
-            key: key,
-            value: out var bytecode
-        )
-            ? bytecode
-            : throw new FileNotFoundException(message: $"'{Manifest.Name}' manifest carries no validated bytecode for '{key}'."));
+        try {
+            ShaderBytecode.ValidateFormat(bytecode: bytecode);
+        } catch (ArgumentException exception) {
+            throw new InvalidDataException(
+                message: $"Package '{Id}' stage bytecode failed format validation: {path} ({exception.Message})",
+                innerException: exception
+            );
+        }
+
+        return bytecode;
     }
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The pass does not read one image and write one, the plan laid out another
-    /// interface than the set's, or the set lacks a stage's bytecode for the backend.</exception>
+    /// <exception cref="InvalidDataException">The pass does not read one image and write one, or a stage's bytecode is
+    /// not valid bytecode of the backend's format.</exception>
+    /// <exception cref="IOException">A stage's deployed bytecode is missing or cannot be read.</exception>
     public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
@@ -84,12 +104,8 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
         ) {
             throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{Id}' must read one image and write one.");
         }
-        // The plan lays the pass out from the catalog's declaration of the set; the bytecode reads the set's own. They
-        // must bind alike, whatever each interface is named.
-        if (!context.Parameters.Layout.Bindings.SequenceEqual(second: Manifest.FrameLayout.Layout.Bindings)) {
-            throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{Id}' was planned with another interface than the set's; the catalog and the loaded set disagree.");
-        }
 
+        var stages = Package.Stages!;
         var lease = context.Pipelines.Acquire(
             device: context.Device,
             key: GpuPassPipelineKey.OfGraphics(
@@ -97,7 +113,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                     Layout: context.Parameters.Layout.PipelineLayout(
                         stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
                     ),
-                    Name: Manifest.Name,
+                    Name: Id,
                     VertexInput: new GpuVertexInputLayout(
                         FullscreenTriangle.StrideBytes,
                         [new GpuVertexAttribute(
@@ -109,7 +125,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 ),
                 fragment: Bytecode(
                     directX: context.HostsOnDirectX,
-                    stem: Manifest.Stages.Fragment!
+                    stem: stages.Fragment
                 ),
                 renderPass: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
                     FinalLayout: GpuImageLayout.RenderTarget,
@@ -119,7 +135,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 )]),
                 vertex: Bytecode(
                     directX: context.HostsOnDirectX,
-                    stem: Manifest.Stages.Vertex!
+                    stem: stages.Vertex
                 )
             )
         );

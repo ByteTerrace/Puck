@@ -14,7 +14,7 @@ public abstract class ManifestCatalog<TManifest> {
     private readonly Dictionary<string, string> m_pathsById;
 
     /// <summary>Adopts an already-scanned id-to-path index.</summary>
-    /// <param name="description">The singular, lower-case noun a diagnostic names this kind with (for example <c>shader set</c>).</param>
+    /// <param name="description">The singular, lower-case noun a diagnostic names this kind with (for example <c>probe kind</c>).</param>
     /// <param name="pathsById">The index, ordinally keyed, produced by <see cref="ScanPaths"/>.</param>
     protected ManifestCatalog(string description, Dictionary<string, string> pathsById) {
         ArgumentException.ThrowIfNullOrEmpty(argument: description);

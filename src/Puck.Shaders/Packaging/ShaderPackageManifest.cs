@@ -96,7 +96,7 @@ public sealed record ShaderPackageBinary(ShaderStage Stage, string Target, strin
 /// pass.</param>
 /// <param name="ParameterBytes">The largest packed parameter block of any pass, in bytes.</param>
 public sealed record ShaderPackageCapabilities(
-    ShaderSetManifestTargetFloor TargetFloor,
+    ShaderTargetFloor TargetFloor,
     IReadOnlyList<string> ImageFormats,
     bool Buffers,
     uint WorkgroupInvocations,

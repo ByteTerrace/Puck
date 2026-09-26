@@ -161,16 +161,6 @@
       "id": "block"
     }
   ],
-  "render": {
-    "extensions": [
-      {
-        "config": {
-          "intensity": 1
-        },
-        "id": "sdf-film-grain"
-      }
-    ]
-  },
   "schema": "puck.world.definition.v1",
   "simulation": {
     "rateHz": 30
@@ -191,6 +181,15 @@
         ],
         "transitionRenderScale": 1,
         "transitionSeconds": 0
+      }
+    ],
+    "post": [
+      {
+        "config": {
+          "intensity": 1
+        },
+        "name": "grain",
+        "package": "sdf.film-grain"
       }
     ],
     "seatControl": {

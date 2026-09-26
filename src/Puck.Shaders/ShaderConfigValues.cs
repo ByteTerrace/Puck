@@ -18,9 +18,9 @@ public sealed record ShaderConfigValue(ShaderValueType Type, ReadOnlyMemory<byte
             start: (index * ((int)ShaderValueTypes.ComponentBytes))
         ));
 }
-/// <summary>A document's <c>config</c> for one shader set, validated against the manifest's config schema with
-/// every absent field resolved to its default — the output of <see cref="ShaderSetManifest.TryBindConfig"/> and the
-/// input a fullscreen pass fills its push constants from.</summary>
+/// <summary>A document's <c>config</c> for one pass or package, validated against its config schema with every absent
+/// field resolved to its default — the output of <see cref="ShaderConfigBinding.TryBind"/> and what a pass block's
+/// config is written from.</summary>
 public sealed class ShaderConfigValues {
     private readonly Dictionary<string, ShaderConfigValue> m_values;
 

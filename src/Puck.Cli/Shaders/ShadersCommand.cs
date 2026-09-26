@@ -2,8 +2,8 @@ using System.CommandLine;
 
 namespace Puck.Cli.Shaders;
 
-/// <summary><c>puck shaders</c> — shader authoring verbs that sit outside the ordinary build-time
-/// <c>puck.shader.manifest.v1</c> recipe.</summary>
+/// <summary><c>puck shaders</c> — shader authoring verbs that sit outside the ordinary build-time shader
+/// recipe.</summary>
 internal static class ShadersCommand {
     public static Command Create() {
         var command = new Command(

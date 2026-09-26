@@ -118,8 +118,10 @@ public sealed record RenderGraphPackagePort(
         return $"Buffer (stride {stride}, count {terms})";
     }
 }
-/// <summary>One engine package a graph can name: an id, its typed ports, and what its shaders read from its pass
-/// group.</summary>
+/// <summary>One engine package a graph can name: an id, its typed ports, what its shaders read from its pass group, its
+/// config schema and, for a post-process package, the stages it draws with. It is the one declaration of a package's
+/// interface: the planner lays a pass of it out from it (<see cref="ShaderPipelineParameterLayout.ForPackage"/>),
+/// <c>puck shaders generate</c> writes its checked-in declarations from it, and its recorder binds by it.</summary>
 /// <param name="Id">The id a <see cref="RenderGraphPackagePass"/> names.</param>
 /// <param name="Inputs">The input ports, in port order: what each version a pass of it reads carries, and the stage that
 /// reads it.</param>
@@ -132,9 +134,22 @@ public sealed record RenderGraphPackagePort(
 /// <param name="Summary">What the package renders.</param>
 /// <param name="Config">The config schema a pass of it binds its <see cref="RenderGraphPackagePass.Config"/> against,
 /// name to field, or <see langword="null"/> when it takes no config.</param>
+/// <param name="Stages">The deployed stages of a post-process package, which samples its one input image in a fullscreen
+/// draw into its one output and which <see cref="PostProcessPackage"/> serves, or <see langword="null"/> for any other
+/// package. A world's <c>views.post</c> rows name post-process packages alone.</param>
 /// <param name="PushesIndex">Whether the package's pipelines push one 4-byte index, which its interface declares
 /// (<see cref="ShaderInterface.PushesIndex"/>) and its shaders read as <c>pushedIndex.index</c>.</param>
-public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, bool PushesIndex = false);
+public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null, bool PushesIndex = false) {
+    /// <summary>Gets whether the package is a post-process package: one with <see cref="Stages"/>.</summary>
+    public bool IsPostProcess => (Stages is not null);
+}
+/// <summary>The deployed stages of a post-process package's fullscreen draw: the directory its bytecode ships in and each
+/// stage's stem, completed by the backend's extension (<c>.spv</c> or <c>.dxil</c>).</summary>
+/// <param name="Directory">The directory the stages' bytecode ships in, relative to the executable, with forward
+/// slashes.</param>
+/// <param name="Vertex">The vertex stage's stem.</param>
+/// <param name="Fragment">The fragment stage's stem.</param>
+public sealed record RenderGraphPackageStages(string Directory, string Vertex, string Fragment);
 /// <summary>The engine packages a host offers graphs, by id.</summary>
 public sealed class RenderGraphPackageCatalog {
     /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
@@ -146,8 +161,11 @@ public sealed class RenderGraphPackageCatalog {
     public const string SdfBricks = "sdf.bricks";
     /// <summary>The id of the unified overlay: the console, HUD, toasts and cursor drawn over its input.</summary>
     public const string Overlay = "overlay";
-    /// <summary>The prefix of a shipped post-process shader set's package id: <c>post.&lt;set id&gt;</c>.</summary>
-    public const string PostProcessPrefix = "post.";
+    /// <summary>The id of the film grain post-process package: a per-pixel integer-hashed offset added over its input.
+    /// The hash is a pure function of pixel cell, grain frame and seed, so it renders identically on both backends. Its
+    /// fragment stage is <c>src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.frag.hlsl</c>, compiled at build, and its
+    /// interface is <c>sdf-film-grain</c>.</summary>
+    public const string SdfFilmGrain = "sdf.film-grain";
     /// <summary>The id of the one placement pass: its base image, with its source reconstructed into a destination rect
     /// over it, an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to
     /// clamped Catmull-Rom at sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
@@ -179,7 +197,7 @@ public sealed class RenderGraphPackageCatalog {
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A package has no id, null port lists, a null or malformed port
     /// (<see cref="RenderGraphPackagePort.IsValid"/>), an input port that writes or an output port that reads, or no
-    /// output, or two share an id.</exception>
+    /// output, a post-process package does not sample one image and draw one, or two share an id.</exception>
     public RenderGraphPackageCatalog(IEnumerable<RenderGraphPackage> packages) {
         ArgumentNullException.ThrowIfNull(argument: packages);
 
@@ -199,6 +217,18 @@ public sealed class RenderGraphPackageCatalog {
             ) {
                 throw new ArgumentException(
                     message: $"Package '{package.Id}' needs an id, well-formed input ports that read and output ports that write, and at least one output.",
+                    paramName: nameof(packages)
+                );
+            }
+            if (
+                package.IsPostProcess &&
+                !(
+                    (package.Inputs is [{ Kind: ShaderPipelineResourceKind.Image, Access: RenderGraphPortAccess.FragmentSampled }]) &&
+                    (package.Outputs is [{ Kind: ShaderPipelineResourceKind.Image, Access: RenderGraphPortAccess.ColorAttachmentWrite }])
+                )
+            ) {
+                throw new ArgumentException(
+                    message: $"Post-process package '{package.Id}' must sample one image and draw one.",
                     paramName: nameof(packages)
                 );
             }
@@ -226,6 +256,40 @@ public sealed class RenderGraphPackageCatalog {
         count: [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.BrickPoolVoxels])],
         strideBytes: sizeof(float)
     );
+    /// <summary>Gets the config schema of <see cref="SdfFilmGrain"/>: the peak offset, the cell size, the seed and the
+    /// flicker rate.</summary>
+    public static IReadOnlyDictionary<string, ShaderConfigField> SdfFilmGrainConfig { get; } = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
+        ["intensity"] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "0.05").RootElement.Clone(),
+            Description: "The peak per-channel offset.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Float
+        ),
+        ["size"] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "1").RootElement.Clone(),
+            Description: "The grain cell size, in pixels.",
+            Min: 1,
+            Type: ShaderValueType.Float
+        ),
+        ["seed"] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
+            Description: "Folded into the per-pixel hash; two worlds with different seeds grain differently.",
+            Type: ShaderValueType.Uint
+        ),
+        ["flickerHz"] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "24").RootElement.Clone(),
+            Description: "How many times per second the grain pattern advances. The pattern is keyed on the engine tick, so a frame carries the grain of the flicker period its tick falls in; a rate that does not divide the tick rate advances every whole number of ticks nearest below its period.",
+            Min: 1,
+            Type: ShaderValueType.Uint
+        ),
+    });
+    /// <summary>Gets what <see cref="SdfFilmGrain"/>'s fragment stage reads from its pass group beside the extent and
+    /// config: its input image and the sampler it samples it through.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> SdfFilmGrainMembers { get; } = [
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: "source", type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: "sourceSampler"),
+    ];
     /// <summary>Gets the config schema of <see cref="Place"/>: the letterbox switch, off by default, the rect, whole by
     /// default, and the sharpness, 0 by default.</summary>
     public static IReadOnlyDictionary<string, ShaderConfigField> PlaceConfig { get; } = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
@@ -341,16 +405,10 @@ public sealed class RenderGraphPackageCatalog {
         Puck.Abstractions.Sources.ImageSourceConversion.TransferPass,
     ];
     /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>,
-    /// <see cref="Place"/> and the <see cref="SourceConversions"/>.</summary>
+    /// <see cref="Place"/>, the <see cref="SourceConversions"/> and the post-process package <see cref="SdfFilmGrain"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
     /// <summary>Gets the catalog of a host that offers no package, whose graphs are shader passes alone.</summary>
     public static RenderGraphPackageCatalog None { get; } = new(packages: []);
-
-    /// <summary>Gets the packages this build offers: the engine's own and one per shipped post-process shader set
-    /// (<see cref="ShaderSetCatalog.Shipped"/>).</summary>
-    public static RenderGraphPackageCatalog Shipped => ShippedCatalog.Value;
-
-    private static readonly Lazy<RenderGraphPackageCatalog> ShippedCatalog = new(valueFactory: static () => WithPostProcess(postProcess: ShaderSetCatalog.Shipped));
 
     /// <summary>Gets the packages in ordinal id order.</summary>
     public IReadOnlyList<RenderGraphPackage> Packages { get; }
@@ -401,37 +459,21 @@ public sealed class RenderGraphPackageCatalog {
             Members: SourceMembers(format: SourceFormatOf(package: id)),
             Summary: $"The uploaded source's region converted by the shipped '{id}' kernel into the image its consumers read."
         )),
+        new RenderGraphPackage(
+            Config: SdfFilmGrainConfig,
+            Id: SdfFilmGrain,
+            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
+            Members: SdfFilmGrainMembers,
+            Stages: new RenderGraphPackageStages(
+                Directory: "Assets/Shaders/Sdf",
+                Fragment: "sdf-film-grain.frag",
+                Vertex: "fullscreen.vert"
+            ),
+            Summary: "Film grain: a per-pixel integer-hashed offset added over the input image, keyed on the engine tick."
+        ),
     ];
 
-    /// <summary>Creates the engine's catalog extended with one <c>post.&lt;id&gt;</c> package per shipped post-process
-    /// shader set, each sampling one image in a render pass that draws another, and taking its set's config schema and
-    /// pass-group members. It reads each manifest's declaration (<see cref="ShaderSetManifest.ReadDeclaration"/>) and
-    /// none of its bytecode.</summary>
-    /// <param name="postProcess">The shipped shader sets.</param>
-    /// <returns>The catalog.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="postProcess"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">A shipped manifest is malformed or its config schema is invalid.</exception>
-    public static RenderGraphPackageCatalog WithPostProcess(ShaderSetCatalog postProcess) {
-        ArgumentNullException.ThrowIfNull(argument: postProcess);
-
-        return new RenderGraphPackageCatalog(packages: EnginePackages().Concat(second: postProcess.Ids.Select(selector: id => {
-            var declaration = (postProcess.TryGetPath(
-                id: id,
-                path: out var path
-            )
-                ? ShaderSetManifest.ReadDeclaration(manifestPath: path)
-                : null);
-
-            return new RenderGraphPackage(
-                Config: declaration?.Config,
-                Id: (PostProcessPrefix + id),
-                Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
-                Members: (declaration?.Members ?? []),
-                Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
-                Summary: $"The shipped post-process shader set '{id}' over the input image."
-            );
-        })));
-    }
     /// <summary>Finds a package by id.</summary>
     /// <param name="id">The package id.</param>
     /// <param name="package">The package, when this returns <see langword="true"/>.</param>

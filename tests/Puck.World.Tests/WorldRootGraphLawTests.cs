@@ -10,20 +10,20 @@ namespace Puck.World.Tests;
 
 /// <summary>The default render graph a world gets when it authors no root (<see cref="WorldRootGraph"/>): the world
 /// alone as the root when nothing is drawn over it; otherwise the root graph reading the world and running each
-/// <c>render.extensions</c> entry as its <c>post.&lt;id&gt;</c> pass in document order, then the overlay, planned by the
-/// graph compiler; a <c>place</c> pass per pane a layout slot names, ahead of them, reading the pane's instance; and an
-/// entry whose config does not bind refused by the compiler, naming the entry.</summary>
+/// <c>views.post</c> row as a pass of its package, named by the row, in document order, then the overlay, planned by the
+/// graph compiler; a <c>place</c> pass per pane a layout slot names, ahead of them, reading the pane's instance; and a
+/// row whose config does not bind refused by the compiler, naming the row.</summary>
 public sealed class WorldRootGraphLawTests {
-    private const string FilmGrain = "sdf-film-grain";
+    private const string FilmGrain = RenderGraphPackageCatalog.SdfFilmGrain;
 
     private static JsonElement Json(string text) => JsonDocument.Parse(json: text).RootElement.Clone();
 
     [Fact]
     public void WithNothingToDrawOverItTheWorldIsTheRoot() {
         var graph = WorldRootGraph.Compose(
-            extensions: null,
             overlay: false,
-            packages: RenderGraphPackageCatalog.Shipped
+            packages: RenderGraphPackageCatalog.Engine,
+            post: null
         );
         var world = Assert.Single(collection: graph.Instances);
 
@@ -37,26 +37,28 @@ public sealed class WorldRootGraphLawTests {
     }
     [Fact]
     public void ThePostPassesThenTheOverlayRunInDocumentOrderOverTheWorld() {
+        WorldViewPostPass[] post = [
+            new(Name: "grain", Package: FilmGrain),
+            new(
+                Config: Json(text: """{"intensity":0.3}"""),
+                Name: "heavy-grain",
+                Package: FilmGrain
+            ),
+        ];
         var graph = WorldRootGraph.Compose(
-            extensions: [
-                new WorldRenderExtensionEntry(Id: FilmGrain),
-                new WorldRenderExtensionEntry(
-                    Config: Json(text: """{"intensity":0.3}"""),
-                    Id: FilmGrain
-                ),
-            ],
             overlay: true,
-            packages: RenderGraphPackageCatalog.Shipped
+            packages: RenderGraphPackageCatalog.Engine,
+            post: post
         );
         var plan = Assert.IsType<RenderGraphPlan>(@object: graph.Plan);
 
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: [$"main$post${FilmGrain}:post.{FilmGrain}", $"main$post${FilmGrain}$2:post.{FilmGrain}", "main$overlay:overlay"]
+            expected: [$"grain:{FilmGrain}", $"heavy-grain:{FilmGrain}", "main$overlay:overlay"]
         );
         Assert.Equal(
-            actual: graph.PostPasses[FilmGrain],
-            expected: [$"main$post${FilmGrain}", $"main$post${FilmGrain}$2"]
+            actual: graph.Post,
+            expected: post
         );
         Assert.Equal(
             actual: (graph.Root, plan.Inputs.Single(), plan.Outputs.Single()),
@@ -86,17 +88,17 @@ public sealed class WorldRootGraphLawTests {
     [Fact]
     public void EachPaneIsPlacedOverTheWorldBeforeThePostPassesAndMainBecomesTheRoot() {
         var graph = WorldRootGraph.Compose(
-            extensions: [new WorldRenderExtensionEntry(Id: FilmGrain)],
             overlay: false,
-            packages: RenderGraphPackageCatalog.Shipped,
-            panes: ["left", "right"]
+            packages: RenderGraphPackageCatalog.Engine,
+            panes: ["left", "right"],
+            post: [new WorldViewPostPass(Name: "grain", Package: FilmGrain)]
         );
         var plan = Assert.IsType<RenderGraphPlan>(@object: graph.Plan);
         var main = graph.Instances.Single(predicate: static instance => (instance.Name == WorldViewGraphs.MainInstance));
 
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["left:place", "right:place", $"main$post${FilmGrain}:post.{FilmGrain}"]
+            expected: ["left:place", "right:place", $"grain:{FilmGrain}"]
         );
         Assert.Equal(
             actual: (graph.Root, string.Join(separator: ",", values: main.Reads.Select(selector: static read => read.Producer))),
@@ -113,10 +115,10 @@ public sealed class WorldRootGraphLawTests {
 
         // With nothing else drawn over the world, a pane alone still makes main the root.
         var panesOnly = WorldRootGraph.Compose(
-            extensions: null,
             overlay: false,
-            packages: RenderGraphPackageCatalog.Shipped,
-            panes: ["left"]
+            packages: RenderGraphPackageCatalog.Engine,
+            panes: ["left"],
+            post: null
         );
 
         Assert.Equal(
@@ -138,61 +140,62 @@ public sealed class WorldRootGraphLawTests {
         Assert.Empty(collection: WorldRootGraph.PanesOf(views: new WorldViewDefaults()));
     }
     [Fact]
-    public void OnlyTheOverlayIsDrawnOverAWorldWithNoExtensions() {
+    public void OnlyTheOverlayIsDrawnOverAWorldWithNoPostPasses() {
         var graph = WorldRootGraph.Compose(
-            extensions: [],
             overlay: true,
-            packages: RenderGraphPackageCatalog.Shipped
+            packages: RenderGraphPackageCatalog.Engine,
+            post: []
         );
 
         Assert.Equal(
             actual: Assert.Single(collection: graph.Plan!.Steps).Name,
             expected: "main$overlay"
         );
-        Assert.Empty(collection: graph.PostPasses);
+        Assert.Empty(collection: graph.Post);
     }
-    // A pane takes its authored name as its version and its place pass, and the root declares its own versions and
-    // passes in the generated form, so a pane may be named what those once were.
+    // A pane takes its authored name as its version and its place pass, a post pass its row's name, and the root declares
+    // its own versions and passes in the generated form, so a pane or a post pass may be named what those once were.
     [Fact]
-    public void APaneNamedLikeTheRootsOwnVersionsAndPassesComposes() {
+    public void APaneOrAPostPassNamedLikeTheRootsOwnVersionsAndPassesComposes() {
         var graph = WorldRootGraph.Compose(
-            extensions: [new WorldRenderExtensionEntry(Id: FilmGrain)],
             overlay: true,
-            packages: RenderGraphPackageCatalog.Shipped,
-            panes: ["frame", "stage1", "overlay", FilmGrain]
+            packages: RenderGraphPackageCatalog.Engine,
+            panes: ["frame", "stage1"],
+            post: [new WorldViewPostPass(Name: "overlay", Package: FilmGrain)]
         );
 
         Assert.Equal(
             actual: graph.Plan!.Steps.Select(selector: static step => step.Name),
-            expected: ["frame", "stage1", "overlay", FilmGrain, $"main$post${FilmGrain}", "main$overlay"]
+            expected: ["frame", "stage1", "overlay", "main$overlay"]
         );
     }
     [Fact]
-    public void AnEntryWhoseConfigDoesNotBindIsTheCompilersRefusalNamingTheEntry() {
+    public void ARowWhoseConfigDoesNotBindIsTheCompilersRefusalNamingTheRow() {
         var refusal = Assert.Throws<WorldRootGraphRefusedException>(testCode: () => WorldRootGraph.Compose(
-            extensions: [
-                new WorldRenderExtensionEntry(Id: FilmGrain),
-                new WorldRenderExtensionEntry(
-                    Config: Json(text: """{"intensity":"loud"}"""),
-                    Id: FilmGrain
-                ),
-            ],
             overlay: false,
-            packages: RenderGraphPackageCatalog.Shipped
+            packages: RenderGraphPackageCatalog.Engine,
+            post: [
+                new WorldViewPostPass(Name: "grain", Package: FilmGrain),
+                new WorldViewPostPass(
+                    Config: Json(text: """{"intensity":"loud"}"""),
+                    Name: "loud",
+                    Package: FilmGrain
+                ),
+            ]
         ));
 
         Assert.StartsWith(
             actualString: refusal.Message,
-            expectedStartString: $"render.extensions[1] '{FilmGrain}': RENDERGRAPH_PACKAGE_CONFIG: "
+            expectedStartString: "views.post[1] 'loud': RENDERGRAPH_PACKAGE_CONFIG: "
         );
     }
     [Fact]
     public void WithMoreThanOneViewEachViewIsAProducerPlacedAheadOfThePanesAndMainIsTheRoot() {
         var graph = WorldRootGraph.Compose(
-            extensions: null,
             overlay: false,
-            packages: RenderGraphPackageCatalog.Shipped,
+            packages: RenderGraphPackageCatalog.Engine,
             panes: ["pane"],
+            post: null,
             views: 3
         );
         var plan = Assert.IsType<RenderGraphPlan>(@object: graph.Plan);
@@ -226,10 +229,10 @@ public sealed class WorldRootGraphLawTests {
     [Fact]
     public void OnlyTheFirstViewsPlacePassLetterboxesOutsideItsRect() {
         var plan = Assert.IsType<RenderGraphPlan>(@object: WorldRootGraph.Compose(
-            extensions: null,
             overlay: false,
-            packages: RenderGraphPackageCatalog.Shipped,
+            packages: RenderGraphPackageCatalog.Engine,
             panes: ["pane"],
+            post: null,
             views: 3
         ).Plan);
 

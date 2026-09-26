@@ -5,7 +5,7 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 public sealed class WorldSchemaBundleSemanticsLawTests {
-    private static readonly Lazy<WorldSchema.SplitSchema> Split = new(valueFactory: () => WorldSchema.Export(postRenderExtensions: []));
+    private static readonly Lazy<WorldSchema.SplitSchema> Split = new(valueFactory: () => WorldSchema.Export(postProcessPackages: []));
 
     [Fact]
     public void ASharedTitleCannotEraseNestedValidationDifferences() {
@@ -67,19 +67,19 @@ public sealed class WorldSchemaBundleSemanticsLawTests {
         Assert.True(condition: bundle.Admits(instance: JsonNode.Parse(json: """{"bodies":{"distribution":null}}""")));
     }
     [Fact]
-    public void BundlingDoesNotRewriteObjectLiteralsInExtensionSchemas() {
+    public void BundlingDoesNotRewriteObjectLiteralsInPostProcessSchemas() {
         var config = JsonNode.Parse(json: """
             {"type":"object","enum":[{"title":"Night","exposure":1}],
              "default":{"title":"Night","exposure":1}}
             """)!.AsObject();
-        var split = WorldSchema.Export(postRenderExtensions: [new WorldSchema.PostRenderExtensionSchema(
+        var split = WorldSchema.Export(postProcessPackages: [new WorldSchema.PostProcessPackageSchema(
                 ConfigSchema: config,
-                Id: "literal-config"
+                Package: "literal-config"
             )]);
         var bundle = SchemaVerdicts.Build(schema: WorldSchema.Bundle(split: split));
 
         Assert.True(condition: bundle.Admits(instance: JsonNode.Parse(json: """
-            {"render":{"extensions":[{"id":"literal-config","config":{"title":"Night","exposure":1}}]}}
+            {"views":{"post":[{"name":"night","package":"literal-config","config":{"title":"Night","exposure":1}}]}}
             """)));
     }
     [Fact]
