@@ -197,6 +197,9 @@ internal static class AffectedCommand {
         var catalogProjects = Closure(model: model, seeds: CatalogSeeds);
 
         var coverage = AffectedCoverage.Read(repositoryRoot: repositoryRoot);
+        var recorded = ((deleted.Count > 0)
+            ? AffectedCoverage.ReadAt(repositoryRoot: repositoryRoot, revision: since)
+            : null);
         // Reading every canary world is the cost of this map, so it is built only for a change a document can reach.
         var reachedBy = new Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>>(valueFactory: () => AffectedDocuments.ReachedBy(
             canaries: canaries,
@@ -221,15 +224,20 @@ internal static class AffectedCommand {
             standInsFor: AffectedStandIns.Create(
                 indexed: [.. coverage.Keys],
                 projects: projects,
-                repositoryRoot: repositoryRoot
+                tree: new AffectedWorkingTree(root: repositoryRoot)
             ),
             worldClosure: closure,
             deleted: deleted,
             // A file deleted since the base is placed through the index the base recorded, which is the only one that
-            // can still name it.
-            recorded: ((deleted.Count > 0)
-                ? AffectedCoverage.ReadAt(repositoryRoot: repositoryRoot, revision: since)
-                : null)
+            // can still name it, or through the stand-ins the base's own tree gave it there.
+            recorded: recorded,
+            recordedStandInsFor: ((recorded is null)
+                ? null
+                : AffectedStandIns.Create(
+                    indexed: [.. recorded.Keys],
+                    projects: projects,
+                    tree: new AffectedRevisionTree(revision: since, root: repositoryRoot)
+                ))
         );
 
         return true;
@@ -378,7 +386,7 @@ internal static class AffectedCommand {
         }
 
         if (plan.Deleted.Count > 0) {
-            Console.Out.WriteLine(value: $"affected: {plan.Deleted.Count} deleted World source(s) are named by neither {CoveragePath} nor the index the base recorded, so no canary was chosen for them; a recording cannot place a file that no longer exists, and their projects' suites still run.");
+            Console.Out.WriteLine(value: $"affected: {plan.Deleted.Count} deleted World source(s) are placed by neither {CoveragePath} nor the index the base recorded, directly or through the stand-ins the base's tree gave them, so no canary was chosen for them; a recording cannot place a file that no longer exists, and their projects' suites still run.");
         }
 
         return (run
@@ -413,8 +421,9 @@ internal static class AffectedCommand {
               include through the C# that names each kernel whose include closure reaches it, and a file
               puck schema writes through the sources declaring the types it is generated from. A changed
               World source neither the index nor a stand-in places is listed as unmapped rather than
-              widening the run. A file deleted since --since is placed by the index the base recorded, and
-              one neither index names is listed as deleted, never unmapped.
+              widening the run. A file deleted since --since is placed by the index the base recorded,
+              directly or through the stand-ins the base's tree gave it; one neither places is listed as
+              deleted, never unmapped.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test.
               Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
