@@ -4,6 +4,7 @@ using System.Numerics;
 using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.SdfVm;
 using Puck.Shaders;
 
 namespace Puck.World.Client;
@@ -424,6 +425,52 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         return true;
+    }
+    /// <summary>Places every view a composed frame of the world rendered (<see cref="PlaceView"/>), each in its rect at
+    /// its render scale. A view is shown once the world has rendered it, except a lone view covering the whole display at
+    /// native scale, which is never shown, so the root stands for the world itself. Before the world has composed a frame
+    /// there are no views, but the world must still be scheduled, since it composes inside its own frame, so the first
+    /// view is placed, not shown, over the whole display at native scale, which it renders at until its first frame names
+    /// its views.</summary>
+    /// <param name="views">The views of the world's last composed frame, in view order.</param>
+    /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+    /// <param name="rendered">Whether the world has rendered a view into its output, by 0-based view, or
+    /// <see langword="null"/> when no view has an output yet.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
+    public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered) {
+        ArgumentNullException.ThrowIfNull(argument: views);
+
+        var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
+
+        if (views.Count == 0) {
+            _ = PlaceView(
+                region: whole,
+                renderScale: 1f,
+                sharpness: sharpness,
+                shown: false,
+                view: 0
+            );
+
+            return;
+        }
+
+        var lone = (
+            (views.Count == 1) &&
+            (views[0].Region == whole) &&
+            !((views[0].RenderScale > 0f) && (views[0].RenderScale < 1f))
+        );
+
+        for (var view = 0; (view < views.Count); view++) {
+            var snapshot = views[view];
+
+            _ = PlaceView(
+                region: snapshot.Region,
+                renderScale: snapshot.RenderScale,
+                sharpness: sharpness,
+                shown: (!lone && (rendered?.Invoke(arg: view) ?? false)),
+                view: view
+            );
+        }
     }
     /// <inheritdoc/>
     /// <remarks>A pane or view of the synthesized root the host did not place this frame is not shown, so its pass
