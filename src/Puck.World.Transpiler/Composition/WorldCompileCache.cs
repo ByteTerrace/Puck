@@ -544,7 +544,8 @@ public sealed class WorldCompileCache {
             writer.Write(buffer: world.Json);
         }
     }
-    // Keeps the newest MaxPersistedEntries entries and removes every temporary file an interrupted write abandoned.
+    // Keeps the newest MaxPersistedEntries entries and removes every temporary file an interrupted write abandoned,
+    // matched ignoring case as the file system does, so a temporary another writer named .TMP is reclaimed too.
     private static void Trim(string directory) {
         var files = new DirectoryInfo(path: directory).GetFiles();
         var abandoned = (DateTime.UtcNow - AbandonedAfter);
@@ -553,7 +554,7 @@ public sealed class WorldCompileCache {
         foreach (var file in files) {
             if (file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: EntryExtension)) {
                 entries.Add(item: file);
-            } else if (file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: TemporaryExtension) && (file.LastWriteTimeUtc < abandoned)) {
+            } else if (file.Name.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: TemporaryExtension) && (file.LastWriteTimeUtc < abandoned)) {
                 Remove(file: file);
             }
         }

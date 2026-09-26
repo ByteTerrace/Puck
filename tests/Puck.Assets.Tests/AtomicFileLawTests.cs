@@ -199,6 +199,58 @@ public sealed class AtomicFileLawTests : IDisposable {
             actual: Entries()
         );
     }
+    // A file mapped as an image can be renamed but not deleted, so replacing one is the interleaving a replace that fails
+    // partway reaches under contention, forced: the old file is moved aside and cannot be removed. ReplaceFile would
+    // leave it under a name of its own (<name>~RF<hex>.TMP) that nothing finds again; the write names the backup
+    // itself, so the one file it leaves is its own temporary, and nothing else beside the destination.
+    [Fact]
+    public void ReplacingAFileMappedAsAnImageLeavesOnlyTheWritersOwnTemporary() {
+        Assert.SkipUnless(
+            condition: OperatingSystem.IsWindows(),
+            reason: "Only Windows maps a loaded library as an image the file system refuses to delete."
+        );
+
+        var path = PathOf(name: "loaded.dll");
+
+        File.Copy(
+            destFileName: path,
+            sourceFileName: Path.Combine(
+                path1: Environment.SystemDirectory,
+                path2: "version.dll"
+            )
+        );
+
+        var library = System.Runtime.InteropServices.NativeLibrary.Load(libraryPath: path);
+
+        try {
+            AtomicFile.WriteAllBytes(
+                bytes: [9, 9, 9],
+                path: path
+            );
+
+            Assert.Equal(
+                expected: [9, 9, 9],
+                actual: File.ReadAllBytes(path: path)
+            );
+
+            var entries = Entries();
+
+            Assert.Equal(
+                expected: 2,
+                actual: entries.Length
+            );
+            Assert.Equal(
+                expected: "loaded.dll",
+                actual: entries[0]
+            );
+            Assert.Matches(
+                actualString: entries[1],
+                expectedRegexPattern: @"^loaded\.dll\.[0-9a-f]{32}\.replaced\.tmp$"
+            );
+        } finally {
+            System.Runtime.InteropServices.NativeLibrary.Free(handle: library);
+        }
+    }
     [Fact]
     public void OnUnixAReplacementKeepsTheDestinationsMode() {
         if (OperatingSystem.IsWindows()) {
