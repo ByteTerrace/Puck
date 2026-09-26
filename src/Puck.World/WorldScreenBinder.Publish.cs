@@ -55,13 +55,11 @@ internal sealed partial class WorldScreenBinder {
 
         ReconcileViews();
     }
-    /// <summary>Publishes the screens' content for this produced frame, before the render graph schedules it: it advances
-    /// the capture gate first, so every source this frame resolves sees the same answer, uploads the fills a filled
-    /// external source resolves to, and services the shared camera feeds, the probe outputs and the HUD's captures. A
+    /// <summary>Publishes the screens' content for this produced frame, before the render graph schedules it: it uploads
+    /// the fills a filled external source resolves to, and services the shared camera feeds, the probe outputs and the HUD's captures. A
     /// producer, machine or probe source a screen shows is a source instance the runtime publishes at its cadence when it
-    /// renders the instance, and a view is an instance too. It fits every window session's camera to the local eye, and on
-    /// the first frame the gate fills while a screen shows external content it composes the views again, so every view
-    /// renders over the fills before a capture reads it. It ends by publishing every screen's mapping
+    /// renders the instance, and a view is an instance too, which a capture frame renders again while it is tainted. It
+    /// fits every window session's camera to the local eye, and ends by publishing every screen's mapping
     /// (<see cref="Mappings"/>) at the extents its images now have.</summary>
     /// <param name="context">The host's frame context, whose host resolves the live GPU device; a frame with no device publishes
     /// nothing.</param>
@@ -74,7 +72,6 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        m_captureGate.BeginFrame();
         ReconcileSessionLifecycles();
         RetireParkedCaptures();
 
@@ -105,20 +102,6 @@ internal sealed partial class WorldScreenBinder {
         ServiceProbeFeeds(deviceContext: deviceContext);
         PublishFrameCaptures(context: in context);
         UpdateWindowCameras();
-
-        // A view refreshing at a divisor may hold an image it rendered from an external source before the gate began
-        // filling; composing the views again restarts their scheduling, so each renders over the fills this frame. A host
-        // that fills every frame never rendered one unfilled, so its cadence is untouched.
-        if (
-            m_captureGate.Filling &&
-            !m_viewsRenderedFilling &&
-            BindsExternal()
-        ) {
-            ReconcileViews(force: true);
-        }
-
-        m_viewsRenderedFilling = m_captureGate.Filling;
-
         Mappings.Publish(images: this);
     }
     /// <summary>Sets the deterministic refresh divisor of every camera view and every session view but a window's. One

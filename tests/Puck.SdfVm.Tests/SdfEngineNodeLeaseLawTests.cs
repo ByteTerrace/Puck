@@ -270,11 +270,12 @@ public sealed class SdfEngineNodeLeaseLawTests {
 
     private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
         public int Captures { get; private set; }
+        public SdfFrame Frame { get; set; } = frame;
 
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
             Captures++;
 
-            return frame;
+            return Frame;
         }
     }
 
@@ -306,7 +307,8 @@ public sealed class SdfEngineNodeLeaseLawTests {
                         Fence: fence,
                         Value: 7UL
                     )
-                )
+                ),
+                tainted: false
             );
             Assert.True(condition: rig.Node.Produce(
                 context: rig.Context,
@@ -369,7 +371,8 @@ public sealed class SdfEngineNodeLeaseLawTests {
                     ImageViewHandle: (0x60 + frame),
                     Release: released.Add,
                     ReleaseToken: frame
-                )
+                ),
+                tainted: false
             );
             Assert.True(condition: rig.Node.Produce(
                 context: rig.Context,
@@ -419,7 +422,8 @@ public sealed class SdfEngineNodeLeaseLawTests {
             actual: rig.Frames.Captures,
             expected: (captures + 2)
         );
-    }    // A mirror: a screen sampling the node's own view binds the output the view completed before, and the engine renders
+    }
+    // A mirror: a screen sampling the node's own view binds the output the view completed before, and the engine renders
     // the frame into another image, reusing a replaced one once nothing holds it, so a steady mirror cycles through at
     // most three images: the one it writes, the one it samples, and the one a ring slot's fence still holds.
     [Fact]
@@ -447,7 +451,8 @@ public sealed class SdfEngineNodeLeaseLawTests {
                 image: previous.Image,
                 index: 0,
                 layout: previous.Layout,
-                lease: previous.Lease
+                lease: previous.Lease,
+                tainted: previous.Tainted
             );
             Assert.True(condition: rig.Node.Produce(
                 context: rig.Context,
@@ -471,6 +476,109 @@ public sealed class SdfEngineNodeLeaseLawTests {
 
         Assert.Equal(actual: written.Count, expected: 3);
         Assert.Equal(actual: rig.LiveImages().Length, expected: (images + 2));
+    }
+
+    // The node's output carries the taint of the reads its latest submitted frame bound: a frame that read unfilled
+    // external content hands out a tainted output, and the next frame over a filled read an untainted one.
+    [Fact]
+    public void AnOutputRenderedFromATaintedReadIsHandedOutTaintedUntilAFrameReadsItFilled() {
+        const string Source = "source$camera$0";
+        var reads = new RenderGraphExternalReads(producers: [Source]);
+
+        using var rig = new Rig(screenSources: new ScreenSources(
+            readOf: static screen => Source,
+            screens: [0]
+        ));
+
+        rig.ProduceFirst();
+
+        bool ProduceOver(bool tainted) {
+            reads.Bind(
+                image: default,
+                index: 0,
+                layout: GpuImageLayout.ShaderReadOnly,
+                lease: ((nint)0x61),
+                tainted: tainted
+            );
+            Assert.True(condition: rig.Node.Produce(
+                context: rig.Context,
+                height: Extent,
+                reads: reads,
+                width: Extent
+            ));
+            reads.RetireUntaken();
+            Assert.True(condition: rig.Node.TryAcquireOutput(output: out var output));
+            output.Lease.Retire();
+
+            return output.Tainted;
+        }
+
+        Assert.Equal(
+            actual: (ProduceOver(tainted: true), ProduceOver(tainted: false)),
+            expected: (true, false)
+        );
+    }
+    // Each view output keeps the taint of the frame that last rendered it: a second view rendered over a tainted read
+    // stays tainted through a frame that renders the first view alone over a filled one.
+    [Fact]
+    public void AViewOutputKeepsItsTaintUntilAFrameRendersThatViewAgain() {
+        const string Source = "source$camera$0";
+        var reads = new RenderGraphExternalReads(producers: [Source]);
+
+        using var rig = new Rig(screenSources: new ScreenSources(
+            readOf: static screen => Source,
+            screens: [0]
+        ));
+
+        var single = rig.Frames.Frame;
+        var view = single.Views[0];
+
+        rig.Frames.Frame = (single with {
+            Views = [
+                (view with {
+                    Region = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f),
+                }),
+                (view with {
+                    Region = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f),
+                }),
+            ],
+        });
+        rig.ProduceFirst();
+
+        (bool First, bool Second) ProduceOver(bool tainted) {
+            reads.Bind(
+                image: default,
+                index: 0,
+                layout: GpuImageLayout.ShaderReadOnly,
+                lease: ((nint)0x61),
+                tainted: tainted
+            );
+            Assert.True(condition: rig.Node.Produce(
+                context: rig.Context,
+                height: Extent,
+                reads: reads,
+                width: Extent
+            ));
+            reads.RetireUntaken();
+            Assert.True(condition: rig.Node.TryAcquireOutput(output: out var first));
+            Assert.True(condition: rig.Node.ViewProducer(view: 1).TryAcquireOutput(output: out var second));
+            first.Lease.Retire();
+            second.Lease.Retire();
+
+            return (first.Tainted, second.Tainted);
+        }
+
+        Assert.Equal(
+            actual: ProduceOver(tainted: true),
+            expected: (true, true)
+        );
+
+        rig.Frames.Frame = single;
+
+        Assert.Equal(
+            actual: ProduceOver(tainted: false),
+            expected: (false, true)
+        );
     }
 
     private sealed class ScreenSources(IReadOnlyList<int> screens, Func<int, string?> readOf) : ISdfScreenSources {

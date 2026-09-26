@@ -191,8 +191,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// destination instance is found or started here.</param>
     /// <param name="roster">The player roster — resolves a seat to its bound camera device.</param>
     /// <param name="renderProbe">The render probe each offscreen view's GPU work is registered with while the view
-    /// is registered, so <c>world.counters gpu</c> reports it, and whose render root says whether a capture is armed;
-    /// <see langword="null"/> when nothing reads it (a headless boot).</param>
+    /// is registered, so <c>world.counters gpu</c> reports it; <see langword="null"/> when nothing reads it (a headless
+    /// boot).</param>
     /// <param name="alwaysFillsCaptures">Whether every frame is a capture frame: an offscreen host, which serves
     /// captures and <c>puck parity</c>, so external content never reaches any frame it produces.</param>
     /// <param name="producers">The image producers the host registers beside the four the engine ships, or
@@ -237,7 +237,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_seatCameraControls = ResolveSeatCameraControls(screens: screens);
         m_captureGate = new WorldCaptureGate(
             alwaysFills: alwaysFillsCaptures,
-            captureArmed: () => (m_renderProbe?.Root?.PendingCapturePath is not null)
+            captureArmed: () => (Runtime?.PendingCapturePath is not null)
         );
         m_fillImage = FillImage;
         m_producers.Register(producer: new WorldTestPatternProducer());

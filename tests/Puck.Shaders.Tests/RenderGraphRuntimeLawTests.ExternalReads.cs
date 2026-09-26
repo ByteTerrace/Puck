@@ -322,7 +322,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Lease: new GpuImageLease(
                     ImageViewHandle: m_completed,
                     Release: _ => Released++
-                )
+                ),
+                Tainted: false
             );
 
             return true;
@@ -400,7 +401,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Lease: new GpuImageLease(
                     ImageViewHandle: image.ImageViewHandle,
                     Release: _ => Released++
-                )
+                ),
+                Tainted: false
             );
 
             return true;

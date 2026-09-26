@@ -14,7 +14,10 @@ namespace Puck.Hosting;
 /// back in this layout.</param>
 /// <param name="Lease">The acquisition, retired exactly once by the consumer that sampled it, after that submission's
 /// fence, on device loss or at disposal.</param>
-public readonly record struct RenderGraphExternalOutput(Surface Image, GpuImageLayout Layout, GpuImageLease Lease);
+/// <param name="Tainted">Whether the image holds external content the capture gate did not fill (a camera, a desktop
+/// capture or a probe of either, resolved outside a capture frame), or was rendered from such an image. An instance that
+/// reads a tainted image is tainted until it renders again from untainted ones, and no capture reads it.</param>
+public readonly record struct RenderGraphExternalOutput(Surface Image, GpuImageLayout Layout, GpuImageLease Lease, bool Tainted);
 /// <summary>Renders a render-graph instance through its own submissions rather than a graph of its own: the SDF engine
 /// behind <c>sdf.world</c>, which submits through its own frame ring. The graph runtime produces it before its
 /// consumers when the schedule renders it, at the scheduled extent, handing it the latest completed image of every

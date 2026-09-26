@@ -26,6 +26,9 @@ namespace Puck.Hosting;
 /// per completed simulation tick (<see cref="RenderGraphFrame.Tick"/>), and a rate source at most its rate, counted in
 /// presented frames at the display's rate. Cadence is counted in ticks and frames, never the wall clock. A source whose
 /// producer declares no extent this frame does not render.</description></item>
+/// <item><description>An instance the frame names to render again (<see cref="RenderGraphFrame.Rerender"/>, a capture
+/// frame's tainted instances) is due whatever its refresh and renders whatever the budget, whenever it is
+/// shown.</description></item>
 /// </list>
 /// </summary>
 public static class RenderGraphScheduler {
@@ -44,6 +47,7 @@ public static class RenderGraphScheduler {
             DemandWidth = new double[count];
             Divisor = new int[count];
             Due = new bool[count];
+            Forced = new bool[count];
             Height = new int[count];
             IsRoot = new bool[count];
             PositionOf = new int[count];
@@ -69,6 +73,8 @@ public static class RenderGraphScheduler {
         public bool[] Demanded { get; }
         public int[] Divisor { get; }
         public bool[] Due { get; }
+        // Whether the frame names the instance to render again.
+        public bool[] Forced { get; }
         public int[] Height { get; }
         public bool[] IsRoot { get; }
         public int[] PositionOf { get; }
@@ -88,6 +94,7 @@ public static class RenderGraphScheduler {
             Array.Clear(array: Demanded);
             Array.Clear(array: DemandHeight);
             Array.Clear(array: DemandWidth);
+            Array.Clear(array: Forced);
             Array.Clear(array: Height);
             Array.Clear(array: IsRoot);
             Array.Clear(array: Price);
@@ -278,6 +285,28 @@ public static class RenderGraphScheduler {
             sourceState[index] = position;
         }
     }
+    // Marks each instance the frame names to render again, refusing a name that is no instance or names a source.
+    private static void Rerenders(RenderGraphInstanceSet set, RenderGraphFrame frame, bool[] forced) {
+        if (frame.Rerender is not { } rerender) {
+            return;
+        }
+
+        for (var position = 0; (position < rerender.Count); position++) {
+            var index = set.IndexOf(name: (rerender[position] ?? string.Empty));
+
+            if (
+                (index < 0) ||
+                set.Instances[index].IsSource
+            ) {
+                throw new ArgumentException(
+                    message: $"Rerender '{rerender[position]}' names no instance that renders again; a source renders at its producer's cadence.",
+                    paramName: nameof(frame)
+                );
+            }
+
+            forced[index] = true;
+        }
+    }
     // Whether a source is due this frame, and its frame divisor: a static source until it has rendered once, a tick
     // source whenever the frame's tick differs from the one it last rendered at, and a rate source as a refresh at its
     // rate is. A source whose producer declares no extent is never due.
@@ -347,7 +376,8 @@ public static class RenderGraphScheduler {
     /// <see cref="RenderGraphSchedule.Next"/>, the frame's roots or footprints are <see langword="null"/>, the frame
     /// does not follow the history, the display extent is not positive, a root or footprint names an undeclared
     /// instance or read, a root names an instance whose output is a buffer, a footprint shows a buffer read, or a source
-    /// state names no source, names one twice, or declares a negative extent or an ill-formed cadence.</exception>
+    /// state names no source, names one twice, or declares a negative extent or an ill-formed cadence, or a rerender names
+    /// no instance or names a source.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A root or footprint fraction is negative or not finite, or the
     /// budget is negative.</exception>
     public static void Schedule(RenderGraphInstanceSet set, RenderGraphFrame frame, RenderGraphHistory history, RenderGraphSchedule schedule) {
@@ -473,6 +503,14 @@ public static class RenderGraphScheduler {
             sourceState: sourceState
         );
 
+        var forced = work.Forced;
+
+        Rerenders(
+            forced: forced,
+            frame: frame,
+            set: set
+        );
+
         var divisor = work.Divisor;
         var due = work.Due;
 
@@ -494,6 +532,7 @@ public static class RenderGraphScheduler {
 
             divisor[index] = set.Instances[index].Refresh.ResolveDivisor(displayHertz: frame.DisplayHertz);
             due[index] = (
+                forced[index] ||
                 (rendered < 0) ||
                 ((frame.Index - rendered) >= divisor[index])
             );
@@ -615,7 +654,10 @@ public static class RenderGraphScheduler {
             ) {
                 continue;
             }
-            if (isRoot[index]) {
+            if (
+                isRoot[index] ||
+                forced[index]
+            ) {
                 admitted[index] = true;
             } else {
                 var last = history.LatestFrame(index: index);

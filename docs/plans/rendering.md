@@ -1245,8 +1245,9 @@ exists. The machine, view, probe and
 session arms stay typed because each names a document row; an emulator joins as
 a machine engine. External content resolves through `WorldCaptureGate`, so a
 capture shows its declared fill and never its pixels. That covers every frame of
-an offscreen host, which serves captures and `puck parity`, and a windowed frame
-from a `world.screenshot` for two frames after. A deterministic source states the
+an offscreen host, which serves captures and `puck parity`, and every windowed
+frame produced while a capture is armed on the render graph, which renders every
+tainted instance the capture reads again (P12b-5). A deterministic source states the
 exact image it shows (`IImageSourceReference`) for the exact verdict
 `ImageSourceVerdict`, which the `uploaded-sources` canary applies to a
 test-pattern source instance before composition.
@@ -3351,15 +3352,29 @@ except step 8.
    the WARP case orders its write by the fence rather than a CPU wait, and the
    WARP reader reads the pattern. A recorded camera run on both backends on real hardware is
    [deferred to the end](#deferred-to-the-end).
-5. The capture gate over the graph. Can land now, after step 2. The gate
-   reads the capture armed on `RenderGraphRuntime` rather than
-   `WorldRenderProbe`'s pending path, and its fixed `HoldFrames` gives way to
-   taint. An instance whose latest output read an unfilled external source is
-   tainted, and a capture frame renders every tainted instance it reads again,
-   whatever its divisor, before the root composes, so a slow view cannot carry
-   external pixels into a capture. Laws: a view at divisor 8 that read a
+5. The capture gate over the graph. Landed. The gate fills while a capture is
+   pending on `RenderGraphRuntime` (`PendingCapturePath`, which the binder reads
+   through its `Runtime`), read at each resolve, and its fixed hold is gone:
+   an image resolved unfilled is handed out tainted
+   (`RenderGraphExternalOutput.Tainted`, set by `WorldCaptureGate.Resolve` and
+   the probe source), an external producer that read one hands out tainted
+   outputs (`RenderGraphExternalReads.Tainted`; each `SdfEngineNode` view output
+   keeps the taint of the frame that last rendered it, `SdfViewOutput.Tainted`),
+   and a graph instance whose latest render bound one is tainted. A frame
+   begun with a capture pending names every tainted instance the captured
+   instance reads, directly or through others, in `RenderGraphFrame.Rerender`,
+   which the scheduler renders whatever its divisor and the budget, before the
+   instances reading it, so a slow view cannot carry external pixels into a
+   capture; a capture moves to its instance, a graph instance or an external
+   producer, only over untainted inputs, and `UnservedCaptureReasonOf` names the
+   tainted read a capture frame could not clear.
+   Laws in `RenderGraphRuntimeLawTests.Taint`: a view at divisor 8 that read a
    camera renders again in the capture frame and reads the fill; a capture
-   never reads a tainted output. `puck parity` is unchanged, since an
+   never reads a tainted output; a capture of an external producer over a
+   tainted read waits and names it. `SdfEngineNodeLeaseLawTests` holds a view
+   output to the taint of the frame that last rendered it.
+   `RenderGraphSchedulerLawTests` pins the
+   rerender's due and budget rules. `puck parity` is unchanged, since an
    offscreen host always fills.
 6. Machine outputs are sources, with the exact verdict. Landed. A machine
    source instance is an uploaded source: `IMachineVideoOutput` declares its

@@ -1187,11 +1187,13 @@ capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
 default), a 1×1 upload, and the producer's frame is never acquired. The gate
 covers screen slots, camera views filming those screens, and HUD `Frame`
 elements. An offscreen host, which serves scheduled captures and `puck parity`,
-fills every frame. A windowed host fills from the frame a `world.screenshot`
-is armed for until two frames after it. On the first frame it fills with an
-external source bound, the binder composes the views again, which restarts
-their scheduling, so every view something shows renders over the fills that
-frame and none shows an image it rendered from that source before. Simulation never
+fills every frame. A windowed host fills while a capture is armed on the
+render graph and not yet served. An image resolved outside a fill is tainted,
+and so is every render-graph instance whose latest output read one: a frame
+produced while a capture is armed renders every tainted instance the capture
+reads again, whatever its refresh, and the capture waits for a frame whose
+inputs are all untainted, so a slow view, a camera view among them, never
+carries external pixels into it. Simulation never
 reads the gate, and no external pixel reaches simulation state, a replay or the
 state hash.
 

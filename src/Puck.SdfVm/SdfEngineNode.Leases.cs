@@ -166,7 +166,8 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
                 ImageViewHandle: acquired.ImageViewHandle,
                 Release: (m_releaseOutput ??= ReleaseOutput),
                 ReleaseToken: acquired.Identity
-            )
+            ),
+            Tainted: acquired.Tainted
         );
 
         return true;
@@ -181,7 +182,9 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
     /// <param name="height">View 0's extent height, in pixels.</param>
     /// <param name="reads">The latest completed image of each source instance the world's instance reads: each screen
     /// that reads one binds its image, and the node takes its lease once however many screens show it, holding it until
-    /// the frame-ring slot that samples it has passed its fence.</param>
+    /// the frame-ring slot that samples it has passed its fence. When any is tainted
+    /// (<see cref="RenderGraphExternalReads.Tainted"/>), each view output the submitted frame renders is handed out
+    /// tainted until a later frame renders that view again.</param>
     /// <returns><see langword="true"/> when the frame was submitted; <see langword="false"/> while the engine's
     /// pipelines build or the context resolves no device.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is

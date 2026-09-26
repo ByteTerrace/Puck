@@ -112,9 +112,8 @@ internal sealed partial class WorldScreenBinder {
             : runtime.Producer(instance: index));
     }
     // Rebuilds the view instances from the camera registrations and the session screens and hands them to the mappings
-    // when they differ from the ones the mappings hold, or always when forced, which composes the running set again and so
-    // restarts its scheduling history: every view something shows renders on the next frame.
-    private void ReconcileViews(bool force = false) {
+    // when they differ from the ones the mappings hold, which composes the running set again.
+    private void ReconcileViews() {
         var views = new List<WorldView>();
         var refresh = RenderGraphRefresh.Every(divisor: m_viewRefreshDivisor);
 
@@ -175,10 +174,7 @@ internal sealed partial class WorldScreenBinder {
             ));
         }
 
-        if (
-            force ||
-            !views.SequenceEqual(second: Mappings.Views.Views)
-        ) {
+        if (!views.SequenceEqual(second: Mappings.Views.Views)) {
             Mappings.ReconcileViews(views: WorldViewInstances.Of(views: views));
         }
     }
