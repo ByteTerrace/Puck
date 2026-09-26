@@ -185,6 +185,14 @@ public sealed class WorldViewGraphLawTests {
             expected: "views.root 'absent' names no views.graphs row."
         );
     }
+    // The synthesized root declares its own versions and passes in the generated form, so a row may take any name the
+    // root once used for them (frame, stage1, overlay), and no row may take the generated form itself.
+    [Fact]
+    public void ARowNameIsRefusedInTheGeneratedFormTheRootDeclaresItsOwnNamesIn() => Refuses(
+        control: Document(Row(name: "frame")),
+        denied: Document(Row(name: GeneratedName.Join("main", "frame"))),
+        expected: "views.graphs[0].name 'main$frame' carries '$' inside it"
+    );
     [Fact]
     public void ASlotShowsAGraphRowByItsName() {
         var document = Document(Row(name: "security"));

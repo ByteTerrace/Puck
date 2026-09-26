@@ -21,7 +21,7 @@ public sealed class AffectedSelectionLawTests {
     ];
     private static readonly HashSet<string> WorldClosure = new(collection: ["World", "Core"], comparer: StringComparer.OrdinalIgnoreCase);
 
-    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null) => AffectedSelection.Select(
+    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null, IReadOnlySet<string>? deleted = null, Dictionary<string, IReadOnlySet<string>>? recorded = null) => AffectedSelection.Select(
         canaries: Canaries,
         changed: changed,
         consumersOf: (consumersOf ?? (static _ => [])),
@@ -31,7 +31,9 @@ public sealed class AffectedSelectionLawTests {
         projects: Projects,
         canariesReaching: (canariesReaching ?? (static _ => new HashSet<string>())),
         standInsFor: (standInsFor ?? (static _ => [])),
-        worldClosure: WorldClosure
+        worldClosure: WorldClosure,
+        deleted: deleted,
+        recorded: recorded
     );
 
     [Fact]
@@ -49,7 +51,7 @@ public sealed class AffectedSelectionLawTests {
                 changed: ["src/World/Door.cs"],
                 coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) }
             ),
-            expected: new AffectedPlan(Canaries: ["doors"], Catalog: false, Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
+            expected: new AffectedPlan(Canaries: ["doors"], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
             comparer: new PlanComparer()
         );
     }
@@ -110,6 +112,37 @@ public sealed class AffectedSelectionLawTests {
         Assert.Empty(collection: plan.Canaries);
         Assert.Empty(collection: plan.Unmapped);
     }
+    /// <summary>A file deleted since the base can never be recorded, so it is never unmapped: the index the base
+    /// recorded places it, choosing the canaries that executed it; one that index does not name either is listed as
+    /// deleted; and nothing reads a deleted file, so a deleted <c>.puck</c> source is not run by <c>puck test</c>.
+    /// Its project's suites still run.</summary>
+    [Fact]
+    public void ADeletedSourceIsPlacedByTheIndexTheBaseRecordedOrListedAsDeletedNeverUnmapped() {
+        var plan = Select(
+            changed: ["src/World/Door.cs", "src/World/Gone.cs", "src/World/Unrecorded.cs", "src/World/tested.puck", "src/World/New.cs"],
+            deleted: new HashSet<string>(collection: ["src/World/Door.cs", "src/World/Gone.cs", "src/World/Unrecorded.cs", "src/World/tested.puck"]),
+            recorded: new() {
+                ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]),
+                ["src/World/Gone.cs"] = new HashSet<string>(collection: ["ink"]),
+            }
+        );
+
+        Assert.Equal(actual: plan.Canaries, expected: ["doors", "ink"]);
+        Assert.Equal(actual: plan.Deleted, expected: ["src/World/Unrecorded.cs", "src/World/tested.puck"]);
+        Assert.Equal(actual: plan.Unmapped, expected: ["src/World/New.cs"]);
+        Assert.Empty(collection: plan.Worlds);
+        Assert.Equal(actual: plan.Suites, expected: ["Cli.Tests", "World.Tests"]);
+
+        // Without the base's index, a deleted file the current index names is still placed by it.
+        Assert.Equal(
+            actual: Select(
+                changed: ["src/World/Door.cs"],
+                coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) },
+                deleted: new HashSet<string>(collection: ["src/World/Door.cs"])
+            ).Canaries,
+            expected: ["doors"]
+        );
+    }
     [Fact]
     public void BuildInfrastructureReachesEverySuiteAndProseReachesNothing() {
         var infrastructure = Select(changed: ["build/Shaders.targets"]);
@@ -142,7 +175,8 @@ public sealed class AffectedSelectionLawTests {
             (x.Parity == y.Parity) &&
             x.Suites.SequenceEqual(second: y.Suites) &&
             x.Unmapped.SequenceEqual(second: y.Unmapped) &&
-            x.Worlds.SequenceEqual(second: y.Worlds));
+            x.Worlds.SequenceEqual(second: y.Worlds) &&
+            x.Deleted.SequenceEqual(second: y.Deleted));
         public int GetHashCode(AffectedPlan obj) => obj.Suites.Count;
     }
 }

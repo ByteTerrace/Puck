@@ -22,9 +22,11 @@ internal sealed record AffectedCanary(string Directory, IReadOnlyList<string> Fi
 /// <param name="Suites">The test suites, ordinal order.</param>
 /// <param name="Unmapped">Changed World sources the coverage index does not know, so no canary could be chosen for
 /// them; ordinal order.</param>
+/// <param name="Deleted">World sources deleted since the base that neither the current index nor the one the base
+/// recorded names, so no canary could be chosen for them and no recording ever can; ordinal order.</param>
 /// <param name="Worlds">Changed <c>.puck</c> sources that declare <c>test</c> blocks, for <c>puck test</c>; ordinal
 /// order.</param>
-internal sealed record AffectedPlan(IReadOnlyList<string> Canaries, bool Catalog, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds);
+internal sealed record AffectedPlan(IReadOnlyList<string> Canaries, bool Catalog, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted);
 /// <summary>
 /// Chooses the suites and canaries a set of changed files needs, and nothing wider. Suites follow the project graph:
 /// a changed project and every project that references it, transitively. Canaries follow what they were recorded
@@ -68,6 +70,13 @@ internal static class AffectedSelection {
     /// <param name="standInsFor">The indexed sources a changed file the index does not know stands for
     /// (<see cref="AffectedStandIns"/>): their canaries are its canaries, and a file with an indexed stand-in is not
     /// unmapped.</param>
+    /// <param name="deleted">The changed files deleted since the base, or <see langword="null"/> for none: nothing reads
+    /// them, and one no index places is listed in <see cref="AffectedPlan.Deleted"/>, never as unmapped.</param>
+    /// <param name="recorded">The index as the base recorded it, which places a deleted file the current index no longer
+    /// names, or <see langword="null"/> for none.</param>
+    /// <param name="recordedStandInsFor">The stand-ins a deleted file had in the tree the base recorded
+    /// (<see cref="AffectedStandIns"/> over <see cref="AffectedRevisionTree"/>), looked up in <paramref name="recorded"/>
+    /// and then the current index, or <see langword="null"/> for none.</param>
     /// <returns>The plan.</returns>
     public static AffectedPlan Select(
         IReadOnlyList<string> changed,
@@ -79,13 +88,17 @@ internal static class AffectedSelection {
         Func<string, bool> declaresTests,
         Func<string, string?, bool> catalogInputs,
         Func<string, IReadOnlyList<string>> standInsFor,
-        Func<string, IReadOnlySet<string>> canariesReaching
+        Func<string, IReadOnlySet<string>> canariesReaching,
+        IReadOnlySet<string>? deleted = null,
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? recorded = null,
+        Func<string, IReadOnlyList<string>>? recordedStandInsFor = null
     ) {
         var catalog = false;
         var everything = false;
         var seeds = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         var selected = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var unmapped = new SortedSet<string>(comparer: StringComparer.Ordinal);
+        var gone = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var worlds = new SortedSet<string>(comparer: StringComparer.Ordinal);
         // Deepest directory first, so a nested project owns its files rather than its parent.
         var owners = projects.OrderByDescending(keySelector: static project => project.Directory.Length).ToArray();
@@ -101,7 +114,10 @@ internal static class AffectedSelection {
                 continue;
             }
 
+            var isDeleted = (deleted?.Contains(item: path) ?? false);
+
             if (
+                !isDeleted &&
                 path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".puck") &&
                 declaresTests(arg: path)
             ) {
@@ -124,13 +140,27 @@ internal static class AffectedSelection {
 
             selected.UnionWith(other: reaching);
 
-            var mapped = (coverage.TryGetValue(key: path, value: out var executedBy) || named || (reaching.Count > 0));
+            var mapped = (
+                coverage.TryGetValue(key: path, value: out var executedBy) ||
+                (isDeleted && (recorded?.TryGetValue(key: path, value: out executedBy) ?? false)) ||
+                named ||
+                (reaching.Count > 0)
+            );
 
             if (executedBy is not null) {
                 selected.UnionWith(other: executedBy);
             } else {
-                foreach (var standIn in standInsFor(arg: path)) {
-                    if (coverage.TryGetValue(key: standIn, value: out var standInExecutedBy)) {
+                // A deleted file stands for what the tree the base recorded said it stood for, in the index that base
+                // recorded; a file the working tree holds stands for what it says now, in the current index.
+                var standIns = (isDeleted
+                    ? (recordedStandInsFor?.Invoke(arg: path) ?? [])
+                    : standInsFor(arg: path));
+
+                foreach (var standIn in standIns) {
+                    if (
+                        (isDeleted && (recorded?.TryGetValue(key: standIn, value: out var standInExecutedBy) ?? false)) ||
+                        coverage.TryGetValue(key: standIn, value: out standInExecutedBy)
+                    ) {
                         mapped = true;
                         selected.UnionWith(other: standInExecutedBy);
                     }
@@ -153,7 +183,9 @@ internal static class AffectedSelection {
                 worldClosure.Contains(item: owner.Name) &&
                 !mapped
             ) {
-                _ = unmapped.Add(item: path);
+                _ = (isDeleted
+                    ? gone.Add(item: path)
+                    : unmapped.Add(item: path));
             }
         }
 
@@ -197,7 +229,8 @@ internal static class AffectedSelection {
             Parity: parity,
             Suites: [.. reached.Where(predicate: static project => project.IsSuite).Select(selector: static project => project.Name).Order(comparer: StringComparer.Ordinal)],
             Unmapped: [.. unmapped],
-            Worlds: [.. worlds]
+            Worlds: [.. worlds],
+            Deleted: [.. gone]
         );
     }
 }

@@ -14,7 +14,8 @@ public sealed partial class RenderGraphRuntime {
     /// <param name="set">The new instances.</param>
     /// <param name="graphs">Each new instance's graph, parallel to <see cref="RenderGraphInstanceSet.Instances"/>:
     /// <see langword="null"/> for an external instance, for a new graph instance whose graph is not compiled yet, and for
-    /// a kept graph instance that keeps the graph it has; a graph given for a kept instance replaces its own.</param>
+    /// a kept graph instance that keeps the graph it has; a graph given for a kept instance replaces its own, and one
+    /// that keeps its pipeline and moves only its inputs rebinds them and builds nothing.</param>
     /// <param name="root">The name of the instance the display shows and captures read.</param>
     /// <param name="refusal">Why the set was refused, when this returns <see langword="false"/>; the runtime is
     /// unchanged then, and every producer created to learn its format was disposed.</param>
@@ -156,12 +157,13 @@ public sealed partial class RenderGraphRuntime {
                     packages: m_packages
                 ));
 
+            // A graph that keeps the instance's pipeline and moves only its inputs rebinds them and builds nothing.
             if (
                 (effective[index] is { } graph) &&
                 !ReferenceEquals(
-                    objA: graph,
+                    objA: graph.Pipeline,
                     objB: ((old >= 0)
-                        ? m_graphs[old]
+                        ? m_graphs[old]?.Pipeline
                         : null)
                 )
             ) {
@@ -200,7 +202,9 @@ public sealed partial class RenderGraphRuntime {
     }
     /// <summary>Installs a graph on one graph instance, replacing the one it has: its inputs are resolved against what
     /// every producer publishes, and its consumers' inputs against what the new graph publishes, and the instance's node
-    /// builds it off the frame thread and keeps presenting the graph it has until the new one installs.</summary>
+    /// builds it off the frame thread and keeps presenting the graph it has until the new one installs. A graph that
+    /// keeps the instance's pipeline and moves only its inputs rebinds them from the next frame and builds
+    /// nothing.</summary>
     /// <param name="instance">The graph instance's name.</param>
     /// <param name="graph">The graph.</param>
     /// <param name="refusal">Why the graph was refused, when this returns <see langword="false"/>; the instance keeps
@@ -237,7 +241,13 @@ public sealed partial class RenderGraphRuntime {
             return false;
         }
 
-        node.Swap(pipeline: graph.Pipeline);
+        if (!ReferenceEquals(
+            objA: graph.Pipeline,
+            objB: m_graphs[index]?.Pipeline
+        )) {
+            node.Swap(pipeline: graph.Pipeline);
+        }
+
         m_graphs = graphs;
         m_inputs = inputs;
 

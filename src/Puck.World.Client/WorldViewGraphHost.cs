@@ -45,6 +45,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         internal BackgroundBuild<CompileOutcome> Compilation { get; } = new();
 
+        // The graph the runtime was last given for the instance, its inputs as they were bound then.
+        internal RenderGraphRuntimeGraph? Installed { get; set; }
         internal int PendingSteps { get; set; }
         internal Exception? ReportedSwapError { get; set; }
 
@@ -74,6 +76,27 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         public Puck.Commands.SourceMapping? Pane { get; set; }
         /// <summary>Gets the node the runtime renders the instance through, which the runtime owns.</summary>
         public required ShaderPipelineRenderNode Node { get; init; }
+        /// <summary>Gets why the instance can show nothing, or <see langword="null"/> while it has a graph installed or on
+        /// its way (a compilation pending, a candidate queued or building). It is its latest compilation's failure, or
+        /// the refusal of the candidate its node was given. A slot showing a refused instance places nothing, so the
+        /// root draws the world beneath it and a capture of the root never waits on it; a wait on the instance fails
+        /// naming the refusal.</summary>
+        public string? Refusal {
+            get {
+                if (
+                    IsCompiling ||
+                    (Node.Plan is not null) ||
+                    Node.HasPendingCandidate ||
+                    Node.IsBuildingCandidate
+                ) {
+                    return null;
+                }
+
+                return ((LastCompile is { Status: ShaderPipelineLoadStatus.Failed or ShaderPipelineLoadStatus.Unsupported } failed)
+                    ? failed.Message
+                    : Node.LastSwapError?.Message);
+            }
+        }
         /// <summary>The number of dependency changes observed.</summary>
         public int SourceChangeCount { get; private set; }
         /// <summary>The root source being watched, or null when watching is disabled.</summary>
@@ -313,7 +336,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     }
     /// <summary>Places a pane this frame: the synthesized root shows the instance inside a normalized rect of the display,
     /// renders it at that rect's extent, and reconstructs it at the given sharpness. An instance the root does not place
-    /// is ignored.</summary>
+    /// is ignored, and so is a refused one (<see cref="Entry.Refusal"/>): the root draws the world beneath its slot, and
+    /// nothing the root shows waits on it.</summary>
     /// <param name="instance">The <c>views.graphs</c> instance the slot names.</param>
     /// <param name="region">The slot's normalized rect.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
@@ -322,7 +346,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             !synthesized.Panes.Contains(value: instance) ||
-            m_placements.ContainsKey(key: instance)
+            m_placements.ContainsKey(key: instance) ||
+            (m_entries.TryGetValue(
+                key: instance,
+                value: out var entry
+            ) && (entry.Refusal is not null))
         ) {
             return false;
         }
@@ -688,6 +716,23 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 : graph))];
         }
 
+        // A row whose inputs moved rebinds its installed graph to them in this same reconfiguration, whether or not its
+        // source moved too: the set's reads follow the inputs, so the bindings it has may name a producer the instance no
+        // longer reads. The runtime rebinds a kept pipeline without building it again.
+        graphs = [.. graphs.Select(selector: (graph, index) => (((graph is null) &&
+            m_entries.TryGetValue(
+                key: set.Instances[index].Name,
+                value: out var entry
+            ) &&
+            (entry.Installed is { } installed) &&
+            (WorldDefinitionRows.FindGraph(
+                graphs: views.Graphs,
+                name: entry.Name
+            ) is { } row) &&
+            !installed.Inputs.SequenceEqual(second: InputsOf(row: row)))
+            ? (installed with { Inputs = InputsOf(row: row) })
+            : graph))];
+
         if (!runtime.TryReconfigure(
             graphs: graphs,
             refusal: out var refusal,
@@ -703,6 +748,19 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         m_synthesized = synthesized;
+
+        for (var index = 0; (index < graphs.Count); index++) {
+            if (
+                (graphs[index] is { } rebound) &&
+                m_entries.TryGetValue(
+                    key: set.Instances[index].Name,
+                    value: out var entry
+                ) &&
+                (entry.Installed is not null)
+            ) {
+                entry.Installed = rebound;
+            }
+        }
 
         var rows = (views.Graphs ?? []);
         var desiredNames = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -772,14 +830,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return false;
         }
 
+        var graph = new RenderGraphRuntimeGraph(
+            Inputs: InputsOf(row: row),
+            Pipeline: pipeline
+        );
+
         if (!runtime.TryInstall(
-            graph: new RenderGraphRuntimeGraph(
-                Inputs: [.. (row.Inputs ?? []).Select(selector: static input => new RenderGraphRuntimeInput(
-                    Producer: input.Instance,
-                    Version: input.Resource
-                ))],
-                Pipeline: pipeline
-            ),
+            graph: graph,
             instance: name,
             refusal: out var refusal
         )) {
@@ -788,10 +845,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return false;
         }
 
+        m_entries[name].Installed = graph;
         reason = string.Empty;
 
         return true;
     }
+    private static RenderGraphRuntimeInput[] InputsOf(WorldViewGraph row) => [.. (row.Inputs ?? []).Select(selector: static input => new RenderGraphRuntimeInput(
+        Producer: input.Instance,
+        Version: input.Resource
+    ))];
     // The passes a row's instance is priced at: its compiled graph's, or one before it has compiled.
     private int PassesOf(WorldViewGraph row) => ((m_entries.TryGetValue(
         key: row.Name,

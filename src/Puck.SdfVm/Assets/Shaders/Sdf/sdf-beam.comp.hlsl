@@ -52,17 +52,19 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
+    uint viewIndex = worldViewOf(id.z);
+
     if (
-        (id.z >= params.viewportCount) ||
+        (viewIndex >= params.viewportCount) ||
         (id.x >= params.tileGrid.x) ||
         (id.y >= params.tileGrid.y)
     ) {
         return;
     }
 
-    uint tileIndex = worldTileIndex(id.z, id.xy, params.tileGrid);
+    uint tileIndex = worldTileIndex(viewIndex, id.xy, params.tileGrid);
 
-    ViewportData view = viewports[id.z];
+    ViewportData view = viewports[viewIndex];
 
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
@@ -136,7 +138,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         [loop]
         for (uint instance = id.y * params.tileGrid.x + id.x;
             instance < sdfProgramLayout.instanceCount; instance += tileCount) {
-            sdfWritePartBound(id.z, instance, view.position.xyz, farDistance,
+            sdfWritePartBound(viewIndex, instance, view.position.xyz, farDistance,
                 (2.0 * view.right.w) / max(regionSizePx.y, 1.0));
         }
     }

@@ -18,7 +18,9 @@ internal sealed record AffectedKernel(string Path, IReadOnlyList<string> Closure
 /// include stands for the C# that loads each kernel whose include closure reaches it: the stage sources come from the
 /// projects' shader items and their closures from <see cref="ShaderSourceClosure"/>, and a loader names its kernel by
 /// a string literal. A file <c>puck schema</c> writes stands for the files that declare the types it is generated from.
-/// A file none of these edges reaches has no stand-in and stays unmapped.
+/// A file none of these edges reaches has no stand-in and stays unmapped. Every file is read through one
+/// <see cref="IAffectedTree"/>, the working tree or the tree the base recorded, so a file deleted since the base stands
+/// for what the base's own projects, shaders and index said.
 /// </summary>
 internal static partial class AffectedStandIns {
     private static readonly string[] ProjectInputNames = ["packages.lock.json", "NativeMethods.txt", "NativeMethods.json"];
@@ -99,23 +101,22 @@ internal static partial class AffectedStandIns {
             .Where(predicate: source => DeclarationPattern().Matches(input: read(arg: source)).Any(predicate: match => names.Contains(item: match.Groups["name"].Value)))
             .Order(comparer: StringComparer.Ordinal)];
     }
-    /// <summary>Reads every stage source a project's shader items declare, with its include closure.</summary>
-    /// <param name="repositoryRoot">The repository root.</param>
+    /// <summary>Reads every stage source a project's shader items declare, with its include closure, from one tree.</summary>
+    /// <param name="tree">The tree the projects, stage sources and includes are read from.</param>
     /// <param name="projects">Every project.</param>
     /// <returns>The kernels. A stage source whose closure cannot be collected is left out.</returns>
-    internal static IReadOnlyList<AffectedKernel> Kernels(string repositoryRoot, IReadOnlyList<AffectedProject> projects) {
+    internal static IReadOnlyList<AffectedKernel> Kernels(IAffectedTree tree, IReadOnlyList<AffectedProject> projects) {
         var kernels = new List<AffectedKernel>();
 
-        foreach (var project in projects.Where(predicate: static project => !project.IsSuite)) {
-            var directory = Path.Combine(path1: repositoryRoot, path2: project.Directory);
-            var projectFile = Path.Combine(path1: directory, path2: $"{project.Name}.csproj");
+        string? ReadFull(string path) => tree.ReadText(path: Relative(path: path, repositoryRoot: tree.Root));
 
-            if (!File.Exists(path: projectFile)) {
+        foreach (var project in projects.Where(predicate: static project => !project.IsSuite)) {
+            if (tree.ReadText(path: $"{project.Directory}/{project.Name}.csproj") is not { } projectText) {
                 continue;
             }
 
             var matcher = new Matcher(comparisonType: StringComparison.OrdinalIgnoreCase);
-            var patterns = XDocument.Load(uri: projectFile).Descendants()
+            var patterns = XDocument.Parse(text: projectText).Descendants()
                 .Where(predicate: static element => StageItems.Contains(value: element.Name.LocalName, comparer: StringComparer.Ordinal))
                 .Select(selector: static element => ((string?)element.Attribute(name: "Include")))
                 .OfType<string>()
@@ -128,16 +129,23 @@ internal static partial class AffectedStandIns {
 
             matcher.AddIncludePatterns(patterns.Select(selector: static pattern => pattern.Replace(newChar: '/', oldChar: '\\')));
 
-            foreach (var file in matcher.GetResultsInFullPath(directoryPath: directory).Order(comparer: StringComparer.Ordinal)) {
+            var directory = Path.Combine(path1: tree.Root, path2: project.Directory);
+            var matched = matcher.Match(
+                files: tree.Files(directory: project.Directory).Select(selector: file => Path.Combine(path1: tree.Root, path2: file)),
+                rootDir: directory
+            );
+
+            foreach (var file in matched.Files.Select(selector: match => Path.GetFullPath(path: Path.Combine(path1: directory, path2: match.Path))).Order(comparer: StringComparer.Ordinal)) {
                 try {
                     var closure = ShaderSourceClosure.Collect(
                         limits: ShaderSourceLimits.Default,
-                        sources: [(file, File.ReadAllText(path: file))]
+                        readInclude: ReadFull,
+                        sources: [(file, (ReadFull(path: file) ?? string.Empty))]
                     );
 
                     kernels.Add(item: new AffectedKernel(
-                        Closure: [.. closure.Sources.Concat(second: closure.Includes).Select(selector: dependency => Relative(path: dependency.Path, repositoryRoot: repositoryRoot))],
-                        Path: Relative(path: file, repositoryRoot: repositoryRoot),
+                        Closure: [.. closure.Sources.Concat(second: closure.Includes).Select(selector: dependency => Relative(path: dependency.Path, repositoryRoot: tree.Root))],
+                        Path: Relative(path: file, repositoryRoot: tree.Root),
                         Project: project.Directory
                     ));
                 } catch (ShaderClosureRefusedException) {
@@ -149,23 +157,20 @@ internal static partial class AffectedStandIns {
         return kernels;
     }
 
-    /// <summary>Creates the stand-in map for the repository.</summary>
-    /// <param name="repositoryRoot">The repository root.</param>
+    /// <summary>Creates the stand-in map for one tree of the repository: the working tree for a changed file, or the tree
+    /// the base recorded for a file deleted since, whose stand-ins are what the base's index knows.</summary>
+    /// <param name="tree">The tree every project, shader and indexed source is read from.</param>
     /// <param name="projects">Every project.</param>
     /// <param name="indexed">Every indexed source.</param>
     /// <returns>The indexed sources a changed file stands for, or none.</returns>
-    public static Func<string, IReadOnlyList<string>> Create(string repositoryRoot, IReadOnlyList<AffectedProject> projects, IReadOnlyCollection<string> indexed) {
+    public static Func<string, IReadOnlyList<string>> Create(IAffectedTree tree, IReadOnlyList<AffectedProject> projects, IReadOnlyCollection<string> indexed) {
         var owners = projects.OrderByDescending(keySelector: static project => project.Directory.Length).ToArray();
-        var kernels = new Lazy<IReadOnlyList<AffectedKernel>>(valueFactory: () => Kernels(projects: projects, repositoryRoot: repositoryRoot));
+        var kernels = new Lazy<IReadOnlyList<AffectedKernel>>(valueFactory: () => Kernels(projects: projects, tree: tree));
         var texts = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
         string Read(string source) {
             if (!texts.TryGetValue(key: source, value: out var text)) {
-                var path = Path.Combine(path1: repositoryRoot, path2: source);
-
-                text = (File.Exists(path: path)
-                    ? File.ReadAllText(path: path)
-                    : string.Empty);
+                text = (tree.ReadText(path: source) ?? string.Empty);
                 texts[source] = text;
             }
 

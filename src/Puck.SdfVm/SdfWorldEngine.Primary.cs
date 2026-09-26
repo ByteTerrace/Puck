@@ -33,7 +33,7 @@ public sealed partial class SdfWorldEngine {
         recorder.PushConstants(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            data: m_pushConstant,
+            data: m_viewPush,
             offset: 0,
             pipelineLayoutHandle: pipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute

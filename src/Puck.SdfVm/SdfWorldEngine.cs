@@ -57,7 +57,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
-    private const int PushConstantByteLength = ((sizeof(uint) * 4) * 2); // 32-byte CompositeParams; word 5 = screenMask, word 6 = instanceMaskWordCount, word 7 = sampleIndex (the deterministic tick clock the sky reads). KEEP IN SYNC with sdf-world.hlsli's CompositeParams.
+    private const int PushConstantByteLength = (sizeof(uint) * 9); // 36-byte CompositeParams; word 5 = screenMask, word 6 = instanceMaskWordCount, word 7 = sampleIndex (the deterministic tick clock the sky reads), word 8 = viewBase. KEEP IN SYNC with sdf-world.hlsli's CompositeParams.
+    // The push word naming the view a dispatch set renders (CompositeParams.viewBase). Record writes it per set into
+    // m_viewPush; m_pushConstant keeps it zero, so the cadence signature never depends on it.
+    private const int ViewBaseWord = 8;
     private const uint ScreenLightBindingIndex = 11; // shared hit-pass layout: sdfScreenLights, register t38 (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
     private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfEnvBase
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
@@ -303,6 +306,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuSubmissionFence[] m_frameFences = new IGpuSubmissionFence[FrameRingSize];
     private readonly nint[] m_instanceCullSets = new nint[FrameRingSize];
     private readonly byte[] m_pushConstant = new byte[PushConstantByteLength];
+    // The push one dispatch set records: m_pushConstant with its viewBase word set to the set's view.
+    private readonly byte[] m_viewPush = new byte[PushConstantByteLength];
     private readonly nint[] m_screenSourceViews = new nint[MaxScreenSurfaces];
     // The screen-light table (screen glow colors, environment, grid-overlay and lever rows) and the bounded-volume table
     // (views and sky), each packed here every frame and written into its region.

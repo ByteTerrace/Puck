@@ -418,6 +418,28 @@ library held the one resample pass, now the `place` package. The pixelate
 interface fixture under `tests/Puck.Shaders.Tests` is its own copy
 and stays with the spike.
 
+**Split-screen seats share one SDF engine, and each seat renders through its
+own dispatch set into its own output.** One `SdfWorldEngine` serves a world.
+It renders each composed view as its own set of dispatches, sky through views,
+into that view's own output image. The graph places each output into its seat
+rect with the `place` package. Everything a frame's views have in common is
+therefore shared by construction: the brick pool, the program upload, the glyph
+atlas, screen sources and their leases, lights, decals and volumes. Three
+alternatives with one engine per seat were rejected:
+
+- A seat engine with no brick pool, the way offscreen camera views film, draws
+  carves through the uncarved-hull fallback. The seats would then visibly differ
+  from the first one, which keeps the baked bricks.
+- A pool per seat engine, with every bake requested on each, costs N times the
+  pool memory and N times the bake dispatches.
+- Seat engines binding the first engine's pool read-only need a cross-engine
+  hazard and ordering design. That design is P14's `sdf.bricks` buffer edge, not
+  split-screen's.
+
+N seats cost N dispatch sets rather than one dispatch whose Z dimension is N,
+and the counted work shows that cost. Layered views return only if the counts
+call for them.
+
 **`SdfEnvironment` folds into the generated frame block.** A separate
 environment packing is a second hand-kept layout beside the frame data, and
 generating the frame block is how the three hand-written copies of each field

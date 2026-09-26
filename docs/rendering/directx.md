@@ -345,6 +345,27 @@ rest when a device opens its file. See
 | `DirectXException` / `HResultExtensions` | The failing-`HRESULT`-to-exception seam every native call funnels through. |
 | `DirectXGpu*` (root and `Interop`) | The `Puck.Abstractions` GPU-contract implementations: compute pipelines, descriptor allocation, storage and geometry buffers, images, render passes and framebuffers, shared-surface export, queue submission. The image factories translate the neutral device context and pixel format once, through `DirectXGpuImageRequest.From`. |
 
+## Debug names
+
+Every object the backend creates carries a debug name taken from its creator,
+a `GpuObjectName` passed to the creating member of `GpuDeviceServices`. The
+name joins the owner (an SDF engine, a graph instance, a package), the part of
+it the object is (a table, a pipeline, a pass), an optional detail within that
+part, and an index for one of several alike, usually a frame slot:
+`sdf.world/viewports[1]`, `overlay/pass`, or `sdf.world/region-copies` for a
+pool. A name holds no handle, counter or clock, so an object has the same name
+on every run.
+
+`DirectXGpuObjectNaming` applies names through `ID3D12Object::SetName`, and
+only when the debug layer is on (`--debug-layers`). It names resources,
+pipeline states, command allocators and command lists; views, descriptor pools
+and sets, and render passes are not Direct3D 12 objects, so they carry no
+name. Otherwise naming returns before it formats anything, so a normal run
+builds no strings. The debug layer prints the name after the object, so a
+teardown leak reads
+`[d3d12-debug] live Live ID3D12Resource at 0x…, Name: law/leaked`;
+`DirectXDebugLayerLivenessTests` holds that.
+
 ## Verification
 
 `tests/Puck.DirectX.Tests` checks the backend's device-free decisions: which

@@ -515,7 +515,7 @@ for that price.
 P11b owes the rest of the package. The main view and every `views.graphs` pane
 run through the graph runtime (commits 6 and 9 below), but `ViewStack` still
 renders every screen, and split-screen seats still share one `sdf.world`
-dispatch. P11b moves those views onto graph instances fed by the scheduler,
+output that the SDF composite assembles (commit 10 below). P11b moves those views onto graph instances fed by the scheduler,
 puts the live schedule's extents and prices in `world.budget`, runs the parity
 and counted-GPU checks, and makes the rest of the deletions P11 lists. These
 P11b items have landed: the first-class package pass kind in
@@ -873,6 +873,39 @@ reconfiguration, and 9b, panes as graph instances.
   the slot), `resample-reconstruction`, `source-conversion`, the pipeline
   canaries and the `post-pass`, `hud-frame-slots` and `view-screens`
   baselines, with `puck parity` unmoved.
+
+P11b commit 10 moves split-screen seats onto the graph with one engine per
+world: each composed view renders through its own dispatch set into its own
+output, and the root places each output into its seat rect with `place` (the
+decision and its rejected alternatives are in
+[the rendering decisions](../decisions/rendering.md#the-frame-graph-and-nesting)).
+Commit 11, the composite's deletion, folds into it. It lands in two halves.
+
+- 10a has landed: each view renders through its own dispatch set. `Record`
+  records sky, mask, beam, cull-args, primary, surface, ambient and views once
+  per view, one deep in Z, and the set's push names its view
+  (`CompositeParams.viewBase`, word 8 of a 36-byte push). `viewportCount` stays
+  every view of the frame, so the per-view buffer strides do not move.
+  `sdf-cull-args` reduces its own view's tiles, so each view's hit and views
+  dispatches cover only that view's surviving tiles. The buffer hazards between
+  one set and the next are the frame buffer plan's, recorded by
+  `RecordBufferBarriers` as for any pass order. The composite still assembles
+  the views into the one output. `SdfWorldEngineWorkLawTests` pins the 36-byte
+  push and two views' doubled dispatch sets.
+- 10b is owed. The engine gains an output image per view slot, sized to that
+  view's render extent, and drops the composite: `sdf-world-composite.comp`,
+  `CompositePass`, `CompositeParams2`, `MaxViewports`' composite role, and the
+  `sources[5]` arrays in the sky and views kernels, which then write one bound
+  output per set. A cadence-skipped frame republishes each view's previous
+  output. `SdfEngineNode` exposes the producers `world` (view 0) and
+  `world$2..world$K`, each leasing its own view's output, where K is the most
+  views any layout composes. `WorldRootGraph` places each into its seat rect
+  with `place`, and `WorldFramePresenter.PrepareGraph` sets each view's
+  footprint to its rect at its render scale, so `place` also takes over the
+  render-scale upsample. A single full-window view at native scale places
+  nothing, so `world` stays the base and parity holds. The seat canaries and
+  `world-counters` are re-recorded through their verbs, with the moved counts
+  explained.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
@@ -2772,8 +2805,8 @@ retirements listed below.
 **Delivers:** first, a capability matrix that lists every feature the SDF engine
 provides, the graph equivalent that replaces it, and the check that proves the
 equivalent works. The list is generated from the engine's public surface and
-console verbs, not written from memory. It covers screen slots, decals, child
-slots, viewports, render scale, tonemap, captures, pass labels, kernel
+console verbs, not written from memory. It covers screen slots, decals,
+viewports, render scale, tonemap, captures, pass labels, kernel
 variants, brick baking, the glyph atlas, volumes, lights, far field, and debug
 views, plus anything else the code shows. No part of the old engine is deleted
 until its row is green.
@@ -2795,13 +2828,12 @@ Then:
 - Working targets move to a float format such as `R16G16B16A16Float`, so HDR
   and temporal accumulation have headroom. The tonemap moves into P16's
   display transform.
-- Composition of panes and child views moves to the graph (P11), and screens
-  read sources through P12.
+- Screens read sources through P12. Panes compose in the graph, since P11b
+  commit 9 deleted the engine's child path.
 
 This retires `render.extensions` as a separate document section, because a
 post-process pass becomes a graph node. It also retires `FullscreenPassNode`,
-`WorldPostRenderExtensionPasses`, the child plumbing in `SdfEngineNode`,
-`ViewStack`'s fixed budget, and the shaders README lines that name consumers
+`WorldPostRenderExtensionPasses`, `ViewStack`'s fixed budget, and the shaders README lines that name consumers
 which no longer exist. Every internal caller and world
 document is updated in the same change.
 
@@ -2940,8 +2972,7 @@ layered views return only if the counts call for them.
 most four group layouts, separate sampler tables, the world group at a fixed
 root parameter, one recorder with indirect dispatch and debug groups, an index
 as the only push constant, and SDF uploads through regions. From P11b: one view
-per `sdf.world` pass with the child map, `ViewStack`, `WorldPipelineRuntime`
-and the composite gone; a first-class package pass kind, which P14 extends to
+per `sdf.world` pass with `ViewStack` and the composite gone; a first-class package pass kind, which P14 extends to
 fragments; one pass-pipeline cache per device, built off the frame thread;
 captures from the graph's root output; per-instance pass counts; render scale
 as a reduced extent and a resample pass; and buffer edges.

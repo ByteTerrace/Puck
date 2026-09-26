@@ -77,7 +77,7 @@ uint; "uint4" and "float4" name 16-byte vectors.
 
 | C# (`SdfWorldEngine` unless noted) | HLSL | Contract |
 |---|---|---|
-| `PushConstantByteLength` = 32 | `CompositeParams` in `sdf-world.hlsli` | Eight words: imageExtent, tileGrid, viewportCount, screenMask (word 5), instanceMaskWordCount (word 6), sampleIndex (word 7). |
+| `PushConstantByteLength` = 36 | `CompositeParams` in `sdf-world.hlsli` | Nine words: imageExtent, tileGrid, viewportCount (every view this frame, which the per-view buffer strides use), screenMask (word 5), instanceMaskWordCount (word 6), sampleIndex (word 7), viewBase (word 8, `ViewBaseWord`: the view one dispatch set renders, read through `worldViewOf`). |
 | `CompositePushByteLength`; `BuildCompositePush` | `CompositeParams2` in `sdf-world-composite.comp.hlsl` | imageExtent, viewportCount, then word 3 = `uint padding`, which places the float4 viewport rects on Direct3D 12's 16-byte constant-buffer boundary; then `scaleQPacked`, `sharpnessQPacked`. The composite composes SDF views only. |
 | `ViewportByteLength` = 96; `PackViewports` | `ViewportData`, `worldRenderDims`, `worldFarDistance` | Six float4 rows; the last (row 5) = (render-scale q byte, asymmetric-frustum offset xy, far distance). Reduced extent = max(1, (dim·q + 127)/255) in integer math, identical in beam, cull, and views; q = 255 is the exact-copy path. |
 | `SdfProgram.InstanceMaskWordCount`; push word 6 | `sdfInstanceMaskWordCount`, `worldInstanceMaskBase` | Width W = max(1, ceil(n/32)). Each tile stores W words plus ceil(W/32) summary words written by `sdf-instance-cull.comp.hlsl`. Indexing is host-pushed, never shader-derived. |

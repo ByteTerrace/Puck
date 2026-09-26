@@ -3,7 +3,8 @@ using System.Globalization;
 namespace Puck.World.Client;
 
 /// <summary>Mints the names of the offscreen view registrations the engine creates beside the ones an author names:
-/// a session screen's view and a seat-relative camera's per-seat view. Each is a generated document name
+/// a session screen's view and a seat-relative camera's per-seat view, and the names the synthesized root graph
+/// declares for itself (<see cref="Root"/>). Each is a generated document name
 /// (<see cref="GeneratedName.Join"/>), and an authored camera name may not be in that form, so no minted view name can
 /// equal a camera's own registration. The parts are recoverable: a session view is <c>session$&lt;screen&gt;</c>, two
 /// parts; a seat view is <c>&lt;camera&gt;$seat$&lt;seat&gt;</c>, three parts, the camera first because it is the
@@ -33,4 +34,19 @@ public static class WorldViewNames {
         SeatPart,
         seat.ToString(provider: CultureInfo.InvariantCulture)
     );
+    /// <summary>Returns the name of a version or pass the synthesized root graph declares for itself, joined under the
+    /// root's instance name: <c>main$world</c>, <c>main$stage$1</c>, <c>main$post$&lt;id&gt;$2</c>. A pane's version
+    /// and its place pass take the pane's authored name, which an author may not spell in this form, so no name the
+    /// root declares for itself can equal a pane's.</summary>
+    /// <param name="parts">One or more parts, none empty and none carrying <see cref="GeneratedName.Joiner"/>.</param>
+    /// <returns><c>main$&lt;part&gt;…</c>.</returns>
+    /// <exception cref="ArgumentException">No part is given, or a part is empty or carries the joiner.</exception>
+    public static string Root(params ReadOnlySpan<string> parts) {
+        var joined = new string[(parts.Length + 1)];
+
+        joined[0] = WorldViewGraphs.MainInstance;
+        parts.CopyTo(destination: joined.AsSpan(start: 1));
+
+        return GeneratedName.Join(parts: joined);
+    }
 }

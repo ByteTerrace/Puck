@@ -1,5 +1,5 @@
 // GPU-driven cull args: a single-WORKGROUP parallel reduction over the beam prepass's per-tile cull buffer. It computes
-// the bounding box of SURVIVING (non-empty) tiles across all SDF viewports and writes (a) the Stage-1 "views" INDIRECT
+// the bounding box of SURVIVING (non-empty) tiles of the one view its dispatch set renders and writes (a) the Stage-1 "views" INDIRECT
 // dispatch group counts and (b) the bbox group origin. The views dispatch then covers ONLY that bbox — the all-empty
 // margins (e.g. the sky above the scene) are never dispatched — and the source-agnostic compositor flattens every
 // remaining empty tile to a constant. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
@@ -42,16 +42,14 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
 
     GroupMemoryBarrierWithGroupSync();
 
-    // Every (viewport, tile) cull entry, flattened: entry = ((v * tilesPerView) + (ty * tileGrid.x) + tx). The strided
-    // walk visits the SAME entry set as a serial triple loop. The grid is small (≈80x50 per viewport at 1280x800) and this runs once per frame.
-    uint tilesPerView = (params.tileGrid.x * params.tileGrid.y);
-    uint total = (params.viewportCount * tilesPerView);
+    // Every tile cull entry of the view this dispatch set renders, flattened: entry = ((ty * tileGrid.x) + tx). The
+    // strided walk visits the SAME entry set as a serial double loop, and runs once per view per frame.
+    uint v = worldViewOf(0u);
+    uint total = (params.tileGrid.x * params.tileGrid.y);
 
     for (uint entry = threadIndex; (entry < total); entry += SDF_CULL_ARGS_THREADS) {
-        uint v = (entry / tilesPerView);
-        uint rem = (entry - (v * tilesPerView));
-        uint ty = (rem / params.tileGrid.x);
-        uint tx = (rem - (ty * params.tileGrid.x));
+        uint ty = (entry / params.tileGrid.x);
+        uint tx = (entry - (ty * params.tileGrid.x));
 
         // Surviving tiles hold a non-negative march-start; empty tiles hold TileEmpty (-1.0).
         if (tiles[worldTileIndex(v, uint2(tx, ty), params.tileGrid)] >= 0.0) {
@@ -92,5 +90,5 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
     cullBounds[3] = ((boxMaxY + 1u) * groupsPerTile);
     viewsArgs[0] = (((boxMaxX - boxMinX) + 1u) * groupsPerTile);
     viewsArgs[1] = (((boxMaxY - boxMinY) + 1u) * groupsPerTile);
-    viewsArgs[2] = params.viewportCount;
+    viewsArgs[2] = 1u;
 }
