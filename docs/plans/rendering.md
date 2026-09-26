@@ -1748,14 +1748,14 @@ overlay's single host-written buffer all go through the selector. The service
 bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuComputeServices`, `IFullscreenPassServices` and
 `WorldPostRenderExtensionServices`, `OverlayServices`, and
-`SdfViewGpuServices` are deleted. The pipeline factories merge into the one
-`IGpuPipelineFactory`: Vulkan's `IVulkanGraphicsPipelineFactory`, which
-`VulkanGpuPipelineFactory` wraps and the Vulkan swapchain compositor calls
-directly, does not survive beside it. The closed set of binding kinds replaces
-`GpuComputeBindingKind`, `ShaderSetManifestBindingKind`, the positional
-`TextureSamplerCount` and `EnableStorageBuffer` fields of
-`GpuGraphicsPipelineDescription`, and every binding index set by hand, such as
-the SDF engine's binding constants.
+`SdfViewGpuServices` are deleted. The pipeline factories have merged into the
+one `IGpuPipelineFactory`: the Vulkan swapchain compositor creates its blit
+through it, for the swapchain's render pass (`VulkanGpuRenderPass.Borrow`).
+The closed set of binding kinds replaces `GpuComputeBindingKind`,
+`ShaderSetManifestBindingKind` and every binding index set by hand, such as the
+SDF engine's binding constants; a graphics description states its groups alone
+(`GpuGraphicsPipelineDescription.Layout`), with no positional samplers, storage
+buffer or push range.
 
 **Gate:** the spike over two passes, `sdf-film-grain.frag.hlsl` and a pixelate
 compute pass, each with two frequency groups, has passed its build-time half,
@@ -1833,9 +1833,8 @@ Phase 2, the services, follows the generated frame block, which has landed:
    viewport and scissor, and `SetScissor` narrows the scissor inside it. The
    depth clear value is P4-0's `GpuDepthAttachment.ClearDepth`, not a recorder
    argument. A neutral graphics pipeline takes no extent: Vulkan's has a
-   dynamic viewport and scissor, and only the presenter's compositor keeps a
-   fixed viewport. Each backend registers one recorder, bound to its device
-   context.
+   dynamic viewport and scissor, which the presenter's recorder also sets. Each
+   backend registers one recorder, bound to its device context.
 8. Done: `IGpuBindings` creates pools, sets and samplers and writes descriptors,
    with no device parameter; each backend registers one, bound to its device
    context. One `WriteBuffer` names the binding's `GpuBindingKind` and element
@@ -2107,10 +2106,8 @@ Phase 3, the groups, follows phase 2:
     - 14b-2, done: the Vulkan presenter. `blit.frag.hlsl` reads a separate
       image and sampler in the pass group, set 3 (the image at binding 0, the
       sampler at 1, each register equal to its binding). `SurfaceCompositor`
-      plans that one group through `VulkanGroupLayouts.Plan`, creates the
-      layouts with `VulkanPipelineLayouts.Create` and hands them to
-      `VulkanGraphicsPipelineFactory`'s swapchain overload, which now takes
-      groups like its other overload; its ring sets are allocated against the
+      creates its blit through `IGpuPipelineFactory` from that one group; its
+      ring sets are allocated against the
       pass group's set layout, each takes the sampler once, a blit writes only
       the image, and a `VulkanDrawCommand` binds its set at its
       `DescriptorSetGroup`. Canaries: the 14b-1 set without
