@@ -74,12 +74,12 @@ public sealed class DisplayOutputLawTests {
     [Fact]
     public void ThePreferredSdrFormatIsChosenWhenReportedAndTheOrderOfSdrFormatsOtherwise() {
         Assert.Equal(
-            actual: Chosen(reported: [SdrBgra, SdrRgba], requested: DisplayColorSpace.Srgb, preferred: GpuPixelFormat.R8G8B8A8Unorm),
+            actual: Chosen(preferred: GpuPixelFormat.R8G8B8A8Unorm, reported: [SdrBgra, SdrRgba], requested: DisplayColorSpace.Srgb),
             expected: SdrRgba
         );
         // A preference not reported, or one no SDR swapchain takes, falls to the order of SdrFormats.
         Assert.Equal(
-            actual: (Chosen(reported: [SdrRgba, SdrBgra], requested: DisplayColorSpace.Srgb, preferred: GpuPixelFormat.R10G10B10A2Unorm), Chosen(reported: [SdrRgba, DisplayOutput.Sdr(format: GpuPixelFormat.D32Float)], requested: DisplayColorSpace.Srgb, preferred: GpuPixelFormat.D32Float)),
+            actual: (Chosen(preferred: GpuPixelFormat.R10G10B10A2Unorm, reported: [SdrRgba, SdrBgra], requested: DisplayColorSpace.Srgb), Chosen(reported: [SdrRgba, DisplayOutput.Sdr(format: GpuPixelFormat.D32Float)], requested: DisplayColorSpace.Srgb, preferred: GpuPixelFormat.D32Float)),
             expected: (SdrBgra, SdrRgba)
         );
         // An SDR format reported only in an HDR color space is no SDR output.
@@ -120,7 +120,7 @@ public sealed class DisplayOutputLawTests {
             expected: (DisplayOutput.SdrWhiteNits, 203.0, 10_000.0)
         );
 
-        foreach (var level in (ReadOnlySpan<double>)[79.999, 10_000.001, double.NaN, double.PositiveInfinity, 0.0, -80.0]) {
+        foreach (var level in ((ReadOnlySpan<double>)[79.999, 10_000.001, double.NaN, double.PositiveInfinity, 0.0, -80.0])) {
             Assert.Equal(
                 actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new PresentationOptions { PaperWhiteNits = level }).ParamName,
                 expected: "nits"
@@ -129,7 +129,7 @@ public sealed class DisplayOutputLawTests {
     }
     [Fact]
     public void SdrWhiteIsOneAtEveryPaperWhiteAndHdrWhiteFollowsTheLevel() {
-        foreach (var level in (ReadOnlySpan<double>)[DisplayOutput.SdrWhiteNits, 203.0, 1_000.0, DisplayOutput.MaxPaperWhiteNits]) {
+        foreach (var level in ((ReadOnlySpan<double>)[DisplayOutput.SdrWhiteNits, 203.0, 1_000.0, DisplayOutput.MaxPaperWhiteNits])) {
             Assert.Equal(
                 actual: (SdrBgra.WhiteScale(paperWhiteNits: level), SdrRgba.WhiteScale(paperWhiteNits: level)),
                 expected: (1.0, 1.0)

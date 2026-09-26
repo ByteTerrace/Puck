@@ -62,6 +62,7 @@ public sealed class VulkanSwapchainFormatLawTests {
     public void EverySdrFormatIsChosenWhenItIsAllTheSurfaceOffers() {
         foreach (var format in DisplayOutput.SdrFormats) {
             var vkFormat = VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format);
+
             var (surface, chosen) = Select(offered: [Offered(vkFormat: UnnamedA2R10G10B10), Offered(vkFormat: vkFormat)]);
 
             Assert.Equal(

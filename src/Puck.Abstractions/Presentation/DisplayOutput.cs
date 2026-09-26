@@ -34,7 +34,6 @@ public readonly record struct DisplayOutput(GpuPixelFormat Format, DisplayColorS
         GpuPixelFormat.R10G10B10A2Unorm,
         GpuPixelFormat.R16G16B16A16Float,
     ];
-
     /// <summary>Gets whether the output is HDR: any color space but <see cref="DisplayColorSpace.Srgb"/>.</summary>
     public bool IsHdr => (ColorSpace != DisplayColorSpace.Srgb);
 
@@ -133,7 +132,6 @@ public readonly record struct DisplayOutput(GpuPixelFormat Format, DisplayColorS
 
         return nits;
     }
-
     /// <summary>Returns the linear pixel value that UI white takes in this output at a paper-white level: one in SDR,
     /// whatever the level, since an SDR display shows its own white; the level over <see cref="SdrWhiteNits"/> in
     /// scRGB; and the level over <see cref="MaxPaperWhiteNits"/> in HDR10, before the perceptual quantizer encodes

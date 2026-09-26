@@ -213,12 +213,12 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
 
         bindings.DestroyPool(poolHandle: bindings.CreatePool(sizes: Pool(buffers: 4), name: default));
 
-        foreach (var extent in (ReadOnlySpan<uint>)[2U, 4U]) {
+        foreach (var extent in ((ReadOnlySpan<uint>)[2U, 4U])) {
             Assert.NotEqual(
                 actual: upload.Upload(
                     format: GpuPixelFormat.R8G8B8A8Unorm,
                     height: extent,
-                    pixels: new byte[(extent * extent * 4U)],
+                    pixels: new byte[((extent * extent) * 4U)],
                     width: extent
                 ),
                 expected: 0
