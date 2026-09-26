@@ -6,8 +6,9 @@ namespace Puck.Vulkan;
 /// <summary>
 /// Implements <see cref="IGpuSurfaceTransferFactory"/> by creating adapter wrappers over
 /// <see cref="VulkanSurfaceReadback"/>, <see cref="VulkanSurfaceUpload"/>, and <see cref="VulkanSurfaceImport"/>, each
-/// bound to the factory's device context. Each wrapper converts <see cref="GpuPixelFormat"/> constants to
-/// <c>VkFormat</c> values at call time.
+/// bound to the factory's device context. The readback and import wrappers convert <see cref="GpuPixelFormat"/>
+/// constants to <c>VkFormat</c> values at call time; the upload reads the neutral format itself, since its byte layout
+/// and capability check follow the format.
 /// </summary>
 /// <param name="deviceContext">The device context every object the factory creates works on.</param>
 /// <param name="bufferApi">The API that makes staging and readback buffers.</param>
@@ -92,11 +93,12 @@ file sealed class VulkanGpuSurfaceReadback(VulkanSurfaceReadback inner) : IGpuSu
 }
 file sealed class VulkanGpuSurfaceUpload(VulkanSurfaceUpload inner) : IGpuSurfaceUpload {
     public void Dispose() => inner.Dispose();
-    public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) =>
+    public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height, uint levels = 1U) =>
         inner.Upload(
+            format: format,
             height: height,
+            levels: levels,
             pixels: pixels,
-            vulkanFormat: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),
             width: width
         );
 }

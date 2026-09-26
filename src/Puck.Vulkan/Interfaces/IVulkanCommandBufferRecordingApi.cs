@@ -264,12 +264,17 @@ public interface IVulkanCommandBufferRecordingApi {
         uint width,
         uint height
     );
-    /// <summary>Records a copy from a tightly packed buffer into a width × height region of a 2D, single-layer color image at the given offset.</summary>
+    /// <summary>Records a copy from tightly packed buffer bytes into a width × height region of one mip level of a 2D,
+    /// single-layer color image at the given offset. A block-compressed image's buffer bytes are rows of blocks, and its
+    /// region may end at the level's edge short of a whole block.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="bufferHandle">The native <c>VkBuffer</c> handle to copy from.</param>
+    /// <param name="bufferOffset">The offset, in bytes, of the region's first texel or block in the buffer; a multiple
+    /// of the format's texel or block size.</param>
     /// <param name="imageHandle">The native <c>VkImage</c> handle to copy to.</param>
     /// <param name="imageLayout">The current layout of the image, as a <c>VkImageLayout</c> value.</param>
+    /// <param name="mipLevel">The mip level of the image the region is in.</param>
     /// <param name="imageOffsetX">The x texel offset of the destination region.</param>
     /// <param name="imageOffsetY">The y texel offset of the destination region.</param>
     /// <param name="width">The width, in texels, of the region to copy.</param>
@@ -278,8 +283,10 @@ public interface IVulkanCommandBufferRecordingApi {
         VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint bufferHandle,
+        ulong bufferOffset,
         nint imageHandle,
         uint imageLayout,
+        uint mipLevel,
         int imageOffsetX,
         int imageOffsetY,
         uint width,

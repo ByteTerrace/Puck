@@ -40,7 +40,8 @@ public static class GpuImageUsages {
     /// <exception cref="ArgumentOutOfRangeException">The extent is zero, the usage is empty or undefined, or the format is
     /// undefined.</exception>
     /// <exception cref="ArgumentException">A depth format declares a usage other than
-    /// <see cref="GpuImageUsage.DepthAttachment"/>, or a color format declares it.</exception>
+    /// <see cref="GpuImageUsage.DepthAttachment"/>, a color format declares it, or a block-compressed format declares a
+    /// usage other than <see cref="GpuImageUsage.Sampled"/>.</exception>
     public static void Validate(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
@@ -60,6 +61,16 @@ public static class GpuImageUsages {
             throw new ArgumentOutOfRangeException(
                 actualValue: usage,
                 message: "An image declares at least one defined usage.",
+                paramName: nameof(usage)
+            );
+        }
+
+        if (
+            GpuPixelFormats.IsBlockCompressed(format: format) &&
+            (usage != GpuImageUsage.Sampled)
+        ) {
+            throw new ArgumentException(
+                message: $"The block-compressed format {format} is only sampled; it declares {usage}.",
                 paramName: nameof(usage)
             );
         }

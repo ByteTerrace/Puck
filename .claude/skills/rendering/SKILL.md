@@ -194,7 +194,25 @@ These are one-line cautions; the owning pages hold the derivations.
   `TextureCodecLawTests`, so an encoder change re-records those pins, moves
   `SdfBaker.Version` and regenerates `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
   (`BakeSamplingFixtureLawTests` writes the fresh one to the temporary directory).
-  Material identity is never blended or compressed.- **Bakes are presentation only** and nothing draws one yet. `BAKE` does not
+  Material identity is never blended or compressed.
+- **A bake reaches the GPU through the one image upload.** `GpuPixelFormat`
+  carries `Bc4Unorm`, `Bc5Unorm`, `Bc6hUfloat` and `Bc7Unorm` (sampled only:
+  `GpuImageUsages.Validate` and the pipeline compiler refuse any other use), and
+  `IGpuSurfaceUpload.Upload` takes a whole chain, levels back to back in
+  `GpuPixelFormats.ChainByteLength`'s layout, refused by
+  `GpuPixelFormats.RequireChain` on both backends alike. Never add a second
+  texture upload path; extend this one. A device that cannot sample a compressed
+  format refuses by name (`NotSupportedException`): Vulkan records
+  `textureCompressionBC` as `VulkanLogicalDevice.SamplesBlockCompression`, and
+  Direct3D 12 asks `D3D12_FEATURE_FORMAT_SUPPORT`. The returned view covers every
+  level, and `IGpuBindings.CreateSampler`'s samplers select levels by point with
+  no level-of-detail clamp on both backends, so a multi-level image samples
+  alike. `BakeSamplingDeviceLawTests` (`tests/Puck.World.Tests`, kernel
+  `Assets/Shaders/bake-sampling.comp.hlsl`) samples each fixture probe on Vulkan,
+  Direct3D 12 hardware and WARP; a fixture regeneration is checked there on the
+  GPU. The BC members share the baker's `TextureFormat` names until the
+  pixel-format fold (rendering plan P17) makes one vocabulary.
+- **Bakes are presentation only** and nothing draws one yet. `BAKE` does not
   derive on boot (`ICompiledWorldChunk.DerivesOnBoot`); a presentation bakes a
   missing prototype through `WorldBakeSchedule`, never on the frame thread.
 
