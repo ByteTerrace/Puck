@@ -3,8 +3,14 @@ using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Puck.DirectX;
 
-internal static class DirectXGpuFormats {
-    internal static DXGI_FORMAT ToDxgiFormat(GpuPixelFormat gpuPixelFormat) => gpuPixelFormat switch {
+/// <summary>Maps backend-neutral <see cref="GpuPixelFormat"/> values to their <c>DXGI_FORMAT</c> equivalents, and image
+/// layouts to resource states.</summary>
+public static class DirectXGpuFormats {
+    /// <summary>Converts a <see cref="GpuPixelFormat"/> to its <c>DXGI_FORMAT</c> value.</summary>
+    /// <param name="gpuPixelFormat">The backend-neutral pixel format.</param>
+    /// <returns>The corresponding <c>DXGI_FORMAT</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="gpuPixelFormat"/> is not defined.</exception>
+    public static DXGI_FORMAT ToDxgiFormat(GpuPixelFormat gpuPixelFormat) => gpuPixelFormat switch {
         GpuPixelFormat.R8G8B8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
         GpuPixelFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
         GpuPixelFormat.R16G16B16A16Float => DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT,
@@ -14,12 +20,16 @@ internal static class DirectXGpuFormats {
         GpuPixelFormat.Bc5Unorm => DXGI_FORMAT.DXGI_FORMAT_BC5_UNORM,
         GpuPixelFormat.Bc6hUfloat => DXGI_FORMAT.DXGI_FORMAT_BC6H_UF16,
         GpuPixelFormat.Bc7Unorm => DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM,
+        GpuPixelFormat.R8G8B8A8Srgb => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+        GpuPixelFormat.B8G8R8A8Srgb => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+        GpuPixelFormat.R10G10B10A2Unorm => DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_UNORM,
         _ => throw new ArgumentOutOfRangeException(
         actualValue: gpuPixelFormat,
         message: null,
         paramName: nameof(gpuPixelFormat)
     ),
     };
+
     // The concrete GpuImageLayout cases share a fixed D3D12_RESOURCE_STATES value. A caller
     // supplies its own behavior for anything else (Undefined included) — a fallback state or a thrown exception.
     internal static bool TryToResourceState(GpuImageLayout layout, out D3D12_RESOURCE_STATES resourceState) {

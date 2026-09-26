@@ -33,6 +33,16 @@ public enum GpuPixelFormat : uint {
     /// <summary>BC7: four unsigned normalized channels in 16-byte blocks of 4x4 texels, read without sRGB decode (Vulkan
     /// <c>BC7_UNORM_BLOCK</c>, <c>DXGI_FORMAT_BC7_UNORM</c>). Sampled only.</summary>
     Bc7Unorm = 9,
+    /// <summary>The R8G8B8A8 format with sRGB encoding: a read decodes and a write encodes (Vulkan <c>R8G8B8A8_SRGB</c>,
+    /// <c>DXGI_FORMAT_R8G8B8A8_UNORM_SRGB</c>). A swapchain may be created in it.</summary>
+    R8G8B8A8Srgb = 10,
+    /// <summary>The B8G8R8A8 format with sRGB encoding (Vulkan <c>B8G8R8A8_SRGB</c>,
+    /// <c>DXGI_FORMAT_B8G8R8A8_UNORM_SRGB</c>). A swapchain may be created in it.</summary>
+    B8G8R8A8Srgb = 11,
+    /// <summary>Three 10-bit unsigned normalized color channels and a 2-bit alpha in one 32-bit word, red in the low bits
+    /// (Vulkan <c>A2B10G10R10_UNORM_PACK32</c>, <c>DXGI_FORMAT_R10G10B10A2_UNORM</c>). A swapchain may be created in
+    /// it.</summary>
+    R10G10B10A2Unorm = 12,
 }
 /// <summary>
 /// Conversions into the <see cref="GpuPixelFormat"/> vocabulary, and the byte layout of its images.
@@ -57,7 +67,8 @@ public static class GpuPixelFormats {
     /// <returns>The bytes per texel, or per block for a block-compressed format.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The format is not defined.</exception>
     public static uint UnitBytes(GpuPixelFormat format) => format switch {
-        GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.D32Float => 4U,
+        GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.D32Float or GpuPixelFormat.R8G8B8A8Srgb
+            or GpuPixelFormat.B8G8R8A8Srgb or GpuPixelFormat.R10G10B10A2Unorm => 4U,
         GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.Bc4Unorm => 8U,
         GpuPixelFormat.R32G32B32A32Float or GpuPixelFormat.Bc5Unorm or GpuPixelFormat.Bc6hUfloat or GpuPixelFormat.Bc7Unorm => 16U,
         _ => throw new ArgumentOutOfRangeException(

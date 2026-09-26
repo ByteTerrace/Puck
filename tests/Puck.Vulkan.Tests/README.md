@@ -16,7 +16,9 @@ range they need, and refuses a description no backend may plan. On a command
 table whose layout entry points record what they are handed, the pipeline
 layout created from those plans holds the planned set layouts in set order,
 their stage flags and the push range, and a failed set layout leaves nothing
-alive. It creates
+alive. The swapchain format selector chooses only formats `GpuPixelFormat`
+names, in its own preference order rather than the surface's, and refuses a
+surface that offers none of them by naming the formats it does offer. It creates
 no real Vulkan instance or device, so it says nothing about driver behavior;
 cross-backend rendering is checked by `puck parity`.
 
