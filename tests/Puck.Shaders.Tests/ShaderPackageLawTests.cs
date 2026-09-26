@@ -450,12 +450,82 @@ public sealed partial class ShaderPackageLawTests {
             result: await packager.LoadAsync(cancellationToken: Token, package: output)
         );
     }
+
+    // Declares tiers on the fixture's graph document, as an author writes them.
+    private static void DeclareTiers(Fixture fixture, params string[] tiers) {
+        var path = fixture.PathOf(logicalPath: "transitive.graph.json");
+        var document = System.Text.Json.Nodes.JsonNode.Parse(json: File.ReadAllText(path: path))!;
+
+        document["tiers"] = new System.Text.Json.Nodes.JsonArray(items: [.. tiers.Select(selector: static tier => ((System.Text.Json.Nodes.JsonNode?)tier))]);
+        File.WriteAllText(contents: document.ToJsonString(), path: path);
+    }
+    // The native tool runs a package build needs: every variant's recorded steps, then two for each interface's echo
+    // pass, one compute stage compiled to SPIR-V and to DXIL.
+    private static int BuildRuns(ShaderPackageManifest manifest) =>
+        (manifest.Passes.Sum(selector: static pass => pass.Variants.Sum(selector: static variant => variant.Stages.Sum(selector: static stage => stage.Steps.Count))) +
+        (2 * manifest.Passes.Select(selector: static pass => pass.Declarations.Path).Distinct().Count()));
+
     [Fact]
-    public async Task A_package_builds_every_tier_variant_and_a_load_reads_the_variant_its_tier_names() {
+    public async Task A_package_whose_graph_declares_no_tier_compiles_one_variant_per_pass() {
+        using var untiered = new Fixture(name: "transitive");
+        var untieredRunner = new PackageRunner();
+        var built = await new ShaderPackager(reflectDxil: false, compiler: untiered.Compiler(runner: untieredRunner)).BuildAsync(
+            cancellationToken: Token,
+            output: untiered.Output(name: "package"),
+            source: untiered.PathOf(logicalPath: "transitive.graph.json")
+        );
+
+        Assert.Equal(expected: ShaderPipelineLoadStatus.Compiled, actual: built.Status);
+        Assert.All(
+            action: static pass => Assert.Equal(expected: [ShaderPackageVariant.DefaultName], actual: pass.Variants.Select(selector: static variant => variant.Name)),
+            collection: built.Manifest!.Passes
+        );
+        Assert.Equal(expected: BuildRuns(manifest: built.Manifest), actual: untieredRunner.CompileRuns);
+
+        // Declaring one tier costs exactly one more variant's steps, counted by the tool runs.
+        using var tiered = new Fixture(name: "transitive");
+        var tieredRunner = new PackageRunner();
+
+        DeclareTiers(fixture: tiered, tiers: "high");
+
+        var tieredBuilt = await new ShaderPackager(reflectDxil: false, compiler: tiered.Compiler(runner: tieredRunner)).BuildAsync(
+            cancellationToken: Token,
+            output: tiered.Output(name: "package"),
+            source: tiered.PathOf(logicalPath: "transitive.graph.json")
+        );
+
+        Assert.Equal(expected: ShaderPipelineLoadStatus.Compiled, actual: tieredBuilt.Status);
+        Assert.Equal(expected: BuildRuns(manifest: tieredBuilt.Manifest!), actual: tieredRunner.CompileRuns);
+        Assert.Equal(
+            actual: (tieredRunner.CompileRuns - untieredRunner.CompileRuns),
+            expected: built.Manifest.Passes.Sum(selector: static pass => pass.Variants[0].Stages.Sum(selector: static stage => stage.Steps.Count))
+        );
+
+        // A tier declared twice names no second variant, and is refused before anything compiles.
+        using var repeated = new Fixture(name: "transitive");
+        var repeatedRunner = new PackageRunner();
+
+        DeclareTiers(fixture: repeated, tiers: ["high", "high"]);
+
+        var refused = await new ShaderPackager(reflectDxil: false, compiler: repeated.Compiler(runner: repeatedRunner)).BuildAsync(
+            cancellationToken: Token,
+            output: repeated.Output(name: "package"),
+            source: repeated.PathOf(logicalPath: "transitive.graph.json")
+        );
+
+        Assert.Equal(expected: ShaderPipelineLoadStatus.Failed, actual: refused.Status);
+        Assert.Contains(actualString: refused.Message, expectedSubstring: "RENDERGRAPH_TIERS");
+        Assert.Equal(expected: 0, actual: repeatedRunner.CompileRuns);
+    }
+    [Fact]
+    public async Task A_package_builds_the_variants_its_graph_declares_and_an_undeclared_tier_loads_the_default() {
         using var fixture = new Fixture(name: "transitive");
         var runner = new PackageRunner();
         var packager = new ShaderPackager(reflectDxil: false, compiler: fixture.Compiler(runner: runner));
         var output = fixture.Output(name: "package");
+
+        DeclareTiers(fixture: fixture, tiers: ["high", "low"]);
+
         var built = await packager.BuildAsync(
             cancellationToken: Token,
             output: output,
@@ -464,31 +534,28 @@ public sealed partial class ShaderPackageLawTests {
 
         Assert.Equal(expected: ShaderPipelineLoadStatus.Compiled, actual: built.Status);
 
-        // Every pass carries the variant no tier names and one per tier, each compiled with its tier defined in both
-        // steps, over the one interface.
+        // Every pass carries the default variant and one per declared tier, cheapest first, each tier's compiled with it
+        // defined in both steps, over the one interface.
         foreach (var pass in built.Manifest!.Passes) {
             Assert.Equal(
                 actual: pass.Variants.Select(selector: static variant => variant.Name),
-                expected: ["default", "low", "medium", "high"]
+                expected: ["default", "low", "high"]
             );
 
-            foreach (var (variant, tier) in pass.Variants.Zip(second: ShaderPackageVariant.Tiers)) {
-                var define = ((tier is { } named)
+            foreach (var variant in pass.Variants) {
+                var define = ((QualityTiers.Parse(name: variant.Name) is { } named)
                     ? $"{QualityTiers.Define}={QualityTiers.DefineValue(tier: named)}"
                     : null);
 
                 Assert.All(
                     action: step => Assert.Equal(
-                        actual: step.Options.Contains(value: define),
-                        expected: (define is not null)
+                        actual: step.Options.Count(predicate: static option => option.StartsWith(comparisonType: StringComparison.Ordinal, value: QualityTiers.Define)),
+                        expected: ((define is null) ? 0 : 1)
                     ),
                     collection: variant.Stages.SelectMany(selector: static stage => stage.Steps)
                 );
                 Assert.All(
-                    action: step => Assert.DoesNotContain(
-                        collection: step.Options,
-                        filter: option => (option.StartsWith(comparisonType: StringComparison.Ordinal, value: QualityTiers.Define) && (define is null))
-                    ),
+                    action: step => Assert.True(condition: ((define is null) || step.Options.Contains(value: define))),
                     collection: variant.Stages.SelectMany(selector: static stage => stage.Steps)
                 );
             }
@@ -499,21 +566,21 @@ public sealed partial class ShaderPackageLawTests {
             );
         }
 
-        // A load compiles nothing and reads exactly the binaries of the variant its tier names.
+        // A load compiles nothing and reads the binaries of the variant its tier names; the undeclared medium tier, and
+        // no tier, read the default variant's, and the load says so.
         var runs = runner.CompileRuns;
 
-        foreach (var tier in ShaderPackageVariant.Tiers) {
+        foreach (var (tier, variantName) in (((QualityTier?, string)[])[(null, "default"), (QualityTier.Low, "low"), (QualityTier.Medium, "default"), (QualityTier.High, "high")])) {
             var loaded = await packager.LoadAsync(cancellationToken: Token, package: output, tier: tier);
 
             Assert.Equal(expected: ShaderPipelineLoadStatus.Compiled, actual: loaded.Status);
+            Assert.Equal(expected: variantName, actual: ShaderPackageVariant.NameOf(tier: loaded.Pipeline!.Tier));
 
             foreach (var pass in built.Manifest.Passes) {
-                var variant = pass.Variants.Single(predicate: candidate => (candidate.Name == ShaderPackageVariant.NameOf(tier: tier)));
-
-                foreach (var binary in variant.Binaries) {
+                foreach (var binary in pass.Variants.Single(predicate: candidate => (candidate.Name == variantName)).Binaries) {
                     var bytes = ((binary.Target == ShaderPackageBinary.SpirvTarget)
-                        ? loaded.Pipeline!.Shaders[pass.Name].SpirvByStage[binary.Stage]
-                        : loaded.Pipeline!.Shaders[pass.Name].DxilByStage[binary.Stage]);
+                        ? loaded.Pipeline.Shaders[pass.Name].SpirvByStage[binary.Stage]
+                        : loaded.Pipeline.Shaders[pass.Name].DxilByStage[binary.Stage]);
 
                     Assert.Equal(
                         actual: bytes.ToArray(),
@@ -523,19 +590,33 @@ public sealed partial class ShaderPackageLawTests {
             }
         }
 
+        Assert.Contains(
+            actualString: (await packager.LoadAsync(cancellationToken: Token, package: output, tier: QualityTier.Medium)).Message,
+            expectedSubstring: "at tier medium->default (the graph declares no medium variant)"
+        );
         Assert.Equal(expected: runs, actual: runner.CompileRuns);
 
-        // A manifest missing a tier's variant is malformed.
+        // Variants out of order are malformed, and variants other than the document declares are not its closure.
         var manifestPath = Path.Combine(path1: output, path2: ShaderPackageManifest.FileName);
 
         File.WriteAllBytes(
             bytes: ShaderPackager.Write(manifest: built.Manifest with {
-                Passes = [.. built.Manifest.Passes.Select(selector: static pass => pass with { Variants = [.. pass.Variants.Take(count: 3)] })],
+                Passes = [.. built.Manifest.Passes.Select(selector: static pass => pass with { Variants = [pass.Variants[0], pass.Variants[2], pass.Variants[1]] })],
             }),
             path: manifestPath
         );
         AssertRefused(
             code: ShaderClosureRefusedException.PackageMalformed,
+            result: await packager.LoadAsync(cancellationToken: Token, package: output, tier: QualityTier.High)
+        );
+        File.WriteAllBytes(
+            bytes: ShaderPackager.Write(manifest: built.Manifest with {
+                Passes = [.. built.Manifest.Passes.Select(selector: static pass => pass with { Variants = [.. pass.Variants.Take(count: 2)] })],
+            }),
+            path: manifestPath
+        );
+        AssertRefused(
+            code: ShaderClosureRefusedException.PackageClosure,
             result: await packager.LoadAsync(cancellationToken: Token, package: output, tier: QualityTier.High)
         );
     }

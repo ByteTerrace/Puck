@@ -1,11 +1,17 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
+
 namespace Puck.Abstractions.Presentation;
 
 /// <summary>
 /// Specifies a presentation quality tier: the authored quality vocabulary a <c>views.graphs</c> row names its tier
-/// from, and the variant of a shader package that row loads. A tier selects how a pass computes, never what it reads:
-/// every variant of a pass is compiled from one source against one interface, with <see cref="QualityTiers.Define"/>
-/// set to the tier's <see cref="QualityTiers.DefineValue"/>. Presentation only; no tier reaches simulation state.
+/// from, the tiers a frame graph declares, and the variant of a shader package a row loads. A tier selects how a pass
+/// computes, never what it reads: every variant of a pass is compiled from one source against one interface, with
+/// <see cref="QualityTiers.Define"/> set to the tier's <see cref="QualityTiers.DefineValue"/>. Every document spells a
+/// tier by its <see cref="QualityTiers.Name"/>. Presentation only; no tier reaches simulation state.
 /// </summary>
+[JsonConverter(typeof(QualityTierJsonConverter))]
 public enum QualityTier : byte {
     /// <summary>The cheapest tier.</summary>
     Low,
@@ -55,4 +61,25 @@ public static class QualityTiers {
         "high" => QualityTier.High,
         _ => null,
     };
+}
+/// <summary>Reads and writes a <see cref="QualityTier"/> as its name (<see cref="QualityTiers.Name"/>), refusing any
+/// other word, or the right word in another case, by name.</summary>
+public sealed class QualityTierJsonConverter : JsonConverter<QualityTier>, IJsonSchemaStringConverter {
+    /// <inheritdoc/>
+    public IReadOnlyList<string>? SchemaTokens => QualityTiers.Names;
+
+    /// <inheritdoc/>
+    public override QualityTier Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        var token = ((reader.TokenType == JsonTokenType.String)
+            ? reader.GetString()
+            : null);
+
+        return (QualityTiers.Parse(name: token) ?? throw new JsonException(message: $"tier '{token}' must be 'low', 'medium', or 'high'."));
+    }
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, QualityTier value, JsonSerializerOptions options) {
+        ArgumentNullException.ThrowIfNull(argument: writer);
+
+        writer.WriteStringValue(value: QualityTiers.Name(tier: value));
+    }
 }

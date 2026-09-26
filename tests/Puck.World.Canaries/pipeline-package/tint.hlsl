@@ -1,6 +1,6 @@
 // Every pixel is (gain, 1 - gain, blue), so a captured region's value is the gain's own arithmetic and the blue names
-// the variant that drew it: 0.5 for the variant no tier names, and 0.25, 0.5 or 0.75 for the low, medium and high
-// variants, which compile with PUCK_QUALITY_TIER defined to 0, 1 or 2.
+// the variant that drew it: 0.5 for the default variant, and 0.25 (tier + 1) for a tier's variant, which compiles with
+// PUCK_QUALITY_TIER defined. The graph declares the high tier alone, whose variant writes 0.75.
 // The generated interface declares the frame group, the pass block (extent and gain) and the output, 'image'.
 #include "tint.interface.hlsli"
 

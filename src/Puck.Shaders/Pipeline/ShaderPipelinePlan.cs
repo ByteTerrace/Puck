@@ -224,7 +224,10 @@ public sealed class ShaderPipelinePlan {
             Name: definition.Name,
             Resources: new ReadOnlyCollection<ShaderPipelineResource>(list: resources),
             Outputs: new ReadOnlyCollection<string>(list: definition.Outputs.ToArray()),
-            Passes: new ReadOnlyCollection<ShaderPipelinePass>(list: passes)
+            Passes: new ReadOnlyCollection<ShaderPipelinePass>(list: passes),
+            Tiers: ((definition.Tiers is { } tiers)
+                ? new ReadOnlyCollection<Puck.Abstractions.Presentation.QualityTier>(list: tiers.ToArray())
+                : null)
         );
     }
     private static Dictionary<string, ShaderConfigField> SnapshotConfig(IReadOnlyDictionary<string, ShaderConfigField> config) =>

@@ -58,19 +58,19 @@ public sealed record ShaderPackageFile(string Path, string Pin, long Bytes);
 /// binary.</param>
 /// <param name="Declarations">The declarations generated from the interface, at the path the pass's source includes
 /// them from.</param>
-/// <param name="Variants">The pass's precompiled binaries, one entry per variant, named and ordered as
-/// <see cref="ShaderPackageVariant.Names"/>. Every variant reads the same interface, so a tier cannot change what a
-/// pass reads.</param>
+/// <param name="Variants">The pass's precompiled binaries, one entry per variant: <see cref="ShaderPackageVariant.DefaultName"/>,
+/// then one for each tier its graph declares (<see cref="RenderGraphDefinition.Variants"/>), cheapest first. Every
+/// variant reads the same interface, so a tier cannot change what a pass reads.</param>
 public sealed record ShaderPackagePass(
     string Name,
     ShaderPackageFile Interface,
     ShaderPackageFile Declarations,
     IReadOnlyList<ShaderPackageVariant> Variants
 );
-/// <summary>One variant of a pass: how it compiled and its precompiled binaries. The variant a <c>views.graphs</c>
-/// row naming no tier loads is <see cref="DefaultName"/>, compiled with no tier defined; each other variant is named for
-/// its <see cref="QualityTier"/> (<see cref="QualityTiers.Name"/>) and compiled with that tier defined
-/// (<see cref="ShaderCompiler.StepsOf"/>).</summary>
+/// <summary>One variant of a pass: how it compiled and its precompiled binaries. Every pass carries
+/// <see cref="DefaultName"/>, compiled with no tier defined, which a <c>views.graphs</c> row naming no tier, or a tier
+/// its graph does not declare, loads; each other variant is a tier the graph declares, named for it
+/// (<see cref="QualityTiers.Name"/>) and compiled with it defined (<see cref="ShaderCompiler.StepsOf"/>).</summary>
 /// <param name="Name">The variant's name.</param>
 /// <param name="Stages">Each stage's entry point, profile, and native tool steps, as the compiler identified
 /// them (<see cref="ShaderCompileIdentity.Stages"/>).</param>
@@ -79,18 +79,31 @@ public sealed record ShaderPackageVariant(string Name, IReadOnlyList<ShaderCompi
     /// <summary>The name of the variant compiled for no tier.</summary>
     public const string DefaultName = "default";
 
-    /// <summary>Gets the tier of every variant a package carries, in the order its passes list them: no tier, then each
-    /// tier, cheapest first.</summary>
-    public static IReadOnlyList<QualityTier?> Tiers { get; } = [null, .. QualityTiers.All.Select(selector: static tier => ((QualityTier?)tier))];
-    /// <summary>Gets the name of every variant a package carries, in the order of <see cref="Tiers"/>.</summary>
-    public static IReadOnlyList<string> Names { get; } = [.. Tiers.Select(selector: NameOf)];
-
     /// <summary>Returns the name of the variant a tier loads.</summary>
     /// <param name="tier">The tier, or <see langword="null"/> for none.</param>
     /// <returns><see cref="DefaultName"/> for no tier, and the tier's name otherwise.</returns>
     public static string NameOf(QualityTier? tier) => ((tier is { } named)
         ? QualityTiers.Name(tier: named)
         : DefaultName);
+    /// <summary>Spells the tier a row asked for and the variant it got: the variant's name when they agree, and
+    /// <c>&lt;asked&gt;-&gt;&lt;variant&gt;</c>, such as <c>high-&gt;default</c>, when the graph declares no variant of the tier
+    /// asked for.</summary>
+    /// <param name="requested">The tier the row names, or <see langword="null"/> for none.</param>
+    /// <param name="variant">The variant's tier (<see cref="RenderGraphDefinition.VariantOf"/>), or
+    /// <see langword="null"/> for <see cref="DefaultName"/>.</param>
+    /// <returns>The spelling.</returns>
+    public static string Spell(QualityTier? requested, QualityTier? variant) => ((requested == variant)
+        ? NameOf(tier: variant)
+        : $"{NameOf(tier: requested)}->{NameOf(tier: variant)}");
+    /// <summary>Describes a load's variant as a clause of its outcome message: nothing for a row naming no tier,
+    /// <c> at tier high</c> for a declared tier, and <c> at tier high-&gt;default</c> with the reason when the graph declares
+    /// no variant of it.</summary>
+    /// <param name="requested">The tier the row names, or <see langword="null"/> for none.</param>
+    /// <param name="variant">The variant's tier, or <see langword="null"/> for <see cref="DefaultName"/>.</param>
+    /// <returns>The clause, empty or starting with a space.</returns>
+    public static string Describe(QualityTier? requested, QualityTier? variant) => ((requested is null)
+        ? string.Empty
+        : $" at tier {Spell(requested: requested, variant: variant)}{((requested == variant) ? string.Empty : $" (the graph declares no {NameOf(tier: requested)} variant)")}");
 }
 /// <summary>One precompiled binary of a package.</summary>
 /// <param name="Stage">The stage it runs.</param>

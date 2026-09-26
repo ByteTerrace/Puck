@@ -749,8 +749,14 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                         result.Append(handler: $"\n  {row.Name} package={package}");
                         continue;
                     }
-                    result.Append(handler: $"\n  {row.Name} source={row.Source} tier={ShaderPackageVariant.NameOf(tier: row.Tier)}");
-                    if (FindEntry(name: row.Name) is not { } entry) { result.Append(value: " unrendered"); continue; }
+                    var rowEntry = FindEntry(name: row.Name);
+
+                    // The tier the row names, then the variant its latest compilation at that tier took, such as
+                    // high->default where the graph declares no high variant.
+                    result.Append(handler: $"\n  {row.Name} source={row.Source} tier={(((rowEntry is { } compiling) && (compiling.Tier == row.Tier) && (compiling.LastCompile?.Pipeline is { } compiled))
+                        ? ShaderPackageVariant.Spell(requested: row.Tier, variant: compiled.Tier)
+                        : ShaderPackageVariant.NameOf(tier: row.Tier))}");
+                    if (rowEntry is not { } entry) { result.Append(value: " unrendered"); continue; }
                     result.Append(handler: $" {(entry.IsCompiling
                         ? "compiling"
                         : "idle")} ready={entry.Node.IsReady.ToString().ToLowerInvariant()} frames={entry.Node.FrameCounter} {Clock(entry: entry)} watch={((entry.WatchPath is null)

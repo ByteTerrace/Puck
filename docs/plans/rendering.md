@@ -2808,19 +2808,24 @@ follow it.
    prices and the refusals) and `BrowserParityRecordingTests`, whose baseline
    holds the dimension the Node harness (`engine-wasm.test.cjs`) holds the
    WebAssembly engine's `AnalyzeCosts` to.
-7. Done: tiers. A package builds four variants a pass, `default` and one per
-   tier, each tier's compiled with `PUCK_QUALITY_TIER` defined
+7. Done: tiers. A graph declares the tiers it varies by (`tiers` in
+   `puck.render.graph.v1`), and its package builds `default` and one variant
+   per declared tier, each tier's compiled with `PUCK_QUALITY_TIER` defined
    (`QualityTiers`, `ShaderCompiler.StepsOf`, `ShaderPackageVariant`), every
-   variant recording its own stages; a load reads the variant its tier names.
-   A `views.graphs` row names its tier from `low`, `medium` and `high`
+   variant recording its own stages; a graph declaring none builds `default`
+   alone. A `views.graphs` row names its tier from `low`, `medium` and `high`
    (`WorldViewGraph.Tier`, `tier: high` in `.puck`, printed back bare), any
    other spelling refused naming it; the host compiles or loads the row at its
-   tier and recompiles on a change, and `pipeline.status` prints it. Laws:
-   `ShaderPackageLawTests` (every variant built, a load per tier reads its
-   binaries), `WorldViewGraphTierLawTests` (documents differing only in tier
-   compile identical manifests and mirrors and hash equally; an unknown tier
-   refused by name) and `GraphParameterStatementTests` (the round trip). The
-   `pipeline-package` canary captures the package's high variant.
+   tier, a tier the graph does not declare falling back to `default` and
+   reported as `tier=low->default`, and recompiles on a change. Laws:
+   `ShaderPackageLawTests` (a graph with no tier compiles one variant a pass,
+   counted in tool runs; declared variants built, a load per tier reads its
+   binaries or the default's), `WorldViewGraphTierLawTests` (documents
+   differing only in tier compile identical manifests and mirrors and hash
+   equally; an unknown tier refused by name) and
+   `GraphParameterStatementTests` (the round trip). The `pipeline-package`
+   canary captures the package's high variant and an undeclared tier's
+   fallback.
 8. The field lattice as a region kind, replacing `WorldClientFieldLattice`'s
    second path, and the materials a program bakes join the mirror.
 

@@ -140,6 +140,8 @@ public sealed class ShaderPipelineLoader {
             var plan = RenderGraphCompiler.ShaderPasses.Compile(definition: definition).Pipeline;
             var shaders = new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal);
             var diagnostics = new List<string>();
+            // A tier the graph does not declare compiles its default variant.
+            var variant = definition.VariantOf(tier: tier);
             var directory = Path.GetDirectoryName(path: path)!;
             // Capture every root stage before invoking tools. A candidate cannot combine different revisions
             // of a file reused by several passes; includes are snapshotted by the source compiler. A graph over no package
@@ -190,7 +192,7 @@ public sealed class ShaderPipelineLoader {
                         source: sourceTexts[sourcePath],
                         sourcePath: sourcePath
                     ),
-                    tier: tier
+                    tier: variant
                 );
                 var shader = m_compiler.CompileAsync(
                     cancellationToken: cancellationToken,
@@ -252,8 +254,10 @@ public sealed class ShaderPipelineLoader {
             var candidate = new CompiledShaderPipeline(
                 plan: plan,
                 shaders: shaders
-            );
-            var message = $"compiled: {plan.Passes.Count} passes; outputs={string.Join(
+            ) {
+                Tier = variant,
+            };
+            var message = $"compiled: {plan.Passes.Count} passes{ShaderPackageVariant.Describe(requested: tier, variant: variant)}; outputs={string.Join(
                 separator: ",",
                 values: plan.Outputs
             )}";

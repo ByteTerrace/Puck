@@ -337,7 +337,11 @@ which is the kind of the instance edge bound to it. Only the package that
 writes a structured or counted buffer publishes it; any other structured or
 counted output is refused with `SHADERPIPE_PACKAGE_STORAGE`.
 
-The refusals are `RENDERGRAPH_SCHEMA`,
+A graph declares the quality tiers its shader passes vary by as `tiers`, a list
+of `low`, `medium` and `high`; see [packaging a pipeline](#packaging-a-pipeline).
+A tier declared twice is `RENDERGRAPH_TIERS`.
+
+The refusals are `RENDERGRAPH_SCHEMA`, `RENDERGRAPH_TIERS`,
 `RENDERGRAPH_DOCUMENT_SHAPE`, `RENDERGRAPH_PACKAGE_UNKNOWN`,
 `RENDERGRAPH_PACKAGE_PORTS`, `RENDERGRAPH_PACKAGE_AS`, and
 `RENDERGRAPH_PACKAGE_INPUT` and `RENDERGRAPH_PACKAGE_OUTPUT` for a version that
@@ -1676,12 +1680,19 @@ precompiled SPIR-V and DXIL per stage and variant
 and runs no tool, so a World whose row names a package, or names a source the
 [build's package store](#the-builds-package-store) holds, needs no compiler; the
 `no-device-compile` canary runs both with DXC hidden from the World's search
-path. Every pass carries four variants, in this order: `default`, compiled with
-no tier defined, then `low`, `medium` and `high`, each compiled with
-`PUCK_QUALITY_TIER` defined to 0, 1 or 2 (`QualityTiers`,
-`ShaderCompiler.StepsOf`). A source that varies by tier tests the symbol with
+path. Every pass carries the `default` variant, compiled with no tier
+defined, then one variant for each tier its graph declares in `tiers`, cheapest
+first, each compiled with `PUCK_QUALITY_TIER` defined to 0, 1 or 2 for `low`,
+`medium` or `high` (`QualityTiers`, `ShaderCompiler.StepsOf`,
+`RenderGraphDefinition.Variants`). A graph that declares no tier, and every
+one-off shader, builds `default` alone, so each declared tier costs one more
+compile of every pass. A source that varies by tier tests the symbol with
 `#if defined(PUCK_QUALITY_TIER)`. Every variant of a pass reads the same
 interface, so a quality tier cannot change what a pass reads.
+
+```json
+{ "$schema": "puck.render.graph.v1", "name": "tint", "tiers": ["high"], … }
+```
 
 ```sh
 puck shaders package src/Puck.World/Assets/pipelines/ink.graph.json --output artifacts/ink
@@ -1722,7 +1733,7 @@ manifest's own name is refused.
 | `compiler` | `{ version, tools: [ { name, version } ] }`: the compiler revision every pass compiled under, and the first line each native tool's `--version` query printed. |
 | `capabilities` | `{ targetFloor: { vulkan, shaderModel }, imageFormats, buffers, workgroupInvocations, parameterBytes }`, derived from the plan: the target every stage compiles to, every image format a storage declares, whether a raw buffer is bound, the largest compute workgroup, and the largest pass parameter block. |
 | `files[]` | `{ path, pin, bytes }` for every authored file of the closure, ordered by path. `pin` is the `sha256/<hex64>` content pin of the file's UTF-8 text, the same hash the cache key records; `bytes` is its length on disk. |
-| `passes[]` | `{ name, interface, declarations, variants: [ { name, stages: [ { stage, entryPoint, profile, steps: [ { tool, options } ] } ], binaries: [ { stage, target, path, pin, bytes } ] } ] }` in execution order, the variants `default`, `low`, `medium`, `high`. Each variant's stages carry the steps it compiled with, a tier's defining `PUCK_QUALITY_TIER`; every variant compiles the same stages, which are `ShaderPipelineLoader.StagesOf`, the loader's one statement of what a pass compiles: a fullscreen pass lists the loader's HLSL vertex stage before its fragment stage, and a geometry pass its own vertex stage before its fragment stage. `interface` and `declarations` are `{ path, pin, bytes }`; the interface's pin is its hash (`ShaderInterface.Hash`), which versions the declarations and every binary. A binary's `target` is `spirv` or `dxil`, and its pin covers its bytes. |
+| `passes[]` | `{ name, interface, declarations, variants: [ { name, stages: [ { stage, entryPoint, profile, steps: [ { tool, options } ] } ], binaries: [ { stage, target, path, pin, bytes } ] } ] }` in execution order, the variants `default` and then each declared tier. Each variant's stages carry the steps it compiled with, a tier's defining `PUCK_QUALITY_TIER`; every variant compiles the same stages, which are `ShaderPipelineLoader.StagesOf`, the loader's one statement of what a pass compiles: a fullscreen pass lists the loader's HLSL vertex stage before its fragment stage, and a geometry pass its own vertex stage before its fragment stage. `interface` and `declarations` are `{ path, pin, bytes }`; the interface's pin is its hash (`ShaderInterface.Hash`), which versions the declarations and every binary. A binary's `target` is `spirv` or `dxil`, and its pin covers its bytes. |
 
 The compile facts are not assembled beside the compiler.
 `compiler.version` and each variant's `stages` are the
@@ -1737,13 +1748,14 @@ reads no tool to check them.
 Loading refuses by name, in this order. It reads the manifest strictly: a path
 that is not a directory holding the manifest, an unknown or missing member, a
 malformed path or pin, a duplicate path, a document that is not a listed file,
-or a pass whose variants are not `default`, `low`, `medium` and `high` in that
-order, each compiling the same stages and carrying one SPIR-V and one DXIL
+or a pass whose variants are not `default` followed by distinct tiers cheapest
+first, each compiling the same stages and carrying one SPIR-V and one DXIL
 binary per stage, is `SHADERPKG_MALFORMED`. It reads every listed file, interface,
 declaration and binary: a missing one is `SHADERPKG_FILE_MISSING`, and one whose
 length or pin differs is `SHADERPKG_FILE_PIN`. It plans the document and
 collects the closure again inside the package. A closure that is not exactly
-the listed files, or passes other than the recorded ones, is
+the listed files, passes other than the recorded ones, or variants other than
+the document's declared tiers, is
 `SHADERPKG_CLOSURE`, and capabilities other than the recorded ones are
 `SHADERPKG_CAPABILITIES`. A pass whose interface, or the declarations this
 engine generates from it, differs from the one its binaries were built for is
@@ -1808,8 +1820,12 @@ A row names its quality tier from `low`, `medium` and `high`, written bare in
 `.puck` (`tier: high`) and as that string in JSON; any other word, in any other
 case, is refused naming it. The host loads the package's variant of that name,
 or compiles the source with the tier defined where no package holds it, and a
-row naming no tier loads `default`. A tier change recompiles the row, and
-`pipeline.status` prints each row's `tier=`. A tier selects how the passes
+row naming no tier loads `default`. A row naming a tier its graph does not
+declare falls back to `default` rather than being refused, since a document
+names its tier without knowing which graphs vary by it, and says so: the load's
+report reads `at tier low->default (the graph declares no low variant)` and
+`pipeline.status` prints `tier=low->default`, where a declared tier prints
+`tier=high`. A tier change recompiles the row. A tier selects how the passes
 compute and never what they read: two documents differing only in a row's tier
 compile the same presentation manifest, fill the same state mirror and hash the
 same state (`WorldViewGraphTierLawTests`). A package row names no tier.
