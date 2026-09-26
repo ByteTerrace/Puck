@@ -1689,9 +1689,11 @@ optional `Text` payload beside the numeric `Value`), never a second
 mutation kind for the same per-cell write.
 
 **A color field is a `#RRGGBB` literal or a `state.<row>[.<key>]` binding to a
-text cell holding one**—the same grammar, resolved by `WorldColor.Resolve`
-against the hosting world: creation palette entries, a screen text source's
-`foreground`/`background`. `WorldDefinitionValidator` refuses a binding that
+text cell holding one**—the same grammar, read through the client's state
+mirror like every presentation read of state (`WorldBakedColors`, whose slots
+the presentation manifest registers at install): creation palette entries, a
+height field's color, a screen text source's `foreground`/`background`. A
+bound color moving rebuilds the program or rebakes the decal that baked it. `WorldDefinitionValidator` refuses a binding that
 names no declared text cell, or one whose text is not a hex color; the
 `CreationCanonicalizer` admits only the binding's syntax (a creation on its own
 has no world to resolve against—the world validator resolves it at the

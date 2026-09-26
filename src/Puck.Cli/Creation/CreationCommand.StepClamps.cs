@@ -53,7 +53,7 @@ internal static partial class CreationCommand {
 
         pool.Emit(
             pooled,
-            definition,
+            WorldBakedColors.Of(definition: definition),
             probeWorstCase: false,
             maxPlacementScale: 1f,
             slotBase: 0

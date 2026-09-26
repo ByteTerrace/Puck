@@ -409,6 +409,11 @@ raises a solid column above the origin that bodies stand on
 (`Puck.Physics.Fields.FieldLatticeSolid`, unioned with the authored solids for contact) and
 the renderer shows (`WorldFieldEmitter`: one CPU-baked distance brick per
 height field, coloured by `color`, uploaded through the engine's brick pool).
+A field row's live cells ride the snapshot, never the document; the client's
+state view keeps them (`WorldDocumentStateView.ApplyFieldCells`) and presentation
+reads them through the state mirror like any row: the brick bakes from the
+height field's row slot, and a pass binds a field row to a float array as
+`state.<field>` (one element per lattice cell, z, then layer, then x).
 `WorldFieldProgram.Compile` is the typed reaction compiler view over that same
 authored topology and reaction list: stable field/node handles, its canonical
 state catalog, fixed-point scalar inputs, typed state dependencies, immutable

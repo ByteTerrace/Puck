@@ -23,7 +23,8 @@ public sealed partial class PipelineOverrideLawTests {
         }),
     });
 
-    // A board pass declaring a uint config field and two four-element arrays, an int and a uint.
+    // A board pass declaring a uint config field, four-element int, uint and float arrays, and an eight-element float
+    // array.
     private const string BoardGraph = """
         {
           "$schema": "puck.render.graph.v1",
@@ -39,7 +40,7 @@ public sealed partial class PipelineOverrideLawTests {
               "kind": "Compute",
               "outputs": [{ "name": "image" }],
               "config": { "level": { "type": "uint", "default": 0 } },
-              "arrays": { "tiles": { "type": "int", "length": 4 }, "marks": { "type": "uint", "length": 4 } }
+              "arrays": { "tiles": { "type": "int", "length": 4 }, "marks": { "type": "uint", "length": 4 }, "heights": { "type": "float", "length": 4 }, "column": { "type": "float", "length": 8 } }
             }
           ],
           "outputs": ["image"]
@@ -153,6 +154,62 @@ public sealed partial class PipelineOverrideLawTests {
                 Assert.Contains(
                     actualString: m_echoes[^1].Message,
                     expectedSubstring: reason
+                );
+
+                return accepted;
+            }
+        );
+    }
+    /// <summary>A field row binds an array like any keyed row, one element per cell of the field lattice: a four-by-two
+    /// lattice's field loads bound to an eight-element float array, and is refused bound to a four-element one as
+    /// <see cref="WorldPipelineOverrideRefusal.ParameterUnbound"/> naming the eight elements it presents.</summary>
+    [Fact]
+    public void AWorldLoadBindsAFieldRowToAnArrayOnlyAsLongAsItsLattice() {
+        var lattice = WorldFieldsSection.ToStateSection(composite: new WorldFieldsSection(
+            Lattice: new WorldFieldLatticeDefinition(
+                Origin: new Puck.Assets.Documents.DocumentVector3(x: 0f, y: 0f, z: 0f),
+                CellSize: 1f,
+                Width: 4,
+                Depth: 2
+            ),
+            Fields: [new WorldFieldRow(Name: "heat", Max: 4f)]
+        ));
+
+        // The live field lattice is fixed at boot, so the server boots with it and every candidate keeps it.
+        WorldDefinition WithField(WorldDefinition definition) => (definition with {
+            StateRaw = ((definition.StateRaw ?? new WorldStateSection()) with {
+                Lattices = lattice.Lattices,
+                World = [.. definition.AuthoredState.Where(predicate: static row => (row.Field is null)), .. (lattice.World ?? [])],
+            }),
+        });
+
+        using var fixture = Fixtures.FreshServer(definition: WithField(definition: Document()));
+
+        fixture.Server.PipelineSources = new WorldPipelineSources(documentDirectory: m_directory);
+        fixture.Server.EchoTap = m_echoes.Add;
+
+        WorldDefinition Binding(string array) => WithField(definition: WithBoardParameter(
+            definition: fixture.Server.Definition,
+            field: array,
+            value: new BindableScalar(binding: "state.heat")
+        ));
+
+        Laws.RefusalWithControl(
+            lawId: "pipeline.overrides.parameter-field-row",
+            controlOutcome: () => Load(
+                candidate: Binding(array: "column"),
+                fixture: fixture
+            ),
+            deniedOutcome: () => {
+                var accepted = Load(
+                    candidate: Binding(array: "heights"),
+                    fixture: fixture
+                );
+
+                AssertLastRefusal(refusal: nameof(WorldPipelineOverrideRefusal.ParameterUnbound));
+                Assert.Contains(
+                    actualString: m_echoes[^1].Message,
+                    expectedSubstring: "row 'heat' presents 8 elements and the array holds 4"
                 );
 
                 return accepted;

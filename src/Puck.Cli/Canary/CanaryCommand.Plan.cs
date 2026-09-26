@@ -35,9 +35,14 @@ internal static partial class CanaryCommand {
     /// <summary>Counts what running <paramref name="manifests"/> costs.</summary>
     /// <param name="manifests">The selected manifests, in authored order.</param>
     /// <param name="namedWorldArtifact">Whether <c>--world-artifact</c> names the World, so nothing builds it.</param>
+    /// <param name="backends">The backends the run boots its backend-declaring proofs on
+    /// (<see cref="SelectBackends"/>).</param>
     /// <returns>The plan.</returns>
-    internal static CanaryPlan Plan(IReadOnlyList<CanaryManifest> manifests, bool namedWorldArtifact) {
-        var proofs = ExpandProofs(manifests: manifests).Select(selector: static proof => {
+    internal static CanaryPlan Plan(IReadOnlyList<CanaryManifest> manifests, bool namedWorldArtifact, IReadOnlyList<string> backends) {
+        var proofs = ExpandProofs(
+            backends: backends,
+            manifests: manifests
+        ).Select(selector: static proof => {
             var manifest = proof.Manifest;
             var legs = ((CanaryLeg[])[manifest.Positive, manifest.Discriminating]);
             var stub = (manifest.BootShape == CanaryBootShape.Stub);
@@ -142,6 +147,11 @@ internal static partial class CanaryCommand {
         }
 
         Console.WriteLine(value: $"canary plan: {plan.Proofs.Count} proof(s), {plan.Legs} leg(s): {plan.ExclusiveLegs} serial, {(plan.Legs - plan.ExclusiveLegs)} parallel up to --jobs.");
+
+        if (BackendScope(proofs: [.. plan.Proofs.Select(selector: static proof => proof.Proof)]) is { } scope) {
+            Console.WriteLine(value: $"canary plan: backend-declaring proofs run {scope}.");
+        }
+
         Console.WriteLine(value: $"canary plan: {plan.WorldBoots} World boot(s); {plan.LegSpawns} leg process spawn(s): {plan.WorldProcesses} World, {plan.StubLaunches} Puck.Launcher.Stub, {plan.PackageSpawns} shaders package.");
         Console.WriteLine(value: $"canary plan: build(s): Puck.World at most {plan.WorldBuilds} (none when the store holds this source state), Puck.Launcher.Stub {plan.StubBuilds}.");
         Console.WriteLine(value: $"canary plan: every leg ends at the quit the runner appends to its script; {plan.BudgetSeconds.ToString(provider: CultureInfo.InvariantCulture)}s of summed per-leg timeouts is the kill ceiling, not the length.");

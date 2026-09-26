@@ -296,7 +296,7 @@ public sealed partial class WorldStampPool {
     }
     // One pool slot's emission: palette, Pass 1 authored ungrouped shapes, Pass 2 blend groups, then the
     // creation's text runs as ONE root-anchored dynamic instance.
-    private static void EmitOne(SdfProgramBuilder builder, WorldDefinition definition, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog) {
+    private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog) {
         var document = live?.Creation.EngineDocument;
         var shapes = (document?.Shapes ?? []);
         // The probe reserves a FULL distinct palette per pool slot (the conservative material bound); a live slot
@@ -305,7 +305,7 @@ public sealed partial class WorldStampPool {
             ? ProbePalette(builder: builder)
             : WorldPlacementStamper.RegisterPalette(
                 builder: builder,
-                definition: definition,
+                colors: colors,
                 document: (document ?? EmptyDocument),
                 tint: null
             )
@@ -1250,7 +1250,8 @@ public sealed partial class WorldStampPool {
     /// the creation-root envelope. Unused registrations and shape slots emit no instances;
     /// dynamic-transform addresses remain fixed. The probe path still takes the largest legal form.</summary>
     /// <param name="builder">The program builder.</param>
-    /// <param name="definition">The live definition a registration's state-bound palette color resolves against.</param>
+    /// <param name="colors">The colors the build bakes, which a registration's state-bound palette color resolves
+    /// through.</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
     /// <param name="maxPlacementScale">Live-consumed: the placement scale envelope's ceiling
     /// (<see cref="WorldPlacementPolicyDefaults.MaxPlacementScale"/>), read fresh at every call — it only feeds spatial-cull
@@ -1262,7 +1263,9 @@ public sealed partial class WorldStampPool {
     /// <param name="textCatalog">The world's packed font catalog, or <see langword="null"/> when none is resolved (a
     /// remote projection) — a registration's text runs are then omitted, exactly as the static stamper omits
     /// them.</param>
-    public void Emit(SdfProgramBuilder builder, WorldDefinition definition, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null) {
+    public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null) {
+        ArgumentNullException.ThrowIfNull(argument: colors);
+
         for (var index = 0; (index < m_pool.Length); index++) {
             var live = (probeWorstCase
                 ? null
@@ -1277,7 +1280,7 @@ public sealed partial class WorldStampPool {
 
             EmitOne(
                 builder: builder,
-                definition: definition,
+                colors: colors,
                 live: live,
                 maxPlacementScale: maxPlacementScale,
                 probeWorstCase: probeWorstCase,

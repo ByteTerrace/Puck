@@ -219,8 +219,9 @@ separate constraint on dense populations; reusable appearances do not remove it.
   the radial wheel and overlay predicates only look slots up
   (`WorldStateMirror.SlotOf`), which registers and reads nothing, and look them
   up again when `WorldStateMirror.Generation` moves. `WorldClient.DeliverState` refreshes the slots the delivery's
-  `WorldStateStamp` moved, `DeliverSnapshot` refreshes the trait-bearing slots
-  still moving, `DeliverDefinition` re-resolves every slot, and
+  `WorldStateStamp` moved, `DeliverSnapshot` hands the snapshot's field cells to
+  the mirror's state view and refreshes the field rows they moved and the
+  trait-bearing slots still moving, `DeliverDefinition` re-resolves every slot, and
   `WorldFramePresenter.CaptureFrame` applies the frame's interpolation fraction
   (pinned to one offscreen) before anything reads it. `StateMirrorFor` answers
   the mirror of the authority a seat is routed to: this one for the authority
@@ -233,6 +234,11 @@ separate constraint on dense populations; reusable appearances do not remove it.
   frame reads them. A `$body` key names the lease's body, and the
   lease releases its slots when the body leaves, its binding moves, or the
   mirror installs a document, so the mirror retires what nothing reads.
+- `WorldBakedColors.cs` is the colors a build bakes (a creation palette's, a
+  height field's, a text screen's ink), read through the mirror's color slots;
+  the scene and field emitters and the decal cache follow a bound one's move
+  with a rebuild. `WorldFieldEmitter` bakes each height field's brick from the
+  field row's slot, the same slot a pass's array bound to `state.<field>` reads.
 - `WorldWheelRings.cs` is one seat's drawn radial: each sector's label and icon
   and the hub label, read from the wheel's label and icon rows through the
   seat's routed mirror, and rebuilt only when one of the slots it read changes

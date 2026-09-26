@@ -130,7 +130,9 @@ and valid only for the call. `IWorldStateView.cs` is the state half of the
 presentation view: the narrow reader, one cell by row ordinal, that the state
 mirror reads every presentation read of state through. `WorldStateMirror.cs` is
 that mirror, a flat slot table refreshed from each delivery's stamp, and
-`WorldDocumentStateView.cs` the view over a delivered definition. A
+`WorldDocumentStateView.cs` the view over a delivered definition and the field
+cells its snapshots carry, which a field row reads (`ApplyFieldCells` names the
+rows a snapshot moved, and `WorldStateMirror.RefreshRows` re-reads them). A
 `WorldSessionMirror` keeps the rows its state deliveries moved until
 `FollowState` takes them, so a session view or a seat routed to that authority
 (through `WorldAuthorityEndpoint.FollowState`) reads only moved slots; the

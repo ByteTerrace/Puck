@@ -62,8 +62,8 @@ public static class ShaderInterfaceEcho {
     }
     /// <summary>Returns the interface an echo of <paramref name="shaderInterface"/> compiles against: the interface itself
     /// when it already declares its <see cref="OutputName"/> port, and otherwise the same members followed
-    /// by a pass-group storage image named <see cref="OutputName"/>. The blocks are the interface's either way, so an echo
-    /// of any document pass holds its blocks to their layout.</summary>
+    /// by a pass-group storage image named <see cref="OutputName"/>, pushing an index when the interface does. The blocks
+    /// are the interface's either way, so an echo of any document pass holds its blocks to their layout.</summary>
     /// <param name="shaderInterface">The interface.</param>
     /// <returns>The interface its echo compiles against.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shaderInterface"/> is <see langword="null"/>.</exception>
@@ -85,7 +85,8 @@ public static class ShaderInterfaceEcho {
                 name: OutputName,
                 type: ShaderValueType.Float4
             )],
-            name: shaderInterface.Name
+            name: shaderInterface.Name,
+            pushesIndex: shaderInterface.PushesIndex
         );
     }
     /// <summary>Generates the echo pass's HLSL for an interface. It includes the interface's generated declarations

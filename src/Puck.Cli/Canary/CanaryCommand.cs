@@ -21,6 +21,7 @@ internal static partial class CanaryCommand {
 
     public static Command Create() {
         var allOption = new Option<bool>(name: "--all") { Description = "Explicitly run every proof, including any declared environmental requirements; it does not promote any proof into the automatic set." };
+        var backendOption = new Option<string?>(name: "--backend") { Description = "Run every backend-declaring proof on this backend only: vulkan or directx. Both run when omitted, and the verdict names the backends that ran." };
         var capabilityOption = new Option<string>(name: "--capability") { Description = "Filter by automatic, headless, windowed, offscreen, gpu, audio-output, or input:<hardware-name>." };
         var idsArgument = new Argument<string[]>(name: "id") { Arity = ArgumentArity.ZeroOrMore, DefaultValueFactory = static _ => [], Description = "Run the named proofs explicitly, regardless of their declared requirements." };
         var listOption = new Option<bool>(name: "--list") { Description = "Strictly load and list every manifest without building or running." };
@@ -35,7 +36,9 @@ internal static partial class CanaryCommand {
         var command = new Command(
             description: "Run bounded, two-leg behavioral proofs against the real Puck.World executable.",
             name: "canary"
-        ) { idsArgument, allOption, capabilityOption, debugLayersOption, jobsOption, listOption, mergeOption, planOption, worldArtifactOption };
+        ) { idsArgument, allOption, backendOption, capabilityOption, debugLayersOption, jobsOption, listOption, mergeOption, planOption, worldArtifactOption };
+
+        backendOption.AcceptOnlyFromAmong(values: [.. WorldOffscreenLeg.Backends]);
 
         command.Detail(detail: """
               no selection           run the automatic set: headless shape and no environmental requirements
@@ -44,6 +47,7 @@ internal static partial class CanaryCommand {
               --list                 strictly load and list every manifest without building or running
               --capability <class>   filter by automatic, headless, windowed, offscreen, gpu, audio-output, or input:<name>
               --merge                run the merge gate: the automatic set plus every proof requiring gpu
+              --backend <name>       run every backend-declaring proof on vulkan or directx only
               --debug-layers         boot every offscreen leg with its backend's validation layer, and fail
                                      a leg on any validation message or an unloaded layer
               --plan                 print the selection's counts and ceiling without building or running
@@ -56,6 +60,8 @@ internal static partial class CanaryCommand {
             alone. A leg ends when its script does: the runner closes each script with wire.errors and
             quit, and kills a leg only at its manifest's timeoutSeconds. An offscreen
             proof runs every leg once per backend, Vulkan then Direct3D 12, and holds only when both did.
+            --backend runs those legs on the one backend it names, and the plan, the selection line and
+            the verdict name the backends that ran; --merge refuses it, since that gate holds both.
 
             Exit codes: 0 all proofs held, 1 an observed proof failed, 2 refusal/infrastructure, including
             an environment that cannot run a selected proof (UNSUPPORTED: no usable GPU device for a
@@ -96,6 +102,24 @@ internal static partial class CanaryCommand {
 
                 return;
             }
+            // The token, never GetValue: a value AcceptOnlyFromAmong refused throws when read. An unknown value is left to
+            // that refusal, which names it; this check speaks only for a backend that exists.
+            if (
+                (result.GetValue(option: mergeOption) || result.GetValue(option: listOption)) &&
+                (result.GetResult(option: backendOption) is { Tokens.Count: > 0 } backendResult) &&
+                (backendResult.Tokens[0].Value is var backend) &&
+                WorldOffscreenLeg.Backends.Contains(
+                    comparer: StringComparer.Ordinal,
+                    value: backend
+                )
+            ) {
+
+                result.AddError(errorMessage: (result.GetValue(option: mergeOption)
+                    ? $"--backend {backend} narrows a run to one backend and --merge is the gate that holds both; select --capability gpu --backend {backend} instead."
+                    : "--backend narrows a run and --list runs nothing; name a selection to run on one backend instead."));
+
+                return;
+            }
             if (
                 (capability is not null) &&
                 !IsKnownCapability(capability: capability)
@@ -117,6 +141,7 @@ internal static partial class CanaryCommand {
         });
         command.SetAction(action: parseResult => Run(
             all: parseResult.GetValue(option: allOption),
+            backends: SelectBackends(backend: parseResult.GetValue(option: backendOption)),
             capability: parseResult.GetValue(option: capabilityOption),
             debugLayers: (parseResult.GetValue(option: debugLayersOption)
                 ? WorldOffscreenLeg.Backends
@@ -140,6 +165,7 @@ internal static partial class CanaryCommand {
     internal static int RunNamed(IReadOnlyList<string> ids, string worldArtifact, IReadOnlyCollection<string> debugLayers) =>
         Run(
             all: false,
+            backends: WorldOffscreenLeg.Backends,
             capability: null,
             debugLayers: debugLayers,
             ids: [.. ids],
@@ -164,6 +190,7 @@ internal static partial class CanaryCommand {
     internal static int RunAutomatic() =>
         Run(
             all: false,
+            backends: WorldOffscreenLeg.Backends,
             capability: null,
             debugLayers: [],
             ids: [],
@@ -181,7 +208,7 @@ internal static partial class CanaryCommand {
         value: "input:"
     ) && (capability.Length > 6))
     );
-    private static int Run(bool all, string? capability, IReadOnlyCollection<string> debugLayers, string[] ids, int jobs, bool list, bool merge, bool plan, string? worldArtifact) {
+    private static int Run(bool all, IReadOnlyList<string> backends, string? capability, IReadOnlyCollection<string> debugLayers, string[] ids, int jobs, bool list, bool merge, bool plan, string? worldArtifact) {
         var selection = ToSelection(
             all: all,
             capability: capability,
@@ -234,6 +261,7 @@ internal static partial class CanaryCommand {
         }
 
         var costs = Plan(
+            backends: backends,
             manifests: selected,
             namedWorldArtifact: (worldArtifact is not null)
         );
@@ -305,11 +333,16 @@ internal static partial class CanaryCommand {
         CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
 
         var buildClock = Stopwatch.StartNew();
+        IReadOnlyList<CanaryProof> proofs = [.. plan.Proofs.Select(selector: static proof => proof.Proof)];
+        var scope = BackendScope(proofs: proofs);
+        var scoped = ((scope is null)
+            ? string.Empty
+            : $" {scope}");
 
         if (explicitAll) {
-            Console.WriteLine(value: $"canary: explicit --all selected {manifests.Count} proof(s), including any declared environmental requirements; it does not change the automatic set.");
+            Console.WriteLine(value: $"canary: explicit --all selected {manifests.Count} proof(s){scoped}, including any declared environmental requirements; it does not change the automatic set.");
         } else {
-            Console.WriteLine(value: $"canary: selected {manifests.Count} proof(s).");
+            Console.WriteLine(value: $"canary: selected {manifests.Count} proof(s){scoped}.");
         }
 
         // Every leg launches one World: the --world-artifact named, or the build keyed by this checkout's sources, reused
@@ -389,7 +422,6 @@ internal static partial class CanaryCommand {
         var failed = false;
         var infrastructureFailed = false;
         var unsupported = new List<string>();
-        IReadOnlyList<CanaryProof> proofs = [.. plan.Proofs.Select(selector: static proof => proof.Proof)];
         var endings = new List<CanaryLegEnding>(capacity: plan.Legs);
 
         using var cancellation = new CancellationTokenSource();
@@ -529,17 +561,17 @@ internal static partial class CanaryCommand {
             foreach (var reason in unsupported) {
                 Console.Error.WriteLine(value: $"UNSUPPORTED: {reason}");
             }
-            Console.Error.WriteLine(value: "ERROR: this environment could not exercise every selected proof; an offscreen proof holds only when every declared backend ran, so the selection is not green.");
+            Console.Error.WriteLine(value: "ERROR: this environment could not exercise every selected proof; an offscreen proof holds only when it ran on every selected backend, so the selection is not green.");
 
             return CliExit.Refused;
         }
         if (failed) {
-            Console.Error.WriteLine(value: "FAIL: one or more selected canaries did not prove both their green leg and executable red leg.");
+            Console.Error.WriteLine(value: $"FAIL: one or more selected canaries{scoped} did not prove both their green leg and executable red leg.");
 
             return CliExit.Failed;
         }
 
-        Console.WriteLine(value: $"PASS: all {manifests.Count} selected canary proof(s) held within the {budget.Total.TotalSeconds:0}-second leg budget.");
+        Console.WriteLine(value: $"PASS: all {manifests.Count} selected canary proof(s) held{scoped} within the {budget.Total.TotalSeconds:0}-second leg budget.");
 
         return CliExit.Success;
     }

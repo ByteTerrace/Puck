@@ -19,8 +19,10 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// deduplicated. <see cref="Bindings"/> are the reads that last as long as the document, which a
 /// <see cref="WorldStateMirror"/> registers when it installs the document: a HUD element's binding or template
 /// placeholder, an overlay <c>state</c> predicate, a binding bar's layout and model cells, every bindable scalar and
-/// color (camera program operands, markers, render lighting, sky and environment colors, the theme), and a render
-/// cycle's position row. <see cref="BodyBindings"/> are templates a body reads through its own
+/// color (camera program operands, markers, render lighting, sky and environment colors, the theme), a render
+/// cycle's position row, every color a signed-distance program bakes (a creation palette's surface, bounce,
+/// weathering and inset colors, a height field's color, a text screen's ink), and each height field's row read whole,
+/// which its brick is baked from. <see cref="BodyBindings"/> are templates a body reads through its own
 /// <c>WorldStateLease</c>: the population's scale row, a look's pose references and lane operands, a creation
 /// driver's state signal and gate tokens, and an effector's gate tokens and state target. A template keeps its
 /// <see cref="StateBinding.BodyKey"/> key as authored; a body's lease resolves that key to the body's index when it
@@ -57,10 +59,14 @@ public sealed class WorldPresentationManifest {
         typeof(CreationEffectorDocument),
         typeof(CreationEffectorTargetDocument),
         typeof(OverlayPredicate.State),
+        typeof(PaletteEntryDocument),
+        typeof(PaletteRadialStopDocument),
+        typeof(PaletteSurfaceDocument),
         typeof(WorldBindingBarAuthoring),
         typeof(WorldHudElement),
         typeof(WorldLookMotion),
         typeof(WorldRenderCycle),
+        typeof(WorldScreenSource.Text),
     ];
 
     private readonly WorldPresentationBinding[] m_bindings;
@@ -131,6 +137,7 @@ public sealed class WorldPresentationManifest {
         }
 
         builder.Visit(value: definition);
+        builder.AddFields(fields: definition.Fields);
 
         return (((builder.Bindings.Count == 0) && (builder.BodyBindings.Count == 0))
             ? Empty
@@ -382,6 +389,31 @@ public sealed class WorldPresentationManifest {
                 }
             }
         }
+        // A color a signed-distance program bakes at build (a palette's, a field's, a text screen's ink), authored as a
+        // #RRGGBB literal or a state binding naming a Text cell; a literal reads nothing.
+        public void AddColor(string? token) => Add(
+            binding: StateBinding.Parse(token: token),
+            conversion: WorldStateConversion.Color
+        );
+        // What the field lattice's presentation reads: each height field's row whole, which its brick is baked from,
+        // and its color. The field rows live in the state section, whose rows the walk never reads.
+        public void AddFields(WorldFieldsSection? fields) {
+            foreach (var row in (fields?.Fields ?? [])) {
+                if (row.HeightScale <= 0f) {
+                    continue;
+                }
+
+                Add(
+                    binding: new StateBinding(
+                        Key: null,
+                        Row: row.Name,
+                        Target: false
+                    ),
+                    conversion: WorldStateConversion.Row
+                );
+                AddColor(token: row.Color);
+            }
+        }
         // A keyed cell of a row named by a state.<row> reference, read as text through its number slot.
         public void AddCell(string? rowReference, string? key) {
             if (
@@ -557,6 +589,25 @@ public sealed class WorldPresentationManifest {
                         binding: color.State,
                         conversion: WorldStateConversion.Color
                     );
+
+                    return false;
+                case PaletteEntryDocument entry:
+                    // The walk continues into the entry's weathering and inset surfaces.
+                    AddColor(token: entry.Color);
+                    AddColor(token: entry.Bounce);
+
+                    return true;
+                case PaletteRadialStopDocument stop:
+                    AddColor(token: stop.Color);
+
+                    return false;
+                case PaletteSurfaceDocument surface:
+                    AddColor(token: surface.Color);
+
+                    return false;
+                case WorldScreenSource.Text text:
+                    AddColor(token: text.Foreground);
+                    AddColor(token: text.Background);
 
                     return false;
                 case OverlayPredicate.State state:

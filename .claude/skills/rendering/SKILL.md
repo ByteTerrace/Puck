@@ -852,6 +852,18 @@ field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, and its
 shader consumer in the same change. What a document field means belongs to
 `puck-world`.
 
+Every state read reaches a program, a decal or a pass through the state
+mirror, never through the document. A color a build bakes (a palette's surface,
+bounce, weathering or inset color, a height field's color, a text screen's ink)
+resolves through `WorldBakedColors`, whose slots the presentation manifest
+registers at install; its builder calls `Begin` at a live build and follows
+`TryTakeMove` in its revision, so a bound color moving rebuilds it. A new baked
+color is a manifest surface resolved the same way. The field lattice is a row
+like any other: the client's state view keeps the cells each snapshot carries,
+`WorldFieldEmitter` bakes a height field's brick from its row slot, and a pass
+binds a field row to an array through the row region a bound row takes; never
+add a second mirror of the lattice.
+
 ## Shader manifests and pipelines
 
 `docs/reference/shaders.md` owns the `puck.render.graph.v1` contract, post
@@ -1353,6 +1365,7 @@ puck canary source-conversion uploaded-sources              # the four shipped c
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
 puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo interface-echo no-device-compile    # shader pipelines offscreen on both backends
+puck canary --capability gpu --backend vulkan               # a per-change GPU check on one backend (vulkan or directx); the verdict names the backend, so it is never the both-backend pass
 dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
 ```
 
@@ -1383,7 +1396,12 @@ hidden from its path, the shipped ink pipeline rendering from its stored
 package and a relocated package from its binaries while an unpackaged source
 row is refused by `SHADERPKG_ABSENT`.
 Each proof runs once per backend, and an absent GPU or compiler is reported as
-unsupported rather than passed, except in a leg that hides the compiler. Under
+unsupported rather than passed, except in a leg that hides the compiler.
+`puck canary --backend vulkan` (or `directx`) runs each proof on that backend
+alone for a per-change check; the plan and verdict lines name the backend
+that ran, and `--merge` refuses the option because the gate holds both. A
+claim that holds on both backends still needs a run without it. `puck parity`
+has no such option: its state and pixel verdicts compare the two backends. Under
 `puck canary --debug-layers` the runner fails every leg on any
 `[vulkan-debug] validation` or `[d3d12-debug]` line, and on
 `[d3d12] debug layer requested but not loaded` (`DebugLayerOutput` in

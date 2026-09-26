@@ -30,10 +30,14 @@ public static class WorldPlacementStamper {
     /// <summary>Registers a creation's palette (16-slot clamp) with an optional tint lerp, returning program-relative
     /// material ids indexed like the creation's own palette slots.</summary>
     /// <param name="builder">The program builder.</param>
-    /// <param name="definition">The definition a state-bound palette entry resolves against.</param>
+    /// <param name="colors">The colors the build bakes, which a state-bound palette color resolves through.</param>
     /// <param name="document">The creation document.</param>
     /// <param name="tint">The albedo tint (color + blend), or <see langword="null"/>.</param>
-    internal static int[] RegisterPalette(SdfProgramBuilder builder, WorldDefinition definition, CreationDocument document, (Vector3 Color, float Blend)? tint) {
+    internal static int[] RegisterPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint) {
+        Func<string, Vector3> resolveLayerColor = value => colors.Resolve(
+            fallback: Vector3.Zero,
+            value: value
+        );
         var palette = (document.Palette ?? []);
         var count = Math.Min(
             val1: palette.Count,
@@ -49,8 +53,7 @@ public static class WorldPlacementStamper {
                 ? palette[index]
                 : null
             );
-            var albedo = WorldColor.Resolve(
-                definition: definition,
+            var albedo = colors.Resolve(
                 fallback: new Vector3(value: 0.7f),
                 value: entry?.Color
             );
@@ -63,11 +66,6 @@ public static class WorldPlacementStamper {
                 );
             }
 
-            Vector3 ResolveLayerColor(string value) => WorldColor.Resolve(
-                definition: definition,
-                fallback: Vector3.Zero,
-                value: value
-            );
             ids[index] = builder.AddMaterial(material: new SdfMaterial(
                 Albedo: albedo,
                 Emissive: (entry?.Emissive ?? 0f),
@@ -76,15 +74,14 @@ public static class WorldPlacementStamper {
                 Specular: (entry?.Specular ?? 0f),
                 Metal: (entry?.Metal ?? 0f),
                 Coat: (entry?.Coat ?? 0f),
-                Weathering: entry?.Weathering?.ToWeathering(resolve: ResolveLayerColor),
+                Weathering: entry?.Weathering?.ToWeathering(resolve: resolveLayerColor),
                 Wrap: (entry?.Wrap ?? 0f),
                 Soften: (entry?.Soften ?? 0f),
-                Bounce: WorldColor.Resolve(
-                    definition: definition,
+                Bounce: colors.Resolve(
                     fallback: Vector3.Zero,
                     value: entry?.Bounce
                 ),
-                Inset: entry?.Inset?.ToInset(resolve: ResolveLayerColor)
+                Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor)
             ));
         }
 
@@ -369,7 +366,7 @@ public static class WorldPlacementStamper {
             }
         );
     }
-    private static int[] ResolvePalette(SdfProgramBuilder builder, WorldDefinition definition, WorldPrototype creation, Dictionary<string, int[]> paletteById) {
+    private static int[] ResolvePalette(SdfProgramBuilder builder, WorldBakedColors colors, WorldPrototype creation, Dictionary<string, int[]> paletteById) {
         if (paletteById.TryGetValue(
             key: creation.Id,
             value: out var cached
@@ -379,7 +376,7 @@ public static class WorldPlacementStamper {
 
         var ids = RegisterPalette(
             builder: builder,
-            definition: definition,
+            colors: colors,
             document: creation.Document,
             tint: null
         );
@@ -501,8 +498,7 @@ public static class WorldPlacementStamper {
     /// distinct untinted creation; a tinted stamp (selection amber / change shimmer) registers its own lerped palette
     /// (act-scale rare, never steady-state).</summary>
     /// <param name="builder">The program builder.</param>
-    /// <param name="definition">The definition the rows belong to — what a state-bound palette color resolves
-    /// against.</param>
+    /// <param name="definition">The definition the rows belong to.</param>
     /// <param name="creations">The world's creation rows.</param>
     /// <param name="placements">The (possibly drag-composed) placement rows.</param>
     /// <param name="textCatalog">The packed world font catalog. Null omits creation text; local-world callers use
@@ -513,8 +509,12 @@ public static class WorldPlacementStamper {
     /// baked into world space with no dynamic slot, or <see langword="null"/> when the caller renders none.</param>
     /// <param name="meshDraws">Receives one draw per static placement instance of a prototype that carries a mesh
     /// (<see cref="WorldPrototype.Mesh"/>), or <see langword="null"/> when the caller draws none.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null) {
+    /// <param name="colors">The colors the build bakes, which a state-bound palette color resolves through, or
+    /// <see langword="null"/> to read them through a mirror of <paramref name="definition"/> built only when a bound
+    /// palette color is emitted (<see cref="WorldBakedColors.Of"/>).</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
+        var baked = (colors ?? WorldBakedColors.Of(definition: definition));
         var paletteById = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
 
         WorldBootWork.Count(kind: WorldBootWork.ShapeBuilds);
@@ -537,13 +537,13 @@ public static class WorldPlacementStamper {
             var paletteIds = ((tint is null)
                 ? ResolvePalette(
                     builder: builder,
+                    colors: baked,
                     creation: creation,
-                    definition: definition,
                     paletteById: paletteById
                 )
                 : RegisterPalette(
                     builder: builder,
-                    definition: definition,
+                    colors: baked,
                     document: creation.Document,
                     tint: tint
                 )
