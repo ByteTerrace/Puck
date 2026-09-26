@@ -417,7 +417,10 @@ and a layout change places panes one frame later. The row's optional camera
 supplies shader camera inputs, and `timeScale` seeds its presentation clock.
 A row also takes a refresh divisor or rate and inputs bound to other rows'
 outputs, with `views.graphBudget` as the scheduler's pass-pixel ceiling, and
-`world.budget` prices each row by planning its source. `views.shaderToolchain`
+`world.budget` prices each row by planning its source, then reads back what the
+render graph runtime scheduled for every instance in its latest frame: rendered
+or not, its extent, frame divisor, passes and pass-pixels, and the passes,
+dispatches and draws its newest completed submission counted. `views.shaderToolchain`
 optionally selects the directory holding `dxc`. `pipeline.sentinels <name> on`
 writes each frame-block word's echo sentinel in place of the frame values and
 config, which an [echo pass](../../docs/reference/shaders.md#pass-interfaces)
@@ -1130,10 +1133,17 @@ so equal settings share a name however they are spelled, a settings change is
 a new name and a new producer, and adding, removing or reordering screens
 renames no source. Screens showing equal sources read one instance, which the scheduler renders at most once a frame, at
 its producer's cadence and negotiated extent, and the instance's `SourceHandle`
-is its identity. `WorldImageProducers.RegisterPackages` registers one
-external-producer factory per producer under its source package, which opens
-the instance's feed from the instance's settings. Screens still bind their
-images through the binder's slots until the runtime binds sources (P12b-2 in
+is its identity. `WorldImageProducers.RegisterPackages` registers one factory
+per producer under its source package, which opens the instance's feed from
+the instance's settings: an uploaded producer's (`testPattern`, `qr`) is an
+upload, whose instance the render-graph runtime converts once a frame at most
+from the region its feed writes, through the shipped conversion its format
+names. A `views.graphs` row names an uploaded producer's source package with
+its `settings` (`"package": "source.qr", "settings": { "payload": "puck" }`),
+so a layout slot shows the source as a pane and a `captures` row can capture
+it before composition; a row naming an imported producer (`camera`,
+`capture`) is refused. Screens still bind their images through the binder's
+slots until the runtime binds sources (P12b-2 in
 [the rendering plan](../../docs/plans/rendering.md#p12--image-sources)).
 
 The engine ships four producers, each with its settings record in

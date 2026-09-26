@@ -207,6 +207,62 @@ public sealed class PlacePackageLawTests {
             expected: Base.ImageHandle
         );
     }
+    // A letterboxing pass whose source is not shown writes the letterbox color everywhere, its rect empty, while part of
+    // the output is uncovered, and stands for its base, dispatching nothing, once the host covers the output.
+    [Fact]
+    public void AnUnshownLetterboxingPassLetterboxesAnUncoveredOutputAndStandsForACoveredOne() {
+        foreach (var uncovered in ((ReadOnlySpan<bool>)[true, false])) {
+            var gpu = new FakePipelineGpu();
+
+            using var node = Node(
+                config: JsonDocument.Parse(json: $$"""{ "{{RenderGraphPackageCatalog.PlaceLetterbox}}": 1 }""").RootElement.Clone(),
+                gpu: gpu,
+                placements: new Placements(shown: new RenderGraphPlacement(
+                    Height: 0.5f,
+                    Left: 0.25f,
+                    Sharpness: 0f,
+                    Shown: false,
+                    Top: 0.25f,
+                    Uncovered: uncovered,
+                    Width: 0.5f
+                ))
+            );
+
+            ProduceUntilPublished(node: node);
+            gpu.Recording = true;
+
+            var shown = node.ProduceFrame(context: default);
+
+            gpu.Recording = false;
+
+            if (!uncovered) {
+                Assert.Empty(collection: gpu.Dispatches);
+                Assert.Equal(
+                    actual: shown.ImageHandle,
+                    expected: Base.ImageHandle
+                );
+
+                continue;
+            }
+
+            _ = Assert.Single(collection: gpu.Dispatches);
+            Assert.Equal(
+                actual: Read(gpu: gpu),
+                expected: (0f, 0f, 0f, 0f, 0f)
+            );
+            Assert.Equal(
+                actual: BinaryPrimitives.ReadUInt32LittleEndian(source: gpu.ConstantBlock(
+                    set: gpu.BoundSets.Last(predicate: static set => (set.Group == ((uint)ShaderInterfaceGroup.Pass))).Set,
+                    sizeBytes: ((int)Layout.SizeBytes)
+                ).AsSpan(start: ((int)Layout.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceLetterbox)))),
+                expected: 1u
+            );
+            Assert.NotEqual(
+                actual: shown.ImageHandle,
+                expected: Base.ImageHandle
+            );
+        }
+    }
     [Fact]
     public void WithoutAHostPlacementTheDispatchReadsTheBoundConfig() {
         var gpu = new FakePipelineGpu();

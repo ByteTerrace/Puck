@@ -51,7 +51,7 @@ public static class VulkanPresenterServiceRegistration {
         var externalMemoryApi = serviceProvider.GetRequiredService<IVulkanExternalMemoryApi>();
         var framebufferSetApi = serviceProvider.GetRequiredService<IVulkanFramebufferSetApi>();
         var frameSynchronizationApi = serviceProvider.GetRequiredService<IVulkanFrameSynchronizationApi>();
-        var graphicsPipelineFactory = serviceProvider.GetRequiredService<IVulkanGraphicsPipelineFactory>();
+        var graphicsPipelineApi = serviceProvider.GetRequiredService<IVulkanGraphicsPipelineApi>();
         var offscreenImageApi = serviceProvider.GetRequiredService<IVulkanOffscreenImageApi>();
         var queueSubmitter = serviceProvider.GetRequiredService<VulkanQueueSubmitter>();
         var renderPassApi = serviceProvider.GetRequiredService<IVulkanRenderPassApi>();
@@ -91,8 +91,8 @@ public static class VulkanPresenterServiceRegistration {
                 allocator: allocator,
                 computePipelineApi: computePipelineApi,
                 deviceContext: deviceContext,
-                naming: naming,
-                pipelineFactory: graphicsPipelineFactory
+                graphicsPipelineApi: graphicsPipelineApi,
+                naming: naming
             ),
                 QueueSubmitter = new VulkanGpuQueueSubmitter(
                 deviceContext: deviceContext,
@@ -160,7 +160,6 @@ public static class VulkanPresenterServiceRegistration {
             framePresentationApi: sp.GetRequiredService<IVulkanFramePresentationApi>(),
             frameSynchronizationApi: sp.GetRequiredService<IVulkanFrameSynchronizationApi>()
         ));
-        services.TryAddSingleton<IVulkanGraphicsPipelineFactory>(implementationFactory: static sp => new VulkanGraphicsPipelineFactory(graphicsPipelineApi: sp.GetRequiredService<IVulkanGraphicsPipelineApi>()));
         services.TryAddSingleton<IVulkanShaderModuleFactory>(implementationFactory: static sp => new VulkanShaderModuleFactory(shaderModuleApi: sp.GetRequiredService<IVulkanShaderModuleApi>()));
 
         // The renderer's command-buffer recorder, the content-addressed asset source, and the shader loader.
@@ -271,14 +270,12 @@ public static class VulkanPresenterServiceRegistration {
         services.TryAddSingleton<IVulkanDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
         services.TryAddSingleton<VulkanQueueSubmitter>();
         services.TryAddSingleton(implementationFactory: sp => new SurfaceCompositor(
-            allocator: sp.GetRequiredService<IAllocator>(),
             bufferApi: sp.GetRequiredService<IVulkanBufferApi>(),
             commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>(),
             commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
             descriptorApi: sp.GetRequiredService<IVulkanDescriptorApi>(),
             externalMemoryApi: sp.GetRequiredService<IVulkanExternalMemoryApi>(),
             framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
-            graphicsPipelineFactory: sp.GetRequiredService<IVulkanGraphicsPipelineFactory>(),
             offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>(),
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>(),
             renderer: sp.GetRequiredService<VulkanRenderer>(),

@@ -534,7 +534,7 @@ and every split-screen seat run through the graph runtime (commits 6, 9 and 10
 below), but `ViewStack` still renders every screen. P11b moves the screens onto graph instances fed by the scheduler,
 puts the live schedule's extents and prices in `world.budget`, runs the parity
 and counted-GPU checks, and makes the rest of the deletions P11 lists (commits
-11 to 14 below). These
+11, 13 and 14 below). These
 P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
@@ -931,13 +931,20 @@ It deletes the SDF engine's composite, and it has landed.
   `split-seats` canary also captures a letterboxed layout it selects through
   `view.override`.
 
-P11b's remaining work is four commits:
+P11b's last four commits are these; 12 has landed:
 
 11. The per-device pass-pipeline cache: the graph's pass pipelines built once a
     device, off the frame thread, and shared by every node that installs the
     same pass.
-12. The live budget: `world.budget` prints the live schedule's extents and
-    prices for every instance.
+12. The live budget, landed: `world.budget` ends with what the runtime's latest
+    schedule decided for every instance (`RenderGraphLiveBudget`, reading
+    `RenderGraphRuntime.Latest`): rendered, waiting, deferred or unread; its
+    extent, a graph instance's quantized footprint or a source's negotiated
+    extent; its frame divisor; its passes and the pass-pixels it spent; and the
+    executed passes, dispatches and draws its newest completed submission
+    counted. Every figure is a count, and a steady read allocates nothing.
+    `RenderGraphRuntimeLawTests.LiveBudget` holds a pane at divisor 2 and a
+    static source across frames.
 13. Screens onto graph instances, after P12b-2: each screen reads a graph
     instance the scheduler feeds, and `ViewStack`, `OffscreenRenderBudget`, the
     procedural test card, `SdfWorldEngine.MaxViewports` and the hand-composed
@@ -1072,11 +1079,12 @@ convert a region into the image a consumer samples. `source-palette` and
 `source-nv12` use a stated matrix and range with co-sited chroma. `source-rgba`
 carries a BGRA swizzle, and `source-transfer` decodes sRGB, linear or PQ into
 linear light. `ImageSourceConversion` is their CPU reference, and the
-`source-conversion` canary holds the palette and NV12 kernels to it on both
-backends. No producer writes a region yet. The emulators still publish through
-`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, and the test pattern, the QR
-code, the capture and camera CPU tiers and the fills through
-`CpuSurfaceSource`. Only the camera's CPU tier hands the screen a counted
+`source-conversion` canary holds all four kernels to it on both backends. The
+test pattern and the QR code write regions, which an uploaded source
+instance's one-pass graph converts in the render-graph runtime; screens still
+show them through `CpuSurfaceSource`. The emulators still publish through
+`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, and the capture and camera CPU
+tiers and the fills through `CpuSurfaceSource`. Only the camera's CPU tier hands the screen a counted
 lease; the others and the machine outputs hand it a bare handle. Each waits
 for P12b to record its region flush and conversion dispatch as a graph source
 node. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
@@ -1788,14 +1796,14 @@ overlay's single host-written buffer all go through the selector. The service
 bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuComputeServices`, `IFullscreenPassServices` and
 `WorldPostRenderExtensionServices`, `OverlayServices`, and
-`SdfViewGpuServices` are deleted. The pipeline factories merge into the one
-`IGpuPipelineFactory`: Vulkan's `IVulkanGraphicsPipelineFactory`, which
-`VulkanGpuPipelineFactory` wraps and the Vulkan swapchain compositor calls
-directly, does not survive beside it. The closed set of binding kinds replaces
-`GpuComputeBindingKind`, `ShaderSetManifestBindingKind`, the positional
-`TextureSamplerCount` and `EnableStorageBuffer` fields of
-`GpuGraphicsPipelineDescription`, and every binding index set by hand, such as
-the SDF engine's binding constants.
+`SdfViewGpuServices` are deleted. The pipeline factories have merged into the
+one `IGpuPipelineFactory`: the Vulkan swapchain compositor creates its blit
+through it, for the swapchain's render pass (`VulkanGpuRenderPass.Borrow`).
+The closed set of binding kinds replaces `GpuComputeBindingKind`,
+`ShaderSetManifestBindingKind` and every binding index set by hand, such as the
+SDF engine's binding constants; a graphics description states its groups alone
+(`GpuGraphicsPipelineDescription.Layout`), with no positional samplers, storage
+buffer or push range.
 
 **Gate:** the spike over two passes, `sdf-film-grain.frag.hlsl` and a pixelate
 compute pass, each with two frequency groups, has passed its build-time half,
@@ -1882,9 +1890,8 @@ Phase 2, the services, follows the generated frame block, which has landed:
    viewport and scissor, and `SetScissor` narrows the scissor inside it. The
    depth clear value is P4-0's `GpuDepthAttachment.ClearDepth`, not a recorder
    argument. A neutral graphics pipeline takes no extent: Vulkan's has a
-   dynamic viewport and scissor, and only the presenter's compositor keeps a
-   fixed viewport. Each backend registers one recorder, bound to its device
-   context.
+   dynamic viewport and scissor, which the presenter's recorder also sets. Each
+   backend registers one recorder, bound to its device context.
 8. Done: `IGpuBindings` creates pools, sets and samplers and writes descriptors,
    with no device parameter; each backend registers one, bound to its device
    context. One `WriteBuffer` names the binding's `GpuBindingKind` and element
@@ -2157,10 +2164,8 @@ Phase 3, the groups, follows phase 2:
     - 14b-2, done: the Vulkan presenter. `blit.frag.hlsl` reads a separate
       image and sampler in the pass group, set 3 (the image at binding 0, the
       sampler at 1, each register equal to its binding). `SurfaceCompositor`
-      plans that one group through `VulkanGroupLayouts.Plan`, creates the
-      layouts with `VulkanPipelineLayouts.Create` and hands them to
-      `VulkanGraphicsPipelineFactory`'s swapchain overload, which now takes
-      groups like its other overload; its ring sets are allocated against the
+      creates its blit through `IGpuPipelineFactory` from that one group; its
+      ring sets are allocated against the
       pass group's set layout, each takes the sampler once, a blit writes only
       the image, and a `VulkanDrawCommand` binds its set at its
       `DescriptorSetGroup`. Canaries: the 14b-1 set without
@@ -2324,12 +2329,24 @@ Phase 3, the groups, follows phase 2:
 20. The SDF engine moves onto groups, its push blocks and hand-set binding
     constants included. It follows P4-1, which rewrites the same kernels.
 21. The owning guides and the `rendering` skill describe the result.
-22. In progress: the P7 deletions no earlier step owns. Vulkan's
-    `IVulkanGraphicsPipelineFactory` folds into the one `IGpuPipelineFactory`,
-    with the swapchain compositor's direct call;
-    `GpuGraphicsPipelineDescription`'s `TextureSamplerCount` and
-    `EnableStorageBuffer` are deleted; and the overlay's host-written buffer
-    uploads through a `GpuRegion` rather than by hand.
+22. In progress: the P7 deletions no earlier step owns. Done: Vulkan has one
+    pipeline factory, `VulkanGpuPipelineFactory`, which creates graphics
+    pipelines through `IVulkanGraphicsPipelineApi` itself, and the swapchain
+    compositor creates its blit through `IGpuPipelineFactory` for the
+    swapchain's render pass (`VulkanGpuRenderPass.Borrow`), opaque and with the
+    neutral dynamic viewport the presenter's recorder sets. A graphics
+    description states its groups alone: `GpuGraphicsPipelineDescription.Layout`
+    is required, and its `TextureSamplerCount`, `EnableStorageBuffer` and push
+    range are deleted with both backends' non-layout graphics paths. The
+    Direct3D 12 surface compositor has no second factory contract to fold; it
+    builds its root signature and pipeline state by hand. Remaining: the
+    overlay's host-written buffer uploads through a `GpuRegion` rather than by
+    hand, which under the staged policy needs the region-copy pipeline leased
+    at the package's build, a copy pool the node states and admits, the copy
+    and its two buffer transitions inside the package recording, and a
+    pixel-shader read state for a buffer on Direct3D 12; and
+    `VulkanGraphicsPipelineCreateRequest`'s fixed viewport, descriptor bindings
+    and push range, which no caller sets any more, leave the native API.
 
 **Decisions.** Root parameter indices are dense, and the push index sits at
 `b0` in space 4, outside every group's space. The spike's frame group is the
@@ -2670,8 +2687,8 @@ source. Four facts shape the order:
   reads or P14-6 makes the engine a package. P12b takes the first path, so it
   does not wait on P14.
 - Two paths sample a shared slot with no lease (see the implementation status).
-- No producer writes an upload region, and no graph runs `source-rgba` or
-  `source-transfer`.
+- Only the test pattern and the QR code write upload regions, which a source
+  instance's graph converts, and no screen reads one yet.
 - Few canaries reach this path. The coverage index maps no canary to the
   capture feed, the camera converter, the QR binder or the descriptor, and the
   62 it maps to `WorldScreenBinder.cs` mostly construct the binder, because the
@@ -2733,28 +2750,53 @@ except step 8.
    `ScreenSlot.Handle()` until P11b deletes `ViewStack`. This deletes
    `ScreenSourceCell`, the binder's per-slot callbacks,
    `SdfEngineNode.SetScreenSourceFrames` and the legacy
-   `SdfWorldRenderSpec.ScreenSources`. Laws on the fake GPU: a screen's lease
+   `SdfWorldRenderSpec.ScreenSources`. An uploaded source (step 3) is already a
+   graph instance whose output the runtime binds like any graph instance's, so
+   for a screen showing the test pattern or a QR code this step connects the
+   screen's slot to its source instance's output (`WorldSourceInstances`
+   installed in the live set, the instance's latest completed image handed to
+   `SdfEngineNode` with the screen's other reads) and then deletes the feed's
+   `CpuSurfaceSource` upload and `IWorldImageFeed.Publish`/`AcquireFrame` for
+   uploaded feeds, leaving `IWorldUploadFeed.TryWrite` their one image path.
+   Laws on the fake GPU: a screen's lease
    retires after the sampling slot's fence; a slot the capture producer is
    lapping is never handed out while leased; a filled external source binds
    its fill and is never acquired. Canaries: `view-screens`,
    `instrument-clock-source`, `hud-frame-slots`, the rest of the binder's 62,
    and `puck parity`.
-3. Uploaded sources write regions, and conversions are planned passes. Can
-   land now over host-visible regions; the device-local residency P7's policy
-   chooses follows P7b-17 and P7b-19, which have landed. Its conversion passes
-   are graph passes, which bind the frame and pass groups since P7b-15. An
-   uploaded source writes `ImageSourceUploadLayout` regions into a
-   `GpuRegion` range per frame slot, which the runtime binds to the source
-   graph's host buffer port. The graph's one pass is the conversion
-   `ImageSourceConversion.PassOf` names, writing the RGBA8 image every
-   consumer reads, so one conversion runs per source however many consumers
-   read it. The test pattern and the QR code move first; the capture and
-   camera CPU tiers follow through `source-rgba`; each capture fill becomes a
-   static source. `CpuSurfaceSource`'s screen role goes with its last caller.
-   Checks: two consumers of one source run one conversion, counted through
-   `IGpuWorkSource`; `source-conversion` gains `source-rgba` and
-   `source-transfer`; a new canary shows a test-pattern screen and a QR
-   screen on both backends.
+3. Uploaded sources write regions, and conversions are planned passes. The
+   source-graph side has landed. An uploaded producer registers an upload for
+   its source package (`RenderGraphPackageRecorders.RegisterSource`, through
+   `WorldImageProducers.RegisterPackages`), and the runtime renders each
+   instance of it through a node running the one-pass graph its upload's
+   descriptor names (`RenderGraphRuntime.Sources.cs`): the region, an external
+   buffer bound as the node's host buffer port (`ShaderPipelineRenderNode.BindRegion`,
+   which flushes the frame slot's share of a ring `GpuRegion` after that slot's
+   fence), and one package pass, the conversion `ImageSourceConversion.PassOf`
+   names (`SourceConversionPackage`, one catalog package per shipped kernel),
+   writing the image every consumer reads. The runtime declares each upload's
+   cadence and extent to the scheduler, so one conversion runs per source a
+   frame at most however many consumers read it, and a capture armed on a
+   source its cadence did not render is served by one more conversion. The
+   test pattern and the QR code write their regions (`IWorldUploadFeed`); a
+   `views.graphs` row names an uploaded producer's source package with its
+   `settings`, so a pane or a `captures` row reads a source instance. Laws in
+   `RenderGraphRuntimeLawTests.Sources`: two consumers of one source run one
+   conversion per tick, counted through the instance's `IGpuWorkSource`; a
+   source's graph is the conversion its descriptor names over a region of its
+   layout; a refused upload renders nothing and names its fault.
+   `source-conversion` holds `source-rgba` and `source-transfer` beside the
+   palette and NV12 kernels, and `uploaded-sources` captures a test-pattern
+   source instance before composition and shows it and a QR code in panes.
+   The conversion packages bind the frame and pass groups as every package
+   does. Still open: regions are host-visible rings, and the device-local
+   residency P7's policy chooses, which P7b-17 and P7b-19 make available, needs
+   the node to record a staged region's copy, so `BindRegion` refuses a staged
+   region until it does. Screens
+   still read the binder's `CpuSurfaceSource` uploads of the same feeds until
+   step 2 connects them; the capture and camera CPU tiers and the capture fills
+   move onto `source-rgba` and static sources after that, and
+   `CpuSurfaceSource`'s screen role goes with its last caller.
 4. Fences across devices. Landed. The consumer creates a
    `D3D12_FENCE_FLAG_SHARED` fence beside the shared targets it provisions
    (`DirectXGpuSurfaceExportFactory.CreateExportableFence`, an
@@ -3286,7 +3328,7 @@ read simulation state, so they do not wait on the state rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
 P11b items its implementation status lists, the main view through the graph
-runtime among them. The rest of P11b, commits 11 to 14, waits on nothing from
+runtime among them. The rest of P11b, commits 11, 13 and 14, waits on nothing from
 P7b, whose groups have landed for everything but the SDF engine; commit 13, the
 screens, follows P12b-2. P12's
 source contract, producers and conversion passes have landed; P12b, the graph

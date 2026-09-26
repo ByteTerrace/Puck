@@ -1160,9 +1160,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer and its own time. The
     /// tick is the state mirror's delivered engine tick and the time the mirror's presented engine tick at this frame's
     /// interpolation fraction (one for an offscreen presentation), in seconds, so a pass reads no wall clock. A lone view
-    /// covering the whole display at native scale is not shown: the root then stands for the world itself. The views and
-    /// slots are the ones the last captured frame composed, since the world producer captures its frame inside the
-    /// runtime's schedule, so a layout change places its views and panes one frame later.</summary>
+    /// covering the whole display at native scale is not shown: the root then stands for the world itself. Whether a
+    /// pane covers the whole display decides whether pixels no view covers owe the letterbox color
+    /// (<see cref="WorldViewGraphHost.PlaceViews"/>). The views and slots are the ones the last captured frame composed,
+    /// since the world producer captures its frame inside the runtime's schedule, so a layout change places its views and
+    /// panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) {
         if (m_graphs is not { } graphs) {
@@ -1175,10 +1177,19 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var height = m_displayHeight;
         var deltaSeconds = ((float)context.FrameDeltaSeconds);
         var presented = PresentedFrame(context: in context);
+        var panesCover = false;
 
         graphs.Present(frame: in presented);
 
+        foreach (var composed in m_composer.Slots) {
+            panesCover |= (
+                (composed.Instance is not null) &&
+                (composed.Region == new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))
+            );
+        }
+
         graphs.PlaceViews(
+            panesCover: panesCover,
             rendered: ViewRendered,
             sharpness: m_settings.UpscaleSharpness,
             views: m_views

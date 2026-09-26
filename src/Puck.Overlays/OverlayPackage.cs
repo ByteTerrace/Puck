@@ -77,14 +77,11 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             cancellationToken.ThrowIfCancellationRequested();
             built.Pipeline = services.PipelineFactory.Create(
                 description: new GpuGraphicsPipelineDescription(
-                    EnableStorageBuffer: false,
                     Layout: context.Parameters.Layout.PipelineLayout(
                         pushesIndex: false,
                         stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
                     ),
                     Name: "overlay-unified",
-                    PushConstantBinding: null,
-                    TextureSamplerCount: 0,
                     VertexInput: new GpuVertexInputLayout(
                         Attributes: [new GpuVertexAttribute(
                             Format: GpuVertexFormat.R32G32Float,

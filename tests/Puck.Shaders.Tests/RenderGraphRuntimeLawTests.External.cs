@@ -168,6 +168,121 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
         }
     }
+    // A kept consumer that has never rendered bound nothing of a retired external producer, so nothing it installed
+    // samples it: the reconfiguration commits, and the producer, which has produced, is disposed once, after the new set
+    // runs.
+    [Fact]
+    public void ARetiredExternalProducerANeverRenderedKeptConsumerReadsIsDisposedOnceAfterTheSwap() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, _, producers) = WorldScene(gpu: gpu);
+
+        using (runtime) {
+            var world = producers.Only;
+            var worldOnly = new Frames(
+                footprints: [],
+                roots: [new RenderGraphRoot(Height: 1.0, Instance: "world", Width: 1.0)],
+                runtime: runtime
+            );
+
+            worldOnly.Next(count: 4);
+            Assert.True(condition: (world.Produced > 0));
+            Assert.False(condition: runtime.NodeOf(instance: "main")!.IsBound(name: "screen"));
+
+            var instancesAtDisposal = -1;
+
+            world.Disposing = () => instancesAtDisposal = runtime.Instances.Instances.Count;
+            Assert.True(
+                condition: runtime.TryReconfigure(
+                    graphs: [Graph(pipeline: ScreensGraph(pool: false))],
+                    refusal: out var refusal,
+                    root: "main",
+                    set: Set(Instance(name: "main"))
+                ),
+                userMessage: refusal?.Message
+            );
+            Assert.Equal(
+                actual: (world.Disposals, instancesAtDisposal, runtime.RetiredProducers, (world.Acquired - world.Released)),
+                expected: (1, 1, 0, 0)
+            );
+        }
+
+        Assert.Equal(
+            actual: producers.Only.Disposals,
+            expected: 1
+        );
+    }
+    // A reconfiguration that fails partway changes nothing of the running set: the retired producer it was holding for
+    // a kept consumer throws as it is acquired, and the new set's created producer is disposed, the kept root keeps its
+    // installed graph and renders on, the old producer is never disposed under it, and at the runtime's disposal every
+    // object the fake created has been released once.
+    [Fact]
+    public void AReconfigurationThatFailsPartwayLeavesTheRunningSetIntactAndLeaksNothing() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, frames, producers) = WorldScene(gpu: gpu);
+
+        using (runtime) {
+            var world = producers.Only;
+            var main = runtime.NodeOf(instance: "main")!;
+
+            frames.Settle();
+            world.ThrowsOnAcquire = true;
+            _ = Assert.Throws<InvalidOperationException>(testCode: () => runtime.TryReconfigure(
+                graphs: [Graph(pipeline: ScreensGraph(pool: false)), null],
+                refusal: out _,
+                root: "main",
+                set: Set(
+                    Instance(name: "main"),
+                    External(name: "other")
+                )
+            ));
+
+            var other = producers.Created[1];
+
+            Assert.Equal(
+                actual: (other.Disposals, world.Disposals, runtime.RetiredProducers),
+                expected: (1, 0, 0)
+            );
+            Assert.Equal(
+                actual: runtime.Instances.Instances.Select(selector: static instance => instance.Name),
+                expected: ["world", "main"]
+            );
+            Assert.Same(
+                actual: runtime.NodeOf(instance: "main"),
+                expected: main
+            );
+            Assert.False(condition: main.HasPendingCandidate);
+
+            world.ThrowsOnAcquire = false;
+            gpu.DescriptorWrites.Clear();
+            gpu.Recording = true;
+            frames.Next(count: 3);
+            gpu.Recording = false;
+            Assert.Equal(
+                actual: gpu.DescriptorWrites.Where(predicate: static write => (write.Binding == 1)).Select(selector: static write => write.Handle),
+                expected: Enumerable.Repeat(
+                    count: 3,
+                    element: world.ImageView
+                )
+            );
+        }
+
+        var disposedWorld = producers.Created[0];
+
+        Assert.Equal(
+            actual: (disposedWorld.Disposals, (disposedWorld.Acquired - disposedWorld.Released)),
+            expected: (1, 0)
+        );
+        Assert.Equal(
+            actual: gpu.LiveBytes,
+            expected: 0UL
+        );
+        Assert.DoesNotContain(
+            collection: gpu.CreatedObjects,
+            filter: static created => (created.DisposeCount > 1)
+        );
+    }
     [Fact]
     public void ALeaseRetiresOnlyAfterTheSamplingSlotsFence() {
         var gpu = new FakePipelineGpu();
@@ -333,7 +448,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
         Assert.Equal(
             actual: Refusal(gpu, new Recorders(), set, "main", null!, main).Message,
-            expected: $"External instance 'world' of package '{World}' names a package no external producer serves."
+            expected: $"External instance 'world' of package '{World}' names a package neither an external producer nor an upload serves."
         );
         Assert.Equal(
             actual: Refusal(gpu, served, set, "nowhere", null!, main).Code,
@@ -694,7 +809,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
             name: "test.world"
         );
 
+        // Called as the producer is disposed, before its image is.
+        public Action? Disposing { get; set; }
+        // Whether an acquisition throws, as a failing producer would.
+        public bool ThrowsOnAcquire { get; set; }
+
         public void Dispose() {
+            Disposing?.Invoke();
             Disposals++;
             m_image?.Dispose();
             m_image = null;
@@ -730,6 +851,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
             request: request
         );
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
+            if (ThrowsOnAcquire) {
+                throw new InvalidOperationException(message: "The fake world failed to hand out its output.");
+            }
             if (
                 (Produced == 0) ||
                 (m_image is not { } image)

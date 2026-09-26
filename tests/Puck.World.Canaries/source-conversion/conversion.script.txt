@@ -1,13 +1,20 @@
 # Compilation, then installation; paused and reset, the instance renders its one initialization frame, in which the
-# seed writes both regions and each shipped conversion pass reads its own.
+# seed writes every region and each shipped conversion pass reads its own.
 pipeline.wait conversion compiled 40
 pipeline.wait conversion installed 10
 pipeline.time conversion pause
 pipeline.reset conversion
 pipeline.wait conversion submitted 1 10
-# The converted palette image, then the converted NV12 image.
+# The converted palette image, the converted NV12 image, the converted four-byte image, then the transfer image, whose
+# half-float linear light the capture reads through the float preview, clamped.
 pipeline.capture conversion {run}/palette.png
 pipeline.wait conversion captured 10
 pipeline.output conversion nv12
 pipeline.capture conversion {run}/nv12.png
+pipeline.wait conversion captured 10
+pipeline.output conversion rgba
+pipeline.capture conversion {run}/rgba.png
+pipeline.wait conversion captured 10
+pipeline.output conversion transfer
+pipeline.capture conversion {run}/transfer.png
 pipeline.wait conversion captured 10

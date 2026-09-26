@@ -250,7 +250,18 @@ These are one-line cautions; the owning pages hold the derivations.
   identity, never the producer id. An external image (camera, capture,
   probe output) is resolved through the binder's `WorldCaptureGate`, never
   directly: a new path that samples one without the gate leaks it into
-  captures. An uploaded source's region layout and the conversion kernels are a
+  captures. An uploaded producer registers an upload for its source package
+  (`RenderGraphPackageRecorders.RegisterSource`), never an external producer:
+  the runtime renders the instance through a node running the one-pass graph
+  its descriptor names (`RenderGraphRuntime.Sources.cs`), the region bound as
+  the node's host buffer port (`ShaderPipelineRenderNode.BindRegion`, a ring
+  `GpuRegion` the node owns and flushes per slot after its fence) and the
+  conversion a catalog package per shipped kernel (`SourceConversionPackage`,
+  its interface generated beside the kernel). The runtime declares the
+  upload's cadence and extent to the scheduler itself. A new uploaded producer
+  writes its planes in `IWorldUploadFeed.TryWrite`; screens still read the
+  binder's `CpuSurfaceSource` uploads until P12b-2 connects them. An uploaded
+  source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`, the
   `source-conversion` canary and `SourceConversionCanaryFixtureTests` together.
@@ -851,7 +862,9 @@ clock, and the scheduler's `.Sources` laws pin each. The runtime withdraws a
 render an external producer could not produce (`RenderGraphHistory.Withdraw`),
 so a static source is asked again. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
-priced by `WorldPresentationCost` in the cost report and `world.budget`.
+priced by `WorldPresentationCost` in the cost report and `world.budget`, which
+also reads the live schedule back per instance through `RenderGraphLiveBudget`
+(`RenderGraphRuntime.Latest` and `Work`: counts, never timing).
 `RenderGraphRuntime` (`src/Puck.Shaders/Graph`, since `Puck.Hosting` cannot
 reach the node) runs a set: it alternates two schedules, renders each
 scheduled instance through its own `ShaderPipelineRenderNode` at the
@@ -957,7 +970,12 @@ graph still binds is held through `ShaderPipelineRenderNode.HoldBinding` until
 that consumer installs a graph that no longer reads it, rebinds the name or is
 released: a graph instance as the consumer bound it, an external producer
 through one more acquisition of its latest output, bound for every frame, and
-`RenderGraphRuntime.RetiredProducers` counts what is held),
+`RenderGraphRuntime.RetiredProducers` counts what is held; a consumer that never
+bound the name, `ShaderPipelineRenderNode.IsBound`, holds nothing. The
+reconfiguration prepares its nodes, checks every graph it hands one
+(`RequireSwappable`) and plans its holds before it changes anything, so a
+failure leaves the running set intact and disposes what it created; a new step
+that can fail joins that preparation, never the commit after it),
 compiles each source row in the background through
 `ShaderPackager.LoadSource`, and installs it with `TryInstall`, inputs taken
 from the row's `inputs`. A row naming an engine `package` (such as `sdf.world`)
@@ -985,7 +1003,10 @@ and a lone full-display view at native scale is not shown, so `main` stands for
 placed one frame after a layout change. The first view's place pass carries
 the `place` config's `letterbox`, so pixels no view or pane covers show the
 letterbox color `place.comp.hlsl` states, and a layout covering the whole
-display pays nothing for it. Screens still render through `ViewStack` until
+display pays nothing for it. While the first view is not shown, its pass still
+letterboxes the whole output when `RenderGraphPlacement.Uncovered` says part of
+the display lies outside every shown rect (`WorldViewGraphHost.PlaceViews`
+counts it covered only when one shown view or pane covers it whole). Screens still render through `ViewStack` until
 later P11b work moves them.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
@@ -1093,7 +1114,7 @@ dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~World
 puck parity                                                 # parity world, offscreen, Vulkan then Direct3D 12
 puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
 puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends
-puck canary source-conversion                               # the shipped palette and NV12 conversion kernels against their CPU reference, offscreen on both backends
+puck canary source-conversion uploaded-sources              # the four shipped conversion kernels against their CPU reference; uploaded source instances converted and shown in panes, offscreen on both backends
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
 puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo no-device-compile    # shader pipelines offscreen on both backends

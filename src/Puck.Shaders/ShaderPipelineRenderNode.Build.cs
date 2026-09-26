@@ -543,11 +543,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 new GpuGraphicsPipelineDescription(
                     declaration.Name,
                     vertexInput,
-                    0,
-                    false,
-                    null,
-                    DepthCompareOf(pass: planned),
-                    layout
+                    layout,
+                    DepthCompareOf(pass: planned)
                 ),
                 name: new GpuObjectName(
                     owner: request.Instance,

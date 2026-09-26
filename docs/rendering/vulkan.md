@@ -88,7 +88,7 @@ value types (`VulkanQueueFamilySelection`, `VulkanPushConstantBinding`, `VulkanV
 | Render pass | `IVulkanRenderPassFactory` | `IVulkanRenderPassApi` | `VulkanRenderPass` |
 | Framebuffers | `IVulkanFramebufferSetFactory` | `IVulkanFramebufferSetApi` | `VulkanFramebufferSet` |
 | Shader module | `IVulkanShaderModuleFactory` | `IVulkanShaderModuleApi` | `VulkanShaderModule` |
-| Graphics pipeline | `IVulkanGraphicsPipelineFactory` | `IVulkanGraphicsPipelineApi` | `VulkanGraphicsPipeline` |
+| Graphics pipeline | `VulkanGpuPipelineFactory` (`IGpuPipelineFactory`) | `IVulkanGraphicsPipelineApi` | `VulkanGraphicsPipeline` |
 | Command buffers | `IVulkanCommandResourcesFactory` | `IVulkanCommandResourcesApi`, `IVulkanCommandBufferRecordingApi` | `VulkanCommandResources` |
 | Frame sync | `IVulkanFrameSynchronizationFactory` | `IVulkanFrameSynchronizationApi` | `VulkanFrameSynchronization` |
 | Buffers (every usage) |—(`VulkanBuffer.Create`) | `IVulkanBufferApi` | `VulkanBuffer` |
@@ -165,14 +165,16 @@ its images' views, and the recorder begins it with one clear value per attachmen
 opaque black for a color, the declared `GpuDepthAttachment.ClearDepth` for the depth.
 A transition into or out of the depth-attachment layout covers the image's depth aspect.
 
-`VulkanGpuPipelineFactory`, the neutral graphics path, creates opaque pipelines with one
-blend state per color attachment, a depth-stencil state that tests and writes exactly when
-the render pass has a depth attachment, and a dynamic viewport and scissor. `VulkanGpuRecorder`
-begins a render pass by setting a viewport of negative height over the area the pass draws,
-so clip-space +y is the top of the attachment as on Direct3D 12, and a scissor over the same
-area. The presenter's compositor keeps its own alpha-over pipeline in Vulkan's convention,
-with a fixed viewport (`VulkanGraphicsPipelineCreateRequest.FixedViewport`). `BindIndexBuffer` and `DrawIndexed` record
-`vkCmdBindIndexBuffer` and `vkCmdDrawIndexed`.
+`VulkanGpuPipelineFactory` creates every graphics pipeline, the presenter's blit included,
+from its description's groups: opaque, with one blend state per color attachment, a
+depth-stencil state that tests and writes exactly when the render pass has a depth
+attachment, and a dynamic viewport and scissor. `VulkanGpuRecorder` begins a render pass by
+setting a viewport of negative height over the area the pass draws, so clip-space +y is the
+top of the attachment as on Direct3D 12, and a scissor over the same area. The presenter's
+recorder (`VulkanCommandBufferRecorder`) sets the same viewport over the swapchain image, and
+its compositor creates the blit for the swapchain's render pass through
+`VulkanGpuRenderPass.Borrow`, which wraps a render pass another owner keeps. `BindIndexBuffer`
+and `DrawIndexed` record `vkCmdBindIndexBuffer` and `vkCmdDrawIndexed`.
 
 | Kind | Usage | Memory |
 |---|---|---|

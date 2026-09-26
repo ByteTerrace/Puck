@@ -1,0 +1,8 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 45
+# Ticks enough for the scheduled capture of the test pattern's source instance, which holds the clock at its tick until
+# the source's conversion serves it, and for both panes to be placed over the root.
+world.wait 480
+# The composed display, the test pattern in the left half and the QR code in the right, captured at the root.
+world.screenshot {run}/frame.png
+world.wait 10
