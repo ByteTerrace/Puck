@@ -1749,7 +1749,7 @@
                 ]
               },
               "input": {
-                "description": "Where a pointer hit on the screen\u0027s source goes: Presentation for hover and highlight, or Simulation for a pointer ray mapped in fixed point from this row, such as a light gun (WorldScreenMappings). Passthrough is refused by name: host passthrough exists only for a source the local user opened on their own machine, and a world document can never create one or send it input. null (the default) is Presentation. Omitted from the wire when null.",
+                "description": "Where a pointer hit on the screen\u0027s source goes: Presentation for hover and highlight, or Simulation for a pointer ray mapped in fixed point from this row, which a $pointer: rule read sees and which aims the screen machine\u0027s light gun for a seat applied to the screen (WorldScreenMappings). Passthrough is refused by name: host passthrough exists only for a source the local user opened on their own machine, and a world document can never create one or send it input. null (the default) is Presentation. Omitted from the wire when null.",
                 "enum": [
                   "Presentation",
                   "Simulation",

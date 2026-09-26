@@ -14,7 +14,8 @@ namespace Puck.HumbleGamingBrick;
 /// One physical medium. The light this machine emits is its RP LED bit (<c>RP</c> bit 0) OR-ed with the cart IR-mode LED
 /// write — both views drive the same LED. The light it receives is a linked peer's emitted light (see
 /// <c>IrLinkSession</c>) OR-ed with this machine's own emitted light when hardware self-sensing applies (see
-/// <see cref="ReceivedLight"/>): a bare CGB with no cable reads its own lit LED back rather than reading dark.
+/// <see cref="ReceivedLight"/>): a bare CGB with no cable reads its own lit LED back rather than reading dark. The
+/// <see cref="ILightGun"/> photodiode shares the receive line, so a gun aimed at a lit pixel reads as received light.
 /// </para>
 /// <para>
 /// RP semantics: a read returns the written data-enable bits 7-6 and LED bit 0, with the unused bits reading 1, and
@@ -37,6 +38,10 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
 
     // The HuC1/HuC3 cart IR-mode LED latch: a second LED drive OR-ed with the RP LED bit.
     private bool m_cartLightOut;
+
+    // The light gun on the receive line; its held aim is its own snapshot state.
+    private readonly ILightGun m_lightGun;
+
     // The currently-emulated model, re-derived on a live device swap (IModeSwitchable) exactly like every other
     // capability gate; gates hardware self-sensing (see ReceivedLight). Not serialized — ModelState is the one snapshotted
     // authority and every gated component re-derives from it via Machine.Restore, same as m_supportsColor elsewhere.
@@ -51,11 +56,15 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     /// <summary>Creates the transceiver seeded with the boot model's self-sensing gate.</summary>
     /// <param name="configuration">The machine configuration, whose <see cref="MachineConfiguration.Model"/> seeds the
     /// self-sensing gate before any live device swap re-derives it.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="configuration"/> is <see langword="null"/>.</exception>
-    public InfraredPort(MachineConfiguration configuration) {
+    /// <param name="lightGun">The light gun wired to the receive line.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="configuration"/> or <paramref name="lightGun"/> is
+    /// <see langword="null"/>.</exception>
+    public InfraredPort(MachineConfiguration configuration, ILightGun lightGun) {
         ArgumentNullException.ThrowIfNull(argument: configuration);
+        ArgumentNullException.ThrowIfNull(argument: lightGun);
 
         m_model = configuration.Model;
+        m_lightGun = lightGun;
     }
 
     /// <inheritdoc/>
@@ -97,7 +106,7 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     /// only when a HuC1/HuC3 cartridge is present.
     /// </remarks>
     public bool ReceivedLight =>
-        ((m_peer?.EmittedLight ?? false) || (SelfSensingEnabled && ((IInfraredPeer)this).EmittedLight));
+        ((m_peer?.EmittedLight ?? false) || (SelfSensingEnabled && ((IInfraredPeer)this).EmittedLight) || m_lightGun.SensesLight);
 
     // Wires two transceivers as IR peers. Internal on purpose: IrLinkSession is the one blessed connect seam, because a
     // connected pair must also be STEPPED as a pair (the interleave keeps their light levels coherent) — the session owns
@@ -128,7 +137,7 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     public byte ReadRegister() {
         var value = ((byte)((m_register & ReadBackKeepMask) | ReadBackHighBits));
 
-        // Bit 1 reads 0 (light detected) only while the data-read-enable bits 7-6 are both set AND a peer LED is lit.
+        // Bit 1 reads 0 (light detected) only while the data-read-enable bits 7-6 are both set AND light is received.
         if (
             ((m_register & DataReadEnableMask) == DataReadEnableMask) &&
             ReceivedLight

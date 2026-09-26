@@ -26,7 +26,7 @@ internal sealed class SnapshotRoundTripStage : IPostStage<PostContext> {
     private static readonly string[] ExpectedSectionRoster = [
         "clock", "ModelState", "DmgCompatibilityState", "SystemMemory", "InterruptController", "TimerComponent",
         "JoypadComponent", "Key1Component", "SerialComponent", "InfraredPort", "ApuComponent", "AudioOutputComponent",
-        "TiltSensorComponent", "CartridgeSlot", "OamDmaController", "Framebuffer", "Ppu", "HdmaController",
+        "TiltSensorComponent", "LightGunComponent", "CartridgeSlot", "OamDmaController", "Framebuffer", "Ppu", "HdmaController",
         "SystemBus", "Sm83",
     ];
 

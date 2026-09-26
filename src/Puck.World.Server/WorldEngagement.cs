@@ -73,6 +73,10 @@ public sealed class WorldEngagement {
     // WorldScreenRoute — what Compose stamps onto a screen application.
     private readonly Dictionary<int, ChannelReachMask> m_screenReach = new();
     private readonly Dictionary<int, string?> m_screenKit = new();
+    // The light gun's mapping per screen: the row's source-normalized mapping (WorldScreenMappings.Normalized), the one
+    // the $pointer: rule read maps through, or null for a row that is not a Simulation screen or maps no ray. Cached
+    // against the row it was built from, so a live screen edit remaps and a steady screen allocates nothing.
+    private readonly Dictionary<int, (WorldScreen Row, SourceMapping? Mapping)> m_screenAims = new();
     // Reused scratch for the per-frame PlayersOn/DissolveScreen collect+prune, so the hot path allocates nothing
     // after warmup.
     private readonly List<Principal> m_holderScratch = new();
@@ -470,7 +474,8 @@ public sealed class WorldEngagement {
     }
     /// <summary>Folds every applied body's channel-masked intent onto its targets for this tick — a screen member
     /// merges into <see cref="m_screenPads"/> (the multiplayer-cabinet OR-merge,
-    /// <see cref="MachinePadState.Merge"/>); a body member queues a co-drive contribution into
+    /// <see cref="MachinePadState.Merge"/>), its light gun aimed where the body's pointer ray maps on a
+    /// <see cref="SourceDestination.Simulation"/> screen (<see cref="Aim"/>); a body member queues a co-drive contribution into
     /// <see cref="BodyContributions"/> for <see cref="WorldServer.Step"/> to enqueue onto the target's next tick,
     /// through the ordinary Drive-gated contribution path. ONE loop over the whole population covers both, and
     /// re-asserts each visited body's capture latch from the same set it folds (see the class remarks) — the
@@ -478,7 +483,10 @@ public sealed class WorldEngagement {
     /// integration IS its delivery. Run once per <see cref="WorldServer.Step"/>, before the tick's
     /// <see cref="Protocol.WorldSnapshot"/> is built, so <see cref="BuildPadSnapshot"/> reflects this tick's
     /// applied intents.</summary>
-    public void FoldTick() {
+    /// <param name="screens">The installed document's screen rows, which the light gun's aim maps through.</param>
+    public void FoldTick(IReadOnlyList<WorldScreen> screens) {
+        ArgumentNullException.ThrowIfNull(argument: screens);
+
         m_screenPads.Clear();
         m_bodyContributions.Clear();
 
@@ -513,10 +521,16 @@ public sealed class WorldEngagement {
                 );
 
                 if (application.Target.Kind == GrantSubjectKind.Screen) {
-                    var pad = Translate(
+                    var pad = (Translate(
                         intent: masked,
                         kit: application.Kit
-                    );
+                    ) with {
+                        Pointer = Aim(
+                            ray: masked.SourceRay,
+                            screenIndex: application.Target.Value,
+                            screens: screens
+                        ),
+                    });
 
                     m_screenPads[application.Target.Value] = (m_screenPads.TryGetValue(
                         key: application.Target.Value,
@@ -538,6 +552,72 @@ public sealed class WorldEngagement {
             }
         }
     }
+    /// <summary>Returns where a pointer ray aims a screen's light gun, mapped in fixed point from the screen row alone
+    /// through <see cref="WorldScreenMappings.Normalized"/>, the mapping the <c>$pointer:</c> rule read runs: the hit's
+    /// source-normalized fractions while the ray lands on the source, and <see cref="MachinePointer.Off"/> for no ray, a
+    /// miss, the bezel, or a screen whose route input is not <see cref="SourceDestination.Simulation"/>.</summary>
+    /// <param name="screens">The installed document's screen rows.</param>
+    /// <param name="screenIndex">The engine screen index.</param>
+    /// <param name="ray">The applied body's pointer ray this tick, or <see langword="null"/> for none.</param>
+    /// <returns>The light gun's aim.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="screens"/> is <see langword="null"/>.</exception>
+    public MachinePointer Aim(IReadOnlyList<WorldScreen> screens, int screenIndex, SourceRay? ray) {
+        ArgumentNullException.ThrowIfNull(argument: screens);
+
+        if (ray is not { } pointer) {
+            return MachinePointer.Off;
+        }
+
+        WorldScreen? row = null;
+
+        for (var index = 0; (index < screens.Count); index++) {
+            if (screens[index].Index == screenIndex) {
+                row = screens[index];
+
+                break;
+            }
+        }
+
+        if (row is null) {
+            return MachinePointer.Off;
+        }
+
+        if (
+            !m_screenAims.TryGetValue(
+            key: screenIndex,
+            value: out var aim
+        ) ||
+            !ReferenceEquals(
+            objA: aim.Row,
+            objB: row
+        )
+        ) {
+            var mapping = ((row.Route.Input == SourceDestination.Simulation)
+                ? WorldScreenMappings.Normalized(screen: row)
+                : null
+            );
+
+            aim = (row, ((mapping?.TryValidate(refusal: out _) ?? false)
+                ? mapping
+                : null
+            ));
+            m_screenAims[screenIndex] = aim;
+        }
+
+        if (aim.Mapping is not { } normalized) {
+            return MachinePointer.Off;
+        }
+
+        var hit = normalized.MapRay(ray: pointer);
+
+        return (hit.IsOnSource
+            ? new MachinePointer(
+                x: checked((ushort)hit.Coordinate.X.Value),
+                y: checked((ushort)hit.Coordinate.Y.Value)
+            )
+            : MachinePointer.Off
+        );
+    }
     /// <summary>Returns the read-only twin of <see cref="Dissolve"/>: computes the identical outcome without
     /// mutating anything. The client submits <see cref="WorldCommand.DissolveControl"/> for the actual
     /// (server-authoritative) mutation regardless of what this reports — the command's own apply re-derives the same
@@ -555,6 +635,17 @@ public sealed class WorldEngagement {
             entityIndex: entityIndex,
             targetPrincipal: targetPrincipal
         );
+    /// <summary>Returns where this tick's merged pad aims <paramref name="screenIndex"/>'s light gun — the
+    /// <c>screen.state</c> read-back of <see cref="FoldTick"/>'s aim.</summary>
+    /// <param name="screenIndex">The engine screen index.</param>
+    /// <returns>The aim, or <see cref="MachinePointer.Off"/> when no application reaches the screen this tick.</returns>
+    public MachinePointer PointerOn(int screenIndex) => (m_screenPads.TryGetValue(
+        key: screenIndex,
+        value: out var pad
+    )
+        ? pad.Pointer
+        : MachinePointer.Off
+    );
     /// <summary>Returns every entity currently applied to <paramref name="screenIndex"/>, reported as 1-based display
     /// numbers (1..128, matching the <c>player.*</c> verb convention — a Seat/Peer principal's
     /// <see cref="Principal.Index"/> plus one) alongside whether the application captures it (its avatar idle,
