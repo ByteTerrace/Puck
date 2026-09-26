@@ -74,24 +74,21 @@ public static unsafe class DirectXTextures {
     /// <see langword="null"/>.</param>
     /// <param name="memory">The device-local counts the texture joins, or <see langword="null"/>; the owner counts its
     /// release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
+    /// <param name="mipLevels">The number of mip levels the texture has; one for a texture without mips.</param>
     /// <returns>The texture, owned by the caller.</returns>
     /// <exception cref="Puck.Abstractions.Gpu.DeviceLostException">The device was removed.</exception>
     /// <exception cref="DirectXException">The creation failed for another reason.</exception>
-    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null, GpuDeviceMemoryWork? memory = null) {
+    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null, GpuDeviceMemoryWork? memory = null, ushort mipLevels = 1) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
-        var description = new D3D12_RESOURCE_DESC {
-            DepthOrArraySize = 1,
-            Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-            Flags = flags,
-            Format = format,
-            Height = height,
-            Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN,
-            MipLevels = 1,
-            SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
-            Width = width,
-        };
+        var description = Describe(
+            flags: flags,
+            format: format,
+            height: height,
+            mipLevels: mipLevels,
+            width: width
+        );
         var texture = DirectXCommandCalls.CreateCommittedResource(
             calls: new DirectXDeviceCommandCalls(device: device),
             clearValue: clearValue,
@@ -110,4 +107,23 @@ public static unsafe class DirectXTextures {
 
         return texture;
     }
+    /// <summary>Returns the description <see cref="CreateCommitted"/> creates a texture from: one array layer, one
+    /// sample, the layout the device chooses.</summary>
+    /// <param name="format">The texture format.</param>
+    /// <param name="width">The width of level 0, in texels.</param>
+    /// <param name="height">The height of level 0, in texels.</param>
+    /// <param name="mipLevels">The number of mip levels.</param>
+    /// <param name="flags">Its resource flags.</param>
+    /// <returns>The description.</returns>
+    public static D3D12_RESOURCE_DESC Describe(DXGI_FORMAT format, uint width, uint height, ushort mipLevels, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE) => new() {
+        DepthOrArraySize = 1,
+        Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+        Flags = flags,
+        Format = format,
+        Height = height,
+        Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN,
+        MipLevels = mipLevels,
+        SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
+        Width = width,
+    };
 }

@@ -102,7 +102,7 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
                 BaseArrayLayer = 0,
                 BaseMipLevel = 0,
                 LayerCount = 1,
-                LevelCount = 1,
+                LevelCount = request.LevelCount,
             },
             ViewType = TwoDimensionalImageViewType,
         };

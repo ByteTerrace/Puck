@@ -10,6 +10,10 @@ internal static class DirectXGpuFormats {
         GpuPixelFormat.R16G16B16A16Float => DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT,
         GpuPixelFormat.R32G32B32A32Float => DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT,
         GpuPixelFormat.D32Float => DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT,
+        GpuPixelFormat.Bc4Unorm => DXGI_FORMAT.DXGI_FORMAT_BC4_UNORM,
+        GpuPixelFormat.Bc5Unorm => DXGI_FORMAT.DXGI_FORMAT_BC5_UNORM,
+        GpuPixelFormat.Bc6hUfloat => DXGI_FORMAT.DXGI_FORMAT_BC6H_UF16,
+        GpuPixelFormat.Bc7Unorm => DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM,
         _ => throw new ArgumentOutOfRangeException(
         actualValue: gpuPixelFormat,
         message: null,

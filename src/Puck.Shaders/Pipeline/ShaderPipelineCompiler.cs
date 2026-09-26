@@ -640,12 +640,12 @@ public sealed partial class ShaderPipelineCompiler {
                 resource.Format,
                 ignoreCase: true,
                 out var format
-            ) || !Enum.IsDefined(value: format) || GpuPixelFormats.IsDepth(format: format))
+            ) || !Enum.IsDefined(value: format) || GpuPixelFormats.IsDepth(format: format) || GpuPixelFormats.IsBlockCompressed(format: format))
             ) {
                 Add(
                     diagnostics,
                     "SHADERPIPE_RESOURCE_FORMAT",
-                    $"Resource '{resource.Name}' has unsupported image format '{resource.Format}'; an image has a color format, and a depth format belongs to a depth resource.",
+                    $"Resource '{resource.Name}' has unsupported image format '{resource.Format}'; an image has an uncompressed color format, a depth format belongs to a depth resource, and a block-compressed format is only ever sampled.",
                     resource.Name
                 );
             }

@@ -113,7 +113,8 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
             Flags: 0,
             MagFilter: vulkanFilter,
             MaxAnisotropy: 1f,
-            MaxLod: 0f,
+            // VK_LOD_CLAMP_NONE: every level a view covers is reachable, as Direct3D 12's MaxLOD of FLT_MAX leaves it.
+            MaxLod: 1000f,
             MinFilter: vulkanFilter,
             MinLod: 0f,
             MipLodBias: 0f,

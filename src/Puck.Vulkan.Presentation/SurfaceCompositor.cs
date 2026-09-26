@@ -369,8 +369,6 @@ public sealed class SurfaceCompositor : IDisposable {
                 width: surface.Width
             );
         } else if (surface.IsCpuPixels) {
-            var vulkanFormat = VulkanGpuFormats.ToVkFormat(gpuPixelFormat: GpuPixelFormats.FromSurfaceFormat(format: surface.Format));
-
             m_rootUpload ??= new VulkanSurfaceUpload(
                 bufferApi: m_bufferApi,
                 commandBufferRecordingApi: m_commandBufferRecordingApi,
@@ -381,9 +379,9 @@ public sealed class SurfaceCompositor : IDisposable {
                 queueSubmitter: m_queueSubmitter
             );
             imageViewHandle = m_rootUpload.Upload(
+                format: GpuPixelFormats.FromSurfaceFormat(format: surface.Format),
                 height: surface.Height,
                 pixels: surface.Pixels,
-                vulkanFormat: vulkanFormat,
                 width: surface.Width
             );
         }

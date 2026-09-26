@@ -410,8 +410,10 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint bufferHandle,
+        ulong bufferOffset,
         nint imageHandle,
         uint imageLayout,
+        uint mipLevel,
         int imageOffsetX,
         int imageOffsetY,
         uint width,
@@ -420,7 +422,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         var copyBufferToImage = device.CmdCopyBufferToImage;
         var bufferImageCopy = new VkBufferImageCopy {
             BufferImageHeight = 0,
-            BufferOffset = 0,
+            BufferOffset = bufferOffset,
             BufferRowLength = 0,
             ImageExtent = new VkExtent3D(
             depth: 1,
@@ -436,7 +438,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 AspectMask = ImageAspectColorBit,
                 BaseArrayLayer = 0,
                 LayerCount = 1,
-                MipLevel = 0,
+                MipLevel = mipLevel,
             },
         };
         var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
