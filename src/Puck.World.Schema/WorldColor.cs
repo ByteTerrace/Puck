@@ -100,39 +100,6 @@ public static class WorldColor {
         )
         );
     }
-    /// <summary>Resolves an authored color against the live document — a hex literal parses directly, a state
-    /// binding reads its Text cell — falling back when the value is neither, the cell is absent, or its text is not
-    /// a hex color (the validator refuses all three at author time; a live cell edit can still put a non-color there).</summary>
-    /// <param name="definition">The live definition the binding reads.</param>
-    /// <param name="value">The authored color, or <see langword="null"/>.</param>
-    /// <param name="fallback">The color used when <paramref name="value"/> resolves to nothing.</param>
-    public static Vector3 Resolve(WorldDefinition definition, string? value, Vector3 fallback) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        if (StateBinding.Parse(token: value) is not (var row, var key, _)) {
-            return HexColor.Parse(
-                fallback: fallback,
-                value: value
-            );
-        }
-
-        return ((WorldStateReader.TryRead(
-            definition: definition,
-            engineTick: 0UL,
-            key: key,
-            rawValue: out _,
-            row: out var stateRow,
-            rowName: row,
-            text: out var text,
-            tick: 0UL
-        ) && (stateRow.Kind == CellKind.Text))
-            ? HexColor.Parse(
-                fallback: fallback,
-                value: text
-            )
-            : fallback
-        );
-    }
     /// <summary>Formats an RGB triple (each component in <c>[0, 1]</c>) as an uppercase <c>#RRGGBB</c> hex string,
     /// matching the catalog's stored convention.</summary>
     /// <param name="rgb">The RGB color.</param>

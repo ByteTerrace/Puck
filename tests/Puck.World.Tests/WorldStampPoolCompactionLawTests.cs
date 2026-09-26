@@ -39,7 +39,7 @@ public sealed class WorldStampPoolCompactionLawTests {
 
         pool.Emit(
             builder: builder,
-            definition: Fixtures.BuildGradientUpDocument(gradientUp: false),
+            colors: WorldBakedColors.Of(definition: Fixtures.BuildGradientUpDocument(gradientUp: false)),
             probeWorstCase: false,
             maxPlacementScale: 1f,
             slotBase: SlotBase

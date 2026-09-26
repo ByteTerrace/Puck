@@ -313,8 +313,8 @@ document. The five cuts are in dependency order, each independently landable.
 **The mechanism defects, and the conformance law.** Owns `WorldProjection`'s
 `Compose` and `TryToDefinition`, and the round-trip law. Delivers a `Compose`
 that supplies `Fields`, which it declares and never sets, so a presentation-tier
-peer stops seeing no field lattice where `WorldClient` and `WorldFieldEmitter`
-read `Definition.Fields`; and a `TryToDefinition` that reads
+peer stops seeing no field lattice where the client's state view
+(`WorldDocumentStateView`) and `WorldFieldEmitter` read `Definition.Fields`; and a `TryToDefinition` that reads
 `projection.Observations` back, so the channel `WorldStateDisclosure.Compose`
 fills stops being inert — the hydration rebuilds `StateRaw` only through
 `WorldFieldsSection.ToStateSection`, which manufactures lattice-shaped rows and
