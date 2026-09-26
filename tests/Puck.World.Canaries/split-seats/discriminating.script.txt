@@ -1,0 +1,9 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 60
+# A second seat joins, and the layout for two seats (the world's split row) shows both, side by side.
+player.join 2
+world.wait 10
+# Seat 2 stays at spawn beside seat 1, so both halves show the dark wall.
+world.wait 90
+world.screenshot {run}/split.png
+world.wait 30

@@ -35,7 +35,7 @@ public sealed class SdfEngineNodeWorkLawTests {
         var first = sample.Submission;
 
         Assert.Equal(expected: SdfWorldEngine.PassLabels.ToArray(), actual: sample.PassLabels.ToArray());
-        Assert.True(condition: sample.TryGetPassCount(column: IndirectDispatchesColumn, pass: CompositePass, value: out var indirect));
+        Assert.True(condition: sample.TryGetPassCount(column: IndirectDispatchesColumn, pass: ViewsPass, value: out var indirect));
         Assert.Equal(actual: indirect, expected: 1L);
 
         rig.Produce();
@@ -84,8 +84,8 @@ public sealed class SdfEngineNodeWorkLawTests {
         Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: Frame));
     }
 
-    private const int CompositePass = 9;
     private const int IndirectDispatchesColumn = 1;
+    private const int ViewsPass = 8;
 
     private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>

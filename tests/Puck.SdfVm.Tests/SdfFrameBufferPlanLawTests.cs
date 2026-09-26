@@ -18,7 +18,6 @@ public sealed class SdfFrameBufferPlanLawTests {
         SdfFramePass.Surface,
         SdfFramePass.Ambient,
         SdfFramePass.Views,
-        SdfFramePass.Composite,
     ];
 
     private static SdfBufferEdge Edge(SdfFrameBuffer buffer, SdfFramePass producer, SdfFramePass consumer, SdfBufferAccess before, SdfBufferAccess after) =>
@@ -66,7 +65,7 @@ public sealed class SdfFrameBufferPlanLawTests {
     }
     [Fact]
     public void ASkippedFrameOwesNoTransition() {
-        Assert.Empty(collection: SdfFrameBufferPlan.Edges(passes: [SdfFramePass.Upload, SdfFramePass.Composite]));
+        Assert.Empty(collection: SdfFrameBufferPlan.Edges(passes: [SdfFramePass.Upload]));
     }
     [Fact]
     public void EveryHazardInARecordingHasExactlyOneEdge() {

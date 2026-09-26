@@ -1,6 +1,6 @@
 // Shared contract and rendering functions for the world kernels. Beam evaluates tile clearance; primary records
-// camera hits; views reconstructs hit shading and diagnostics; composite assembles the source images. The scene
-// program and cameras remain data. KEEP IN SYNC with SdfWorldEngine's packing and pass order.
+// camera hits; views reconstructs hit shading and diagnostics into the view's own output image. The scene program and
+// cameras remain data. KEEP IN SYNC with SdfWorldEngine's packing and pass order.
 #ifndef SDF_WORLD_HLSLI
 #define SDF_WORLD_HLSLI
 #include "sdf-tile.hlsli"
@@ -12,14 +12,15 @@ struct ViewportData {
     float4 right;       // xyz = right basis,   w = tan(fov / 2)
     float4 up;          // xyz = up basis,      w = aspect ratio
     float4 forward;     // xyz = forward basis, w = debug view mode (0 = final)
-    float4 region;      // xy = normalized origin, zw = normalized size (of the output image)
-    // x = the RENDER-SCALE numerator q (1..255; 255 = native): the view renders at worldRenderDims(rectDims, q) and
-    // Stage 2 upsamples back into the full region (bilinear; q == 255 takes the exact-copy path). yz = the off-axis
-    // (asymmetric) frustum's tangent-space center offset (SdfAsymmetricFrustum) — (0,0) for an ordinary symmetric
-    // camera, consumed by cameraRayDirection below. w = the frame's FAR DISTANCE (SdfFrame.FarDistance, read through
-    // worldFarDistance below).
-    // KEEP IN SYNC with SdfWorldEngine.PackViewports (the 96-byte row) and BuildCompositePush's scaleQPacked.
-    float4 renderScale;
+    // xy = the view's RENDER extent in pixels, which is the size of the output image its dispatch set writes: the host
+    // sizes each view's image at the extent the render graph schedules for it, and the graph's place pass reconstructs
+    // it into the view's rect. zw are zero.
+    float4 extent;
+    // x is zero. yz = the off-axis (asymmetric) frustum's tangent-space center offset (SdfAsymmetricFrustum) — (0,0)
+    // for an ordinary symmetric camera, consumed by cameraRayDirection below. w = the frame's FAR DISTANCE
+    // (SdfFrame.FarDistance, read through worldFarDistance below).
+    // KEEP IN SYNC with SdfWorldEngine.PackViewports (the 96-byte row).
+    float4 lens;
 };
 [[vk::binding(2, 0)]] StructuredBuffer<ViewportData> viewports : register(t1);
 
@@ -29,21 +30,17 @@ struct ViewportData {
 // per view row by SdfWorldEngine.PackViewports — the one buffer every kernel that marches already binds), never a
 // shader constant: the host refuses a non-finite or non-positive value before packing, so no kernel guards it.
 float worldFarDistance(ViewportData view) {
-    return view.renderScale.w;
+    return view.lens.w;
 }
 
-// The per-view REDUCED render extent, derived from the view's OUTPUT extent and the quantized scale numerator q by
-// INTEGER arithmetic — max(1, (outDim * q + 127) / 255) — so Stage 1 (render), the beam/instance-cull tile coverage,
-// and Stage 2 (upsample) can never disagree by a float rounding: every consumer derives the identical extent from the
-// identical integers on both backends. q = 255 reduces to outDim exactly ((d*255 + 127)/255 == d), the native path.
-uint2 worldRenderDims(uint2 rectDims, float renderScaleQ) {
-    uint q = clamp((uint)renderScaleQ, 1u, 255u);
-
-    return max((((rectDims * q) + 127u) / 255u), uint2(1u, 1u));
+// A view's render extent in pixels: its output image's size, packed by the host as exact integers. Every consumer (the
+// sky, the tile passes' coverage, the hit passes and views) reads this one value, so none can disagree on it.
+uint2 worldViewDims(ViewportData view) {
+    return max((uint2)view.extent.xy, uint2(1u, 1u));
 }
 
-struct CompositeParams {
-    uint2 imageExtent;   // output image size in pixels
+struct WorldParams {
+    uint2 imageExtent;   // the engine extent in pixels: the largest a view renders, the per-view visibility record stride
     uint2 tileGrid;      // tiles per viewport (row, column) — the cull buffer's per-viewport stride
     uint viewportCount;  // every view this frame renders; the per-view buffer strides, whichever view one set renders
     uint screenMask;     // bit s set => screen source slot s is bound this frame (Stage 1 only; unused elsewhere)
@@ -55,7 +52,7 @@ struct CompositeParams {
     // kernel's view is worldViewOf(id.z). KEEP IN SYNC with SdfWorldEngine.ViewBaseWord.
     uint viewBase;
 };
-[[vk::push_constant]] ConstantBuffer<CompositeParams> params;
+[[vk::push_constant]] ConstantBuffer<WorldParams> params;
 
 // The view a dispatch-set invocation renders.
 uint worldViewOf(uint z) {
@@ -147,7 +144,7 @@ static const uint SdfTonemapFilmic = 1u;
 
 #ifdef SDF_SCREEN_SOURCES
 // A declared ScreenSlab instance's world-space front-face frame (see Puck.SignedDistance.SdfScreenSurface) — Stage 1 ONLY
-// (binding 10/11 are not part of the beam prepass or Stage 2's descriptor sets). Indexed DIRECTLY by screen index
+// (binding 10/11 are not part of the beam prepass's descriptor set). Indexed DIRECTLY by screen index
 // (0..31, the same slot SetScreenSource/screenSources binds) — not by declaration order — so a hit resolves its
 // surface with no search; an unfilled slot's entry is never read (no material id can address it: the host packs an
 // entry only when SdfProgramBuilder registers that screen index).
@@ -750,7 +747,7 @@ static const int PrimaryRefineSteps = 8;
 // sphere fallback compare), so the divided step and that compare are pinned `precise` on both backends and the strict
 // path never rides the division. The four-bound teleport rides BOTH paths (branchless, no division).
 // #define SDF_STRICT_MARCH
-// WorldTileSize / TileEmpty / worldTileIndex live in sdf-tile.hlsli — shared with sdf-world-composite.comp.
+// WorldTileSize / TileEmpty / worldTileIndex live in sdf-tile.hlsli.
 
 // Shading weights of the world's one directional-sun-plus-hemisphere model. The ambient base, its hemisphere
 // gradient, the sun weight and the fog density are environment lanes (SdfEnvironment) so a world can author them;
@@ -1153,7 +1150,7 @@ float3 materialPalette(int material) {
 
 // The perspective ray for a viewport-local UV (pixel centers in [0,1] within the viewport's region; screen-up maps
 // to the camera's +up). SYMMETRIC by construction: `direction`'s defining expression below is untouched from before
-// the off-axis branch existed, so a camera that never sets renderScale.yz (every camera but a border window) takes
+// the off-axis branch existed, so a camera that never sets lens.yz (every camera but a border window) takes
 // the IDENTICAL sum in the IDENTICAL order — bit-exact, not merely numerically equal, which is what a build with the
 // branch not taken needs to prove byte-identity against a build without it at all.
 float3 cameraRayDirection(ViewportData view, float2 localUv) {
@@ -1170,12 +1167,12 @@ float3 cameraRayDirection(ViewportData view, float2 localUv) {
         ((ndc.y * tanHalfFov) * view.up.xyz)
     );
 
-    // Off-axis (asymmetric) frustum shear for a border window (SdfAsymmetricFrustum, Puck.SdfVm.Views): the render-
-    // scale row's two always-zero spares carry the frustum's tangent-space center offset, appended as a TRAILING
+    // Off-axis (asymmetric) frustum shear for a border window (SdfAsymmetricFrustum, Puck.SdfVm.Views): the lens
+    // row's two otherwise-zero lanes carry the frustum's tangent-space center offset, appended as a TRAILING
     // term so the symmetric sum above is never reassociated (float addition is not associative — computing the
     // offset into a fresh accumulator first, then adding, can round differently than one flat left-to-right sum).
-    if ((view.renderScale.y != 0.0) || (view.renderScale.z != 0.0)) {
-        direction += ((view.renderScale.y * view.right.xyz) + (view.renderScale.z * view.up.xyz));
+    if ((view.lens.y != 0.0) || (view.lens.z != 0.0)) {
+        direction += ((view.lens.y * view.right.xyz) + (view.lens.z * view.up.xyz));
     }
 
     return normalize(direction);
@@ -1488,7 +1485,7 @@ static const int DebugViewModeCount = 12;
 static const int DebugViewModeNormals = 2;
 // Mode 7 (slice) is special-cased in TWO other places: renderView SKIPS the march for it (the slice never needs a
 // hit), and the beam prepass FORCE-SURVIVES every in-viewport tile for it (sdf-beam.comp) so the indirect dispatch
-// and Stage 2's empty-tile flatten cannot truncate the field picture — the slice must show the IDEAL field wall to
+// cannot truncate the field picture — the slice must show the IDEAL field wall to
 // wall. KEEP IN SYNC with DebugViewModes.Names in src/Puck.SdfVm/DebugViewModes.cs.
 static const int DebugViewModeSlice = 7;
 // Mode 8 (mask density) tints each pixel by its tile's kept-instance count — cull correctness by eye, and the way the
@@ -2564,7 +2561,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             float edgeWeight = (coverage * grazing);
             bool adjacentSky = false;
             if (edgeWeight > DitherQuantum) {
-                uint2 renderDims = worldRenderDims((uint2)(view.region.zw * float2(params.imageExtent)), view.renderScale.x);
+                uint2 renderDims = worldViewDims(view);
                 const int2 offsets[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
                 [unroll] for (uint i = 0u; i < 4u; i++) {
                     int2 neighbor = int2(pixel) + offsets[i];

@@ -5,9 +5,11 @@ using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-/// <summary>Describes one viewport slot's normalized output region for an SDF frame: an SDF camera render.</summary>
+/// <summary>Describes one viewport slot of an SDF frame: an SDF camera render into the view's own output image, and the
+/// normalized display region a host places that output in.</summary>
 /// <param name="Camera">The camera used to render the view.</param>
-/// <param name="Region">The view's normalized output region.</param>
+/// <param name="Region">The view's normalized display region, which sizes its output when no host asks for an
+/// extent (<see cref="SdfWorldEngine.DefaultViewExtent"/>).</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
     /// <summary>The off-axis (asymmetric) frustum's tangent-space center offset — <c>(0, 0)</c> (the default) is the
     /// ordinary symmetric camera every view used before this member existed, byte-identical: the shader adds it as a
@@ -15,24 +17,19 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// A non-zero value shears the frustum so a fixed rectangular aperture (a border-window face) maps 1:1 to the
     /// render regardless of where the camera's own eye sits relative to that aperture — see
     /// <see cref="Puck.SdfVm.Views.SdfAsymmetricFrustum"/>, the one producer of a non-zero offset. Rides the packed
-    /// render-scale row's <c>yz</c> lanes (KEEP IN SYNC with <c>SdfWorldEngine.PackViewports</c> and sdf-world.hlsli's
-    /// <c>ViewportData.renderScale</c>; the row's <c>w</c> lane carries <see cref="SdfFrame.FarDistance"/>) — no row
-    /// growth.</summary>
+    /// lens row's <c>yz</c> lanes (KEEP IN SYNC with <c>SdfWorldEngine.PackViewports</c> and sdf-world.hlsli's
+    /// <c>ViewportData.lens</c>; the row's <c>w</c> lane carries <see cref="SdfFrame.FarDistance"/>).</summary>
     public Vector2 AsymmetricFrustumOffset { get; init; }
-    /// <summary>The view's internal render scale in (0, 1]: Stage 1 renders the view at this fraction of its output
-    /// region (an integer-derived extent — see the shader's <c>worldRenderDims</c>) and Stage 2 upsamples it back.
-    /// 1 (the default) renders native through a bit-exact copy path, so an unset frame is byte-identical to a build
-    /// without the lever. Presentation-only: hosts drop it during camera transitions / for mostly-hidden views.</summary>
+    /// <summary>The view's render scale in (0, 1]: the fraction of its region's extent its output renders at when no
+    /// host asks for an extent (<see cref="SdfWorldEngine.DefaultViewExtent"/>); a host placing the output reconstructs
+    /// it into the region. 1 (the default) renders native. Presentation-only: hosts drop it during camera transitions
+    /// and for mostly-hidden views.</summary>
     public float RenderScale { get; init; } = 1f;
-    /// <summary>The reduced-resolution reconstruction blend in [0, 1]: 0 keeps the four-tap bilinear fast path; 1 uses
-    /// clamped Catmull-Rom bicubic reconstruction; values between blend continuously. Ignored by the native exact-copy
-    /// path. Presentation-only, quantized to one byte in Stage 2's push constants.</summary>
-    public float UpscaleSharpness { get; init; }
 }
 /// <summary>Contains the scene program and presentation state consumed by one SDF render frame.</summary>
 /// <param name="Program">The SDF program to render.</param>
 /// <param name="ProgramChanged">Whether the renderer must upload <paramref name="Program"/> for this frame.</param>
-/// <param name="Views">The camera views to render and composite.</param>
+/// <param name="Views">The camera views to render, each into its own output.</param>
 /// <param name="Time">The presentation time in seconds.</param>
 public sealed record SdfFrame(
     SdfProgram Program,

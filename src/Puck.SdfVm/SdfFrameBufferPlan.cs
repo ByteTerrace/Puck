@@ -42,10 +42,8 @@ public enum SdfFramePass {
     Surface,
     /// <summary>Ambient occlusion.</summary>
     Ambient,
-    /// <summary>Shading into the per-view sources.</summary>
+    /// <summary>Shading into the view's output.</summary>
     Views,
-    /// <summary>The split-screen composite.</summary>
-    Composite,
 }
 /// <summary>How a dispatch reaches a buffer. A dispatch that only reads a buffer binds it read-only, so a read is always
 /// <see cref="Read"/>: Direct3D 12 would hold a buffer bound through a read-write (UAV) binding in
@@ -112,11 +110,11 @@ public static class SdfFrameBufferPlan {
 
     /// <summary>The buffers <paramref name="pass"/> touches and how, in the order its transitions are recorded.</summary>
     /// <param name="pass">The dispatch.</param>
-    /// <returns>The pass's buffer uses; host-written tables and images are not listed, so the upload, the sky and the
-    /// composite have none.</returns>
+    /// <returns>The pass's buffer uses; host-written tables and images are not listed, so the upload and the sky have
+    /// none.</returns>
     public static ReadOnlySpan<SdfBufferUse> Uses(SdfFramePass pass) => pass switch {
         SdfFramePass.BrickUpload or SdfFramePass.BrickBake => BrickWrites,
-        SdfFramePass.Upload or SdfFramePass.Sky or SdfFramePass.Composite => [],
+        SdfFramePass.Upload or SdfFramePass.Sky => [],
         SdfFramePass.Mask => MaskUses,
         SdfFramePass.Beam => BeamUses,
         SdfFramePass.CullArgs => CullArgsUses,

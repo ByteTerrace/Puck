@@ -11,7 +11,7 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfWorldKernelsLoadWorkLawTests {
     private static readonly string[] Stems = [
-        "sdf-world-ambient", "sdf-beam", "sdf-brick-bake", "sdf-world-composite", "sdf-cull-args",
+        "sdf-world-ambient", "sdf-beam", "sdf-brick-bake", "sdf-cull-args",
         "sdf-instance-cull", "sdf-world-primary", "sdf-sky", "sdf-world-surface", "sdf-world-views",
         "sdf-world-views-core", "sdf-world-views-folds",
     ];
@@ -53,7 +53,7 @@ public sealed class SdfWorldKernelsLoadWorkLawTests {
             Assert.Equal(expected: expected, actual: work.Read(kind: SdfWorldKernels.BytecodeBytes));
             // Passed through: each kernel is its own file's bytes.
             Assert.Equal(expected: new byte[] { 0 }, actual: kernels.Ambient.ToArray());
-            Assert.Equal(expected: Enumerable.Repeat(count: 12, element: ((byte)11)), actual: kernels.ViewsFolds.ToArray());
+            Assert.Equal(expected: Enumerable.Repeat(count: 11, element: ((byte)10)), actual: kernels.ViewsFolds.ToArray());
 
             _ = SdfWorldKernels.Load(
                 bytecodeExtension: ".spv",

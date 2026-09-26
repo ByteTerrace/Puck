@@ -227,9 +227,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
-    private Func<IReadOnlyList<string>, WorldRootGraph>? m_compose;
+    private Func<IReadOnlyList<string>, int, WorldRootGraph>? m_compose;
     private bool m_disposed;
     private WorldViewDefaults? m_lastViews;
+    // The last refusal Reconcile reported, so a section it keeps retrying reports each refusal once.
+    private string? m_refusal;
     private IRenderGraphInstances? m_runtime;
     private WorldRootGraph? m_synthesized;
 
@@ -282,10 +284,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
             var synthesizedGraphs = synthesized.Graphs();
 
-            instances = [synthesized.Instances[0], .. rows, .. synthesized.Instances.Skip(count: 1)];
-            composed.Add(item: synthesizedGraphs[0]);
+            // The world producers first, so the runtime renders the one that renders every view before the ones that hand
+            // out later views' outputs.
+            var producers = synthesized.Producers.Count;
+
+            instances = [.. synthesized.Producers, .. rows, .. synthesized.Instances.Skip(count: producers)];
+            composed.AddRange(collection: synthesizedGraphs.Take(count: producers));
             composed.AddRange(collection: Enumerable.Repeat<RenderGraphRuntimeGraph?>(count: rows.Count, element: null));
-            composed.AddRange(collection: synthesizedGraphs.Skip(count: 1));
+            composed.AddRange(collection: synthesizedGraphs.Skip(count: producers));
             root = synthesized.Root;
         }
 
@@ -309,12 +315,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// onto it.</summary>
     /// <param name="runtime">The runtime, built from the set <see cref="TryCompose"/> composed for the booted
     /// document.</param>
-    /// <param name="compose">Synthesizes the default graph over the panes a document's layouts place.</param>
+    /// <param name="compose">Synthesizes the default graph over the panes a document's layouts place and the views they
+    /// compose (<see cref="WorldRootGraph.ViewsOf"/>).</param>
     /// <param name="synthesized">The default graph the runtime was built with, or <see langword="null"/> when the booted
     /// document names its own root.</param>
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/> or <paramref name="compose"/> is
     /// <see langword="null"/>.</exception>
-    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, WorldRootGraph> compose, WorldRootGraph? synthesized) {
+    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, WorldRootGraph> compose, WorldRootGraph? synthesized) {
         ArgumentNullException.ThrowIfNull(argument: runtime);
         ArgumentNullException.ThrowIfNull(argument: compose);
 
@@ -375,9 +382,52 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         return true;
     }
+    /// <summary>Places a view of the world this frame: the synthesized root reads the view's producer at its rect's
+    /// extent at its render scale, and, when the view is shown, reconstructs its output into the rect at the given
+    /// sharpness. The first view is also the base the root draws everything over, so it is read whether shown or not. A
+    /// view the synthesized root does not place (one past its <see cref="WorldRootGraph.Views"/>, or any view under a
+    /// graph that places none) is ignored.</summary>
+    /// <param name="view">The 0-based view.</param>
+    /// <param name="region">The view's normalized rect.</param>
+    /// <param name="renderScale">The view's render scale in (0, 1]; any other value renders native.</param>
+    /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+    /// <param name="shown">Whether the root draws the view's output into its rect this frame.</param>
+    /// <returns><see langword="true"/> when the root places the view this frame.</returns>
+    public bool PlaceView(int view, NormalizedRect region, float renderScale, float sharpness, bool shown) {
+        if (
+            (m_synthesized is not { Plan: not null } synthesized) ||
+            (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
+        ) {
+            return false;
+        }
+
+        var scale = (((renderScale > 0f) && (renderScale < 1f))
+            ? renderScale
+            : 1f);
+
+        m_placements[synthesized.ViewPasses[view]] = new RenderGraphPlacement(
+            Height: region.Height,
+            Left: region.X,
+            Sharpness: sharpness,
+            Shown: shown,
+            Top: region.Y,
+            Width: region.Width
+        );
+
+        if (shown || (view == 0)) {
+            m_footprints.Add(item: new RenderGraphFootprint(
+                Consumer: WorldViewGraphs.MainInstance,
+                Height: (region.Height * scale),
+                Producer: WorldRootGraph.ProducerOf(view: view),
+                Width: (region.Width * scale)
+            ));
+        }
+
+        return true;
+    }
     /// <inheritdoc/>
-    /// <remarks>A pane of the synthesized root the host did not place this frame is not shown, so its pass draws
-    /// nothing.</remarks>
+    /// <remarks>A pane or view of the synthesized root the host did not place this frame is not shown, so its pass
+    /// draws nothing.</remarks>
     public bool TryGet(string instance, string pass, out RenderGraphPlacement placement) {
         if (
             !string.Equals(
@@ -386,7 +436,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 comparisonType: StringComparison.Ordinal
             ) ||
             (m_synthesized is not { } synthesized) ||
-            !synthesized.Panes.Contains(value: pass)
+            (!synthesized.Panes.Contains(value: pass) && !synthesized.ViewPasses.Contains(value: pass))
         ) {
             placement = default;
 
@@ -641,9 +691,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     }
     /// <summary>Reconciles the accepted <c>views</c> section onto the runtime before it schedules a frame: the instance
     /// set follows the section's rows and the panes its layouts place, every surviving instance keeps its node and
-    /// graph, a row with a new source compiles, and a removed row's instance retires. Refused mutations never reach
-    /// here, and a set the runtime refuses leaves the running one in place, reported by name. Does nothing before a
-    /// runtime is attached.</summary>
+    /// graph, a row with a new source compiles, and a removed row's instance retires. A row whose inputs moved keeps its
+    /// installed graph, rebound to them, only while it stays a graph instance and that graph declares exactly the
+    /// versions the new inputs name; otherwise its source compiles anew. Refused mutations never reach here, and a set
+    /// the runtime refuses leaves the running one in place, reported by name once, and is tried again on the next call.
+    /// Does nothing before a runtime is attached.</summary>
     /// <param name="views">The accepted document's <c>views</c> section.</param>
     public void Reconcile(WorldViewDefaults views) {
         ArgumentNullException.ThrowIfNull(argument: views);
@@ -659,24 +711,21 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return;
         }
 
-        m_lastViews = views;
-
         var synthesized = m_synthesized;
 
         if (views.Root is null) {
             var panes = WorldRootGraph.PanesOf(views: views);
+            var composedViews = WorldRootGraph.ViewsOf(views: views);
 
             if (
                 (synthesized is null) ||
+                (synthesized.Views != composedViews) ||
                 !synthesized.Panes.SequenceEqual(second: panes, comparer: StringComparer.Ordinal)
             ) {
                 try {
-                    synthesized = m_compose!(arg: panes);
+                    synthesized = m_compose!(arg1: panes, arg2: composedViews);
                 } catch (WorldRootGraphRefusedException exception) {
-                    Report?.Invoke(
-                        SetReportName,
-                        $"refused: {exception.Message}"
-                    );
+                    ReportRefusal(reason: exception.Message);
 
                     return;
                 }
@@ -694,10 +743,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             synthesized: synthesized,
             views: views
         )) {
-            Report?.Invoke(
-                SetReportName,
-                $"refused: {reason}"
-            );
+            ReportRefusal(reason: reason);
 
             return;
         }
@@ -718,8 +764,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         // A row whose inputs moved rebinds its installed graph to them in this same reconfiguration, whether or not its
         // source moved too: the set's reads follow the inputs, so the bindings it has may name a producer the instance no
-        // longer reads. The runtime rebinds a kept pipeline without building it again.
+        // longer reads. The runtime rebinds a kept pipeline without building it again. Only a graph instance whose
+        // installed graph declares exactly the versions the new inputs bind is rebound: an instance that became a
+        // package, or inputs naming a version the installed graph lacks, leave the slot empty for the new source.
         graphs = [.. graphs.Select(selector: (graph, index) => (((graph is null) &&
+            (set.Instances[index].Kind == RenderGraphInstanceKind.Graph) &&
             m_entries.TryGetValue(
                 key: set.Instances[index].Name,
                 value: out var entry
@@ -729,7 +778,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 graphs: views.Graphs,
                 name: entry.Name
             ) is { } row) &&
-            !installed.Inputs.SequenceEqual(second: InputsOf(row: row)))
+            !installed.Inputs.SequenceEqual(second: InputsOf(row: row)) &&
+            DeclaresExactly(
+                graph: installed,
+                inputs: InputsOf(row: row)
+            ))
             ? (installed with { Inputs = InputsOf(row: row) })
             : graph))];
 
@@ -739,14 +792,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             root: root,
             set: set
         )) {
-            Report?.Invoke(
-                SetReportName,
-                $"refused: {refusal.Code}: {refusal.Message}"
-            );
+            ReportRefusal(reason: $"{refusal.Code}: {refusal.Message}");
 
             return;
         }
 
+        m_lastViews = views;
+        m_refusal = null;
         m_synthesized = synthesized;
 
         for (var index = 0; (index < graphs.Count); index++) {
@@ -861,6 +913,43 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     ) && (entry.LastCompile?.Pipeline is { } pipeline))
         ? pipeline.Plan.Passes.Count
         : 1);
+    // Whether a graph's external versions are exactly the ones a list of inputs binds, so the runtime can rebind it to
+    // them.
+    private static bool DeclaresExactly(RenderGraphRuntimeGraph graph, IReadOnlyList<RenderGraphRuntimeInput> inputs) {
+        var external = graph.Pipeline.Plan.Storages
+            .Where(predicate: static storage => storage.IsExternal)
+            .Select(selector: static storage => storage.Name)
+            .ToHashSet(comparer: StringComparer.Ordinal);
+        var bound = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var input in inputs) {
+            if (
+                (input.Version is not { } version) ||
+                !external.Contains(item: version) ||
+                !bound.Add(item: version)
+            ) {
+                return false;
+            }
+        }
+
+        return (bound.Count == external.Count);
+    }
+    // Reports a refused section once: Reconcile tries the section again on every call until it is accepted or replaced.
+    private void ReportRefusal(string reason) {
+        if (string.Equals(
+            a: reason,
+            b: m_refusal,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return;
+        }
+
+        m_refusal = reason;
+        Report?.Invoke(
+            SetReportName,
+            $"refused: {reason}"
+        );
+    }
     private void ResetFootprints() {
         m_footprints.Clear();
 

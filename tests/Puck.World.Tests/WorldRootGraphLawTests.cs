@@ -185,4 +185,53 @@ public sealed class WorldRootGraphLawTests {
             expectedStartString: $"render.extensions[1] '{FilmGrain}': RENDERGRAPH_PACKAGE_CONFIG: "
         );
     }
+    [Fact]
+    public void WithMoreThanOneViewEachViewIsAProducerPlacedAheadOfThePanesAndMainIsTheRoot() {
+        var graph = WorldRootGraph.Compose(
+            extensions: null,
+            overlay: false,
+            packages: RenderGraphPackageCatalog.Shipped,
+            panes: ["pane"],
+            views: 3
+        );
+        var plan = Assert.IsType<RenderGraphPlan>(@object: graph.Plan);
+
+        Assert.Equal(
+            actual: graph.Producers.Select(selector: static producer => $"{producer.Name}:{producer.ExternalPackage}"),
+            expected: ["world:sdf.world", "world$2:sdf.world", "world$3:sdf.world"]
+        );
+        Assert.Equal(
+            actual: (graph.Root, graph.Views, graph.Instances.Count),
+            expected: (WorldViewGraphs.MainInstance, 3, 4)
+        );
+        Assert.Equal(
+            actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
+            expected: ["main$view$1:place", "main$view$2:place", "main$view$3:place", "pane:place"]
+        );
+        Assert.Equal(
+            actual: graph.ViewPasses,
+            expected: ["main$view$1", "main$view$2", "main$view$3"]
+        );
+        // The first view's version is a second version of the first producer, so its base and its source differ.
+        Assert.Equal(
+            actual: graph.Graphs()[3]!.Inputs.Select(selector: static input => $"{input.Version}<-{input.Producer}"),
+            expected: ["main$world<-world", "main$view$1<-world", "main$view$2<-world$2", "main$view$3<-world$3", "pane<-pane"]
+        );
+        // Each view's footprint follows its rect frame by frame, so the root states none of its own.
+        Assert.Empty(collection: graph.Footprints);
+    }
+    [Fact]
+    public void AViewProducersNameReadsBackAsItsView() {
+        Assert.Equal(
+            actual: (WorldViewNames.World(view: 2), WorldViewNames.ViewOf(instance: "world$2"), WorldViewNames.ViewOf(instance: "world$5")),
+            expected: ("world$2", ((int?)1), ((int?)4))
+        );
+        Assert.Null(@object: WorldViewNames.ViewOf(instance: WorldViewGraphs.WorldInstance));
+        Assert.Null(@object: WorldViewNames.ViewOf(instance: "world$1"));
+        Assert.Null(@object: WorldViewNames.ViewOf(instance: "world$02"));
+        Assert.Equal(
+            actual: WorldRootGraph.ViewsOf(views: new WorldViewDefaults()),
+            expected: PlayerRoster.MaxSlots
+        );
+    }
 }

@@ -8,7 +8,8 @@ namespace Puck.World.Tests;
 /// <summary>A render-graph runtime's instance set without a device, for driving a <see cref="WorldViewGraphHost"/>: a
 /// reconfiguration keeps the node of every graph instance it continues by name, creates one for each new graph instance
 /// through the factory it was given, and disposes the node of every instance it drops; an install swaps the graph onto
-/// the instance's node.</summary>
+/// the instance's node. It refuses as the runtime does a graph handed to an external instance and a graph whose external
+/// versions its inputs do not bind exactly, and refuses one reconfiguration outright when asked to.</summary>
 /// <param name="create">Creates the node of a new graph instance, by its name.</param>
 internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> create) : IRenderGraphInstances, IDisposable {
     private readonly Dictionary<string, ShaderPipelineRenderNode> m_nodes = new(comparer: StringComparer.Ordinal);
@@ -18,6 +19,8 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
 
     /// <summary>Gets how many reconfigurations the runtime accepted.</summary>
     public int Reconfigurations { get; private set; }
+    /// <summary>Gets or sets whether the next reconfiguration is refused whatever it asks for.</summary>
+    public bool RefuseNext { get; set; }
 
     /// <inheritdoc/>
     public string Root { get; private set; } = WorldViewGraphs.WorldInstance;
@@ -34,11 +37,12 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
         var fake = new FakeGraphInstances(create: create);
 
         host.Attach(
-            compose: static panes => WorldRootGraph.Compose(
+            compose: static (panes, views) => WorldRootGraph.Compose(
                 extensions: null,
                 overlay: false,
                 packages: RenderGraphPackageCatalog.Shipped,
-                panes: panes
+                panes: panes,
+                views: views
             ),
             runtime: fake,
             synthesized: WorldRootGraph.Compose(
@@ -70,6 +74,53 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
     }
     /// <inheritdoc/>
     public bool TryReconfigure(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, string root, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal) {
+        if (RefuseNext) {
+            RefuseNext = false;
+            refusal = new RenderGraphRuntimeRefusal(
+                Code: RenderGraphRuntimeRefusalCode.GraphCount,
+                Message: "The fake refuses this reconfiguration.",
+                Names: []
+            );
+
+            return false;
+        }
+
+        for (var index = 0; (index < graphs.Count); index++) {
+            if (graphs[index] is not { } graph) {
+                continue;
+            }
+
+            var name = set.Instances[index].Name;
+
+            if (set.Instances[index].Kind == RenderGraphInstanceKind.External) {
+                refusal = new RenderGraphRuntimeRefusal(
+                    Code: RenderGraphRuntimeRefusalCode.ExternalProducer,
+                    Message: $"External instance '{name}' was given a graph.",
+                    Names: [name]
+                );
+
+                return false;
+            }
+
+            var external = graph.Pipeline.Plan.Storages
+                .Where(predicate: static storage => storage.IsExternal)
+                .Select(selector: static storage => storage.Name)
+                .Order(comparer: StringComparer.Ordinal);
+            var bound = graph.Inputs
+                .Select(selector: static input => (input.Version ?? string.Empty))
+                .Order(comparer: StringComparer.Ordinal);
+
+            if (!external.SequenceEqual(second: bound, comparer: StringComparer.Ordinal)) {
+                refusal = new RenderGraphRuntimeRefusal(
+                    Code: RenderGraphRuntimeRefusalCode.InputVersion,
+                    Message: $"Instance '{name}' does not bind its graph's external versions exactly.",
+                    Names: [name]
+                );
+
+                return false;
+            }
+        }
+
         foreach (var name in m_nodes.Keys.ToArray()) {
             if (set.IndexOf(name: name) < 0) {
                 m_nodes[name].Dispose();

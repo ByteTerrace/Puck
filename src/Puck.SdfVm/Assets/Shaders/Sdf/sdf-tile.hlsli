@@ -1,10 +1,10 @@
 // The per-tile cull grid's shared vocabulary: the tile size, the "no ray hits" sentinel, and the (viewport, tile) ->
 // flat index mapping. Deliberately BINDING-FREE and dependency-free — it declares no buffers, no push constants, and
-// includes nothing — so the two kernels that own incompatible push-constant layouts (sdf-world-composite.comp defines
-// its own CompositeParams2) can still share one definition instead of keeping hand-synced copies.
+// includes nothing — so a kernel with a push-constant layout of its own can share one definition instead of keeping a
+// hand-synced copy.
 //
-// The cull buffer these index is written by sdf-beam.comp, reduced by sdf-cull-args.comp, and read by both
-// sdf-world-views.comp (as a march-start) and sdf-world-composite.comp (as a flatten-or-copy decision).
+// The cull buffer these index is written by sdf-beam.comp, reduced by sdf-cull-args.comp, and read by
+// sdf-world-views.comp as a march-start.
 #ifndef SDF_TILE_HLSLI
 #define SDF_TILE_HLSLI
 
@@ -12,7 +12,7 @@
 // (WorldTileSize / 8)^2 groups — sdf-cull-args.comp relies on that divisibility.
 static const uint WorldTileSize = 16u;
 // The sentinel a tile carries when the beam prepass's cone provably clears the field: no ray in the tile can hit, so
-// Stage 1 skips the tile's pixels entirely and Stage 2 flattens them to a constant. Every other value the beam writes
+// Stage 1 skips the tile's pixels entirely, leaving the sky pre-pass's pixels. Every other value the beam writes
 // is a march-start t >= ConeNear > 0, so `== TileEmpty` is an exact test rather than a tolerance.
 static const float TileEmpty = -1.0;
 

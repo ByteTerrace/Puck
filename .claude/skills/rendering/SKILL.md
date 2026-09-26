@@ -890,9 +890,19 @@ through its own submissions, and each consumer binds its latest output under
 a `GpuImageLease` that the consumer node's per-slot `LeaseRetireList` holds
 until that slot's fence (the leased `BindImage` serves one frame). The set
 refuses an external instance's reads and any previous-frame read of one.
-`SdfEngineNode` is the `sdf.world` producer; it counts acquisitions
-(`OutputLeases`) and disposes an engine a new extent replaced only once its
-output is released (`RetiringEngines`). The
+`SdfEngineNode` is the `sdf.world` producer for view 0 (`world`), and
+`SdfEngineNode.ViewProducer(view)` is the producer of each later view
+(`world$2..world$K`, named by `WorldViewNames.World`). The node renders every
+view in its own `Produce`; a later view's `Produce` only records the extent the
+graph scheduled, which the engine renders at from the next frame. Each view
+writes its own output image (`SdfWorldEngine.ViewOutputs.cs`), sized to its
+scheduled extent or, before one, `DefaultViewExtent` (rect at render scale,
+quantized by `RenderGraphExtent`), and reallocated only when that extent
+changes; a replaced output is kept until no lease holds it and its writer has
+retired. A cadence-skipped frame records no view set, so each previous output
+stands. The node counts acquisitions per output image (`OutputLeases`); its
+engine extent only grows, and it disposes an engine a larger extent replaced
+only once its outputs are released (`RetiringEngines`). The
 root instance is the runtime's output and its default capture target; the root
 may be an external producer when nothing is drawn over it.
 `RenderGraphRuntime.CaptureTarget` arms a capture of any instance. A graph
@@ -904,12 +914,17 @@ at zero allocations included.
 The main view runs through the runtime. `WorldRootGraph`
 (`src/Puck.World.Client`) synthesizes a world's default graph, when
 `views.root` is absent, as a document value the graph compiler plans: `world`
-(the `sdf.world` producer), then the root `main`, which reads `world` and every
-pane and runs one `place` package pass per `views.graphs` instance a layout
-slot names (the pass named after the instance), then one `post.<id>` pass per
-`render.extensions` entry in order, then `overlay` in a windowed World. `main`
-is the root whenever anything is drawn over the world, panes included; with
-nothing drawn over it `world` is the root. With `views.root` set the runtime
+(the `sdf.world` producer) and `world$2..world$K` for K =
+`WorldRootGraph.ViewsOf` (the most non-instance slots of any `views.layouts`
+row or `PlayerRoster.MaxSlots`, capped at `SdfWorldEngine.MaxViewports`), then
+the root `main`, which reads `world` and every pane and runs, when K > 1, one
+`place` pass per view (`main$view$<n>`, n from 1; view 1's reads `world`
+through a second version beside `main$world`), then one `place` package pass
+per `views.graphs` instance a layout slot names (the pass named after the
+instance), then one `post.<id>` pass per `render.extensions` entry in order,
+then `overlay` in a windowed World. `main` is the root whenever anything is
+drawn over the world, panes included, and always when K > 1; otherwise `world`
+is the root. With `views.root` set the runtime
 runs the rows alone. A config that does not bind is the compiler's
 `RENDERGRAPH_PACKAGE_CONFIG`, which the boot's pre-flight
 (`WorldPostBuildWiring`) reports as a refused definition. `WorldRenderRoot`
@@ -938,9 +953,18 @@ width and height), advances the pane's clock and feeds its camera, pointer and
 time. A pane the active layout does not show draws nothing in its place pass
 and is not scheduled. The composer runs inside the world producer's frame, so a
 layout change places panes one frame later, and a layout transition's
-render-scale dip does not reach panes. A pane slot adds no SDF view, and the
-SDF composite composes SDF views only. Screens still render through
-`ViewStack` until later P11b work moves them.
+render-scale dip does not reach panes. A pane slot adds no SDF view. Each SDF
+view of the last composed frame is placed through `WorldViewGraphHost.PlaceView`
+(footprint: rect at render scale; placement: rect with
+`world.upscale-sharpness`), so `place` does the render-scale reconstruction.
+The first view's footprint is always added, since it is the base. A view is
+shown only once the engine has rendered it
+(`WorldFramePresenter.ViewRendered`, `SdfEngineNode.HasViewOutput`), and a
+lone full-display view at native scale is not shown, so `main` stands for
+`world` and parity holds. Views, like panes, are placed one frame after a
+layout change. Pixels between views show the base's clamped pixels; there is
+no letterbox color. Screens still render through `ViewStack` until later P11b
+work moves them.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):

@@ -14,7 +14,6 @@ public sealed partial class SdfWorldEngine {
     private const int SurfacePass = 6;
     private const int AmbientPass = 7;
     private const int ViewsPass = 8;
-    private const int CompositePass = 9;
 
     private static readonly WorkClass[] PassClassTable = BuildPassClasses();
 
@@ -26,9 +25,9 @@ public sealed partial class SdfWorldEngine {
     // pipeline, so a sample says which program and kernel set its counts ran under.
     private long m_workRevision;
 
-    /// <summary>Gets the labels of the passes a cadence-skipped frame does not run, in pass order. Every other pass of
-    /// <see cref="PassLabels"/> runs on every frame: <c>upload</c> copies whatever changed in the frame's tables
-    /// whatever the passes do with them, and <c>composite</c> re-composites the retained view images.</summary>
+    /// <summary>Gets the labels of the passes a cadence-skipped frame does not run, in pass order: every pass but
+    /// <c>upload</c>, which copies whatever changed in the frame's tables whatever the passes do with them, while each
+    /// view's retained output stands.</summary>
     public static ReadOnlySpan<string> CadenceSkippedPassLabels =>
         PassLabelTable.AsSpan(
             length: ((ViewsPass - SkyPass) + 1),
@@ -53,7 +52,7 @@ public sealed partial class SdfWorldEngine {
         m_work;
 
     private static WorkClass[] BuildPassClasses() {
-        var classes = new WorkClass[(CompositePass + 1)];
+        var classes = new WorkClass[(ViewsPass + 1)];
 
         classes[UploadPass] = WorkClass.PerBackendDeterministic;
 

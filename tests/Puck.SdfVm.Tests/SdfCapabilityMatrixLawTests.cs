@@ -42,7 +42,6 @@ public sealed class SdfCapabilityMatrixLawTests {
         ["surface"] = "sdf.world surface, visibility version 1",
         ["ambient"] = "sdf.world ambient, visibility version 2",
         ["views"] = "sdf.world shadow, light and volume shading, color versions 0 to 2",
-        ["composite"] = "no pass: P11b composes views in the graph",
     };
     // The rows no check proves yet.
     private static readonly string[] Gaps = [
@@ -95,11 +94,14 @@ public sealed class SdfCapabilityMatrixLawTests {
         ),
         new(
             Capability: "viewports",
-            Equivalent: "one sdf.world instance per view, scheduled by RenderGraphScheduler",
-            Check: "puck parity (one view)",
+            Equivalent: "one sdf.world instance per view, scheduled by RenderGraphScheduler, each view's output placed by the root's place pass",
+            Check: "puck parity (one view); the split-seats canary (two views)",
             Green: false,
             Members: [
                 "SdfFrame.Views", "SdfViewSnapshot.Camera", "SdfViewSnapshot.Region", "SdfViewSnapshot.AsymmetricFrustumOffset",
+                "SdfWorldEngine.RequestViewExtent", "SdfWorldEngine.HasViewOutput", "SdfWorldEngine.TryAcquireViewOutput",
+                "SdfWorldEngine.ReleaseViewOutput", "SdfWorldEngine.ViewOutputHolds", "SdfEngineNode.ViewProducer",
+                "SdfEngineNode.HasViewOutput",
                 "SdfWorldEngine.MaxViewports", "SdfWorldEngine.ConeNear", "SdfWorldEngine.PrimaryMarchSteps",
                 "SdfWorldEngineOptions.ViewportCapacity", "SdfWorldRenderSpec.ViewportCapacity", "SdfWorldRenderSpec.Width",
                 "SdfWorldRenderSpec.Height",
@@ -107,10 +109,10 @@ public sealed class SdfCapabilityMatrixLawTests {
         ),
         new(
             Capability: "render scale",
-            Equivalent: "a reduced instance extent and the graph's resample pass",
+            Equivalent: "a reduced instance extent, reconstructed by the root's place pass",
             Check: null,
             Green: false,
-            Members: ["SdfViewSnapshot.RenderScale", "SdfViewSnapshot.UpscaleSharpness"]
+            Members: ["SdfViewSnapshot.RenderScale", "SdfWorldEngine.DefaultViewExtent"]
         ),
         new(
             Capability: "screen slots",
@@ -261,6 +263,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Green: false,
             Members: [
                 "SdfWorldEngine.OutputImageHandle", "SdfWorldEngine.OutputImageViewHandle", "SdfWorldEngine.OutputLayout", "SdfWorldEngine.ExportSharedHandle",
+                "SdfWorldEngine.OutputWidth", "SdfWorldEngine.OutputHeight",
                 "SdfWorldEngineOptions.CreateOutputImage",
             ]
         ),

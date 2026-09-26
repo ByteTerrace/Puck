@@ -507,7 +507,7 @@ public sealed class SdfWorldEngineUploadLawTests {
         );
         Assert.Equal(
             actual: rig.Gpu.PoolsCreated.CountBy(keySelector: static pool => pool).ToDictionary(),
-            expected: SdfWorldEngine.DescriptorPools(brickPool: false).CountBy(keySelector: static pool => pool).ToDictionary()
+            expected: SdfWorldEngine.DescriptorPools(brickPool: false, viewportCapacity: 1).CountBy(keySelector: static pool => pool).ToDictionary()
         );
 
         var pools = rig.Gpu.PoolsCreated.Count;

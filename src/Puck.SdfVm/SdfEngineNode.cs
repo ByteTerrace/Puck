@@ -16,18 +16,17 @@ namespace Puck.SdfVm;
 /// <param name="HalfHeight">The half-extent along <paramref name="Up"/> this frame.</param>
 public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 Right, Vector3 Up, float HalfWidth, float HalfHeight);
 /// <summary>
-/// The SDF engine as a host-model <see cref="IRenderNode"/>: a generic multi-viewport SDF world compositor driven by
+/// The SDF engine as a host-model <see cref="IRenderNode"/>: a generic multi-viewport SDF world renderer driven by
 /// compute, fully backend-neutral (it depends only on the neutral <c>IGpuCompute*</c> seam, so the identical node runs
 /// on whichever backend the host publishes). It resolves the shared device from <see cref="FrameContext.Host"/>,
 /// pulls each frame's scene + cameras + regions from an <see cref="ISdfFrameSource"/>, and drives the shared
 /// <see cref="SdfWorldEngine"/> core in its fire-and-forget mode (the host's frame pacing orders the frames).
 /// <para>
-/// Rendering is two-stage so the compositor is source-agnostic, ahead of which a sky pre-pass (<c>sdf-sky.comp</c>)
-/// fills every source pixel with the authored sky, so a tile the beam later culls is never a stale, undispatched
-/// pixel. <c>sdf-beam.comp</c> cone-marches the field per tile to a conservative march-start depth;
-/// <c>sdf-world-views.comp</c> (Stage 1) renders each viewport's SDF camera into its own rect-sized
-/// <em>source</em> texture; <c>sdf-world-composite.comp</c> (Stage 2) places each source into its screen region by a 1:1
-/// copy.
+/// Each view renders through its own dispatch set into its own output image: a sky pre-pass (<c>sdf-sky.comp</c>)
+/// fills every output pixel with the authored sky, so a tile the beam later culls is never a stale, undispatched pixel;
+/// <c>sdf-beam.comp</c> cone-marches the field per tile to a conservative march-start depth; <c>sdf-world-views.comp</c>
+/// (Stage 1) shades the view's SDF camera into its output. A render graph places each output into its view's rect: the
+/// node produces view 0 as <c>sdf.world</c>, and each later view through <see cref="ViewProducer"/>.
 /// The viewport count follows <see cref="SdfFrame.Views"/>; nothing about the scene, cameras, or layout is baked in.
 /// </para>
 /// <para>
@@ -46,7 +45,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     private readonly int m_dynamicTransformCapacity;
     private readonly ISdfFrameSource m_frameSource;
 
-    // The extent the engine renders at; Produce changes it, replacing the engine.
+    // The engine's extent, the largest any view renders at; Produce grows it, replacing the engine.
     private uint m_height;
 
     private readonly int m_instanceCapacity;
@@ -175,9 +174,9 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         m_engine = m_pipelines.TryBuild(
             construct: static (pipelines, regionCopy, inputs) => {
                 // The viewport CAPACITY: the first frame's count raised to the declared floor (the split-screen
-                // envelope — the engine itself composites each frame's actual Views.Count, validated against it).
+                // envelope — the engine itself renders each frame's actual Views.Count, validated against it).
                 if (inputs.Options.ViewportCapacity > SdfWorldEngine.MaxViewports) {
-                    throw new ArgumentException(message: $"The world compositor supports at most {SdfWorldEngine.MaxViewports} viewports; the frame/floor asks for {inputs.Options.ViewportCapacity}.");
+                    throw new ArgumentException(message: $"The world engine supports at most {SdfWorldEngine.MaxViewports} viewports; the frame/floor asks for {inputs.Options.ViewportCapacity}.");
                 }
 
                 return new SdfWorldEngine(
@@ -208,8 +207,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         if (m_engine is null) {
             return false;
         }
-
-        m_engineToken++;
 
         return true;
     }
@@ -277,10 +274,10 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         m_capturePng.ThrowIfUnavailable(path: path);
 
         if (!m_capturePng.TryWrite(
-            height: ((int)m_height),
+            height: ((int)m_engine!.OutputHeight),
             path: path,
-            rgba: m_engine!.ReadPixels().ToArray(),
-            width: ((int)m_width)
+            rgba: m_engine.ReadPixels().ToArray(),
+            width: ((int)m_engine.OutputWidth)
         )) {
             throw new NotSupportedException(message: "PNG capture is unavailable.");
         }
@@ -472,6 +469,11 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             LiveProgramFieldScopeClamps = frame.Program.FieldScopeClamps;
         }
 
+        ApplyScheduledViewExtents(
+            engine: m_engine!,
+            viewCount: frame.Views.Count
+        );
+
         if (0 == m_screenSourceFrames.Count) {
             m_engine!.SubmitFrame(frame: frame);
         } else {
@@ -495,8 +497,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         return Surface.SameDeviceImage(
             imageHandle: m_engine.OutputImageHandle,
             imageViewHandle: m_engine.OutputImageViewHandle,
-            width: m_width,
-            height: m_height,
+            width: m_engine.OutputWidth,
+            height: m_engine.OutputHeight,
             format: SurfaceFormat.R8G8B8A8Unorm
         );
     }
@@ -517,8 +519,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// device, and the services the engine records through, come from the host context each frame.</param>
     /// <param name="frameSource">The per-frame source of the scene, cameras, and viewport regions.</param>
     /// <param name="kernels">The compiled world kernel set (SPIR-V for Vulkan, DXIL for Direct3D 12).</param>
-    /// <param name="width">The render width in pixels.</param>
-    /// <param name="height">The render height in pixels.</param>
+    /// <param name="width">The engine's extent width in pixels, the widest any view renders.</param>
+    /// <param name="height">The engine's extent height in pixels, the tallest any view renders.</param>
     /// <param name="screenSources">An optional map from a program-declared <see cref="SdfScreenSurface.ScreenIndex"/>
     /// to a provider of that screen's current same-device storage-image view (General layout, shader-readable),
     /// called once per produced frame — a provider may close over any GPU image a host owns directly, e.g. an emulator's
@@ -545,10 +547,9 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// declares its envelope here instead of relying on every future program staying within the first frame's size.</param>
     /// <param name="instanceCapacity">An optional floor on the instance count the per-tile mask buffer is sized for —
     /// the hot-swap counterpart of <paramref name="programWordCapacity"/> for instanced programs.</param>
-    /// <param name="viewportCapacity">An optional floor on the compositor's viewport capacity — the envelope for a
-    /// frame source whose per-frame view count grows past the first frame's (a split-screen host whose players join
-    /// later). The engine composites each frame's actual view count up to the envelope; 0 keeps the pre-existing
-    /// freeze-at-first-frame behavior.</param>
+    /// <param name="viewportCapacity">An optional floor on the engine's viewport capacity — the envelope for a frame
+    /// source whose per-frame view count grows past the first frame's (a split-screen host whose players join later).
+    /// The engine renders each frame's actual view count up to the envelope; 0 sizes it by the first frame.</param>
     /// <param name="debugLabel">An optional GPU-capture debug-group name for this engine's whole recorded frame (see
     /// <see cref="SdfWorldEngine.DebugLabel"/>); a nested view engine passes <c>view:&lt;name&gt;</c> so a capture
     /// distinguishes it. Defaults to the engine's own default (<c>world</c>) when omitted. Presentation-only.</param>

@@ -96,7 +96,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
     [Fact]
     public void AnEngineTheHeapCannotAdmitIsRefusedByNameAllocatesNothingAndRetriesOnlyOnAChangedInput() {
         using var rig = new Rig(reportVersion: SdfIsa.Version);
-        var demand = SdfWorldEngine.DescriptorPools(brickPool: false).Aggregate(
+        var demand = SdfWorldEngine.DescriptorPools(brickPool: false, viewportCapacity: 1).Aggregate(
             func: static (sum, pool) => (sum + pool.HeapDescriptors),
             seed: 0U
         );
@@ -159,7 +159,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
     public void AHeapRefusedEngineRetriesExactlyOnceAfterAnotherOwnerReleasesItsPool() {
         using var rig = new Rig(reportVersion: SdfIsa.Version);
         IGpuBindings bindings = rig.Gpu;
-        var demand = SdfWorldEngine.DescriptorPools(brickPool: false).Aggregate(
+        var demand = SdfWorldEngine.DescriptorPools(brickPool: false, viewportCapacity: 1).Aggregate(
             func: static (sum, pool) => (sum + pool.HeapDescriptors),
             seed: 0U
         );
@@ -377,7 +377,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         public ref readonly FrameContext Context => ref m_context;
         // Each engine construction that reaches its own descriptor pool creates exactly one, after the copy pool it
         // reserves for its regions, and the pipeline set none, so the engine's own pools are the attempts.
-        public int EngineAttempts => Gpu.PoolsCreated.Count(predicate: static pool => (pool == SdfWorldEngine.DescriptorPoolSizes(brickPool: false)));
+        public int EngineAttempts => Gpu.PoolsCreated.Count(predicate: static pool => (pool == SdfWorldEngine.DescriptorPoolSizes(brickPool: false, viewportCapacity: 1)));
         public GpuCreationFaults Faults { get; }
         public FakeGpuDevice Gpu { get; }
         public SdfEngineNode Node { get; }

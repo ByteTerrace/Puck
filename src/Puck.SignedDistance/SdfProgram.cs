@@ -482,7 +482,7 @@ public sealed partial class SdfProgram {
     /// <summary>Gets the per-(viewport, tile) instance-mask width in uints for this program: ceil(instance count / 32),
     /// never below 1 (a zero-instance program keeps one all-zero word so the mask buffer indexing stays uniform).
     /// <c>Puck.SdfVm.SdfWorldEngine</c> sizes its mask buffer from it and pushes the live uploaded program's value per
-    /// frame as the kernels' indexing width (CompositeParams.instanceMaskWordCount); the reader's inner word
+    /// frame as the kernels' indexing width (WorldParams.instanceMaskWordCount); the reader's inner word
     /// iteration independently derives the same formula (KEEP IN SYNC with sdfInstanceMaskWordCount in
     /// Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>
     public int InstanceMaskWordCount => InstanceMaskWordCountFor(instanceCount: m_instances.Length);

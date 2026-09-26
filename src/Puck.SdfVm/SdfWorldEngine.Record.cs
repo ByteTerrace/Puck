@@ -5,32 +5,20 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    // upload → (per view: sky → mask → beam → cull-args → primary → surface → ambient → views) → composite.
-    // The hit passes share the indirect bbox and have barriers between consumers; output uses its consumer layout.
+    // upload → (per view: sky → mask → beam → cull-args → primary → surface → ambient → views). The hit passes share the
+    // indirect bbox and have barriers between consumers; each view's output ends in its consumer layout.
     private void Record(uint viewportCount) {
         var recorder = m_gpu.Recorder;
         var commandBuffer = m_commandPools[m_currentSlot].CommandBufferHandle;
-        // After the first frame the OUTPUT rests in its handoff layout: shader-readable when a same-device consumer
-        // sampled it, or the cross-backend External layout when it was exported. The first frame starts undefined.
-        // The non-export consumer set spans TWO stages — the presenter's fragment blit AND another engine's COMPUTE
-        // sampler (a view engine's output bound as a screen source) — so the resting-stage scope names both; under
-        // the frame ring the begin-of-frame re-transition below must order after whichever consumer read it last.
+        // Between frames each view's output rests in its handoff layout: shader-readable for a same-device consumer, or
+        // the cross-backend External layout when it is exported. The consumers span TWO stages — a graph pass's
+        // fragment or compute read, and another engine's COMPUTE sampler (a view engine's output bound as a screen
+        // source) — so the resting-stage scope names both; under the frame ring the re-transition before a view's set
+        // must order after whichever consumer read it last. A new output starts undefined.
         var restingLayout = OutputLayout;
         var restingStage = (m_exportMode
             ? GpuStage.ComputeShader
             : GpuStage.FragmentShader | GpuStage.ComputeShader
-        );
-        var outputOldLayout = (m_imageInitialized
-            ? restingLayout
-            : GpuImageLayout.Undefined
-        );
-        var outputSourceAccess = (m_imageInitialized
-            ? GpuAccess.ShaderRead
-            : GpuAccess.None
-        );
-        var outputSourceStage = (m_imageInitialized
-            ? restingStage
-            : GpuStage.TopOfPipe
         );
 
         recorder.BeginCommandBuffer(
@@ -44,26 +32,9 @@ public sealed partial class SdfWorldEngine {
             label: DebugLabel
         );
 
-        // Every descriptor-reachable image must have a defined layout before the first dispatch. In particular, the
-        // sky pre-pass writes the per-view sources before Stage 1, while screen content may sample the filler there.
-        if (!m_imageInitialized) {
-            foreach (var source in m_sourceTextures) {
-                if (source is null) {
-                    continue;
-                }
-
-                recorder.TransitionImageLayout(
-                    commandBufferHandle: commandBuffer,
-                    destinationAccessMask: GpuAccess.ShaderWrite,
-                    destinationStageMask: GpuStage.ComputeShader,
-                    imageHandle: source.ImageHandle,
-                    newLayout: GpuImageLayout.General,
-                    oldLayout: GpuImageLayout.Undefined,
-                    sourceAccessMask: GpuAccess.None,
-                    sourceStageMask: GpuStage.TopOfPipe
-                );
-            }
-
+        // Every descriptor-reachable image must have a defined layout before the first dispatch: screen content may
+        // sample the filler in the first frame's views.
+        if (!m_fillerInitialized) {
             recorder.TransitionImageLayout(
                 commandBufferHandle: commandBuffer,
                 destinationAccessMask: GpuAccess.ShaderRead,
@@ -74,10 +45,11 @@ public sealed partial class SdfWorldEngine {
                 sourceAccessMask: GpuAccess.None,
                 sourceStageMask: GpuStage.TopOfPipe
             );
+            m_fillerInitialized = true;
         }
 
         // FRAME-RING cross-frame gate: the GPU-written device-local scratch (tile / instance-mask / indirect-args /
-        // cull-bounds / primary-hit buffers, the per-view source textures) is SHARED across ring slots, so with FrameRingSize
+        // cull-bounds / primary-hit buffers) is SHARED across ring slots, so with FrameRingSize
         // frames in flight this frame's first write must order after the PREVIOUS frame's last read of that scratch —
         // an execution dependency on all prior compute (and the indirect-args fetch), queue-scoped like every Vulkan
         // barrier. This serializes GPU frames against each other (the natural order anyway — the ring overlaps CPU
@@ -97,7 +69,7 @@ public sealed partial class SdfWorldEngine {
         RecordBrickBakeSlices(commandBuffer: commandBuffer);
 
         // The work counted before UploadPass (the brick upload and bake slices, the begin-of-frame transitions and
-        // barrier) or after CompositePass is counted outside every pass.
+        // barrier) is counted outside every pass, and so are each view's output transitions.
         m_work.EnterPass(pass: UploadPass);
         // The region copies run on every frame, skipped ones included (the tables are this frame's inputs whatever the
         // passes do with them), copying only the words the staged regions owe, then transitioning each copied buffer
@@ -105,26 +77,43 @@ public sealed partial class SdfWorldEngine {
         RecordRegionCopies(commandBuffer: commandBuffer);
         m_work.LeavePass();
 
-        // Cadence gate: when this frame's inputs are byte-identical to the last RENDERED frame's
-        // (DecideCadenceSkip proved it), SKIP sky through views and fall straight through to the composite below —
-        // which re-reads the RETAINED (single, ring-shared) views source textures the previous frame wrote and
-        // re-composites them into the swapchain-bound output. Pixel-identical to a full re-render of these inputs;
-        // the top-of-frame cross-frame barrier already orders this read after that previous frame's writes.
+        // Cadence gate: when this frame's inputs are byte-identical to the last RENDERED frame's (DecideCadenceSkip
+        // proved it), every view's set is skipped and its retained output, untouched in its resting layout, stands:
+        // pixel-identical to a full re-render of these inputs.
         m_pushConstant.AsSpan().CopyTo(destination: m_viewPush);
 
         var viewPushWords = MemoryMarshal.Cast<byte, uint>(span: m_viewPush.AsSpan());
 
-        // Each view renders through its own dispatch set, sky through views, one deep in Z: the set's push names its view
-        // (CompositeParams.viewBase), and the buffer hazards between one set's reads and the next set's writes are the
-        // frame buffer plan's, recorded by RecordBufferBarriers as for any pass order.
+        // Each view renders through its own dispatch set, sky through views, one deep in Z, into its own output: the set's
+        // push names its view (WorldParams.viewBase), and the buffer hazards between one set's reads and the next set's
+        // writes are the frame buffer plan's, recorded by RecordBufferBarriers as for any pass order.
         for (var view = 0u; ((view < viewportCount) && !m_skipThisFrame); view++) {
+            var output = m_viewOutputs[view]!;
+            var viewsSet = m_viewsSets[m_currentSlot][view];
+
             viewPushWords[ViewBaseWord] = view;
+            recorder.TransitionImageLayout(
+                commandBufferHandle: commandBuffer,
+                destinationAccessMask: GpuAccess.ShaderWrite,
+                destinationStageMask: GpuStage.ComputeShader,
+                imageHandle: output.Image.ImageHandle,
+                newLayout: GpuImageLayout.General,
+                oldLayout: (output.Initialized
+                    ? restingLayout
+                    : GpuImageLayout.Undefined),
+                sourceAccessMask: (output.Initialized
+                    ? GpuAccess.ShaderRead
+                    : GpuAccess.None),
+                sourceStageMask: (output.Initialized
+                    ? restingStage
+                    : GpuStage.TopOfPipe)
+            );
             m_work.EnterPass(pass: SkyPass);
 
-            // Sky pre-pass FIRST, before any tile is culled: fills every pixel of the set's view's render-dims source
-            // texture with the authored sky. Direct (not indirect) over a fixed (imageExtent.x, imageExtent.y, 1) grid
-            // — the largest the view's render-dims rect can reach, per-thread bounds-checked against its actual
-            // rectDims, matching the beam/instance-cull dispatch style. Reuses Stage 1's own descriptor set (m_viewsSets) and push constant; a beam-culled
+            // Sky pre-pass FIRST, before any tile is culled: fills every pixel of the set's view's output with the
+            // authored sky. Direct (not indirect) over a fixed (imageExtent.x, imageExtent.y, 1) grid — the largest a
+            // view's render extent can reach, per-thread bounds-checked against its actual extent, matching the
+            // beam/instance-cull dispatch style. Reuses Stage 1's own descriptor set and push constant; a beam-culled
             // tile's pixel is otherwise never touched by any later pass, so this is the only writer that reaches it.
             RecordBufferBarriers(
                 commandBuffer: commandBuffer,
@@ -142,7 +131,7 @@ public sealed partial class SdfWorldEngine {
             recorder.BindDescriptorSet(
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                descriptorSetHandle: m_viewsSets[m_currentSlot],
+                descriptorSetHandle: viewsSet,
                 group: 0,
                 pipelineLayoutHandle: m_skyPipeline.LayoutHandle
             );
@@ -167,7 +156,7 @@ public sealed partial class SdfWorldEngine {
             m_work.LeavePass();
             m_work.EnterPass(pass: MaskPass);
 
-            // Order the sky pass's source-texture writes before the views pass overwrites the same images.
+            // Order the sky pass's output writes before the views pass overwrites the same image.
             recorder.MemoryBarrier(
                 commandBufferHandle: commandBuffer,
                 destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
@@ -313,6 +302,7 @@ public sealed partial class SdfWorldEngine {
                 label: "primary",
                 pass: SdfFramePass.Primary,
                 pipeline: m_primaryPipeline,
+                viewsSet: viewsSet,
                 workPass: PrimaryPass
             );
             RecordHitPass(
@@ -320,6 +310,7 @@ public sealed partial class SdfWorldEngine {
                 label: "surface",
                 pass: SdfFramePass.Surface,
                 pipeline: m_surfacePipeline,
+                viewsSet: viewsSet,
                 workPass: SurfacePass
             );
             RecordHitPass(
@@ -327,14 +318,15 @@ public sealed partial class SdfWorldEngine {
                 label: "ambient",
                 pass: SdfFramePass.Ambient,
                 pipeline: m_ambientPipeline,
+                viewsSet: viewsSet,
                 workPass: AmbientPass
             );
 
-            // Stage 1: shade each viewport's primary hits into its own source texture — dispatched INDIRECTLY from the
+            // Stage 1: shade the view's primary hits into its output — dispatched INDIRECTLY from the
             // GPU-computed surviving-tile bbox; the all-empty margins are never dispatched; the kernel offsets each
             // invocation by the bbox origin (binding 8). The pipeline is the variant UploadProgram selected for the LIVE
             // program (full ISA vs core-ops — the stripped cases are unreachable under core, so the field is the same;
-            // see SdfViewsKernelVariant); the per-slot views set binds against either (identically defined layouts, same
+            // see SdfViewsKernelVariant); the view's views set binds against either (identically defined layouts, same
             // bindings array).
             m_work.EnterPass(pass: ViewsPass);
 
@@ -360,7 +352,7 @@ public sealed partial class SdfWorldEngine {
             recorder.BindDescriptorSet(
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                descriptorSetHandle: m_viewsSets[m_currentSlot],
+                descriptorSetHandle: viewsSet,
                 group: 0,
                 pipelineLayoutHandle: viewsPipeline.LayoutHandle
             );
@@ -382,96 +374,30 @@ public sealed partial class SdfWorldEngine {
             );
 
             m_work.LeavePass();
-        }
 
-        if (!m_skipThisFrame) {
-            m_work.EnterPass(pass: CompositePass);
-
-            // Make Stage 1's source-texture writes visible to Stage 2's reads.
-            recorder.MemoryBarrier(
+            // Hand the output off in its consumer layout: shader-readable for a same-device consumer (a graph pass or
+            // readback), or the cross-backend External handoff layout. Routing this through the recorder keeps its
+            // per-resource state tracking the single source of truth.
+            recorder.TransitionImageLayout(
                 commandBufferHandle: commandBuffer,
                 destinationAccessMask: GpuAccess.ShaderRead,
-                destinationStageMask: GpuStage.ComputeShader,
+                destinationStageMask: restingStage,
+                imageHandle: output.Image.ImageHandle,
+                newLayout: restingLayout,
+                oldLayout: GpuImageLayout.General,
                 sourceAccessMask: GpuAccess.ShaderWrite,
                 sourceStageMask: GpuStage.ComputeShader
             );
-        } else {
-            // SKIPPED FRAME: no render passes ran; fall through to the composite. The retained tile buffer + source
-            // textures (single, ring-shared, left in General by the previous rendered frame) are ordered for this
-            // frame's composite reads by the top-of-frame cross-frame barrier, so no extra barrier is needed. The sky
-            // pre-pass is skipped too: its only inputs (viewports, sdfScreenLights) are already covered by the
-            // signature that proved this frame identical to the last rendered one, so its retained output is still correct.
+            output.Initialized = true;
+            output.Rendered = true;
+        }
+
+        // A skipped frame runs no view's set: each view's output keeps the frame it last rendered.
+        if (m_skipThisFrame) {
             for (var pass = SkyPass; (pass <= ViewsPass); pass++) {
                 m_work.SkipPass(pass: pass);
             }
-
-            m_work.EnterPass(pass: CompositePass);
         }
-
-        recorder.TransitionImageLayout(
-            commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuAccess.ShaderWrite,
-            destinationStageMask: GpuStage.ComputeShader,
-            imageHandle: m_storageImage.ImageHandle,
-            newLayout: GpuImageLayout.General,
-            oldLayout: outputOldLayout,
-            sourceAccessMask: outputSourceAccess,
-            sourceStageMask: outputSourceStage
-        );
-
-        // Stage 2: composite each source into its screen region (indirect, from the host-written constant grid).
-        RecordBufferBarriers(
-            commandBuffer: commandBuffer,
-            pass: SdfFramePass.Composite
-        );
-        recorder.BeginDebugGroup(
-            commandBufferHandle: commandBuffer,
-            label: "composite"
-        );
-        recorder.BindPipeline(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            pipelineHandle: m_compositePipeline.Handle
-        );
-        recorder.BindDescriptorSet(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            descriptorSetHandle: m_compositeSets[m_currentSlot],
-            group: 0,
-            pipelineLayoutHandle: m_compositePipeline.LayoutHandle
-        );
-        recorder.PushConstants(
-            bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
-            data: m_compositePush,
-            offset: 0,
-            pipelineLayoutHandle: m_compositePipeline.LayoutHandle,
-            stageFlags: GpuShaderStage.Compute
-        );
-        recorder.DispatchIndirect(
-            argumentBufferHandle: m_compositeArgsBuffer.BufferHandle,
-            argumentBufferOffset: 0,
-            commandBufferHandle: commandBuffer
-        );
-        recorder.EndDebugGroup(
-            commandBufferHandle: commandBuffer
-        );
-
-        m_work.LeavePass();
-
-        // Hand the output off in its consumer layout: shader-readable for a same-device consumer (compositor or
-        // readback), or the cross-backend External handoff layout. Routing this through the recorder keeps its
-        // per-resource state tracking the single source of truth.
-        recorder.TransitionImageLayout(
-            commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuAccess.ShaderRead,
-            destinationStageMask: restingStage,
-            imageHandle: m_storageImage.ImageHandle,
-            newLayout: restingLayout,
-            oldLayout: GpuImageLayout.General,
-            sourceAccessMask: GpuAccess.ShaderWrite,
-            sourceStageMask: GpuStage.ComputeShader
-        );
 
         recorder.EndDebugGroup(
             commandBufferHandle: commandBuffer
@@ -479,8 +405,6 @@ public sealed partial class SdfWorldEngine {
         recorder.EndCommandBuffer(
             commandBufferHandle: commandBuffer
         );
-
-        m_imageInitialized = true;
     }
     // One queued host-baked brick per produced frame: the brick staging region, retargeted at the brick's slot in the
     // pool, owes every voxel written and copies them there through the device's region-copy pipeline. The pool's

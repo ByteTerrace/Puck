@@ -7,8 +7,9 @@ namespace Puck.SdfVm;
 /// <param name="Program">The scene program; the GPU buffer is sized to it and it is uploaded once at construction
 /// (the "program uploaded once" seam the dynamic-transform channel rides). A host whose scene later changes calls
 /// <see cref="SdfWorldEngine.UploadProgram"/> — program and instance buffers grow when necessary.</param>
-/// <param name="ViewportCapacity">The number of viewport slots to provision (source textures + packed viewport rows).
-/// Frames may carry fewer views than the capacity, never more; the kernels' source array caps it at 5.</param>
+/// <param name="ViewportCapacity">The number of view slots to provision (each with its views set per frame ring slot, its
+/// output image and its packed viewport row). Frames may carry fewer views than the capacity, never more; at most
+/// <see cref="SdfWorldEngine.MaxViewports"/>.</param>
 /// <param name="DynamicTransformCapacity">The number of dynamic entity-transform slots to allocate (at least one slot
 /// is always bound so the binding stays valid for a static scene). The engine automatically raises this floor to the
 /// program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/>. Each slot costs 48 bytes of the dynamic-transform
@@ -40,7 +41,7 @@ namespace Puck.SdfVm;
 /// When <see langword="null"/>, the engine creates its own.</param>
 public sealed record SdfWorldEngineOptions(
     SdfProgram Program,
-    uint ViewportCapacity = SdfWorldEngine.MaxViewports,
+    uint ViewportCapacity = 1,
     int DynamicTransformCapacity = 1,
     Func<IGpuDeviceContext, IGpuImage>? CreateOutputImage = null,
     int ProgramWordCapacity = 0,

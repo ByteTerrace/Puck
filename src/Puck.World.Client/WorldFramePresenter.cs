@@ -1147,11 +1147,18 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         return true;
     }
 
+    /// <summary>Gets or sets whether the world has rendered a view into its output (<c>SdfEngineNode.HasViewOutput</c>),
+    /// which a view must have before the root shows it, so a capture is never served over a stand-in; or
+    /// <see langword="null"/> before a render root is attached, when no view is shown.</summary>
+    public Func<int, bool>? ViewRendered { get; set; }
+
     /// <summary>Prepares the render graph's frame before its runtime schedules it: reconciles the document's
-    /// <c>views.graphs</c> rows onto the runtime, then, for each graph instance a slot of the last composed layout
-    /// shows, places it in its slot's rect at the live upscale sharpness, advances its clock, and hands it this frame's
-    /// camera, pointer and time. The slots are the ones the last captured frame composed, since the world producer
-    /// captures its frame inside the runtime's schedule, so a layout change places its panes one frame later.</summary>
+    /// <c>views.graphs</c> rows onto the runtime, then places each view of the world the last composed frame rendered
+    /// in its rect at its render scale and the live upscale sharpness, and, for each graph instance a slot of the last
+    /// composed layout shows, places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer
+    /// and time. A lone view covering the whole display at native scale is not shown: the root then stands for the world
+    /// itself. The views and slots are the ones the last captured frame composed, since the world producer captures its
+    /// frame inside the runtime's schedule, so a layout change places its views and panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) {
         if (m_graphs is not { } graphs) {
@@ -1163,6 +1170,35 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var width = m_displayWidth;
         var height = m_displayHeight;
         var deltaSeconds = ((float)context.FrameDeltaSeconds);
+        var whole = (
+            (m_views.Count == 1) &&
+            (m_views[0].Region == new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)) &&
+            !((m_views[0].RenderScale > 0f) && (m_views[0].RenderScale < 1f))
+        );
+
+        // Before the world has composed a frame there are no views to place, but the world must still be scheduled, since
+        // it composes inside its own frame: it renders at the whole display until its first frame names its views.
+        if (m_views.Count == 0) {
+            _ = graphs.PlaceView(
+                region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f),
+                renderScale: 1f,
+                sharpness: m_settings.UpscaleSharpness,
+                shown: false,
+                view: 0
+            );
+        }
+
+        for (var view = 0; (view < m_views.Count); view++) {
+            var snapshot = m_views[view];
+
+            _ = graphs.PlaceView(
+                region: snapshot.Region,
+                renderScale: snapshot.RenderScale,
+                sharpness: m_settings.UpscaleSharpness,
+                shown: (!whole && (ViewRendered?.Invoke(arg: view) ?? false)),
+                view: view
+            );
+        }
 
         foreach (var composed in m_composer.Slots) {
             var region = composed.Region;
@@ -1382,7 +1418,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                         Region: region
                     ) {
                         RenderScale = (m_settings.RenderScale * transitionScale),
-                        UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
                         hasSeatViewFallback = true;
@@ -1412,13 +1447,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             );
 
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
-            // any lower tier renders that view's SDF at a reduced extent and upsamples. A layout transition dips it.
+            // any lower tier renders that view's SDF at a reduced extent, which the root's place pass reconstructs. A
+            // layout transition dips it.
             m_views.Add(item: new SdfViewSnapshot(
                 Camera: camera,
                 Region: region
             ) {
                 RenderScale = (m_settings.RenderScale * transitionScale),
-                UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // The listener-policy candidate: the SAME resolved rig the seat renders through (editor rig included),
             // so "focus" listens where the active view looks.
@@ -1497,7 +1532,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 )
             ) {
                 RenderScale = m_settings.RenderScale,
-                UpscaleSharpness = m_settings.UpscaleSharpness,
             });
         } else {
             m_noLocalSeatsNarrated = false;

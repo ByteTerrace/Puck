@@ -13,8 +13,8 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// Laws for <see cref="SdfEngineNode"/> as the external producer behind <c>sdf.world</c>, over
 /// <see cref="FakeGpuDevice"/>: it hands out its engine's latest completed output as a lease on every frame, produced or
-/// not; it counts every acquisition; and an engine it replaces at a new extent is disposed only once every acquisition
-/// of that engine's output is released.
+/// not; it counts every acquisition; a view output its engine replaces at a new extent, and an engine it replaces at a
+/// larger one, are disposed only once every acquisition of them is released.
 /// </summary>
 public sealed class SdfEngineNodeLeaseLawTests {
     private const uint Extent = 64;
@@ -74,17 +74,47 @@ public sealed class SdfEngineNodeLeaseLawTests {
         output.Lease.Retire();
     }
     [Fact]
-    public void AnEngineReplacedWhileLeasedIsDisposedOnlyAfterRelease() {
+    public void AViewOutputReplacedWhileLeasedIsHeldUntilReleaseAndTheEngineIsKept() {
         using var rig = new Rig();
 
         rig.ProduceFirst();
         Assert.True(condition: rig.Node.TryAcquireOutput(output: out var held));
 
-        // A new extent replaces the engine; the old one is held while its output is leased.
+        // A smaller extent resizes the view's output inside the engine; the replaced output is held while leased.
         Assert.True(condition: rig.Node.Produce(
             context: rig.Context,
             height: (Extent / 2),
             width: (Extent / 2)
+        ));
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var current));
+        Assert.Equal(
+            actual: (rig.Node.RetiringEngines, rig.Node.OutputLeases, current.Image.Width, current.Image.Height),
+            expected: (0, 2, (Extent / 2), (Extent / 2))
+        );
+        held.Lease.Retire();
+        Assert.Equal(
+            actual: rig.Node.OutputLeases,
+            expected: 1
+        );
+
+        current.Lease.Retire();
+        Assert.Equal(
+            actual: rig.Node.OutputLeases,
+            expected: 0
+        );
+    }
+    [Fact]
+    public void AnEngineReplacedAtALargerExtentWhileLeasedIsDisposedOnlyAfterRelease() {
+        using var rig = new Rig();
+
+        rig.ProduceFirst();
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var held));
+
+        // An extent past the engine's replaces the engine; the old one is held while its output is leased.
+        Assert.True(condition: rig.Node.Produce(
+            context: rig.Context,
+            height: (Extent * 2),
+            width: (Extent * 2)
         ));
         Assert.Equal(
             actual: (rig.Node.RetiringEngines, rig.Node.OutputLeases, rig.Node.IsReady),
@@ -93,7 +123,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
         Assert.True(condition: rig.Node.TryAcquireOutput(output: out var current));
         Assert.Equal(
             actual: (current.Image.Width, current.Image.Height),
-            expected: ((Extent / 2), (Extent / 2))
+            expected: ((Extent * 2), (Extent * 2))
         );
         held.Lease.Retire();
         Assert.Equal(

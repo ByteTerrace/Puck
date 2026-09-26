@@ -10,15 +10,15 @@ namespace Puck.Shaders.Tests;
 /// records it by hand. The definition is built from <see cref="SdfFrameBufferPlan.Uses"/>: a write starts a buffer's
 /// version, a read-write forwards the latest version, a read binds it, and an indirect read is the pass's indirect
 /// dispatch arguments; a buffer read before any pass writes it (the brick pool, which world-scoped brick work fills) is
-/// external. The planner must order the passes as <see cref="SdfWorldEngine.PassLabels"/> less the composite and the
-/// upload, whose region copies touch no frame buffer and are the regions' own, and plan,
+/// external. The planner must order the passes as <see cref="SdfWorldEngine.PassLabels"/> less the upload, whose region
+/// copies touch no frame buffer and are the regions' own, and plan,
 /// between passes of the frame, exactly the buffer transitions <see cref="SdfFrameBufferPlan.Edges"/> derives. The one
-/// image chain (sky, then views shading over it) is the passes' published output and is not part of the buffer plan.
+/// image chain (sky, then views shading over it into the view's output) is the passes' published output and is not part
+/// of the buffer plan.
 /// Every buffer is counted over the capacities it grows with, and at every capacity the planner's size is the engine's
 /// allocation, <see cref="SdfWorldEngine.FrameBufferBytes"/>.
 /// </summary>
 public sealed class SdfPassPlanLawTests {
-    private const string Composite = "composite";
     private const string Upload = "upload";
 
     // The engine's ledger label for each dispatch, mirrored because the engine keeps the pairing only in the order of its
@@ -34,7 +34,6 @@ public sealed class SdfPassPlanLawTests {
         SdfFramePass.Surface => "surface",
         SdfFramePass.Ambient => "ambient",
         SdfFramePass.Views => "views",
-        SdfFramePass.Composite => Composite,
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(pass)),
     };
     private static ShaderPipelineCountTerm Term(ulong elements, params ShaderPipelineCountBasis[] per) => new(
@@ -106,8 +105,8 @@ public sealed class SdfPassPlanLawTests {
         viewports: 1,
         width: 64
     );
-    // The dispatches of one rendered view, in recording order: every labelled pass but the composite.
-    private static SdfFramePass[] Frame { get; } = [.. Enum.GetValues<SdfFramePass>().Where(predicate: static pass => ((LabelOf(pass: pass) is { } label) && (label != Composite)))];
+    // The dispatches of one rendered view, in recording order: every labelled pass.
+    private static SdfFramePass[] Frame { get; } = [.. Enum.GetValues<SdfFramePass>().Where(predicate: static pass => (LabelOf(pass: pass) is not null))];
 
     private static ShaderPipelinePlan Plan(SdfFrameCapacity capacity) {
         var latest = new Dictionary<SdfFrameBuffer, string>();
@@ -196,16 +195,16 @@ public sealed class SdfPassPlanLawTests {
     }
 
     [Fact]
-    public void ThePlannedOrderIsTheEnginesPassOrderLessTheCompositeAndTheUpload() {
+    public void ThePlannedOrderIsTheEnginesPassOrderLessTheUpload() {
         var labels = SdfWorldEngine.PassLabels.ToArray();
 
         Assert.Equal(
             actual: Frame.Select(selector: static pass => LabelOf(pass: pass)!).Distinct(),
-            expected: labels.Where(predicate: static label => ((label != Composite) && (label != Upload)))
+            expected: labels.Where(predicate: static label => (label != Upload))
         );
         Assert.Equal(
             actual: Plan(capacity: Default).PassOrder,
-            expected: labels.Where(predicate: static label => ((label != Composite) && (label != Upload)))
+            expected: labels.Where(predicate: static label => (label != Upload))
         );
     }
     [Fact]

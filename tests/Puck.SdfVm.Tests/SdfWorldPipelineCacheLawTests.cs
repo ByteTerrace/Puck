@@ -20,7 +20,7 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfWorldPipelineCacheLawTests {
     private const uint Extent = 32;
     // Every engine kernel but the two brick kernels, which the fake kernel set leaves empty.
-    private const long PipelinesPerSet = 11L;
+    private const long PipelinesPerSet = 10L;
 
     [Fact]
     public void LeasesOnOneDeviceAndKernelSetShareOneSetCreatedOnce() {

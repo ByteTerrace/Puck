@@ -128,7 +128,6 @@ public sealed class SdfWorldPipelines : IDisposable {
         "sdf-world-views-core" => kernels.ViewsCore,
         "sdf-world-views-folds" => kernels.ViewsFolds,
         "sdf-sky" => kernels.Sky,
-        "sdf-world-composite" => kernels.Composite,
         "sdf-brick-bake" => kernels.BrickBake,
         _ => throw new ArgumentException(
             message: $"Unknown SDF kernel '{name}'.",

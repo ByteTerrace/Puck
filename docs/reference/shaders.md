@@ -438,9 +438,13 @@ frame slot's `LeaseRetireList` until that slot's fence proves the sampling
 submission finished, or until a device loss or disposal. An external producer
 reads no instance and keeps no history, so the instance set refuses a read
 declared by one and a previous-frame read of one. `SdfEngineNode` is the
-`sdf.world` producer: it submits through the SDF engine's own frame ring,
-counts every acquisition of its output, and disposes an engine a new extent
-replaced only once that engine's output is released.
+`sdf.world` producer: it submits through the SDF engine's own frame ring and
+renders every view of the frame, each into its own output image.
+`SdfEngineNode.ViewProducer` gives a producer for each later view, whose own
+`Produce` only records the extent the scheduler chose; the engine renders at
+that extent from the next frame. The node counts every acquisition of each
+output. Its engine's extent only grows, and it disposes an engine a larger
+extent replaced only once that engine's outputs are released.
 
 A capture armed on the runtime reads the root instance's output, and one armed
 through `RenderGraphRuntime.CaptureTarget` reads the instance it names. A graph
@@ -457,15 +461,19 @@ gets the default graph `WorldRootGraph` (in `Puck.World.Client`) synthesizes
 from its document, a graph document value planned by `RenderGraphCompiler` like
 any other:
 
-- `world`: the `sdf.world` external producer, the SDF engine node.
+- `world`: the `sdf.world` external producer, the SDF engine node, which
+  publishes the first view.
+- `world$2` onward: one producer per further split-screen view, when the
+  world's layouts or player roster can compose more than one view.
 - `main`: the root graph reading `world`'s output over the whole display and
-  every pane's output. It runs one `place` package pass per `views.graphs`
-  instance any layout slot names, each pass named after its instance, then one
+  every pane's output. With more than one view it first runs one `place` pass
+  per view. Then it runs one `place` package pass per `views.graphs` instance
+  any layout slot names, each pass named after its instance, then one
   `post.<id>` pass per `render.extensions` entry in document order, then the
   `overlay` pass in a windowed World that loaded its glyph atlas.
 
-`main` is the root whenever anything is drawn over the world, panes included.
-When nothing is, as in an offscreen World with no panes and no
+`main` is the root whenever anything is drawn over the world, panes included,
+and whenever the world has more than one view. When neither holds, as in an offscreen World with no panes and no
 `render.extensions`, `world` is the root and the display shows the engine's
 output directly. A world that sets `views.root` authors its whole render graph,
 the `sdf.world` package row included, and the runtime runs its rows alone.
@@ -502,7 +510,22 @@ its place pass draws nothing and its instance is not scheduled.
 The layout composer runs inside the world producer's frame, so a layout change
 places panes one frame later. A
 layout transition's render-scale dip does not apply to panes, and a pane slot
-adds no view to the SDF engine, whose composite composes SDF views only.
+adds no view to the SDF engine.
+
+Split-screen seats are placed the same way. The SDF engine renders each view
+of a layout into its own output image, and each view is a producer of its own:
+`world` for the first, then `world$2`, `world$3` and so on, up to the most
+views any layout or the player roster can compose. When a world has more than
+one, `main` is the root and runs one `place` pass per view ahead of the pane
+passes. `PrepareGraph` places each view at its rect and adds a footprint of
+that rect at the view's render scale, so the scheduler renders the view at the
+reduced extent and `place` reconstructs it with the same sharpness. A view is
+shown only once the engine has rendered it, and a single view covering the
+whole display at native scale is not placed, so `main` passes `world` through
+unchanged. A layout change places its views one frame later, like its panes.
+Where no view covers the display, the base's clamped pixels show; there is no
+letterbox color.
+
 Screens still render through `ViewStack`; moving them onto graph instances is
 the rest of P11b in
 [the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).

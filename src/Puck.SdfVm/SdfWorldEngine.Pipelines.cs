@@ -14,8 +14,7 @@ public sealed partial class SdfWorldEngine {
     internal const int ViewsCorePipelineIndex = 7;
     internal const int ViewsFoldsPipelineIndex = 8;
     internal const int SkyPipelineIndex = 9;
-    internal const int CompositePipelineIndex = 10;
-    internal const int BrickBakePipelineIndex = 11;
+    internal const int BrickBakePipelineIndex = 10;
 
     // The pipelines this engine records with. The owner built them and disposes them; a kernel reload swaps the
     // native objects behind the same slots, so the fields below never change.
@@ -63,10 +62,10 @@ public sealed partial class SdfWorldEngine {
             m_pipelines.Rollback(reload: reload);
             throw;
         } finally {
-            // The ISA probe temporarily borrows slot zero's source descriptors and tile buffer. Force their normal
+            // The ISA probe temporarily borrows slot zero's view-0 descriptors and tile buffer. Force their normal
             // rebinding and a fresh render even on rollback; retained world/image ownership is unchanged.
-            Array.Clear(array: m_boundSourceViews[0]);
-            Array.Clear(array: m_boundScreenSourceViews[0]);
+            Array.Clear(array: m_boundOutputViews[0]);
+            Array.Clear(array: m_boundScreenSourceViews[0][0]);
             Array.Clear(array: m_boundGlyphAtlasViews);
             m_hasPreviousFrameSignature = false;
         }
@@ -155,7 +154,7 @@ public sealed partial class SdfWorldEngine {
                 Kind: GpuComputeBindingKind.StorageBufferReadWrite
             ),
         ];
-        // Stage 1 (per-view SDF): program (1) + viewports (2) + dynamic entity transforms (9) + the source array (4) +
+        // Stage 1 (per-view SDF): program (1) + viewports (2) + dynamic entity transforms (9) + the view's output (4) +
         // the GPU-computed dispatch box (8) + the screen-surface table (10) + THIRTY-TWO separate screen-source
         // SampledImage bindings (12..43 — DXC cannot fuse an ARRAY texture into one Vulkan combined-image-sampler, so
         // each screen index gets its own binding; the pipeline factory bakes in ONE static nearest sampler PER
@@ -164,7 +163,7 @@ public sealed partial class SdfWorldEngine {
         // records read (50). The SRV registers resolve program t0, viewport t1, dynamicTransforms t2, cullBounds t3,
         // screenSurfaces t4, screenSources t5..t36, instanceMasks t37, screenLights t38, glyph atlas t39, decals t40,
         // brick pool t41, frame instance grid t42, volumes t43, cull buffer t44, visibility records t45; the UAVs
-        // resolve sources u0..u4, visibility records u5 (matching the HLSL) — Direct3D 12 assigns t#/u#/s# registers
+        // resolve the output image u0, visibility records u1 (matching the HLSL) — Direct3D 12 assigns t#/u#/s# registers
         // from THIS array's order (DirectXGpuPipelineFactory), so the HLSL's explicit register annotations must mirror
         // this exact sequence; a reorder here without the matching HLSL edit desyncs the root signature. Every buffer
         // a hit pass only reads binds read-only, so SdfFrameBufferPlan declares plain reads for it. The 32
@@ -183,8 +182,7 @@ public sealed partial class SdfWorldEngine {
                 Kind: GpuComputeBindingKind.StorageBufferRead
             ),
             new GpuComputeBinding(
-                Binding: ViewSourceBindingIndex,
-                Count: MaxViewports,
+                Binding: ViewOutputBindingIndex,
                 Kind: GpuComputeBindingKind.StorageImage
             ),
             new GpuComputeBinding(
@@ -241,7 +239,7 @@ public sealed partial class SdfWorldEngine {
                 Binding: TileBindingIndex,
                 Kind: GpuComputeBindingKind.StorageBufferRead
             ),
-            // The visibility records, written by primary, surface and ambient (u5, after the five source images) and
+            // The visibility records, written by primary, surface and ambient (u1, after the output image) and
             // read by views through a read-only binding of the same buffer (t45).
             new GpuComputeBinding(
                 Binding: PrimaryHitBindingIndex,
@@ -250,19 +248,6 @@ public sealed partial class SdfWorldEngine {
             new GpuComputeBinding(
                 Binding: PrimaryHitReadBindingIndex,
                 Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-        ];
-        // Stage 2 (source-agnostic composite): output image (0) + the source array (1). The sky pre-pass fills every
-        // source pixel, so the compositor needs no cull buffer.
-        internal static readonly GpuComputeBinding[] Composite = [
-            new GpuComputeBinding(
-                Binding: CompositeOutputBindingIndex,
-                Kind: GpuComputeBindingKind.StorageImage
-            ),
-            new GpuComputeBinding(
-                Binding: CompositeSourceBindingIndex,
-                Count: MaxViewports,
-                Kind: GpuComputeBindingKind.StorageImage
             ),
         ];
         // The carve-bake baker's set: the per-slot request buffer (a float4 SRV at t0) + the shared pool WRITTEN as a UAV
@@ -281,11 +266,11 @@ public sealed partial class SdfWorldEngine {
 
         // A pipeline factory reads a push-constant range's size and stages; each engine records its own payload.
         private static readonly GpuPushConstantBinding PassPush = Push(length: PushConstantByteLength);
-        private static readonly GpuPushConstantBinding CompositePush = Push(length: CompositePushByteLength);
         private static readonly GpuPushConstantBinding BrickPush = Push(length: BrickBakePushByteLength);
 
         // Indexed by the *PipelineIndex constants. The hit passes, the sky and the three views variants share Views,
-        // so their descriptor-set layouts are identically defined and one per-slot views set binds against each of them.
+        // so their descriptor-set layouts are identically defined and one per-slot, per-view views set binds against each
+        // of them.
         // Nearest filtering end to end on those: a bound screen source (an emulator or child's native pixels) magnifies
         // as crisp cells, never bilinear smears.
         internal static readonly PipelineSpec[] Specs = [
@@ -299,7 +284,6 @@ public sealed partial class SdfWorldEngine {
             Spec(name: "sdf-world-views-core", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
             Spec(name: "sdf-world-views-folds", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
             Spec(name: "sdf-sky", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
-            Spec(name: "sdf-world-composite", bindings: Composite, push: CompositePush),
             Spec(name: "sdf-brick-bake", bindings: BrickBake, push: BrickPush, brick: true),
         ];
         // The order a build starts the pipelines in (SdfWorldPipelines.Build): the views variants, the longest driver
@@ -313,7 +297,6 @@ public sealed partial class SdfWorldEngine {
             SurfacePipelineIndex,
             AmbientPipelineIndex,
             SkyPipelineIndex,
-            CompositePipelineIndex,
             BrickBakePipelineIndex,
             ViewsCorePipelineIndex,
             ViewsFoldsPipelineIndex,

@@ -25,11 +25,11 @@ world.budget
 ```
 
 - **`world.cadence off`** makes every frame render. With the cadence gate on, a
-  frame whose render inputs match the previous one re-composites the retained
-  image, so a still scene would read near zero.
+  frame whose render inputs match the previous one keeps each view's retained
+  output, so a still scene would read near zero.
 - **`world.counters gpu`** echoes what each render node counted for its newest
   completed submission: per labeled pass (`upload`, `sky`, `mask`, `beam`,
-  `cull-args`, `primary`, `surface`, `ambient`, `views`, `composite`) the
+  `cull-args`, `primary`, `surface`, `ambient`, `views`) the
   dispatches, barriers, binds, push-constant bytes and uploads it recorded, or
   `skipped` for a pass the cadence gate did not run. These counts are exact
   and the same on every backend for the same inputs, so a change that moves

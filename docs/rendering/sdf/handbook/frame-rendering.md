@@ -3,7 +3,7 @@
 One world frame turns an SDF program into pixels through a fixed sequence of
 compute passes. Upload and sky filling precede culling; the mask pass builds
 per-tile instance visibility before the beam and primary marches; surface,
-ambient, view, and composite passes finish the image. The sequence exposes
+ambient, and view passes finish each view's image. The sequence exposes
 where the GPU work goes, why mask-first processing keeps beam cost tied to nearby
 instances, how render-scale tiers trade resolution for frame budget, and how two
 frames stay in flight without stalling the whole device.
@@ -11,10 +11,11 @@ frames stay in flight without stalling the whole device.
 ## One indirect render pipeline
 
 A world frame records its passes into one command buffer. Upload and sky filling
-precede culling; camera traversal, surface evaluation, AO and lighting have separate dispatches:
+precede culling; camera traversal, surface evaluation, AO and lighting have separate dispatches.
+Every pass after the upload runs once per view, into that view's own output image:
 
 ```text
-   upload → sky → mask → beam → cull-args → primary → surface → ambient → views → composite
+   upload → sky → mask → beam → cull-args → primary → surface → ambient → views
 ```
 
 These are the engine's `world.counters gpu` pass labels — the columns its per-pass work
@@ -53,17 +54,20 @@ curvature. **ambient** evaluates contact occlusion along those normals.
 volumes. Compare all four passes when measuring per-pixel field cost: moving
 work between kernels can reduce register pressure but adds buffer traffic.
 
-**composite** blits the finished per-view surfaces into the framebuffer, applying
-the per-view render-scale upsample where a view rendered below native. Its
-cost is small next to the per-pixel passes.
+The engine never assembles its views. Each view's output is its own image,
+sized to the view's render extent, and the render graph's `place` pass puts it
+in its seat rect on the root image, upsampling it where the view rendered below
+native. In split screen each view is a graph producer of its own (`world`,
+`world$2`, and so on), so the graph schedules and places the seats the same way
+it places panes.
 
 ## What each pass costs
 
 The passes scale with different things. `mask` and `beam` scale with how many
 instances lie near each tile's cone. `primary`, `surface`, `ambient`, and
 `views` scale with on-screen content: how many pixels hit a surface and how
-much of the program each field query walks. `sky`, `cull-args`, and
-`composite` are small. **The four per-pixel passes are the scale lever for
+much of the program each field query walks. `sky` and `cull-args` are
+small. **The four per-pixel passes are the scale lever for
 on-screen content; `mask`+`beam` is the scale lever for instance count.**
 Moving work between the per-pixel passes can relieve register pressure but
 adds hit-buffer traffic, so compare their sum as well as each label.
@@ -115,17 +119,20 @@ per-pixel `views` costs.
 ## Render-scale tiers trade resolution for frame time
 
 When the shading epilogue is the cost and you need the frame to fit a tighter
-budget, the lever is to render a view at *reduced* resolution and upsample it in
-the composite. Each view carries a `RenderScale`; the engine quantizes it to a
-single byte and every per-view pass (sky, mask, beam, primary, surface,
-ambient, views) derives the identical reduced extent from it, so the whole
-pipeline agrees on the smaller render target. The composite reconstructs the
-result at native resolution with a four-tap bilinear filter, blended toward
-clamped Catmull-Rom by the view's upscale sharpness.
+budget, the lever is to render a view at *reduced* resolution and upsample it
+afterwards. Each view carries a `RenderScale`. The host sets the view's
+footprint in the render graph to its rect at that scale, the graph quantizes
+the footprint to an extent, and the engine renders the view's output image at
+exactly that extent. Every per-view pass (sky, mask, beam, primary, surface,
+ambient, views) reads the same extent from the view's row, so the whole
+pipeline agrees on the smaller render target. The graph's `place` pass
+reconstructs the result at native resolution with a four-tap bilinear filter,
+blended toward clamped Catmull-Rom by the upscale sharpness.
 
-The important property is that **native is byte-exact by construction**: the
-maximum scale value takes an exact-copy path with no filtering, so a view at full
-scale is bit-identical to a pipeline with no render-scale machinery at all. You
+The important property is that **native is byte-exact by construction**:
+`place` copies exactly when the output's extent equals its rect, and a single
+view covering the whole display at native scale is not placed at all, so a view
+at full scale is bit-identical to a pipeline with no render-scale machinery. You
 pay nothing until you dial it down. Reduced tiers expose a policy ladder that
 trades a soft upsample for a large `views` saving—the right knob when a
 heavy revealed scene needs to reach a frame-rate target that native can't hit.
@@ -219,22 +226,22 @@ execution.
 
 Performance is judged by code, disassembly, and deterministic work counters —
 never by wall-clock or GPU timestamps. The engine counts the work each of the
-ten labeled passes (`upload`, `sky`, `mask`, `beam`, `cull-args`, `primary`,
-`surface`, `ambient`, `views`, and `composite`) records, with no arming and no
+nine labeled passes (`upload`, `sky`, `mask`, `beam`, `cull-args`, `primary`,
+`surface`, `ambient`, and `views`) records, with no arming and no
 effect on the image: dispatches, indirect dispatches, barriers, pipeline and
 descriptor-set binds, push-constant bytes, descriptor writes and host-visible
 upload bytes. The `upload` pass counts the regions' writes and copies; since
 they follow each device's residency policy, the pass is per-backend
 deterministic, and `puck counters` does not hold the two backends to it. Work
-before the first pass (brick uploads and bakes, the begin-of-frame transitions)
-or between frames (descriptor rebinds) is counted outside every pass. A frame
+before the first pass (brick uploads and bakes, the begin-of-frame transitions),
+each view's output transitions, or work between frames (descriptor rebinds) is counted outside every pass. A frame
 the cadence gate skips reports
 `sky` through `views` as skipped rather than as zero. Counts are published only
 once the GPU has finished the submission, so `world.counters gpu` shows the newest
 completed frame, under the program and kernel revision it ran with.
 
 In `Puck.World`, read the previous frame's passes with `world.counters gpu`. A still
-scene re-composites its retained image instead of rendering, so run
+scene keeps each view's retained output instead of rendering, so run
 `world.cadence off` before measuring one. Hold the camera at a fixed pose
 while comparing runs; [SDF performance](performance.md) turns this into the
 general rule: frame-index a measurement camera, never wall-clock it. The
@@ -259,5 +266,7 @@ disassembly or trace the code path instead.
   [`src/Puck.SdfVm/SdfWorldEngine.cs`](../../../../src/Puck.SdfVm/SdfWorldEngine.cs)
   and the `Record` method in
   [`src/Puck.SdfVm/SdfWorldEngine.Record.cs`](../../../../src/Puck.SdfVm/SdfWorldEngine.Record.cs).
-- Render-scale quantization and the byte-exact native path: the `RenderScale`
-  viewport row in the [rendering skill's sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).
+- Each view's output image and its extent: `DefaultViewExtent` and the view
+  outputs in
+  [`src/Puck.SdfVm/SdfWorldEngine.ViewOutputs.cs`](../../../../src/Puck.SdfVm/SdfWorldEngine.ViewOutputs.cs),
+  and the `extent` viewport row in the [rendering skill's sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).

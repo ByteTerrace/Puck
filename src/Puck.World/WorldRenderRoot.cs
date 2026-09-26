@@ -86,16 +86,20 @@ internal static class WorldRenderRoot {
                 // an unbound screen has no provider (the engine's procedural fallback lights it).
                 ScreenLights = binder.ScreenLights,
                 ScreenSourceFrames = binder.ScreenSources,
-                ViewportCapacity = PlayerRoster.MaxSlots,
+                ViewportCapacity = WorldRootGraph.ViewsOf(views: definition.Views),
             }
         );
         var packages = new RenderGraphPackageRecorders();
 
-        // The one external instance is the world, and the runtime owns the engine node from here on.
+        // The world's external instances are its views: the first is the engine node, which renders them all, and each
+        // later one the node's producer for that view. The runtime owns the engine node from here on.
         packages.RegisterProducer(
-            factory: _ => engine,
+            factory: context => ((WorldViewNames.ViewOf(instance: context.Instance) is { } view)
+                ? engine.ViewProducer(view: view)
+                : engine),
             package: RenderGraphPackageCatalog.SdfWorld
         );
+        frameSource.ViewRendered = engine.HasViewOutput;
         // The root places each pane where the host's composer shows it this frame.
         packages.Register(
             factory: new PlacePackage(placements: host),
@@ -135,11 +139,12 @@ internal static class WorldRenderRoot {
         var overlaid = (overlay is not null);
 
         host.Attach(
-            compose: panes => WorldRootGraph.Compose(
+            compose: (panes, views) => WorldRootGraph.Compose(
                 extensions: extensions,
                 overlay: overlaid,
                 packages: RenderGraphPackageCatalog.Shipped,
-                panes: panes
+                panes: panes,
+                views: views
             ),
             runtime: runtime,
             synthesized: synthesized

@@ -40,7 +40,6 @@ internal static class SdfTestPipelines {
             Ambient: code,
             Beam: new byte[] { beam },
             BrickBake: ReadOnlyMemory<byte>.Empty,
-            Composite: code,
             CullArgs: code,
             InstanceCull: code,
             Primary: code,
