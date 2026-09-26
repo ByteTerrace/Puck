@@ -1,0 +1,144 @@
+{
+  "host": {
+    "authority": null,
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 256,
+    "journalDepth": 2000,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "offscreen",
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0,
+    "width": 256
+  },
+  "schema": "puck.world.definition.v1",
+  "views": {
+    "layouts": [
+      {
+        "name": "interfaces",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": null,
+            "height": 0.125,
+            "instance": "ink-simulation",
+            "width": 1,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "camera": null,
+            "height": 0.125,
+            "instance": "ink-visualize",
+            "width": 1,
+            "x": 0,
+            "y": 0.125
+          },
+          {
+            "camera": null,
+            "height": 0.125,
+            "instance": "ink-finish",
+            "width": 1,
+            "x": 0,
+            "y": 0.25
+          },
+          {
+            "camera": null,
+            "height": 0.125,
+            "instance": "tint",
+            "width": 1,
+            "x": 0,
+            "y": 0.375
+          },
+          {
+            "camera": null,
+            "height": 0.125,
+            "instance": "sdf-film-grain",
+            "width": 1,
+            "x": 0,
+            "y": 0.5
+          },
+          {
+            "camera": null,
+            "height": 0.125,
+            "instance": "place",
+            "width": 1,
+            "x": 0,
+            "y": 0.625
+          },
+          {
+            "camera": null,
+            "height": 0.125,
+            "instance": "overlay",
+            "width": 1,
+            "x": 0,
+            "y": 0.75
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
+      }
+    ],
+    "seatControl": {
+      "maxPitch": 0.01,
+      "minPitch": -0.01,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "pipeline",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 0.01,
+          "pitch": 0,
+          "yaw": 0
+        },
+        {
+          "$type": "fieldOfView",
+          "fieldOfViewRadians": 0.001
+        }
+      ],
+      "version": "puck.camera.program.v1"
+    },
+    "graphs": [
+      {
+        "camera": null,
+        "name": "ink-simulation",
+        "source": "ink-simulation.graph.json"
+      },
+      {
+        "camera": null,
+        "name": "ink-visualize",
+        "source": "ink-visualize.graph.json"
+      },
+      {
+        "camera": null,
+        "name": "ink-finish",
+        "source": "ink-finish.graph.json"
+      },
+      {
+        "camera": null,
+        "name": "tint",
+        "source": "tint.graph.json"
+      },
+      {
+        "camera": null,
+        "name": "sdf-film-grain",
+        "source": "sdf-film-grain.graph.json"
+      },
+      {
+        "camera": null,
+        "name": "place",
+        "source": "place.graph.json"
+      },
+      {
+        "camera": null,
+        "name": "overlay",
+        "source": "overlay.graph.json"
+      }
+    ]
+  }
+}

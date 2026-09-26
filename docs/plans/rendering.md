@@ -312,9 +312,9 @@ One leg stays open, and is not yet proven: one build on Linux compared byte for
 byte with the Windows build of the same commit. CI runs it as `verify.yml`'s
 `shader-bytecode` job (see P7's gate).
 
-P8 is complete but for one item of its check: the generated echo runs on both
-backends for one interface, the `pipeline-echo` canary's own, rather than for
-every shipped package's (see P8's check). The frame group is a descriptor set,
+P8 is complete but for one item of its check: the `interface-echo` canary
+echoes every shipped interface family, and has not yet run on a GPU (see P8's
+check). The frame group is a descriptor set,
 set 0, since P7b step 15 put pipelines on groups. HLSL is the one source
 language. `ShaderCompiler` runs DXC alone, a pass document names no
 language, and the Shadertoy adapter, the GLSL front end, the translation back
@@ -370,8 +370,21 @@ binaries, while an unpackaged source is refused. Both canaries pass on both
 backends under the debug layers, and `pipeline-echo`'s discriminating leg,
 which expects two members to hold each other's sentinel, turns red.
 
-Open: the generated echo reaches the GPU for the canary's own interface only,
-where P8's check asks for every shipped package's. The worlds under the
+The `interface-echo` canary runs one echo per shipped interface family in one
+world: the ink simulation, visualize and finish passes, the package canary's
+tint, the film grain set, and the `place` and `overlay` packages. The Moth's
+blocks are ink finish's, and the `post.sdf-film-grain` package's are the film
+grain set's. Its discriminating leg reloads every row onto an echo whose last
+member's first word expects the next word's sentinel.
+`InterfaceEchoCanaryFixtureTests` hold each echo's blocks to its targets' and
+fail when a shipped package or shader set with frame data has no echo. The
+SDF engine's `sdf-world` and `sdf-brick-bake` interfaces join the canary in
+the change that lands them (S16). The overlay
+echo holds the overlay's types at their offsets, but a document orders config
+fields by name, so its `misc` and `sdf` names trade places.
+
+Open: the `interface-echo` canary has not yet run on a GPU, which is what P8's
+check asks for. The worlds under the
 repository's `worlds/` tree, the genesis card among them, are not part of the
 game's build, so their source rows compile where DXC is present. Only the
 `default` variant is built, which is all P8 closes with.
@@ -3346,7 +3359,7 @@ owner at a time.
 is under way: steps 1 to 13, 14a, 14b-1 to 14b-5 and 15 to 19 have landed, and
 step 22 is in progress. What remains is the SDF engine's groups (14b-6 and
 step 20, which also follows P4-1), 14b-7's deletions, and step 21. P8 is
-complete but for its echo of every shipped package's interface, and its frame
+complete but for a GPU run of its echo of every shipped interface family, and its frame
 group
 became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not
 read simulation state, so they do not wait on the state rebuild.
