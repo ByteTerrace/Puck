@@ -4,6 +4,11 @@ IDXGIFactory4
 IDXGIFactory5
 IDXGIAdapter1
 IDXGISwapChain3
+// The display output a swap chain presents on, whose color space says whether HDR is on (IDXGIOutput6::GetDesc1),
+// and the swap chain color spaces an HDR output selects (IDXGISwapChain3::CheckColorSpaceSupport, SetColorSpace1).
+IDXGIOutput6
+DXGI_COLOR_SPACE_TYPE
+DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG
 DXGI_SWAP_CHAIN_DESC1
 DXGI_FEATURE
 DXGI_ERROR_NOT_FOUND
