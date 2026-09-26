@@ -395,6 +395,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
         return true;
     }
+
     GpuImageLease IWorldSeatCameras.Acquire(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
@@ -417,6 +418,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             ? feed!.Handle()
             : 0
         );
+
     // A camera on its GPU tier orders its copies by the ring's shared fence, unless the render device refused it (the
     // producer then keeps its CPU wait); the CPU tier crosses no devices.
     private SharedFenceOrder? CameraFenceOrderFor(int seat, WorldCameraSensor sensor) {
@@ -441,6 +443,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 SharedFence: false
             ));
     }
+
     (uint Width, uint Height)? IWorldSeatCameras.Extent(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
@@ -479,6 +482,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             : feed.Fault
         );
     }
+
     private void ServiceCameraDeviceGraph(CameraDevice device, IGpuDeviceContext deviceContext) {
         // A retired last HUD camera source can leave a physical device with no sensor feeds. Do not reopen an empty
         // graph; if an old profile open was already in flight, dispose its result when it lands instead of adopting it.
@@ -971,7 +975,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
     }
     // Reader construction can succeed while a multiplexing driver delivers only one selected sensor. Count cadence
     // opportunities with no new frame, including a formerly live stream that freezes; after roughly three seconds at
-    // the default cadence the no-signal state and its likeliest cause become observable.
+    // the default cadence the unbound state and its likeliest cause become observable.
     private void NoteCameraStarvation(CameraDevice device, CameraFeed feed) {
         if (++feed.StarvedPulls <= 90) {
             return;

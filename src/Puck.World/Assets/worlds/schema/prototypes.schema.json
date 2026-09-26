@@ -1631,7 +1631,7 @@
                         "string",
                         "null"
                       ],
-                      "description": "The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map \u2014 none (no signal), test (the test pattern), and camera:\u003Cname\u003E / feed:\u003Cname\u003E (a View of the named camera, resolved against the placement\u0027s derived creation-eye feeds then the world\u0027s own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) lights the no-signal card. Null = the no-signal card until a world\u0027s face override wires a feed."
+                      "description": "The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map \u2014 none (unbound glass), test (the test pattern), and camera:\u003Cname\u003E / feed:\u003Cname\u003E (a View of the named camera, resolved against the placement\u0027s derived creation-eye feeds then the world\u0027s own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) shows unbound glass. Null = unbound glass until a world\u0027s face override wires a feed."
                     }
                   },
                   "required": [
