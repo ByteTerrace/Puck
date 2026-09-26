@@ -203,9 +203,10 @@ A window captured into a pane, such as an editor, can take the keyboard.
   no source has focus. A key's release goes wherever its press went, so neither
   side is left holding a key after focus moves. Pointer events are routed by
   the mapping a hit lands on, never by focus.
-- The reserved chord, Control and Alt held with Escape pressed, always returns
-  focus to the game. Its Escape reaches neither the game nor a source, whichever
-  had focus.
+- The reserved chord, Control and Alt held with Escape pressed, returns focus to
+  the game whenever a source has it, and that Escape reaches neither the game
+  nor the source. While the game has focus the chord has nothing to return, so
+  its Escape is the game's like any other key.
 
 A world document never creates a passthrough source: the world validator
 refuses a screen whose `input` is `Passthrough`. Focus sits inside the input the

@@ -206,6 +206,38 @@ public sealed class SourcePassthroughRouterLawTests {
         );
     }
     [Fact]
+    public void TheChordsEscapeIsTheGamesUnlessASourceHoldsFocus() {
+        var (router, editor, _) = Build();
+
+        // With nothing focused the chord returns nothing, so every key of it, Escape included, reaches the game.
+        foreach (var key in ((ReadOnlySpan<KeyCode>)[KeyCode.ControlLeft, KeyCode.AltLeft, KeyCode.Escape])) {
+            Assert.False(condition: router.Route(inputEvent: WindowInputEvent.KeyDown(key: key)));
+        }
+        foreach (var key in ((ReadOnlySpan<KeyCode>)[KeyCode.Escape, KeyCode.AltLeft, KeyCode.ControlLeft])) {
+            Assert.False(condition: router.Route(inputEvent: WindowInputEvent.KeyUp(key: key)));
+        }
+
+        // With the editor focused the same chord returns focus and its Escape reaches nobody.
+        Assert.True(condition: Click(
+            point: OnEditor,
+            router: router
+        ));
+        editor.Deliveries.Clear();
+        Assert.True(condition: router.Route(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.ControlLeft)));
+        Assert.True(condition: router.Route(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.AltLeft)));
+        Assert.True(condition: router.Route(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Escape)));
+        Assert.Null(@object: router.Focus.Focused);
+        Assert.True(condition: router.Route(inputEvent: WindowInputEvent.KeyUp(key: KeyCode.Escape)));
+        Assert.DoesNotContain(
+            collection: editor.Deliveries,
+            filter: static delivery => (delivery.Key == KeyCode.Escape)
+        );
+
+        // A second Escape, the modifiers still held, finds nothing focused and is the game's.
+        Assert.False(condition: router.Route(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Escape)));
+        Assert.False(condition: router.Route(inputEvent: WindowInputEvent.KeyUp(key: KeyCode.Escape)));
+    }
+    [Fact]
     public void ADocumentDeclaredSourceNeverFocusesOrReceivesInput() {
         // The resolver holds a window for the source, so only the opener and destination stand between it and input.
         SourceMapping[] declared = [

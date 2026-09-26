@@ -3315,7 +3315,8 @@ A mapped point goes to one of three destinations:
 | Presentation | Hover and highlight | GPU picking is allowed |
 
 When a source has keyboard focus, keys go to it instead of the game, and a
-reserved chord always returns focus to the game. Host passthrough exists only
+reserved chord always returns focus to the game; with no source focused, the
+chord's Escape is the game's. Host passthrough exists only
 for a source the local user opened on their own machine. A world document can
 never create a passthrough source or send it input, whether it was authored
 locally or arrived through a portal. A hit on a rendered source continues as a
@@ -3436,7 +3437,9 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      deepest child under the point and to the window thread's keyboard focus.
    - Laws: `SourcePassthroughRouterLawTests` (a focused source's pointer and
      keys reach a fake window at the mapped client point, the chord returns
-     focus, a document-declared source never focuses, releases follow presses),
+     focus and is consumed while a source holds it, its Escape reaches the game
+     while none does, a document-declared source never focuses, releases follow
+     presses),
      `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
      and `Win32PassthroughWindowTests` (a hidden Puck window reads the posted
      pointer events back at their client points).
