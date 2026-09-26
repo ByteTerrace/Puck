@@ -46,7 +46,7 @@ views variants), then retires the old set; a failure keeps the previous
 kernels. Scene buffers, images, baked bricks, and world state survive; the ISA
 probe's descriptor caches and the cadence signature are invalidated. The last
 successful set survives device-loss recovery. `views.graphs` instances
-(`pipeline.reload`) and post-render decorator pipelines are outside this
+(`pipeline.reload`) and `views.post` post-process packages are outside this
 command, and host ABI,
 buffer-layout, or C# ISA changes need a rebuild.
 

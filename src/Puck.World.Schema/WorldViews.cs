@@ -82,6 +82,21 @@ public sealed record WorldViewGraph(string Name,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Output = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Settings = null);
+/// <summary>One pass the render graph composition synthesizes runs over the composed frame: a post-process package pass
+/// of the root graph (<c>WorldViewGraphs.MainInstance</c>), written as a <c>puck.render.graph.v1</c> document's
+/// <c>packages</c> row is, less its ports. The rows run in order after every view and pane is placed and before the
+/// overlay, each reading the frame the pass before it wrote and writing the frame the next reads, so a row names no
+/// input or output. Presentation only; nothing here reaches simulation state.</summary>
+/// <param name="Name">The pass's name in the root graph (a <c>SafeName</c>, unique within the section and distinct from
+/// every <c>views.graphs</c> row, whose place pass the root names after the row), which a probe parameter's
+/// <c>post</c> target names.</param>
+/// <param name="Package">The post-process package the pass runs, a render graph package id such as
+/// <c>sdf.film-grain</c>, checked against the host's catalog at document load.</param>
+/// <param name="Config">The package's config values, each absent field at its default, or <see langword="null"/> for
+/// every default. The graph compiler binds them against the package's schema when the root graph is composed, and a
+/// boot refuses a value that does not bind, naming the row.</param>
+public sealed record WorldViewPostPass(string Name, string Package,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] System.Text.Json.JsonElement? Config = null);
 /// <summary>The price ceiling the graph scheduler holds the instances the display does not show directly to.</summary>
 /// <param name="PassPixelsPerFrame">The pass-pixels (passes times rendered pixels) those instances may spend in one
 /// presented frame; the stalest due instance is admitted first and the rest read their latest completed output. 0 sets
@@ -151,6 +166,9 @@ public enum WorldSeatYawReference : byte {
 /// <c>WorldViewGraphs.MainInstance</c>. A world that names its root authors its whole render graph, the
 /// <c>sdf.world</c> package row included.</param>
 /// <param name="GraphBudget">The graph scheduler's price ceiling, or <see langword="null"/> for none.</param>
+/// <param name="Post">The post-process passes the synthesized root graph runs over the composed frame, in order, before
+/// the overlay, or <see langword="null"/> for none. A world that names <see cref="Root"/> authors its whole graph and
+/// names none.</param>
 public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatRig"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? SeatRigRaw = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatControl"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatViewControl? SeatControlRaw = null,
@@ -158,7 +176,8 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ShaderToolchain = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewGraph>? Graphs = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewGraphBudget? GraphBudget = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Root = null) {
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Root = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewPostPass>? Post = null) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 
     /// <summary>Gets the placeholder an UNAUTHORED <c>views</c> section resolves to — an empty program, holding the

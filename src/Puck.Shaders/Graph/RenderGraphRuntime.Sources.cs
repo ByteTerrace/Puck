@@ -67,7 +67,7 @@ public sealed partial class RenderGraphRuntime {
             ],
             Resources: [
                 new ShaderPipelineResource(
-                    Initialization: ShaderPipelineInitialization.External,
+                    Initialization: ShaderPipelineInitialization.Host,
                     Kind: ShaderPipelineResourceKind.Buffer,
                     Name: RenderGraphPackageCatalog.SourceRegion,
                     SizeBytes: ((ulong)ImageSourceUploadLayout.ByteCount(header: in header))

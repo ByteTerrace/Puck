@@ -184,8 +184,8 @@ sources, each a `WorkCounterSet`. `shaders.compiler` counts a compiler's
 requests, its cache hits, and each native tool's runs, where
 `ShaderCompiler.StepsOf`'s steps run. `procedures.vulkan` counts the device-
 and instance-level procedures `VulkanProcResolver` resolves.
-`shaders.sdf-kernels` and `shaders.set-manifest` count the shader loads in
-`SdfWorldKernels` and `ShaderSetManifest` and the bytecode bytes each read. Requests, tool runs,
+`shaders.sdf-kernels` counts the kernel loads in `SdfWorldKernels` and the
+bytecode bytes they read. Requests, tool runs,
 resolutions and loads are per-backend-deterministic; cache hits are pacing,
 because the compile cache under the state root outlives the process. The
 World registers the shader sources in both presentation shapes, and the Vulkan
@@ -227,7 +227,7 @@ framebuffers are separate objects over those images. The
 `pipeline-geometry` canary draws two geometry passes through one color and one
 depth chain on both backends, and GPU-free laws hold the plan, the node's
 recording and each backend's refusal of incompatible attachments. The float
-preview, the overlay and the `post.<id>` packages draw through the same render
+preview, the overlay and the post-process packages draw through the same render
 passes.
 The vertex stage of a geometry pass receives no parameters; a camera or
 per-instance transform for mesh geometry belongs to P4.
@@ -329,12 +329,11 @@ pass's config fields in ordinal name order, all in the frame group. The group
 is a descriptor set, set 0, which each pass binds by group (P7b step 15), and
 nothing a pass records is pushed. Its declarations are generated into
 `<interface>.interface.hlsli`, which the
-loader supplies in memory for a pipeline pass and a shader set checks in, and
+loader supplies in memory for a pipeline pass and an engine package checks in, and
 the host writes the block through `ShaderPipelineParameterLayout.WriteFrame`.
 `ShaderFrameConstants`, `ShaderFrameInput`, `IShaderPipelinePassConstants`,
 `ShaderPushConstantLayout` and `ManifestPassConstants` are deleted, with the
-shader-set manifest's `pushConstants` block and the hand-declared frame
-structs. The ink passes, the package canary's tint, the Moth, the genesis card
+hand-declared frame structs. The ink passes, the package canary's tint, the Moth, the genesis card
 and film grain read the generated block; the pointer has Puck's top-left
 origin and the sources are re-derived so each renders the same, and film grain
 quantizes the tick to its flicker period itself, exactly as the host did.
@@ -360,8 +359,8 @@ source's closure, its passes' interfaces and its plan's names
 stored package with its key and compiles nothing, wherever the booted document
 lies; a source with no stored package compiles in a checkout that has DXC and
 is refused by `SHADERPKG_ABSENT` where nothing can compile it. The shipped rows
-name the ink pipeline and the Moth shader; film grain is a shader set whose
-bytecode the SDF build compiles. The `pipeline-echo` canary runs the generated
+name the ink pipeline and the Moth shader; film grain is a post-process package
+whose stages the SDF build compiles. The `pipeline-echo` canary runs the generated
 echo with `pipeline.sentinels` on and a copy that expects two members to hold
 each other's sentinel.
 The `no-device-compile` canary hides DXC from the World's path and renders the
@@ -372,13 +371,12 @@ which expects two members to hold each other's sentinel, turns red.
 
 The `interface-echo` canary runs one echo per shipped interface family in one
 world: the ink simulation, visualize and finish passes, the package canary's
-tint, the film grain set, and the `place` and `overlay` packages. The blocks of
+tint, and the `sdf.film-grain`, `place` and `overlay` packages. The blocks of
 the Moth and of the `source-*` conversion packages, which hold the extent
-alone, are ink finish's, and the `post.sdf-film-grain` package's are the film
-grain set's. Its discriminating leg reloads every row onto an echo whose last
+alone, are ink finish's. Its discriminating leg reloads every row onto an echo whose last
 member's first word expects the next word's sentinel.
 `InterfaceEchoCanaryFixtureTests` hold each echo's blocks to its targets' and
-fail when a shipped package or shader set with frame data has no echo. The
+fail when a shipped package with frame data has no echo. The
 SDF engine's `sdf-world` and `sdf-brick-bake` interfaces join the canary in
 the change that lands them (S16).
 
@@ -530,9 +528,9 @@ pass-graph document: a pipeline is a graph of shader passes that a world
 names, and a lone `.hlsl` source reads as a one-pass graph. Its members are
 `name`, `resources`, `passes` and `outputs`, plus `packages`: engine work
 named by package id from `RenderGraphPackageCatalog`, which offers
-`sdf.world`, `overlay` and one `post.<id>` package per shipped post-process
-set. `RenderGraphCompiler` checks the schema tag and plans a graph with P3's
-planner: a package pass enters the plan only through the planner's package
+`sdf.world`, `overlay`, `place`, the source conversions and the post-process
+packages such as `sdf.film-grain`. `RenderGraphCompiler` checks the schema
+tag and plans a graph with P3's planner: a package pass enters the plan only through the planner's package
 entry, and its planned pass carries its own kind,
 `ShaderPipelinePassKind.Package`, and a package step naming its package, its
 ports' versions and its extent in place of a declaration, so one planner
@@ -576,7 +574,7 @@ P11b items have landed: the first-class package pass kind in
 document pass kind with no package member, so package work enters the
 planner only through its package entry, the fold of the pipeline document
 into the graph document, planned buffer edges, the graph runtime,
-`sdf.world` as the runtime's external producer, the `post.<id>` and
+`sdf.world` as the runtime's external producer, the post-process and
 `overlay` package recorders, planned barriers for package ports (commits
 5a, 5b, 5c and 5d below), the main view through the runtime with captures
 from its root (commit 6 below), and graph rows naming packages and the root,
@@ -629,7 +627,7 @@ allocates only fixed-size buffers, so a counted package buffer such as
 `sdf.bricks`'s brick pool cannot be an instance's storage until the host
 supplies its counts. A world may author its own root graph in `views.graphs`;
 when it does not, composition synthesizes the default one, `sdf.world` then a
-`place` pass per pane, each `render.extensions` pass as `post.<id>` and then
+`place` pass per pane, a pass per `views.post` row and then
 `overlay`, as a graph document that goes through the same compiler, so no
 render tree is built in C# alone. `views.graphs` rows run live beside it
 (commit 9).
@@ -641,8 +639,8 @@ P11b commit 5 puts the three engine packages behind the graph runtime.
 its exact package id. The runtime creates the recorder at install and disposes
 it on replacement, device loss and disposal. Each frame the recorder records
 into the begun command buffer it is handed, and it never submits, waits or
-creates a pipeline on the frame thread. `post.<id>` and `overlay` become
-recorders. `sdf.world` stays an external producer until P14-6: its output is
+creates a pipeline on the frame thread. The post-process packages and
+`overlay` become recorders. `sdf.world` stays an external producer until P14-6: its output is
 the engine's latest completed image, held as a `GpuImageLease` until the
 submission that samples it retires, and never copied. The commit lands as four
 sub-steps, in this order:
@@ -694,7 +692,7 @@ sub-steps, in this order:
     left them in.
   - The synthesized default composition of two instances, `world` as the
     external `sdf.world` producer and the root graph that reads it and runs the
-    `post.<id>` passes and then `overlay`, landed with the live wiring
+    `views.post` passes and then `overlay`, landed with the live wiring
     (commit 6).
   - `RenderGraphRuntimeLawTests.External` holds the runtime to it over a fake
     producer on `FakePipelineGpu`: the latest output bound on every render, a
@@ -706,10 +704,10 @@ sub-steps, in this order:
     while leased disposed only after release, device loss releasing every held
     engine, and steady acquisition allocating nothing. `RenderGraphSchedulerLawTests`
     holds the instance-set refusals and the producer's price.
-- 5b has landed: `post.<id>` is a package recorder. Commit 6 wired it live and
-  deleted `FullscreenPassNode`, the node that wrapped a one-pass
-  `ShaderPipelineRenderNode` with its own frame ring, fences, submission and
-  executor swap per `render.extensions` entry.
+- 5b has landed: every post-process package is a package recorder. Commit 6
+  wired it live and deleted `FullscreenPassNode`, the node that wrapped a
+  one-pass `ShaderPipelineRenderNode` with its own frame ring, fences,
+  submission and executor swap per post pass.
   - A package id is served by an `IRenderGraphPackageFactory`. Its `Build` runs
     in the candidate's `BackgroundBuild` beside the shader passes and creates the
     pass's modules, pipeline and render pass; its `Create` takes them when the
@@ -719,19 +717,19 @@ sub-steps, in this order:
     admitted through the heap budget. A recording carries the pass's pass block
     and the frame's lease list, and an
     image a package draws into is created usable as a color attachment.
-  - `PostProcessPackage` is the one factory for every `post.<id>`, registered
-    per set under its id. Each frame it writes the input into the slot's set,
+  - `PostProcessPackage` is the one factory for every post-process package,
+    registered per package under its id. Each frame it writes the input into the slot's set,
     pushes the frame block, and records the render pass and the draw over a
     framebuffer cached per output image, between the barriers the node plans
     for its ports (5d). The extent comes from the schedule, so a post pass
     resizes with its instance.
   - A package pass carries `config` values. The graph compiler binds them
-    against the package's schema, which the catalog reads from each shipped
-    manifest's declaration (`ShaderSetManifest.ReadDeclaration`), and refuses a
-    config that does not bind as `RENDERGRAPH_PACKAGE_CONFIG`; the bound values
-    are the pass's frame block config, which `TrySetConfig` rebinds by pass
-    name. `WorldPostRenderExtensions.IsShipped` is the catalog's `post.<id>`
-    lookup. A probe's `target.id` cross-reference stays in world validation.
+    against the package's schema, which the catalog entry declares, and
+    refuses a config that does not bind as `RENDERGRAPH_PACKAGE_CONFIG`; the
+    bound values are the pass's frame block config, which `TrySetConfig`
+    rebinds by pass name. `WorldPostProcessVocabularyHook` checks a
+    `views.post` row's package against the catalog at document load. A probe's
+    `post` target's `pass` cross-reference stays in world validation.
   - `PostProcessPackageLawTests` hold it on `FakePipelineGpu`: the render
     pass, pipeline description, vertex buffer and draw, input write and pushed
     frame blocks `FullscreenPassNode` recorded for the shipped film grain,
@@ -775,8 +773,8 @@ sub-steps, in this order:
     (`RenderGraphPortAccess`): a compute read or a fragment-sampled read for an
     input, a compute write or a color-attachment write for an output, which only
     an image port takes. The catalog refuses an input port that writes, an
-    output port that reads and a color-attachment buffer port. `post.<id>` and
-    `overlay` sample their input and draw their output; `sdf.world`,
+    output port that reads and a color-attachment buffer port. The post-process
+    packages and `overlay` sample their input and draw their output; `sdf.world`,
     `sdf.bricks` and `place` read and write by compute.
   - The graph compiler hands each package pass's port accesses to the planner
     (`ShaderPipelinePackagePass.InputAccesses` and `OutputAccesses`), and
@@ -792,7 +790,7 @@ sub-steps, in this order:
     image's own, and an owned input's planned frame-end layout, which a root
     capture reads.
   - `RenderGraphPackageBarrierLawTests` hold a compute shader pass, a
-    `post.<id>` pass and the overlay to the hand-derived barrier table, layouts
+    post-process package pass and the overlay to the hand-derived barrier table, layouts
     included, and a drawn target alone to the color-attachment usage.
     `ObservedPackageFactory` (`tests/Shared`) counts the barriers a package
     records itself: `PostProcessPackageLawTests` and `OverlayPackageLawTests`
@@ -810,10 +808,10 @@ Each sub-step's gate:
   text rather than from a `puck affected` run, so it is unverified. Nothing
   live runs through 5a yet, so these gates run when the default composition
   moves onto the graph; until then its evidence is the fake-GPU laws above.
-- 5b: a new post canary, which 5b lands behind. It boots one shipped
-  `post.<id>` on both backends and pins its pixels, with a discriminating leg
-  without the extension. No existing gate covers a post pass: no canary or parity
-  world authors `render.extensions`, and although the coverage index maps
+- 5b: the `post-pass` canary, which 5b lands behind. It boots a `views.post`
+  row running `sdf.film-grain` on both backends and pins its pixels, with a
+  discriminating leg without the row. No parity world authors `views.post`,
+  and although the coverage index maps
   `FullscreenPassNode.cs` to 21 canaries, none of them composes a post pass.
 - 5c: parity likely does not cross the overlay: with nothing visible the
   pass-through returns the SDF frame, and the parity world appears to show no
@@ -836,14 +834,14 @@ captures come from the graph's root output.
 - `WorldRootGraph` synthesizes a world's default graph from its document, a
   graph document value `RenderGraphCompiler` plans like any other: `world`, the
   `sdf.world` producer, and, when anything is drawn over it, the root `main`,
-  which reads `world` over the whole display and runs one `post.<id>` pass per
-  `render.extensions` entry in document order, then `overlay` in a windowed
+  which reads `world` over the whole display and runs one pass per
+  `views.post` row in document order, then `overlay` in a windowed
   World that loaded its glyph atlas. Both presentation shapes run the post
   passes, so offscreen captures and parity see them. With nothing drawn over it
-  (offscreen with no extensions) `world` is the root, and the runtime shows and
-  captures the producer's output directly. A config that does not bind is the
-  compiler's `RENDERGRAPH_PACKAGE_CONFIG`, which the boot's pre-flight reports
-  as a refused definition naming the entry.
+  (offscreen with no `views.post` rows) `world` is the root, and the runtime
+  shows and captures the producer's output directly. A config that does not
+  bind is the compiler's `RENDERGRAPH_PACKAGE_CONFIG`, which the boot's
+  pre-flight reports as a refused definition naming the row.
 - `WorldRenderRoot` builds the engine node, registers it as the `sdf.world`
   producer beside the post and overlay packages, and installs the runtime
   behind `RenderGraphRuntimeNode`, the host's render root, in both shapes. The
@@ -979,7 +977,7 @@ P11b's last four commits are these; 11 and 12 have landed:
     layout). Every pass pipeline a `ShaderPipelineRenderNode` installs comes
     from it: each document pass's compute or graphics pipeline with its shader
     modules and render pass, the float preview's, and each package pass's
-    (`place`, `post.<id>`, `overlay` and the source conversions of
+    (`place`, each post-process package, `overlay` and the source conversions of
     `SourceConversionPackage`) through
     `RenderGraphPackageRecorderContext.Pipelines`. Each device's region-copy
     pipeline is an entry too (`GpuRegionCopyPass`). A candidate's build leases
@@ -1084,11 +1082,33 @@ echoes the published mappings, a pick and a walk; the laws are
 `WorldViewPaneMappingLawTests`, and the `pane-display` canary maps a display
 point to the pane's pixel and moves it with the slot.
 
-P13b owes the rest. No screen publishes a mapping, so the screen shading still
-reads its own bezel constant, which `WorldScreenMappings` mirrors, and the GPU
-does not yet draw from the mapping. No instance reports the surfaces standing
-in its world (`IRenderGraphHitScene.Placements` is empty on the live host), so
-a walk that continues into an instance ends on its world. No host feeds
+Screens publish their mappings too (P13b-1's screen half). The screen binder
+holds a `WorldScreenMappingSet` (`src/Puck.World.Client/Sources`) reconciled
+with the rows it applies: each row's `WorldScreenMappings.Of` mapping, with the
+glass bezel as its warp, named by the instance its source is, a producer,
+machine or probe source by its `WorldSourceInstances` handle
+(`source$<producer>$<digest>`), a view by its camera's registration and a
+session by its screen's session view. A view's and a session's extent is
+document data; a source instance's is the running image's, which the binder
+answers through `IWorldScreenImages` (a machine output's `Width` and `Height`,
+a producer feed's descriptor, a probe's ring). `WorldScreenBinder.Publish`
+republishes every mapping each frame, allocating nothing while handles and
+extents hold. A screen showing no image, a live `screen.source` bind over its
+row, or an image of unknown extent publishes none, and `world.screens` prints
+each screen's mapping in `SourceMapping.Describe`'s line or why it has none.
+Every view's world producer reports the published screens as the placements
+standing in its world (`WorldViewGraphHost.Screens`), so a walk from a view's
+pane continues through a screen into its source: it ends `Producer` at a
+producer source's pixel, and `Unread` on a screen showing a camera view, which
+renders through `ViewStack` and is no instance of the live set. The laws are
+`WorldScreenMappingLawTests` and
+`WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`,
+and the `view-screens` canary prints and holds each screen's mapping and a walk
+through each screen.
+
+P13b owes the rest. The screen shading still reads its own bezel constant,
+which `WorldScreenMappings` mirrors, and the GPU does not yet draw from the
+mapping. No host feeds
 `SourceFocus` or delivers a focused source's input to its window, no machine
 reads a mapped pointer, and nothing reads the picker for hover yet. The
 recorded Windows run, a click reaching a captured editor window at the mapped
@@ -1103,8 +1123,8 @@ root, in both presentation shapes (see P11b commit 6 above):
    `views.graphs` row as an instance of its own.
 2. When anything is drawn over the world or the world can compose more than
    one view, the root `main`: one `place` pass per view, then one per pane a layout
-   slot names, then one `post.<id>` package pass per `render.extensions` entry
-   in document order, then `overlay`, which draws the console, HUD, toasts and
+   slot names, then one post-process package pass per `views.post` row in
+   document order, each reading the frame the pass before it wrote, then `overlay`, which draws the console, HUD, toasts and
    cursor in a windowed World. Otherwise `world` is the root.
 3. The launcher, which hands the root's image to a surface compositor that
    blits it to the swapchain.
@@ -1897,8 +1917,9 @@ bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuComputeServices`, `IFullscreenPassServices` and
 `WorldPostRenderExtensionServices`, `OverlayServices`, and
 `SdfViewGpuServices` are deleted. The pipeline factories have merged into the
-one `IGpuPipelineFactory`: the Vulkan swapchain compositor creates its blit
-through it, for the swapchain's render pass (`VulkanGpuRenderPass.Borrow`).
+one `IGpuPipelineFactory`: both swapchain compositors lease their blit from the
+pass-pipeline cache, which creates it through it for a render pass in the
+swapchain's format.
 The closed set of binding kinds replaces `GpuComputeBindingKind`,
 `ShaderSetManifestBindingKind` and every binding index set by hand, such as the
 SDF engine's binding constants; a graphics description states its groups alone
@@ -2290,8 +2311,8 @@ Phase 3, the groups, follows phase 2:
       `instrument-clock-source`, `music-conditional-layer-and-embellishment`,
       `voice-babble` and `world-seat-binding-recompose`.
     - 14b-5, done with step 18: film grain. `sdf-film-grain.frag.hlsl` reads
-      a separate image and sampler, which its manifest declares as
-      `{ kind, name }` members of its pass group; `FullscreenPassNode` was
+      a separate image and sampler, which its package declares as members of
+      its pass group; `FullscreenPassNode` was
       deleted with P11b commit 6. Canaries: 21, the 14b-1 set with the
       overlay's three audio canaries.
     - 14b-6, the SDF engine, last: `sdf-world.hlsli`'s thirty-two screen
@@ -2320,7 +2341,8 @@ Phase 3, the groups, follows phase 2:
     that is not an identifier, and a module whose reflected bindings differ
     from its interface's layout. Each pass is created through its interface's
     `PipelineLayout` and binds its two sets by group. 14b-3 landed here.
-    Step 18 moved shader sets and package passes onto the same two groups.
+    Step 18 moved package passes, post-process packages included, onto the
+    same two groups.
 16. Done: the gate spike's GPU half, the `binding` parity station
     (`tests/Puck.Parity/binding.graph.json`, shown in a corner pane of the parity
     layout and captured as its own instance): a compute pass and a fullscreen
@@ -2360,13 +2382,12 @@ Phase 3, the groups, follows phase 2:
     one region-copy pipeline), `SdfWorldEngineUploadLawTests` (the mesh
     region's words for a known draw set, and a moved draw owing one word), with
     the upload laws and `GpuResidencyLawTests` unchanged.
-18. Done: the overlay and fullscreen passes are on groups. A package pass and a
-    shader set bind the frame group and a pass group holding the extent, the
-    config and then the members they declare: a package's catalog entry
+18. Done: the overlay and fullscreen passes are on groups. A package pass
+    binds the frame group and a pass group holding the extent, the config and
+    then the members it declares: its catalog entry
     (`RenderGraphPackage.Members`) lists the values its recorder writes into
     the pass block each frame (`RenderGraphPackageRecording.PassBlock`) and the
-    resources it binds, and a set's manifest lists its bindings as
-    `GpuBindingKind` members, which retires `ShaderSetManifestBindingKind`.
+    resources it binds, as `GpuBindingKind` members.
     The node seeds every pass's pass region and sizes its one pool for every
     pass's frame and pass sets, from which a recorder allocates its own
     (`RenderGraphPackageSets`); nothing a pipeline pass records is pushed.
@@ -2379,7 +2400,7 @@ Phase 3, the groups, follows phase 2:
     `TeardownAfterFaultLawTests`). `puck shaders interface --package <id>`
     writes an engine package's include, which a law holds to the compiled
     shader's reflection, and `puck shaders generate --check` holds every
-    package's and shader set's include to the generator by name.
+    package's include to the generator by name.
 19. Done: the SDF engine uploads through `GpuRegion`
     (`SdfWorldEngine.Regions.cs`). Its program words, viewport rows, dynamic
     transforms, frame instance grid, screen surfaces, screen lights, volumes,
@@ -2431,35 +2452,43 @@ Phase 3, the groups, follows phase 2:
 21. The owning guides and the `rendering` skill describe the result.
 22. In progress: the P7 deletions no earlier step owns. Done: Vulkan has one
     pipeline factory, `VulkanGpuPipelineFactory`, which creates graphics
-    pipelines through `IVulkanGraphicsPipelineApi` itself, and the swapchain
-    compositor creates its blit through `IGpuPipelineFactory` for the
-    swapchain's render pass (`VulkanGpuRenderPass.Borrow`), opaque and with the
-    neutral dynamic viewport the presenter's recorder sets. A graphics
-    description states its groups alone: `GpuGraphicsPipelineDescription.Layout`
-    is required, and its `TextureSamplerCount`, `EnableStorageBuffer` and push
-    range are deleted with both backends' non-layout graphics paths, and
+    pipelines through `IVulkanGraphicsPipelineApi` itself. Both swapchain
+    compositors bind one group, `SurfaceBlitLayout` (the source at `t0` and its
+    sampler at `s1`, space 3), and lease their blit from the device's
+    `GpuPassPipelineCache` for a render pass in the swapchain's format
+    (`VulkanGpuFormats.FromVkFormat` on Vulkan), opaque and with the neutral
+    dynamic viewport the presenter's recorder sets; the Direct3D 12 compositor's
+    hand-built root signature and pipeline state and `VulkanGpuRenderPass.Borrow`
+    are deleted. The Direct3D 12 compositor keeps a one-SRV and a one-sampler
+    shader-visible heap until P16, and `DirectXDrawCommand` names the group, both
+    heaps and both tables. A graphics description states its groups alone:
+    `GpuGraphicsPipelineDescription.Layout` is required, and its
+    `TextureSamplerCount`, `EnableStorageBuffer` and push range are deleted with
+    both backends' non-layout graphics paths, and
     `VulkanGraphicsPipelineCreateRequest` takes its caller's layout and a
     dynamic viewport alone (its fixed viewport, descriptor bindings, push range
-    and the native API's owned-layout branch are deleted). The overlay's
-    host-written buffer is a `GpuRegion` through one node mechanism: a package
-    states its regions (`IRenderGraphPackageFactory.Regions`), and
+    and the native API's owned-layout branch are deleted). Every host-written
+    buffer a graph reads is a `GpuRegion` through one node mechanism: a package
+    states its regions (`IRenderGraphPackageFactory.Regions`) and a graph
+    declares its host buffer ports (`ShaderPipelineInitialization.Host`), and
     `ShaderPipelineRenderNode` creates them under `GpuResidency.Select`, takes
-    the region-copy pipeline in the candidate's build, states and admits a
-    reserved copy pool per staged pass in `DescriptorPools`, and records every
-    owed copy with its barriers in one command buffer ahead of the frame's
-    passes; recorders record no barrier. `BindRegion`'s host buffer ports go
-    through the same mechanism, so a staged uploaded source is no longer
-    refused. On Direct3D 12 a buffer the fragment stage reads is in
-    `ALL_SHADER_RESOURCE`. Laws: `OverlayPackageLawTests` (a steady drawn frame
-    uploads nothing under a ring or staged; the staged copy pool stated and
-    copies recorded), `RenderGraphRuntimeLawTests.AStagedSourceRegionReachesItsConversionByteExact`
-    and `DirectXBufferStatesLawTests`. Remaining: the Direct3D 12 surface
-    compositor's hand-built root signature and pipeline state move onto
-    `IGpuPipelineFactory`, as Vulkan's blit did, with its surface-blit shader on
-    the group registers; its shader-visible heaps stay until P16.
-    `VulkanGpuRenderPass.Borrow` keeps its stated format until P17's pixel-format
-    fold gives it the swapchain's.
-
+    the region-copy pipeline in the candidate's build, states and admits one
+    copy pool per graph reserving every staged region's sets in
+    `DescriptorPools`, moves a bound port to each later graph's share
+    (`GpuRegion.MoveCopySets`), and records every owed copy with its barriers in
+    one command buffer ahead of the frame's passes; recorders record no barrier.
+    Every region counts in the node's account (`GpuRegion.BytesOf`,
+    `RegionBytes`) and in `world.budget`'s live rows. On Direct3D 12 a buffer
+    the fragment stage reads is in `ALL_SHADER_RESOURCE`. Laws:
+    `OverlayPackageLawTests` (a steady drawn frame uploads nothing under a ring
+    or staged; the staged copy pool stated and copies recorded),
+    `RenderGraphRuntimeLawTests.AStagedSourceRegionReachesItsConversionByteExact`
+    (one pool stated and created for the port, its region bytes and budget
+    row), `GpuResidencyLawTests` (`BytesOf` per policy, a staged region moved
+    across pools) and `DirectXBufferStatesLawTests`. Remaining: a device law
+    that runs a node pass over a region staged by explicit choice on Vulkan
+    hardware and on Direct3D 12 hardware and WARP and reads it back byte-exact,
+    since a device with an aperture rings by default.
 **Decisions.** Root parameter indices are dense, and the push index sits at
 `b0` in space 4, outside every group's space. The spike's frame group is the
 generated frame block, the only generated include, and previous-frame inputs
@@ -2881,9 +2910,9 @@ except step 8.
    `WorldImageProducers.RegisterPackages`), and the runtime renders each
    instance of it through a node running the one-pass graph its upload's
    descriptor names (`RenderGraphRuntime.Sources.cs`): the region, an external
-   buffer bound as the node's host buffer port (`ShaderPipelineRenderNode.BindRegion`,
-   which flushes the frame slot's share of a ring `GpuRegion` after that slot's
-   fence), and one package pass, the conversion `ImageSourceConversion.PassOf`
+   buffer the graph declares as a host buffer port and binds with
+   `ShaderPipelineRenderNode.BindRegion` (a ring or staged `GpuRegion` the node
+   owns on the copy sets the graph reserved), and one package pass, the conversion `ImageSourceConversion.PassOf`
    names (`SourceConversionPackage`, one catalog package per shipped kernel),
    writing the image every consumer reads. The runtime declares each upload's
    cadence and extent to the scheduler, so one conversion runs per source a
@@ -2900,10 +2929,7 @@ except step 8.
    palette and NV12 kernels, and `uploaded-sources` captures a test-pattern
    source instance before composition and shows it and a QR code in panes.
    The conversion packages bind the frame and pass groups as every package
-   does. Still open: regions are host-visible rings, and the device-local
-   residency P7's policy chooses, which P7b-17 and P7b-19 make available, needs
-   the node to record a staged region's copy, so `BindRegion` refuses a staged
-   region until it does. Screens
+   does. The node records a staged region's copy (P7b-22). Still open: screens
    still read the binder's `CpuSurfaceSource` uploads of the same feeds until
    step 2 connects them; the capture and camera CPU tiers and the capture fills
    move onto `source-rgba` and static sources after that, and
@@ -3023,24 +3049,32 @@ pick through a portal reaches the nested world's surface.
 
 **Depends on:** P11 and P12.
 
-**P13b, the rest of the package.** Panes publish live mappings and the hit walk
-runs over the live instance set, but `WorldScreenMappings.Of` and `SourceFocus`
-are called only by their laws, `SourceHandle.Producer` only by tests, and the
-screen shading reads its own bezel constant. Each commit is marked with what it
-waits on; only step 5 waits on P7b's groups.
+**P13b, the rest of the package.** Panes and screens publish live mappings and
+the hit walk runs over the live instance set through both, but `SourceFocus` is
+called only by its laws and the screen shading reads its own bezel constant.
+Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
 
-1. Mappings are published from the live renderer. The pane half has landed:
-   `WorldViewGraphHost.PublishPanes` publishes each shown view's and pane's
-   `SourceMapping` through its graph instance, named by the instance's
+1. Mappings are published from the live renderer, landed in both halves. The
+   pane half: `WorldViewGraphHost.PublishPanes` publishes each shown view's and
+   pane's `SourceMapping` through its graph instance, named by the instance's
    `RenderGraphInstance.Handle`, at the extent the runtime's latest schedule
    renders it at, and `world.view.panes` reports the mappings it publishes.
    Laws: `WorldViewPaneMappingLawTests` over the live host's placements; the
-   `pane-display` canary. The screen half is owed, GPU-free, after P12b-3: the
-   binder publishes each screen's `SourceMapping` through
-   `WorldScreenMappings.Of`, with the source instance's `SourceHandle` in place
-   of the stand-in, and `world.screens` reports the mapping it publishes
-   (`SourceMapping.Describe`, the line `world.view.panes` prints). Laws:
-   `WorldScreenInputLawTests` over the live binder's rows.
+   `pane-display` canary. The screen half: the binder's
+   `WorldScreenMappingSet` publishes each screen's `SourceMapping` through
+   `WorldScreenMappings.Of`, named by its source instance's `SourceHandle`
+   (`WorldSourceInstances`; a view's camera registration or a session's view
+   for those arms), and `world.screens` reports the mapping it publishes
+   (`SourceMapping.Describe`, the line `world.view.panes` prints). Every view's
+   world producer reports the screens as its placements, so the walk continues
+   through a screen into its source. Laws: `WorldScreenMappingLawTests` over
+   the binder's rows (a screen at an arbitrary pose maps known points to known
+   pixels, identically on every run) and
+   `WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`;
+   the `view-screens` canary. A screen showing a camera view ends its walk
+   `Unread` until camera views render as live instances (P11b), and a live
+   `screen.source` bind, which no row names, publishes no mapping until P12b-2
+   makes live binds source instances.
 2. The simulation destination, landed. A tick's command snapshot never reaches
    the server, which integrates each seat's `PlayerIntent`, so the intent
    carries the ray:
@@ -3100,9 +3134,9 @@ waits on; only step 5 waits on P7b's groups.
    `WorldViewGraphHost.Walk` runs `RenderGraphHitWalk` over the runtime's
    instance set from the published panes, with each view's seat camera and each
    pane's paired camera, and the pane pointer maps through its instance's
-   published mapping. The live host reports no surface placements inside an
-   instance's world, so a walk ends on the first instance it continues into
-   until screens publish (step 1's screen half). The portal check, a pick
+   published mapping. Each view's world producer reports the published screens
+   as the surface placements inside its world, so a walk continues from a view
+   through a screen into its source (step 1's screen half). The portal check, a pick
    through a portal reaching the nested world's surface, needs a nested world
    rendered as an instance, which no live world does yet.
 
@@ -3147,10 +3181,9 @@ Then:
 - Screens read sources through P12. Panes compose in the graph, since P11b
   commit 9 deleted the engine's child path.
 
-This retires `render.extensions` as a separate document section, because a
-post-process pass becomes a graph node. It also retires
-`WorldPostRenderExtensionPasses`, `ViewStack`'s fixed budget, and the shaders README lines that name consumers
-which no longer exist. Every internal caller and world
+A post-process pass is a pass of the synthesized root graph, which a world
+names in `views.post` (step 12). P14 also retires `ViewStack`'s fixed budget
+and the shaders README lines that name consumers which no longer exist. Every internal caller and world
 document is updated in the same change.
 
 The engine's own pass and hazard model is deleted once its passes are graph
@@ -3161,9 +3194,9 @@ passes, because the planner's tracker (P3) then decides every barrier:
 pass-index constants, `PassLabels`, and the `Record*` methods that fix the
 dispatch order by hand. `SdfWorldEngine` does not survive as a second path
 beside the pass package: when the last capability row is green, the
-monolith is gone. A `views.graphs` instance's node and a `render.extensions` pass both
-draw through their device context's services, so retiring `render.extensions`
-frees no graphics bundle.
+monolith is gone. A `views.graphs` instance's node and a `views.post` pass both
+draw through their device context's services, so the post passes hold no
+graphics bundle of their own.
 
 **Check:** every capability-matrix row green; `puck parity` recorded before the
 move and re-recorded after, with any moved pixels explained in the change; P2's
@@ -3256,11 +3289,17 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 9. The engine's cadence becomes the scheduler's.
 10. Float working targets and the display pass, with parity re-recorded.
 11. Staged shading.
-12. `render.extensions` retires with its validation and the
-    `world.extensions` verb; `comprehensive.synthetic.world.puck` migrates.
-    `ShaderSetManifest`, the `puck.shader.manifest.v1` form film grain ships
-    in, folds into the pass package, so a post-process set ships the way any
-    pass does.
+12. Landed, post passes as the root graph's own passes: a world names them in
+    `views.post`, each row a graph document's `packages` row less its ports
+    (`name`, `package`, `config`), which the synthesized root `main` runs in
+    order after every view and pane is placed and before `overlay`, each
+    reading the frame the pass before it wrote.
+    `comprehensive.synthetic.world.puck` names its film grain there. The
+    shader-set manifest is folded into the package: film grain is the engine
+    catalog's `sdf.film-grain`, whose one declaration holds its stages,
+    members, config and interface, and `PostProcessPackage` serves every
+    post-process package, so a post pass ships the way `place` and `overlay`
+    do.
 13. The final sweep deletes the matrix law, `SdfWorldEngine` and the types
     listed above, `SdfShaderSetVerification`,
     `SdfWorldKernels`, the SDF pipeline set and its cache, and corrects the comments and

@@ -32,7 +32,7 @@ internal sealed class WorldOverlayGlyphs {
     public OverlayGlyphSdfPack? Pack { get; }
 }
 /// <summary>Builds the render root both GPU presentation shapes present and capture: the SDF engine node as the
-/// <c>sdf.world</c> producer, the graph's packages (<c>place</c>, each <c>render.extensions</c> set, and the overlay when
+/// <c>sdf.world</c> producer, the graph's packages (<c>place</c>, each <c>views.post</c> row's package, and the overlay when
 /// the shape draws one), and the <see cref="RenderGraphRuntime"/> that runs the document's instances — its
 /// <c>views.graphs</c> rows beside the default graph composition synthesizes, or the rows alone under an authored
 /// <c>views.root</c> — behind the node the host produces frames from. The <see cref="WorldViewGraphHost"/> drives the
@@ -55,6 +55,10 @@ internal static class WorldRenderRoot {
         var definition = sp.GetRequiredService<WorldDefinition>();
         var graph = sp.GetRequiredService<WorldRootGraph>();
         var host = sp.GetRequiredService<WorldViewGraphHost>();
+
+        // A walk into a view's world continues through the screens standing in it.
+        host.Screens = binder.Mappings;
+
         var synthesized = ((definition.Views.Root is null)
             ? graph
             : null);
@@ -106,10 +110,15 @@ internal static class WorldRenderRoot {
             package: RenderGraphPackageCatalog.Place
         );
 
-        foreach (var id in graph.PostPasses.Keys) {
+        // Each post-process package a views.post row runs, which the graph compiler has already found in the catalog.
+        foreach (var package in RenderGraphPackageCatalog.Engine.Packages.Where(predicate: package => (package.IsPostProcess && graph.Post.Any(predicate: pass => string.Equals(
+            a: pass.Package,
+            b: package.Id,
+            comparisonType: StringComparison.Ordinal
+        ))))) {
             packages.Register(
-                factory: new PostProcessPackage(manifest: ShaderSetCatalog.Shipped.Load(id: id)),
-                package: (RenderGraphPackageCatalog.PostProcessPrefix + id)
+                factory: new PostProcessPackage(package: package),
+                package: package.Id
             );
         }
 
@@ -145,14 +154,14 @@ internal static class WorldRenderRoot {
             throw new InvalidOperationException(message: $"The document's render graph was refused: {refusal.Code}: {refusal.Message}");
         }
 
-        var extensions = definition.Render.Extensions;
+        var post = definition.Views.Post;
         var overlaid = (overlay is not null);
 
         host.Attach(
             compose: (panes, views) => WorldRootGraph.Compose(
-                extensions: extensions,
                 overlay: overlaid,
-                packages: RenderGraphPackageCatalog.Shipped,
+                packages: RenderGraphPackageCatalog.Engine,
+                post: post,
                 panes: panes,
                 views: views
             ),
@@ -176,8 +185,7 @@ internal static class WorldRenderRoot {
         probe.Device = device;
         probe.Node = engine;
         probe.Root = root;
-        sp.GetRequiredService<WorldPostRenderExtensionPasses>().Attach(
-            extensions: definition.Render.Extensions,
+        sp.GetRequiredService<WorldPostPasses>().Attach(
             graph: graph,
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)
         );

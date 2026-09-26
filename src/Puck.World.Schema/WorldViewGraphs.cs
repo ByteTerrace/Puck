@@ -10,7 +10,7 @@ public static class WorldViewGraphs {
     /// alone.</summary>
     public const string WorldInstance = "world";
     /// <summary>The name of the root graph instance composition synthesizes when the world has a pass to draw over its
-    /// SDF world: each <c>render.extensions</c> pass in order, then the overlay.</summary>
+    /// SDF world: its views and panes placed, each <c>views.post</c> pass in order, then the overlay.</summary>
     public const string MainInstance = "main";
 
     /// <summary>Returns whether a name is one of the instances of the render graph composition synthesizes, which a

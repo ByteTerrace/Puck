@@ -70,6 +70,7 @@ internal sealed partial class WorldScreenBinder {
         slot.ReleaseDeclared();
         slot.DeclaredFeed = feed;
         slot.DeclaredFault = null;
+        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} showing QR v{feed!.Version} {QrErrorCorrection.Letter(level: feed.Level)} mask{feed.Mask} {feed.Descriptor.Width}x{feed.Descriptor.Height} '{ElideForEcho(payload: feed.Payload)}'");
     }

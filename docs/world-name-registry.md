@@ -2515,7 +2515,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | Path | Member | Reason |
 |---|---|---|
 | `spawnPoints[].id` | `WorldSpawnPoint.Id` | a spawn point id |
-| `render.extensions[].id` | `WorldRenderExtensionEntry.Id` | a post-render extension id |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
@@ -2692,6 +2691,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.cameraRig.operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
 | `views.graphs[].name` | `WorldViewGraph.Name` | a view graph instance name |
 | `views.graphs[].source` | `WorldViewGraph.Source` | a view graph's source is a document path |
+| `views.post[].name` | `WorldViewPostPass.Name` | a post pass name |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `hud.panels[].id` | `WorldHudPanel.Id` | a HUD panel id |
@@ -2906,8 +2906,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `probes[].inputs{*}[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `probes[].inputs{*}[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `probes[].bindings[][axis].source` | `WorldProbeBinding.Axis.Source` | an input source id |
-| `probes[].bindings[][parameter].target[extension].id` | `WorldProbeParameterTarget.Extension.Id` | a post-render extension id |
-| `probes[].bindings[][parameter].target[extension].field` | `WorldProbeParameterTarget.Extension.Field` | an extension config field |
+| `probes[].bindings[][parameter].target[post].pass` | `WorldProbeParameterTarget.Post.Pass` | a post pass name |
+| `probes[].bindings[][parameter].target[post].field` | `WorldProbeParameterTarget.Post.Field` | a post pass config field |
 | `probes[].bindings[][parameter].target[probe].id` | `WorldProbeParameterTarget.Probe.Id` | a probe id |
 | `probes[].bindings[][parameter].target[probe].field` | `WorldProbeParameterTarget.Probe.Field` | a probe parameter field |
 | `captures.rows[].station` | `WorldCaptureRow.Station` | a capture station is the captures section's own namespace |

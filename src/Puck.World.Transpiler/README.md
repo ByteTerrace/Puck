@@ -801,7 +801,7 @@ inferred from its expression). The `table`/`slot`/`pile`/`grid` declaration refu
 
 The engine's validation of a composed world reports each refusal as PUCK030 (an error), a row or record field
 naming an undeclared enum as PUCK119, and each check it deferred to
-the host that runs the world — a machine engine, post-render extension or probe kind the diagnosing host carries no
+the host that runs the world — a machine engine, post-process package or probe kind the diagnosing host carries no
 catalog for — as PUCK118, an information notice that never fails a compile or a composition.
 
 `PUCK008`/`PUCK013`/`PUCK014` also cover a rule-body-only keyword found where an ordinary statement belongs

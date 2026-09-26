@@ -186,7 +186,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldProbeBinding.Axis), TypeInfoPropertyName = "WorldProbeBindingAxis")]
 [JsonSerializable(typeof(WorldProbeBinding.Parameter), TypeInfoPropertyName = "WorldProbeBindingParameter")]
 [JsonSerializable(typeof(WorldProbeBinding.Control), TypeInfoPropertyName = "WorldProbeBindingControl")]
-[JsonSerializable(typeof(WorldProbeParameterTarget.Extension), TypeInfoPropertyName = "WorldProbeParameterTargetExtension")]
+[JsonSerializable(typeof(WorldProbeParameterTarget.Post), TypeInfoPropertyName = "WorldProbeParameterTargetPost")]
 [JsonSerializable(typeof(WorldProbeParameterTarget.Probe), TypeInfoPropertyName = "WorldProbeParameterTargetProbe")]
 [JsonSerializable(typeof(WorldScreenSource.Probe), TypeInfoPropertyName = "WorldScreenSourceProbe")]
 // The shipped image producers' settings shapes, which a producer source's settings object binds to

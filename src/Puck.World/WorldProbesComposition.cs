@@ -5,7 +5,7 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-/// <summary>Registers the camera-probes host — <see cref="WorldProbes"/>, its <see cref="WorldPostRenderExtensionPasses"/>
+/// <summary>Registers the camera-probes host — <see cref="WorldProbes"/>, its <see cref="WorldPostPasses"/>
 /// write target, its <see cref="ISnapshotInputCapture"/> contribution to the host loop's per-frame capture order,
 /// and its console surface (<see cref="ProbeCommandModule"/>).</summary>
 public static class WorldProbesComposition {
@@ -16,12 +16,12 @@ public static class WorldProbesComposition {
     public static IServiceCollection AddWorldProbes(this IServiceCollection services) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
-        services.AddSingleton<WorldPostRenderExtensionPasses>();
+        services.AddSingleton<WorldPostPasses>();
         services.AddSingleton(implementationFactory: static sp => new WorldProbes(
             clock: sp.GetRequiredService<IInputClock>(),
             definitionSource: sp.GetRequiredService<WorldDefinitionSource>(),
             focus: sp.GetRequiredService<IInputFocus>(),
-            passes: sp.GetRequiredService<WorldPostRenderExtensionPasses>(),
+            passes: sp.GetRequiredService<WorldPostPasses>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             router: sp.GetRequiredService<InputRouter>(),
             screens: sp.GetRequiredService<WorldScreenBinder>()

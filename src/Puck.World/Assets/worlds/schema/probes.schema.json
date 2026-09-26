@@ -118,7 +118,7 @@
               "title": "WorldProbeBindingAxis"
             },
             {
-              "description": "Writes a channel into a presentation-float shader-extension config field, lerped over Range. Presentation-only \u2014 the destination never feeds simulation state.",
+              "description": "Writes a channel into a presentation-float config field of a post pass or a probe kind, lerped over Range. Presentation-only \u2014 the destination never feeds simulation state.",
               "properties": {
                 "$type": {
                   "const": "parameter"
@@ -135,26 +135,26 @@
                   ],
                   "anyOf": [
                     {
-                      "description": "Writes a shader-extension config field on a composed render.extensions entry.",
+                      "description": "Writes a config field of a views.post pass, live, into the root graph\u0027s pass block.",
                       "properties": {
                         "$type": {
-                          "const": "extension"
+                          "const": "post"
                         },
-                        "id": {
-                          "description": "The render.extensions[].id entry this targets \u2014 must name an entry the document itself composes.",
+                        "pass": {
+                          "description": "The views.post[].name this targets \u2014 must name a row of this document.",
                           "type": "string"
                         },
                         "field": {
-                          "description": "The extension\u0027s config field name \u2014 checked against its manifest at boot, never here (the same shallow-then-deep precedent every kind-vocabulary field follows).",
+                          "description": "The pass\u0027s package config field name \u2014 checked against the package\u0027s schema at boot, never here (the same shallow-then-deep precedent every kind-vocabulary field follows).",
                           "type": "string"
                         }
                       },
                       "required": [
-                        "id",
+                        "pass",
                         "field"
                       ],
                       "additionalProperties": false,
-                      "title": "WorldProbeParameterTargetExtension"
+                      "title": "WorldProbeParameterTargetPost"
                     },
                     {
                       "description": "Writes a config field of another declared probe\u0027s kind, live, into its running kernel \u2014 one probe\u0027s reading steering another\u0027s computation (a tracked centroid placing a relighting kind\u0027s light).",

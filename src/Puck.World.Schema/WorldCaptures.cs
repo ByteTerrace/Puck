@@ -28,7 +28,7 @@ public sealed record WorldCapturePaletteEntry(int Material, string Color);
 /// indices.</param>
 /// <param name="Instance">The render-graph instance whose output the station captures, or <see langword="null"/> (the
 /// default) for the root, the frame the display shows. <see cref="WorldViewGraphs.WorldInstance"/> captures the SDF
-/// world before any <c>render.extensions</c> pass or the overlay is drawn over it.</param>
+/// world before any <c>views.post</c> pass or the overlay is drawn over it.</param>
 public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Ticks, IReadOnlyList<WorldCapturePaletteEntry> Palette,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instance = null) {
     /// <summary>The generated name of one capture: the station and the tick joined as a file name

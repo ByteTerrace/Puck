@@ -68,9 +68,11 @@ public sealed class GpuRegion : IDisposable {
 
     private readonly byte[] m_contents;
     private readonly IGpuComputePipeline? m_copyPipeline;
+
     // The staged policy's copy sets: its share of its owner's reserved pool, or of its own; null under the other
-    // policies.
-    private readonly GpuRegionCopySets? m_copySets;
+    // policies. MoveCopySets hands a reserved region another share.
+    private GpuRegionCopySets? m_copySets;
+
     private readonly IGpuBindings m_bindings;
     private readonly IGpuBuffer? m_destination;
     private readonly bool m_external;
@@ -396,6 +398,31 @@ public sealed class GpuRegion : IDisposable {
             : (CopyMaxGroupsPerDimension, ((uint)((groups + (CopyMaxGroupsPerDimension - 1UL)) / CopyMaxGroupsPerDimension)))
         );
     }
+    /// <summary>Returns the bytes of the buffers a region that owns its destination creates: one host-visible buffer per
+    /// slot under the ring, the one shared buffer in place, and under the staged policy one staging buffer per slot (the
+    /// header and run-table reserve before the region's bytes) and the device-local destination. It is each buffer's
+    /// logical size, not the backend's allocation.</summary>
+    /// <param name="policy">The residency policy.</param>
+    /// <param name="byteCount">The region's size in bytes; positive.</param>
+    /// <param name="slotCount">The owner's frame slots; positive.</param>
+    /// <returns>The bytes.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> is not a defined value, or
+    /// <paramref name="byteCount"/> or <paramref name="slotCount"/> is not positive.</exception>
+    public static ulong BytesOf(GpuResidencyPolicy policy, int byteCount, int slotCount) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: byteCount);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: slotCount);
+
+        return policy switch {
+            GpuResidencyPolicy.Ring => checked((((ulong)byteCount) * ((ulong)slotCount))),
+            GpuResidencyPolicy.InPlace => ((ulong)byteCount),
+            GpuResidencyPolicy.Staged => checked(((((((ulong)CopyBlockBase) * sizeof(uint)) + ((ulong)byteCount)) * ((ulong)slotCount)) + ((ulong)byteCount))),
+            _ => throw new ArgumentOutOfRangeException(
+                actualValue: policy,
+                message: "The residency policy is not defined.",
+                paramName: nameof(policy)
+            ),
+        };
+    }
 
     /// <summary>Gets the region's size in bytes.</summary>
     public int ByteCount { get; }
@@ -566,6 +593,39 @@ public sealed class GpuRegion : IDisposable {
         );
         owed.Clear();
         m_stagedSlot = -1;
+    }
+    /// <summary>Moves a staged region whose owner reserved its copy sets to another share, one the owner reserved since,
+    /// such as the pool of a graph that replaced the one the region was created with. The region writes a slot's set of
+    /// the new share before it records that slot's next copy, and never touches its old share again, so the owner may
+    /// dispose the old pool once no submission that recorded a copy with it is in flight. Contents and owed words are
+    /// unchanged.</summary>
+    /// <param name="copySets">The new share, of a pool holding the region's number of slots.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="copySets"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The region is not staged, or it created its own copy pool.</exception>
+    /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
+    /// <see cref="SlotCount"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public void MoveCopySets(GpuRegionCopySets copySets) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+        ArgumentNullException.ThrowIfNull(copySets);
+
+        if (
+            (Policy != GpuResidencyPolicy.Staged) ||
+            (m_ownedCopyPool is not null)
+        ) {
+            throw new InvalidOperationException(message: "Only a staged region whose owner reserved its copy sets moves to another share.");
+        }
+        if (copySets.SlotCount != SlotCount) {
+            throw new ArgumentException(
+                message: $"The copy sets hold {copySets.SlotCount} slot(s), but the region has {SlotCount}.",
+                paramName: nameof(copySets)
+            );
+        }
+
+        m_copySets = copySets;
     }
     /// <summary>Moves an external destination's landing point: the region's word 0 lands at
     /// <paramref name="destinationWord"/> from the next copy on, and since what the destination holds there is

@@ -228,8 +228,10 @@ every tick carries the ray. A rule reads the hit as
 `WorldScreenMappings.Normalized` (source-normalized `x`/`y` in `[0, 1)`, `on`
 1 on the source, all 0 otherwise); a screen whose `input` is not `Simulation`
 is refused for it at compile time. `world.screens` echoes `input:<destination>`
-per screen and `body.channels` echoes the seat's ray and hits. No machine reads
-a mapped pixel yet; the `rendering` skill owns the mapping itself.
+and the mapping the presentation publishes for the row (named by its source
+instance, at its image's extent) per screen, and `body.channels` echoes the
+seat's ray and hits. No machine reads a mapped pixel yet; the `rendering` skill
+owns the mapping itself.
 
 ## `Dissolve` — three outcomes, no repair
 

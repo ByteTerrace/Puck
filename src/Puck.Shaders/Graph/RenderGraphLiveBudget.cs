@@ -8,9 +8,11 @@ namespace Puck.Shaders;
 /// The live budget a runtime spends: what its latest schedule (<see cref="RenderGraphRuntime.Latest"/>) decided for
 /// every instance, read back as text. Each instance's row names it, what the scheduler decided (rendered, waiting,
 /// deferred or unread), the extent it renders at (a graph instance's quantized footprint, a source's negotiated
-/// extent), its rate as a frame divisor, the passes one render records and the pass-pixels it spent this frame, and the
-/// work its newest completed submission counted (<see cref="RenderGraphRuntime.Work"/>): the passes that executed of
-/// those recorded, and their dispatches and draws. Every figure is a count; nothing is timed. A reader reuses one
+/// extent), its rate as a frame divisor, the passes one render records and the pass-pixels it spent this frame, for an
+/// instance that renders a graph the bytes of the host-written regions its installed graph reads
+/// (<see cref="RenderGraphRuntime.RegionBytes"/>), and the work its newest completed submission counted
+/// (<see cref="RenderGraphRuntime.Work"/>): the passes that executed of those recorded, and their dispatches and draws.
+/// Every figure is a count; nothing is timed. A reader reuses one
 /// instance, which reuses one <see cref="GpuWorkSample"/>, so a steady read into a builder with room allocates nothing.
 /// </summary>
 public sealed class RenderGraphLiveBudget {
@@ -117,6 +119,13 @@ public sealed class RenderGraphLiveBudget {
                 .Append(value: ' ')
                 .Append(value: row.PassPixels)
                 .Append(value: " pass-pixels");
+
+            if (runtime.RegionBytes(instance: index) is { } regionBytes) {
+                _ = into.Append(value: " regions ")
+                    .Append(value: regionBytes)
+                    .Append(value: " bytes");
+            }
+
             AppendLedger(
                 into: into,
                 work: runtime.Work(instance: index)

@@ -826,23 +826,12 @@ public static partial class WorldDecompiler {
                 sb.AppendLine();
             }
             first = false;
-            if (v is JsonObject subObj) {
-                DecompileNamedBlock(
-                    sb,
-                    k,
-                    null,
-                    subObj,
-                    indentLevel: 1
-                );
-            } else {
-                sb.AppendLine(
-                    CultureInfo.InvariantCulture,
-                    $"    {PuckPrinter.PrintPropertyName(level: 1, name: k)}: {FormatValue(
-                        indentLevel: 1,
-                        node: v
-                    )}"
-                );
-            }
+            EmitField(
+                indentLevel: 1,
+                key: k,
+                sb: sb,
+                value: v
+            );
         }
 
         sb.AppendLine(value: "}");

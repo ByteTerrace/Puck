@@ -1,4 +1,4 @@
-# The same frames of a world that authors no render.extensions, so no pass composes over the world's output.
+# The same frames of a world that authors no views.post, so no pass composes over the world's output.
 # The engine ready first: its pipeline set installed and its first frame produced, however long a cold driver
 # cache takes.
 world.wait ready 45

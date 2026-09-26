@@ -105,7 +105,8 @@ public sealed partial class ShaderPipelineRenderNode {
         // The graph's frame region, on the pass that created it; null on every other pass.
         public GpuRegion? FrameRegion;
         // The regions a package pass's package states, which the node flushes and copies (ShaderPipelineRenderNode.Regions.cs),
-        // and the copy sets reserved for the staged ones; null for a pass that states none.
+        // null for a pass that states none; and the graph's copy pool, reserving every staged region's sets, on its first
+        // pass and null on every other.
         public GpuRegion[]? Regions;
         public GpuRegionCopyPool? RegionCopySets;
 

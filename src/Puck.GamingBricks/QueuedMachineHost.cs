@@ -57,6 +57,10 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <inheritdoc/>
     public nint NativeImageViewHandle => m_worker.NativeImageViewHandle;
     /// <inheritdoc/>
+    public int Height => m_worker.Height;
+    /// <inheritdoc/>
+    public int Width => m_worker.Width;
+    /// <inheritdoc/>
     public long PendingSteps => m_worker.PendingSteps;
     /// <inheritdoc/>
     public string? QueueFault => m_worker.QueueFault;
