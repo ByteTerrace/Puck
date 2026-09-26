@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Assets.Textures;
 using Puck.SignedDistance.Baking;
@@ -86,7 +87,7 @@ public sealed class SdfBakerLawTests {
             var (width, height) = texture.LevelExtent(level: level);
 
             Assert.Equal(expected: ((texture.Width >> level), (texture.Height >> level)), actual: (width, height));
-            Assert.Equal(expected: TextureFormats.LevelBytes(format: texture.Format, height: height, width: width), actual: texture.Levels[level].LongLength);
+            Assert.Equal(expected: GpuPixelFormats.LevelByteLength(format: texture.Format, height: ((uint)height), width: ((uint)width)), actual: ((ulong)texture.Levels[level].LongLength));
         }
     }
 
@@ -313,14 +314,15 @@ public sealed class SdfBakerLawTests {
         // The sphere is all material 0, which emits nothing: every level decodes to zero light, and every block is the
         // one block the encoder writes for a uniform dark block.
         var impostor = Bake(name: "sphere", quality: SdfBakeQuality.Standard).Impostor;
-        var constant = impostor.Emission.Levels[0].AsSpan(length: Bc6hCodec.BlockBytes, start: 0).ToArray();
+        var blockBytes = ((int)GpuPixelFormats.UnitBytes(format: GpuPixelFormat.Bc6hUfloat));
+        var constant = impostor.Emission.Levels[0].AsSpan(length: blockBytes, start: 0).ToArray();
 
         for (var level = 0; (level < impostor.Emission.Levels.Count); level++) {
             var blocks = impostor.Emission.Levels[level];
             var decoded = impostor.Emission.Decode(level: level);
 
-            for (var at = 0; (at < blocks.Length); at += Bc6hCodec.BlockBytes) {
-                Assert.Equal(expected: constant, actual: blocks.AsSpan(length: Bc6hCodec.BlockBytes, start: at).ToArray());
+            for (var at = 0; (at < blocks.Length); at += blockBytes) {
+                Assert.Equal(expected: constant, actual: blocks.AsSpan(length: blockBytes, start: at).ToArray());
             }
 
             for (var texel = 0; (texel < (decoded.Length / 8)); texel++) {

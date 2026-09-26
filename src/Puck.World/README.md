@@ -413,8 +413,11 @@ A layout slot shows the instance by naming it with `instance`; it can instead
 select a `camera`, but cannot select both. The root graph places each pane
 over the world at its slot's rect, renders it at the slot's size, and feeds it
 the slot's pointer; a pane the active layout does not show is not rendered,
-and a layout change places panes one frame later. The row's optional camera
-supplies shader camera inputs, and `timeScale` seeds its presentation clock.
+and a layout change places panes one frame later. A pane or split-screen view
+under the pointer is outlined in the accent hue, and `world.view.panes`
+reports it as `hovered=`
+([pointing at a displayed source](../../docs/reference/commands.md#pointing-at-a-displayed-source)).
+The row's optional camera supplies shader camera inputs, and `timeScale` seeds its presentation clock.
 A row also takes a refresh divisor or rate and inputs bound to other rows'
 outputs, with `views.graphBudget` as the scheduler's pass-pixel ceiling and
 the bound parameters' byte ceilings, and

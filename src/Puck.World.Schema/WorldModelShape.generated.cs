@@ -3325,7 +3325,7 @@ public static partial class WorldModelShape {
                 M("presentation", typeof(global::Puck.World.WorldHostPresentation), typeof(global::Puck.World.WorldHostDefaults), "Presentation", Read | Write),
                 M("width", typeof(global::System.Int32), typeof(global::Puck.World.WorldHostDefaults), "Width", Read | Write),
                 M("height", typeof(global::System.Int32), typeof(global::Puck.World.WorldHostDefaults), "Height", Read | Write),
-                M("surfaceFormat", typeof(global::Puck.Abstractions.Presentation.SurfaceFormat), typeof(global::Puck.World.WorldHostDefaults), "SurfaceFormat", Read | Write),
+                M("surfaceFormat", typeof(global::Puck.Abstractions.Gpu.GpuPixelFormat), typeof(global::Puck.World.WorldHostDefaults), "SurfaceFormat", Read | Write),
                 M("fullscreen", typeof(global::System.Boolean), typeof(global::Puck.World.WorldHostDefaults), "Fullscreen", Read | Write),
                 M("presentMode", typeof(global::Puck.Abstractions.Presentation.PresentMode), typeof(global::Puck.World.WorldHostDefaults), "PresentMode", Read | Write),
                 M("targetHertz", typeof(global::System.Double), typeof(global::Puck.World.WorldHostDefaults), "TargetHertz", Read | Write),

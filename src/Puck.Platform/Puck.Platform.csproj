@@ -14,6 +14,7 @@
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.Abstractions.Capture" />
+        <Using Include="Puck.Abstractions.Gpu" />
         <Using Include="Puck.Abstractions.Memory" />
         <Using Include="Puck.Abstractions.Pacing" />
         <Using Include="Puck.Abstractions.Presentation" />

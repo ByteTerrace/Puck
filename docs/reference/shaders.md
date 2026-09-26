@@ -629,14 +629,7 @@ binding allocator is consulted:
 - Every gap is filled with a `uint` padding member named `_pad<offset>`.
 - An interface may push one 4-byte index (`ShaderInterface.PushesIndex`),
   described under [the pushed index](#the-pushed-index). It is the one value a
-  pipeline pushes.
-- The interface model can still declare its frame group's block as pushed
-  (`ShaderInterface.PushConstants`): a pushed constant-buffer binding
-  (`ShaderInterfaceBinding.Pushed`) at set 0, binding 0, laid out by the same
-  rule and declared `[[vk::push_constant]]` with `register(b0, space0)`. No
-  shipped interface does, and no pipeline can be created from one (see below).
-  A pushed group holds values and arrays only, and an interface pushes its
-  frame block or an index, never both.
+  pipeline pushes; every group's block is bound as a constant buffer.
 
 `ShaderInterfaceHlsl.Generate` writes the include a pass reads, named
 `<interface>.interface.hlsli`. It declares one struct per group, named for the
@@ -654,9 +647,9 @@ comparison holds both kinds of bytecode to the same layout. A record's kind is
 a `GpuBindingKind` (`src/Puck.Abstractions/Gpu/Bindings`), the one closed set
 of binding kinds: constant buffer, read-only buffer, read-write buffer,
 sampled image, storage image and sampler. Push constants are not a kind. A
-pushed block is a constant buffer marked `Pushed`, which only SPIR-V can tell
-apart; DXIL reflects a pushed frame block as the constant buffer at `b0`,
-space 0, which `ShaderInterfaceLayout.DxilBindings` states. A buffer record
+pushed block, the pushed index, is a constant buffer marked `Pushed`, which
+only SPIR-V can tell apart; DXIL reflects it as the constant buffer at `b0` in
+space 4, which `ShaderInterfaceLayout.DxilBindings` states. A buffer record
 carries its `ElementStride` ([buffer elements](#buffer-elements)).
 
 - `SpirvInterfaceReader` parses a SPIR-V module's `DescriptorSet`, `Binding`,
@@ -721,18 +714,16 @@ two buffers as one set at group 0; such a list holds only buffers and storage
 images (`GpuComputeBinding`), so a sampled image or a sampler always belongs to
 a group.
 
-An interface that pushes its frame block has no pipeline layout:
-`ShaderInterfaceLayout.PipelineLayout` refuses it, because a pipeline pushes
-only an index. An interface that pushes an index gives its pipeline layout that
-push ([the pushed index](#the-pushed-index)).
+An interface that pushes an index gives its pipeline layout that push
+([the pushed index](#the-pushed-index)).
 
 `ShaderInterfaceLayout.Mismatch` names how a compiled module reads a binding, a
 block member, an offset or a buffer stride other than as laid out; a load runs
 it over every document pass's SPIR-V and a package build over both bytecodes.
 It holds the module's records to one backend's view at a time, `Bindings` or
 `DxilBindings`, and accepts them when every record fits the same view, so a
-pushed frame block and a pushed index, which SPIR-V reports at the same place,
-are told apart by their members.
+bound frame block and a pushed index, which SPIR-V reports at the same place,
+are told apart.
 `ShaderInterfaceEcho.Generate` writes an interface's echo pass: a compute pass
 that reads every word of every block member, in set order, through the
 generated declarations, compares it with the
@@ -779,9 +770,8 @@ a `Mismatch` on both backends that names both strides.
 ### The pushed index
 
 An interface constructed with `pushesIndex: true` declares that its pipeline
-pushes one 4-byte index, the one value a grouped pipeline can push; an
-interface pushes its frame block or an index, never both, and refuses the pair
-by name. The SDF engine's brick baker (`SdfWorldInterfaces.BrickBake`, the
+pushes one 4-byte index, the one value a grouped pipeline can push. The SDF
+engine's brick baker (`SdfWorldInterfaces.BrickBake`, the
 interface `sdf-brick-bake`) is the one shipped interface that declares it: it
 pushes each dispatch's slice ordinal. After the groups its include declares:
 

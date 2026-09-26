@@ -38,7 +38,7 @@ public abstract record ProbeKernelInput {
     /// <param name="Format">The ring's pixel format.</param>
     /// <param name="SharedTargetHandles">The ring's shared textures (opaque NT handles on Windows), two or more.</param>
     /// <param name="Slots">The publication the graph acquires the latest completed slot from.</param>
-    public sealed record Ring(int Width, int Height, SurfaceFormat Format, IReadOnlyList<nint> SharedTargetHandles, ISharedSlotRing Slots) : ProbeKernelInput;
+    public sealed record Ring(int Width, int Height, GpuPixelFormat Format, IReadOnlyList<nint> SharedTargetHandles, ISharedSlotRing Slots) : ProbeKernelInput;
     /// <summary>An optional socket left unbound — one register, always a null SRV.</summary>
     public sealed record Unbound() : ProbeKernelInput;
 }
@@ -57,7 +57,7 @@ public static class ProbeKernelInputLimits {
 /// <param name="TargetFormat">The ring's pixel format.</param>
 /// <param name="SharedTargetHandles">The ring's shared textures (opaque NT handles on Windows), two or more.</param>
 /// <param name="Slots">The publication the consumer acquires completed slots from; configured for the ring's size.</param>
-public readonly record struct ProbeKernelOutput(int Width, int Height, SurfaceFormat TargetFormat, IReadOnlyList<nint> SharedTargetHandles, LatestSlotPublication Slots);
+public readonly record struct ProbeKernelOutput(int Width, int Height, GpuPixelFormat TargetFormat, IReadOnlyList<nint> SharedTargetHandles, LatestSlotPublication Slots);
 /// <summary>One kernel-class probe's request: the kernel's precompiled entry points, the packed constant-buffer bytes
 /// bound from the kind's config, its declared sockets, which camera sensor's frame triggers a cycle, and its optional
 /// texture output. The kernel runs on the camera graph's own device and worker thread, which creates it from the

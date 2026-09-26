@@ -994,7 +994,7 @@ internal static class Fixtures {
         Backend: WorldBackendPreference.Auto,
         Width: 1280,
         Height: 800,
-        SurfaceFormat: Puck.Abstractions.Presentation.SurfaceFormat.R8G8B8A8Unorm,
+        SurfaceFormat: Puck.Abstractions.Gpu.GpuPixelFormat.R8G8B8A8Unorm,
         Fullscreen: false,
         PresentMode: Puck.Abstractions.Presentation.PresentMode.Immediate,
         TargetHertz: 0.0,

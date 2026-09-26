@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Runtime.Versioning;
-using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Gpu;
 using Puck.Platform.Probes;
 using Xunit;
 
@@ -74,7 +74,7 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
             Inputs: [new ProbeKernelInput.Ring(
                     Width: KernelBench.FrameWidth,
                     Height: KernelBench.FrameHeight,
-                    Format: SurfaceFormat.R8G8B8A8Unorm,
+                    Format: GpuPixelFormat.R8G8B8A8Unorm,
                     SharedTargetHandles: [target.SharedHandle, ((nint)1)],
                     Slots: slots
                 )],

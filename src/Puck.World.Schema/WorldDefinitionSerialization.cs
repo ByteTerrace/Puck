@@ -6,8 +6,8 @@ using System.Text.Json.Schema;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -197,7 +197,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldQrSettings))]
 [JsonSerializable(typeof(WorldTestPatternSettings))]
 // The host-section defaults row (the world.row.set host payload shape + the document `host` section). WorldBackendPreference
-// and SurfaceFormat ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit
+// and the surface format ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit
 // "directX" / "r8G8B8A8Unorm"; PresentMode keeps the generic camelCase converter (immediate/adaptive/…).
 [JsonSerializable(typeof(WorldHostDefaults))]
 // The LOOK rows (the world.row.set looks payload shape + the document `looks`/`lookAssignment` sections). The polymorphic
@@ -933,20 +933,19 @@ internal sealed class WorldBackendPreferenceJsonConverter() : TokenEnumJsonConve
     protected override string ToToken(WorldBackendPreference value) => WorldHostTokens.BackendToken(backend: value);
 }
 /// <summary>
-/// Reads and writes the two authorable <see cref="SurfaceFormat"/> values as explicit tokens (<c>r8g8b8a8</c> /
-/// <c>b8g8r8a8</c>), which would otherwise emit the unreadable <c>r8G8B8A8Unorm</c>.
-/// <see cref="SurfaceFormat.Unknown"/> and any other member are rejected at read (the validator also rejects
-/// <see cref="SurfaceFormat.Unknown"/> — the hole the Demo's string list could not express). The
-/// <c>world.host</c> read-back prints through the same map.
+/// Reads and writes the two authorable surface formats, <see cref="GpuPixelFormat.R8G8B8A8Unorm"/> and
+/// <see cref="GpuPixelFormat.B8G8R8A8Unorm"/>, as explicit tokens (<c>r8g8b8a8</c> / <c>b8g8r8a8</c>), which would
+/// otherwise emit the unreadable <c>r8G8B8A8Unorm</c>. Any other member is rejected at read, and the validator rejects
+/// one set another way. The <c>world.host</c> read-back prints through the same map.
 /// </summary>
-internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<SurfaceFormat>(
+internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<GpuPixelFormat>(
     "surfaceFormat",
     [WorldHostTokens.SurfaceFormatRgba, WorldHostTokens.SurfaceFormatBgra]
 ) {
     /// <inheritdoc/>
-    protected override SurfaceFormat? Parse(string? token) => WorldHostTokens.ParseSurfaceFormat(token: token);
+    protected override GpuPixelFormat? Parse(string? token) => WorldHostTokens.ParseSurfaceFormat(token: token);
     /// <inheritdoc/>
-    protected override string ToToken(SurfaceFormat value) => WorldHostTokens.SurfaceFormatToken(format: value);
+    protected override string ToToken(GpuPixelFormat value) => WorldHostTokens.SurfaceFormatToken(format: value);
 }
 /// <summary>
 /// Reads and writes a <see cref="Puck.Abstractions.Presentation.QualityTier"/> as its name (<c>low</c> / <c>medium</c>

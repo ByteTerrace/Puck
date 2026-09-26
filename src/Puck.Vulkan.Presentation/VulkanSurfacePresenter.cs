@@ -95,8 +95,7 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
             captureImport: ref m_captureImport,
             captureReadback: ref m_captureReadback,
             deviceContext: m_renderer,
-            surface: surface,
-            toGpuFormat: GpuPixelFormats.FromSurfaceFormat
+            surface: surface
         );
     }
     /// <inheritdoc/>

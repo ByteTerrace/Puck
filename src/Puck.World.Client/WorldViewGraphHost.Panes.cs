@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
@@ -15,10 +16,20 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     private int m_displayHeight = 1;
     private int m_displayWidth = 1;
 
+    private SourceMapping? m_hovered;
+    private SourcePick m_hoveredPick;
+
     /// <summary>Gets the display's height, in pixels, as the panes were last published against.</summary>
     public int DisplayHeight => m_displayHeight;
     /// <summary>Gets the display's width, in pixels, as the panes were last published against.</summary>
     public int DisplayWidth => m_displayWidth;
+    /// <summary>Gets the published mapping of the pane under the pointer, as <see cref="Hover"/> last resolved it
+    /// against the panes <see cref="PublishPanes"/> last published, or <see langword="null"/> when the pointer is on no
+    /// pane's source or nothing asked since the panes were published.</summary>
+    public SourceMapping? HoveredPane => m_hovered;
+    /// <summary>Gets the picker's answer for the hovered pane: its source and the source pixel under the pointer;
+    /// default while <see cref="HoveredPane"/> is <see langword="null"/>.</summary>
+    public SourcePick HoveredPick => m_hoveredPick;
     /// <summary>Gets the mapping of every pane the root's <c>place</c> passes draw, in drawing order (the views, then the
     /// <c>views.graphs</c> panes), as <see cref="PublishPanes"/> last published it. The host rewrites the list in
     /// place.</summary>
@@ -38,13 +49,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// instance by <see cref="RenderGraphInstance.Handle"/> and showing its whole image at the extent the runtime's
     /// latest schedule renders it at. A placement whose instance has not rendered yet, or that covers no area, publishes
     /// nothing; neither does a view the root stands for, which no <c>place</c> pass draws. A frame whose placements,
-    /// extents and instances hold publishes the mappings it published before, allocating nothing.</summary>
+    /// extents and instances hold publishes the mappings it published before, allocating nothing. Publishing clears the
+    /// hovered pane until <see cref="Hover"/> asks again, so no hover outlives the panes it was picked from.</summary>
     /// <param name="displayWidth">The display's width, in pixels.</param>
     /// <param name="displayHeight">The display's height, in pixels.</param>
     public void PublishPanes(uint displayWidth, uint displayHeight) {
         m_displayWidth = ((int)Math.Clamp(max: int.MaxValue, min: 1u, value: displayWidth));
         m_displayHeight = ((int)Math.Clamp(max: int.MaxValue, min: 1u, value: displayHeight));
         m_panes.Clear();
+        ClearHover();
 
         if (
             (m_runtime is { Latest: { } latest } runtime) &&
@@ -79,6 +92,40 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             displayWidth: m_displayWidth,
             panes: m_panes
         );
+    }
+    /// <summary>Forgets the hovered pane: the pointer left the display, or its presentation shows none.</summary>
+    public void ClearHover() {
+        m_hovered = null;
+        m_hoveredPick = default;
+    }
+    /// <summary>Resolves the pane under the pointer, the presentation destination's hover: asks <see cref="Picker"/> for
+    /// the topmost published pane whose source holds the point and keeps its mapping as <see cref="HoveredPane"/>. A point
+    /// on a letterbox bar or bezel, or on no pane, hovers nothing, and a pane the layout does not show was never
+    /// published, so it is never hovered. Allocates nothing.</summary>
+    /// <param name="point">The pointer, in display pixels from the display's top-left corner.</param>
+    /// <returns>The hovered pane's mapping, or <see langword="null"/>.</returns>
+    public SourceMapping? Hover(Vector2 point) {
+        ClearHover();
+
+        if (!Picker.TryPick(
+            pick: out var pick,
+            point: point
+        )) {
+            return null;
+        }
+
+        // The picker names the pane's source; panes are listed in drawing order and the topmost wins, so the last
+        // pane showing that source is the one picked.
+        for (var index = (m_panes.Count - 1); (index >= 0); index--) {
+            if (m_panes[index].Source == pick.Source) {
+                m_hovered = m_panes[index];
+                m_hoveredPick = pick;
+
+                break;
+            }
+        }
+
+        return m_hovered;
     }
     /// <summary>Records the camera an instance renders from this frame, which a hit on its image continues through.</summary>
     /// <param name="instance">The instance's name.</param>

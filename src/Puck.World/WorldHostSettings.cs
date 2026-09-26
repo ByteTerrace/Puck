@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 
 namespace Puck.World;
@@ -45,7 +46,7 @@ public sealed record WorldHostSettings(
     bool BackendDowngraded,
     int Width,
     int Height,
-    SurfaceFormat SurfaceFormat,
+    GpuPixelFormat SurfaceFormat,
     bool Fullscreen,
     PresentMode PresentMode,
     double TargetHertz,

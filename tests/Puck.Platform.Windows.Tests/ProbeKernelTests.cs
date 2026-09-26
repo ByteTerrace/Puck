@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
-using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Gpu;
 using Puck.Platform.Probes;
 using Xunit;
 
@@ -163,7 +163,7 @@ public sealed class ProbeKernelTests {
             Inputs: [new ProbeKernelInput.Ring(
                     Width: FrameWidth,
                     Height: FrameHeight,
-                    Format: SurfaceFormat.R8G8B8A8Unorm,
+                    Format: GpuPixelFormat.R8G8B8A8Unorm,
                     SharedTargetHandles: sharedRing.Handles,
                     Slots: sharedRing.Slots
                 )],
@@ -280,7 +280,7 @@ public sealed class ProbeKernelTests {
             Output: new ProbeKernelOutput(
                 Width: FrameWidth,
                 Height: FrameHeight,
-                TargetFormat: SurfaceFormat.R8G8B8A8Unorm,
+                TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
                 SharedTargetHandles: [targets[0].SharedHandle, targets[1].SharedHandle],
                 Slots: slots
             )
@@ -398,7 +398,7 @@ public sealed class ProbeKernelTests {
             Output: new ProbeKernelOutput(
                 Width: FrameWidth,
                 Height: FrameHeight,
-                TargetFormat: SurfaceFormat.R8G8B8A8Unorm,
+                TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
                 SharedTargetHandles: [targets[0].SharedHandle, targets[1].SharedHandle],
                 Slots: slots
             )
@@ -562,7 +562,7 @@ public sealed class ProbeKernelTests {
                 new ProbeKernelInput.Ring(
                     Width: FrameWidth,
                     Height: FrameHeight,
-                    Format: SurfaceFormat.R8G8B8A8Unorm,
+                    Format: GpuPixelFormat.R8G8B8A8Unorm,
                     SharedTargetHandles: paintingRing.Handles,
                     Slots: paintingRing.Slots
                 ),
@@ -571,7 +571,7 @@ public sealed class ProbeKernelTests {
             Output: new ProbeKernelOutput(
                 Width: FrameWidth,
                 Height: FrameHeight,
-                TargetFormat: SurfaceFormat.R8G8B8A8Unorm,
+                TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
                 SharedTargetHandles: [targets[0].SharedHandle, targets[1].SharedHandle],
                 Slots: slots
             )
@@ -675,7 +675,7 @@ public sealed class ProbeKernelTests {
             Output: new ProbeKernelOutput(
                 Width: FrameWidth,
                 Height: FrameHeight,
-                TargetFormat: SurfaceFormat.R8G8B8A8Unorm,
+                TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
                 SharedTargetHandles: [targets[0].SharedHandle, targets[1].SharedHandle],
                 Slots: slots
             )

@@ -1,14 +1,11 @@
-using Puck.Abstractions.Presentation;
-
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
-/// Backend-neutral GPU resource pixel formats. Each backend maps these to its native format values.
-/// Deliberately distinct from <see cref="SurfaceFormat"/>: that enum is the presentable-surface vocabulary
-/// (what a swapchain, window, or capture produces), while this one describes GPU resources (storage images,
-/// render targets, sampled textures) and is free to grow GPU-only members with no presentable equivalent. The explicit
-/// <see cref="GpuPixelFormats.FromSurfaceFormat"/> bridge marks exactly where a presentable format enters
-/// GPU-resource land.
+/// The one pixel-format vocabulary: the layout of an image's texels wherever they live. A GPU resource (a storage
+/// image, a render target, a sampled texture, a swapchain image) is created in one, a presented or captured
+/// <see cref="Presentation.Surface"/> declares one, and a baked texture's levels and the block codecs of
+/// <c>Puck.Assets.Textures</c> are stored in one. Each backend maps a member to its native format value, and
+/// <see cref="GpuPixelFormats"/> states each member's byte layout once.
 /// </summary>
 public enum GpuPixelFormat : uint {
     /// <summary>The R8G8B8A8 unsigned normalized format.</summary>
@@ -43,9 +40,15 @@ public enum GpuPixelFormat : uint {
     /// (Vulkan <c>A2B10G10R10_UNORM_PACK32</c>, <c>DXGI_FORMAT_R10G10B10A2_UNORM</c>). A swapchain may be created in
     /// it.</summary>
     R10G10B10A2Unorm = 12,
+    /// <summary>One 8-bit unsigned normalized channel (Vulkan <c>R8_UNORM</c>, <c>DXGI_FORMAT_R8_UNORM</c>).</summary>
+    R8Unorm = 13,
+    /// <summary>Two 8-bit unsigned normalized channels, red first (Vulkan <c>R8G8_UNORM</c>,
+    /// <c>DXGI_FORMAT_R8G8_UNORM</c>).</summary>
+    R8G8Unorm = 14,
 }
 /// <summary>
-/// Conversions into the <see cref="GpuPixelFormat"/> vocabulary, and the byte layout of its images.
+/// The byte layout of <see cref="GpuPixelFormat"/> images: the one statement of each format's texel or block size, and
+/// the level and mip-chain lengths an upload, a block codec and a bake read from it.
 /// </summary>
 public static class GpuPixelFormats {
     /// <summary>The texels along each edge of a block-compressed format's block.</summary>
@@ -67,6 +70,8 @@ public static class GpuPixelFormats {
     /// <returns>The bytes per texel, or per block for a block-compressed format.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The format is not defined.</exception>
     public static uint UnitBytes(GpuPixelFormat format) => format switch {
+        GpuPixelFormat.R8Unorm => 1U,
+        GpuPixelFormat.R8G8Unorm => 2U,
         GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.D32Float or GpuPixelFormat.R8G8B8A8Srgb
             or GpuPixelFormat.B8G8R8A8Srgb or GpuPixelFormat.R10G10B10A2Unorm => 4U,
         GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.Bc4Unorm => 8U,
@@ -167,18 +172,8 @@ public static class GpuPixelFormats {
 
         return required;
     }
-    /// <summary>Converts a <see cref="SurfaceFormat"/> to its <see cref="GpuPixelFormat"/> equivalent.</summary>
-    public static GpuPixelFormat FromSurfaceFormat(SurfaceFormat format) {
-        return format switch {
-            SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
-            SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
-            _ => throw new ArgumentOutOfRangeException(
-            actualValue: format,
-            message: "The surface format has no GPU pixel format mapping.",
-            paramName: nameof(format)
-        ),
-        };
-    }
-
-    private static ulong BlocksAcross(uint texels) => (((((ulong)texels) + BlockTexels) - 1UL) / BlockTexels);
+    /// <summary>Gets the blocks along an edge of a block-compressed image, a partial block counting as one.</summary>
+    /// <param name="texels">The edge, in texels.</param>
+    /// <returns>The blocks.</returns>
+    public static ulong BlocksAcross(uint texels) => (((((ulong)texels) + BlockTexels) - 1UL) / BlockTexels);
 }
