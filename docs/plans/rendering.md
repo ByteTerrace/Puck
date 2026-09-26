@@ -2697,8 +2697,8 @@ except step 8.
    made before the writer writes, cannot retire until the signal, and then reads
    the pattern; the Vulkan law imports the fence and holds a submission waiting
    on it unretired until the Direct3D 11 signal, and skips by name on a device
-   without the extension. WARP's Direct3D 11 device opens a shared fence
-   created on a WARP Direct3D 12 device. Still open: a recorded camera run on
+   without the extension. Whether WARP's Direct3D 11 device opens a shared fence
+   is what the law's WARP case answers; it has not run yet. Still open: a recorded camera run on
    both backends on real hardware, and the capture GPU route, which publishes
    its slot's value but acquires no lease until step 2.
 5. The capture gate over the graph. Can land now, after step 2. The gate
