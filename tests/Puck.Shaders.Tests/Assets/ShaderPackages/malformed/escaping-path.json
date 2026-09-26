@@ -43,24 +43,6 @@
   "passes": [
     {
       "name": "blur",
-      "stages": [
-        {
-          "stage": "Compute",
-          "entryPoint": "main",
-          "profile": "cs_6_6",
-          "steps": [
-            {
-              "tool": "dxc",
-              "options": [
-                "-T",
-                "cs_6_6",
-                "-E",
-                "main"
-              ]
-            }
-          ]
-        }
-      ],
       "interface": {
         "path": "blur.interface.json",
         "pin": "sha256/0000000000000000000000000000000000000000000000000000000000000000",
@@ -74,6 +56,24 @@
       "variants": [
         {
           "name": "default",
+          "stages": [
+            {
+              "stage": "Compute",
+              "entryPoint": "main",
+              "profile": "cs_6_6",
+              "steps": [
+                {
+                  "tool": "dxc",
+                  "options": [
+                    "-T",
+                    "cs_6_6",
+                    "-E",
+                    "main"
+                  ]
+                }
+              ]
+            }
+          ],
           "binaries": [
             {
               "stage": "Compute",

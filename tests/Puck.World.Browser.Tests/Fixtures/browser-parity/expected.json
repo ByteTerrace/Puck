@@ -1,4 +1,85 @@
 {
   "tictactoe-write-then-judge": "14288512152897749991",
-  "tictactoe-judge-twice": "14288512152897749991"
+  "tictactoe-judge-twice": "14288512152897749991",
+  "presentation-cost": {
+    "instances": [
+      {
+        "name": "board",
+        "source": "board.graph.json",
+        "divisor": 1,
+        "hertz": null,
+        "passes": null,
+        "issue": "the document analysis plans no graph source"
+      },
+      {
+        "name": "gauge",
+        "source": "gauge.graph.json",
+        "divisor": 1,
+        "hertz": null,
+        "passes": null,
+        "issue": "the document analysis plans no graph source"
+      }
+    ],
+    "passPixelsPerFrame": "0",
+    "bindings": [
+      {
+        "pipeline": "board",
+        "pass": "draw",
+        "member": "level",
+        "token": "state.level",
+        "elements": 1,
+        "bytesPerTick": "4",
+        "bytesPerFrame": "0"
+      },
+      {
+        "pipeline": "board",
+        "pass": "draw",
+        "member": "tiles",
+        "token": "state.cells",
+        "elements": 8,
+        "bytesPerTick": "128",
+        "bytesPerFrame": "0"
+      },
+      {
+        "pipeline": "board",
+        "pass": "draw",
+        "member": "width",
+        "token": "8",
+        "elements": 0,
+        "bytesPerTick": "0",
+        "bytesPerFrame": "0"
+      },
+      {
+        "pipeline": "gauge",
+        "pass": "fill",
+        "member": "clock",
+        "token": "state.clock",
+        "elements": 1,
+        "bytesPerTick": "4",
+        "bytesPerFrame": "4"
+      },
+      {
+        "pipeline": "gauge",
+        "pass": "fill",
+        "member": "eased",
+        "token": "state.eased.0",
+        "elements": 1,
+        "bytesPerTick": "4",
+        "bytesPerFrame": "4"
+      },
+      {
+        "pipeline": "gauge",
+        "pass": "fill",
+        "member": "stored",
+        "token": "state.eased.0.$target",
+        "elements": 1,
+        "bytesPerTick": "4",
+        "bytesPerFrame": "0"
+      }
+    ],
+    "bytesPerTick": "144",
+    "bytesPerFrame": "8",
+    "bytesPerTickCeiling": "1024",
+    "bytesPerFrameCeiling": "16"
+  }
 }

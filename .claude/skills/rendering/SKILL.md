@@ -1276,8 +1276,15 @@ manifest's pin), and a package refusal fails the instance's compilation with
 its code. Every refusal is a
 `ShaderClosureRefusedException` code: `SHADERSRC_*` for a closure,
 `SHADERPKG_*` for a package. A package carries its sources, each pass's
-interface and generated declarations, and SPIR-V and DXIL per stage for the
-`default` variant; the pass entry records the interface hash. A build holds
+interface and generated declarations, and SPIR-V and DXIL per stage for
+`default` and for each tier its graph declares in `tiers`
+(`RenderGraphDefinition.Variants`, each compiled with `QualityTiers.Define` set
+through `ShaderCompiler.StepsOf`; a graph declaring none, and a one-off shader,
+builds `default` alone, so never build a variant the graph does not declare);
+the pass entry records the interface hash, and a load reads the variant a
+`views.graphs` row's `tier` names (`LoadSource`'s `tier`), falling back to
+`default` for an undeclared tier (`RenderGraphDefinition.VariantOf`) and saying
+so as `tier=low->default` (`ShaderPackageVariant.Spell`). A build holds
 every binary's and each interface's echo pass's reflected frame block to the
 layout (`SHADERPKG_INTERFACE`); a load reads the binaries and runs no tool, so
 never make a package load consult the compiler, and the `no-device-compile`

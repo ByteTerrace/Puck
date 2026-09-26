@@ -1892,6 +1892,8 @@ export type PresentMode = "Vsync" | "Mailbox" | "Immediate" | "Adaptive";
 
 export type Principal = string;
 
+export type QualityTier = "low" | "medium" | "high";
+
 export type RuleGroupDeclaration = {
   /**
    * The group's stable name — unique within the section, and never a rule's name.
@@ -10926,6 +10928,10 @@ export type WorldViewGraph = {
       [k: string]: BindableScalar;
     } | null;
   } | null;
+  /**
+   * The quality tier the instance renders at, from the authored quality vocabulary: the variant of its source's package it loads, or the tier its source compiles for where no package holds it. A tier selects how the passes compute and never what they read, so two documents differing only in a row's tier present the same state. null loads the variant no tier names.
+   */
+  tier?: QualityTier | null;
 };
 
 export type WorldViewGraphBudget = {
@@ -10933,6 +10939,14 @@ export type WorldViewGraphBudget = {
    * The pass-pixels (passes times rendered pixels) those instances may spend in one presented frame; the stalest due instance is admitted first and the rest read their latest completed output. 0 sets no ceiling.
    */
   passPixelsPerFrame?: number;
+  /**
+   * The bytes every bound parameter together may owe its pass on a tick that moves its row, or 0 for no ceiling. A document whose bindings exceed it is refused, naming the graph and the binding that crosses it.
+   */
+  bytesPerTick?: number;
+  /**
+   * The bytes every bound parameter together may owe its pass on each presented frame between ticks, or 0 for no ceiling, refused the same way.
+   */
+  bytesPerFrame?: number;
 };
 
 export type WorldViewGraphInput = {

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Puck.Abstractions;
+using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Hosting;
 
@@ -170,43 +171,55 @@ public sealed partial class ShaderPackager {
                 ));
             }
 
-            var loaded = m_loader.Load(
-                cancellationToken: cancellationToken,
-                name: plan.Definition.Name,
-                path: documentPath
-            );
+            // Every variant compiles from the one source: the default with no tier defined, then each tier the graph declares.
+            var variants = new List<(string Name, CompiledShaderPipeline Pipeline)>(capacity: plan.Definition.Variants.Count);
+            ShaderPipelineLoadResult? loaded = null;
 
-            if (loaded.Pipeline is null) {
-                return new ShaderPackageResult(
-                    Manifest: null,
-                    Message: loaded.Message,
-                    Pipeline: null,
-                    Status: loaded.Status
+            foreach (var tier in plan.Definition.Variants) {
+                var variant = m_loader.Load(
+                    cancellationToken: cancellationToken,
+                    name: plan.Definition.Name,
+                    path: documentPath,
+                    tier: tier
                 );
-            }
 
-            if (!Matches(
-                pipeline: loaded.Pipeline,
-                survey: survey
-            )) {
-                return Changed();
+                if (variant.Pipeline is null) {
+                    return new ShaderPackageResult(
+                        Manifest: null,
+                        Message: ((tier is null)
+                            ? variant.Message
+                            : $"variant '{ShaderPackageVariant.NameOf(tier: tier)}': {variant.Message}"),
+                        Pipeline: null,
+                        Status: variant.Status
+                    );
+                }
+
+                if (!Matches(
+                    pipeline: variant.Pipeline,
+                    survey: survey
+                )) {
+                    return Changed();
+                }
+
+                loaded ??= variant;
+                variants.Add(item: (ShaderPackageVariant.NameOf(tier: tier), variant.Pipeline));
             }
 
             await ReflectAsync(
                 cancellationToken: cancellationToken,
-                pipeline: loaded.Pipeline,
-                survey: survey
+                survey: survey,
+                variants: variants
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             var binaries = new List<(string LogicalPath, byte[] Bytes)>();
             var passes = PassesOf(
                 binaries: binaries,
-                pipeline: loaded.Pipeline,
                 rootPath: rootPath,
-                survey: survey
+                survey: survey,
+                variants: variants
             );
             var manifest = new ShaderPackageManifest(
-                Capabilities: CapabilitiesOf(plan: loaded.Pipeline.Plan),
+                Capabilities: CapabilitiesOf(plan: loaded!.Pipeline!.Plan),
                 Compiler: new ShaderPackageCompiler(
                     Tools: tools,
                     Version: passes.Compiler
@@ -312,9 +325,12 @@ public sealed partial class ShaderPackager {
     /// its manifest.</param>
     /// <param name="path">The source path.</param>
     /// <param name="cancellationToken">The token that cancels the load.</param>
+    /// <param name="tier">The quality tier whose variant loads, or <see langword="null"/> for the variant no tier names
+    /// (<see cref="ShaderPackageVariant.NameOf"/>): a package's binaries of that variant, or the compiler's compile for
+    /// that tier.</param>
     /// <returns>The outcome. A package directory's dependencies are its manifest and every file the manifest lists; a
     /// source's are the files of its closure, whether its store package or the compiler served it.</returns>
-    public ShaderPipelineLoadResult LoadSource(string name, string path, CancellationToken cancellationToken = default) {
+    public ShaderPipelineLoadResult LoadSource(string name, string path, CancellationToken cancellationToken = default, QualityTier? tier = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
 
         var fullPath = Path.GetFullPath(path: path);
@@ -323,13 +339,15 @@ public sealed partial class ShaderPackager {
             return LoadSourceFile(
                 cancellationToken: cancellationToken,
                 name: name,
-                path: fullPath
+                path: fullPath,
+                tier: tier
             );
         }
 
         var loaded = LoadAsync(
             cancellationToken: cancellationToken,
-            package: fullPath
+            package: fullPath,
+            tier: tier
         ).GetAwaiter().GetResult();
 
         return new ShaderPipelineLoadResult(
@@ -343,8 +361,10 @@ public sealed partial class ShaderPackager {
     /// binaries are the candidate's bytecode.</summary>
     /// <param name="package">The package directory.</param>
     /// <param name="cancellationToken">The token that cancels the load.</param>
+    /// <param name="tier">The quality tier whose variant's binaries load, or <see langword="null"/> for the variant no
+    /// tier names.</param>
     /// <returns>The outcome; on success, the package's manifest and the candidate read from its binaries.</returns>
-    public Task<ShaderPackageResult> LoadAsync(string package, CancellationToken cancellationToken = default) {
+    public Task<ShaderPackageResult> LoadAsync(string package, CancellationToken cancellationToken = default, QualityTier? tier = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
 
         return GuardAsync(body: () => {
@@ -399,6 +419,17 @@ public sealed partial class ShaderPackager {
                 );
             }
 
+            var declared = plan.Definition.Variants.Select(selector: ShaderPackageVariant.NameOf).ToArray();
+
+            if (manifest.Passes.FirstOrDefault(predicate: pass => !pass.Variants.Select(selector: static variant => variant.Name).SequenceEqual(second: declared)) is { } undeclared) {
+                throw new ShaderClosureRefusedException(
+                    code: ShaderClosureRefusedException.PackageClosure,
+                    message: $"the document declares the variants [{string.Join(separator: ", ", values: declared)}]; pass '{undeclared.Name}' records [{string.Join(separator: ", ", values: undeclared.Variants.Select(selector: static variant => variant.Name))}]."
+                );
+            }
+
+            // A tier the graph does not declare loads its default variant.
+            var variant = plan.Definition.VariantOf(tier: tier);
             var shaders = new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal);
 
             foreach (var planned in plan.Passes) {
@@ -431,18 +462,21 @@ public sealed partial class ShaderPackager {
                     planned: planned,
                     recorded: recorded,
                     rootPath: rootPath,
-                    sourcePath: generated.SourcePath
+                    sourcePath: generated.SourcePath,
+                    tier: variant
                 );
             }
 
             var pipeline = new CompiledShaderPipeline(
                 plan: plan,
                 shaders: shaders
-            );
+            ) {
+                Tier = variant,
+            };
 
             return Task.FromResult(result: new ShaderPackageResult(
                 Manifest: manifest,
-                Message: $"loaded package '{manifest.Name}': {manifest.Files.Count} files, {manifest.Passes.Count} passes from their binaries; outputs={string.Join(separator: ",", values: plan.Outputs)}",
+                Message: $"loaded package '{manifest.Name}': {manifest.Files.Count} files, {manifest.Passes.Count} passes from their {ShaderPackageVariant.NameOf(tier: variant)} binaries{ShaderPackageVariant.Describe(requested: tier, variant: variant)}; outputs={string.Join(separator: ",", values: plan.Outputs)}",
                 Pipeline: pipeline,
                 Status: ShaderPipelineLoadStatus.Compiled
             ));
@@ -660,11 +694,9 @@ public sealed partial class ShaderPackager {
         foreach (var pass in manifest.Passes) {
             if (
                 string.IsNullOrWhiteSpace(value: pass.Name) ||
-                !passes.Add(item: pass.Name) ||
-                (pass.Stages.Count == 0) ||
-                pass.Stages.Any(predicate: static stage => ((stage.Steps.Count == 0) || stage.Steps.Any(predicate: static step => string.IsNullOrWhiteSpace(value: step.Tool))))
+                !passes.Add(item: pass.Name)
             ) {
-                throw Malformed(why: $"pass '{pass.Name}' is empty, is listed twice, or has a stage with no steps.");
+                throw Malformed(why: $"pass '{pass.Name}' is empty or is listed twice.");
             }
 
             Artifact(
@@ -678,16 +710,33 @@ public sealed partial class ShaderPackager {
                 what: "declarations"
             );
 
-            if (!pass.Variants.Any(predicate: static variant => string.Equals(
-                a: variant.Name,
-                b: ShaderPackageVariant.DefaultName,
-                comparisonType: StringComparison.Ordinal
-            ))) {
-                throw Malformed(why: $"pass '{pass.Name}' has no '{ShaderPackageVariant.DefaultName}' variant.");
+            // The default variant, then distinct tiers cheapest first; which tiers is the document's declaration, which a
+            // load holds the variants to.
+            var tiers = pass.Variants.Skip(count: 1).Select(selector: static variant => QualityTiers.Parse(name: variant.Name)).ToArray();
+
+            if (
+                (pass.Variants.Count == 0) ||
+                !string.Equals(
+                    a: pass.Variants[0].Name,
+                    b: ShaderPackageVariant.DefaultName,
+                    comparisonType: StringComparison.Ordinal
+                ) ||
+                tiers.Any(predicate: static tier => (tier is null)) ||
+                !tiers.SequenceEqual(second: tiers.Order().Distinct())
+            ) {
+                throw Malformed(why: $"pass '{pass.Name}' carries the variants [{string.Join(separator: ", ", values: pass.Variants.Select(selector: static variant => variant.Name))}]; a pass carries '{ShaderPackageVariant.DefaultName}', then each tier it declares once, of {string.Join(separator: ", ", values: QualityTiers.Names)}, in that order.");
             }
 
             foreach (var variant in pass.Variants) {
-                foreach (var stage in pass.Stages) {
+                if (
+                    (variant.Stages.Count == 0) ||
+                    variant.Stages.Any(predicate: static stage => ((stage.Steps.Count == 0) || stage.Steps.Any(predicate: static step => string.IsNullOrWhiteSpace(value: step.Tool)))) ||
+                    !variant.Stages.Select(selector: static stage => (stage.Stage, stage.EntryPoint)).SequenceEqual(second: pass.Variants[0].Stages.Select(selector: static stage => (stage.Stage, stage.EntryPoint)))
+                ) {
+                    throw Malformed(why: $"pass '{pass.Name}' variant '{variant.Name}' has no stages, a stage with no steps, or other stages than the pass's '{ShaderPackageVariant.DefaultName}' variant.");
+                }
+
+                foreach (var stage in variant.Stages) {
                     foreach (var target in ((string[])[ShaderPackageBinary.SpirvTarget, ShaderPackageBinary.DxilTarget])) {
                         if (variant.Binaries.Count(predicate: binary => ((binary.Stage == stage.Stage) && string.Equals(
                             a: binary.Target,
@@ -699,7 +748,7 @@ public sealed partial class ShaderPackager {
                     }
                 }
 
-                if (variant.Binaries.Count != (pass.Stages.Count * 2)) {
+                if (variant.Binaries.Count != (variant.Stages.Count * 2)) {
                     throw Malformed(why: $"pass '{pass.Name}' variant '{variant.Name}' carries a binary for a stage the pass does not compile.");
                 }
 
@@ -717,9 +766,12 @@ public sealed partial class ShaderPackager {
             }
         }
     }
-    // Holds every compiled binary's frame block to its pass's layout, then compiles each interface's echo pass and holds
-    // its blocks too: the echo reads every member, so a declaration the generator placed wrongly shows here.
-    private async Task ReflectAsync(CompiledShaderPipeline pipeline, PackageSurvey survey, CancellationToken cancellationToken) {
+    // Holds every variant's compiled binaries' frame blocks to its pass's layout, then compiles each interface's echo pass
+    // and holds its blocks too: the echo reads every member, so a declaration the generator placed wrongly shows here.
+    // Every variant reads the one interface, so each interface's echo compiles once.
+    private async Task ReflectAsync(IReadOnlyList<(string Name, CompiledShaderPipeline Pipeline)> variants, PackageSurvey survey, CancellationToken cancellationToken) {
+        var pipeline = variants[0].Pipeline;
+
         var dxil = ((m_reflectDxil && OperatingSystem.IsWindows())
             ? DxilInterfaceReader.Load(toolchain: m_compiler.Toolchain)
             : null);
@@ -752,11 +804,13 @@ public sealed partial class ShaderPackager {
                 var layout = planned.Parameters.Layout;
                 var generated = survey.Generated[planned.Name];
 
-                Check(
-                    layout: layout,
-                    shader: pipeline.Shaders[planned.Name],
-                    what: $"pass '{planned.Name}'"
-                );
+                foreach (var (name, variant) in variants) {
+                    Check(
+                        layout: layout,
+                        shader: variant.Shaders[planned.Name],
+                        what: $"pass '{planned.Name}' variant '{name}'"
+                    );
+                }
 
                 if (!echoed.Add(item: generated.DeclarationsPath)) {
                     continue;
@@ -837,41 +891,61 @@ public sealed partial class ShaderPackager {
 
         return true;
     }
-    // Each pass's manifest entry, and the binaries it lists, from the compiled candidate and the survey's generated
-    // interface and declarations.
-    private static (string Compiler, IReadOnlyList<ShaderPackagePass> Passes) PassesOf(CompiledShaderPipeline pipeline, PackageSurvey survey, string rootPath, List<(string LogicalPath, byte[] Bytes)> binaries) {
-        var identities = pipeline.Plan.Passes.Select(selector: pass => (pass.Name, Identity: (pipeline.Shaders[pass.Name].Identity ?? throw new InvalidOperationException(message: $"Pass '{pass.Name}' was not compiled from source.")))).ToArray();
-        var compiler = identities[0].Identity.Compiler;
+    // Each pass's manifest entry, and the binaries it lists, from every variant's compiled candidate and the survey's
+    // generated interface and declarations.
+    private static (string Compiler, IReadOnlyList<ShaderPackagePass> Passes) PassesOf(IReadOnlyList<(string Name, CompiledShaderPipeline Pipeline)> variants, PackageSurvey survey, string rootPath, List<(string LogicalPath, byte[] Bytes)> binaries) {
+        static ShaderCompileIdentity IdentityOf(CompiledShaderPipeline pipeline, string pass) => (pipeline.Shaders[pass].Identity ?? throw new InvalidOperationException(message: $"Pass '{pass}' was not compiled from source."));
 
-        if (identities.Any(predicate: entry => (entry.Identity.Compiler != compiler))) {
-            throw new InvalidOperationException(message: "The passes of one candidate were compiled under different compiler revisions.");
+        var plan = variants[0].Pipeline.Plan;
+        var compiler = IdentityOf(
+            pass: plan.Passes[0].Name,
+            pipeline: variants[0].Pipeline
+        ).Compiler;
+
+        if (variants.Any(predicate: variant => plan.Passes.Any(predicate: pass => (IdentityOf(pass: pass.Name, pipeline: variant.Pipeline).Compiler != compiler)))) {
+            throw new InvalidOperationException(message: "The passes of one package were compiled under different compiler revisions.");
         }
 
-        var passes = new List<ShaderPackagePass>(capacity: identities.Length);
+        var passes = new List<ShaderPackagePass>(capacity: plan.Passes.Count);
 
-        foreach (var (name, identity) in identities) {
+        foreach (var planned in plan.Passes) {
+            var name = planned.Name;
             var generated = survey.Generated[name];
-            var shader = pipeline.Shaders[name];
-            var passBinaries = new List<ShaderPackageBinary>();
+            var passVariants = new List<ShaderPackageVariant>(capacity: variants.Count);
 
-            foreach (var stage in identity.Stages) {
-                foreach (var (target, bytes) in ((ReadOnlySpan<(string, ReadOnlyMemory<byte>)>)[(ShaderPackageBinary.SpirvTarget, shader.SpirvByStage[stage.Stage]), (ShaderPackageBinary.DxilTarget, shader.DxilByStage[stage.Stage])])) {
-                    var logicalPath = BinaryPath(
-                        pass: name,
-                        stage: stage.Stage,
-                        target: target,
-                        variant: ShaderPackageVariant.DefaultName
-                    );
+            foreach (var (variantName, pipeline) in variants) {
+                var identity = IdentityOf(
+                    pass: name,
+                    pipeline: pipeline
+                );
+                var shader = pipeline.Shaders[name];
+                var passBinaries = new List<ShaderPackageBinary>();
 
-                    binaries.Add(item: (logicalPath, bytes.ToArray()));
-                    passBinaries.Add(item: new ShaderPackageBinary(
-                        Bytes: bytes.Length,
-                        Path: logicalPath,
-                        Pin: (ContentPin.Prefix + ContentPin.Compute(content: bytes.Span).Hex),
-                        Stage: stage.Stage,
-                        Target: target
-                    ));
+                foreach (var stage in identity.Stages) {
+                    foreach (var (target, bytes) in ((ReadOnlySpan<(string, ReadOnlyMemory<byte>)>)[(ShaderPackageBinary.SpirvTarget, shader.SpirvByStage[stage.Stage]), (ShaderPackageBinary.DxilTarget, shader.DxilByStage[stage.Stage])])) {
+                        var logicalPath = BinaryPath(
+                            pass: name,
+                            stage: stage.Stage,
+                            target: target,
+                            variant: variantName
+                        );
+
+                        binaries.Add(item: (logicalPath, bytes.ToArray()));
+                        passBinaries.Add(item: new ShaderPackageBinary(
+                            Bytes: bytes.Length,
+                            Path: logicalPath,
+                            Pin: (ContentPin.Prefix + ContentPin.Compute(content: bytes.Span).Hex),
+                            Stage: stage.Stage,
+                            Target: target
+                        ));
+                    }
                 }
+
+                passVariants.Add(item: new ShaderPackageVariant(
+                    Binaries: passBinaries,
+                    Name: variantName,
+                    Stages: identity.Stages
+                ));
             }
 
             passes.Add(item: new ShaderPackagePass(
@@ -886,11 +960,7 @@ public sealed partial class ShaderPackager {
                     text: generated.InterfaceText
                 ),
                 Name: name,
-                Stages: identity.Stages,
-                Variants: [new ShaderPackageVariant(
-                    Binaries: passBinaries,
-                    Name: ShaderPackageVariant.DefaultName
-                )]
+                Variants: passVariants
             ));
         }
 
@@ -935,11 +1005,12 @@ public sealed partial class ShaderPackager {
             path: documentPath
         )).Pipeline;
     }
-    // Reads one pass's default-variant binaries, each verified against its pin by Open.
-    private static CompiledShader ReadBinaries(ShaderPipelinePlannedPass planned, ShaderPackagePass recorded, string rootPath, string sourcePath) {
-        var variant = recorded.Variants.Single(predicate: static variant => string.Equals(
+    // Reads the binaries of one pass's variant for a tier, each verified against its pin by Open.
+    private static CompiledShader ReadBinaries(ShaderPipelinePlannedPass planned, ShaderPackagePass recorded, string rootPath, string sourcePath, QualityTier? tier) {
+        var name = ShaderPackageVariant.NameOf(tier: tier);
+        var variant = recorded.Variants.Single(predicate: variant => string.Equals(
             a: variant.Name,
-            b: ShaderPackageVariant.DefaultName,
+            b: name,
             comparisonType: StringComparison.Ordinal
         ));
         var spirv = new Dictionary<ShaderStage, ReadOnlyMemory<byte>>();
@@ -950,10 +1021,10 @@ public sealed partial class ShaderPackager {
             sourcePath: sourcePath
         );
 
-        if (!stages.Select(selector: static stage => (stage.Stage, stage.EntryPoint)).SequenceEqual(second: recorded.Stages.Select(selector: static stage => (stage.Stage, stage.EntryPoint)))) {
+        if (!stages.Select(selector: static stage => (stage.Stage, stage.EntryPoint)).SequenceEqual(second: variant.Stages.Select(selector: static stage => (stage.Stage, stage.EntryPoint)))) {
             throw new ShaderClosureRefusedException(
                 code: ShaderClosureRefusedException.PackageClosure,
-                message: $"pass '{planned.Name}' compiles [{string.Join(separator: ", ", values: stages.Select(selector: static stage => $"{stage.Stage} {stage.EntryPoint}"))}]; the package holds binaries for [{string.Join(separator: ", ", values: recorded.Stages.Select(selector: static stage => $"{stage.Stage} {stage.EntryPoint}"))}]."
+                message: $"pass '{planned.Name}' compiles [{string.Join(separator: ", ", values: stages.Select(selector: static stage => $"{stage.Stage} {stage.EntryPoint}"))}]; the package holds binaries for [{string.Join(separator: ", ", values: variant.Stages.Select(selector: static stage => $"{stage.Stage} {stage.EntryPoint}"))}]."
             );
         }
 
@@ -1051,14 +1122,16 @@ public sealed partial class ShaderPackager {
                 sources: [(sourcePath, sourceText)]
             );
 
+            // A package compiles every stage once for each variant its graph declares.
             steps.AddRange(collection: ShaderPipelineLoader.StagesOf(
                 pass: pass.Declaration,
                 source: sourceText,
                 sourcePath: sourcePath
-            ).Select(selector: static stage => ShaderCompiler.StepsOf(
+            ).SelectMany(selector: stage => plan.Definition.Variants.Select(selector: tier => ShaderCompiler.StepsOf(
                 entryPoint: stage.EntryPoint,
-                stage: stage.Stage
-            )));
+                stage: stage.Stage,
+                tier: tier
+            ))));
 
             foreach (var root in closure.Sources) {
                 Add(

@@ -775,8 +775,9 @@ public static partial class WorldDecompiler {
             );
         }
 
-        // Graph instances and post passes: each row prints as its named block.
-        foreach (var (rowsKey, keyword) in ((ReadOnlySpan<(string, string)>)[("graphs", "graph"), ("post", "post")])) {
+        // Graph instances and post passes: each row prints as its named block, each member in the form its row's model
+        // gives it, so a closed word such as a graph's tier prints bare.
+        foreach (var (rowsKey, keyword, holder) in ((ReadOnlySpan<(string, string, Type)>)[("graphs", "graph", typeof(WorldViewGraph)), ("post", "post", typeof(WorldViewPostPass))])) {
             if (
                 !views.TryGetPropertyValue(
                 jsonNode: out var rowsNode,
@@ -807,7 +808,8 @@ public static partial class WorldDecompiler {
                         name,
                         rowObj,
                         indentLevel: 1,
-                        excludedKeys: ["name"]
+                        excludedKeys: ["name"],
+                        holder: holder
                     );
                 }
             }
