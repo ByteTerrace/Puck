@@ -17,7 +17,8 @@ namespace Puck.World.Tests;
 /// and the exact verdict holds against that image and names the first pixel of one that differs. A third producer
 /// registers its shape and its runtime with no change to the document model: a document naming it validates, a settings
 /// member it does not declare is refused by name, and an unregistered id is refused by name. A capture of a world whose
-/// screen shows a desktop capture shows the declared fill and never acquires the desktop's pixels.
+/// screen shows a desktop capture shows the declared fill and never acquires the desktop's pixels. A camera source declares
+/// the extent its seat's sensor delivers.
 /// </summary>
 public sealed class ImageProducerLawTests {
     private const string ThirdId = "lawThird";
@@ -432,6 +433,68 @@ public sealed class ImageProducerLawTests {
         Assert.Null(@object: source.Fault);
     }
 
+    // A camera source is scheduled and mapped at its descriptor's extent, so the descriptor states the extent the seat's
+    // sensor delivers: the requested one before the seat holds a camera, the negotiated one after, and each new one as the
+    // device, its profile or its tier changes.
+    [Fact]
+    public void ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers() {
+        var cameras = new FakeSeatCameras();
+        var feed = new WorldCameraSourceFeed(
+            cameras: cameras,
+            profile: new WorldFeedProfile(
+                Height: 360,
+                RefreshRateHz: 30U,
+                Width: 640
+            ),
+            seat: 2,
+            sensor: WorldCameraSensor.Infrared
+        );
+        using var source = new WorldImageFeedProducer(
+            fill: static _ => default,
+            gate: new WorldCaptureGate(
+                alwaysFills: false,
+                captureArmed: static () => false
+            ),
+            opening: new WorldImageSourceOpening(
+                Context: new RenderGraphExternalProducerContext(
+                    Device: null!,
+                    HostsOnDirectX: false,
+                    Instance: "source$camera$0",
+                    Package: RenderGraphInstance.SourcePackage(producer: WorldImageProducerSettings.CameraId)
+                ),
+                Fault: null,
+                Feed: feed
+            )
+        );
+
+        Assert.Equal(
+            actual: (source.Descriptor!.Width, source.Descriptor.Height, source.Descriptor.Producer, source.Descriptor.Content),
+            expected: (640U, 360U, WorldImageProducerSettings.CameraId, ImageContentClass.External)
+        );
+
+        cameras.Extent = (1280U, 720U);
+
+        var negotiated = source.Descriptor!;
+
+        Assert.Equal(
+            actual: (negotiated.Width, negotiated.Height),
+            expected: (1280U, 720U)
+        );
+        Assert.Same(
+            actual: source.Descriptor,
+            expected: negotiated
+        );
+
+        cameras.Extent = (320U, 240U);
+        Assert.Equal(
+            actual: (source.Descriptor!.Width, source.Descriptor.Height),
+            expected: (320U, 240U)
+        );
+        Assert.Equal(
+            actual: cameras.Reads,
+            expected: [(2, WorldCameraSensor.Infrared)]
+        );
+    }
     // A producer standing in for a real one: every feed it opens answers one fixed handle and counts acquisitions. Its
     // feed declares the registration's producer, class and transport unless a law overrides one to disagree.
     private sealed class FakeProducer(string id, ImageContentClass content, ImageSourceTransport transport, string? feedProducer = null, ImageContentClass? feedContent = null, ImageSourceTransport? feedTransport = null) : IWorldImageProducer {
@@ -457,6 +520,25 @@ public sealed class ImageProducerLawTests {
             fault = null;
 
             return true;
+        }
+    }
+    // The seats' cameras standing in for real ones: one extent, or none while the seat holds no camera, and the distinct
+    // (seat, sensor) pairs read.
+    private sealed class FakeSeatCameras : IWorldSeatCameras {
+        public (uint Width, uint Height)? Extent { get; set; }
+        public List<(int Seat, WorldCameraSensor Sensor)> Reads { get; } = [];
+
+        public GpuImageLease Acquire(int seat, WorldCameraSensor sensor) => default;
+        public string? Fault(int seat, WorldCameraSensor sensor) => null;
+        public nint Handle(int seat, WorldCameraSensor sensor) => 0;
+        public Vector3 Light(int seat, WorldCameraSensor sensor) => Vector3.Zero;
+
+        (uint Width, uint Height)? IWorldSeatCameras.Extent(int seat, WorldCameraSensor sensor) {
+            if (!Reads.Contains(item: (seat, sensor))) {
+                Reads.Add(item: (seat, sensor));
+            }
+
+            return Extent;
         }
     }
     private sealed class FakeFeed(ImageSourceDescriptor descriptor) : IWorldImportFeed {

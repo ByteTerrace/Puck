@@ -1,6 +1,7 @@
 using Puck.Abstractions.Machines;
 using Puck.Platform;
 using Puck.SdfVm;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -62,7 +63,7 @@ internal sealed partial class WorldScreenBinder {
             : null);
 
         return (feed switch {
-            CameraSlotFeed camera => CameraFenceOrderFor(
+            WorldCameraSourceFeed camera => CameraFenceOrderFor(
                 seat: camera.Seat,
                 sensor: camera.Sensor
             ),

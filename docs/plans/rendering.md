@@ -1197,7 +1197,10 @@ source reads. The capture and camera CPU tiers and the capture fills convert
 through the same one-pass graph on a node of their own
 (`RenderGraphRuntime.CreateConverter`, `RenderGraphSourceConverter`), since
 their tier is chosen per device at run time and the HUD reads them outside the
-set, and hand out counted leases. The emulators still publish through
+set, and hand out counted leases. A fill converts as soon as a screen shows or
+a HUD frame names an external source, because a converter's graph builds off
+the frame thread; a camera source's descriptor states the extent its seat's
+sensor delivers, requested until the device negotiates one. The emulators still publish through
 `IMachineVideoOutput`'s own `IGpuSurfaceUpload`, from the machine source
 instance's producer, and hand the screen a bare handle; P12b-6 moves them onto
 a region. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras

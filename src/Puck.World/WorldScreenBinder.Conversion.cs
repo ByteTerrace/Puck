@@ -65,6 +65,11 @@ internal sealed partial class WorldScreenBinder {
 
         // The image-view handle a frame samples, for a read that submits no GPU work; zero before the first conversion.
         public nint Handle => (m_shown?.Converter.ImageViewHandle ?? 0);
+        // The extent of the image a frame samples, or null before the first conversion.
+        public (uint Width, uint Height)? Extent => ((m_shown is { } shown)
+            ? (shown.Width, shown.Height)
+            : null
+        );
 
         private void Release(int token) {
             var entry = ((m_current?.Token == token)

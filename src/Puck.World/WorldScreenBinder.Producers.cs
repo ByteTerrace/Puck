@@ -22,11 +22,29 @@ internal sealed partial class WorldScreenBinder {
 
         return false;
     }
-    // Ensures the fill image of every external source a screen shows exists while the gate fills, so a filled source never
-    // samples an unset handle: each fill is a static source, its one pixel converted once through source-rgba and again
-    // only after a device loss drops it.
+    // Whether a screen shows external content or a HUD frame names it.
+    private bool ConsumesExternal() {
+        if (BindsExternal()) {
+            return true;
+        }
+
+        foreach (var (source, _) in m_frameSourceReferences.Keys) {
+            if (IsExternal(source: source)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Converts the fill image of every external source a screen shows or a HUD frame names whenever one does, not only
+    // while the gate fills: a conversion's graph builds off the frame thread and its first conversions wait for it, so a
+    // fill first converted on the frame a capture is armed for would miss that capture. Each fill is a static source,
+    // its one pixel converted once through source-rgba and again only after a device loss drops it.
     private void EnsureFills(in FrameContext context) {
-        if (!m_captureGate.Filling) {
+        if (
+            !m_captureGate.Filling &&
+            !ConsumesExternal()
+        ) {
             return;
         }
 
@@ -116,8 +134,8 @@ internal sealed partial class WorldScreenBinder {
                 return false;
             }
 
-            feed = new CameraSlotFeed(
-                binder: binder,
+            feed = new WorldCameraSourceFeed(
+                cameras: binder,
                 profile: settings.Profile,
                 seat: (settings.Seat ?? DefaultViewSeat),
                 sensor: settings.Sensor
@@ -126,51 +144,6 @@ internal sealed partial class WorldScreenBinder {
 
             return true;
         }
-    }
-    // One screen's reference to a seat's shared camera feed. Publishing, device loss and disposal belong to the shared
-    // feed the binder owns, so they are nothing here.
-    private sealed class CameraSlotFeed : IWorldImportFeed {
-        private readonly WorldScreenBinder m_binder;
-
-        public CameraSlotFeed(WorldScreenBinder binder, WorldFeedProfile? profile, int seat, WorldCameraSensor sensor) {
-            m_binder = binder;
-            Seat = seat;
-            Sensor = sensor;
-            Descriptor = new ImageSourceDescriptor(
-                Cadence: ImageSourceCadence.Rate(rateHz: (profile ?? WorldFeedProfile.Default).RefreshRateHz),
-                Color: ImageColorEncoding.Srgb,
-                Content: ImageContentClass.External,
-                Format: ImagePixelFormat.B8G8R8A8Unorm,
-                Height: 0U,
-                Producer: WorldImageProducerSettings.CameraId,
-                Transport: ImageSourceTransport.Imported,
-                Width: 0U
-            );
-        }
-
-        public ImageSourceDescriptor Descriptor { get; }
-        public string? Fault => m_binder.CameraFaultFor(
-            seat: Seat,
-            sensor: Sensor
-        );
-        public Vector3 Light => m_binder.CameraLightFor(
-            seat: Seat,
-            sensor: Sensor
-        );
-        public int Seat { get; }
-        public WorldCameraSensor Sensor { get; }
-
-        public GpuImageLease AcquireFrame() => m_binder.AcquireCameraFrame(
-            seat: Seat,
-            sensor: Sensor
-        );
-        public void Dispose() { }
-        public nint Handle() => m_binder.CameraHandleFor(
-            seat: Seat,
-            sensor: Sensor
-        );
-        public void NotifyDeviceLost() { }
-        public void Publish(in FrameContext context) { }
     }
     // The desktop-capture producer: a window keyed by title or a whole monitor keyed by index, opened through the one
     // capture open ladder (TryCreateCaptureFeed), which retains a pending feed for a target not yet present. A capture a

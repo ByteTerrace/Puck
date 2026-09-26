@@ -18,7 +18,7 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-internal sealed partial class WorldScreenBinder {
+internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
     // Render frames between a graph ending (unplug, end of stream) and the reopen attempt, and between a refused open
     // and its retry — long enough for a driver to finish tearing down, short enough that a replug recovers unaided.
     private const int CameraReopenFrames = 60;
@@ -395,9 +395,7 @@ internal sealed partial class WorldScreenBinder {
 
         return true;
     }
-    // The four per-frame reads a ScreenSlot bound to (CameraSeat, CameraSensorKind) makes — thin wrappers over
-    // TryResolveCamera so the slot itself carries no camera machinery of its own.
-    private GpuImageLease AcquireCameraFrame(int seat, WorldCameraSensor sensor) =>
+    GpuImageLease IWorldSeatCameras.Acquire(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
             fault: out _,
@@ -408,7 +406,7 @@ internal sealed partial class WorldScreenBinder {
             ? feed!.AcquireFrame()
             : default
         );
-    private nint CameraHandleFor(int seat, WorldCameraSensor sensor) =>
+    nint IWorldSeatCameras.Handle(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
             fault: out _,
@@ -443,7 +441,18 @@ internal sealed partial class WorldScreenBinder {
                 SharedFence: false
             ));
     }
-    private Vector3 CameraLightFor(int seat, WorldCameraSensor sensor) =>
+    (uint Width, uint Height)? IWorldSeatCameras.Extent(int seat, WorldCameraSensor sensor) =>
+        (TryResolveCamera(
+            device: out _,
+            fault: out _,
+            feed: out var feed,
+            seat: seat,
+            sensor: sensor
+        )
+            ? feed!.Extent
+            : null
+        );
+    Vector3 IWorldSeatCameras.Light(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
             fault: out _,
@@ -454,7 +463,7 @@ internal sealed partial class WorldScreenBinder {
             ? feed!.Light
             : Vector3.Zero
         );
-    private string? CameraFaultFor(int seat, WorldCameraSensor sensor) {
+    string? IWorldSeatCameras.Fault(int seat, WorldCameraSensor sensor) {
         if (!TryResolveCamera(
             device: out _,
             fault: out var fault,
@@ -1449,6 +1458,12 @@ internal sealed partial class WorldScreenBinder {
         public ICameraSharedStream? SharedStream { get; private set; }
         public int StarvedPulls { get; set; }
         public ICameraStream? Stream => (((ICameraStream?)SharedStream) ?? PixelStream);
+        // The extent a frame samples: the shared ring's, the stream's negotiated one; the CPU tier's converted image's,
+        // fitted into the profile; the profile's before either has an image.
+        public (uint Width, uint Height) Extent => (((GpuTargets is not null) && (SharedStream is { } shared))
+            ? (checked((uint)shared.Width), checked((uint)shared.Height))
+            : (Pixels.Extent ?? (OutputWidth, OutputHeight))
+        );
 
         public GpuImageLease AcquireFrame() {
             if (
