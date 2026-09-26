@@ -202,6 +202,64 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
         return true;
     }
+    /// <inheritdoc/>
+    public bool ReadRow(int ordinal, bool target, ulong tick, ulong engineTick, Span<double> elements, out WorldStateMotion motion) {
+        var document = Shape();
+        var changed = false;
+
+        motion = WorldStateMotion.Still;
+
+        // A field row's cells are read by index, the lattice cell each element is.
+        if (
+            (((uint)ordinal) < ((uint)document.State.Count)) &&
+            (m_fieldOfOrdinal[ordinal] is var field and >= 0)
+        ) {
+            var cells = m_cells[field];
+
+            for (var index = 0; (index < elements.Length); index++) {
+                var number = ((index < cells.Length)
+                    ? ((double)FixedQ4816.FromRawBits(value: cells[index]))
+                    : 0d
+                );
+
+                if (elements[index] != number) {
+                    elements[index] = number;
+                    changed = true;
+                }
+            }
+
+            return changed;
+        }
+
+        // Any other keyed row holds at most TopologyCompilation.MaxCells cells, each under a cached decimal key.
+        for (var index = 0; (index < elements.Length); index++) {
+            var number = 0d;
+
+            if (TryRead(
+                engineTick: engineTick,
+                key: IndexKeyCache.Get(index: index),
+                ordinal: ordinal,
+                sample: out var sample,
+                target: target,
+                tick: tick
+            )) {
+                _ = WorldStateMirror.TryConvertNumber(
+                    number: out number,
+                    value: sample.Value
+                );
+
+                if (sample.Motion != WorldStateMotion.Still) {
+                    motion = sample.Motion;
+                }
+            }
+            if (elements[index] != number) {
+                elements[index] = number;
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
     /// <summary>Applies one snapshot's field-cell writes (<see cref="WorldSnapshot.FieldCells"/>) to the cells a field
     /// row is read from, and names each field row a write moved, so the owner refreshes the mirror slots bound to it
     /// (<see cref="WorldStateMirror.RefreshRows"/>). A write naming a field or a cell the delivered lattice does not

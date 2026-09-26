@@ -404,6 +404,83 @@ public sealed class WorldFieldRowLawTests {
             actual: colors.Resolve(fallback: Vector3.One, value: "state.colors.bump")
         );
     }
+    /// <summary>A field of the most cells a lattice may hold (<see cref="WorldFieldCapacity.MaxCells"/>) refreshes by
+    /// index: once warm, a snapshot moving it and the refresh that re-reads its row allocate nothing, far past the keys
+    /// a keyed row's cells are named by.</summary>
+    [Fact]
+    public void AMaximumFieldRefreshAllocatesNothingOnceWarm() {
+        const int MaxWidth = WorldFieldCapacity.MaxExtent;
+        const int MaxDepth = (WorldFieldCapacity.MaxCells / WorldFieldCapacity.MaxExtent);
+        var definition = Fixtures.WithLattice(
+            composite: new WorldFieldsSection(
+                Lattice: new WorldFieldLatticeDefinition(
+                    Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
+                    CellSize: 1f,
+                    Width: MaxWidth,
+                    Depth: MaxDepth
+                ),
+                Fields: [new WorldFieldRow(Name: "heat", Max: 4f)]
+            ),
+            definition: Fixtures.BuildDocument()
+        );
+        var view = new WorldDocumentStateView(definition: () => definition);
+        var mirror = new WorldStateMirror(view: view);
+
+        mirror.Install(engineTick: 0UL, tick: 0UL);
+
+        var slot = mirror.Bind(binding: Whole(row: "heat"), conversion: WorldStateConversion.Row);
+        var moved = new int[WorldFieldCapacity.MaxFields];
+        FieldCellDelta[][] writes = [
+            [new FieldCellDelta(Cell: (WorldFieldCapacity.MaxCells - 1), Field: 0, Raw: One)],
+            [new FieldCellDelta(Cell: (WorldFieldCapacity.MaxCells - 1), Field: 0, Raw: 0L)],
+        ];
+
+        void Step(int step) {
+            var count = view.ApplyFieldCells(
+                deltas: writes[(step % 2)],
+                moved: moved
+            );
+
+            mirror.RefreshRows(ordinals: moved.AsSpan(length: count, start: 0));
+        }
+
+        Assert.Equal(expected: WorldFieldCapacity.MaxCells, actual: mirror.RowValues(slot: slot).Length);
+        Step(step: 0);
+        Assert.Equal(expected: 1d, actual: mirror.RowValues(slot: slot)[(WorldFieldCapacity.MaxCells - 1)]);
+        Step(step: 1);
+
+        var allocated = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var step = 0; (step < 64); step++) {
+            Step(step: step);
+        }
+
+        Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - allocated));
+    }
+    /// <summary>A document's own colors (<see cref="WorldBakedColors.Of"/>) build no mirror for a build that bakes only
+    /// literals, and resolving literals allocates nothing; the first bound color installs one and reads its cell.</summary>
+    [Fact]
+    public void ADocumentsOwnColorsBuildAMirrorOnlyForABoundColor() {
+        var colors = WorldBakedColors.Of(definition: Document());
+
+        colors.Begin();
+
+        var allocated = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var index = 0; (index < 64); index++) {
+            _ = colors.Resolve(fallback: Vector3.One, value: "#ABCDEF");
+            _ = colors.Resolve(fallback: Vector3.One, value: null);
+        }
+
+        Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - allocated));
+        Assert.False(condition: colors.IsMirrored);
+        Assert.False(condition: colors.TryTakeMove());
+        Assert.Equal(
+            expected: HexColor.Parse(fallback: Vector3.Zero, value: "#3FAF6F"),
+            actual: colors.Resolve(fallback: Vector3.One, value: "state.colors.bump")
+        );
+        Assert.True(condition: colors.IsMirrored);
+    }
 
     // A brick service that completes every upload at once and keeps each upload's voxels.
     private sealed class RecordingBrickBakes : ISdfBrickBakeService {

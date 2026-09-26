@@ -886,39 +886,25 @@ public sealed class WorldStateMirror : IWorkCounterSource {
             }
         }
     }
-    // Reads every element of a row slot, cell i under the decimal key i, as one read. The slot presents its current
+    // Reads every element of a row slot through the view's whole-row read, as one read. The slot presents its current
     // elements whole, never interpolated, and stays restless while any cell is still moving.
     private void ReadRow(ref Slot entry) {
         var elements = (entry.Elements ?? []);
         var motion = WorldStateMotion.Still;
         var changed = false;
 
-        for (var index = 0; (index < elements.Length); index++) {
-            var number = 0d;
-
-            if (
-                (entry.Ordinal >= 0) &&
-                m_view.TryRead(
+        if (entry.Ordinal >= 0) {
+            changed = m_view.ReadRow(
+                elements: elements,
                 engineTick: m_engineTick,
-                key: IndexKeyCache.Get(index: index),
+                motion: out motion,
                 ordinal: entry.Ordinal,
-                sample: out var sample,
                 target: entry.Binding.Target,
                 tick: m_tick
-            )
-            ) {
-                _ = TryConvertNumber(
-                    number: out number,
-                    value: sample.Value
-                );
-                if (sample.Motion != WorldStateMotion.Still) {
-                    motion = sample.Motion;
-                }
-            }
-            if (elements[index] != number) {
-                elements[index] = number;
-                changed = true;
-            }
+            );
+        } else if (elements.AsSpan().ContainsAnyExcept(value: 0d)) {
+            Array.Clear(array: elements);
+            changed = true;
         }
 
         m_reads.Increment();
@@ -938,7 +924,8 @@ public sealed class WorldStateMirror : IWorkCounterSource {
             entry.Changed = m_revision;
         }
     }
-    private static bool TryConvertNumber(CellValue value, out double number) {
+
+    internal static bool TryConvertNumber(CellValue value, out double number) {
         if (!value.HasValue) {
             number = 0d;
 

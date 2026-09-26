@@ -17,11 +17,13 @@ namespace Puck.World.Client;
 /// </para>
 /// </summary>
 public sealed class WorldBakedColors {
-    private readonly WorldStateMirror m_mirror;
+    // The document a mirror is installed over on the first bound color, for colors read on their own (Of).
+    private readonly WorldDefinition? m_definition;
 
     private int m_checkedColorRevision;
     private int m_checkedGeneration;
     private int m_count;
+    private WorldStateMirror? m_mirror;
     private string[] m_tokens = [];
     private int[] m_changed = [];
 
@@ -35,29 +37,29 @@ public sealed class WorldBakedColors {
         m_mirror = mirror;
     }
 
-    /// <summary>Returns the colors of a document read on its own, through a mirror installed over it: what a tool or a
-    /// law that builds a program from a document with no client resolves its colors through. It compiles the document's
-    /// manifest and reads every slot once.</summary>
+    private WorldBakedColors(WorldDefinition definition) => m_definition = definition;
+
+    /// <summary>Gets whether a mirror backs these colors: always for colors over a client's mirror, and for a
+    /// document's own colors (<see cref="Of"/>) only once a bound color has been resolved.</summary>
+    public bool IsMirrored => (m_mirror is not null);
+
+    /// <summary>Returns the colors of a document read on its own: what a tool, a law, or a build from a document with no
+    /// client of its own resolves its colors through. A literal parses directly; the first bound color installs a
+    /// mirror over the document, compiling its manifest and reading every slot once, so a build that bakes only
+    /// literals builds no mirror.</summary>
     /// <param name="definition">The document.</param>
-    /// <returns>The colors, over a mirror of <paramref name="definition"/>.</returns>
+    /// <returns>The colors, read through a mirror of <paramref name="definition"/> once one is needed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public static WorldBakedColors Of(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
-
-        mirror.Install(
-            engineTick: 0UL,
-            tick: 0UL
-        );
-
-        return new WorldBakedColors(mirror: mirror);
+        return new WorldBakedColors(definition: definition);
     }
     /// <summary>Starts a build: forgets the colors the previous build baked.</summary>
     public void Begin() {
         m_count = 0;
-        m_checkedColorRevision = m_mirror.ColorRevision;
-        m_checkedGeneration = m_mirror.Generation;
+        m_checkedColorRevision = (m_mirror?.ColorRevision ?? 0);
+        m_checkedGeneration = (m_mirror?.Generation ?? 0);
     }
     /// <summary>Resolves one authored color for the build under way and remembers a bound one.</summary>
     /// <param name="value">The authored color: a <c>#RRGGBB</c> literal, a <c>state.&lt;row&gt;[.&lt;key&gt;]</c>
@@ -76,17 +78,18 @@ public sealed class WorldBakedColors {
             );
         }
 
-        var slot = m_mirror.SlotOf(
+        var mirror = Mirror();
+        var slot = mirror.SlotOf(
             conversion: WorldStateConversion.Color,
             token: value
         );
 
         Remember(
-            changed: m_mirror.Changed(slot: slot),
+            changed: mirror.Changed(slot: slot),
             token: value!
         );
 
-        return (m_mirror.TryColor(
+        return (mirror.TryColor(
             slot: slot,
             value: out var color
         )
@@ -104,18 +107,19 @@ public sealed class WorldBakedColors {
     public bool TryTakeMove() {
         if (
             (m_count == 0) ||
-            ((m_mirror.ColorRevision == m_checkedColorRevision) && (m_mirror.Generation == m_checkedGeneration))
+            (m_mirror is not { } mirror) ||
+            ((mirror.ColorRevision == m_checkedColorRevision) && (mirror.Generation == m_checkedGeneration))
         ) {
             return false;
         }
 
-        m_checkedColorRevision = m_mirror.ColorRevision;
-        m_checkedGeneration = m_mirror.Generation;
+        m_checkedColorRevision = mirror.ColorRevision;
+        m_checkedGeneration = mirror.Generation;
 
         var moved = false;
 
         for (var index = 0; (index < m_count); index++) {
-            var changed = m_mirror.Changed(slot: m_mirror.SlotOf(
+            var changed = mirror.Changed(slot: mirror.SlotOf(
                 conversion: WorldStateConversion.Color,
                 token: m_tokens[index]
             ));
@@ -129,6 +133,25 @@ public sealed class WorldBakedColors {
         return moved;
     }
 
+    // The mirror a bound color reads through, installed over the document on first need for colors read on their own.
+    private WorldStateMirror Mirror() {
+        if (m_mirror is { } mirror) {
+            return mirror;
+        }
+
+        var definition = m_definition!;
+
+        mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
+        mirror.Install(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+        m_mirror = mirror;
+        m_checkedColorRevision = mirror.ColorRevision;
+        m_checkedGeneration = mirror.Generation;
+
+        return mirror;
+    }
     private void Remember(string token, int changed) {
         if (m_count == m_tokens.Length) {
             var capacity = Math.Max(

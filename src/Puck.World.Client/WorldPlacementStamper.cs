@@ -510,8 +510,8 @@ public static class WorldPlacementStamper {
     /// <param name="meshDraws">Receives one draw per static placement instance of a prototype that carries a mesh
     /// (<see cref="WorldPrototype.Mesh"/>), or <see langword="null"/> when the caller draws none.</param>
     /// <param name="colors">The colors the build bakes, which a state-bound palette color resolves through, or
-    /// <see langword="null"/> to read them through a mirror of <paramref name="definition"/>
-    /// (<see cref="WorldBakedColors.Of"/>).</param>
+    /// <see langword="null"/> to read them through a mirror of <paramref name="definition"/> built only when a bound
+    /// palette color is emitted (<see cref="WorldBakedColors.Of"/>).</param>
     public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var baked = (colors ?? WorldBakedColors.Of(definition: definition));
