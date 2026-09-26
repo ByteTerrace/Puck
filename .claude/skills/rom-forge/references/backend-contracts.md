@@ -20,6 +20,9 @@ lowered document. None of this is author-facing DSL syntax — it has no DSL spe
   `0x020000C0` and arrays from `0x02000900`.
   The compiler uses `FrameworkKernel` and input primitives directly, with no
   save, victory or C# game-state callbacks in generated player cartridges.
+- A `$light` read on CGB writes RP (`0xFF56`) with `0xC0` — both data-read-enable
+  bits, lamp off — then reads it back: bit 1 is low while light arrives, and a lit
+  lamp would read as its own light. Nothing else in a generated cartridge writes RP.
 - CGB shadow OAM: `0xC100`; the VBlank handler invokes the HRAM DMA trampoline
   and advances the frame counter. Fixed code/data windows are 0x0150..0x3FFF
   and 0x4000..0x7FFF. The header is Color-required MBC1+RAM+battery.

@@ -180,8 +180,7 @@ public sealed class LightGunLawTests {
             actual: fixture.Server.Engagement.PointerOn(screenIndex: MachineScreen),
             expected: fixture.Server.Engagement.Aim(
                 ray: Lit,
-                screenIndex: MachineScreen,
-                screens: fixture.Server.Definition.Screens
+                screenIndex: MachineScreen
             )
         );
         Assert.Equal(
@@ -244,8 +243,7 @@ public sealed class LightGunLawTests {
         var expected = WorldScreenMappings.Normalized(screen: screens.Single(predicate: static screen => (screen.Index == MachineScreen))).MapRay(ray: Lit);
         var aim = fixture.Server.Engagement.Aim(
             ray: Lit,
-            screenIndex: MachineScreen,
-            screens: screens
+            screenIndex: MachineScreen
         );
 
         Assert.True(condition: expected.IsOnSource);
@@ -260,40 +258,38 @@ public sealed class LightGunLawTests {
         Assert.True(condition: (aim.Column(width: 160) < LightGunProbeCartridge.DarkColumn));
         Assert.True(condition: (fixture.Server.Engagement.Aim(
             ray: Dark,
-            screenIndex: MachineScreen,
-            screens: screens
+            screenIndex: MachineScreen
         ).Column(width: 160) >= LightGunProbeCartridge.DarkColumn));
 
         foreach (var ray in new SourceRay?[] { Miss, RayTo(x: 0.99f), null }) {
             Assert.Equal(
                 actual: fixture.Server.Engagement.Aim(
                     ray: ray,
-                    screenIndex: MachineScreen,
-                    screens: screens
+                    screenIndex: MachineScreen
                 ),
                 expected: MachinePointer.Off
             );
         }
 
-        // A screen whose route input is not Simulation maps no aim, and neither does an index the document lacks.
-        var presentation = Document(
-            cartridgePath: CartridgePath(directory: directory),
-            input: SourceDestination.Presentation
-        ).Screens;
-
+        // An index the document lacks maps no aim, and neither does a screen whose route input is not Simulation: the
+        // aim reads the running document's row, so that screen is a document of its own.
         Assert.Equal(
             actual: fixture.Server.Engagement.Aim(
                 ray: Lit,
-                screenIndex: MachineScreen,
-                screens: presentation
+                screenIndex: 99
             ),
             expected: MachinePointer.Off
         );
+
+        using var presentation = Boot(definition: Document(
+            cartridgePath: CartridgePath(directory: directory),
+            input: SourceDestination.Presentation
+        ));
+
         Assert.Equal(
-            actual: fixture.Server.Engagement.Aim(
+            actual: presentation.Server.Engagement.Aim(
                 ray: Lit,
-                screenIndex: 99,
-                screens: screens
+                screenIndex: MachineScreen
             ),
             expected: MachinePointer.Off
         );

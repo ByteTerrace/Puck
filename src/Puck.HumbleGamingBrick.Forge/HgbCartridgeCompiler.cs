@@ -11,7 +11,7 @@ namespace Puck.HumbleGamingBrick.Forge;
 /// Work-RAM layout above <c>FrameworkMemoryMap.GameRam</c>:
 /// 0xC200..0xC27F variables, 0xC280 prior held input, 0xC281 operand spill, 0xC282 discard sink, 0xC283 the frame's scene snapshot, 0xC284..0xDFFF arrays, spanning the fixed page and the switchable bank pinned at boot.
 /// </remarks>
-public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
+public sealed partial class HgbCartridgeCompiler : ICartridgeCompiler {
     private const ushort ArrayBaseAddress = 0xC284;
     private const ushort ArrayLimitAddress = 0xE000;
     private const ushort HeldInputAddress = 0xC280;
@@ -1645,8 +1645,15 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             )) {
                 Button(
                     button: button,
+                    emitter: emitter,
                     mode: mode
                 );
+
+                return;
+            }
+
+            if (CartridgeExpressions.IsLight(state: state)) {
+                Light(emitter: emitter);
 
                 return;
             }
@@ -1668,42 +1675,6 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             emitter.LoadAFromAddress(address: ((guard && (state.Name.Spelling == document.Scene))
                 ? SceneAddress
                 : (ushort)variables[state.Name.Spelling]));
-        }
-
-        // Leaves 1 in the accumulator while the button satisfies the mode, and 0 otherwise.
-        void Button(string button, string mode) {
-            var zero = emitter.NewLabel();
-            var done = emitter.NewLabel();
-
-            emitter.LoadAFromAddress(address: ((mode == "pressed")
-                ? FrameworkMemoryMap.InputPressed
-                : FrameworkMemoryMap.InputHeld));
-            if (mode == "released") {
-                emitter.ComplementA();
-                emitter.Load(
-                    destination: Reg8.B,
-                    source: Reg8.A
-                );
-                emitter.LoadAFromAddress(address: HeldInputAddress);
-                emitter.Arithmetic(
-                    op: AluOp.And,
-                    source: Reg8.B
-                );
-            }
-
-            emitter.ArithmeticImmediate(
-                op: AluOp.And,
-                value: Key(key: button)
-            );
-            emitter.JumpRelative(
-                condition: Condition.Zero,
-                label: zero
-            );
-            emitter.LoadAImmediate(value: 1);
-            emitter.JumpRelative(label: done);
-            emitter.MarkLabel(label: zero);
-            emitter.XorA();
-            emitter.MarkLabel(label: done);
         }
 
         void Unary(ExpressionOp operation) {

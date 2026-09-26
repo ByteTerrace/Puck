@@ -1184,7 +1184,12 @@ compares a read-back against.
 camera, a desktop capture or a probe's output, resolves through
 `WorldCaptureGate`. While the gate fills, the image resolves to its declared
 capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
-default), a 1×1 upload, and the producer's frame is never acquired. The gate
+default), and the producer's frame is never acquired. A fill is a 1×1 image
+converted through `source-rgba` (`WorldCaptureFills`). Its converter builds
+off the frame thread, so a fill first converted on the frame a capture is
+armed for would have no image on that frame; each fill therefore converts as
+soon as a screen shows or a HUD frame names an external source, before any
+capture is armed. The gate
 covers screen slots, camera views filming those screens, and HUD `Frame`
 elements. An offscreen host, which serves scheduled captures and `puck parity`,
 fills every frame. A windowed host fills while a capture is armed on the
@@ -1375,7 +1380,7 @@ boot-time load pin, so the code never claims an identity the running world no
 longer has; the echo says `hash-covers=live-definition` and carries the payload
 in full. It is deterministic in the definition alone—same document, same
 payload, every run. An
-unbound slot gets the engine's no-signal card, and a missing device is loud
+unbound slot shows dark glass, and a missing device is loud
 data in `world.screens`/`screen.state`, never a crash. A machine screen is
 engine-neutral (`Puck.Abstractions.Machines`): `WorldBootComposition`
 registers the SM83 family (`gaming-brick`) and the ARM7TDMI machine

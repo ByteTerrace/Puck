@@ -54,6 +54,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private readonly float m_fieldOfViewRadians;
     private readonly WorldSessionMirror m_mirror;
 
+    // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
+    private readonly WorldStaticPalettes m_palettes = new();
+
     private SdfProgram? m_lastProgram;
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.
@@ -338,7 +341,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 builder: builder,
                 definition: definition,
                 creations: definition.Creations,
-                placements: definition.Placements
+                placements: definition.Placements,
+                palettes: m_palettes
             );
         }
 

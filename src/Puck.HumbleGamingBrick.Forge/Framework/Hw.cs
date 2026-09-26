@@ -40,6 +40,9 @@ public static class Hw {
     /// different amounts of execution hold different DIV values, so a link protocol seeds a symmetry-breaking backoff
     /// from it. Writing any value resets the whole counter to zero.</summary>
     public const byte PortDivider = 0x04;
+    /// <summary>RP — the Color infrared port (matches <c>MemoryMap.InfraredPort</c>): bit 0 lights the lamp, and bit 1
+    /// reads 0 while light arrives, but only while the data-read-enable bits 7-6 are both set.</summary>
+    public const byte PortInfrared = 0x56;
     /// <summary>IE — the interrupt enable mask (0xFFFF, reachable as high-page port 0xFF).</summary>
     public const byte PortInterruptEnable = 0xFF;
     /// <summary>IF — the interrupt request flags.</summary>

@@ -108,6 +108,9 @@ receiver but is host input, not a paced peer.
 - The Humble battery's `light-gun` stage exercises it with
   `LightGunProbeCartridge`, which draws a white and a black half and publishes
   what it senses. The advanced brick has no light gun and ignores the pointer.
+- A forge cartridge reads it through the `$light` operand, which arms RP and
+  yields 1 while light arrives; the World's `light-gun` canary aims a seat's
+  pointer at `light-gun.cgb.puck` headless.
 
 ### Game Boy Printer (`GamePrinterDevice`)
 - Emulates the external thermal printer connected via serial cable (`GamePrinterLinkSession`).

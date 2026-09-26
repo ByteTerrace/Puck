@@ -481,9 +481,9 @@ internal sealed partial class WorldScreenBinder {
 
         if (
             FillsExternal &&
-            IsExternal(source: source)
+            WorldCaptureFills.IsExternal(source: source)
         ) {
-            frame = FillImage(rgba: ImageSourceDescriptor.DefaultCaptureFill);
+            frame = m_fills.Acquire(rgba: ImageSourceDescriptor.DefaultCaptureFill);
 
             return (0 != frame.ImageViewHandle);
         }
@@ -549,16 +549,6 @@ internal sealed partial class WorldScreenBinder {
         return false;
     }
 
-    // Whether a source's content is external: a producer whose registered shape says so, or a probe, which processes a
-    // camera's frames.
-    private static bool IsExternal(WorldScreenSource? source) => source switch {
-        WorldScreenSource.Producer producer => (WorldImageProducerVocabulary.TryGet(
-            id: producer.Id,
-            shape: out var shape
-        ) && (shape.Content == ImageContentClass.External)),
-        WorldScreenSource.Probe => true,
-        _ => false,
-    };
     // Standalone captures ride the same per-frame pull cadence a slot-owned capture does, from Publish (below), and
     // the same device-lost/dispose sweeps every other feed this binder owns gets.
     private void PublishFrameCaptures(in FrameContext context) {

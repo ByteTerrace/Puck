@@ -885,6 +885,20 @@ public static class CreationStampEmitter {
             shape: shape,
             transform: transform
         );
+        if (shape.Trims is { Count: > 0 }) {
+            EmitPaletteTrims(
+                builder: builder,
+                document: document,
+                paletteIds: paletteIds,
+                shape: shape,
+                transform: transform
+            );
+        }
+    }
+
+    // A shape's trims against its creation's palette. The material delegate captures the palette, so it lives here, where
+    // only a shape that carries trims pays for it, rather than in EmitShapeStamp, whose every call would.
+    private static void EmitPaletteTrims(SdfProgramBuilder builder, CreationDocument document, ShapeDocument shape, CreationStampTransform transform, int[] paletteIds) =>
         EmitTrims(
             builder: builder,
             contactMargin: null,
@@ -898,7 +912,7 @@ public static class CreationStampEmitter {
             shape: shape,
             transform: transform
         );
-    }
+
     /// <summary>Emits every authored text run under the same stamp transform as <see cref="Emit"/>.</summary>
     /// <param name="builder">The target program builder.</param>
     /// <param name="document">The creation document.</param>
@@ -1155,8 +1169,10 @@ public static class CreationStampEmitter {
         // bound charges it once up front.
         var reach = (document.Noise?.Amplitude ?? 0f);
         var any = false;
+        var shapes = (document.Shapes ?? []);
 
-        foreach (var shape in (document.Shapes ?? [])) {
+        for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
+            var shape = shapes[shapeIndex];
             // A domain fold carries the shape across its lattice, so the fold's displacement bound is charged
             // beside the shape's own position; Dilate/Onion move the outer surface outward by their own value — all
             // in creation units, scaled with them.
@@ -1262,17 +1278,22 @@ public static class CreationStampEmitter {
             return true;
         }
 
-        foreach (var shape in (document.Shapes ?? [])) {
-            var blend = (shape.Blend ?? SdfBlendOp.Union);
+        // Indexed rather than foreach over the lists' interface, which would box an enumerator on every stamp.
+        var shapes = (document.Shapes ?? []);
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            var blend = (shapes[index].Blend ?? SdfBlendOp.Union);
 
             if (blend is not (SdfBlendOp.Union or SdfBlendOp.SmoothUnion)) {
                 return true;
             }
         }
 
-        foreach (var run in (document.TextRuns ?? [])) {
+        var runs = (document.TextRuns ?? []);
+
+        for (var index = 0; (index < runs.Count); index++) {
             if (string.Equals(
-                a: run.Mode,
+                a: runs[index].Mode,
                 b: TextRunDocument.ModeEngrave,
                 comparisonType: StringComparison.Ordinal
             )) {
@@ -1444,6 +1465,13 @@ public static class CreationStampEmitter {
     // which yields a zero-extent (inert) collider rather than the float path's vanishingly thin one.
     private static readonly FixedQ4816 MinimumTransformExtentFixed = FixedQ4816.FromDouble(value: MinimumTransformExtent);
 }
+/// <summary>Receives each materialized instance of a lattice walk as a struct, so a walk
+/// (<see cref="CreationStampLattice.ForEachInstance{TVisitor}"/>) allocates no delegate and no closure.</summary>
+public interface ICreationStampVisitor {
+    /// <summary>Receives one materialized instance.</summary>
+    /// <param name="instance">The instance.</param>
+    void Visit(CreationStampInstance instance);
+}
 /// <summary>Materializes the same placement pattern and reflected copies consumed by creation stamp emission.</summary>
 public static class CreationStampLattice {
     /// <summary>Visits pattern copies in A-major, then B-major order, followed immediately by each reflected copy —
@@ -1530,6 +1558,28 @@ public static class CreationStampLattice {
     public static void ForEachInstance(Vector3 origin, Quaternion rotation, CreationStampPattern? pattern, IReadOnlyList<Vector3>? sampledOffsets, CreationStampPlane? mirror, Action<CreationStampInstance> visitor) {
         ArgumentNullException.ThrowIfNull(visitor);
 
+        var adapter = new ActionVisitor(action: visitor);
+
+        ForEachInstance(
+            mirror: mirror,
+            origin: origin,
+            pattern: pattern,
+            rotation: rotation,
+            sampledOffsets: sampledOffsets,
+            visitor: ref adapter
+        );
+    }
+    /// <summary>Visits pattern copies in A-major, then B-major order, followed immediately by each reflected copy,
+    /// through a struct visitor, so the walk allocates nothing.</summary>
+    /// <typeparam name="TVisitor">The visitor's type.</typeparam>
+    /// <param name="origin">The placement origin.</param>
+    /// <param name="rotation">The placement rotation.</param>
+    /// <param name="pattern">The pattern declaration, or <see langword="null"/> for one copy.</param>
+    /// <param name="sampledOffsets">Precomputed placement-local offsets from a hash-sampled Noise/Scatter region
+    /// (see <see cref="ForEachFixedInstance"/>), or <see langword="null"/> to use <paramref name="pattern"/>.</param>
+    /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
+    /// <param name="visitor">Receives each materialized instance.</param>
+    public static void ForEachInstance<TVisitor>(Vector3 origin, Quaternion rotation, CreationStampPattern? pattern, IReadOnlyList<Vector3>? sampledOffsets, CreationStampPlane? mirror, ref TVisitor visitor) where TVisitor : struct, ICreationStampVisitor {
         var plane = ((mirror is { } authoredPlane)
             ? new CreationStampPlane(
                 Normal: Vector3.Normalize(value: authoredPlane.Normal),
@@ -1540,7 +1590,13 @@ public static class CreationStampLattice {
 
         if (sampledOffsets is { Count: > 0 } offsets) {
             for (var index = 0; (index < offsets.Count); index++) {
-                VisitLocal(local: offsets[index]);
+                VisitLocal(
+                    local: offsets[index],
+                    origin: origin,
+                    plane: plane,
+                    rotation: rotation,
+                    visitor: ref visitor
+                );
             }
         } else {
             var countA = Math.Max(
@@ -1556,15 +1612,24 @@ public static class CreationStampLattice {
 
             for (var indexA = 0; (indexA < countA); indexA++) {
                 for (var indexB = 0; (indexB < countB); indexB++) {
-                    VisitLocal(local: ((stepA * indexA) + (stepB * indexB)));
+                    VisitLocal(
+                        local: ((stepA * indexA) + (stepB * indexB)),
+                        origin: origin,
+                        plane: plane,
+                        rotation: rotation,
+                        visitor: ref visitor
+                    );
                 }
             }
         }
 
-        void VisitLocal(Vector3 local) {
+        static void VisitLocal(ref TVisitor visitor, Vector3 origin, Quaternion rotation, CreationStampPlane? plane, Vector3 local) {
             Visit(
                 local: local,
-                reflectionNormal: null
+                origin: origin,
+                reflectionNormal: null,
+                rotation: rotation,
+                visitor: ref visitor
             );
 
             if (plane is { } reflection) {
@@ -1575,12 +1640,15 @@ public static class CreationStampLattice {
 
                 Visit(
                     local: reflectedOrigin,
-                    reflectionNormal: reflection.Normal
+                    origin: origin,
+                    reflectionNormal: reflection.Normal,
+                    rotation: rotation,
+                    visitor: ref visitor
                 );
             }
         }
-        void Visit(Vector3 local, Vector3? reflectionNormal) {
-            visitor(obj: new CreationStampInstance(
+        static void Visit(ref TVisitor visitor, Vector3 origin, Quaternion rotation, Vector3 local, Vector3? reflectionNormal) {
+            visitor.Visit(instance: new CreationStampInstance(
                 Origin: (origin + Vector3.Transform(
                     rotation: rotation,
                     value: local
@@ -1658,5 +1726,10 @@ public static class CreationStampLattice {
                 val2: ceiling
             )
         );
+    }
+
+    // Adapts a delegate visitor to the struct walk, so the delegate overload and the struct one share one walk.
+    private readonly struct ActionVisitor(Action<CreationStampInstance> action) : ICreationStampVisitor {
+        public void Visit(CreationStampInstance instance) => action(obj: instance);
     }
 }

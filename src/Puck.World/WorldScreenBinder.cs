@@ -78,11 +78,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly Func<WorldOverlayFacts> m_facts;
     // Keeps external images out of captures; see WorldCaptureGate.
     private readonly WorldCaptureGate m_captureGate;
-    // The one delegate the gate resolves fills through (cached so a resolve allocates nothing), and one static converted
+    // The one delegate the gate resolves fills through (cached so a resolve allocates nothing), and the static converted
     // 1x1 image per capture-fill color a filled external source resolves to.
     private readonly Func<uint, GpuImageLease> m_fillImage;
+    private readonly WorldCaptureFills m_fills;
 
-    private readonly Dictionary<uint, ConvertedPixels> m_fills = new();
     // The producers every producer source opens through: the four the engine ships, then any the host registers.
     private readonly WorldImageProducers m_producers = new();
 
@@ -242,7 +242,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             alwaysFills: alwaysFillsCaptures,
             captureArmed: () => (Runtime?.PendingCapturePath is not null)
         );
-        m_fillImage = FillImage;
+        m_fills = new WorldCaptureFills(
+            consumesExternal: ConsumesExternal,
+            gate: m_captureGate
+        );
+        m_fillImage = m_fills.Acquire;
         m_producers.Register(producer: new WorldTestPatternProducer());
         m_producers.Register(producer: new WorldQrProducer());
         m_producers.Register(producer: new CameraProducer(binder: this));
@@ -462,11 +466,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             slot.Session?.Dispose();
         }
 
-        foreach (var fill in m_fills.Values) {
-            fill.Retire();
-        }
-
-        m_fills.Clear();
+        m_fills.Dispose();
 
         DisposeCamera();
         ReleaseProbeFeeds();
@@ -484,9 +484,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             return;
         }
 
-        foreach (var fill in m_fills.Values) {
-            fill.OnDeviceLost();
-        }
+        m_fills.OnDeviceLost();
 
         CameraDeviceLost();
         ReleaseProbeFeeds();
@@ -633,13 +631,13 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (!IsExternal(source: ShownOf(screen: index))) {
+        if (!WorldCaptureFills.IsExternal(source: ShownOf(screen: index))) {
             return (Ok: false, Message: $"screen {index} has no source to eject");
         }
 
         if (
             (slot.DeclaredSource is WorldScreenSource.Producer declared) &&
-            !IsExternal(source: declared)
+            !WorldCaptureFills.IsExternal(source: declared)
         ) {
             ShowRow(index: index);
         } else {

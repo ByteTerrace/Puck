@@ -100,39 +100,19 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: $"[body.engage: target '{args[0].ToString()}' must be a screen index or body:<n>]");
         }
 
-        // The body index (if any) trails the target at token 1 — read directly rather than through
-        // WorldArgs.TryParseIndex, which reads the ORIGINAL args by position and would misparse a stripped capture:
-        // token sitting at args[1] in the (target, capture) two-token shape (tokenCount == 1, original args.Count == 2)
-        // as a malformed body index instead of the absent-token default.
-        var index = 0;
-
-        if (tokenCount >= 2) {
-            if (
-                !args.TryInt(
-                index: 1,
-                value: out index
-            ) ||
-                (index < 0) ||
-                (index >= m_population.Capacity)
-            ) {
-                return CommandResult.Error(output: $"[body.engage: body index must be an integer 0..{(m_population.Capacity - 1)}]");
-            }
-        }
-
-        var player = (IsSeat(index: index)
-            ? (m_roster.IsJoined(slot: index)
-                ? m_server.Body(index: index)
-                : null)
-            : m_population.EntryBody(index: index)
+        // The driving body is the optional 0-based body index at token 1, default body 0 (seat 1's body), read and
+        // resolved exactly as body.disengage and every other body.* verb read theirs (ResolveTarget). A stripped
+        // capture: token is left out by passing the positional count, so the (target, capture) shape is the
+        // absent-token default, never a malformed index.
+        var (player, index, targetError) = ResolveTarget(
+            args: in args,
+            count: tokenCount,
+            requiredCount: 1,
+            verb: "body.engage"
         );
 
         if (player is null) {
-            var missError = (IsSeat(index: index)
-                ? $"[body.engage: body:{index} is not joined — see world.players]"
-                : $"[body.engage: body:{index} is not an active population entry — see world.population]"
-            );
-
-            return CommandResult.Error(output: missError);
+            return CommandResult.Error(output: targetError!);
         }
 
         // Authority check happens before any mutation, including the auto-insert boot below: it checks the acting

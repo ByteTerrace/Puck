@@ -51,6 +51,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
     private readonly int m_bandCount;
     private readonly Func<WorldDefinition> m_definition;
+
+    // The neighbours' static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
+    private readonly WorldStaticPalettes m_palettes = new();
+
     // The band's own selected-body latch: which delivered entity slots THIS program's geometry was compiled for.
     // Emission and the per-frame transform pack must read the SAME set — packing a body the program never compiled
     // writes a pose into a slot no instance reads, and skipping one it did compile parks live geometry.
@@ -430,7 +434,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                         array: m_mappedPlacements,
                         count: mappedCount,
                         offset: 0
-                    )
+                    ),
+                    palettes: m_palettes
                 );
             }
 

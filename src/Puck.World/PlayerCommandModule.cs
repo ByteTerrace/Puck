@@ -217,7 +217,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.engage",
-            description: "ROUTES a body's intent onto a TARGET — a diegetic screen (the classic UX) or another body (possession): body.engage <screen>|body:<n> [capture:on|off] [body] — [capture:on|off] defaults to on (today's behavior: the source avatar idles); capture:off MIRRORS instead — the target still receives the routed channels every tick while the source avatar keeps moving under its own input. [body] is the trailing index 0..4095 (default 0). On a SCREEN target the resolved per-frame intent (tape/press/held keys alike) is translated to joypad buttons and delivered to the screen's booted machine; the screen must be declared engageable, carry a booted machine (screen.insert first), and — when its route sets an engage radius — the body's avatar must be within it (body.pose up first); multiple bodies engaged on one screen OR-merge their buttons (the multiplayer cabinet). On a BODY target the routed channels reach the target through the ordinary co-drive contribution path — the actor must ALSO hold Drive over the target body (world.grant seatN drive body:<n>) for anything to actually move; a route alone confers no Drive authority. Route only — orthogonal to body.control.",
+            description: "ROUTES a body's intent onto a TARGET — a diegetic screen (the classic UX) or another body (possession): body.engage <screen>|body:<n> [body] [capture:on|off] — [body] is the driving body, an optional 0-based body index like every body.* verb's (default 0, seat 1's body; body 1 is seat 2's); [capture:on|off], always the last token, defaults to on (today's behavior: the source avatar idles); capture:off MIRRORS instead — the target still receives the routed channels every tick while the source avatar keeps moving under its own input. On a SCREEN target the resolved per-frame intent (tape/press/held keys alike) is translated to joypad buttons and delivered to the screen's booted machine; the screen must be declared engageable, carry a booted machine (screen.insert first), and — when its route sets an engage radius — the body's avatar must be within it (body.pose up first); multiple bodies engaged on one screen OR-merge their buttons (the multiplayer cabinet). On a BODY target the routed channels reach the target through the ordinary co-drive contribution path — the actor must ALSO hold Drive over the target body (world.grant seatN drive body:<n>) for anything to actually move; a route alone confers no Drive authority. Route only — orthogonal to body.control.",
             handler: EngageHandler,
             ackOnly: true
         );
@@ -343,11 +343,13 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // the local roster seats (gated on roster membership), 4..4095 the simulated entries. Returns an error (naming
     // world.players for a seat, world.population for an entry) when the index is malformed or names an inactive
     // one. This is the loopback's fast path with sharper wording; off the loopback the server's own
-    // QueryAnswer.Refused verdict carries the same miss, rendered as IsError either way.
-    private (WorldBody? Player, int Index, string? Error) ResolveTarget(in WireArgs args, int requiredCount, string verb) {
+    // QueryAnswer.Refused verdict carries the same miss, rendered as IsError either way. A verb that reads a trailing
+    // option token off the end (body.engage's capture:on|off) passes the positional count left before it.
+    private (WorldBody? Player, int Index, string? Error) ResolveTarget(in WireArgs args, int requiredCount, string verb, int? count = null) {
         if (!WorldArgs.TryParseIndex(
             args: in args,
             at: requiredCount,
+            count: count,
             min: 0,
             max: (m_population.Capacity - 1),
             fallback: 0,

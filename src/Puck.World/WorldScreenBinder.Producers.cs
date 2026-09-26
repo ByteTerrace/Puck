@@ -12,96 +12,53 @@ internal sealed partial class WorldScreenBinder {
     // Whether any screen shows external content: a camera, a capture or a probe output.
     private bool BindsExternal() {
         foreach (var slot in m_slots.Values) {
-            if (IsExternal(source: ShownOf(screen: slot.Index))) {
+            if (WorldCaptureFills.IsExternal(source: ShownOf(screen: slot.Index))) {
                 return true;
             }
         }
 
         return false;
     }
-    // Whether a screen shows external content or a HUD frame names it.
+    // Whether a screen shows external content or a HUD frame names it: the consumers WorldCaptureFills converts the fills
+    // for before any capture is armed.
     private bool ConsumesExternal() {
         if (BindsExternal()) {
             return true;
         }
 
         foreach (var (source, _) in m_frameSourceReferences.Keys) {
-            if (IsExternal(source: source)) {
+            if (WorldCaptureFills.IsExternal(source: source)) {
                 return true;
             }
         }
 
         return false;
     }
-    // Converts the fill image of every external source a screen shows or a HUD frame names whenever one does, not only
-    // while the gate fills: a conversion's graph builds off the frame thread and its first conversions wait for it, so a
-    // fill first converted on the frame a capture is armed for would miss that capture. Each fill is a static source,
-    // its one pixel converted once through source-rgba and again only after a device loss drops it.
+    // Converts the fill of every external source a screen shows or a HUD frame names whenever one does, not only while
+    // the gate fills (WorldCaptureFills.Begin says why): the default fill, then each fill color a screen's source declares.
     private void EnsureFills(in FrameContext context) {
-        if (
-            !m_captureGate.Filling &&
-            !ConsumesExternal()
-        ) {
+        var runtime = Runtime;
+
+        if (!m_fills.Begin(
+            context: in context,
+            runtime: runtime
+        )) {
             return;
         }
-
-        EnsureFill(
-            context: in context,
-            rgba: ImageSourceDescriptor.DefaultCaptureFill
-        );
 
         foreach (var slot in m_slots.Values) {
             if (
                 (ReadOf(screen: slot.Index) is { } instance) &&
                 (FeedOf(instance: instance) is { Descriptor.FillsCaptures: true } source)
             ) {
-                EnsureFill(
+                m_fills.Ensure(
                     context: in context,
-                    rgba: source.Descriptor.CaptureFill
+                    rgba: source.Descriptor.CaptureFill,
+                    runtime: runtime
                 );
             }
         }
     }
-    private void EnsureFill(in FrameContext context, uint rgba) {
-        if (!m_fills.TryGetValue(
-            key: rgba,
-            value: out var fill
-        )) {
-            fill = new ConvertedPixels(
-                content: ImageContentClass.Presentation,
-                name: $"fill:{rgba:x8}",
-                producer: "fill"
-            );
-            m_fills[rgba] = fill;
-        }
-
-        if (
-            (fill.Handle != 0) ||
-            (Runtime is not { } runtime)
-        ) {
-            return;
-        }
-
-        ReadOnlySpan<byte> pixel = [((byte)rgba), ((byte)(rgba >> 8)), ((byte)(rgba >> 16)), ((byte)(rgba >> 24))];
-
-        _ = fill.TryConvert(
-            context: in context,
-            format: ImagePixelFormat.R8G8B8A8Unorm,
-            height: 1U,
-            planes: pixel,
-            runtime: runtime,
-            width: 1U
-        );
-    }
-    // The fill image of a packed RGBA8 color, held until the frame that samples it retires, or 0 (unbound glass, which shows
-    // no external pixels either) before EnsureFills has converted it.
-    private GpuImageLease FillImage(uint rgba) => (m_fills.TryGetValue(
-        key: rgba,
-        value: out var fill
-    )
-        ? fill.Acquire()
-        : 0
-    );
     private Vector3 ResolveLight(IWorldImageFeed feed) => (m_captureGate.Fills(content: feed.Descriptor.Content)
         ? WorldImageLight.OfFill(rgba: feed.Descriptor.CaptureFill)
         : feed.Light

@@ -276,6 +276,24 @@ public static partial class DocumentLowering {
 
                         return builtin;
                     }
+                    // A call that is no compile-time function and no arm the vocabulary declares anywhere would reach the
+                    // document as an arm nothing reads, and fail far from here; it is refused at the call instead, by
+                    // name, with no alias taken (`min` is not `minimum`).
+                    if (
+                        (arm is null) &&
+                        !scope.Templates.ContainsKey(key: call.Name) &&
+                        !scope.Vocabulary.NamesArm(callName: call.Name)
+                    ) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.BuiltinRefused,
+                            message: $"'{call.Name}' is not a compile-time function or a document arm{((DocumentBuiltins.SpellingFor(written: call.Name) is { } spelling)
+                                ? $"; the document language spells it '{spelling}'"
+                                : "")}",
+                            span: call.Span
+                        );
+
+                        return null;
+                    }
 
                     var jsonObj = new JsonObject {
                         ["$type"] = call.Name,

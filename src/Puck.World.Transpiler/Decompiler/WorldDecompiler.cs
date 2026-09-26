@@ -738,12 +738,15 @@ public static partial class WorldDecompiler {
                 sb.AppendLine();
             }
             first = false;
+            // Each member in the form the seat control's model gives it, so a closed word such as its yaw reference
+            // prints bare.
             DecompileNamedBlock(
                 sb,
                 "seatControl",
                 null,
                 scObj,
-                indentLevel: 1
+                indentLevel: 1,
+                holder: typeof(WorldSeatViewControl)
             );
         }
 

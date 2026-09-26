@@ -1,0 +1,53 @@
+schema: "puck.world.definition.v1"
+basis: "../../../src/Puck.World/Assets/worlds/avatars/moth"
+documentId: "light-gun-canary"
+
+// One Simulation screen showing the light-gun cartridge, facing +z at (0, 1, 0), two units wide: the picture's left
+// half is lit and its right half dark. The cartridge publishes its light sensor to its first variable byte, which a
+// read binding mirrors into `seen` whenever it changes.
+machines [
+  {
+    name: "gallery"
+    engine: "gaming-brick"
+    configuration {
+      schema: "puck.gaming-brick.configuration.v1"
+      model: "cgb"
+      boot: "fast"
+      content { path: "../../../src/Puck.World/Assets/cartridges/light-gun.cgb.cartridge.json" }
+    }
+    memory [
+      {
+        name: "seen"
+        direction: Read
+        space: "bus"
+        format: "u8"
+        row: seen
+        address: 0xC200
+        access: "inspect"
+        update: "onChange"
+        conversion: "checked"
+      }
+    ]
+  }
+]
+
+screens [
+  {
+    index: 0
+    origin [0, 1, 0]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 1
+    halfHeight: 0.9
+    halfDepth: 0.03
+    round: 0
+    source: machine(instance: gallery, output: "video")
+    route { engageable: true, engageRadius: 100, input: Simulation }
+  }
+]
+
+state {
+  world {
+    slot seen = 0
+  }
+}

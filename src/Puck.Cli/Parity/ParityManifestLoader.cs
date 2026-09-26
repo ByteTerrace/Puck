@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Puck.Cli.Parity;
@@ -274,7 +275,8 @@ internal static class ParityManifestLoader {
             refusal: Refusal,
             "kind",
             "graph",
-            "world"
+            "world",
+            "parameters"
         );
 
         var kind = CliStrictJson.ReadRequiredString(
@@ -311,9 +313,61 @@ internal static class ParityManifestLoader {
             )
         );
 
+        // The steps of each bound parameter's row, keyed by pass and field as a world's views.graphs row keys them, each
+        // an object from the simulation tick a value starts at to the value: the field reads it from that tick on.
+        var parameters = new Dictionary<(string Pass, string Field), IReadOnlyList<(ulong From, uint Value)>>();
+
+        if (row.TryGetProperty(
+            propertyName: "parameters",
+            value: out var parametersElement
+        )) {
+            foreach (var pass in CliStrictJson.RequireObject(
+                context: $"{context} parameters",
+                element: parametersElement,
+                refusal: Refusal
+            ).EnumerateObject()) {
+                foreach (var field in CliStrictJson.RequireObject(
+                    context: $"{context} parameters.{pass.Name}",
+                    element: pass.Value,
+                    refusal: Refusal
+                ).EnumerateObject()) {
+                    var steps = new List<(ulong From, uint Value)>();
+
+                    foreach (var step in CliStrictJson.RequireObject(
+                        context: $"{context} parameters.{pass.Name}.{field.Name}",
+                        element: field.Value,
+                        refusal: Refusal
+                    ).EnumerateObject()) {
+                        if (!ulong.TryParse(
+                            provider: CultureInfo.InvariantCulture,
+                            result: out var from,
+                            s: step.Name,
+                            style: NumberStyles.None
+                        )) {
+                            throw new ParityDocumentRefusal(message: $"{context} parameters.{pass.Name}.{field.Name} key '{step.Name}' must be the simulation tick the value starts at.");
+                        }
+                        if (
+                            (step.Value.ValueKind != JsonValueKind.Number) ||
+                            !step.Value.TryGetUInt32(value: out var value)
+                        ) {
+                            throw new ParityDocumentRefusal(message: $"{context} parameters.{pass.Name}.{field.Name}.{step.Name} must be a whole number from 0 to {uint.MaxValue}.");
+                        }
+
+                        steps.Add(item: (from, value));
+                    }
+                    if (steps.Count == 0) {
+                        throw new ParityDocumentRefusal(message: $"{context} parameters.{pass.Name}.{field.Name} must state at least one step.");
+                    }
+
+                    parameters[(pass.Name, field.Name)] = steps;
+                }
+            }
+        }
+
         return (ParityBindingReference.TryLoad(
             error: out var error,
             graphPath: graph,
+            parameters: parameters,
             reference: out var reference,
             worldPath: world
         )

@@ -48,7 +48,10 @@ Post stages are authoritative; update stale skill guidance in the same change.
    moves is accepted from the run's own candidate ledger with `--accept`,
    never re-measured. Run both batteries when shared hosting, snapshots,
    clocks, or link behavior crosses the two machines; run Tier C for serial,
-   SIO, infrared, or link changes.
+   SIO, infrared, or link changes. The light gun rides the infrared receive
+   line: its Humble stage is `light-gun`, a forge cartridge reads it through
+   `$light` (`CartridgeLightTests`), and the World's headless `light-gun`
+   canary drives it from a seat's pointer.
 6. Report exact commands, selected stages, asset-gated skips, and whether a
    failure is caused by the change or was already present.
 

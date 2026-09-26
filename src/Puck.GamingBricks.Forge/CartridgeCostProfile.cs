@@ -35,6 +35,8 @@ namespace Puck.GamingBricks.Forge;
 /// <param name="LoopStep">One iteration's own overhead.</param>
 /// <param name="MapWrite">One queued map write.</param>
 /// <param name="OperandArray">Reading an array element.</param>
+/// <param name="OperandLight">Reading the light sensor, or <see langword="null"/> on a machine with no infrared receiver,
+/// where the read is refused and never priced.</param>
 /// <param name="OperandVariable">Reading a variable.</param>
 /// <param name="RasterRow">One mid-picture scroll change.</param>
 /// <param name="RasterSetup">Republishing the scroll rows at all.</param>
@@ -58,6 +60,7 @@ public sealed record CartridgeCostProfile(
     long LoopStep,
     long MapWrite,
     long OperandArray,
+    long? OperandLight,
     long OperandVariable,
     long RasterRow,
     long RasterSetup,
@@ -82,6 +85,7 @@ public sealed record CartridgeCostProfile(
         MapWrite: 46L,
         Name: "puck.cartridge.agb.v1",
         OperandArray: 28L,
+        OperandLight: null,
         OperandVariable: 10L,
         RasterRow: 1147L,
         RasterSetup: 2791L,
@@ -107,6 +111,7 @@ public sealed record CartridgeCostProfile(
         MapWrite: 76L,
         Name: "puck.cartridge.cgb.v1",
         OperandArray: 13L,
+        OperandLight: 9L,
         OperandVariable: 2L,
         RasterRow: 130L,
         RasterSetup: 480L,

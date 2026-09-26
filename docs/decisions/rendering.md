@@ -32,6 +32,18 @@ contract: a completed sample carries identity, labels, pass states, and counts
 together, there is no parallel pipeline-only counting interface, and no label
 is borrowed from the currently installed graph.
 
+**P14 and P15 are gated by counted-cost ceilings.** Each of their passes'
+deterministic counters, dispatches, march steps, texels written and bytes
+uploaded, is recorded over one pinned workload, `puck counters`' world with its
+camera and views, at the floor tier and the resolution the RTX 2060 runs, and
+held as a calibrated ceiling that workload may not exceed; other content is
+free to cost more, since its counts gate nothing. P14 adds the march-step and
+texel counters, and per-pass upload bytes, that the ledger lacks today. A ceiling is
+re-recorded only in the change that explains why the count moved, so a cost
+increase is always a stated decision; wall-clock and GPU timing never set or
+move one. The floor device is where a missed budget first shows, so its counts
+bound the programme's rendering cost before any timing is taken.
+
 **Attachment ownership belongs to the pipeline plan.** A backend executes a
 plan it does not own. Outputs are versioned, each version has one writer, and
 forwarding transfers ownership rather than permitting multiple writers; a
@@ -106,13 +118,18 @@ unified-memory devices included.
 fields, and baked distant content may each fit a scene, and no broad shadow or
 ambient-occlusion speedup is assumed without a scene and fidelity comparison.
 
-**P6's three representation experiments are in the programme's scope.** They
+**P6's five representation experiments are in the programme's scope.** They
 are a per-placement choice between the field, a bake and a mesh, decided by
-counted cost; shadows and ambient occlusion on meshes; and capsule or ellipsoid
+counted cost; shadows and ambient occlusion on meshes; capsule or ellipsoid
 proxies on a character's bones for approximate shadows and ambient occlusion
-that never silently become the contact surface. Each is scoped on its own and
-becomes a default only once it shows a useful scene, its fidelity limits and
-its measured cost. The other representations
+that never silently become the contact surface; glossy reflections marched
+through the field, one bounce; and short-range soft global illumination
+gathered from the field. Each is scoped on its own and becomes a default only
+once it shows a useful scene, its fidelity limits and its measured cost. The
+reflection and global illumination experiments start after P14-5 puts the SDF
+passes on their declared interfaces and stay off the critical path; each lands
+with a counted-cost report and a quality-tier switch that turns it off, so the
+floor tier never pays for it. The other representations
 [P6](../plans/rendering.md#p6--representation-experiments) names, such as
 destructible fields, mesh import and skinning, stay out until a scene shows
 the need.
@@ -300,12 +317,11 @@ offscreen capture pins the fraction to one, so a capture shows exactly one named
 tick. Presentation time is a float and never re-enters state. On the GPU a
 bound scalar is copied into its pass's parameter block at the offset the
 interface fixes, and a bound row fills an array member in that pass's own World
-group block; each is written only when its value moves. The rest of the GPU
-side is the contract P10's remaining work delivers: arrays move into shared
+group block; each is written only when its value moves. Arrays live in shared
 regions keyed by row and element format, so two passes reading one row the same
 way read one copy; a row bound once is indexed per instance, so a board of
-sixty-four pieces is one binding; and the field lattice becomes a region kind,
-so a field has one truth on the GPU. The mirror reads
+sixty-four pieces is one binding; and the field lattice is a row the mirror
+reads like any other, so a field has one truth on the GPU. The mirror reads
 [the presentation view's](runtime-and-delivery.md#the-presentation-view) state
 interface, not a document.
 
@@ -366,17 +382,17 @@ steps no tick past the armed one until the capture is served or refused, and
 refuses it by name after a bounded hold. It also
 reports: `WorldCaptureScheduler` refuses a capture served by a frame showing
 another tick as `stale`, naming both ticks, rather than leaving it out of the
-manifest. The pricing and the second tick are the contract P10's remaining
-work delivers, and neither exists yet. A world's bindings are to appear in the
-cost report as bytes per tick and bytes per frame, beside and separate from the
-simulation's cycle bound, with a document over its ceiling refused at
+manifest. Bindings are priced too: a world's bindings appear in the cost report
+as bytes per tick and bytes per frame, beside and separate from the
+simulation's cycle bound, and a document over its ceiling is refused at
 validation naming the pipeline and the binding. A state-bound parameter adds a
 second tick, the one its regions were refreshed at, which the fence does not
-pin. That tick is to be reported: a capture carries it, and `puck parity` gains
-a verdict that the frame shows the tick it was armed for, ordered before the
-pixel verdict, so a skewed capture fails as a skew. `puck parity` is then to pin
-one reference tier, with one station in the parity world whose pixels depend on
-a bound row, and a second leg at the floor tier follows once tiers exist.
+pin. That tick is reported: a capture carries it as its region tick, and
+`puck parity`'s tick verdict holds it to the armed tick, ordered before the
+pixel verdict, so a skewed capture fails as a skew. `puck parity` pins one
+reference tier, `high`, and its `bound` station's pixels depend on a bound row
+the world's own rules move. A second leg at the floor tier, `low`, on floor
+hardware is a deferred hardware check.
 
 ## The frame graph and nesting
 

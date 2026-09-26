@@ -27,6 +27,26 @@ public static class DocumentBuiltins {
         comparer: StringComparer.Ordinal
     );
 
+    /// <summary>Returns the one spelling a refusal may name for a call written as an abbreviation of it: the first
+    /// value-position name, in ordinal order, that begins with <paramref name="written"/>. It is a hint in a refusal's
+    /// message, never an alias the lowering accepts.</summary>
+    /// <param name="written">The call's name as written.</param>
+    /// <returns>The name, or <see langword="null"/> when none begins with <paramref name="written"/>.</returns>
+    public static string? SpellingFor(string written) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: written);
+
+        return Names
+            .Where(predicate: name => (
+                (name.Length > written.Length) &&
+                name.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: written
+                )
+            ))
+            .Order(comparer: StringComparer.Ordinal)
+            .FirstOrDefault();
+    }
+
     // The lambda's parameters are bound as locals rather than as constants: a bound value is an already-lowered
     // JSON node, not an expression that could be lowered again.
     private static JsonNode? Apply(LambdaExpressionNode lambda, DocumentScope scope, string? fieldKey, JsonNode? first, JsonNode? second) {
