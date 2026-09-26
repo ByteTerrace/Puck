@@ -65,6 +65,14 @@
         <Using Include="Puck.State" />
     </ItemGroup>
     <ItemGroup>
+        <!-- BakeSamplingDeviceLawTests: its probe kernel compiles through the shared shader recipe like any shipped
+             kernel, and it samples the bake fixture BakeSamplingFixtureLawTests holds to a fresh bake. -->
+        <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
+        <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
+        <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
+        <Content Include="..\Puck.SignedDistance.Tests\Fixtures\bake-sampling.json" Link="Fixtures\bake-sampling.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <ItemGroup>
         <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->
         <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
     </ItemGroup>
@@ -77,6 +85,7 @@
         <Compile Include="..\Shared\RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
         <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
         <Compile Include="..\Shared\ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
+        <Compile Include="..\Shared\WarpDeviceApi.cs" Link="WarpDeviceApi.cs" />
     </ItemGroup>
     <ItemGroup>
         <!-- A world's music, tune, and patch rows resolve their source against the executable's own directory, where

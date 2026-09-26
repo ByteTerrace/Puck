@@ -1110,7 +1110,8 @@ A hit maps back to a source's pixels only through P13's CPU model; no live
 consumer feeds it a world-surface hit yet. The GPU bakes
 settled carves into 128-cubed bricks (`SdfWorldEngine.BrickBake.cs`).
 
-P17's CPU half has landed; its GPU half is open. `SdfBaker`
+P17's CPU half and the device half of its sampling check have landed; drawing a
+bake is open. `SdfBaker`
 (`src/Puck.SignedDistance/Baking`) bakes a program through `SdfFieldEvaluator`
 into an indexed mesh, five surface textures and an octahedral impostor
 ([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).
@@ -1136,17 +1137,34 @@ the same bytes on every machine: the baker reads the field in fixed point,
 writes floats only from correctly rounded scalar arithmetic, and encodes sRGB
 against exact thresholds.
 
+Both backends put a bake's textures on the GPU as they are stored.
+`GpuPixelFormat` names BC4, BC5, BC6H and BC7, sampled only, and the one image
+upload (`IGpuSurfaceUpload.Upload`) takes every level of a chain, returns a
+view over all of them, and refuses by name a device that cannot sample the
+format: a Vulkan device created without `textureCompressionBC`, or a Direct3D 12
+device whose format support lacks two-dimensional sampling. The samplers select
+levels by point with no level-of-detail clamp on both backends.
+`BakeSamplingDeviceLawTests` uploads the BC7, BC5 and BC6H textures of
+`tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json` with every level
+and samples each probe texel at its level on Vulkan, Direct3D 12 hardware and
+WARP, holding each to the CPU decoder under the fixture's tolerance;
+`BakeSamplingFixtureLawTests` holds the fixture's GPU-free half. BC7 albedo is
+uploaded without sRGB decode: the drawing path chooses its sRGB view.
+
 P17 still owes:
 
 - drawing a bake, which needs P4's shared visibility, and choosing per
-  placement between a bake and the field by P6's measured cost;
-- the device half of the bake sampling check: uploading the BC7, BC5 and BC6H
-  textures of `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json` with
-  every level and sampling each probe texel on both backends, which needs a GPU
-  image of a block-compressed format with mip levels; `BakeSamplingFixtureLawTests`
-  holds the fixture's GPU-free half;
+  placement between a bake and the field by P6's measured cost; the draw also
+  decides how an sRGB bake is read (a `Bc7UnormSrgb` view or a decode in the
+  shader);
 - the parity world shipping its bakes, and the check that a missing bake draws
-  through its field and then switches.
+  through its field and then switches;
+- the pixel-format fold. The block-compressed `GpuPixelFormat` members carry the
+  baker's `TextureFormat` names, and the fold makes them one vocabulary: it
+  replaces `GpuPixelFormats.UnitBytes` and `LevelByteLength` with the codecs'
+  own block sizes, the name-for-name parse in `BakeSamplingDeviceLawTests`, the
+  per-format switches in `ShaderPipelineRenderNode.Budget` and
+  `ShaderInterface.StorageFormatSpelling`, and `GpuPixelFormats.FromSurfaceFormat`.
 
 The SDF engine's frame data is written by hand in three places: an `SdfFrame`
 field, a numbered row in the packed buffer, and an HLSL accessor.
@@ -3364,7 +3382,8 @@ declarations (P14-3) and the planner's vocabulary with multi-basis counts
 (P14-4) needed none of them and have landed. P4-2's mesh
 work follows P4-1 and P7b's services. P15 and P16 both follow P14: P15 also needs P4, and P16, the smallest package
 in this group, needs P14's float working targets. P17's CPU half, the bakes and
-their texture codecs, has landed; drawing a bake follows P4 and choosing
+their texture codecs, has landed, and so has their block-compressed upload and
+sampling check on both backends; drawing a bake follows P4 and choosing
 between a bake and the field follows P6.
 
 **Bound state.** P9's CPU half and its frame-group half, which fills the
