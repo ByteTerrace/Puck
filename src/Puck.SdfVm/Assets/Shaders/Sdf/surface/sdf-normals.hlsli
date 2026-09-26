@@ -18,12 +18,6 @@ static const float NormalProbeEpsilon = 0.0006;
 // estimate up; it mirrors the reference study's own clamp lower bound (src/Puck.World/Assets/pipelines/moth.hlsl, clamp(magnitude,.12,1.5)).
 static const float GradientMagnitudeFloor = 0.12;
 
-// Per-pixel query tally for world.debug-view evals, including primary local-part marches and shading probes.
-// Call sites here and in sdf-primary.hlsli count their queries; the interpreter does not. This per-thread
-// scalar follows the material-seam channel's pattern and resets at renderView entry. Counting stays active
-// for every view so selecting the evaluation heatmap does not change the work being measured.
-static float sdfEvalCount = 0.0;
-
 // The 4-tap TETRAHEDRON normal probe, MASKED (world path): estimates the field gradient from 4 samples at the corners
 // of a tetrahedron (offset directions k.xyy/k.yyx/k.yxy/k.xxx = the alternating cube corners) instead of 6 axis-aligned
 // samples. The taps are isotropic — Σ dᵢdᵢᵀ = 4·I and Σ dᵢ = 0 — so weighting each sample by its own direction

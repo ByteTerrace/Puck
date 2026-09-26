@@ -21,7 +21,7 @@
 #define SDF_SAMPLED_REGIONS
 // The bounded volumes are in the shared interface, but only shading uses shade-volumes.hlsli's call at the end of
 // renderView; primary compiles it out.
-// The per-tile shadow gather (shade/sdf-shadow-gather.hlsli's sdfShadowGatherGroup): one groupshared shadow candidate mask per 8x8
+// The per-tile shadow gather (surface/sdf-shadow-gather.hlsli's sdfShadowGatherGroup): one groupshared shadow candidate mask per 8x8
 // workgroup, built cooperatively at the uniform seam inside renderView. Every lane — rendered pixel or not — must
 // reach renderView, so CSMain below turns its per-pixel extent test into an `active` flag instead of a return.
 // Primary and surface exit before group gathers; ambient and views each execute their own uniform gather.

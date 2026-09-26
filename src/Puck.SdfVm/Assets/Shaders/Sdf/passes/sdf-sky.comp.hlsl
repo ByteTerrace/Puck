@@ -12,7 +12,7 @@
 // kernel never samples a screen source: it is
 // the only configuration under which sdfScreenLights — and the real (non-pinned-literal) skyColor/lighting
 // accessors — are declared at all (shade/sdf-environment.hlsli's #else half returns the pinned defaults unconditionally, which
-// would make worldSkyEnabled() always false here). SDF_DYNAMIC_TRANSFORMS is required too: shade/sdf-shadow-gather.hlsli's
+// would make worldSkyEnabled() always false here). SDF_DYNAMIC_TRANSFORMS is required too: surface/sdf-shadow-gather.hlsli's
 // shadow-gather body (unconditionally compiled, unreached from this kernel's CSMain) references
 // sdfInstanceShadowSuppressed, whose declaration in field/sdf-instance-flags.hlsli is itself gated on this macro.
 #define SDF_DYNAMIC_TRANSFORMS

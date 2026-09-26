@@ -1,15 +1,7 @@
 // The per-workgroup shadow and ambient gather that builds one candidate mask for a group's hits.
-#ifndef SHADE_SDF_SHADOW_GATHER_HLSLI
-#define SHADE_SDF_SHADOW_GATHER_HLSLI
+#ifndef SURFACE_SDF_SHADOW_GATHER_HLSLI
+#define SURFACE_SDF_SHADOW_GATHER_HLSLI
 #ifdef SDF_SCREEN_SOURCES
-// The soft-shadow GRID-CULL A/B lever (the sdf.shadowcull verb). Rides SdfGridObjParams.w: 0 (the DEFAULT, an unset
-// frame uploads 0) = ON — the grid-gathered shadow-ray march; 1 = OFF — the flat all-instances march (the ground-truth
-// reference the departed cull gate matched, and the A/B lever's slow reference). KEEP IN SYNC with SdfFrame.DisableShadowCull
-// and SdfWorldEngine.PackScreenLights.
-bool worldShadowCullEnabled() {
-    return (sdfScreenLights[SdfGridObjParams].w < 0.5);
-}
-
 #ifdef SDF_GROUP_SHADOW_GATHER
 // Build the shadow-ray candidate mask into sdfShadowMaskWords for the soft-shadow marches of ONE 8x8 WORKGROUP — the
 // per-tile gather that replaced the former per-lit-pixel gather. Every lane publishes its hit hitPoint (or none),

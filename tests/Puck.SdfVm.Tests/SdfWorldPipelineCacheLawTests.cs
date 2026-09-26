@@ -125,7 +125,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
         _ = first.ProduceFirstFrame(context: in context);
         _ = second.ProduceFirstFrame(context: in context);
 
-        Assert.True(condition: first.RequestShaderReload(directory: AppContext.BaseDirectory));
+        Assert.True(condition: first.RequestShaderReload(tree: AppContext.BaseDirectory));
         _ = first.ProduceFrame(context: in context);
 
         var status = first.ShaderReloadStatus;

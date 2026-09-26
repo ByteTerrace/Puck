@@ -137,7 +137,7 @@ wider than the ray itself, because the closest-approach estimate must include
 occluders just beside the ray. A wider cone is always safe (a superset can't
 drop a needed occluder); too narrow leaks light. The chord is three penumbra
 half-slopes, `worldShadowPenumbraChord()` (`march/sdf-march-constants.hlsli`) `= 3 * worldShadowPenumbraSlope()`
-(`shade/sdf-lighting.hlsli`): every occluder that can lower the estimate lies inside that
+(`frame/sdf-lights.hlsli`): every occluder that can lower the estimate lies inside that
 cone with margin. `SdfEnvironment.MaxPenumbraSlope` keeps the chord below one.
 
 **When the gather wins and when it doesn't** is a clean story about density:

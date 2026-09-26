@@ -235,7 +235,7 @@ public sealed partial class SdfWorldEngine {
         var unitRight = Vector3.Normalize(value: right);
         var unitUp = Vector3.Normalize(value: up);
         // 3 float4 per entry (right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad) — KEEP IN SYNC with SdfProgram's
-        // ScreenSurfaceWords packing and shade/sdf-environment.hlsli's ScreenSurfaceData.
+        // ScreenSurfaceWords packing and frame/sdf-environment.hlsli's ScreenSurfaceData.
         Span<float> floats = stackalloc float[(ScreenSurfaceByteLength / sizeof(float))];
 
         floats[0] = unitRight.X; floats[1] = unitRight.Y; floats[2] = unitRight.Z; floats[3] = halfWidth;

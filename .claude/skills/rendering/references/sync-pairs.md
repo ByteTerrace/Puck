@@ -101,7 +101,7 @@ uint; "uint4" and "float4" name 16-byte vectors.
 | `BindViewOutputs` | `output`, written by views and sky: the set's view's own output image | Each (ring slot, view) pair has its own views set (`DescriptorPoolSizes(brickPool, viewportCapacity)`). |
 | Glyph atlas; decal cells | `sdfGlyphAtlas` through `screenSampler`; `sdfDecalCells` | |
 | The instance-mask buffer | `sdfInstanceMasksRW` in instance-cull; `sdfInstanceMasks` in the beam and the hit passes | |
-| `DebugViewModes.Names` | `DebugViewModeCount` in `debug/sdf-levers.hlsli`, and mode ids in `passes/sdf-render-view.hlsli`, `sdf-surface.hlsli`, `sdf-beam.comp.hlsl` | Twelve modes, the same order on both sides; mode 11 is `visibility`. |
+| `DebugViewModes.Names` | `DebugViewModeCount` in `frame/sdf-levers.hlsli`, and mode ids in `passes/sdf-render-view.hlsli`, `sdf-surface.hlsli`, `sdf-beam.comp.hlsl` | Twelve modes, the same order on both sides; mode 11 is `visibility`. |
 | `PrimaryMarchSteps` = 128 | `MaxSteps` in `march/sdf-march-constants.hlsli` | |
 | `ConeNear` = 0.02 | `ConeNear` in `sdf-viewport.hlsli` (the beam's cone start and the mesh pass's near plane) | The beam starts conservatively at this ray distance; primary starts no earlier than `ConeNear / dot(ray, forward)`, the intersection with the forward-distance near plane that the mesh projection and `ViewProjection` share. |
 | `SdfProgram.MaxDynamicTransformSlot` = int.MaxValue − 1 | the `TransformDynamic` slot decode | `slot + 1` must fit. The C# validation compares the float lane in double, because `(float)int.MaxValue` rounds up to 2³¹. |

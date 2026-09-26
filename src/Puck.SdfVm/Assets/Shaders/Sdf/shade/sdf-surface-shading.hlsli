@@ -1,13 +1,6 @@
 // Curvature shading and the world and object grid overlays.
 #ifndef SHADE_SDF_SURFACE_SHADING_HLSLI
 #define SHADE_SDF_SURFACE_SHADING_HLSLI
-// Stylized curvature/NPR shading (render.lighting.curvature) — artistic, not physically-based, and inert until a
-// world authors a gain. The runtime gate is "any gain above zero": the curvature normal costs a 5th map() centre tap
-// beyond the four the normal already takes, and the enrichment carries a divide, so both hang off this one predicate
-// rather than an arithmetic *0 that DXC's DXIL backend does not fold away.
-bool worldCurvatureShadingEnabled() {
-    return (max(worldCurvatureCavity(), max(worldCurvatureRim(), worldCurvatureInk())) > 0.0);
-}
 // Folds the stylized curvature terms into an already-lit surface color. Every term reads the curvature through the
 // authored band: a ridge or cavity saturates at the band's low edge and the ink line spans the band, so a gain is a
 // fraction in [0, 1] whatever the geometry's fillet radii (a 0.02-unit fillet has curvature 50; the raw value would

@@ -54,7 +54,7 @@ public enum SdfEnvironmentBlend : byte {
     Hold = 2,
 }
 /// <summary>How the frame's final color is remapped before it reaches the store — see
-/// <c>sdfFilmicTonemap</c>/<c>worldTonemapMode</c> in shade/sdf-lighting.hlsli.</summary>
+/// <c>sdfFilmicTonemap</c> in shade/sdf-lighting.hlsli and <c>worldTonemapMode</c> in frame/sdf-lights.hlsli.</summary>
 public enum SdfTonemapMode : byte {
     /// <summary>No remap: the stylized shaded color, as every world rendered before this field existed.</summary>
     None = 0,
@@ -64,7 +64,7 @@ public enum SdfTonemapMode : byte {
 }
 /// <summary>The lit path's per-frame environment — every light, the stylization gains, and the sky — as one lane
 /// table the engine uploads as float4 rows of the screen-light buffer (<c>SdfWorldEngine.PackEnvironment</c>, which
-/// also performs the host bakes noted per row). KEEP IN SYNC with shade/sdf-environment.hlsli's <c>SdfEnv*</c> rows and
+/// also performs the host bakes noted per row). KEEP IN SYNC with frame/sdf-environment.hlsli's <c>SdfEnv*</c> rows and
 /// accessors.</summary>
 /// <remarks>
 /// Row layout (row-relative to the environment base, four float lanes per row):

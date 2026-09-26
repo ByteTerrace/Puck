@@ -37,7 +37,7 @@
 
 // SDF_INSTANCE_SHADOW_TRANSPARENT_BIT, the high bit of the instance meta's segmentEnd lane (i1.w), marks an instance
 // whose compose only REMOVES material (a Subtraction-family carve), so omitting it from a shadow march can only make
-// the field MORE solid (darker / never light-leak). Read ONLY by shade/sdf-shadow-gather.hlsli's sdfShadowGather under the
+// the field MORE solid (darker / never light-leak). Read ONLY by surface/sdf-shadow-gather.hlsli's sdfShadowGather under the
 // sdf.shadow-proxy lever (sdfInstanceShadowTransparent); mapCore's segment-range enumeration MASKS it off
 // (SDF_INSTANCE_SEGMENT_END_MASK) so segmentEnd stays the true directory range and every rendered pixel is
 // byte-identical whether the bit is set or not.
@@ -47,7 +47,7 @@
 // entry, same (viewport, tile) indexing as the cull buffer.
 
 // === Shadow-ray instance cull (the world LIT path only) ==============================================================
-// A shadow-ray instance mask over the light ray's grid neighborhood, built by shade/sdf-shadow-gather.hlsli's
+// A shadow-ray instance mask over the light ray's grid neighborhood, built by surface/sdf-shadow-gather.hlsli's
 // sdfShadowGatherGroup (the grid slab walk along the sun ray) and consumed by mapMasked EXACTLY like the device per-tile
 // mask — so a culled soft-shadow march is BIT-IDENTICAL to the flat all-instances march by the same exact-cull contract
 // (an omitted instance's bound excludes every on-axis shadow sample, so its compose returns the accumulator to the
@@ -58,7 +58,7 @@
 // the primary march, normals, and coverage keep their camera masks. Guarded on SDF_SCREEN_SOURCES: only the world-views kernel
 // shades (the beam/cull/rt kernels never see it).
 #ifdef SDF_SCREEN_SOURCES
-// GROUPSHARED under SDF_GROUP_SHADOW_GATHER (the Stage 1 kernels): the per-tile gather (shade/sdf-shadow-gather.hlsli's
+// GROUPSHARED under SDF_GROUP_SHADOW_GATHER (the Stage 1 kernels): the per-tile gather (surface/sdf-shadow-gather.hlsli's
 // sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup. The full 2048-word mask costs 8 KiB per group, not per lane.
 // Other kernels retain the small inactive per-thread array; nothing in them builds a mask.
 #ifdef SDF_GROUP_SHADOW_GATHER

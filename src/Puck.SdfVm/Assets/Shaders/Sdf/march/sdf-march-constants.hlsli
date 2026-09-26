@@ -1,4 +1,4 @@
-// The march, cone, tile-gap, shadow and heat-map constants the world kernels share.
+// The march, cone, tile-gap, shadow and heat-map constants the world kernels share, and the per-pixel query tally.
 #ifndef MARCH_SDF_MARCH_CONSTANTS_HLSLI
 #define MARCH_SDF_MARCH_CONSTANTS_HLSLI
 // The primary march's step budget. KEEP IN SYNC with SdfWorldEngine.PrimaryMarchSteps (the world.budget cost sheet
@@ -105,4 +105,10 @@ static const float FastShadowMaxDistance = 5.0;
 // ray, so every occluder that can lower the estimate lies inside three penumbra half-slopes with margin; a wider cone
 // is always a superset, only less selective. SdfEnvironment.MaxPenumbraSlope keeps the chord below one.
 float worldShadowPenumbraChord() { return (3.0 * worldShadowPenumbraSlope()); }
+
+// Per-pixel query tally for world.debug-view evals, including primary local-part marches and shading probes.
+// Call sites in the march, the normals and the occlusion count their queries; the interpreter does not. This per-thread
+// scalar follows the material-seam channel's pattern and resets at renderView entry. Counting stays active
+// for every view so selecting the evaluation heatmap does not change the work being measured.
+static float sdfEvalCount = 0.0;
 #endif

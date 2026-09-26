@@ -3702,8 +3702,14 @@ generates the frame block into `frame/`.
    and `sdf-world.hlsli` aggregators in `field/` and `passes/`), and every
    compiled kernel's bytes are unchanged by the move.
    `SdfShaderLayeringLawTests` (`tests/Puck.SdfVm.Tests`) refuses an include of
-   a higher layer, a source outside every layer and an include that resolves
-   nowhere, and was shown failing on a deliberate upward include.
+   a higher layer, a use of a function, constant, global or macro that only a
+   higher layer declares, a source outside every layer and an include that
+   resolves nowhere. The frame's row decoders (the environment rows, the
+   lights and the levers, `frame/sdf-environment.hlsli`, `frame/sdf-lights.hlsli`
+   and `frame/sdf-levers.hlsli`), the shadow and ambient gather
+   (`surface/sdf-shadow-gather.hlsli`) and the query tally sit in the lowest
+   layer that uses them, and the surface pass asks `sdfScreenSurfaceShades`
+   whether a screen covers a hit.
 3. Landed, the generated instruction-set declarations: `puck shaders generate`
    writes `sdf-isa.hlsli` from the C# model through `SdfIsaHlsl`, covering the
    version handshake, every ISA enum member and the packed-layout constants,

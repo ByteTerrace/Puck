@@ -1,6 +1,9 @@
-// The debug view modes and the engine levers the bench verbs set.
-#ifndef DEBUG_SDF_LEVERS_HLSLI
-#define DEBUG_SDF_LEVERS_HLSLI
+// The debug view modes and the engine levers the bench verbs and the world's settings set, each decoded from the
+// frame's screen-light rows.
+#ifndef FRAME_SDF_LEVERS_HLSLI
+#define FRAME_SDF_LEVERS_HLSLI
+#include "sdf-environment.hlsli"
+#include "sdf-lights.hlsli"
 // March + shade one viewport's ray for a pixel at the viewport-local UV, starting the march at `marchStart` (the
 // tile-cull lower bound; TileEmpty skips the march entirely → background) and resolving the debug view mode.
 // `instanceMaskBase` is the pixel's tile mask base in the mask buffer (SDF_INSTANCE_MASK_ALL when the beam prepass
@@ -136,5 +139,22 @@ bool worldUseFastAmbientOcclusion() {
     return false;
 #endif
 }
+
+// Stylized curvature/NPR shading (render.lighting.curvature) — artistic, not physically-based, and inert until a
+// world authors a gain. The runtime gate is "any gain above zero": the curvature normal costs a 5th map() centre tap
+// beyond the four the normal already takes, and the enrichment carries a divide, so both hang off this one predicate
+// rather than an arithmetic *0 that DXC's DXIL backend does not fold away.
+bool worldCurvatureShadingEnabled() {
+    return (max(worldCurvatureCavity(), max(worldCurvatureRim(), worldCurvatureInk())) > 0.0);
+}
+#ifdef SDF_SCREEN_SOURCES
+// The soft-shadow GRID-CULL A/B lever (the sdf.shadowcull verb). Rides SdfGridObjParams.w: 0 (the DEFAULT, an unset
+// frame uploads 0) = ON — the grid-gathered shadow-ray march; 1 = OFF — the flat all-instances march (the ground-truth
+// reference the departed cull gate matched, and the A/B lever's slow reference). KEEP IN SYNC with SdfFrame.DisableShadowCull
+// and SdfWorldEngine.PackScreenLights.
+bool worldShadowCullEnabled() {
+    return (sdfScreenLights[SdfGridObjParams].w < 0.5);
+}
+#endif
 
 #endif

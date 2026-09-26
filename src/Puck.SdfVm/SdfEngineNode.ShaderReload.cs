@@ -34,11 +34,13 @@ public sealed partial class SdfEngineNode {
 
     /// <summary>Queues a compiled-kernel reload. The next produced frame starts loading the bytecode and creating the
     /// changed pipelines off the frame thread; a later frame installs them. Does not rebuild or reset the world.</summary>
-    /// <param name="directory">Bytecode directory; null selects the deployed SDF assets. Relative paths resolve against the process working directory.</param>
+    /// <param name="tree">The kernel tree whose passes directory (<see cref="SdfWorldKernels.PassesDirectory"/>) holds the
+    /// bytecode: a source checkout's <c>src/Puck.SdfVm/Assets/Shaders/Sdf</c>, or null for the deployed tree
+    /// (<see cref="SdfWorldKernels.DeployedTree"/>). Relative paths resolve against the process working directory.</param>
     /// <returns>False if another request is still pending; otherwise true. Read <see cref="ShaderReloadStatus"/> for completion.</returns>
     /// <exception cref="ArgumentException">The directory path is invalid.</exception>
-    public bool RequestShaderReload(string? directory = null) {
-        var resolved = Path.GetFullPath(path: (directory ?? SdfWorldKernels.DefaultDirectory));
+    public bool RequestShaderReload(string? tree = null) {
+        var resolved = Path.GetFullPath(path: SdfWorldKernels.PassesDirectory(tree: (tree ?? SdfWorldKernels.DeployedTree)));
 
         lock (m_shaderReloadGate) {
             var previous = ShaderReloadStatus;

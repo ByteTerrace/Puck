@@ -50,7 +50,7 @@ namespace Puck.SignedDistance;
 // Screen surfaces are a SEPARATE fixed-size side table (ScreenSurfaceWords), not part of the sdfWords stream above —
 // they are shading-only data the world renderer's Stage 1 binds into its own buffer, ALWAYS sized to
 // SdfProgramBuilder.MaxScreenSurfaces and indexed DIRECTLY by screen index (KEEP IN SYNC with SdfWorldEngine and
-// shade/sdf-environment.hlsli's ScreenSurfaceData).
+// frame/sdf-environment.hlsli's ScreenSurfaceData).
 /// <summary>Contains the typed SDF instruction stream and its packed GPU representation, bounds, instances,
 /// materials, screen surfaces, and acceleration metadata.</summary>
 public sealed partial class SdfProgram {
@@ -78,7 +78,7 @@ public sealed partial class SdfProgram {
     /// well below any legitimate rounding of a real radius toward 0 so the branch never misfires on a genuine bound.</summary>
     private const float ParkedBoundRadius = -1f;
     /// <summary>Each packed screen-surface entry's uvec4 (16-byte) stride: right.xyz+halfWidth, up.xyz+halfHeight,
-    /// origin.xyz+pad (KEEP IN SYNC with shade/sdf-environment.hlsli's ScreenSurfaceData).</summary>
+    /// origin.xyz+pad (KEEP IN SYNC with frame/sdf-environment.hlsli's ScreenSurfaceData).</summary>
     private const int ScreenSurfaceVectorsPerEntry = 3;
     /// <summary>Each packed <see cref="SdfShapeType.Sweep"/> curve table entry's uvec4 stride: (A.xyz, radiusStart),
     /// (B.xyz, radiusEnd), (C.xyz, bulge).</summary>

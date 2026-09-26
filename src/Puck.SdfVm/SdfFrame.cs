@@ -86,7 +86,7 @@ public sealed record SdfFrame(
     /// <summary>The slice debug view's plane selector: 0 (the default) = camera-locked (the plane through the world
     /// origin with normal = camera forward), 1/2/3 = a world-axis-aligned plane (X/Y/Z normal) at
     /// <see cref="DebugSliceOffset"/> along that axis. Rides the screen-light buffer's environment entry's two spare
-    /// lanes (KEEP IN SYNC with shade/sdf-environment.hlsli's <c>sdfScreenLights</c> env decode and
+    /// lanes (KEEP IN SYNC with frame/sdf-environment.hlsli's <c>sdfScreenLights</c> env decode and
     /// <c>SdfWorldEngine.PackScreenLights</c>) — no new upload plumbing. Read only by debug view mode 7 (slice);
     /// every other mode ignores it, so the default demo is byte-unchanged.</summary>
     public float DebugSliceAxis { get; init; }
@@ -96,7 +96,7 @@ public sealed record SdfFrame(
     /// <summary>Engine-bench lever: skips <c>calcAO</c>'s normal-ladder ambient occlusion (occlusion is forced to 1, so
     /// creases read brighter). Default <see langword="false"/> = AO on. Isolates the AO map() evals per lit pixel for
     /// the <c>sdf.ao</c> bench toggle. Rides the bench-params screen-light row's <c>.y</c> lane (KEEP IN SYNC with
-    /// <c>SdfWorldEngine.PackScreenLights</c> and debug/sdf-levers.hlsli's <c>worldAoDisabled</c>); an unset frame uploads 0
+    /// <c>SdfWorldEngine.PackScreenLights</c> and frame/sdf-levers.hlsli's <c>worldAoDisabled</c>); an unset frame uploads 0
     /// and AO stays on.</summary>
     public bool DisableAmbientOcclusion { get; init; }
     /// <summary>A/B lever for the beam-published per-tile far bound. Default
@@ -105,13 +105,13 @@ public sealed record SdfFrame(
     /// through <see cref="FarDistance"/>, so the pixel is output-identical to a full march but pays fewer steps. Set
     /// <see langword="true"/> to push the far bound out of reach so the march runs to <see cref="FarDistance"/>
     /// exactly as without it — the paired-run "off" side. Rides a dedicated far-field screen-light row's <c>.x</c> lane
-    /// (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and debug/sdf-levers.hlsli's <c>worldFarBoundDisabled</c> /
+    /// (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and frame/sdf-levers.hlsli's <c>worldFarBoundDisabled</c> /
     /// <c>SdfFarFieldParams</c>); an unset frame uploads 0 and the far bound stays on.</summary>
     public bool DisableFarBound { get; init; }
     /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic CRTs stop spilling colored light
     /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit CRTs' cost for the
     /// <c>sdf.screen-lights</c> bench toggle. Rides the bench-params screen-light row's <c>.w</c> lane (KEEP IN SYNC with
-    /// <c>SdfWorldEngine.PackScreenLights</c> and debug/sdf-levers.hlsli's <c>worldScreenLightsDisabled</c>); an unset frame
+    /// <c>SdfWorldEngine.PackScreenLights</c> and frame/sdf-levers.hlsli's <c>worldScreenLightsDisabled</c>); an unset frame
     /// uploads 0 and screen lights stay on.</summary>
     public bool DisableScreenLights { get; init; }
     /// <summary>Disables the soft-shadow grid cull (default <see langword="false"/> = the cull is on). With the cull on
@@ -120,12 +120,12 @@ public sealed record SdfFrame(
     /// the flat all-instances march: the ground-truth reference for the cull, and the A/B lever's off state (the
     /// <c>sdf.shadowcull</c> verb) — cull-equals-flat parity is checked by flipping the verb. Rides the screen-light
     /// buffer's grid-object-params row's reserved <c>.w</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c>
-    /// and shade/sdf-shadow-gather.hlsli's <c>worldShadowCullEnabled</c>); an unset frame uploads 0 and the cull stays on.</summary>
+    /// and frame/sdf-levers.hlsli's <c>worldShadowCullEnabled</c>); an unset frame uploads 0 and the cull stays on.</summary>
     public bool DisableShadowCull { get; init; }
     /// <summary>Engine-bench lever: skips the whole soft-shadow sun march (the sun goes unshadowed; the ambient term is
     /// untouched, so shadowed regions read brighter). Default <see langword="false"/> = shadows on. Isolates the single
     /// most expensive shading term for the <c>sdf.soft-shadows</c> bench toggle. Rides the bench-params screen-light
-    /// row's <c>.x</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and debug/sdf-levers.hlsli's
+    /// row's <c>.x</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and frame/sdf-levers.hlsli's
     /// <c>worldSoftShadowsDisabled</c>); an unset frame uploads 0 and shadows stay on.</summary>
     public bool DisableSoftShadows { get; init; }
     /// <summary>Enables the cadence gate: a presentation-only frame-graph optimization where a
@@ -146,12 +146,12 @@ public sealed record SdfFrame(
     /// evaluate every carve. Conservative when on — a skipped carve can only make the field more solid, so shadows go
     /// darker, never light-leak. The <c>sdf.shadow-proxy</c> bench toggle. Rides a dedicated shadow-proxy screen-light
     /// row's <c>.x</c> lane (SdfBenchParams's four lanes are full — KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c>
-    /// and shade/sdf-shadow-gather.hlsli's <c>worldShadowProxyEnabled</c> / <c>SdfShadowProxyParams</c>); an unset frame uploads 0 and
+    /// and frame/sdf-levers.hlsli's <c>worldShadowProxyEnabled</c> and frame/sdf-environment.hlsli's <c>SdfShadowProxyParams</c>); an unset frame uploads 0 and
     /// the proxy stays off.</summary>
     public bool EnableShadowProxy { get; init; }
     /// <summary>The grid-lock overlay flags (bit0 = draw the world floor grid, bit1 = draw the object grid). Rides
     /// the screen-light buffer's grid rows 9..12 (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and
-    /// shade/sdf-environment.hlsli's <c>SdfGridWorld..SdfGridObjParams</c> decode). Default 0 = no overlay, so a frame that never
+    /// frame/sdf-environment.hlsli's <c>SdfGridWorld..SdfGridObjParams</c> decode). Default 0 = no overlay, so a frame that never
     /// sets it uploads the same zeros as before.</summary>
     public uint GridFlags { get; init; }
     /// <summary>The floor plane height the world grid draws on (the overlay gates on the surface being near this Y).</summary>
@@ -182,31 +182,31 @@ public sealed record SdfFrame(
     /// march ceiling — one shared length, or the cull set would be unsound for the ray) for the <c>sdf.shadow-distance</c>
     /// bench toggle. <c>0</c> (the default) means the full 1.0 reach — an unset frame uploads 0 and behavior is
     /// unchanged; set 0.5/0.25 to shorten far shadows. Rides the bench-params screen-light row's <c>.z</c> lane (KEEP IN
-    /// SYNC with <c>SdfWorldEngine.PackScreenLights</c> and debug/sdf-levers.hlsli's <c>worldShadowDistanceScale</c>).</summary>
+    /// SYNC with <c>SdfWorldEngine.PackScreenLights</c> and frame/sdf-levers.hlsli's <c>worldShadowDistanceScale</c>).</summary>
     public float ShadowDistanceScale { get; init; }
     /// <summary>Uses the already-computed camera-tile instance mask for soft-shadow rays instead of running the
     /// correctness-complete per-pixel shadow-grid gather. This is an explicit performance approximation for dense
     /// real-time crowds: it can omit an occluder outside the camera tile whose shadow reaches into the tile, but avoids
     /// paying a grid traversal for every sun-facing pixel. Default <see langword="false"/> keeps the exact gathered
     /// mask. Rides the shadow-proxy params row's reserved <c>.y</c> lane (KEEP IN SYNC with
-    /// <c>SdfWorldEngine.PackScreenLights</c> and debug/sdf-levers.hlsli's <c>worldUseCameraTileShadowMask</c>).</summary>
+    /// <c>SdfWorldEngine.PackScreenLights</c> and frame/sdf-levers.hlsli's <c>worldUseCameraTileShadowMask</c>).</summary>
     public bool UseCameraTileShadowMask { get; init; }
     /// <summary>Uses the one-sample contact-AO approximation instead of the three-rung quality ladder. This is an
     /// explicit presentation approximation for dense real-time scenes; the default <see langword="false"/> retains
     /// the quality path. Rides the shadow-proxy params row's reserved <c>.w</c> lane (KEEP IN SYNC with
-    /// <c>SdfWorldEngine.PackScreenLights</c> and debug/sdf-levers.hlsli's <c>worldUseFastAmbientOcclusion</c>).</summary>
+    /// <c>SdfWorldEngine.PackScreenLights</c> and frame/sdf-levers.hlsli's <c>worldUseFastAmbientOcclusion</c>).</summary>
     public bool UseFastAmbientOcclusion { get; init; }
     /// <summary>Uses the bounded-cost soft-shadow marcher: fewer samples, wider open-space advances, and a sub-visible
     /// darkness early-out. This is an explicit presentation approximation for dense real-time scenes; the default
     /// <see langword="false"/> retains the exact 48-step quality path. Rides the shadow-proxy params row's reserved
-    /// <c>.z</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and debug/sdf-levers.hlsli's
+    /// <c>.z</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and frame/sdf-levers.hlsli's
     /// <c>worldUseFastSoftShadowMarch</c>).</summary>
     public bool UseFastSoftShadowMarch { get; init; }
     /// <summary>Selects the four-tap finite-difference surface normal instead of the default analytic forward-mode
     /// gradient dual. The default <see langword="false"/> uses analytic normals (one dual field evaluation at
     /// the hit — exact through the transform chain, immune to finite-difference cancellation). Rides the screen-light
     /// buffer's grid-object-params row's reserved <c>.z</c> lane (KEEP IN SYNC with
-    /// <c>SdfWorldEngine.PackScreenLights</c> and debug/sdf-levers.hlsli's <c>worldUseTapNormals</c>); a frame that never sets
+    /// <c>SdfWorldEngine.PackScreenLights</c> and frame/sdf-levers.hlsli's <c>worldUseTapNormals</c>); a frame that never sets
     /// it uploads 0 and shades with analytic normals.</summary>
     public bool UseFiniteDifferenceNormals { get; init; }
 

@@ -6,16 +6,17 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// The SDF kernels' module tree (<c>src/Puck.SdfVm/Assets/Shaders/Sdf</c>) is layered, lowest first: the generated
 /// declarations (<c>isa</c>), the field interpreter (<c>field</c>), the frame's data (<c>frame</c>), the march
-/// (<c>march</c>), the surface resolve (<c>surface</c>), shading (<c>shade</c>), the debug views and levers
-/// (<c>debug</c>), and the pass entry points and bodies (<c>passes</c>). A module includes only modules of its own layer
-/// or a lower one, so no layer reaches one above it; every source lives in a layer's directory, and every include
-/// resolves to a source in the tree.
+/// (<c>march</c>), the surface resolve (<c>surface</c>), shading (<c>shade</c>), the debug views (<c>debug</c>), and the
+/// pass entry points and bodies (<c>passes</c>). A module depends only on modules of its own layer or a lower one: it
+/// includes none above it, and it uses no symbol that only a module above it declares, because an aggregator that
+/// includes a higher module first would otherwise hide the dependency. Every source lives in a layer's directory, and
+/// every include resolves to a source in the tree.
 /// </summary>
 public sealed partial class SdfShaderLayeringLawTests {
     private static readonly string[] Layers = ["isa", "field", "frame", "march", "surface", "shade", "debug", "passes"];
 
     [Fact]
-    public void NoModuleIncludesAHigherLayer() {
+    public void NoModuleDependsOnAHigherLayer() {
         var root = RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory);
         var files = Directory.EnumerateFiles(path: root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
             .Where(predicate: static path => (path.EndsWith(value: ".hlsl", comparisonType: StringComparison.Ordinal) || path.EndsWith(value: ".hlsli", comparisonType: StringComparison.Ordinal)))
@@ -26,7 +27,11 @@ public sealed partial class SdfShaderLayeringLawTests {
             );
 
         Assert.NotEmpty(collection: files);
-        Assert.Empty(collection: Violations(files: files));
+        // Joined, so a failure names every violation rather than the first few.
+        Assert.Equal(
+            actual: string.Join(separator: Environment.NewLine, values: Violations(files: files)),
+            expected: string.Empty
+        );
     }
     // The check refuses an upward include by name, and accepts one within a layer or to a lower one; it also refuses a
     // source outside every layer and an include that resolves nowhere in the tree.
@@ -50,12 +55,61 @@ public sealed partial class SdfShaderLayeringLawTests {
             ]
         );
     }
+    // The check refuses a use of a function, constant, global or macro that only a higher layer declares, and accepts
+    // one its own layer or a lower one declares, a member access, a name no module declares (an intrinsic), a parameter
+    // or local that shares a higher module's name, and a pass-supplied macro a module only tests in a conditional.
+    [Fact]
+    public void AnUpwardSymbolUseIsRefusedByName() {
+        var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+            ["isa/a.hlsli"] = "[[vk::binding(0, 3)]] StructuredBuffer<float4> lights : register(t0, space3);\nstruct Row { float4 value; };\n",
+            ["field/b.hlsli"] = "static const uint RowCount = 4u;\n#define FIELD_SCALE 2.0\nfloat fieldAt(float3 p) { return (length(p) * FIELD_SCALE); }\n",
+            ["surface/c.hlsli"] = string.Join(
+                separator: '\n',
+                "// levelOf() in a comment is no use.",
+                "float surfaceAt(float3 p) {",
+                "#ifdef PASS_FLAG",
+                "    float local = lights[RowCount].x;",
+                "#endif",
+                "    Row row; row.levelOf = 0;",
+                "    return (fieldAt(p) + levelOf(p) + DEBUG_TINT + debugMode);",
+                "}"
+            ),
+            ["debug/d.hlsli"] = "#define DEBUG_TINT 0.5\nstatic const int debugMode = 3;\nfloat levelOf(float3 p) { return p.x; }\n",
+            ["field/f.hlsli"] = "float probe(uint debugMode) { float levelOf = 1.0; return (debugMode * levelOf); }\n",
+            ["passes/e.comp.hlsl"] ="#define PASS_FLAG\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) { surfaceAt((float3)id); }\n",
+        };
+
+        Assert.Equal(
+            actual: Violations(files: files),
+            expected: [
+                "surface/c.hlsli uses DEBUG_TINT from debug/d.hlsli, a higher layer",
+                "surface/c.hlsli uses debugMode from debug/d.hlsli, a higher layer",
+                "surface/c.hlsli uses levelOf from debug/d.hlsli, a higher layer",
+            ]
+        );
+    }
 
     // Every rule a tree of sources (keyed by path relative to the tree's root, forward slashes) breaks, in path order.
     private static List<string> Violations(IReadOnlyDictionary<string, string> files) {
         var violations = new List<string>();
+        var declarers = new Dictionary<string, List<string>>(comparer: StringComparer.Ordinal);
+        var code = files.ToDictionary(
+            comparer: StringComparer.Ordinal,
+            elementSelector: static file => StripComments(text: file.Value),
+            keySelector: static file => file.Key
+        );
 
-        foreach (var (path, text) in files.OrderBy(keySelector: static file => file.Key, comparer: StringComparer.Ordinal)) {
+        foreach (var (path, text) in code) {
+            foreach (var symbol in Declarations(code: text)) {
+                if (!declarers.TryGetValue(key: symbol, value: out var paths)) {
+                    declarers[symbol] = paths = [];
+                }
+
+                paths.Add(item: path);
+            }
+        }
+
+        foreach (var (path, text) in code.OrderBy(keySelector: static file => file.Key, comparer: StringComparer.Ordinal)) {
             var layer = LayerOf(path: path);
 
             if (layer < 0) {
@@ -74,6 +128,17 @@ public sealed partial class SdfShaderLayeringLawTests {
                     violations.Add(item: $"{path} includes {target}, which is not in the tree");
                 } else if (LayerOf(path: target) > layer) {
                     violations.Add(item: $"{path} includes {target}, a higher layer");
+                }
+            }
+
+            var locals = LocalDeclarations(code: text);
+
+            foreach (var symbol in Uses(code: text).Where(predicate: symbol => !locals.Contains(item: symbol)).Order(comparer: StringComparer.Ordinal)) {
+                if (
+                    declarers.TryGetValue(key: symbol, value: out var paths) &&
+                    paths.All(predicate: declarer => (declarer != path) && (LayerOf(path: declarer) > layer))
+                ) {
+                    violations.Add(item: $"{path} uses {symbol} from {string.Join(separator: ", ", values: paths.Order(comparer: StringComparer.Ordinal))}, a higher layer");
                 }
             }
         }
@@ -105,7 +170,124 @@ public sealed partial class SdfShaderLayeringLawTests {
 
         return string.Join(separator: '/', values: segments);
     }
+    // The source with each comment replaced by the line breaks it spanned, so every line keeps its place.
+    private static string StripComments(string text) => CommentPattern().Replace(
+        evaluator: static comment => new string(
+            c: '\n',
+            count: comment.Value.Count(predicate: static c => (c == '\n'))
+        ),
+        input: text
+    );
+    // The names a module declares at file scope: its macros, structs, functions, constants, globals and resources. A
+    // name is declared where it follows a type (an identifier or a template's closing bracket) outside every brace and
+    // parenthesis, and is followed by a parameter list, an initializer, an array bound, a register or semantic, or the
+    // declaration's end.
+    private static HashSet<string> Declarations(string code) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var braces = 0;
+        var parens = 0;
+        string? previous = null;
 
+        foreach (var line in code.Split(separator: '\n')) {
+            if (DirectivePattern().Match(input: line) is { Success: true } directive) {
+                if (directive.Groups[1].Value == "define") {
+                    _ = names.Add(item: directive.Groups[2].Value);
+                }
+
+                continue;
+            }
+
+            foreach (Match token in TokenPattern().Matches(input: line)) {
+                var value = token.Value;
+
+                switch (value) {
+                    case "{":
+                        braces++;
+                        break;
+                    case "}":
+                        braces--;
+                        break;
+                    case "(":
+                        parens++;
+                        break;
+                    case ")":
+                        parens--;
+                        break;
+                }
+
+                if ((braces == 0) && (parens == 0) && IsIdentifier(token: previous) && (previous != "return") && IsIdentifier(token: value)) {
+                    var rest = line.AsSpan(start: (token.Index + value.Length)).TrimStart();
+
+                    if (
+                        (previous == "struct") ||
+                        (rest.Length == 0) ||
+                        (rest[0] is '(' or ';' or '=' or '[' or ':' or ',')
+                    ) {
+                        _ = names.Add(item: value);
+                    }
+                }
+
+                previous = ((value == ">") ? "type" : value);
+            }
+        }
+
+        return names;
+    }
+    // The names a module uses: every identifier outside a comment, a member access and a directive, except the body of
+    // a macro definition, which is code wherever it expands.
+    private static HashSet<string> Uses(string code) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var line in code.Split(separator: '\n')) {
+            var text = line;
+
+            if (DirectivePattern().Match(input: line) is { Success: true } directive) {
+                if (directive.Groups[1].Value != "define") {
+                    continue;
+                }
+
+                text = line[(directive.Groups[2].Index + directive.Groups[2].Length)..];
+            }
+
+            foreach (Match use in UsePattern().Matches(input: text)) {
+                _ = names.Add(item: use.Value);
+            }
+        }
+
+        return names;
+    }
+    // The names a module declares in any scope, its parameters and locals included: a name that follows a type and is
+    // followed by an initializer, an array bound, a semantic, a separator or the end of a declaration or parameter list.
+    // Its uses of such a name are its own, never a higher module's.
+    private static HashSet<string> LocalDeclarations(string code) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var line in code.Split(separator: '\n')) {
+            if (DirectivePattern().IsMatch(input: line)) {
+                continue;
+            }
+
+            foreach (Match declaration in LocalDeclarationPattern().Matches(input: line)) {
+                if (declaration.Groups[1].Value is not ("return" or "else" or "case" or "in" or "out" or "inout")) {
+                    _ = names.Add(item: declaration.Groups[2].Value);
+                }
+            }
+        }
+
+        return names;
+    }
+    private static bool IsIdentifier(string? token) => ((token is { Length: > 0 }) && (char.IsLetter(c: token[0]) || (token[0] == '_')));
+
+    [GeneratedRegex(pattern: "//[^\\n]*|/\\*.*?\\*/", options: RegexOptions.Singleline)]
+    private static partial Regex CommentPattern();
+    [GeneratedRegex(pattern: "^\\s*#\\s*(\\w+)\\s*(\\w*)")]
+    private static partial Regex DirectivePattern();
+    [GeneratedRegex(pattern: "([A-Za-z_]\\w*|>)\\s+([A-Za-z_]\\w*)\\s*(?=[;=,)\\[:])")]
+    private static partial Regex LocalDeclarationPattern();
     [GeneratedRegex(pattern: "^\\s*#\\s*include\\s+\"([^\"]+)\"", options: RegexOptions.Multiline)]
     private static partial Regex IncludePattern();
+    [GeneratedRegex(pattern: "[A-Za-z_]\\w*|\\d[\\w.]*|\\S")]
+    private static partial Regex TokenPattern();
+    [GeneratedRegex(pattern: "(?<![\\w.])[A-Za-z_]\\w*")]
+    private static partial Regex UsePattern();
 }
