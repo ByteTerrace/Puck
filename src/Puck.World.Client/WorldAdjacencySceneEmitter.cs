@@ -96,10 +96,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // compares against this to decide whether a rebuild is owed, without ever emitting from inside WriteRevision
     // itself (emission belongs to Emit alone).
     private readonly Dictionary<string, (int Definition, int Snapshot)> m_polledRevisions = new(comparer: StringComparer.Ordinal);
-    // Each neighbour's bound colors, read through the neighbour's own state mirror as the local build reads the client's
-    // (WorldBakedColors), so a state-cell write that moves a bound color rebuilds the border as it would a local
-    // placement. Kept per adjacency while the neighbour's mirror is the same object.
-    private readonly Dictionary<string, (WorldStateMirror Mirror, WorldBakedColors Colors)> m_neighbourColors = new(comparer: StringComparer.Ordinal);
+    // Each neighbour's bound colors, read through a state mirror over the neighbour's pinned image as the local build
+    // reads the client's (WorldBakedColors), so a state-cell write that moves a bound color rebuilds the border as it
+    // would a local placement, and only once the neighbour's pin advances to the image carrying it.
+    private readonly Dictionary<string, NeighbourColors> m_neighbourColors = new(comparer: StringComparer.Ordinal);
     // A band whose delivered body count has already crossed MaxEntitiesPerBand, so the truncation is stated once per
     // border rather than once per program rebuild.
     private readonly HashSet<string> m_truncationNarrated = new(comparer: StringComparer.Ordinal);
@@ -166,29 +166,56 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // A plain indexed copy of the first `count` entries — the ONLY place EmitCurrent allocates a fresh
     // m_emittedProjections array, reached only when a live edit authors more adjacency projections than this
     // composition reserved at boot.
-    // The bound colors a projection's neighbour bakes, over that neighbour's followed state mirror.
-    private WorldBakedColors ColorsOf(WorldAdjacencyProjection projection) {
-        var mirror = projection.Neighbour.FollowState();
-
-        if (
-            m_neighbourColors.TryGetValue(
-                key: projection.Name,
-                value: out var held
-            ) &&
-            ReferenceEquals(
-                objA: held.Mirror,
-                objB: mirror
-            )
-        ) {
-            return held.Colors;
+    // The bound colors a projection's neighbour bakes, read from definition, the neighbour image the caller read once
+    // and draws the border's geometry from, so geometry and colors always come from one image.
+    private WorldBakedColors ColorsOf(WorldAdjacencyProjection projection, WorldDefinition definition) {
+        if (!m_neighbourColors.TryGetValue(
+            key: projection.Name,
+            value: out var colors
+        )) {
+            colors = new NeighbourColors(definition: definition);
+            m_neighbourColors[projection.Name] = colors;
         }
 
-        var colors = new WorldBakedColors(mirror: mirror);
-
-        m_neighbourColors[projection.Name] = (mirror, colors);
-
-        return colors;
+        return colors.Follow(definition: definition);
     }
+
+    // A state mirror over one neighbour image and the colors a border bakes through it. Owned by the presentation that
+    // builds the border, so nothing else writes it; it reinstalls over a new image object, which re-reads every slot
+    // and reports a move only for a baked color whose value changed (WorldBakedColors.TryTakeMove).
+    private sealed class NeighbourColors {
+        private WorldDefinition m_definition;
+
+        public NeighbourColors(WorldDefinition definition) {
+            m_definition = definition;
+            Mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => m_definition));
+            Mirror.Install(
+                engineTick: 0UL,
+                tick: 0UL
+            );
+            Colors = new WorldBakedColors(mirror: Mirror);
+        }
+
+        public WorldBakedColors Colors { get; }
+        public WorldStateMirror Mirror { get; }
+
+        // Follows a neighbour image: the same image object reads as it did, a new one reinstalls the mirror over it.
+        public WorldBakedColors Follow(WorldDefinition definition) {
+            if (!ReferenceEquals(
+                objA: definition,
+                objB: m_definition
+            )) {
+                m_definition = definition;
+                Mirror.Install(
+                    engineTick: 0UL,
+                    tick: 0UL
+                );
+            }
+
+            return Colors;
+        }
+    }
+
     private static WorldAdjacencyProjection[] CopyProjections(IReadOnlyList<WorldAdjacencyProjection> source, int count) {
         var copy = new WorldAdjacencyProjection[count];
 
@@ -434,8 +461,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
 
             var neighbour = projection.Neighbour;
+            // The neighbour image is read once: the border's geometry and its bound colors both come from it.
+            var image = neighbour.Definition;
             var selection = WorldAdjacencyGeometry.Select(
-                definition: neighbour.Definition,
+                definition: image,
                 frame: projection.Path[0].Neighbour,
                 overlapDepth: projection.OverlapDepth
             );
@@ -450,7 +479,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
 
             if (mappedCount > 0) {
-                var colors = ColorsOf(projection: projection);
+                var colors = ColorsOf(
+                    definition: image,
+                    projection: projection
+                );
 
                 colors.Begin();
                 // Adjacency delivery currently carries the neighbouring document, not its hash-pinned font asset
@@ -459,8 +491,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 WorldPlacementStamper.EmitStatic(
                     builder: builder,
                     colors: colors,
-                    definition: neighbour.Definition,
-                    creations: neighbour.Definition.Creations,
+                    definition: image,
+                    creations: image.Creations,
                     placements: new ArraySegment<WorldPlacement>(
                         array: m_mappedPlacements,
                         count: mappedCount,
@@ -633,7 +665,10 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
             // A bound color the border baked moving in the neighbour's state mirror rebuilds it, as the local scene
             // emitter's baked-color component does for its own placements.
-            if (ColorsOf(projection: projection).TryTakeMove()) {
+            if (ColorsOf(
+                definition: projection.Neighbour.Definition,
+                projection: projection
+            ).TryTakeMove()) {
                 m_neighbourRevision++;
             }
         }

@@ -517,9 +517,6 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         );
         public WorldDefinition Definition => (m_pinnedDefinition ?? mirror.Definition);
         public int DefinitionRevision => mirror.DefinitionRevision;
-
-        public WorldStateMirror FollowState() => mirror.FollowState();
-
         public int EntityCapacity => WorldBodiesLimits.CapacityCeiling;
         public float InterpolationAlpha => (m_hasPin
             ? WorldSessionMirror.ResolveInterpolationAlpha(

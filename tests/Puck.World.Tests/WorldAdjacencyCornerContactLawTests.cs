@@ -3,7 +3,6 @@ using System.Numerics;
 using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
-using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -496,8 +495,6 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         }
     }
     private sealed class SeamNeighbour : IWorldAdjacencyNeighbourContact {
-        private WorldStateMirror? m_state;
-
         private readonly WorldSolidField? m_field;
 
         public SeamNeighbour(WorldDefinition definition, WorldFaceFrame counterpartFrame, bool hasField) {
@@ -521,19 +518,6 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         public WorldFaceFrame CounterpartFrame { get; }
         public WorldDefinition Definition { get; }
         public int DefinitionRevision => 0;
-
-        public WorldStateMirror FollowState() {
-            if (m_state is null) {
-                m_state = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => Definition));
-                m_state.Install(
-                    engineTick: 0UL,
-                    tick: 0UL
-                );
-            }
-
-            return m_state;
-        }
-
         public int EntityCapacity => 0;
         public float InterpolationAlpha => 0f;
         public int SnapshotRevision => 0;
@@ -610,8 +594,6 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         }
     }
     private sealed class CornerNeighbour : IWorldAdjacencyNeighbourContact {
-        private WorldStateMirror? m_state;
-
         private readonly WorldSolidField m_field;
 
         public CornerNeighbour(WorldDefinition definition) {
@@ -631,19 +613,6 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         public WorldFaceFrame CounterpartFrame => Boundary(yaw: 0f).CompileFrame();
         public WorldDefinition Definition { get; }
         public int DefinitionRevision => 0;
-
-        public WorldStateMirror FollowState() {
-            if (m_state is null) {
-                m_state = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => Definition));
-                m_state.Install(
-                    engineTick: 0UL,
-                    tick: 0UL
-                );
-            }
-
-            return m_state;
-        }
-
         public int EntityCapacity => 0;
         public float InterpolationAlpha => 0f;
         public int SnapshotRevision => 0;

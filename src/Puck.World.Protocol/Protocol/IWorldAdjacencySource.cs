@@ -69,16 +69,6 @@ public interface IWorldAdjacencyNeighbour {
     /// <summary>Gets the monotonic delivery counter behind <see cref="Definition"/> — the render composition's own
     /// rebuild-watch component, so a live neighbour edit is reflected exactly like a local one.</summary>
     int DefinitionRevision { get; }
-
-    /// <summary>Brings the neighbour's state mirror up to its latest delivery and returns it: the one mirror every
-    /// presentation read of the neighbour's rows goes through, its bound colors and field cells included, as
-    /// <see cref="Client.WorldSessionMirror.FollowState"/> is for a session.</summary>
-    /// <returns>The neighbour's state mirror.</returns>
-    /// <remarks>The mirror follows the latest delivery, while <see cref="Definition"/> may be the image a tick pinned for
-    /// contact, so a border's bound colors can lead its pinned geometry by at most the deliveries since the last pin.
-    /// Presentation only: nothing the simulation decides reads it.</remarks>
-    Client.WorldStateMirror FollowState();
-
     /// <summary>Gets the counterpart face's own derived frame, in the NEIGHBOUR's own local coordinate space — the
     /// SAME per-revision derivation (<see cref="WorldFaceCatalog"/>) the portal trigger, the arrival isometry, and
     /// rendering all read for this face.</summary>

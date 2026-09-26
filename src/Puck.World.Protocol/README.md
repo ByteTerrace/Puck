@@ -137,9 +137,10 @@ rows a snapshot moved, and `WorldStateMirror.RefreshRows` re-reads them). A
 `FollowState` takes them, so a session view or a seat routed to that authority
 (through `WorldAuthorityEndpoint.FollowState`) reads only moved slots. It applies
 each snapshot's field cells to its view as the local client does, so a followed
-field row reads what the authority simulated, and an adjacency neighbour exposes
-the same mirror (`IWorldAdjacencyNeighbour.FollowState`), through which a
-session's and a border's bound colors rebuild their view when a cell moves; the
+field row reads what the authority simulated, and a session view's bound colors
+rebuild it when a cell moves. A border reads its neighbour's bound colors through
+a mirror over the neighbour image pinned for the tick, the same image its
+geometry comes from, so it never shows a color ahead of its geometry; the
 capture scheduler reads a camera `select` key through its own mirror at the armed
 tick.
 
