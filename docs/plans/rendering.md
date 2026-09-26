@@ -2198,8 +2198,9 @@ Phase 3, the groups, follows phase 2:
     document pass. `UnifiedOverlayNode`, which the overlay package eclipsed, is
     deleted with its laws re-homed onto the package (`OverlayPackageLawTests`,
     `TeardownAfterFaultLawTests`). `puck shaders interface --package <id>`
-    writes an engine package's include, which a law holds to the generator and
-    to the compiled shader's reflection.
+    writes an engine package's include, which a law holds to the compiled
+    shader's reflection, and `puck shaders generate --check` holds every
+    package's and shader set's include to the generator by name.
 19. Done: the SDF engine uploads through `GpuRegion`
     (`SdfWorldEngine.Regions.cs`). Its program words, viewport rows, dynamic
     transforms, frame instance grid, screen surfaces, screen lights, volumes,
