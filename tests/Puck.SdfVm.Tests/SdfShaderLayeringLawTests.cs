@@ -55,9 +55,11 @@ public sealed partial class SdfShaderLayeringLawTests {
             ]
         );
     }
-    // The check refuses a use of a function, constant, global or macro that only a higher layer declares, and accepts
-    // one its own layer or a lower one declares, a member access, a name no module declares (an intrinsic), a parameter
-    // or local that shares a higher module's name, and a pass-supplied macro a module only tests in a conditional.
+    // The check refuses a use of a function, constant, global or macro that only a higher layer declares, a macro tested
+    // in a conditional included, and a name used outside the one function whose parameter or local shares it. It accepts
+    // a name its own layer or a lower one declares, a member access, a name no module declares (an intrinsic), a
+    // parameter or local that shares a higher module's name inside its function, and a macro a pass defines that a module
+    // only tests in a conditional.
     [Fact]
     public void AnUpwardSymbolUseIsRefusedByName() {
         var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
@@ -72,17 +74,23 @@ public sealed partial class SdfShaderLayeringLawTests {
                 "#endif",
                 "    Row row; row.levelOf = 0;",
                 "    return (fieldAt(p) + levelOf(p) + DEBUG_TINT + debugMode);",
-                "}"
+                "}",
+                "#ifdef DEBUG_OVERLAY",
+                "float tintOf(float Tint) { return Tint; }",
+                "#endif",
+                "float tinted() { return Tint; }"
             ),
-            ["debug/d.hlsli"] = "#define DEBUG_TINT 0.5\nstatic const int debugMode = 3;\nfloat levelOf(float3 p) { return p.x; }\n",
+            ["debug/d.hlsli"] = "#define DEBUG_TINT 0.5\n#define DEBUG_OVERLAY\nstatic const int debugMode = 3;\nstatic const float Tint = 1.0;\nfloat levelOf(float3 p) { return p.x; }\n",
             ["field/f.hlsli"] = "float probe(uint debugMode) { float levelOf = 1.0; return (debugMode * levelOf); }\n",
-            ["passes/e.comp.hlsl"] ="#define PASS_FLAG\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) { surfaceAt((float3)id); }\n",
+            ["passes/e.comp.hlsl"] = "#define PASS_FLAG\n[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) { surfaceAt((float3)id); }\n",
         };
 
         Assert.Equal(
             actual: Violations(files: files),
             expected: [
+                "surface/c.hlsli uses DEBUG_OVERLAY from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses DEBUG_TINT from debug/d.hlsli, a higher layer",
+                "surface/c.hlsli uses Tint from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses debugMode from debug/d.hlsli, a higher layer",
                 "surface/c.hlsli uses levelOf from debug/d.hlsli, a higher layer",
             ]
@@ -131,15 +139,27 @@ public sealed partial class SdfShaderLayeringLawTests {
                 }
             }
 
-            var locals = LocalDeclarations(code: text);
+            var (uses, tested) = Uses(code: text);
+            var upward = new SortedDictionary<string, IEnumerable<string>>(comparer: StringComparer.Ordinal);
 
-            foreach (var symbol in Uses(code: text).Where(predicate: symbol => !locals.Contains(item: symbol)).Order(comparer: StringComparer.Ordinal)) {
-                if (
-                    declarers.TryGetValue(key: symbol, value: out var paths) &&
-                    paths.All(predicate: declarer => (declarer != path) && (LayerOf(path: declarer) > layer))
-                ) {
-                    violations.Add(item: $"{path} uses {symbol} from {string.Join(separator: ", ", values: paths.Order(comparer: StringComparer.Ordinal))}, a higher layer");
+            // A macro a pass defines configures the modules it includes, so a conditional that tests one is no use of a
+            // higher layer; any other name is a use wherever it appears.
+            foreach (var (symbols, passMacros) in new[] { (uses, false), (tested, true) }) {
+                foreach (var symbol in symbols) {
+                    if (!declarers.TryGetValue(key: symbol, value: out var paths)) {
+                        continue;
+                    }
+
+                    var counted = paths.Where(predicate: declarer => !passMacros || (LayerOf(path: declarer) != (Layers.Length - 1))).ToArray();
+
+                    if ((counted.Length > 0) && counted.All(predicate: declarer => (declarer != path) && (LayerOf(path: declarer) > layer))) {
+                        upward[symbol] = counted;
+                    }
                 }
+            }
+
+            foreach (var (symbol, paths) in upward) {
+                violations.Add(item: $"{path} uses {symbol} from {string.Join(separator: ", ", values: paths.Order(comparer: StringComparer.Ordinal))}, a higher layer");
             }
         }
 
@@ -233,44 +253,87 @@ public sealed partial class SdfShaderLayeringLawTests {
 
         return names;
     }
-    // The names a module uses: every identifier outside a comment, a member access and a directive, except the body of
-    // a macro definition, which is code wherever it expands.
-    private static HashSet<string> Uses(string code) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+    // The names a module uses in code, and the macros its conditionals test. A use is an identifier outside a comment and
+    // a member access; a macro definition's body is code wherever it expands. A parameter or local is its function's
+    // own name: inside that one function a use of it is no use of a declaration elsewhere, and outside it, it is.
+    private static (HashSet<string> Uses, HashSet<string> Tested) Uses(string code) {
+        var uses = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var tested = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var lines = code.Split(separator: '\n');
 
-        foreach (var line in code.Split(separator: '\n')) {
-            var text = line;
-
-            if (DirectivePattern().Match(input: line) is { Success: true } directive) {
-                if (directive.Groups[1].Value != "define") {
-                    continue;
-                }
-
-                text = line[(directive.Groups[2].Index + directive.Groups[2].Length)..];
-            }
-
-            foreach (Match use in UsePattern().Matches(input: text)) {
-                _ = names.Add(item: use.Value);
-            }
-        }
-
-        return names;
-    }
-    // The names a module declares in any scope, its parameters and locals included: a name that follows a type and is
-    // followed by an initializer, an array bound, a semantic, a separator or the end of a declaration or parameter list.
-    // Its uses of such a name are its own, never a higher module's.
-    private static HashSet<string> LocalDeclarations(string code) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        foreach (var line in code.Split(separator: '\n')) {
-            if (DirectivePattern().IsMatch(input: line)) {
+        for (var index = 0; (index < lines.Length); index++) {
+            if (DirectivePattern().Match(input: lines[index]) is not { Success: true } directive) {
                 continue;
             }
 
-            foreach (Match declaration in LocalDeclarationPattern().Matches(input: line)) {
-                if (declaration.Groups[1].Value is not ("return" or "else" or "case" or "in" or "out" or "inout")) {
-                    _ = names.Add(item: declaration.Groups[2].Value);
+            var keyword = directive.Groups[1].Value;
+            var rest = lines[index][(directive.Groups[1].Index + keyword.Length)..];
+
+            if (keyword == "define") {
+                foreach (Match use in UsePattern().Matches(input: lines[index][(directive.Groups[2].Index + directive.Groups[2].Length)..])) {
+                    _ = uses.Add(item: use.Value);
                 }
+            } else if (keyword is "if" or "ifdef" or "ifndef" or "elif") {
+                foreach (Match use in UsePattern().Matches(input: rest)) {
+                    if (use.Value != "defined") {
+                        _ = tested.Add(item: use.Value);
+                    }
+                }
+            }
+
+            lines[index] = string.Empty;
+        }
+
+        // Each file-scope declaration or definition in turn: it ends at a semicolon or at the brace that closes its body,
+        // outside every brace.
+        var body = string.Join(separator: '\n', values: lines);
+        var depth = 0;
+        var start = 0;
+
+        for (var index = 0; (index <= body.Length); index++) {
+            var end = (index == body.Length);
+
+            if (!end) {
+                switch (body[index]) {
+                    case '{':
+                        depth++;
+                        continue;
+                    case '}':
+                        depth--;
+                        end = (depth == 0);
+                        break;
+                    case ';':
+                        end = (depth == 0);
+                        break;
+                }
+            }
+            if (!end) {
+                continue;
+            }
+
+            var scope = body[start..Math.Min(val1: (index + 1), val2: body.Length)];
+            var locals = LocalDeclarations(scope: scope);
+
+            foreach (Match use in UsePattern().Matches(input: scope)) {
+                if (!locals.Contains(item: use.Value)) {
+                    _ = uses.Add(item: use.Value);
+                }
+            }
+
+            start = (index + 1);
+        }
+
+        return (uses, tested);
+    }
+    // The names one file-scope declaration or definition declares, its parameters and locals included: a name that
+    // follows a type and is followed by an initializer, an array bound, a semantic, a separator or the end of a
+    // declaration or parameter list.
+    private static HashSet<string> LocalDeclarations(string scope) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (Match declaration in LocalDeclarationPattern().Matches(input: scope)) {
+            if (declaration.Groups[1].Value is not ("return" or "else" or "case" or "in" or "out" or "inout")) {
+                _ = names.Add(item: declaration.Groups[2].Value);
             }
         }
 
