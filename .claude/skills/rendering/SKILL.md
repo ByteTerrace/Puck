@@ -234,10 +234,12 @@ These are one-line cautions; the owning pages hold the derivations.
   frames in flight (`RenderGraphRuntime.DefaultInFlightFrames`); a source that
   counts its outstanding leases (`WorldOverlayFrameSources`) is sized by it. A
   new sampled-lease path holds its leases in that list rather than its own
-  array. Not every image another producer keeps writing is leased yet: the
-  desktop capture's GPU route reads its latest slot without acquiring it, so
-  nothing stops the producer overwriting a slot a submission still samples;
-  rendering plan P12b-2 leases it. A screen reading a source instance is bound
+  array. Every image another producer keeps writing is leased: a camera stream,
+  a desktop capture's GPU route and a probe output each publish through a
+  `SharedTargetRing` over a `LatestSlotPublication`, whose producer reserves
+  write slots through it (`TryReserveWriteSlot`) and so never overwrites a slot
+  a lease holds, and a reattach retires the ring, disposed with its fence by the
+  last lease. A screen reading a source instance is bound
   under the world node's lease before the offscreen views render, and they
   sample that image (`SdfEngineNode.BoundScreenSource`). Two devices are ordered by a Direct3D 12 shared
   fence the consumer creates beside the targets: a Direct3D 11 producer signals

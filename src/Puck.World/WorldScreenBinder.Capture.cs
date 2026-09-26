@@ -186,8 +186,9 @@ internal sealed partial class WorldScreenBinder {
     }
     // Ensures the feed's THREE simultaneous-access shared textures exist and are attached to its current source at the
     // source's native extent (the sampler scales, so no GPU-side resize is needed). Reallocates on a resize
-    // (GpuTargetsOutdated) or a reacquired source; AttachGpuTargets replaces first, then the superseded images are
-    // disposed. Cadence-gated by the caller, so it never runs per render frame.
+    // (GpuTargetsOutdated) or a reacquired source; AttachGpuTargets replaces first, then the superseded ring retires,
+    // disposed with its fence once no submitted frame samples it. Cadence-gated by the caller, so it never runs per
+    // render frame.
     [SupportedOSPlatform("windows10.0.10240")]
     private void EnsureGpuTargets(CaptureFeed feed, IGpuDeviceContext deviceContext) {
         var source = feed.Source!;
@@ -214,7 +215,7 @@ internal sealed partial class WorldScreenBinder {
         }
 
         var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)deviceContext));
-        var images = new IGpuExportableImage[3];
+        var images = new IGpuExportableImage[SharedTargetCount];
         var handles = new nint[images.Length];
 
         for (var i = 0; (i < images.Length); ++i) {
@@ -226,29 +227,38 @@ internal sealed partial class WorldScreenBinder {
             handles[i] = images[i].SharedHandle;
         }
 
-        // The fence the platform signals after each copy; the frame that samples a slot waits for its value on the GPU.
-        var fence = export.CreateExportableFence();
-        var superseded = feed.GpuTargets;
-        var supersededFence = feed.GpuFence;
+        // The fence the platform signals after each copy, whose value the frame that samples a slot waits for on the GPU,
+        // and the publication the platform reserves and publishes slots through and the frames acquire them from.
+        var slots = new LatestSlotPublication();
 
-        // Attach first (the platform contract: attach swaps the targets in safely), then release the old allocation.
+        slots.Configure(targetCount: images.Length);
+
+        var ring = new SharedTargetRing(
+            fence: SharedRingFence.Create(
+                export: export,
+                hostsOnDirectX: true,
+                renderDevice: deviceContext
+            ),
+            images: images,
+            importedViews: null,
+            imports: null,
+            ring: slots,
+            targetDevice: null
+        );
+        var superseded = feed.GpuTargets;
+
+        // Attach first (the platform contract: attach swaps the targets in safely), then retire the old ring: its images
+        // and fence go once the last submitted frame sampling them has retired its lease.
         source.AttachGpuTargets(targets: new NativeImageGpuCaptureTargets(
             SharedTargetHandles: handles,
             Width: width,
             Height: height,
-            SharedFenceHandle: fence.SharedHandle
+            Slots: slots,
+            SharedFenceHandle: ring.ProducerFenceHandle
         ));
-        feed.GpuTargets = images;
-        feed.GpuFence = fence;
+        feed.GpuTargets = ring;
         feed.GpuAttachedSource = source;
-
-        if (superseded is not null) {
-            foreach (var image in superseded) {
-                image.Dispose();
-            }
-        }
-
-        supersededFence?.Dispose();
+        superseded?.Retire();
     }
     // Constructs a capture feed carrying this binder's transport choice (GPU on the D3D12 host, CPU on Vulkan). The one
     // place window/monitor CaptureFeeds are built, so the route flag can never diverge across the open/pending sites.
@@ -528,12 +538,10 @@ internal sealed partial class WorldScreenBinder {
     ) : IDisposable {
         public string? Fault { get; set; }
         public INativeImageCaptureFeed? GpuAttachedSource { get; set; }
-        // The three simultaneous-access shared textures the platform copies into round-robin (null until the source's
-        // extent is known and the first attach runs), and the source they are attached to (identity guards re-attach).
-        public IReadOnlyList<IGpuExportableImage>? GpuTargets { get; set; }
-        // The shared fence the platform signals after each copy into GpuTargets, and the render device's submitter the
-        // frame that samples a slot adds its wait to.
-        public IGpuExportableFence? GpuFence { get; set; }
+        // The ring of simultaneous-access shared textures, with its shared fence and slot publication, the platform copies
+        // into (null until the source's extent is known and the first attach runs); GpuAttachedSource is the source it is
+        // attached to (identity guards re-attach).
+        public SharedTargetRing? GpuTargets { get; set; }
         // The human label a fault reads under: a window title, or a whole-monitor index.
         public string Label => ((MonitorIndex is { } monitor)
             ? $"monitor {monitor}"
@@ -547,34 +555,20 @@ internal sealed partial class WorldScreenBinder {
         public INativeImageCaptureFeed? Source { get; private set; } = source;
         public CpuSurfaceSource Surface { get; } = surface;
         public string Title { get; } = title;
-        // Whether this feed rides the D3D12 GPU transport (the platform copies GPU-side into GpuTargets and the screen
-        // samples the LatestGpuSlot image), rather than the CPU-pixel Surface. Fixed at construction by the host backend.
+        // Whether this feed rides the D3D12 GPU transport (the platform copies GPU-side into GpuTargets and a frame acquires
+        // their latest slot), rather than the CPU-pixel Surface. Fixed at construction by the host backend.
         public bool GpuRoute { get; } = gpuRoute;
 
         private PullCadence Cadence { get; } = new(rateHz: profile.RefreshRateHz);
 
-        // Acquires the image a frame samples: on the GPU route, the latest published copy's slot, whose shared-fence
-        // value the sampling submission waits for; otherwise the CPU surface.
+        // Acquires the image a frame samples: on the GPU route, the latest published copy's slot, held against the
+        // platform's next writes until the lease retires and carrying the shared-fence value its submission waits for;
+        // otherwise the CPU surface.
         public GpuImageLease AcquireFrame() {
-            if (
-                GpuRoute &&
-                Live &&
-                (Source is { } source) &&
-                (source.LatestGpuSlot is var slot and >= 0) &&
-                (GpuTargets is { } targets) &&
-                (slot < targets.Count)
-            ) {
-                var fenceValue = source.GpuSlotFenceValue(slot: slot);
-
-                return new GpuImageLease(
-                    ImageViewHandle: targets[slot].ImageViewHandle,
-                    Wait: (((0UL != fenceValue) && (GpuFence is { } fence))
-                        ? new GpuExternalWait(
-                            Fence: fence,
-                            Value: fenceValue
-                        )
-                        : default)
-                );
+            if (GpuRoute) {
+                return ((Live && (GpuTargets is { } ring) && ring.TryAcquire(frame: out var frame))
+                    ? frame
+                    : 0);
             }
 
             return Handle();
@@ -587,11 +581,9 @@ internal sealed partial class WorldScreenBinder {
         }
         public nint Handle() {
             if (GpuRoute) {
-                // The sampled handle is the image-view of the platform's latest completed GPU copy; 0 (no-signal) until
-                // that first copy lands. Returning a different slot handle per copy is cheap — the engine rebinds a
-                // bound screen source's descriptor every frame anyway (SdfWorldEngine.SetScreenSource).
-                return ((Live && (Source is { } source) && (source.LatestGpuSlot is var slot and >= 0) && (GpuTargets is { } targets) && (slot < targets.Count))
-                    ? targets[slot].ImageViewHandle
+                // The image view of the platform's latest completed GPU copy; 0 (no-signal) until that first copy lands.
+                return ((Live && (GpuTargets is { } ring))
+                    ? ring.LatestHandle()
                     : 0
                 );
             }
@@ -606,23 +598,14 @@ internal sealed partial class WorldScreenBinder {
             ReleaseGpuTargets();
             Cadence.Rearm();
         }
-        // Disposes the shared textures (device-owned) and forgets the attachment so the next pull reallocates them on the
-        // live device. Called on a lost source, on device loss, and on disposal.
+        // Retires the shared ring (device-owned; disposed once no submitted frame samples it) and forgets the attachment so
+        // the next pull reallocates it on the live device. Called on a lost source, on device loss, and on disposal.
         public void ReleaseGpuTargets() {
+            var ring = GpuTargets;
+
             GpuAttachedSource = null;
-
-            if (GpuTargets is not { } targets) {
-                return;
-            }
-
             GpuTargets = null;
-
-            foreach (var image in targets) {
-                image.Dispose();
-            }
-
-            GpuFence?.Dispose();
-            GpuFence = null;
+            ring?.Retire();
         }
         public bool ShouldPull() => Cadence.ShouldPull();
         public bool TryEnsureSource(long? adapterLuid) {

@@ -366,7 +366,7 @@ internal sealed partial class WorldScreenBinder {
 
         slots.Configure(targetCount: images.Count);
 
-        var targets = new CameraGpuTargetSet(
+        var targets = new SharedTargetRing(
             fence: fence,
             images: images,
             importedViews: views,
@@ -413,7 +413,7 @@ internal sealed partial class WorldScreenBinder {
         public bool Live { get; set; }
         public ProbeKernelOutput? Output { get; set; }
         public (int Width, int Height)? Request { get; set; }
-        public CameraGpuTargetSet? Targets { get; set; }
+        public SharedTargetRing? Targets { get; set; }
 
         public GpuImageLease AcquireFrame() {
             if (

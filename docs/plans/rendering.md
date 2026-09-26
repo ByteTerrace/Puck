@@ -1158,8 +1158,9 @@ Direct3D 11 write and publishes the slot with the value, and the consuming
 submission waits for it on the GPU (a Vulkan host through the fence imported as
 a timeline semaphore); a device that cannot share the fence, and the probe
 kernel, which reads its channels on the CPU, wait on the CPU instead. The
-consumer holds a CPU slot lease until its submission retires. The capture GPU
-route samples a slot with no lease at all.
+consumer holds a CPU slot lease until its submission retires, the desktop capture's
+included (its targets' `LatestSlotPublication`, which its producer reserves write
+slots through, so it never overwrites a slot a lease holds).
 Every image that enters rendering from outside a pass is
 described by `ImageSourceDescriptor` (`Puck.Abstractions.Sources`): producer,
 transport, extent, pixel format (including palette-indexed and NV12), color
@@ -2935,8 +2936,8 @@ the order:
 - `sdf.world` is an external producer, which takes image reads (step 2), so a
   screen inside the SDF frame reads a source instance through a graph edge
   without waiting on P14-6.
-- The capture GPU route samples a shared slot with no lease (see the
-  implementation status).
+- Every image another thread or device writes, the desktop capture's GPU route
+  included, is sampled under a lease its producer cannot overwrite (step 2).
 - Only the test pattern and the QR code write upload regions, which a source
   instance's graph converts and a screen showing the source samples.
 - Few canaries reach this path. The coverage index maps no canary to the
@@ -3072,7 +3073,15 @@ except step 8.
       `WorldScreenMappingLawTests.ALiveBindOverARowPublishesTheBoundSourcesMapping`.
    5. The capture GPU route acquires its slot through `LatestSlotPublication`,
       and its superseded images and shared fence are released through the
-      lease after the last submission that samples them.
+      lease after the last submission that samples them. Landed: the capture
+      targets are a `SharedTargetRing` (the camera's and the probe's ring,
+      renamed), whose publication rides `NativeImageGpuCaptureTargets.Slots`;
+      `Win32GraphicsCaptureFeed` reserves each write slot through it and drops a
+      tick with none free, the feed acquires the latest slot as a lease that
+      holds it and carries its fence value, and a reattach or a lost source
+      retires the old ring, disposed with its fence by the last lease.
+      `INativeImageCaptureFeed.LatestGpuSlot` and `GpuSlotFenceValue` go. Law:
+      `LatestSlotPublicationTests.A_lapping_producer_never_writes_a_slot_a_lease_holds`.
    6. The offscreen views bind acquired leases rather than
       `ScreenSlot.Handle()` until P11b-13 deletes `ViewStack`.
    7. The capture and camera CPU tiers go through `source-rgba`, each capture
@@ -3117,7 +3126,8 @@ except step 8.
    (`Win32D3D11CompletionSignal`, the one completion primitive of every Direct3D
    11 producer), signals the next value on its immediate context after each
    write and flushes, and publishes the slot with that value
-   (`LatestSlotPublication.Publish`, `INativeImageCaptureFeed.GpuSlotFenceValue`).
+   (`LatestSlotPublication.Publish`; a capture through its targets'
+   `NativeImageGpuCaptureTargets.Slots`).
    The consumer acquires the slot with its value, the lease carries a
    `GpuExternalWait`, and the node that samples it adds the wait to the
    submission that samples it (`IGpuQueueSubmitter.AddExternalWait` right
@@ -3140,9 +3150,7 @@ except step 8.
    on it unretired until the Direct3D 11 signal, and skips by name on a device
    without the extension. WARP's Direct3D 11 device opens the shared fence, so
    the WARP case orders its write by the fence rather than a CPU wait, and the
-   WARP reader reads the pattern. Still open: the capture GPU route, which
-   publishes its slot's value but acquires no lease until step 2. A recorded
-   camera run on both backends on real hardware is
+   WARP reader reads the pattern. A recorded camera run on both backends on real hardware is
    [deferred to the end](#deferred-to-the-end).
 5. The capture gate over the graph. Can land now, after step 2. The gate
    reads the capture armed on `RenderGraphRuntime` rather than

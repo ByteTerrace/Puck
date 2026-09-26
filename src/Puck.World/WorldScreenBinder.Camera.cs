@@ -23,9 +23,10 @@ internal sealed partial class WorldScreenBinder {
     // and its retry — long enough for a driver to finish tearing down, short enough that a replug recovers unaided.
     private const int CameraReopenFrames = 60;
     private const int CameraRefusalFrames = 120;
-    // Shared-target ring depth per stream: enough room for the renderer's two in-flight frames plus one write target;
+    // Shared-target ring depth per camera stream and desktop capture: enough room for the renderer's two in-flight frames
+    // plus one write target;
     // explicit slot acquisitions enforce the guarantee when producer and renderer cadence diverge.
-    private const int CameraTargetCount = 3;
+    private const int SharedTargetCount = 3;
 
     // The document-member-to-platform-control pairing, stated once so ApplyCameraControlsFor and DescribeCameraFeed
     // can never disagree about which authored member drives which device control.
@@ -669,7 +670,7 @@ internal sealed partial class WorldScreenBinder {
                 graph: shared
             )) {
                 device.Shared = shared;
-                Console.Out.WriteLine(value: $"[camera] GPU tier: '{shared.Name}' {DescribeStreams(graph: shared)}, {CameraTargetCount} shared targets per sensor{(m_hostsOnDirectX
+                Console.Out.WriteLine(value: $"[camera] GPU tier: '{shared.Name}' {DescribeStreams(graph: shared)}, {SharedTargetCount} shared targets per sensor{(m_hostsOnDirectX
                     ? ""
                     : ", imported for Vulkan sampling")}.");
             } else {
@@ -765,7 +766,7 @@ internal sealed partial class WorldScreenBinder {
                 return false;
             }
 
-            var targets = new CameraGpuTargetSet(
+            var targets = new SharedTargetRing(
                 fence: fence,
                 images: images,
                 importedViews: views,
@@ -808,7 +809,7 @@ internal sealed partial class WorldScreenBinder {
     // the CPU for its readings, gets none.
     [SupportedOSPlatform("windows10.0.10240")]
     private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, SurfaceFormat format, int width, int height, bool sharedFence, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out SharedRingFence? fence, out string fault) {
-        var allocated = new IGpuExportableImage[CameraTargetCount];
+        var allocated = new IGpuExportableImage[SharedTargetCount];
         var handles = new nint[allocated.Length];
         IGpuSurfaceImport[]? createdImports = null;
         nint[]? createdViews = null;
@@ -1433,7 +1434,7 @@ internal sealed partial class WorldScreenBinder {
         private bool m_surfaceDisposed;
 
         public string? Fault { get; set; }
-        public CameraGpuTargetSet? GpuTargets { get; set; }
+        public SharedTargetRing? GpuTargets { get; set; }
         public Vector3 Light { get; set; }
         public bool Live { get; set; }
         public byte[]? PanelPixels { get; set; }
@@ -1549,11 +1550,12 @@ internal sealed partial class WorldScreenBinder {
         }
         public bool ShouldPull() => m_cadence.ShouldPull();
     }
-    // One platform producer's render-device-owned target ring — a camera stream's or a probe kernel output's. A
-    // screen-source frame acquires both the ring slot (so the producer cannot overwrite it) and this set's lifetime
-    // (so a producer close cannot destroy the texture while an already-submitted renderer frame still samples it).
-    // All methods run on the render thread except the ring's producer-side checks.
-    private sealed class CameraGpuTargetSet {
+    // One platform producer's render-device-owned target ring — a camera stream's, a desktop capture's or a probe kernel
+    // output's. A screen-source frame acquires both the ring slot (so the producer cannot overwrite it) and this set's
+    // lifetime (so a producer close or a reattach cannot destroy the texture or the shared fence while an
+    // already-submitted renderer frame still samples it). All methods run on the render thread except the ring's
+    // producer-side checks.
+    private sealed class SharedTargetRing {
         private readonly SharedRingFence? m_fence;
         private readonly IReadOnlyList<IGpuExportableImage> m_images;
         private readonly nint[]? m_importedViews;
@@ -1579,7 +1581,7 @@ internal sealed partial class WorldScreenBinder {
         /// has none).</summary>
         public string FenceRefusal => (m_fence?.Refusal ?? "");
 
-        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, SharedRingFence? fence, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
+        public SharedTargetRing(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, SharedRingFence? fence, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
             m_fence = fence;
             m_images = images;
             m_importedViews = importedViews;
@@ -1641,6 +1643,12 @@ internal sealed partial class WorldScreenBinder {
                 : m_images[slot].ImageViewHandle
             );
         }
+        // The image view of the latest published slot, for a read that submits no GPU work; zero before the first
+        // publication and once retired.
+        public nint LatestHandle() => (m_retired
+            ? 0
+            : Handle(slot: m_stream.LatestSlot)
+        );
         public void Retire() {
             m_retired = true;
 

@@ -24,9 +24,9 @@ namespace Puck.Platform.Windows;
 /// A compositor-owned Windows Graphics Capture feed with two transports off the same free-threaded callback: a CPU
 /// path (a cadence-gated staging readback, atomically published into a triple-buffer ring so the buffer returned by
 /// TryCapture is never written by the producer) and, when GPU targets are attached, a zero-copy path that copies each
-/// captured frame straight into a consumer-provisioned D3D12-shared texture on the capture adapter, signals the
-/// consumer's shared fence (or, on a device that cannot open it, waits on the CPU), and publishes the slot with the
-/// value it signalled. The GPU path is the D3D12 render host's transport; the CPU path stays live (at a reduced cadence)
+/// captured frame straight into a consumer-provisioned D3D12-shared texture on the capture adapter, in a slot the
+/// consumer does not hold (<see cref="NativeImageGpuCaptureTargets.Slots"/>), signals the consumer's shared fence (or,
+/// on a device that cannot open it, waits on the CPU), and publishes the slot with the value it signalled. The GPU path is the D3D12 render host's transport; the CPU path stays live (at a reduced cadence)
 /// for the Vulkan host and the POST probe.
 /// </summary>
 [SupportedOSPlatform("windows10.0.19041")]
@@ -143,9 +143,6 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private bool m_hasFrame;
     private volatile bool m_isEnded;
     private long m_lastLivenessCheckTicks;
-
-    private volatile int m_latestGpuSlot = -1;
-
     private long m_nextCaptureTicks;
     private long m_publishedRevision;
     private int m_sourceHeight;
@@ -182,22 +179,9 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     /// <inheritdoc/>
     public int SourceHeight => Volatile.Read(location: ref m_sourceHeight);
     /// <inheritdoc/>
-    public int LatestGpuSlot => m_latestGpuSlot;
-    /// <inheritdoc/>
     public long GpuRevision => Interlocked.Read(location: ref m_gpuRevision);
     /// <inheritdoc/>
     public SharedFenceOrder GpuFenceOrder => (m_gpuTargets?.Signal.Order ?? SharedFenceOrder.Pending);
-
-    /// <inheritdoc/>
-    public ulong GpuSlotFenceValue(int slot) {
-        var values = m_gpuTargets?.FenceValues;
-
-        return (((values is not null) && (((uint)slot) < ((uint)values.Length)))
-            ? Volatile.Read(location: ref values[slot])
-            : 0UL
-        );
-    }
-
     /// <inheritdoc/>
     public bool GpuTargetsOutdated {
         get {
@@ -224,6 +208,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
                 paramName: nameof(targets)
             );
         }
+        ArgumentNullException.ThrowIfNull(argument: targets.Slots);
         ValidateOutputExtent(
             width: targets.Width,
             height: targets.Height
@@ -266,6 +251,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
         var newTargets = new GpuTargetSet(
             slotTextures: slotTextures,
+            slots: targets.Slots,
             signal: signal,
             width: targets.Width,
             height: targets.Height,
@@ -273,11 +259,10 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         );
         GpuTargetSet? oldTargets;
         // The pump copies under m_callbackGate, so swapping the set there guarantees no in-flight copy references the
-        // outgoing textures; the new set (fresh handles) restarts the published slot.
+        // outgoing textures; the new set publishes through its own slots.
         lock (m_callbackGate) {
             oldTargets = m_gpuTargets;
             m_gpuTargets = newTargets;
-            m_latestGpuSlot = -1;
             m_cpuReadbackCounter = 0;
         }
 
@@ -592,31 +577,29 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             ((IWinRTObject)surface).NativeObject.Dispose();
         }
     }
-    // Copies the captured frame into the next round-robin GPU slot and publishes it. A source/target extent mismatch
-    // (a resize between attach and now) pauses GPU publishing — GpuTargetsOutdated reports it — until a matching
-    // AttachGpuTargets. Runs under m_callbackGate, so the attached set cannot be swapped mid-copy.
+    // Copies the captured frame into a slot no consumer holds and publishes it with the fence value the copy signals. A
+    // tick with no free slot is dropped, so a slot a submission still samples is never overwritten. A source/target
+    // extent mismatch (a resize between attach and now) pauses GPU publishing — GpuTargetsOutdated reports it — until a
+    // matching AttachGpuTargets. Runs under m_callbackGate, so the attached set cannot be swapped mid-copy.
     private void PublishGpuFrame(GpuTargetSet gpuTargets, nint sourceTexture) {
         if (
             (gpuTargets.Width != m_sourceWidth) ||
-            (gpuTargets.Height != m_sourceHeight)
+            (gpuTargets.Height != m_sourceHeight) ||
+            !gpuTargets.Slots.TryReserveWriteSlot(slot: out var slot)
         ) {
             return;
         }
 
-        var slot = gpuTargets.NextSlot;
         var fenceValue = m_device!.CopyToSharedTarget(
             signal: gpuTargets.Signal,
             sourceTexture: sourceTexture,
             targetTexture: gpuTargets.SlotTextures[slot]
         );
 
-        // Written before the slot is published: a consumer reads the slot, then its value.
-        Volatile.Write(
-            location: ref gpuTargets.FenceValues[slot],
-            value: fenceValue
+        gpuTargets.Slots.Publish(
+            fenceValue: fenceValue,
+            slot: slot
         );
-        gpuTargets.NextSlot = ((slot + 1) % gpuTargets.SlotTextures.Length);
-        m_latestGpuSlot = slot;
         _ = Interlocked.Increment(location: ref m_gpuRevision);
     }
     private bool ShouldRunCpuReadback(int divisor) {
@@ -818,26 +801,16 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         Window,
         Monitor,
     }
-    // The attached GPU targets: the opened shared slot textures, the completion signal over the consumer's shared fence,
-    // each slot's last signalled value, the extent they were sized to and the CPU-readback divisor. NextSlot is the
-    // round-robin write cursor, mutated only by the pump under m_callbackGate.
-    private sealed class GpuTargetSet {
-        public GpuTargetSet(nint[] slotTextures, Win32D3D11CompletionSignal signal, int width, int height, int cpuReadbackDivisor) {
-            CpuReadbackDivisor = cpuReadbackDivisor;
-            FenceValues = new ulong[slotTextures.Length];
-            Height = height;
-            Signal = signal;
-            SlotTextures = slotTextures;
-            Width = width;
-        }
-
-        public int CpuReadbackDivisor { get; }
-        public ulong[] FenceValues { get; }
-        public int Height { get; }
-        public int NextSlot { get; set; }
-        public Win32D3D11CompletionSignal Signal { get; }
-        public nint[] SlotTextures { get; }
-        public int Width { get; }
+    // The attached GPU targets: the opened shared slot textures, the publication the slots are reserved and published
+    // through, the completion signal over the consumer's shared fence, the extent they were sized to and the CPU-readback
+    // divisor.
+    private sealed class GpuTargetSet(nint[] slotTextures, LatestSlotPublication slots, Win32D3D11CompletionSignal signal, int width, int height, int cpuReadbackDivisor) {
+        public int CpuReadbackDivisor { get; } = cpuReadbackDivisor;
+        public int Height { get; } = height;
+        public Win32D3D11CompletionSignal Signal { get; } = signal;
+        public LatestSlotPublication Slots { get; } = slots;
+        public nint[] SlotTextures { get; } = slotTextures;
+        public int Width { get; } = width;
     }
     [ComImport]
     [ComVisible(true)]
