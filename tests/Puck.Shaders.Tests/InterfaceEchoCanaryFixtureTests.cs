@@ -43,6 +43,8 @@ public sealed class InterfaceEchoCanaryFixtureTests {
         ("sdf-film-grain", "package sdf.film-grain", static () => PackageOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
         ("place", "package place", static () => PackageOf(id: RenderGraphPackageCatalog.Place)),
         ("overlay", "package overlay", static () => PackageOf(id: RenderGraphPackageCatalog.Overlay)),
+        // Each source conversion package binds its region and image beside a pass block of the extent alone, ink finish's.
+        .. RenderGraphPackageCatalog.SourceConversions.Select(selector: static id => ("ink-finish", $"package {id}", ((Func<ShaderInterfaceLayout>)(() => PackageOf(id: id))))),
     ];
 
     public static TheoryData<string> EchoNames() => [.. Echoes];

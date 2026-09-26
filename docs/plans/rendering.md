@@ -371,15 +371,14 @@ which expects two members to hold each other's sentinel, turns red.
 
 The `interface-echo` canary runs one echo per shipped interface family in one
 world: the ink simulation, visualize and finish passes, the package canary's
-tint, and the `sdf.film-grain`, `place` and `overlay` packages. The Moth's
-blocks are ink finish's. Its discriminating leg reloads every row onto an echo whose last
+tint, and the `sdf.film-grain`, `place` and `overlay` packages. The blocks of
+the Moth and of the `source-*` conversion packages, which hold the extent
+alone, are ink finish's. Its discriminating leg reloads every row onto an echo whose last
 member's first word expects the next word's sentinel.
 `InterfaceEchoCanaryFixtureTests` hold each echo's blocks to its targets' and
 fail when a shipped package with frame data has no echo. The
 SDF engine's `sdf-world` and `sdf-brick-bake` interfaces join the canary in
-the change that lands them (S16). The overlay
-echo holds the overlay's types at their offsets, but a document orders config
-fields by name, so its `misc` and `sdf` names trade places.
+the change that lands them (S16).
 
 Open: the `interface-echo` canary has not yet run on a GPU, which is what P8's
 check asks for. The worlds under the

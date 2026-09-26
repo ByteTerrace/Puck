@@ -351,6 +351,54 @@ internal static class AffectedCommand {
 
         return CliExit.Success;
     }
+
+    /// <summary>Writes a plan as the verb prints it: one line per chosen suite (<c>suite</c>), world (<c>test</c>, run with
+    /// <c>puck test</c>) and canary (<c>canary</c>); the catalog, named with the check <c>--run</c> makes of it; parity; then
+    /// each unmapped and deleted source with the note that explains it.</summary>
+    /// <param name="plan">The plan.</param>
+    /// <param name="into">The writer.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="plan"/> or <paramref name="into"/> is <see langword="null"/>.</exception>
+    public static void Describe(AffectedPlan plan, TextWriter into) {
+        ArgumentNullException.ThrowIfNull(argument: plan);
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        foreach (var suite in plan.Suites) {
+            into.WriteLine(value: $"suite {suite}");
+        }
+
+        foreach (var world in plan.Worlds) {
+            into.WriteLine(value: $"test {world}");
+        }
+
+        foreach (var canary in plan.Canaries) {
+            into.WriteLine(value: $"canary {canary}");
+        }
+
+        if (plan.Catalog) {
+            into.WriteLine(value: $"catalog {ShippedCatalog} (puck compile --tree {ShippedTree} --check)");
+        }
+
+        if (plan.Parity) {
+            into.WriteLine(value: "parity");
+        }
+
+        foreach (var path in plan.Unmapped) {
+            into.WriteLine(value: $"unmapped {path}");
+        }
+
+        if (plan.Unmapped.Count > 0) {
+            into.WriteLine(value: $"affected: {plan.Unmapped.Count} World source(s) are missing from {CoveragePath}, so no canary was chosen for them; record coverage with `puck affected --record` when the owner asks for a full run.");
+        }
+
+        foreach (var path in plan.Deleted) {
+            into.WriteLine(value: $"deleted {path}");
+        }
+
+        if (plan.Deleted.Count > 0) {
+            into.WriteLine(value: $"affected: {plan.Deleted.Count} deleted World source(s) are placed by neither {CoveragePath} nor the index the base recorded, directly or through the stand-ins the base's tree gave them, so no canary was chosen for them; a recording cannot place a file that no longer exists, and their projects' suites still run.");
+        }
+    }
+
     private static int Run(string since, bool run, bool record) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refuse(verb: Verb, what: Environment.CurrentDirectory, why: "is not inside the Puck repository.");
@@ -375,41 +423,10 @@ internal static class AffectedCommand {
             Console.Out.WriteLine(value: "affected: build infrastructure changed, which reaches every project.");
         }
 
-        foreach (var suite in plan.Suites) {
-            Console.Out.WriteLine(value: $"suite {suite}");
-        }
-
-        foreach (var world in plan.Worlds) {
-            Console.Out.WriteLine(value: $"test {world}");
-        }
-
-        foreach (var canary in plan.Canaries) {
-            Console.Out.WriteLine(value: $"canary {canary}");
-        }
-
-        if (plan.Catalog) {
-            Console.Out.WriteLine(value: $"catalog {ShippedCatalog}");
-        }
-
-        if (plan.Parity) {
-            Console.Out.WriteLine(value: "parity");
-        }
-
-        foreach (var path in plan.Unmapped) {
-            Console.Out.WriteLine(value: $"unmapped {path}");
-        }
-
-        if (plan.Unmapped.Count > 0) {
-            Console.Out.WriteLine(value: $"affected: {plan.Unmapped.Count} World source(s) are missing from {CoveragePath}, so no canary was chosen for them; record coverage with `puck affected --record` when the owner asks for a full run.");
-        }
-
-        foreach (var path in plan.Deleted) {
-            Console.Out.WriteLine(value: $"deleted {path}");
-        }
-
-        if (plan.Deleted.Count > 0) {
-            Console.Out.WriteLine(value: $"affected: {plan.Deleted.Count} deleted World source(s) are placed by neither {CoveragePath} nor the index the base recorded, directly or through the stand-ins the base's tree gave them, so no canary was chosen for them; a recording cannot place a file that no longer exists, and their projects' suites still run.");
-        }
+        Describe(
+            into: Console.Out,
+            plan: plan
+        );
 
         return (run
             ? Execute(plan: plan, repositoryRoot: repositoryRoot)
@@ -422,7 +439,7 @@ internal static class AffectedCommand {
             DefaultValueFactory = static _ => "HEAD",
             Description = "The base revision the working tree is compared against (default: HEAD, so only uncommitted changes).",
         };
-        var runOption = new Option<bool>(name: "--run") { Description = "Build and run the chosen suites, then puck test on the chosen worlds, then the chosen canaries and parity." };
+        var runOption = new Option<bool>(name: "--run") { Description = "Build and run the chosen suites, then puck test on the chosen worlds, then the catalog check, then the chosen canaries and parity." };
         var recordOption = new Option<bool>(name: "--record") { Description = $"Record {CoveragePath}: build a World that records the methods it compiles, run the full canary set on it, and map each canary's methods to source files. A full run; do it when the owner asks for one." };
         var command = new Command(
             description: "Name the test suites and canaries a change needs, and with --run run exactly those.",
@@ -451,8 +468,9 @@ internal static class AffectedCommand {
               documents reached it in the base's tree; one none of these places is listed as deleted,
               never unmapped.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
-              every suite. A changed .puck source that declares test blocks is run with puck test.
-              Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
+              every suite. A changed .puck source that declares test blocks is run with puck test, and
+              prints as a test line. A catalog line names the game's Release catalog, which --run checks
+              with the compile it names; it holds no test worlds. Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
 
               Exit codes: 0 planned or every chosen check passed, 1 a chosen check failed, 2 refused.
             """);
