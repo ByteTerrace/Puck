@@ -1443,6 +1443,8 @@ public static class QueuedHostContractProbe {
             throw new NotSupportedException();
         public IGpuSurfaceReadback CreateReadback() =>
             throw new NotSupportedException();
+        public bool TryImportFence(nint sharedHandle, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IGpuSharedFence? fence, out string refusal) =>
+            throw new NotSupportedException();
         public IGpuSurfaceUpload CreateUpload() {
             lock (m_uploads) {
                 return m_uploads.Dequeue();

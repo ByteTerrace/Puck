@@ -371,6 +371,13 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         gpu: this
     );
     public IGpuSurfaceUpload CreateUpload() => throw new NotSupportedException();
+    public bool TryImportFence(nint sharedHandle, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IGpuSharedFence? fence, out string refusal) {
+        fence = null;
+        refusal = "the fake device imports no fence";
+
+        return false;
+    }
+    public void AddExternalWait(GpuExternalWait wait) => throw new NotSupportedException();
     public void DestroyPool(nint poolHandle) {
         if (0 == poolHandle) {
             return;

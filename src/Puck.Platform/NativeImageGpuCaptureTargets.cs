@@ -8,7 +8,8 @@ namespace Puck.Platform;
 /// each published tick, copies the captured frame into the next round-robin slot; the consumer imports the same handles
 /// on its render device and samples the slot named by <see cref="INativeImageCaptureFeed.LatestGpuSlot"/> whenever
 /// <see cref="INativeImageCaptureFeed.GpuRevision"/> advances. Two or more slots keep the writer off the slot a consumer
-/// is sampling.
+/// is sampling. After each copy the feed signals <see cref="SharedFenceHandle"/>'s next value, which the consumer's
+/// submission waits for (<see cref="INativeImageCaptureFeed.GpuSlotFenceValue"/>).
 /// </summary>
 /// <param name="SharedTargetHandles">The shared NT handles (D3D12 <c>CreateSharedHandle</c>) of the target textures, each
 /// created at <see cref="Width"/> × <see cref="Height"/> B8G8R8A8; two or more are required.</param>
@@ -19,9 +20,12 @@ namespace Puck.Platform;
 /// <param name="CpuReadbackDivisor">The cadence divisor for the coexisting CPU readback: every <c>N</c>-th capture tick
 /// also runs the CPU path (for the glow and the probe). A value of zero or less disables CPU frames while GPU mode is
 /// active.</param>
+/// <param name="SharedFenceHandle">The consumer's shared fence (a Direct3D 12 <c>D3D12_FENCE_FLAG_SHARED</c> fence's NT
+/// handle) the feed signals after each copy, or zero to complete every copy on the CPU.</param>
 public sealed record NativeImageGpuCaptureTargets(
     IReadOnlyList<nint> SharedTargetHandles,
     int Width,
     int Height,
-    int CpuReadbackDivisor = 8
+    int CpuReadbackDivisor = 8,
+    nint SharedFenceHandle = 0
 );

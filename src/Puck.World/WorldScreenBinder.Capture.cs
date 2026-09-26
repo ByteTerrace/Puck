@@ -207,11 +207,12 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
+        var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)deviceContext));
         var images = new IGpuExportableImage[3];
         var handles = new nint[images.Length];
 
         for (var i = 0; (i < images.Length); ++i) {
-            images[i] = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)deviceContext)).CreateSimultaneousAccessImage(
+            images[i] = export.CreateSimultaneousAccessImage(
                 format: GpuPixelFormat.B8G8R8A8Unorm,
                 height: ((uint)height),
                 width: ((uint)width)
@@ -219,15 +220,21 @@ internal sealed partial class WorldScreenBinder {
             handles[i] = images[i].SharedHandle;
         }
 
+        // The fence the platform signals after each copy; the frame that samples a slot waits for its value on the GPU.
+        var fence = export.CreateExportableFence();
         var superseded = feed.GpuTargets;
+        var supersededFence = feed.GpuFence;
 
         // Attach first (the platform contract: attach swaps the targets in safely), then release the old allocation.
         source.AttachGpuTargets(targets: new NativeImageGpuCaptureTargets(
             SharedTargetHandles: handles,
             Width: width,
-            Height: height
+            Height: height,
+            SharedFenceHandle: fence.SharedHandle
         ));
         feed.GpuTargets = images;
+        feed.GpuFence = fence;
+        feed.GpuSubmitter = deviceContext.Services.QueueSubmitter;
         feed.GpuAttachedSource = source;
 
         if (superseded is not null) {
@@ -235,6 +242,8 @@ internal sealed partial class WorldScreenBinder {
                 image.Dispose();
             }
         }
+
+        supersededFence?.Dispose();
     }
     // Constructs a capture feed carrying this binder's transport choice (GPU on the D3D12 host, CPU on Vulkan). The one
     // place window/monitor CaptureFeeds are built, so the route flag can never diverge across the open/pending sites.
@@ -448,6 +457,10 @@ internal sealed partial class WorldScreenBinder {
         // The three simultaneous-access shared textures the platform copies into round-robin (null until the source's
         // extent is known and the first attach runs), and the source they are attached to (identity guards re-attach).
         public IReadOnlyList<IGpuExportableImage>? GpuTargets { get; set; }
+        // The shared fence the platform signals after each copy into GpuTargets, and the render device's submitter the
+        // frame that samples a slot adds its wait to.
+        public IGpuExportableFence? GpuFence { get; set; }
+        public IGpuQueueSubmitter? GpuSubmitter { get; set; }
         // The human label a fault reads under: a window title, or a whole-monitor index.
         public string Label => ((MonitorIndex is { } monitor)
             ? $"monitor {monitor}"
@@ -467,6 +480,34 @@ internal sealed partial class WorldScreenBinder {
 
         private PullCadence Cadence { get; } = new(rateHz: profile.RefreshRateHz);
 
+        // Acquires the image a frame samples: on the GPU route, the latest published copy's slot, whose shared-fence
+        // value the sampling submission waits for; otherwise the CPU surface.
+        public GpuImageLease AcquireFrame() {
+            if (
+                GpuRoute &&
+                Live &&
+                (Source is { } source) &&
+                (source.LatestGpuSlot is var slot and >= 0) &&
+                (GpuTargets is { } targets) &&
+                (slot < targets.Count)
+            ) {
+                var fenceValue = source.GpuSlotFenceValue(slot: slot);
+
+                if (
+                    (0UL != fenceValue) &&
+                    (GpuFence is { } fence)
+                ) {
+                    GpuSubmitter!.AddExternalWait(wait: new GpuExternalWait(
+                        Fence: fence,
+                        Value: fenceValue
+                    ));
+                }
+
+                return targets[slot].ImageViewHandle;
+            }
+
+            return Handle();
+        }
         public void Dispose() {
             ReleaseGpuTargets();
             Source?.Dispose();
@@ -508,6 +549,9 @@ internal sealed partial class WorldScreenBinder {
             foreach (var image in targets) {
                 image.Dispose();
             }
+
+            GpuFence?.Dispose();
+            GpuFence = null;
         }
         public bool ShouldPull() => Cadence.ShouldPull();
         public bool TryEnsureSource(long? adapterLuid) {

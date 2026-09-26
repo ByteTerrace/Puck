@@ -24,9 +24,10 @@ namespace Puck.Platform.Windows;
 /// A compositor-owned Windows Graphics Capture feed with two transports off the same free-threaded callback: a CPU
 /// path (a cadence-gated staging readback, atomically published into a triple-buffer ring so the buffer returned by
 /// TryCapture is never written by the producer) and, when GPU targets are attached, a zero-copy path that copies each
-/// captured frame straight into a consumer-provisioned D3D12-shared texture on the capture adapter and publishes the
-/// completed slot. The GPU path is the D3D12 render host's transport; the CPU path stays live (at a reduced cadence) for
-/// the Vulkan host and the POST probe.
+/// captured frame straight into a consumer-provisioned D3D12-shared texture on the capture adapter, signals the
+/// consumer's shared fence (or, on a device that cannot open it, waits on the CPU), and publishes the slot with the
+/// value it signalled. The GPU path is the D3D12 render host's transport; the CPU path stays live (at a reduced cadence)
+/// for the Vulkan host and the POST probe.
 /// </summary>
 [SupportedOSPlatform("windows10.0.19041")]
 public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
@@ -185,6 +186,18 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     /// <inheritdoc/>
     public long GpuRevision => Interlocked.Read(location: ref m_gpuRevision);
     /// <inheritdoc/>
+    public SharedFenceOrder GpuFenceOrder => (m_gpuTargets?.Signal.Order ?? SharedFenceOrder.Pending);
+
+    /// <inheritdoc/>
+    public ulong GpuSlotFenceValue(int slot) {
+        var values = m_gpuTargets?.FenceValues;
+
+        return (((values is not null) && (((uint)slot) < ((uint)values.Length)))
+            ? Volatile.Read(location: ref values[slot])
+            : 0UL
+        );
+    }
+    /// <inheritdoc/>
     public bool GpuTargetsOutdated {
         get {
             // A resize latches the new extent into m_source* under the callback gate; the attached set keeps its
@@ -238,8 +251,21 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             throw;
         }
 
+        Win32D3D11CompletionSignal signal;
+
+        try {
+            signal = device.OpenSignal(sharedFenceHandle: targets.SharedFenceHandle);
+        } catch {
+            foreach (var texture in slotTextures) {
+                Win32GraphicsCaptureDevice.ReleaseTexture(texture: texture);
+            }
+
+            throw;
+        }
+
         var newTargets = new GpuTargetSet(
             slotTextures: slotTextures,
+            signal: signal,
             width: targets.Width,
             height: targets.Height,
             cpuReadbackDivisor: targets.CpuReadbackDivisor
@@ -577,10 +603,16 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
 
         var slot = gpuTargets.NextSlot;
+        var fenceValue = m_device!.CopyToSharedTarget(
+            signal: gpuTargets.Signal,
+            sourceTexture: sourceTexture,
+            targetTexture: gpuTargets.SlotTextures[slot]
+        );
 
-        m_device!.CopyToSharedTargetAndDrain(
-            targetTexture: gpuTargets.SlotTextures[slot],
-            sourceTexture: sourceTexture
+        // Written before the slot is published: a consumer reads the slot, then its value.
+        Volatile.Write(
+            location: ref gpuTargets.FenceValues[slot],
+            value: fenceValue
         );
         gpuTargets.NextSlot = ((slot + 1) % gpuTargets.SlotTextures.Length);
         m_latestGpuSlot = slot;
@@ -697,6 +729,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         foreach (var texture in targets.SlotTextures) {
             Win32GraphicsCaptureDevice.ReleaseTexture(texture: texture);
         }
+
+        targets.Signal.Dispose();
     }
     private static void ReleaseProjection(object? value) {
         if (value is IWinRTObject projection) {
@@ -783,17 +817,22 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         Window,
         Monitor,
     }
-    // The attached GPU targets: the opened shared slot textures plus the extent they were sized to and the CPU-readback
-    // divisor. NextSlot is the round-robin write cursor, mutated only by the pump under m_callbackGate.
+    // The attached GPU targets: the opened shared slot textures, the completion signal over the consumer's shared fence,
+    // each slot's last signalled value, the extent they were sized to and the CPU-readback divisor. NextSlot is the
+    // round-robin write cursor, mutated only by the pump under m_callbackGate.
     private sealed class GpuTargetSet {
-        public GpuTargetSet(nint[] slotTextures, int width, int height, int cpuReadbackDivisor) {
+        public GpuTargetSet(nint[] slotTextures, Win32D3D11CompletionSignal signal, int width, int height, int cpuReadbackDivisor) {
             CpuReadbackDivisor = cpuReadbackDivisor;
+            FenceValues = new ulong[slotTextures.Length];
             Height = height;
+            Signal = signal;
             SlotTextures = slotTextures;
             Width = width;
         }
 
         public int CpuReadbackDivisor { get; }
+        public ulong[] FenceValues { get; }
+        public Win32D3D11CompletionSignal Signal { get; }
         public int Height { get; }
         public int NextSlot { get; set; }
         public nint[] SlotTextures { get; }
@@ -826,7 +865,6 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
     private ID3D11Device* m_device;
     private ID3D11Device1* m_device1;
     private ulong[]? m_downscaleAccumulators;
-    private ID3D11Query* m_gpuCopyQuery;
     private IDirect3DDevice? m_runtimeDevice;
     private long m_sequence;
     private int m_sourceHeight;
@@ -836,7 +874,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
 
     // A LUID pins the device to the render host's adapter so its shared-target opens succeed (cross-adapter shared-handle
     // opens fail); the default (null) keeps the CPU-only path adapter-agnostic. An explicit adapter forces UNKNOWN driver
-    // type. device1 carries OpenSharedResource1 and the event query drains each GPU copy.
+    // type. device1 carries OpenSharedResource1.
     public Win32GraphicsCaptureDevice(long? adapterLuid = null) {
         IDXGIAdapter1* adapter = null;
 
@@ -870,15 +908,6 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
                 operation: "QueryInterface(ID3D11Device1)"
             );
             m_device1 = ((ID3D11Device1*)device1);
-
-            var queryDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
-            ID3D11Query* query;
-
-            device->CreateQuery(
-                pQueryDesc: &queryDesc,
-                ppQuery: &query
-            );
-            m_gpuCopyQuery = query;
 
             var dxgiIid = IDXGIDevice.IID_Guid;
 
@@ -948,30 +977,21 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
 
         return ((nint)texture);
     }
-    // Copies the captured frame into a shared target and blocks (on the callback thread, at the readback cadence) until
-    // the copy has completed on the GPU, so the slot is safe for another device to sample. Mirrors the camera GPU tier's
-    // event-query drain; no D3D11 fence exists in this codebase and none is needed.
-    public void CopyToSharedTargetAndDrain(nint targetTexture, nint sourceTexture) {
+    // Opens the consumer's shared fence on this device for a newly attached target set; zero keeps the CPU wait.
+    public Win32D3D11CompletionSignal OpenSignal(nint sharedFenceHandle) => new(
+        context: ((nint)m_context),
+        device: ((nint)m_device),
+        sharedFenceHandle: sharedFenceHandle
+    );
+    // Copies the captured frame into a shared target on the callback thread and completes it through the target set's
+    // signal: the fence value the copy signals, or zero once a CPU wait has seen it finish.
+    public ulong CopyToSharedTarget(nint targetTexture, nint sourceTexture, Win32D3D11CompletionSignal signal) {
         m_context->CopyResource(
             pDstResource: ((ID3D11Resource*)targetTexture),
             pSrcResource: ((ID3D11Resource*)sourceTexture)
         );
-        m_context->End(pAsync: ((ID3D11Asynchronous*)m_gpuCopyQuery));
-        m_context->Flush();
 
-        BOOL done = false;
-
-        while (!done) {
-            m_context->GetData(
-                DataSize: ((uint)sizeof(BOOL)),
-                GetDataFlags: 0,
-                pAsync: ((ID3D11Asynchronous*)m_gpuCopyQuery),
-                pData: &done
-            );
-            if (!done) {
-                Thread.SpinWait(iterations: 64);
-            }
-        }
+        return signal.Complete();
     }
     // Releases a COM pointer obtained from this device (an opened shared target); zero is ignored.
     public static void ReleaseTexture(nint texture) {
@@ -1218,10 +1238,6 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             m_runtimeDevice = null;
         }
 
-        if (m_gpuCopyQuery is not null) {
-            _ = ((IUnknown*)m_gpuCopyQuery)->Release();
-            m_gpuCopyQuery = null;
-        }
 
         if (m_device1 is not null) {
             _ = ((IUnknown*)m_device1)->Release();

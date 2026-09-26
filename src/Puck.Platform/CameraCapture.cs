@@ -105,30 +105,38 @@ public interface ICameraStream {
 public interface ICameraPixelStream : ICameraStream, IFrameCaptureSource;
 /// <summary>A shared-texture stream: the platform converts each frame on its own device and copies it into one of the
 /// consumer-provisioned shared targets (sized <see cref="ICameraStream.Width"/> × <see cref="ICameraStream.Height"/>
-/// in <see cref="TargetFormat"/>), completing the copy before publishing the slot. Consumers acquire the newest
-/// completed slot and release it only after asynchronous GPU sampling retires; the producer drops a frame when every
-/// non-current target remains acquired.</summary>
+/// in <see cref="TargetFormat"/>). Each published slot carries the value the copy signals on the consumer's shared
+/// fence, so the consumer's submission waits for it on the GPU; a device that cannot open the fence completes the copy
+/// on the CPU before publishing and publishes zero (<see cref="FenceOrder"/>). Consumers acquire the newest slot and
+/// release it only after asynchronous GPU sampling retires; the producer drops a frame when every non-current target
+/// remains acquired.</summary>
 public interface ICameraSharedStream : ICameraStream, ISharedSlotRing {
     /// <summary>Gets the pixel format the consumer must provision the shared targets in.</summary>
     SurfaceFormat TargetFormat { get; }
+    /// <summary>Gets how the stream orders its copies before the consumer's reads, once it has opened the targets.</summary>
+    SharedFenceOrder FenceOrder { get; }
 
     /// <summary>Begins streaming into the given shared targets; frames are published across slots that have no active
     /// consumer acquisition.</summary>
     /// <param name="sharedTargetHandles">The consumer-provisioned shared textures (opaque NT handles on Windows).</param>
+    /// <param name="sharedFenceHandle">The consumer's shared fence (a Direct3D 12 shared fence's NT handle) the producer
+    /// signals after each copy, or zero to complete every copy on the CPU.</param>
     /// <exception cref="ArgumentException">Fewer than two targets were provided.</exception>
     /// <exception cref="InvalidOperationException">The stream already started.</exception>
-    void Start(IReadOnlyList<nint> sharedTargetHandles);
+    void Start(IReadOnlyList<nint> sharedTargetHandles, nint sharedFenceHandle);
 }
-/// <summary>A ring of consumer-owned slots with one producer: a consumer acquires the latest completed slot, samples
+/// <summary>A ring of consumer-owned slots with one producer: a consumer acquires the latest published slot, samples
 /// it across an asynchronous submission, and releases it; the producer never writes a slot a consumer holds.</summary>
 public interface ISharedSlotRing {
     /// <summary>Gets the most recently published slot, or <c>-1</c> before the first publication.</summary>
     int LatestSlot { get; }
 
-    /// <summary>Acquires the latest completed slot; pair a <see langword="true"/> result with <see cref="Release"/>.</summary>
+    /// <summary>Acquires the latest published slot; pair a <see langword="true"/> result with <see cref="Release"/>.</summary>
     /// <param name="slot">When this returns <see langword="true"/>, the slot to sample.</param>
+    /// <param name="fenceValue">When this returns <see langword="true"/>, the shared-fence value the slot's write
+    /// signals, which the submission sampling it waits for; zero when the write completed before publication.</param>
     /// <returns>Whether a slot has been published.</returns>
-    bool TryAcquireLatest(out int slot);
+    bool TryAcquireLatest(out int slot, out ulong fenceValue);
     /// <summary>Releases a slot acquired by <see cref="TryAcquireLatest"/> once the work sampling it has retired.</summary>
     /// <param name="slot">The acquired slot.</param>
     void Release(int slot);

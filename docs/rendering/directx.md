@@ -322,6 +322,22 @@ recently used library files across all its adapter directories and deletes the
 rest when a device opens its file. See
 [the Vulkan pipeline cache](vulkan.md#pipeline-cache).
 
+## Waiting on another device
+
+A Direct3D 11 producer (a camera, a desktop capture) writes into simultaneous-access textures
+this device owns and orders its writes with a shared fence rather than a CPU wait or a keyed
+mutex. `DirectXGpuSurfaceExportFactory.CreateExportableFence` creates a
+`D3D12_FENCE_FLAG_SHARED` fence and its NT handle (`DirectXExportableFence`); the producer opens
+the handle through `ID3D11Device5::OpenSharedFence` and signals the next value after each write.
+A consumer adds the value to the queue submitter with `IGpuQueueSubmitter.AddExternalWait` when
+it acquires the image, and `DirectXGpuQueueSubmitter` issues each wait as
+`ID3D12CommandQueue::Wait` immediately before its next submission's `ExecuteCommandLists`, so
+that submission and every later one on the queue wait on the GPU. The wait goes through
+`DirectXCommandCalls.QueueWait`, so a removal it meets is a `DeviceLostException`. A fence
+another device created opens through `IGpuSurfaceTransferFactory.TryImportFence` as a
+`DirectXSharedFence`. A Vulkan host allocates the targets and the fence on a headless Direct3D 12
+device on the render adapter and imports both (see [Vulkan](vulkan.md#waiting-on-another-device)).
+
 ## Constraints and invariants
 
 - **Windows-only by construction.** Every type that touches Win32 is

@@ -19,8 +19,12 @@ public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     /// across the feed's lifetime.</summary>
     long GpuRevision { get; }
     /// <summary>Gets the index (into <see cref="NativeImageGpuCaptureTargets.SharedTargetHandles"/>) of the most
-    /// recently completed GPU copy, or <c>-1</c> until the first copy into the currently attached targets.</summary>
+    /// recently published GPU copy, or <c>-1</c> until the first copy into the currently attached targets.</summary>
     int LatestGpuSlot { get; }
+    /// <summary>Gets how the feed orders its GPU copies before the consumer's reads: through the consumer's shared fence
+    /// (<see cref="NativeImageGpuCaptureTargets.SharedFenceHandle"/>), or by a CPU wait and why; pending while no
+    /// targets are attached.</summary>
+    SharedFenceOrder GpuFenceOrder { get; }
     /// <summary>Gets the live capture source height in pixels; it updates on window resize or monitor mode change and is
     /// the height the consumer should size its GPU targets to.</summary>
     int SourceHeight { get; }
@@ -34,4 +38,10 @@ public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     /// <param name="targets">The shared targets, sized to the live source extent (<see cref="SourceWidth"/> ×
     /// <see cref="SourceHeight"/>).</param>
     void AttachGpuTargets(NativeImageGpuCaptureTargets targets);
+    /// <summary>Returns the shared-fence value the copy a GPU slot holds signals, which the submission sampling the slot
+    /// waits for on the GPU.</summary>
+    /// <param name="slot">The slot, as <see cref="LatestGpuSlot"/> named it.</param>
+    /// <returns>The value; zero when the copy finished before it was published, or for a slot no attached target
+    /// has.</returns>
+    ulong GpuSlotFenceValue(int slot);
 }

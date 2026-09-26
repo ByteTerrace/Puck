@@ -8,8 +8,8 @@ namespace Puck.Vulkan.Factories;
 /// <summary>
 /// The default <see cref="IVulkanLogicalDeviceFactory"/>: it creates a logical device, enabling the
 /// swapchain extension always and the optional pipeline-executable-properties,
-/// storage-image-without-format, and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control)
-/// features only when the physical device supports them.
+/// storage-image-without-format, external memory and semaphore, timeline-semaphore, and GPU capability-floor (fp16,
+/// 16-bit storage, subgroup-size-control) features only when the physical device supports them.
 /// </summary>
 public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     /// <summary>Diagnostic introspection extension (compiled register counts etc.); enabled
@@ -38,6 +38,9 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // the pipeline-stage create-info; probing the device's Features2 with it returns FALSE on hardware that DOES
     // support the feature.
     private const uint StructureTypePhysicalDeviceSubgroupSizeControlFeatures = 1000225002;
+    // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES; its first VkBool32 is timelineSemaphore, which a
+    // Direct3D 12 shared fence imported as a semaphore needs.
+    private const uint StructureTypePhysicalDeviceTimelineSemaphoreFeatures = 1000207000;
     private const string SwapchainExtension = "VK_KHR_swapchain";
 
     /// <summary>Win32 external-memory import, for sampling a texture another backend (Direct3D 12) produced
@@ -46,6 +49,13 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     private static readonly string[] ExternalMemoryExtensions = [
         "VK_KHR_external_memory",
         "VK_KHR_external_memory_win32",
+    ];
+    /// <summary>Win32 external-semaphore import, for waiting on a Direct3D 12 shared fence imported as a timeline
+    /// semaphore (<c>VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT</c>). Enabled whenever supported, with the
+    /// timeline-semaphore feature; the base extension is core in Vulkan 1.1.</summary>
+    private static readonly string[] ExternalSemaphoreExtensions = [
+        "VK_KHR_external_semaphore",
+        "VK_KHR_external_semaphore_win32",
     ];
     /// <summary>Closed-loop present-timing extensions: <c>present_id</c> tags each present, <c>present_wait</c> blocks
     /// until it is displayed. Enabled only when both extensions AND both features are supported; otherwise the host pacer
@@ -152,6 +162,22 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             physicalDeviceHandle: physicalDeviceHandle
         )) {
             extensions.AddRange(collection: ExternalMemoryExtensions);
+        }
+
+        if (m_physicalDeviceApi.HasDeviceExtension(
+            extensionName: "VK_KHR_external_semaphore_win32",
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle
+        )) {
+            extensions.AddRange(collection: ExternalSemaphoreExtensions);
+        }
+
+        if (m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceTimelineSemaphoreFeatures
+        )) {
+            featureStructureTypes.Add(item: StructureTypePhysicalDeviceTimelineSemaphoreFeatures);
         }
 
         var presentTiming = SupportsPresentTiming(

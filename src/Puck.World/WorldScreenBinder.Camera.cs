@@ -418,6 +418,30 @@ internal sealed partial class WorldScreenBinder {
             ? feed!.Handle()
             : 0
         );
+    // A camera on its GPU tier orders its copies by the ring's shared fence, unless the render device refused it (the
+    // producer then keeps its CPU wait); the CPU tier crosses no devices.
+    private SharedFenceOrder? CameraFenceOrderFor(int seat, WorldCameraSensor sensor) {
+        if (
+            !TryResolveCamera(
+                device: out _,
+                fault: out _,
+                feed: out var feed,
+                seat: seat,
+                sensor: sensor
+            ) ||
+            (feed!.SharedStream is not { } stream) ||
+            (feed.GpuTargets is not { } targets)
+        ) {
+            return null;
+        }
+
+        return ((targets.FenceRefusal.Length == 0)
+            ? stream.FenceOrder
+            : new SharedFenceOrder(
+                Reason: targets.FenceRefusal,
+                SharedFence: false
+            ));
+    }
     private Vector3 CameraLightFor(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
@@ -725,11 +749,13 @@ internal sealed partial class WorldScreenBinder {
                 adapterLuid: adapterLuid,
                 deviceContext: deviceContext,
                 fault: out fault,
+                fence: out var fence,
                 format: stream.TargetFormat,
                 height: stream.Height,
                 images: out var images,
                 importedViews: out var views,
                 imports: out var imports,
+                sharedFence: true,
                 width: stream.Width
             )) {
                 foreach (var started in provisioned) {
@@ -740,6 +766,7 @@ internal sealed partial class WorldScreenBinder {
             }
 
             var targets = new CameraGpuTargetSet(
+                fence: fence,
                 images: images,
                 importedViews: views,
                 imports: imports,
@@ -748,7 +775,10 @@ internal sealed partial class WorldScreenBinder {
             );
 
             try {
-                stream.Start(sharedTargetHandles: targets.SharedHandles);
+                stream.Start(
+                    sharedFenceHandle: targets.ProducerFenceHandle,
+                    sharedTargetHandles: targets.SharedHandles
+                );
             } catch (Exception exception) {
                 targets.Retire();
 
@@ -773,13 +803,16 @@ internal sealed partial class WorldScreenBinder {
     // Provisions one shared ring a platform producer (a camera stream, a probe kernel) writes into. Ownership transfers
     // to the caller only on success; every partial D3D12 allocation or Vulkan import is released here on failure. The
     // producer declares its format: the source-reader tier uses BGRA, the coordinated compute tier and every probe
-    // output RGBA. All are sampled directly, so no renderer-wide convention leaks.
+    // output RGBA. All are sampled directly, so no renderer-wide convention leaks. A ring whose producer can order its
+    // writes on the GPU (a camera stream) gets a shared fence beside its targets; a probe output, whose kernel waits on
+    // the CPU for its readings, gets none.
     [SupportedOSPlatform("windows10.0.10240")]
-    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, SurfaceFormat format, int width, int height, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out string fault) {
+    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, SurfaceFormat format, int width, int height, bool sharedFence, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out SharedRingFence? fence, out string fault) {
         var allocated = new IGpuExportableImage[CameraTargetCount];
         var handles = new nint[allocated.Length];
         IGpuSurfaceImport[]? createdImports = null;
         nint[]? createdViews = null;
+        SharedRingFence? createdFence = null;
 
         try {
             var pixelFormat = (format switch {
@@ -826,13 +859,24 @@ internal sealed partial class WorldScreenBinder {
                 }
             }
 
+            if (sharedFence) {
+                createdFence = SharedRingFence.Create(
+                    export: export,
+                    hostsOnDirectX: m_hostsOnDirectX,
+                    renderDevice: deviceContext
+                );
+            }
+
             images = allocated;
             imports = createdImports;
             importedViews = createdViews;
+            fence = createdFence;
             fault = "";
 
             return true;
         } catch (Exception exception) {
+            createdFence?.Dispose();
+
             if (createdImports is not null) {
                 foreach (var import in createdImports) {
                     import?.Dispose();
@@ -846,6 +890,7 @@ internal sealed partial class WorldScreenBinder {
             images = [];
             imports = null;
             importedViews = null;
+            fence = null;
             fault = exception.Message;
 
             return false;
@@ -1509,6 +1554,7 @@ internal sealed partial class WorldScreenBinder {
     // (so a producer close cannot destroy the texture while an already-submitted renderer frame still samples it).
     // All methods run on the render thread except the ring's producer-side checks.
     private sealed class CameraGpuTargetSet {
+        private readonly SharedRingFence? m_fence;
         private readonly IReadOnlyList<IGpuExportableImage> m_images;
         private readonly nint[]? m_importedViews;
         private readonly IGpuSurfaceImport[]? m_imports;
@@ -1527,8 +1573,14 @@ internal sealed partial class WorldScreenBinder {
         /// <summary>Gets the ring's exportable target images' shared handles, in slot order — fixed for the life of
         /// the set, so a per-frame reader never re-derives them.</summary>
         public IReadOnlyList<nint> SharedHandles => m_sharedHandles;
+        /// <summary>Gets the shared fence handle the producer signals, or zero when it keeps the CPU wait.</summary>
+        public nint ProducerFenceHandle => (m_fence?.ProducerHandle ?? 0);
+        /// <summary>Gets why the render device cannot wait on the ring's shared fence, or empty when it can (or the ring
+        /// has none).</summary>
+        public string FenceRefusal => (m_fence?.Refusal ?? "");
 
-        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
+        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, SharedRingFence? fence, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
+            m_fence = fence;
             m_images = images;
             m_importedViews = importedViews;
             m_imports = imports;
@@ -1561,6 +1613,7 @@ internal sealed partial class WorldScreenBinder {
                 image.Dispose();
             }
 
+            m_fence?.Dispose();
             m_targetDevice?.RemoveDependent();
         }
         private void Release(int slot) {
@@ -1598,7 +1651,10 @@ internal sealed partial class WorldScreenBinder {
         public bool TryAcquire(out GpuImageLease frame) {
             if (
                 m_retired ||
-                !m_stream.TryAcquireLatest(slot: out var slot)
+                !m_stream.TryAcquireLatest(
+                    fenceValue: out var fenceValue,
+                    slot: out var slot
+                )
             ) {
                 frame = default;
 
@@ -1617,6 +1673,12 @@ internal sealed partial class WorldScreenBinder {
 
             ++m_outstanding;
 
+            // The producer published the value its write signals; the submission that samples this lease waits for it
+            // on the GPU. Zero means the write finished before publication.
+            if (0UL != fenceValue) {
+                m_fence!.Wait(value: fenceValue);
+            }
+
             var handle = Handle(slot: slot);
 
             frame = new GpuImageLease(
@@ -1627,5 +1689,78 @@ internal sealed partial class WorldScreenBinder {
 
             return true;
         }
+    }
+    // The shared fence a ring's producer signals after each write: created beside the targets on the device that owns
+    // them, and waited on by the render device's submissions, directly on the Direct3D 12 host and as an imported
+    // timeline semaphore on the Vulkan host. A Vulkan device that cannot import it leaves no fence for the producer, which
+    // then keeps its CPU wait.
+    private sealed class SharedRingFence : IDisposable {
+        private readonly IGpuExportableFence? m_exported;
+        private readonly IGpuSharedFence? m_imported;
+        private readonly IGpuQueueSubmitter m_submitter;
+        private readonly IGpuSharedFence? m_waitable;
+
+        private SharedRingFence(IGpuExportableFence? exported, IGpuSharedFence? imported, IGpuSharedFence? waitable, IGpuQueueSubmitter submitter, string refusal) {
+            m_exported = exported;
+            m_imported = imported;
+            m_submitter = submitter;
+            m_waitable = waitable;
+            Refusal = refusal;
+        }
+
+        public nint ProducerHandle => ((m_waitable is null)
+            ? 0
+            : m_exported!.SharedHandle
+        );
+        public string Refusal { get; }
+
+        [SupportedOSPlatform("windows10.0.10240")]
+        public static SharedRingFence Create(DirectXGpuSurfaceExportFactory export, bool hostsOnDirectX, IGpuDeviceContext renderDevice) {
+            var exported = export.CreateExportableFence();
+            var submitter = renderDevice.Services.QueueSubmitter;
+
+            if (hostsOnDirectX) {
+                return new SharedRingFence(
+                    exported: exported,
+                    imported: null,
+                    refusal: "",
+                    submitter: submitter,
+                    waitable: exported
+                );
+            }
+
+            if (renderDevice.Services.SurfaceTransferFactory.TryImportFence(
+                fence: out var imported,
+                refusal: out var refusal,
+                sharedHandle: exported.SharedHandle
+            )) {
+                return new SharedRingFence(
+                    exported: exported,
+                    imported: imported,
+                    refusal: "",
+                    submitter: submitter,
+                    waitable: imported
+                );
+            }
+
+            exported.Dispose();
+
+            return new SharedRingFence(
+                exported: null,
+                imported: null,
+                refusal: refusal,
+                submitter: submitter,
+                waitable: null
+            );
+        }
+
+        public void Dispose() {
+            m_imported?.Dispose();
+            m_exported?.Dispose();
+        }
+        public void Wait(ulong value) => m_submitter.AddExternalWait(wait: new GpuExternalWait(
+            Fence: m_waitable!,
+            Value: value
+        ));
     }
 }

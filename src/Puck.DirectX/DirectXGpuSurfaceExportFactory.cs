@@ -69,6 +69,15 @@ public sealed class DirectXGpuSurfaceExportFactory(DirectXDeviceContext deviceCo
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage | GpuImageUsage.ColorAttachment,
             width: width
         );
+    /// <summary>Creates a shared fence a producer on another device signals to order its writes into this device's
+    /// shared images: a Direct3D 11 device opens its handle and signals it after each write, and a submission here, or
+    /// on a Vulkan device that imports the handle, waits for the written value on the GPU. Not part of the neutral
+    /// interface: only a Direct3D 12 device creates a fence Direct3D 11 can open.</summary>
+    /// <returns>The fence, at zero, owned by the caller.</returns>
+    /// <exception cref="System.Runtime.InteropServices.COMException">The device refused the fence or its shared
+    /// handle.</exception>
+    public unsafe IGpuExportableFence CreateExportableFence() =>
+        new DirectXExportableFence(device: ((Windows.Win32.Graphics.Direct3D12.ID3D12Device*)deviceContext.Device.Handle));
 }
 /// <summary>
 /// Implements <see cref="IGpuImageFactory"/> for Direct3D 12 by creating <see cref="DirectXGpuImage"/> instances.

@@ -282,7 +282,7 @@ internal sealed partial class WorldScreenBinder {
         public CaptureFeed Feed { get; }
         public Vector3 Light => Feed.Light;
 
-        public GpuImageLease AcquireFrame() => Feed.Handle();
+        public GpuImageLease AcquireFrame() => Feed.AcquireFrame();
         public void Dispose() => Feed.Dispose();
         public nint Handle() => Feed.Handle();
         public void NotifyDeviceLost() => Feed.NotifyDeviceLost();

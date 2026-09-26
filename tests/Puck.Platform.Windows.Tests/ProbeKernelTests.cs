@@ -143,7 +143,7 @@ public sealed class ProbeKernelTests {
                 outside: [0, 0, 0, 255]
             )
         );
-        sharedRing.Slots.Publish(slot: writeSlot);
+        sharedRing.Slots.Publish(fenceValue: 0UL, slot: writeSlot);
 
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
@@ -175,7 +175,7 @@ public sealed class ProbeKernelTests {
             ring: ring
         );
 
-        Assert.True(condition: sharedRing.Slots.TryAcquireLatest(slot: out var readSlot));
+        Assert.True(condition: sharedRing.Slots.TryAcquireLatest(fenceValue: out _, slot: out var readSlot));
 
         try {
             var view = bench.OpenSharedView(sharedHandle: sharedRing.Handles[readSlot]);
@@ -518,9 +518,9 @@ public sealed class ProbeKernelTests {
             target: paintingRing.Targets[paintingWriteSlot],
             pixels: greenPixels
         );
-        paintingRing.Slots.Publish(slot: paintingWriteSlot);
+        paintingRing.Slots.Publish(fenceValue: 0UL, slot: paintingWriteSlot);
 
-        Assert.True(condition: paintingRing.Slots.TryAcquireLatest(slot: out var paintingReadSlot));
+        Assert.True(condition: paintingRing.Slots.TryAcquireLatest(fenceValue: out _, slot: out var paintingReadSlot));
 
         var targets = new[] { bench.CreateSharedTarget(), bench.CreateSharedTarget() };
         var slots = new LatestSlotPublication();

@@ -58,6 +58,12 @@ public unsafe interface IDirectXCommandCalls {
     /// <param name="value">The value the fence is set to once the queue reaches the signal.</param>
     /// <returns>The call's result.</returns>
     HRESULT Signal(ID3D12CommandQueue* queue, ID3D12Fence* fence, ulong value);
+    /// <summary>Asks <c>ID3D12CommandQueue::Wait</c>.</summary>
+    /// <param name="queue">The queue whose later work waits.</param>
+    /// <param name="fence">The fence waited on, which may be shared with another device.</param>
+    /// <param name="value">The value the queue waits for the fence to reach.</param>
+    /// <returns>The call's result.</returns>
+    HRESULT QueueWait(ID3D12CommandQueue* queue, ID3D12Fence* fence, ulong value);
     /// <summary>Reads <c>ID3D12Fence::GetCompletedValue</c>; a removed device reads <c>UINT64_MAX</c>.</summary>
     /// <param name="fence">The fence read.</param>
     /// <returns>The fence's completed value.</returns>
@@ -92,6 +98,7 @@ public readonly unsafe struct DirectXDeviceCommandCalls(ID3D12Device* device) : 
     private const int ListCloseSlot = 9;
     private const int ListResetSlot = 10;
     private const int QueueSignalSlot = 14;
+    private const int QueueWaitSlot = 15;
     private const int ResourceMapSlot = 8;
 
     /// <summary>Creates the calls for a device context's current device.</summary>
@@ -169,6 +176,13 @@ public readonly unsafe struct DirectXDeviceCommandCalls(ID3D12Device* device) : 
     /// <inheritdoc/>
     public HRESULT Signal(ID3D12CommandQueue* queue, ID3D12Fence* fence, ulong value) =>
         ((delegate* unmanaged[Stdcall]<ID3D12CommandQueue*, ID3D12Fence*, ulong, HRESULT>)VtableOf(instance: queue)[QueueSignalSlot])(
+            queue,
+            fence,
+            value
+        );
+    /// <inheritdoc/>
+    public HRESULT QueueWait(ID3D12CommandQueue* queue, ID3D12Fence* fence, ulong value) =>
+        ((delegate* unmanaged[Stdcall]<ID3D12CommandQueue*, ID3D12Fence*, ulong, HRESULT>)VtableOf(instance: queue)[QueueWaitSlot])(
             queue,
             fence,
             value
@@ -342,6 +356,24 @@ public static unsafe class DirectXCommandCalls {
         ).ThrowIfFailed(
             calls: calls,
             operation: "ID3D12CommandQueue::Signal"
+        );
+    /// <summary>Queues a GPU-side wait: work the queue executes after the call starts only once the fence reaches the
+    /// value, which another device may signal. Nothing blocks on the CPU.</summary>
+    /// <typeparam name="TCalls">The calls' answerer.</typeparam>
+    /// <param name="calls">The calls.</param>
+    /// <param name="queue">The queue whose later work waits.</param>
+    /// <param name="fence">The fence waited on.</param>
+    /// <param name="value">The value waited for.</param>
+    /// <exception cref="DeviceLostException">The device was removed.</exception>
+    /// <exception cref="DirectXException">The wait failed for another reason.</exception>
+    public static void QueueWait<TCalls>(TCalls calls, ID3D12CommandQueue* queue, ID3D12Fence* fence, ulong value) where TCalls : IDirectXCommandCalls =>
+        calls.QueueWait(
+            fence: fence,
+            queue: queue,
+            value: value
+        ).ThrowIfFailed(
+            calls: calls,
+            operation: "ID3D12CommandQueue::Wait"
         );
     /// <summary>Blocks until a fence reaches a value. A removed device's fence reads <c>UINT64_MAX</c>, so the wait
     /// returns at once.</summary>

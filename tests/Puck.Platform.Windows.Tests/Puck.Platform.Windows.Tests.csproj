@@ -20,6 +20,9 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Platform.Windows\Puck.Platform.Windows.csproj" />
+        <!-- The shared-fence laws' readers: a Direct3D 12 device and a Vulkan device on the Direct3D 11 writer's adapter. -->
+        <ProjectReference Include="..\..\src\Puck.DirectX\Puck.DirectX.csproj" />
+        <ProjectReference Include="..\..\src\Puck.Vulkan\Puck.Vulkan.csproj" />
         <!-- The shipped probe kinds and the build that compiles their kernels beside their sources. -->
         <ProjectReference Include="..\..\src\Puck.Shaders\Puck.Shaders.csproj" />
     </ItemGroup>

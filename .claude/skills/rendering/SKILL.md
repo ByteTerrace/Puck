@@ -220,9 +220,17 @@ These are one-line cautions; the owning pages hold the derivations.
   desktop capture's GPU route (`CaptureFeed.Handle`) and the offscreen views'
   renders (`ScreenSlot.Handle`) bind a shared slot's bare handle, so nothing
   stops the producer overwriting a slot a submission still samples. Rendering
-  plan P12b-2 leases them. Nothing orders two devices on the GPU either: a
-  producer's CPU wait before it publishes is the only ordering until P12b-4's
-  shared fence.
+  plan P12b-2 leases them. Two devices are ordered by a Direct3D 12 shared
+  fence the consumer creates beside the targets: a Direct3D 11 producer signals
+  it through `Win32D3D11CompletionSignal`, the one completion primitive every
+  Direct3D 11 producer uses, and publishes each slot with the value, and the
+  code that acquires the slot adds a `GpuExternalWait` to the render device's
+  `IGpuQueueSubmitter.AddExternalWait`, which its next submission carries (a
+  Vulkan host imports the fence through `TryImportFence`). A published value
+  of zero means the write finished on the CPU (a device that cannot share the
+  fence, the probe kernel); never add a wait for it. A new path that samples a
+  shared slot adds its wait where it acquires, before the submission that
+  samples it is recorded.
 - **Image sources.** An image from outside a pass is described once, by
   `ImageSourceDescriptor`, and a world names its producer by id
   (`WorldScreenSource.Producer`). A new producer registers a

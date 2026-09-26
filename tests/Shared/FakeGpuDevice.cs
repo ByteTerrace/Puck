@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 
@@ -129,6 +130,8 @@ internal sealed class FakeGpuDevice :
     /// admitted into it, or refused with <see cref="GpuDescriptorHeapRefusalException"/>, and returns its ranges when
     /// destroyed, as a Direct3D 12 device's pools do.</summary>
     public GpuDescriptorHeapBudget? DescriptorHeap { get; set; }
+    /// <summary>Gets every external wait added, in the order the submitter took them.</summary>
+    public List<GpuExternalWait> ExternalWaits { get; } = [];
     /// <summary>Gets the number of submissions made, fenced or not.</summary>
     public int Submissions { get; private set; }
 
@@ -372,6 +375,10 @@ internal sealed class FakeGpuDevice :
         ((Fence)fence).Arm();
         Submissions++;
     }
+    void IGpuQueueSubmitter.AddExternalWait(GpuExternalWait wait) {
+        Hit(key: "IGpuQueueSubmitter.AddExternalWait");
+        ExternalWaits.Add(item: wait);
+    }
     void IGpuQueueSubmitter.SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
         Hit(key: "IGpuQueueSubmitter.SubmitAndWait");
         Submissions++;
@@ -506,6 +513,12 @@ internal sealed class FakeGpuDevice :
     }
 
     IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport() => throw new NotSupportedException();
+    bool IGpuSurfaceTransferFactory.TryImportFence(nint sharedHandle, [NotNullWhen(true)] out IGpuSharedFence? fence, out string refusal) {
+        fence = null;
+        refusal = "the fake device imports no fence";
+
+        return false;
+    }
     IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => new Readback(reportVersion: m_reportVersion);
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => new SurfaceUpload();
 

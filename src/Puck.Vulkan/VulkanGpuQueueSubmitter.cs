@@ -8,9 +8,62 @@ namespace Puck.Vulkan;
 /// <summary>
 /// Implements <see cref="IGpuQueueSubmitter"/> by forwarding to <see cref="VulkanQueueSubmitter"/>, resolving the
 /// graphics queue from the device context by downcasting to <see cref="IVulkanDeviceContext"/>. Submission fences
-/// are plain <c>VkFence</c>s created through the frame-synchronization API.
+/// are plain <c>VkFence</c>s created through the frame-synchronization API. External waits join the next submission's
+/// wait list as timeline semaphores (<see cref="VulkanSharedFence"/>) with their values, at every stage.
 /// </summary>
 public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, VulkanQueueSubmitter queueSubmitter, IVulkanFrameSynchronizationApi frameSynchronizationApi) : IGpuQueueSubmitter {
+    private int m_waitCount;
+    private nint[] m_waitSemaphores = [];
+    private ulong[] m_waitValues = [];
+
+    private ReadOnlySpan<nint> WaitSemaphores => m_waitSemaphores.AsSpan(
+        length: m_waitCount,
+        start: 0
+    );
+    private ReadOnlySpan<ulong> WaitValues => m_waitValues.AsSpan(
+        length: m_waitCount,
+        start: 0
+    );
+
+    // A submission that reached the queue carried the list; an empty one did not, so it keeps the list.
+    private void ClearWaitsAfter(ReadOnlySpan<nint> commandBufferHandles) {
+        if (!commandBufferHandles.IsEmpty) {
+            m_waitCount = 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Takes a <see cref="VulkanSharedFence"/> of this device.</remarks>
+    public void AddExternalWait(GpuExternalWait wait) {
+        ArgumentOutOfRangeException.ThrowIfZero(wait.Value);
+
+        if (wait.Fence is not VulkanSharedFence fence) {
+            throw new ArgumentException(
+                message: $"A Vulkan submission waits only on an imported timeline semaphore, not a {wait.Fence?.GetType().Name ?? "null"}.",
+                paramName: nameof(wait)
+            );
+        }
+
+        if (m_waitCount == m_waitSemaphores.Length) {
+            var capacity = Math.Max(
+                val1: 4,
+                val2: (m_waitCount * 2)
+            );
+
+            Array.Resize(
+                array: ref m_waitSemaphores,
+                newSize: capacity
+            );
+            Array.Resize(
+                array: ref m_waitValues,
+                newSize: capacity
+            );
+        }
+
+        m_waitSemaphores[m_waitCount] = fence.SemaphoreHandle;
+        m_waitValues[m_waitCount] = wait.Value;
+        ++m_waitCount;
+    }
     /// <inheritdoc/>
     public IGpuSubmissionFence CreateSubmissionFence() {
         var vkContext = deviceContext;
@@ -27,8 +80,11 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
         queueSubmitter.Submit(
             commandBufferHandles: commandBufferHandles,
             device: vkContext.LogicalDevice.Commands,
-            graphicsQueue: vkContext.LogicalDevice.GraphicsQueue
+            graphicsQueue: vkContext.LogicalDevice.GraphicsQueue,
+            waitSemaphores: WaitSemaphores,
+            waitValues: WaitValues
         );
+        ClearWaitsAfter(commandBufferHandles: commandBufferHandles);
     }
     /// <inheritdoc/>
     public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
@@ -39,8 +95,11 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
             commandBufferHandles: commandBufferHandles,
             device: vkContext.LogicalDevice.Commands,
             fenceHandle: vkFence.Arm(),
-            graphicsQueue: vkContext.LogicalDevice.GraphicsQueue
+            graphicsQueue: vkContext.LogicalDevice.GraphicsQueue,
+            waitSemaphores: WaitSemaphores,
+            waitValues: WaitValues
         );
+        ClearWaitsAfter(commandBufferHandles: commandBufferHandles);
     }
     /// <inheritdoc/>
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
@@ -49,8 +108,11 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
         queueSubmitter.SubmitAndWait(
             commandBufferHandles: commandBufferHandles,
             device: vkContext.LogicalDevice.Commands,
-            graphicsQueue: vkContext.LogicalDevice.GraphicsQueue
+            graphicsQueue: vkContext.LogicalDevice.GraphicsQueue,
+            waitSemaphores: WaitSemaphores,
+            waitValues: WaitValues
         );
+        ClearWaitsAfter(commandBufferHandles: commandBufferHandles);
     }
 }
 

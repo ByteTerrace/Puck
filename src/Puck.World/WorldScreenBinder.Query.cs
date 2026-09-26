@@ -39,6 +39,28 @@ internal sealed partial class WorldScreenBinder {
         ? slot.Handle()
         : 0
     );
+    /// <summary>Returns how the image a screen shows crosses from its producer's device to the render device: through the
+    /// shared fence the producer signals and the render device's submission waits for, or by the producer's CPU wait
+    /// and why. Only a camera on its GPU tier and a capture on its GPU route cross devices.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    /// <returns>The order, or <see langword="null"/> when the screen's source crosses no devices.</returns>
+    public SharedFenceOrder? FenceOrderAt(int index) {
+        if (!m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        )) {
+            return null;
+        }
+
+        return ((slot.LiveFeed ?? slot.DeclaredFeed) switch {
+            CameraSlotFeed camera => CameraFenceOrderFor(
+                seat: camera.Seat,
+                sensor: camera.Sensor
+            ),
+            CaptureSlotFeed { Feed: { GpuRoute: true, Source: { } source } } => source.GpuFenceOrder,
+            _ => null,
+        });
+    }
     /// <summary>Returns a one-line description of every live cable link — a facade over
     /// <see cref="Server.WorldMachineHost.DescribeLinks"/>.</summary>
     public string DescribeLinks() => m_machines.DescribeLinks();
