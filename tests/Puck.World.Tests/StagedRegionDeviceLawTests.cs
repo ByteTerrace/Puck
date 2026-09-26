@@ -18,9 +18,12 @@ namespace Puck.World.Tests;
 /// deployed <c>region-copy</c> kernel ahead of the <c>source-rgba</c> conversion, and a capture of the instance, read
 /// back from the device, must equal byte for byte what <see cref="ImageSourceConversion.ToRgba8"/> computes from the
 /// region the upload wrote on the tick the capture was served. It runs on the first Vulkan device with a graphics queue,
-/// on the first Direct3D 12 hardware adapter and on the software (WARP) renderer, and skips by name where the host has
-/// none.
+/// on the first Direct3D 12 hardware adapter with the debug layer on, where the copy's and the conversion's command
+/// lists must agree on the region's state in submission order (no <c>[d3d12-debug]</c> line), and on the software
+/// (WARP) renderer, and skips by name where the host has none. It runs alone, because the debug layer removes every
+/// device the process already holds.
 /// </summary>
+[Collection(name: DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 public sealed class StagedRegionDeviceLawTests {
     private const uint Extent = 16;
@@ -49,12 +52,23 @@ public sealed class StagedRegionDeviceLawTests {
     [InlineData(true)]
     [Theory]
     public void AStagedRegionReachesANodePassByteExactOnADirect3D12Device(bool warp) {
-        using var context = (warp ? DirectXTestDevices.Warp() : DirectXTestDevices.Hardware());
+        var output = new StringWriter();
+        var context = (warp ? DirectXTestDevices.Warp() : DirectXTestDevices.Debug(output: output));
 
-        Convert(
-            backend: (warp ? "directx (WARP)" : "directx"),
-            device: context,
-            hostsOnDirectX: true
+        try {
+            Convert(
+                backend: (warp ? "directx (WARP)" : "directx"),
+                device: context,
+                hostsOnDirectX: true
+            );
+            context.DrainDebugMessages();
+        } finally {
+            context.Dispose();
+        }
+
+        Assert.DoesNotContain(
+            actualString: output.ToString(),
+            expectedSubstring: "[d3d12-debug]"
         );
     }
 

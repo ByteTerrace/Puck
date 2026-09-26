@@ -15,13 +15,17 @@ namespace Puck.Shaders;
 // the copies' writes and one buffer barrier per copied buffer making the writes visible to the shader stages that read
 // it. A recorder records no barrier and no copy of its own.
 public sealed partial class ShaderPipelineRenderNode {
-    // The stages that read a region: a package draws with one (the overlay reads its region in the fragment stage) and a
-    // compute pass dispatches with another (a source conversion reads its host buffer port), so a copy is made visible
-    // to both.
+    // The stages that read a package's region: a package draws with one (the overlay reads its region in the fragment
+    // stage) and could dispatch with another, so a copy is made visible to both.
     private const GpuStage RegionReaders = GpuStage.ComputeShader | GpuStage.FragmentShader;
 
     private readonly Dictionary<string, GpuRegion> m_externalRegions = new(comparer: StringComparer.Ordinal);
-    private readonly List<IGpuBuffer> m_copiedRegions = [];
+    // The package regions the frame's copies wrote, which the copy command buffer hands to their readers. A host buffer
+    // port's copied buffer is never among them: its readers' planned barriers start from the host's state, which covers
+    // the copy's write, so each buffer transitions in one command buffer of the submission and every command buffer's
+    // first transition of a buffer starts from the state the ones submitted before it left, although the copies are
+    // recorded after the passes.
+    private readonly List<IGpuBuffer> m_copiedPackageRegions = [];
 
     // The device's region-copy pipeline, leased by the build of the first graph with a staged region, and each slot's
     // command pool the frame's copies are recorded in; all held until a device loss or disposal.
@@ -301,6 +305,7 @@ public sealed partial class ShaderPipelineRenderNode {
             foreach (var region in regions) {
                 RecordRegionCopy(
                     command: ref command,
+                    handsToReaders: true,
                     region: region,
                     slot: slot
                 );
@@ -309,6 +314,7 @@ public sealed partial class ShaderPipelineRenderNode {
         foreach (var region in m_externalRegions.Values) {
             RecordRegionCopy(
                 command: ref command,
+                handsToReaders: false,
                 region: region,
                 slot: slot
             );
@@ -320,7 +326,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         var recorder = m_gpu.Recorder;
 
-        foreach (var buffer in m_copiedRegions) {
+        foreach (var buffer in m_copiedPackageRegions) {
             recorder.TransitionBuffer(
                 bufferHandle: buffer.BufferHandle,
                 commandBufferHandle: command,
@@ -331,7 +337,7 @@ public sealed partial class ShaderPipelineRenderNode {
             );
         }
 
-        m_copiedRegions.Clear();
+        m_copiedPackageRegions.Clear();
         recorder.EndDebugGroup(commandBufferHandle: command);
         recorder.EndCommandBuffer(commandBufferHandle: command);
         commands.Insert(
@@ -341,8 +347,9 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Flushes one region's share of the slot and records its copy when it owes one, beginning the frame's copy command
     // buffer, behind the barrier that orders the earlier submissions' reads of every staged destination before the
-    // copies write them, at the first.
-    private void RecordRegionCopy(GpuRegion region, int slot, ref nint command) {
+    // copies write them, at the first. A package region's copied buffer is handed to its readers at the end of the copy
+    // command buffer; a host buffer port's is handed over by its readers' planned barriers.
+    private void RecordRegionCopy(GpuRegion region, int slot, bool handsToReaders, ref nint command) {
         region.Flush(slot: slot);
 
         if (!region.OwesCopy) {
@@ -371,7 +378,9 @@ public sealed partial class ShaderPipelineRenderNode {
             commandBuffer: command,
             slot: slot
         );
-        m_copiedRegions.Add(item: region.Buffer(slot: slot));
+        if (handsToReaders) {
+            m_copiedPackageRegions.Add(item: region.Buffer(slot: slot));
+        }
     }
     // Releases the copy command pools and gives up the node's lease on the region-copy pipeline, once every region that
     // copies with it is disposed and no submission that recorded a copy is in flight.

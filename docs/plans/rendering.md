@@ -2483,7 +2483,10 @@ Phase 3, the groups, follows phase 2:
     copy pool per graph reserving every staged region's sets in
     `DescriptorPools`, moves a bound port to each later graph's share
     (`GpuRegion.MoveCopySets`), and records every owed copy with its barriers in
-    one command buffer ahead of the frame's passes; recorders record no barrier.
+    one command buffer ahead of the frame's passes; recorders record no barrier,
+    and a host buffer port's copied buffer is handed to its readers by their
+    planned barriers, so a buffer transitions in one command list of a
+    submission, as Direct3D 12 carries its state from list to list.
     Every region counts in the node's account (`GpuRegion.BytesOf`,
     `RegionBytes`) and in `world.budget`'s live rows. On Direct3D 12 a buffer
     the fragment stage reads is in `ALL_SHADER_RESOURCE`. Laws:
@@ -2498,7 +2501,10 @@ Phase 3, the groups, follows phase 2:
     hands the runtime its device's own memory profile with no host-visible
     device-local bytes, so a source's region stages, and reads the conversion
     back byte-exact against the CPU reference on Vulkan hardware, Direct3D 12
-    hardware and WARP.
+    hardware with the debug layer and WARP;
+    `RenderGraphRuntimeLawTests.AStagedRegionsCopyAndItsReadersAgreeOnItsStateInSubmissionOrder`
+    replays a submission's buffer states as Direct3D 12 carries them from the copy
+    list to the pass lists recorded before it.
 **Decisions.** Root parameter indices are dense, and the push index sits at
 `b0` in space 4, outside every group's space. The spike's frame group is the
 generated frame block, the only generated include, and previous-frame inputs

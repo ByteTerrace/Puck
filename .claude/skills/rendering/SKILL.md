@@ -587,8 +587,13 @@ These are one-line cautions; the owning pages hold the derivations.
   (`stagedRegions`, admitted with the graph, owned by its first pass), moves a
   bound port to each later graph's share (`GpuRegion.MoveCopySets`), and records
   every owed copy in one command buffer ahead of the frame's passes, behind a
-  memory barrier and followed by a buffer barrier per copied buffer to the compute
-  and fragment stages. Every region counts in the node's account
+  memory barrier and followed by a buffer barrier per copied package region to
+  the compute and fragment stages. A host buffer port's copied buffer is handed
+  over by its readers' planned barriers instead: the copies are recorded after
+  the passes but submitted before them, and Direct3D 12 carries a buffer's state
+  from list to list within one submission, so a buffer transitions in one command
+  buffer of a submission (`UploadModelGpu.StateConflicts` replays a submission as
+  Direct3D 12 tracks it). Every region counts in the node's account
   (`GpuRegion.BytesOf`, `RegionBytes`, a replaced graph's `LiveBytes`) and in
   `world.budget`'s live rows. A new host upload is a region, never a hand-written
   buffer, and a new host-written port is a host buffer port. On Direct3D 12 a buffer the fragment stage
@@ -610,7 +615,8 @@ These are one-line cautions; the owning pages hold the derivations.
   chosen through the profile alone: `StagedRegionDeviceLawTests`
   (`tests/Puck.World.Tests`) hands the runtime a context reporting the device's
   own profile with no host-visible device-local bytes and reads an uploaded
-  source's conversion back byte-exact on Vulkan, Direct3D 12 hardware and WARP.
+  source's conversion back byte-exact on Vulkan, Direct3D 12 hardware (debug
+  layer on, no `[d3d12-debug]` line) and WARP.
   A Vulkan swapchain is created only in a `GpuPixelFormat`
   (`VulkanSwapchainFactory.SelectSurfaceFormat` over `SwapchainFormats`); a
   surface offering none of them refuses at creation, never mid-frame.
