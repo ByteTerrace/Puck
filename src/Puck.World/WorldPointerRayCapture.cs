@@ -10,16 +10,20 @@ namespace Puck.World;
 /// (<see cref="SourceRay.Through"/> over the view <see cref="WorldSeatViewports"/> published for the frame on screen)
 /// and sustains the ray on that seat's lane as the <see cref="SourcePointerCommands.Origin"/> and
 /// <see cref="SourcePointerCommands.Direction"/> commands (<see cref="InputRouter.Sustain"/>), so every tick the frame
-/// runs carries it, a catch-up burst included. The ray ends when the pointer leaves the seat's view, moves to another
-/// seat, or the world declares no <c>Simulation</c> screen; the server then reads <c>on</c> 0.
+/// runs carries it, a catch-up burst included. Only a seat that still holds the mouse the position is attributed to
+/// points: the ray ends when that mouse leaves the seat or the position names no mouse (a platform that reports only
+/// the aggregate cursor, or a gamepad-only seat), when the pointer leaves the seat's view or the window
+/// (<see cref="WorldPointer.ForgetPosition"/>), or when the world declares no <c>Simulation</c> screen; the server then
+/// reads <c>on</c> 0.
 /// </summary>
 /// <remarks>The camera is presentation float state; the ray enters the command plane as the float values the tick's
 /// snapshot records and is quantized once into simulation at the seat verb, so a replay reproduces it exactly.
 /// Single-threaded: the host loop services every <see cref="ISnapshotInputCapture"/> on the window-pump thread, where
 /// the frame source also publishes the seat views.</remarks>
-internal sealed class WorldPointerRayCapture : ISnapshotInputCapture {
-    private readonly WorldClient m_client;
+public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
+    private readonly Func<WorldDefinition> m_definition;
     private readonly WorldPointer m_pointer;
+    private readonly PlayerRoster m_roster;
     private readonly InputRouter m_router;
     private readonly WorldSeatViewports m_viewports;
 
@@ -29,23 +33,26 @@ internal sealed class WorldPointerRayCapture : ISnapshotInputCapture {
     /// <summary>Initializes a new instance of the <see cref="WorldPointerRayCapture"/> class.</summary>
     /// <param name="pointer">The live pointer store, read non-destructively.</param>
     /// <param name="viewports">The per-seat view publication of the frame on screen.</param>
-    /// <param name="client">The client whose delivered definition names the world's screens.</param>
+    /// <param name="roster">The roster that says which seat holds the mouse the position is attributed to.</param>
+    /// <param name="definition">Reads the delivered definition whose screens the ray may map through.</param>
     /// <param name="router">The router whose seat lanes carry the ray.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldPointerRayCapture(WorldPointer pointer, WorldSeatViewports viewports, WorldClient client, InputRouter router) {
+    public WorldPointerRayCapture(WorldPointer pointer, WorldSeatViewports viewports, PlayerRoster roster, Func<WorldDefinition> definition, InputRouter router) {
         ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: viewports);
-        ArgumentNullException.ThrowIfNull(argument: client);
+        ArgumentNullException.ThrowIfNull(argument: roster);
+        ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: router);
 
-        m_client = client;
+        m_definition = definition;
         m_pointer = pointer;
+        m_roster = roster;
         m_router = router;
         m_viewports = viewports;
     }
 
     private bool DeclaresSimulationScreen() {
-        foreach (var screen in m_client.Definition.Screens) {
+        foreach (var screen in m_definition().Screens) {
             if (screen.Route.Input == SourceDestination.Simulation) {
                 return true;
             }
@@ -71,8 +78,12 @@ internal sealed class WorldPointerRayCapture : ISnapshotInputCapture {
 
     /// <inheritdoc/>
     public void CaptureFrame(ulong frameKey) {
+        var device = m_pointer.PositionedDevice;
+
         if (
             (m_pointer.PositionedSlot is not { } slot) ||
+            (m_roster.DeviceSlot(device: device) != slot) ||
+            (m_roster.KindOf(device: device) != InputDeviceKind.Mouse) ||
             !DeclaresSimulationScreen()
         ) {
             End();

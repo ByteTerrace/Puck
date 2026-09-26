@@ -10,11 +10,12 @@ namespace Puck.World;
 /// than from the event — so a consumer never has to reconstruct held-button or cursor state the store already
 /// carries, and adding one costs no second <see cref="IWindowInputObserver"/>.
 /// </summary>
-internal interface IWorldPointerConsumer {
+public interface IWorldPointerConsumer {
     /// <summary>Reacts to the seat's freshly-updated pointer state.</summary>
     /// <param name="slot">The 0-based seat slot the pointer currently rides.</param>
     void OnPointer(int slot);
 }
+
 /// <summary>Marks an <see cref="IWorldPointerConsumer"/> that reads <see cref="WorldPointer.TakeWheel"/>, so
 /// <see cref="WorldPointerSink"/> knows a real reader exists and must not drain-and-discard the wheel accumulator on
 /// its behalf. <see cref="WorldWheelFeed"/> is the one implementation — the radial action menu's ring cycling is
@@ -22,6 +23,7 @@ internal interface IWorldPointerConsumer {
 /// structural.</summary>
 internal interface IWorldWheelConsumer : IWorldPointerConsumer {
 }
+
 /// <summary>
 /// The one <see cref="IWindowInputObserver"/> the pointer has. It writes every raw pointer event into
 /// <see cref="WorldPointer"/> and then drives each registered <see cref="IWorldPointerConsumer"/>, so the whole
@@ -43,9 +45,12 @@ internal interface IWorldWheelConsumer : IWorldPointerConsumer {
 /// <see cref="PlayerRoster.DeviceSlotChanging"/>: a device moving seats mid-drag can strand a held pointer button on
 /// the seat it just left (the event stream has already moved to the new seat, so no real button-up can ever reach
 /// the old one), so this releases broadly rather than trying to pinpoint which seat, if any, actually held a mouse
-/// button through the move.</para>
+/// button through the move. It also forgets the position (<see cref="WorldPointer.ForgetPosition"/>), so neither the
+/// seat a device left nor a new occupant of it keeps pointing, drawing a cursor or hovering with the old position;
+/// the next reported position seats the pointer afresh. <see cref="WindowInputKind.PointerLeft"/> forgets it the same
+/// way.</para>
 /// </remarks>
-internal sealed class WorldPointerSink : IWindowInputObserver {
+public sealed class WorldPointerSink : IWindowInputObserver {
     private readonly IWorldPointerConsumer[] m_consumers;
     private readonly bool m_hasWheelConsumer;
     private readonly WorldPointer m_pointer;
@@ -78,6 +83,7 @@ internal sealed class WorldPointerSink : IWindowInputObserver {
     // button that was not actually held stays not-held), only occasionally redundant.
     private void OnDeviceSlotChanging(InputDeviceId _) {
         m_pointer.ReleaseAllButtons();
+        m_pointer.ForgetPosition();
     }
     // Each mouse resolves its OWN seat from its OWN device id (see the class remarks); a device the roster cannot
     // yet place falls back to WorldPointerSlot's fixed seat.
@@ -93,6 +99,12 @@ internal sealed class WorldPointerSink : IWindowInputObserver {
             // Not a pointer act — nothing downstream should react to it as one.
             return;
         }
+        if (inputEvent.Kind == WindowInputKind.PointerLeft) {
+            // The window reports no position until the pointer returns, so no seat points anywhere meanwhile.
+            m_pointer.ForgetPosition();
+
+            return;
+        }
 
         var slot = ResolveSlot(device: inputEvent.DeviceId);
 
@@ -106,8 +118,9 @@ internal sealed class WorldPointerSink : IWindowInputObserver {
                 break;
             case WindowInputKind.PointerPosition:
                 m_pointer.SetPosition(
-                    slot: slot,
-                    position: inputEvent.Vector
+                    device: inputEvent.DeviceId,
+                    position: inputEvent.Vector,
+                    slot: slot
                 );
 
                 break;

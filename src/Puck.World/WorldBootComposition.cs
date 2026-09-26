@@ -1294,8 +1294,9 @@ public static class WorldBootComposition {
         // frame through the pointer seat's published camera and sustained on that seat's lane ahead of the frame's
         // snapshots, so the seat verbs quantize it into the seat's intent on every tick.
         services.AddSingleton<ISnapshotInputCapture>(implementationFactory: static sp => new WorldPointerRayCapture(
-            client: sp.GetRequiredService<WorldClient>(),
+            definition: () => sp.GetRequiredService<WorldClient>().Definition,
             pointer: sp.GetRequiredService<WorldPointer>(),
+            roster: sp.GetRequiredService<PlayerRoster>(),
             router: sp.GetRequiredService<InputRouter>(),
             viewports: sp.GetRequiredService<WorldSeatViewports>()
         ));

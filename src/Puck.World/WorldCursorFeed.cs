@@ -249,8 +249,8 @@ internal sealed class WorldCursorFeed {
 
     /// <summary>Recomposes and publishes this frame's cursor frame (the overlay's <c>FeedTick</c>).</summary>
     public void Tick() {
-        // The process has one pointer, riding the seat whose mouse moved it last, so at most one cursor entry
-        // publishes per frame.
+        // The process has one pointer, riding the seat of the device that moved it last and none after it left the
+        // window, so at most one cursor entry publishes per frame.
         var slot = (m_pointer.PositionedSlot ?? WorldPointerSlot.Resolve(roster: m_roster));
         var count = 0;
         var position = m_pointer.Position(slot: slot);
