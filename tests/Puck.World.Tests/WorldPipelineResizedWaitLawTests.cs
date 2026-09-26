@@ -68,7 +68,7 @@ public sealed class WorldPipelineResizedWaitLawTests {
             name: "fill",
             width: Extent
         );
-        using var runtime = new WorldPipelineRuntime(
+        using var runtime = new WorldViewGraphHost(
             documentDirectory: directory.RootPath,
             packager: new ShaderPackager(compiler: new ShaderCompiler(
                 cacheDirectory: directory.PathOf(name: "cache"),
@@ -78,10 +78,15 @@ public sealed class WorldPipelineResizedWaitLawTests {
             Report = (name, message) => reports.Add(item: $"[pipeline: {name} {message}]"),
         };
 
-        runtime.Register(
-            name: "fill",
-            node: node
+        using var instances = FakeGraphInstances.Attach(
+            create: _ => node,
+            host: runtime
         );
+
+        runtime.Reconcile(views: new WorldViewDefaults(Graphs: [new WorldViewGraph(
+            Name: "fill",
+            Source: "fill.hlsl"
+        )]));
         node.Swap(pipeline: Fill());
         Assert.True(condition: SpinWait.SpinUntil(
             condition: () => {

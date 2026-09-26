@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
@@ -9,25 +10,23 @@ namespace Puck.World.Client;
 
 /// <summary>A non-destructive pointer sample in client pixels, supplied by the host.</summary>
 public readonly record struct WorldPipelinePointerSample(Vector2 ClientPosition, bool HasPosition, bool Pressed);
-/// <summary>Hosts named shader-pipeline instances. Compilation runs in the background; completed candidates
-/// are installed by the frame presenter before producing a frame. Clocks and history are presentation state.</summary>
-public sealed partial class WorldPipelineRuntime : IDisposable {
-    /// <summary>The factory for instances loaded after boot, using the same device as the host.</summary>
-    public Func<string, ShaderPipelineRenderNode>? CreateNode { get; set; }
-    /// <summary>Gets the directory against which authored pipeline source paths resolve — the same directory the
-    /// server's override gate resolves <c>views.pipelines</c> rows against. See <see cref="Rebase"/>.</summary>
+/// <summary>Hosts a world's <c>views.graphs</c> rows on its render-graph runtime: it composes the runtime's instance set
+/// from the rows and the default graph it synthesizes, compiles each row's source in the background and installs the
+/// graph on the row's instance, and places the panes a layout shows. Clocks and history are presentation state.</summary>
+public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDisposable {
+    /// <summary>Gets the directory against which authored graph source paths resolve — the same directory the
+    /// server's override gate resolves <c>views.graphs</c> rows against. See <see cref="Rebase"/>.</summary>
     public string DocumentDirectory { get; private set; }
-    /// <summary>Every registered instance by its authored name.</summary>
+    /// <summary>Every graph row with a source that the runtime runs, by its authored name.</summary>
     public IReadOnlyDictionary<string, Entry> Entries => m_entries;
+    /// <summary>Gets this frame's footprints: the synthesized root showing the world, then each pane at its slot's
+    /// extent. The render root reads this list, which the host rewrites in place every frame.</summary>
+    public IReadOnlyList<RenderGraphFootprint> Footprints => m_footprints;
     /// <summary>The source loader used by both boot and live authoring: a row naming a package directory loads through
     /// the package, and any other row through the ordinary pipeline loader.</summary>
     public ShaderPackager Packager { get; }
     /// <summary>A non-destructive pointer read, absent in an offscreen host.</summary>
     public Func<WorldPipelinePointerSample>? ReadPointer { get; set; }
-    /// <summary>Registers a newly created instance with the owning render tree.</summary>
-    public Action<string, ShaderPipelineRenderNode>? RegisterNode { get; set; }
-    /// <summary>Removes and retires an instance from the owning render tree.</summary>
-    public Action<string>? RemoveNode { get; set; }
     /// <summary>Completed compilation reports, delivered only from the presentation thread.</summary>
     public Action<string, string>? Report { get; set; }
 
@@ -73,7 +72,7 @@ public sealed partial class WorldPipelineRuntime : IDisposable {
         /// <summary>The published mapping of the pane the instance is shown in, kept while its region and extent hold,
         /// or <see langword="null"/> before the instance is first shown.</summary>
         public Puck.Commands.SourceMapping? Pane { get; set; }
-        /// <summary>The GPU executor, owned by the hosting render tree.</summary>
+        /// <summary>Gets the node the runtime renders the instance through, which the runtime owns.</summary>
         public required ShaderPipelineRenderNode Node { get; init; }
         /// <summary>The number of dependency changes observed.</summary>
         public int SourceChangeCount { get; private set; }
@@ -194,24 +193,187 @@ public sealed partial class WorldPipelineRuntime : IDisposable {
     // compiled from, taken before and after the load so an edit during compilation retries instead of mislabeling.
     internal sealed record CompileOutcome(ShaderPipelineLoadResult Result, ShaderPipelineSource? Source);
 
+    /// <summary>The name <see cref="Report"/> gives a report about the instance set as a whole.</summary>
+    public const string SetReportName = "render-graph";
     /// <summary>The source watch's quiet period before requesting compilation.</summary>
     public const int WatchDebounceMilliseconds = 150;
     /// <summary>The minimum interval between dependency metadata polls, independent of presentation cadence.</summary>
     public const int WatchPollMilliseconds = 50;
 
     private readonly Dictionary<string, Entry> m_entries = new(comparer: StringComparer.Ordinal);
+    private readonly List<RenderGraphFootprint> m_footprints = [];
+    private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
+    private Func<IReadOnlyList<string>, WorldRootGraph>? m_compose;
     private bool m_disposed;
-    private IReadOnlyList<WorldViewPipeline>? m_lastRows;
+    private WorldViewDefaults? m_lastViews;
+    private IRenderGraphInstances? m_runtime;
+    private WorldRootGraph? m_synthesized;
 
-    /// <summary>Creates a host registry using the shared source loader and the world's document directory.</summary>
-    public WorldPipelineRuntime(ShaderPackager packager, string documentDirectory) {
+    /// <summary>Creates a host using the shared source loader and the world's document directory.</summary>
+    public WorldViewGraphHost(ShaderPackager packager, string documentDirectory) {
         ArgumentNullException.ThrowIfNull(packager);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentDirectory);
         Packager = packager;
         DocumentDirectory = Path.GetFullPath(path: documentDirectory);
     }
 
+    /// <summary>Composes a runtime's instance set from a document's <c>views</c> section: the synthesized default graph
+    /// (the world producer, then every row, then the root that reads the world and the panes) when the section names no
+    /// <c>views.root</c>, or the rows alone, rooted where <c>views.root</c> says, when it does.</summary>
+    /// <param name="views">The document's <c>views</c> section.</param>
+    /// <param name="synthesized">The default graph, or <see langword="null"/> when the section names its own root.</param>
+    /// <param name="passes">The passes one render of a row's graph records.</param>
+    /// <param name="set">The instances, when this returns <see langword="true"/>.</param>
+    /// <param name="graphs">Each instance's graph, parallel to <paramref name="set"/>: the synthesized root's, and
+    /// <see langword="null"/> for the world producer and every row.</param>
+    /// <param name="root">The instance the display shows.</param>
+    /// <param name="reason">Why the instances were refused.</param>
+    /// <returns><see langword="true"/> when the instances form a valid set.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="views"/> or <paramref name="passes"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="synthesized"/> is <see langword="null"/> and the section names
+    /// no root.</exception>
+    public static bool TryCompose(WorldViewDefaults views, WorldRootGraph? synthesized, Func<WorldViewGraph, int> passes, [NotNullWhen(returnValue: true)] out RenderGraphInstanceSet? set, out IReadOnlyList<RenderGraphRuntimeGraph?> graphs, out string root, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: views);
+        ArgumentNullException.ThrowIfNull(argument: passes);
+
+        var rows = WorldViewGraphs.Instances(
+            graphs: (views.Graphs ?? []),
+            passes: passes
+        );
+        List<RenderGraphInstance> instances;
+        var composed = new List<RenderGraphRuntimeGraph?>();
+
+        if (views.Root is { } authored) {
+            instances = [.. rows];
+            composed.AddRange(collection: Enumerable.Repeat<RenderGraphRuntimeGraph?>(count: rows.Count, element: null));
+            root = authored;
+        } else {
+            if (synthesized is null) {
+                throw new ArgumentException(
+                    message: "A section that names no root renders the synthesized default graph, and none was given.",
+                    paramName: nameof(synthesized)
+                );
+            }
+
+            var synthesizedGraphs = synthesized.Graphs();
+
+            instances = [synthesized.Instances[0], .. rows, .. synthesized.Instances.Skip(count: 1)];
+            composed.Add(item: synthesizedGraphs[0]);
+            composed.AddRange(collection: Enumerable.Repeat<RenderGraphRuntimeGraph?>(count: rows.Count, element: null));
+            composed.AddRange(collection: synthesizedGraphs.Skip(count: 1));
+            root = synthesized.Root;
+        }
+
+        graphs = composed;
+
+        if (!RenderGraphInstanceSet.TryCreate(
+            instances: instances,
+            refusal: out var refusal,
+            set: out set
+        )) {
+            reason = refusal.Message;
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Drives a runtime from here on: the next <see cref="Reconcile"/> composes the document's instance set
+    /// onto it.</summary>
+    /// <param name="runtime">The runtime, built from the set <see cref="TryCompose"/> composed for the booted
+    /// document.</param>
+    /// <param name="compose">Synthesizes the default graph over the panes a document's layouts place.</param>
+    /// <param name="synthesized">The default graph the runtime was built with, or <see langword="null"/> when the booted
+    /// document names its own root.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="runtime"/> or <paramref name="compose"/> is
+    /// <see langword="null"/>.</exception>
+    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, WorldRootGraph> compose, WorldRootGraph? synthesized) {
+        ArgumentNullException.ThrowIfNull(argument: runtime);
+        ArgumentNullException.ThrowIfNull(argument: compose);
+
+        m_compose = compose;
+        m_lastViews = null;
+        m_runtime = runtime;
+        m_synthesized = synthesized;
+        ResetFootprints();
+    }
+    /// <summary>Starts a frame before the runtime schedules it: reconciles the accepted <c>views</c> section, installs
+    /// complete candidates and polls dependency watches, and clears the previous frame's placements, leaving the
+    /// footprints the synthesized root always shows.</summary>
+    /// <param name="views">The accepted document's <c>views</c> section.</param>
+    public void BeginFrame(WorldViewDefaults views) {
+        Reconcile(views: views);
+        PumpWatches();
+        ResetFootprints();
+        m_placements.Clear();
+    }
+    /// <summary>Places a pane this frame: the synthesized root shows the instance inside a normalized rect of the display,
+    /// renders it at that rect's extent, and reconstructs it at the given sharpness. An instance the root does not place
+    /// is ignored.</summary>
+    /// <param name="instance">The <c>views.graphs</c> instance the slot names.</param>
+    /// <param name="region">The slot's normalized rect.</param>
+    /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+    /// <returns><see langword="true"/> when the root places the instance this frame.</returns>
+    public bool Place(string instance, NormalizedRect region, float sharpness) {
+        if (
+            (m_synthesized is not { Plan: not null } synthesized) ||
+            !synthesized.Panes.Contains(value: instance) ||
+            m_placements.ContainsKey(key: instance)
+        ) {
+            return false;
+        }
+
+        m_placements.Add(
+            key: instance,
+            value: new RenderGraphPlacement(
+                Height: region.Height,
+                Left: region.X,
+                Sharpness: sharpness,
+                Shown: true,
+                Top: region.Y,
+                Width: region.Width
+            )
+        );
+        m_footprints.Add(item: new RenderGraphFootprint(
+            Consumer: WorldViewGraphs.MainInstance,
+            Height: region.Height,
+            Producer: instance,
+            Width: region.Width
+        ));
+
+        return true;
+    }
+    /// <inheritdoc/>
+    /// <remarks>A pane of the synthesized root the host did not place this frame is not shown, so its pass draws
+    /// nothing.</remarks>
+    public bool TryGet(string instance, string pass, out RenderGraphPlacement placement) {
+        if (
+            !string.Equals(
+                a: instance,
+                b: WorldViewGraphs.MainInstance,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+            (m_synthesized is not { } synthesized) ||
+            !synthesized.Panes.Contains(value: pass)
+        ) {
+            placement = default;
+
+            return false;
+        }
+
+        if (!m_placements.TryGetValue(
+            key: pass,
+            value: out placement
+        )) {
+            placement = default;
+        }
+
+        return true;
+    }
     /// <summary>Rebases every future relative source resolution onto a newly loaded document's own directory — a
     /// <c>world.load</c>/<c>world.reload</c> that installs a document from another directory moves what a row's
     /// relative <c>source</c> resolves against, the same directory the server's override gate begins reading rows
@@ -222,7 +384,7 @@ public sealed partial class WorldPipelineRuntime : IDisposable {
         ArgumentException.ThrowIfNullOrWhiteSpace(documentDirectory);
         DocumentDirectory = Path.GetFullPath(path: documentDirectory);
     }
-    /// <summary>Cancels pending compilations; the render tree retains ownership of the GPU instances.</summary>
+    /// <summary>Cancels pending compilations; the runtime retains ownership of the GPU instances.</summary>
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
@@ -280,15 +442,23 @@ public sealed partial class WorldPipelineRuntime : IDisposable {
                     var held = entry.Node.HasPendingCandidate;
 
                     try {
-                        entry.Node.Swap(pipeline: pipeline);
-                        entry.Candidate = ((compiled?.Source is { } source)
-                            ? (pipeline.Plan, source)
-                            : null);
-                        if (held) {
-                            Report?.Invoke(
-                                name,
-                                "superseded: compiled candidate"
-                            );
+                        if (!Install(
+                            name: name,
+                            pipeline: pipeline,
+                            reason: out var refused
+                        )) {
+                            result = result with { Message = refused, Pipeline = null, Status = ShaderPipelineLoadStatus.Failed };
+                            entry.LastCompile = result;
+                        } else {
+                            entry.Candidate = ((compiled?.Source is { } source)
+                                ? (pipeline.Plan, source)
+                                : null);
+                            if (held) {
+                                Report?.Invoke(
+                                    name,
+                                    "superseded: compiled candidate"
+                                );
+                            }
                         }
                     } catch (Exception exception) when ((exception is InvalidOperationException or ArgumentException or NotSupportedException or InvalidDataException)) {
                         result = result with { Message = exception.Message, Pipeline = null, Status = ShaderPipelineLoadStatus.Failed };
@@ -441,34 +611,129 @@ public sealed partial class WorldPipelineRuntime : IDisposable {
             );
         });
     }
-    /// <summary>Reconciles accepted document rows before rendering. Refused mutations never create GPU instances.</summary>
-    public void Reconcile(IReadOnlyList<WorldViewPipeline> rows) {
+    /// <summary>Reconciles the accepted <c>views</c> section onto the runtime before it schedules a frame: the instance
+    /// set follows the section's rows and the panes its layouts place, every surviving instance keeps its node and
+    /// graph, a row with a new source compiles, and a removed row's instance retires. Refused mutations never reach
+    /// here, and a set the runtime refuses leaves the running one in place, reported by name. Does nothing before a
+    /// runtime is attached.</summary>
+    /// <param name="views">The accepted document's <c>views</c> section.</param>
+    public void Reconcile(WorldViewDefaults views) {
+        ArgumentNullException.ThrowIfNull(argument: views);
+
+        if (
+            m_disposed ||
+            (m_runtime is not { } runtime) ||
+            ReferenceEquals(
+                objA: m_lastViews,
+                objB: views
+            )
+        ) {
+            return;
+        }
+
+        m_lastViews = views;
+
+        var synthesized = m_synthesized;
+
+        if (views.Root is null) {
+            var panes = WorldRootGraph.PanesOf(views: views);
+
+            if (
+                (synthesized is null) ||
+                !synthesized.Panes.SequenceEqual(second: panes, comparer: StringComparer.Ordinal)
+            ) {
+                try {
+                    synthesized = m_compose!(arg: panes);
+                } catch (WorldRootGraphRefusedException exception) {
+                    Report?.Invoke(
+                        SetReportName,
+                        $"refused: {exception.Message}"
+                    );
+
+                    return;
+                }
+            }
+        } else {
+            synthesized = null;
+        }
+
+        if (!TryCompose(
+            graphs: out var graphs,
+            passes: PassesOf,
+            reason: out var reason,
+            root: out var root,
+            set: out var set,
+            synthesized: synthesized,
+            views: views
+        )) {
+            Report?.Invoke(
+                SetReportName,
+                $"refused: {reason}"
+            );
+
+            return;
+        }
+
+        // A synthesized root this host already runs keeps the graph it has installed.
         if (ReferenceEquals(
-            objA: m_lastRows,
-            objB: rows
-        )) { return; }
+            objA: synthesized,
+            objB: m_synthesized
+        )) {
+            graphs = [.. graphs.Select(selector: (graph, index) => (((synthesized is not null) && string.Equals(
+                a: set.Instances[index].Name,
+                b: WorldViewGraphs.MainInstance,
+                comparisonType: StringComparison.Ordinal
+            ))
+                ? null
+                : graph))];
+        }
+
+        if (!runtime.TryReconfigure(
+            graphs: graphs,
+            refusal: out var refusal,
+            root: root,
+            set: set
+        )) {
+            Report?.Invoke(
+                SetReportName,
+                $"refused: {refusal.Code}: {refusal.Message}"
+            );
+
+            return;
+        }
+
+        m_synthesized = synthesized;
+
+        var rows = (views.Graphs ?? []);
         var desiredNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var row in rows) {
-            desiredNames.Add(item: row.Name);
-            if (!m_entries.TryGetValue(
-                key: row.Name,
-                value: out var entry
-            )) {
-                if (CreateNode is not { } create) { continue; }
-                var node = create(row.Name);
-
-                RegisterNode?.Invoke(
-                    row.Name,
-                    node
-                );
-                Register(
-                    name: row.Name,
-                    node: node
-                );
-                entry = m_entries[row.Name];
+            if (
+                (row.Source is null) ||
+                (runtime.NodeOf(instance: row.Name) is not { } node)
+            ) {
+                continue;
             }
+
+            desiredNames.Add(item: row.Name);
+
+            if (
+                !m_entries.TryGetValue(
+                    key: row.Name,
+                    value: out var entry
+                ) ||
+                !ReferenceEquals(
+                    objA: entry.Node,
+                    objB: node
+                )
+            ) {
+                entry?.CancelPending();
+                entry = new Entry { Name = row.Name, Node = node, Owner = this };
+                m_entries[row.Name] = entry;
+            }
+
             entry.Adopt(row: row);
+
             if (!string.Equals(
                 a: entry.Source,
                 b: row.Source,
@@ -480,28 +745,65 @@ public sealed partial class WorldPipelineRuntime : IDisposable {
                 );
             }
         }
-        m_lastRows = rows;
+
         foreach (var name in m_entries.Keys.ToArray()) {
             if (desiredNames.Contains(item: name)) { continue; }
-            var entry = m_entries[name];
-
-            entry.CancelPending();
-            RemoveNode?.Invoke(name);
+            m_entries[name].CancelPending();
             m_entries.Remove(key: name);
         }
     }
-    /// <summary>Registers a render-tree-owned instance exactly once.</summary>
-    public void Register(string name, ShaderPipelineRenderNode node) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentNullException.ThrowIfNull(node);
-        m_entries.Add(
-            key: name,
-            value: new Entry { Name = name, Node = node, Owner = this }
-        );
-    }
-    /// <summary>Looks up a registered instance without creating one.</summary>
+    /// <summary>Looks up an instance the host runs without creating one.</summary>
     public bool TryGet(string name, out Entry entry) => m_entries.TryGetValue(
         key: name,
         value: out entry!
     );
+
+    // Installs a compiled graph on its row's instance, binding each input the row declares to the instance it names.
+    private bool Install(string name, CompiledShaderPipeline pipeline, out string reason) {
+        if (
+            (m_runtime is not { } runtime) ||
+            (WorldDefinitionRows.FindGraph(
+                graphs: m_lastViews?.Graphs,
+                name: name
+            ) is not { } row)
+        ) {
+            reason = $"no views.graphs row named '{name}' runs on the render graph";
+
+            return false;
+        }
+
+        if (!runtime.TryInstall(
+            graph: new RenderGraphRuntimeGraph(
+                Inputs: [.. (row.Inputs ?? []).Select(selector: static input => new RenderGraphRuntimeInput(
+                    Producer: input.Instance,
+                    Version: input.Resource
+                ))],
+                Pipeline: pipeline
+            ),
+            instance: name,
+            refusal: out var refusal
+        )) {
+            reason = $"{refusal.Code}: {refusal.Message}";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    // The passes a row's instance is priced at: its compiled graph's, or one before it has compiled.
+    private int PassesOf(WorldViewGraph row) => ((m_entries.TryGetValue(
+        key: row.Name,
+        value: out var entry
+    ) && (entry.LastCompile?.Pipeline is { } pipeline))
+        ? pipeline.Plan.Passes.Count
+        : 1);
+    private void ResetFootprints() {
+        m_footprints.Clear();
+
+        if (m_synthesized is { } synthesized) {
+            m_footprints.AddRange(collection: synthesized.Footprints);
+        }
+    }
 }

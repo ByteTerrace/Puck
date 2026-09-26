@@ -1,7 +1,7 @@
 # The same instance names the perturbed echo, which expects time and timeDelta to hold each other's sentinel.
 pipeline.wait echo compiled 40
 pipeline.wait echo installed 10
-world.row.set views.pipelines {"name":"echo","source":"{fixtures}/perturbed.graph.json"}
+world.row.set views.graphs {"name":"echo","source":"{fixtures}/perturbed.graph.json"}
 pipeline.reload echo
 pipeline.wait echo compiled 40
 pipeline.wait echo installed 10

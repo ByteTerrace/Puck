@@ -303,6 +303,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     cancellationToken.ThrowIfCancellationRequested();
                     build.Preview = PreviewObjects.Create(
                         device: request.Device,
+                        owner: request.Instance,
                         gpu: request.Gpu,
                         directX: request.DirectX,
                         height: preview.Height,
@@ -414,6 +415,10 @@ public sealed partial class ShaderPipelineRenderNode {
                         [],
                         null,
                         Layout: layout
+                    ),
+                    name: new GpuObjectName(
+                        owner: request.Instance,
+                        part: planned.Name
                     )
                 );
 
@@ -472,6 +477,10 @@ public sealed partial class ShaderPipelineRenderNode {
                 description: RenderPassOf(
                     planned: planned,
                     specs: specs
+                ),
+                name: new GpuObjectName(
+                    owner: request.Instance,
+                    part: planned.Name
                 )
             );
             Graphics = gpu.PipelineFactory.Create(
@@ -486,6 +495,10 @@ public sealed partial class ShaderPipelineRenderNode {
                     null,
                     DepthCompareOf(pass: planned),
                     layout
+                ),
+                name: new GpuObjectName(
+                    owner: request.Instance,
+                    part: planned.Name
                 )
             );
         }

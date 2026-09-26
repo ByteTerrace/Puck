@@ -38,6 +38,7 @@ internal sealed class FakeGpuDevice :
     IGpuSurfaceTransferFactory {
     private readonly bool m_countCalls;
     private readonly bool m_holdFences;
+    private readonly GpuObjectNaming m_naming;
     private readonly byte m_reportVersion;
 
     private readonly Dictionary<nint, Creation> m_trackedHandles = [];
@@ -58,8 +59,11 @@ internal sealed class FakeGpuDevice :
     /// <param name="holdFences">Whether a submitted fence waits for the test to complete it.</param>
     /// <param name="trackObjects">Whether every created object is tracked in <see cref="Created"/> and
     /// <see cref="Memory"/>.</param>
-    public FakeGpuDevice(byte reportVersion = 0, bool countCalls = false, bool holdFences = false, bool trackObjects = false) {
+    /// <param name="naming">The naming every creating member hands its object to, as a backend's do, or
+    /// <see langword="null"/> for <see cref="GpuObjectNaming.Off"/>.</param>
+    public FakeGpuDevice(byte reportVersion = 0, bool countCalls = false, bool holdFences = false, bool trackObjects = false, GpuObjectNaming? naming = null) {
         m_countCalls = countCalls;
+        m_naming = (naming ?? GpuObjectNaming.Off);
         m_holdFences = holdFences;
         m_reportVersion = reportVersion;
         m_trackObjects = trackObjects;
@@ -68,6 +72,7 @@ internal sealed class FakeGpuDevice :
             BufferFactory = this,
             CommandPoolFactory = this,
             ImageFactory = this,
+            Naming = m_naming,
             PipelineFactory = this,
             QueueSubmitter = this,
             Recorder = this,
@@ -105,7 +110,8 @@ internal sealed class FakeGpuDevice :
     /// its height times four bytes, a buffer its size.</summary>
     public GpuDeviceMemoryWork Memory { get; } = new(backend: "fake");
 
-    public GpuMemoryProfile MemoryProfile => default;
+    /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
+    public GpuMemoryProfile MemoryProfile { get; set; }
     /// <summary>Gets this device as every one of its own services.</summary>
     public GpuDeviceServices Services { get; }
 
@@ -211,35 +217,52 @@ internal sealed class FakeGpuDevice :
     }
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionBuffer");
-    IGpuCommandPool IGpuCommandPoolFactory.Create() {
+    IGpuCommandPool IGpuCommandPoolFactory.Create(in GpuObjectName name) {
         Hit(key: "IGpuCommandPoolFactory.Create");
 
-        return new Resource(
-            creation: Track(kind: "command pool"),
-            gpu: this
+        return Named(
+            kind: GpuObjectKind.CommandPool,
+            name: in name,
+            resource: new Resource(
+                creation: Track(kind: "command pool"),
+                gpu: this
+            )
         );
     }
-    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
+    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) {
         BeforeComputePipeline?.Invoke(obj: description);
         Hit(key: "IGpuPipelineFactory.Create(compute)");
 
-        return new Resource(
-            creation: Track(kind: "compute pipeline"),
-            gpu: this,
-            groupLayouts: GroupLayoutsOf(layout: description?.Layout)
+        return Named(
+            kind: GpuObjectKind.Pipeline,
+            name: in name,
+            resource: new Resource(
+                creation: Track(kind: "compute pipeline"),
+                gpu: this,
+                groupLayouts: GroupLayoutsOf(layout: description?.Layout)
+            )
         );
     }
-    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
         Hit(key: "IGpuPipelineFactory.Create(graphics)");
 
-        return new Resource(
-            creation: Track(kind: "graphics pipeline"),
-            gpu: this,
-            groupLayouts: GroupLayoutsOf(layout: description?.Layout)
+        return Named(
+            kind: GpuObjectKind.Pipeline,
+            name: in name,
+            resource: new Resource(
+                creation: Track(kind: "graphics pipeline"),
+                gpu: this,
+                groupLayouts: GroupLayoutsOf(layout: description?.Layout)
+            )
         );
     }
-    nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {
+    nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) {
         Hit(key: "IGpuBindings.AllocateSet");
+        m_naming.Name(
+            handle: 7,
+            kind: GpuObjectKind.DescriptorSet,
+            name: in name
+        );
 
         return 7;
     }
@@ -268,7 +291,7 @@ internal sealed class FakeGpuDevice :
         }
     }
 
-    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes) {
+    nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) {
         Hit(key: "IGpuBindings.CreatePool");
 
         GpuDescriptorAdmission? admission = null;
@@ -295,6 +318,12 @@ internal sealed class FakeGpuDevice :
         if (heap is not null) {
             m_heapPools[handle] = (heap, admission!);
         }
+
+        m_naming.Name(
+            handle: handle,
+            kind: GpuObjectKind.DescriptorPool,
+            name: in name
+        );
 
         return handle;
     }
@@ -349,12 +378,16 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuQueueSubmitter.SubmitAndWait");
         Submissions++;
     }
-    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description) {
+    IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description, in GpuObjectName name) {
         Hit(key: "IGpuRenderPassFactory.Create");
 
-        return new Resource(
-            creation: Track(kind: "render pass"),
-            gpu: this
+        return Named(
+            kind: GpuObjectKind.RenderPass,
+            name: in name,
+            resource: new Resource(
+                creation: Track(kind: "render pass"),
+                gpu: this
+            )
         );
     }
     IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) {
@@ -378,51 +411,102 @@ internal sealed class FakeGpuDevice :
             gpu: this
         );
     }
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) {
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         Hit(key: "IGpuBufferFactory.CreateHostVisible");
 
-        return new Resource(
-            creation: Track(kind: "host-visible buffer"),
-            gpu: this,
-            sizeBytes: sizeBytes
+        return Named(
+            kind: GpuObjectKind.Buffer,
+            name: in name,
+            resource: new Resource(
+                creation: Track(kind: "host-visible buffer"),
+                gpu: this,
+                sizeBytes: sizeBytes
+            )
         );
     }
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
+        Hit(key: "IGpuBufferFactory.CreateHostVisibleDeviceLocal");
+
+        return Named(
+            kind: GpuObjectKind.Buffer,
+            name: in name,
+            resource: new Resource(
+                creation: Track(
+                    deviceLocal: true,
+                    deviceLocalBytes: sizeBytes,
+                    kind: "host-visible device-local buffer"
+                ),
+                gpu: this,
+                sizeBytes: sizeBytes
+            )
+        );
+    }
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) {
         Hit(key: "IGpuBufferFactory.CreateHostVisible(data)");
 
-        return new Resource(
-            creation: Track(kind: "host-visible buffer"),
-            gpu: this,
-            sizeBytes: ((ulong)data.Length)
+        return Named(
+            kind: GpuObjectKind.Buffer,
+            name: in name,
+            resource: new Resource(
+                creation: Track(kind: "host-visible buffer"),
+                gpu: this,
+                sizeBytes: ((ulong)data.Length)
+            )
         );
     }
-    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) {
+    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         Hit(key: "IGpuBufferFactory.CreateDeviceLocal");
 
-        return new Resource(
-            creation: Track(
-                deviceLocal: true,
-                deviceLocalBytes: sizeBytes,
-                kind: "device-local buffer"
-            ),
-            gpu: this,
-            sizeBytes: sizeBytes
+        return Named(
+            kind: GpuObjectKind.Buffer,
+            name: in name,
+            resource: new Resource(
+                creation: Track(
+                    deviceLocal: true,
+                    deviceLocalBytes: sizeBytes,
+                    kind: "device-local buffer"
+                ),
+                gpu: this,
+                sizeBytes: sizeBytes
+            )
         );
     }
-    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
+    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
         Hit(key: "IGpuImageFactory.Create");
 
-        return new Resource(
-            creation: Track(
-                deviceLocal: true,
-                deviceLocalBytes: ((((ulong)width) * height) * 4UL),
-                kind: "image"
-            ),
-            gpu: this,
-            height: height,
-            width: width
+        return Named(
+            kind: GpuObjectKind.Image,
+            name: in name,
+            resource: new Resource(
+                creation: Track(
+                    deviceLocal: true,
+                    deviceLocalBytes: ((((ulong)width) * height) * 4UL),
+                    kind: "image"
+                ),
+                gpu: this,
+                height: height,
+                width: width
+            )
         );
     }
+
+    // Hands a created object to the device's naming, as a backend's creating members do, under the fake's fixed handle
+    // for its kind.
+    private Resource Named(Resource resource, GpuObjectKind kind, in GpuObjectName name) {
+        m_naming.Name(
+            handle: kind switch {
+                GpuObjectKind.Buffer => resource.BufferHandle,
+                GpuObjectKind.CommandPool => resource.CommandBufferHandle,
+                GpuObjectKind.Image => resource.ImageHandle,
+                _ => ((IGpuPipeline)resource).Handle,
+            },
+            kind: kind,
+            name: in name
+        );
+
+        return resource;
+    }
+
     IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport() => throw new NotSupportedException();
     IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => new Readback(reportVersion: m_reportVersion);
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => new SurfaceUpload();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Puck.Hosting;
 using Puck.Shaders;
+using Puck.World.Client;
 
 using Xunit;
 
@@ -9,7 +10,8 @@ namespace Puck.World.Tests;
 /// <summary>The default render graph a world gets when it authors no root (<see cref="WorldRootGraph"/>): the world
 /// alone as the root when nothing is drawn over it; otherwise the root graph reading the world and running each
 /// <c>render.extensions</c> entry as its <c>post.&lt;id&gt;</c> pass in document order, then the overlay, planned by the
-/// graph compiler; and an entry whose config does not bind refused by the compiler, naming the entry.</summary>
+/// graph compiler; a <c>place</c> pass per pane a layout slot names, ahead of them, reading the pane's instance; and an
+/// entry whose config does not bind refused by the compiler, naming the entry.</summary>
 public sealed class WorldRootGraphLawTests {
     private const string FilmGrain = "sdf-film-grain";
 
@@ -22,7 +24,7 @@ public sealed class WorldRootGraphLawTests {
             overlay: false,
             packages: RenderGraphPackageCatalog.Shipped
         );
-        var world = Assert.Single(collection: graph.Instances.Instances);
+        var world = Assert.Single(collection: graph.Instances);
 
         Assert.Null(@object: graph.Plan);
         Assert.Equal(
@@ -60,7 +62,7 @@ public sealed class WorldRootGraphLawTests {
             expected: (WorldViewGraphs.MainInstance, "world", "frame")
         );
 
-        var main = graph.Instances.Instances[graph.Instances.IndexOf(name: WorldViewGraphs.MainInstance)];
+        var main = graph.Instances.Single(predicate: static instance => (instance.Name == WorldViewGraphs.MainInstance));
 
         Assert.Equal(
             actual: (main.Passes, main.Kind, Assert.Single(collection: main.Reads).Producer),
@@ -79,6 +81,60 @@ public sealed class WorldRootGraphLawTests {
             actual: graph.Graphs().Select(selector: static installed => installed?.Inputs.Single()),
             expected: [null, new RenderGraphRuntimeInput(Producer: WorldViewGraphs.WorldInstance, Version: "world")]
         );
+    }
+    [Fact]
+    public void EachPaneIsPlacedOverTheWorldBeforeThePostPassesAndMainBecomesTheRoot() {
+        var graph = WorldRootGraph.Compose(
+            extensions: [new WorldRenderExtensionEntry(Id: FilmGrain)],
+            overlay: false,
+            packages: RenderGraphPackageCatalog.Shipped,
+            panes: ["left", "right"]
+        );
+        var plan = Assert.IsType<RenderGraphPlan>(@object: graph.Plan);
+        var main = graph.Instances.Single(predicate: static instance => (instance.Name == WorldViewGraphs.MainInstance));
+
+        Assert.Equal(
+            actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
+            expected: ["left:place", "right:place", $"{FilmGrain}:post.{FilmGrain}"]
+        );
+        Assert.Equal(
+            actual: (graph.Root, string.Join(separator: ",", values: main.Reads.Select(selector: static read => read.Producer))),
+            expected: (WorldViewGraphs.MainInstance, "world,left,right")
+        );
+        Assert.Equal(
+            actual: graph.Graphs()[1]!.Inputs,
+            expected: [
+                new RenderGraphRuntimeInput(Producer: WorldViewGraphs.WorldInstance, Version: "world"),
+                new RenderGraphRuntimeInput(Producer: "left", Version: "left"),
+                new RenderGraphRuntimeInput(Producer: "right", Version: "right"),
+            ]
+        );
+
+        // With nothing else drawn over the world, a pane alone still makes main the root.
+        var panesOnly = WorldRootGraph.Compose(
+            extensions: null,
+            overlay: false,
+            packages: RenderGraphPackageCatalog.Shipped,
+            panes: ["left"]
+        );
+
+        Assert.Equal(
+            actual: (panesOnly.Root, Assert.Single(collection: panesOnly.Plan!.Steps).Name),
+            expected: (WorldViewGraphs.MainInstance, "left")
+        );
+    }
+    [Fact]
+    public void ThePanesAreTheInstancesAnyLayoutSlotNamesInFirstNamedOrder() {
+        var views = new WorldViewDefaults(Layouts: [
+            new WorldViewLayout(Name: "a", Slots: [new WorldViewSlot(Instance: "right"), new WorldViewSlot(Camera: "c")]),
+            new WorldViewLayout(Name: "b", Slots: [new WorldViewSlot(Instance: "left"), new WorldViewSlot(Instance: "right")]),
+        ]);
+
+        Assert.Equal(
+            actual: WorldRootGraph.PanesOf(views: views),
+            expected: ["right", "left"]
+        );
+        Assert.Empty(collection: WorldRootGraph.PanesOf(views: new WorldViewDefaults()));
     }
     [Fact]
     public void OnlyTheOverlayIsDrawnOverAWorldWithNoExtensions() {

@@ -15,7 +15,7 @@
 // register(t0) DELIBERATELY shadows sdf-vm.hlsli's sdfWords (and t1 shadows sdf-world.hlsli's viewports): this kernel
 // reads NEITHER, DXC dead-code-eliminates both declarations, and `tiles` ends up the only SRV — which the Direct3D 12
 // pipeline factory assigns t0 by binding order anyway. If you ever call map() or read viewports[] from here, the
-// overlap becomes real: split CompositeParams/isChildViewport out of sdf-world.hlsli rather than renumbering this
+// overlap becomes real: split CompositeParams out of sdf-world.hlsli rather than renumbering this
 // register, because the factory assigns registers POSITIONALLY and an annotation change alone desyncs the root signature.
 [[vk::binding(3, 0)]] StructuredBuffer<float> tiles : register(t0);       // read-only beam cull buffer
 [[vk::binding(5, 0)]] RWStructuredBuffer<uint> viewsArgs : register(u0);  // [groupCountX, groupCountY, groupCountZ]
@@ -43,18 +43,12 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
     GroupMemoryBarrierWithGroupSync();
 
     // Every (viewport, tile) cull entry, flattened: entry = ((v * tilesPerView) + (ty * tileGrid.x) + tx). The strided
-    // walk visits the SAME entry set as a serial triple loop; a child viewport's tiles are skipped identically (the beam
-    // never culled them). The grid is small (≈80x50 per viewport at 1280x800) and this runs once per frame.
+    // walk visits the SAME entry set as a serial triple loop. The grid is small (≈80x50 per viewport at 1280x800) and this runs once per frame.
     uint tilesPerView = (params.tileGrid.x * params.tileGrid.y);
     uint total = (params.viewportCount * tilesPerView);
 
     for (uint entry = threadIndex; (entry < total); entry += SDF_CULL_ARGS_THREADS) {
         uint v = (entry / tilesPerView);
-
-        if (isChildViewport(v)) {
-            continue; // a child viewport's slot is a hosted surface, not an SDF camera — the beam never culled it.
-        }
-
         uint rem = (entry - (v * tilesPerView));
         uint ty = (rem / params.tileGrid.x);
         uint tx = (rem - (ty * params.tileGrid.x));

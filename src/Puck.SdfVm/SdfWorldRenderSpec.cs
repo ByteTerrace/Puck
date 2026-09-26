@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The data an SDF world render host needs — the render boundary between a scene-owning application node (the
 /// overworld, a document-driven world) and the shared assembly in <see cref="SdfWorldRenderBuilder"/>. Everything
-/// backend-specific (kernel bytecode selection, child-node backend flags) derives from
+/// backend-specific (kernel bytecode selection) derives from
 /// <see cref="HostsOnDirectX"/> in one place, the builder; a spec never names a bytecode extension.
 /// </summary>
 /// <param name="FrameSource">The per-frame source of the scene, cameras, and viewport regions.</param>
@@ -22,11 +22,6 @@ public sealed record SdfWorldRenderSpec(
     /// frozen at construction. Defaults to <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (64 MB); a host
     /// whose scene never bakes carves sets 0 to allocate no pool.</summary>
     public int BrickPoolVoxelCapacity { get; init; } = SdfWorldEngine.DefaultBrickPoolVoxelCapacity;
-    /// <summary>Child render nodes keyed by name (each <see cref="SdfViewSnapshot.Child"/> naming one supplies that
-    /// frame's slot surface instead of an SDF camera render). The name is the registry key a <see cref="SdfFrame"/>'s
-    /// per-view bindings resolve against, not a fixed viewport slot — see <see cref="SdfEngineNode"/>'s remarks for the
-    /// per-frame slot derivation.</summary>
-    public IReadOnlyDictionary<string, IRenderNode>? Children { get; init; }
     /// <summary>An optional in-place decorator applied to <see cref="FrameSource"/> before the engine node is built —
     /// the seam a host uses to wrap the scene's frame source (e.g. a diegetic-UI overlay that emits its own SDF
     /// geometry into the program). Returns the frame source to actually render; identity when absent.</summary>
@@ -36,7 +31,7 @@ public sealed record SdfWorldRenderSpec(
     /// host whose moving-entity population grows over the run passes its peak here.</summary>
     public int DynamicTransformCapacity { get; init; }
     /// <summary>Whether the resolved host backend is Direct3D 12 — the one input every backend-specific choice
-    /// (bytecode extension, child-node flags, overlay availability) derives from.</summary>
+    /// (bytecode extension, overlay availability) derives from.</summary>
     public bool HostsOnDirectX { get; init; }
     /// <summary>A floor on the instance count the per-tile mask buffer is sized for — the capacity envelope for a
     /// frame source that hot-swaps programs whose instance counts grow past the first frame's.</summary>

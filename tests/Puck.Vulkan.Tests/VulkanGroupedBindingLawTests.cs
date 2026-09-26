@@ -80,10 +80,12 @@ public sealed unsafe class VulkanGroupedBindingLawTests {
 
         var set = rig.Bindings.AllocateSet(
             descriptorSetLayoutHandle: GroupSetLayout,
+            name: default,
             poolHandle: Pool
         );
         var flat = rig.Bindings.AllocateSet(
             descriptorSetLayoutHandle: 0x2000,
+            name: default,
             poolHandle: Pool
         );
 
@@ -181,7 +183,8 @@ public sealed unsafe class VulkanGroupedBindingLawTests {
             Device = context.LogicalDevice;
             Bindings = new VulkanGpuBindings(
                 allocator: new VulkanDescriptorAllocator(descriptorApi: Descriptors),
-                deviceContext: context
+                deviceContext: context,
+                naming: GpuObjectNaming.Off
             );
             Recorder = new VulkanGpuRecorder(
                 deviceContext: context,

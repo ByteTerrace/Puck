@@ -16,7 +16,6 @@ public sealed partial class SdfWorldEngine {
     internal const int SkyPipelineIndex = 9;
     internal const int CompositePipelineIndex = 10;
     internal const int BrickBakePipelineIndex = 11;
-    internal const int BrickUploadPipelineIndex = 12;
 
     // The pipelines this engine records with. The owner built them and disposes them; a kernel reload swaps the
     // native objects behind the same slots, so the fields below never change.
@@ -302,7 +301,6 @@ public sealed partial class SdfWorldEngine {
             Spec(name: "sdf-sky", bindings: Views, push: PassPush, filter: GpuSamplerFilter.Nearest),
             Spec(name: "sdf-world-composite", bindings: Composite, push: CompositePush),
             Spec(name: "sdf-brick-bake", bindings: BrickBake, push: BrickPush, brick: true),
-            Spec(name: "sdf-brick-upload", bindings: BrickBake, push: BrickPush, brick: true),
         ];
         // The order a build starts the pipelines in (SdfWorldPipelines.Build): the views variants, the longest driver
         // translations, start last, lightest first (core, folds, full), and every other pipeline starts before them in
@@ -317,7 +315,6 @@ public sealed partial class SdfWorldEngine {
             SkyPipelineIndex,
             CompositePipelineIndex,
             BrickBakePipelineIndex,
-            BrickUploadPipelineIndex,
             ViewsCorePipelineIndex,
             ViewsFoldsPipelineIndex,
             ViewsPipelineIndex,

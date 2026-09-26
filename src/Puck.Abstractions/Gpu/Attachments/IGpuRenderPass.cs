@@ -27,9 +27,10 @@ public interface IGpuFramebuffer : IDisposable {
 public interface IGpuRenderPassFactory {
     /// <summary>Creates a render pass.</summary>
     /// <param name="description">The attachments; <see cref="GpuRenderPassDescription.Validate"/> states the rules.</param>
+    /// <param name="name">The object's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
     /// <returns>A new, owning <see cref="IGpuRenderPass"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="description"/> breaks a rule.</exception>
-    IGpuRenderPass Create(GpuRenderPassDescription description);
+    IGpuRenderPass Create(GpuRenderPassDescription description, in GpuObjectName name);
     /// <summary>Binds a render pass to images; <see cref="GpuFramebuffers.Validate"/> states the rules.</summary>
     /// <param name="renderPass">The render pass, created by this factory.</param>
     /// <param name="colors">One image per color attachment, in order, each of that attachment's format and declaring

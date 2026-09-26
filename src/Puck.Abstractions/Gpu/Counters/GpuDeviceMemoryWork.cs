@@ -9,7 +9,8 @@ namespace Puck.Abstractions.Gpu;
 /// <para>
 /// An allocation counts by its <see cref="GpuMemoryRole"/>, never by the memory type the driver chose, and
 /// <see cref="IsCounted"/> is the one statement of that rule for both backends: images, device-local buffers, exportable
-/// images and imported memory count; host-visible, staging, upload and readback buffers never do, even on a
+/// images, imported memory and host-visible device-local buffers (the aperture a ring region lives in) count, since
+/// each consumes the adapter's memory; host-visible, staging, upload and readback buffers never do, even on a
 /// unified-memory device where every memory type is device-local. Swapchain images, which the presentation engine
 /// allocates, never reach here.
 /// </para>
@@ -69,13 +70,14 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     /// <inheritdoc/>
     public ReadOnlySpan<WorkKind> WorkKinds => Counts.Kinds;
 
-    /// <summary>Returns whether an allocation of <paramref name="role"/> is counted: only
-    /// <see cref="GpuMemoryRole.DeviceLocal"/> is.</summary>
+    /// <summary>Returns whether an allocation of <paramref name="role"/> is counted: the roles that consume the
+    /// adapter's memory, <see cref="GpuMemoryRole.DeviceLocal"/> and <see cref="GpuMemoryRole.HostVisibleDeviceLocal"/>,
+    /// are.</summary>
     /// <param name="role">The allocation's role.</param>
     /// <returns>Whether the role counts.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="role"/> is not a defined value.</exception>
     public static bool IsCounted(GpuMemoryRole role) => role switch {
-        GpuMemoryRole.DeviceLocal => true,
+        GpuMemoryRole.DeviceLocal or GpuMemoryRole.HostVisibleDeviceLocal => true,
         GpuMemoryRole.HostVisible => false,
         _ => throw new ArgumentOutOfRangeException(
             actualValue: role,

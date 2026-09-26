@@ -66,10 +66,10 @@ surface.
   `WorldReplaySnapshot.ForkedFrom` (`WorldReplayForkProvenance`), refused by
   name when it claims more copied ticks than the tape holds. Right behind it,
   a nullable string carries the directory the recording server's pipeline
-  source reader resolved `views.pipelines` rows against
+  source reader resolved `views.graphs` rows against
   (`WorldReplaySnapshot.PipelineSourceDirectory`); `Drive` attaches a
   `WorldPipelineSources` over it to the shadow server, so a recorded
-  `CommitViewPipeline` binds against the same sources and re-drives to the
+  `CommitViewGraph` binds against the same sources and re-drives to the
   recorded outcome.
   World remains at version 1 during development (owner instruction). Change the
   current format directly; do not bump versions or accumulate retired magic values

@@ -251,7 +251,7 @@ world.
 
 **Resolve a document's paths beside it.** Every relative path a world document
 authors (basis, imports, `references`, asset-row `source`, addon `modulePath`,
-pipeline/graph `source`, probe `track`, machine content, `host.icon`, schedule
+`views.graphs` `source`, probe `track`, machine content, `host.icon`, schedule
 instance `document`) resolves through `WorldDocumentPaths` against
 `WorldDefinition.DocumentDirectory`, the directory the loader read the document
 from; engine content the build ships (default world, fonts, shaders, probe
@@ -427,9 +427,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 - `world.screenshot <path.png>` REQUESTS the next composed frame including
   the overlay — the cheap pixel assertion. It arms; it does not capture:
   the stdout echo says `pending`, the file is announced on STDERR
-  (`[capture] unified overlay -> …`), so **fence a frame (`world.wait`)
-  before reading it**, and a second shot armed before the first composes is
-  refused by name.
+  (`[capture] main -> …` from the default render graph's root, or
+  `[debug] captured frame N -> …` when the world is the root), so **fence a
+  frame (`world.wait`) before reading it**, and a second shot armed before
+  the first composes is refused by name.
   The terminal console starts hidden; if a script opens its seat session
   (`console [on|off] <player>` from stdin), it may cover the frame — close it
   before judging pixels.

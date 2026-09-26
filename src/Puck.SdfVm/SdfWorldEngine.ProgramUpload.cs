@@ -27,10 +27,8 @@ public sealed partial class SdfWorldEngine {
         // by element count and returns SDF_FAR_DISTANCE, so the Subtraction never bites). Only the pool's own capacity
         // (checked in RequestBrickBake) is the frozen envelope now — not the program's shape declaration.
 
-        // The program buffer is SHARED across the frame ring (a program swap is a rare host event, not per-frame
-        // state), so rewriting it must first drain every in-flight frame still reading the current words. A no-op when
-        // nothing is outstanding (construction, or a waited harness).
-        WaitForFrameRing();
+        // The program words go through their region like every other table, so a frame in flight keeps reading the words
+        // its slot was sent; only growing a capacity drains the frame ring.
         EnsureProgramCapacity(program: program);
 
         // A program whose grid contains no active maskable dynamic instance has one invariant table. Build it against
@@ -50,11 +48,11 @@ public sealed partial class SdfWorldEngine {
         }
 
         WriteProgramWords(program: program);
-        // Seed the screen-surface mirror from the program's declared surfaces (the "program uploaded once" baseline);
-        // any SetScreenSurface call made before the next produced frame patches this same mirror before it goes out — a
+        // Seed the screen-surface table from the program's declared surfaces (the "program uploaded once" baseline);
+        // any SetScreenSurface call made before the next produced frame patches this same table before it goes out — a
         // re-upload never resurrects the program's original frame over a live SetScreenSurface write made in between.
-        // Only the bytes that differ are owed to the ring slots.
-        _ = m_screenSurfaces.Write(
+        // Only the words that differ are owed.
+        _ = m_screenSurfaceRegion.Write(
             bytes: MemoryMarshal.Cast<uint, byte>(span: program.ScreenSurfaceWords),
             offset: 0
         );

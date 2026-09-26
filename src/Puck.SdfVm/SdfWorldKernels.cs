@@ -24,8 +24,6 @@ namespace Puck.SdfVm;
 /// <param name="Composite">The Stage 2 source-agnostic compositor kernel.</param>
 /// <param name="BrickBake">The standalone carve-union brick baker (<c>sdf-brick-bake.comp</c>) — dispatched only when
 /// the engine provisions a brick pool.</param>
-/// <param name="BrickUpload">The host-baked brick uploader (<c>sdf-brick-upload.comp</c>) — a staging-to-pool copy, dispatched
-/// only when the engine provisions a brick pool.</param>
 public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> Sky,
     ReadOnlyMemory<byte> Beam,
@@ -38,8 +36,7 @@ public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> ViewsCore,
     ReadOnlyMemory<byte> ViewsFolds,
     ReadOnlyMemory<byte> Composite,
-    ReadOnlyMemory<byte> BrickBake,
-    ReadOnlyMemory<byte> BrickUpload
+    ReadOnlyMemory<byte> BrickBake
 ) {
     /// <summary>The name a counters report heads <see cref="LoadWork"/>'s section with.</summary>
     public const string LoadWorkSourceName = "shaders.sdf-kernels";
@@ -74,7 +71,7 @@ public readonly record struct SdfWorldKernels(
     /// changed kernel starts a new cache file.</summary>
     /// <returns>A lowercase 16-digit hexadecimal key.</returns>
     public string ContentKey() =>
-        Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: [Sky, Beam, InstanceCull, CullArgs, Primary, Surface, Ambient, Views, ViewsCore, ViewsFolds, Composite, BrickBake, BrickUpload]);
+        Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: [Sky, Beam, InstanceCull, CullArgs, Primary, Surface, Ambient, Views, ViewsCore, ViewsFolds, Composite, BrickBake]);
     /// <summary>Loads the world kernel set from the standard deploy location (<see cref="DefaultDirectory"/>).</summary>
     /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for Direct3D 12).</param>
     /// <returns>The loaded kernel set.</returns>
@@ -128,7 +125,6 @@ public readonly record struct SdfWorldKernels(
             Ambient: Read(stem: "sdf-world-ambient"),
             Beam: Read(stem: "sdf-beam"),
             BrickBake: Read(stem: "sdf-brick-bake"),
-            BrickUpload: Read(stem: "sdf-brick-upload"),
             Composite: Read(stem: "sdf-world-composite"),
             CullArgs: Read(stem: "sdf-cull-args"),
             InstanceCull: Read(stem: "sdf-instance-cull"),

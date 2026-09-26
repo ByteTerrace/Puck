@@ -313,7 +313,7 @@ public sealed partial class WorldDocument {
         WorldMutation.SetCollision => WorldSection.Collision,
         WorldMutation.SetHostDefaults => WorldSection.Host,
         WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout
-            or WorldMutation.UpsertViewPipeline or WorldMutation.RemoveViewPipeline or WorldMutation.CommitViewPipeline => WorldSection.Views,
+            or WorldMutation.UpsertViewGraph or WorldMutation.RemoveViewGraph or WorldMutation.CommitViewGraph => WorldSection.Views,
         WorldMutation.SetPlayerDefaults or WorldMutation.SetPlayerSeatLook => WorldSection.PlayerDefaults,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
         WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics => WorldSection.Dynamics,
@@ -1031,17 +1031,17 @@ public sealed partial class WorldDocument {
                 return TryComposeViewLayoutUpsert(candidate: out candidate, current: current, mutation: m, reason: out reason);
             case WorldMutation.RemoveViewLayout m:
                 return TryComposeViewLayoutRemove(candidate: out candidate, current: current, mutation: m, reason: out reason);
-            case WorldMutation.UpsertViewPipeline m:
-                return TryComposeViewPipelineUpsert(candidate: out candidate, current: current, mutation: m, reason: out reason);
-            case WorldMutation.CommitViewPipeline m:
-                return TryComposePipelineCommit(
+            case WorldMutation.UpsertViewGraph m:
+                return TryComposeViewGraphUpsert(candidate: out candidate, current: current, mutation: m, reason: out reason);
+            case WorldMutation.CommitViewGraph m:
+                return TryComposeGraphCommit(
                     candidate: out candidate,
                     commit: m,
                     current: current,
                     reason: out reason
                 );
-            case WorldMutation.RemoveViewPipeline m:
-                return TryComposeViewPipelineRemove(candidate: out candidate, current: current, mutation: m, reason: out reason);
+            case WorldMutation.RemoveViewGraph m:
+                return TryComposeViewGraphRemove(candidate: out candidate, current: current, mutation: m, reason: out reason);
             case WorldMutation.RemoveBindingOverlay m:
                 if (!Remove(
                     list: current.BindingOverlays,

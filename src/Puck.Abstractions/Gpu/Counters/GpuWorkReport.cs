@@ -107,9 +107,9 @@ public static class GpuWorkReport {
         );
     }
     /// <summary>Writes one node as the JSON object
-    /// <c>{"name":…,"sample":{"submission":S,"revision":R,"passes":[{"label":…,"state":"executed|skipped|not-reached","counts":{…}}],"outside":{…}}|null,"lifetime":{…}|null}</c>.
-    /// A pass that did not execute carries no <c>counts</c>; <c>sample</c> is <see langword="null"/> while no submission
-    /// has completed.</summary>
+    /// <c>{"name":…,"sample":{"submission":S,"revision":R,"passes":[{"label":…,"class":"deterministic|per-backend-deterministic","state":"executed|skipped|not-reached","counts":{…}}],"outside":{…}}|null,"lifetime":{…}|null}</c>.
+    /// A pass's <c>class</c> is <see cref="GpuWorkSample.GetPassClass"/>. A pass that did not execute carries no
+    /// <c>counts</c>; <c>sample</c> is <see langword="null"/> while no submission has completed.</summary>
     /// <param name="writer">The writer to write to.</param>
     /// <param name="node">The node to write.</param>
     /// <param name="sample">The caller's sample, overwritten by the read.</param>
@@ -238,6 +238,10 @@ public static class GpuWorkReport {
             writer.WriteString(
                 propertyName: "label",
                 value: labels[pass]
+            );
+            writer.WriteString(
+                propertyName: "class",
+                value: EnumWireName<WorkClass>.Of(value: sample.GetPassClass(pass: pass))
             );
             writer.WriteString(
                 propertyName: "state",

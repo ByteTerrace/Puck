@@ -76,8 +76,8 @@ public sealed class DirectXGpuSurfaceExportFactory(DirectXDeviceContext deviceCo
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuImageFactory(DirectXDeviceContext deviceContext) : IGpuImageFactory {
     /// <inheritdoc/>
-    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) =>
-        new DirectXGpuImage(
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
+        var image = new DirectXGpuImage(
             format: format,
             request: DirectXGpuImageRequest.From(
                 deviceContext: deviceContext,
@@ -87,4 +87,13 @@ public sealed class DirectXGpuImageFactory(DirectXDeviceContext deviceContext) :
             ),
             usage: usage
         );
+
+        deviceContext.Services.Naming.Name(
+            handle: image.ImageHandle,
+            kind: GpuObjectKind.Image,
+            name: in name
+        );
+
+        return image;
+    }
 }

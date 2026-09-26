@@ -102,10 +102,6 @@ internal static class ConstructProbes {
             Pointer: "/views/layouts/0",
             Source: Doc(body: "views {\n    layout \"main\" {\n    }\n}")
         )],
-        ["pipeline"] = [new(
-            Pointer: "/views/pipelines/0",
-            Source: Doc(body: "views {\n    pipeline \"main\" {\n    }\n}")
-        )],
         ["graph"] = [new(
             Pointer: "/views/graphs/0",
             Source: Doc(body: "views {\n    graph \"main\" {\n    }\n}")

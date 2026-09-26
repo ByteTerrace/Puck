@@ -56,50 +56,64 @@ public static class VulkanPresenterServiceRegistration {
         var queueSubmitter = serviceProvider.GetRequiredService<VulkanQueueSubmitter>();
         var renderPassApi = serviceProvider.GetRequiredService<IVulkanRenderPassApi>();
         var shaderModuleFactory = serviceProvider.GetRequiredService<IVulkanShaderModuleFactory>();
+        var validation = serviceProvider.GetRequiredService<VulkanRendererOptions>().EnableValidation;
 
-        return deviceContext => GpuCreationFaults.Wrap(faults: creationFaults, services: new GpuDeviceServices {
-            Bindings = new VulkanGpuBindings(
+        return deviceContext => {
+            var naming = new VulkanGpuObjectNaming(
+                deviceContext: deviceContext,
+                isEnabled: validation
+            );
+
+            return GpuCreationFaults.Wrap(faults: creationFaults, services: new GpuDeviceServices {
+                Bindings = new VulkanGpuBindings(
                 allocator: descriptorAllocator,
-                deviceContext: deviceContext
+                deviceContext: deviceContext,
+                naming: naming
             ),
-            BufferFactory = new VulkanGpuBufferFactory(
+                BufferFactory = new VulkanGpuBufferFactory(
                 bufferApi: bufferApi,
-                deviceContext: deviceContext
+                deviceContext: deviceContext,
+                naming: naming
             ),
-            CommandPoolFactory = new VulkanGpuCommandPoolFactory(
+                CommandPoolFactory = new VulkanGpuCommandPoolFactory(
                 commandResourcesFactory: commandResourcesFactory,
-                deviceContext: deviceContext
+                deviceContext: deviceContext,
+                naming: naming
             ),
-            ImageFactory = new VulkanGpuImageFactory(
+                ImageFactory = new VulkanGpuImageFactory(
                 deviceContext: deviceContext,
                 framebufferSetApi: framebufferSetApi,
+                naming: naming,
                 offscreenImageApi: offscreenImageApi
             ),
-            PipelineFactory = new VulkanGpuPipelineFactory(
+                Naming = naming,
+                PipelineFactory = new VulkanGpuPipelineFactory(
                 allocator: allocator,
                 computePipelineApi: computePipelineApi,
                 deviceContext: deviceContext,
+                naming: naming,
                 pipelineFactory: graphicsPipelineFactory
             ),
-            QueueSubmitter = new VulkanGpuQueueSubmitter(
+                QueueSubmitter = new VulkanGpuQueueSubmitter(
                 deviceContext: deviceContext,
                 frameSynchronizationApi: frameSynchronizationApi,
                 queueSubmitter: queueSubmitter
             ),
-            Recorder = new VulkanGpuRecorder(
+                Recorder = new VulkanGpuRecorder(
                 deviceContext: deviceContext,
                 recordingApi: commandBufferRecordingApi
             ),
-            RenderPassFactory = new VulkanGpuRenderPassFactory(
+                RenderPassFactory = new VulkanGpuRenderPassFactory(
                 deviceContext: deviceContext,
                 framebufferSetApi: framebufferSetApi,
+                naming: naming,
                 renderPassApi: renderPassApi
             ),
-            ShaderModuleFactory = new VulkanGpuShaderModuleFactory(
+                ShaderModuleFactory = new VulkanGpuShaderModuleFactory(
                 deviceContext: deviceContext,
                 shaderModuleFactory: shaderModuleFactory
             ),
-            SurfaceTransferFactory = new VulkanGpuSurfaceTransferFactory(
+                SurfaceTransferFactory = new VulkanGpuSurfaceTransferFactory(
                 bufferApi: bufferApi,
                 commandBufferRecordingApi: commandBufferRecordingApi,
                 commandResourcesFactory: commandResourcesFactory,
@@ -110,7 +124,8 @@ public static class VulkanPresenterServiceRegistration {
                 offscreenImageApi: offscreenImageApi,
                 queueSubmitter: queueSubmitter
             ),
-        });
+            });
+        };
     }
 
     /// <summary>Registers the factories, command-buffer recorder, asset source, and shader loader the

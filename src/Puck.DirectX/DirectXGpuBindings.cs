@@ -75,7 +75,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     /// <remarks>A group's layout handle (<see cref="IGpuComputePipeline.GroupLayoutHandles"/>) takes a region of the
     /// pool's view range as long as the group's view table and a region of its sampler range as long as its sampler
     /// table, so a group's samplers live in the device's sampler heap.</remarks>
-    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {
+    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) {
         var pool = ((DirectXDescriptorPool)GCHandle.FromIntPtr(value: poolHandle).Target!);
         var set = ((GCHandle.FromIntPtr(value: descriptorSetLayoutHandle).Target is DirectXGroupLayout group)
             ? PlaceGroupSet(
@@ -194,7 +194,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             refusal: out refusal
         );
     /// <inheritdoc/>
-    public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
+    public nint CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) {
         var handle = GCHandle.ToIntPtr(value: GCHandle.Alloc(value: Heaps.AllocatePool(sizes: in sizes)));
 
         _ = Interlocked.Increment(location: ref m_liveHandles);

@@ -34,14 +34,17 @@ public sealed class VulkanBufferLawTests {
         var device = new UntouchableDeviceContext();
         var factory = new VulkanGpuBufferFactory(
             bufferApi: bufferApi,
-            deviceContext: device
+            deviceContext: device,
+            naming: GpuObjectNaming.Off
         );
         using var buffer = (hostVisible
             ? factory.CreateHostVisible(
+                name: default,
                 sizeBytes: 64,
                 usage: usage
             )
             : factory.CreateDeviceLocal(
+                name: default,
                 sizeBytes: 64,
                 usage: usage
             ));
@@ -65,9 +68,11 @@ public sealed class VulkanBufferLawTests {
 
         using var buffer = ((VulkanBuffer)new VulkanGpuBufferFactory(
             bufferApi: bufferApi,
-            deviceContext: new UntouchableDeviceContext()
+            deviceContext: new UntouchableDeviceContext(),
+            naming: GpuObjectNaming.Off
         ).CreateHostVisible(
             data: data,
+            name: default,
             usage: usage
         ));
 
@@ -85,18 +90,22 @@ public sealed class VulkanBufferLawTests {
         var bufferApi = new RecordingBufferApi();
         var factory = new VulkanGpuBufferFactory(
             bufferApi: bufferApi,
-            deviceContext: new UntouchableDeviceContext()
+            deviceContext: new UntouchableDeviceContext(),
+            naming: GpuObjectNaming.Off
         );
 
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => factory.CreateHostVisible(
             data: [1, 2, 3, 4],
+            name: default,
             usage: GpuBufferUsage.None
         ));
         _ = Assert.Throws<ArgumentException>(testCode: () => factory.CreateHostVisible(
             data: [],
+            name: default,
             usage: GpuBufferUsage.Vertex
         ));
         _ = Assert.Throws<ArgumentException>(testCode: () => factory.CreateDeviceLocal(
+            name: default,
             sizeBytes: 0,
             usage: GpuBufferUsage.Storage
         ));
@@ -119,6 +128,10 @@ public sealed class VulkanBufferLawTests {
         Assert.Equal(
             actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.HostCoherent),
             expected: (HostVisibleCoherentProperties, true, GpuMemoryRole.HostVisible)
+        );
+        Assert.Equal(
+            actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.HostCoherentDeviceLocal),
+            expected: (HostVisibleCoherentProperties | DeviceLocalProperty, true, GpuMemoryRole.HostVisibleDeviceLocal)
         );
         Assert.Equal(
             actual: VulkanNativeBufferApi.MemoryProperties(memory: VulkanBufferMemory.DeviceLocal),

@@ -636,9 +636,9 @@ break, and nothing wider:
   A canary is also chosen for any file its manifest's documents reach, read
   with the documents' own readers: a world reaches the layers it composes,
   the neighbour worlds its adjacencies name and the `.graph.json` documents
-  its `views.pipelines` and `views.graphs` rows name, and a graph document
-  reaches the pass shaders it declares, each resolved as the host resolves
-  it. A world is read composed and parsed but not validated, so a world whose
+  its `views.graphs` rows name, and a graph document
+  reaches the pass shaders it declares and every file they include, each
+  resolved as the host resolves it. A world is read composed and parsed but not validated, so a world whose
   adjacencies or extensions need the host's resolvers still reaches them.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
 - A file no canary can execute is placed through the indexed C# sources it
@@ -681,7 +681,14 @@ the projects' `bin` directories (see [where the World artifact is
 built](#where-the-world-artifact-is-built)). `--world-artifact <dll>` runs every
 leg on the named entry assembly instead, such as a published package's, and
 builds nothing. `--debug-layers` boots every offscreen leg's World with
-`--debug-layers`, its backend's validation layer. It keeps stdout and stderr
+`--debug-layers`, its backend's validation layer, and then fails any such leg
+whose stderr holds a validation message, naming the first: a
+`[vulkan-debug] validation` line or any `[d3d12-debug]` line, a teardown
+live-object report included. The Vulkan loader's `general` notices do not
+count, and the Direct3D 12 drain never prints the one message the layer raises
+by design, a pipeline-library miss. A Direct3D 12 leg that prints
+`[d3d12] debug layer requested but not loaded` fails too, since nothing
+validated it. The runner keeps stdout and stderr
 separate, pins BOM-less UTF-8 stdin, closes the pipe, drains both streams,
 checks the absolute `--world` boot-origin line, enforces per-leg and
 whole-suite budgets, and kills the process tree on timeout.
@@ -1275,14 +1282,17 @@ class:
 | Class | Meaning | Compared |
 |---|---|---|
 | `deterministic` | The same inputs give the same count on every run and backend: simulation counts at a pinned tick, and the GPU counts of one submission. | Across backends in one run, and between two reports. |
-| `per-backend-deterministic` | The same on every run of one backend: the GPU objects a node creates. | Between two reports, backend by backend. |
+| `per-backend-deterministic` | The same on every run of one backend: the GPU objects a node creates, and the counts of a pass whose work follows the device (the SDF engine's `upload`, which follows its residency policy). | Between two reports, backend by backend. |
 | `pacing` | Depends on timing or on state outside the run: which submission a read lands on, skipped presents, the compile cache's hits. | Never. |
 | `allocation-zero-nonzero` | A managed-allocation reading from `AllocationWindow.Measure` over a named window (`world.counters.read`), recorded with the GC mode. | Only as zero or not zero. |
 
 Each kind's class is declared by the kind's owner (`WorkKind.Class`) and
-reaches the collector through the `kinds` legend of `world.counters --json`. A
-node's submission and revision identities are not kinds; the collector records
-them as `pacing`.
+reaches the collector through the `kinds` legend of `world.counters --json`.
+Each pass there also carries a class, `deterministic` or
+`per-backend-deterministic`, which the node declares (`GpuWorkLedger.Configure`);
+a deterministic kind counted in a per-backend-deterministic pass is recorded as
+per-backend-deterministic. A node's submission and revision identities are not
+kinds; the collector records them as `pacing`.
 
 The run prints the report's path, then one line for each deterministic count or
 pass state that differs between the two backends, naming its kind, pass and
@@ -2079,7 +2089,8 @@ baked and the field evaluations it spent, each distinct creation baked once. A
 run whose compiled worlds name no bake writes no pack.
 
 A `--tree` run also packages every pipeline its compiled worlds name by source:
-each `views.pipelines` row's source, resolved from the document's place in the
+each `views.graphs` row's `source` (a row naming an engine `package` has none),
+resolved from the document's place in the
 tree, is compiled with `dxc` from the search path into one
 [shader package](shaders.md#the-builds-package-store) under its key in
 `packages/` at the root of the output, and every package file joins the report.

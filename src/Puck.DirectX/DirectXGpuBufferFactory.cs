@@ -10,6 +10,9 @@ namespace Puck.DirectX;
 /// Implements <see cref="IGpuBufferFactory"/> for Direct3D 12 on its device context. A host-visible buffer is an
 /// upload-heap buffer, permanently mapped and permanently in <see cref="HostVisibleState"/>, which covers every read
 /// state a vertex, index, constant, shader-resource or indirect-argument use needs, so no transition ever moves it. A
+/// host-visible device-local buffer is mapped the same way on a <c>GPU_UPLOAD</c> heap, the adapter's memory the host
+/// writes through its aperture, which exists only where the device reports GPU upload heaps; like a default-heap
+/// buffer it is created in <see cref="DeviceLocalState"/>, from which a read promotes it. A
 /// device-local buffer is a default-heap buffer created in <see cref="DeviceLocalState"/> that allows unordered access
 /// when it declares <see cref="GpuBufferUsage.Storage"/>; a shader's write promotes it to <c>UNORDERED_ACCESS</c>, and
 /// an indirect dispatch reading it records the transition into <c>INDIRECT_ARGUMENT</c>
@@ -26,7 +29,7 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
     public const D3D12_RESOURCE_STATES HostVisibleState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
 
     /// <inheritdoc/>
-    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) {
+    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         GpuBufferUsages.Validate(
             sizeBytes: sizeBytes,
             usage: usage
@@ -44,6 +47,12 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
             sizeBytes: sizeBytes
         );
 
+        Naming.Name(
+            handle: ((nint)buffer),
+            kind: GpuObjectKind.Buffer,
+            name: in name
+        );
+
         return new DirectXGpuDeviceBuffer(
             bufferHandle: ((nint)buffer),
             memory: deviceContext.Memory,
@@ -51,40 +60,25 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
         );
     }
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) {
-        GpuBufferUsages.Validate(
+    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
+        CreateMapped(
+            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
+            name: in name,
             sizeBytes: sizeBytes,
             usage: usage
         );
-
-        var buffer = DirectXBuffers.CreateCommitted(
-            device: Device,
-            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
-            initialState: HostVisibleState,
-            sizeBytes: sizeBytes
-        );
-        void* mapped;
-
-        try {
-            mapped = DirectXCommandCalls.Map(
-                calls: new DirectXDeviceCommandCalls(device: Device),
-                resource: buffer
-            );
-        } catch {
-            _ = ((IUnknown*)buffer)->Release();
-
-            throw;
-        }
-
-        return new DirectXGpuStorageBuffer(
-            bufferHandle: ((nint)buffer),
-            mapped: mapped,
-            sizeBytes: sizeBytes
-        );
-    }
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
+    public IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
+        CreateMapped(
+            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_GPU_UPLOAD,
+            name: in name,
+            sizeBytes: sizeBytes,
+            usage: usage
+        );
+    /// <inheritdoc/>
+    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) {
         var buffer = CreateHostVisible(
+            name: in name,
             sizeBytes: ((ulong)data.Length),
             usage: usage
         );
@@ -96,4 +90,58 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
 
     private ID3D12Device* Device =>
         ((ID3D12Device*)deviceContext.Device.Handle);
+    private GpuObjectNaming Naming =>
+        deviceContext.Services.Naming;
+
+    // A permanently mapped buffer: on an UPLOAD heap in HostVisibleState, on a GPU_UPLOAD heap in DeviceLocalState (the
+    // runtime creates every buffer outside an upload heap in COMMON), where it joins the device-local counts, since it
+    // is the adapter's memory.
+    private IGpuStorageBuffer CreateMapped(D3D12_HEAP_TYPE heapType, ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
+        GpuBufferUsages.Validate(
+            sizeBytes: sizeBytes,
+            usage: usage
+        );
+
+        var state = ((heapType == D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD)
+            ? HostVisibleState
+            : DeviceLocalState
+        );
+        var buffer = DirectXBuffers.CreateCommitted(
+            device: Device,
+            heapType: heapType,
+            initialState: state,
+            memory: deviceContext.Memory,
+            sizeBytes: sizeBytes
+        );
+        void* mapped;
+
+        try {
+            mapped = DirectXCommandCalls.Map(
+                calls: new DirectXDeviceCommandCalls(device: Device),
+                resource: buffer
+            );
+        } catch {
+            DirectXDeviceMemory.CountReleased(
+                memory: deviceContext.Memory,
+                resource: ((nint)buffer)
+            );
+            _ = ((IUnknown*)buffer)->Release();
+
+            throw;
+        }
+
+        Naming.Name(
+            handle: ((nint)buffer),
+            kind: GpuObjectKind.Buffer,
+            name: in name
+        );
+
+        return new DirectXGpuStorageBuffer(
+            bufferHandle: ((nint)buffer),
+            mapped: mapped,
+            memory: deviceContext.Memory,
+            sizeBytes: sizeBytes,
+            state: state
+        );
+    }
 }

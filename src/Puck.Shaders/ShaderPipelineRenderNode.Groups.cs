@@ -80,6 +80,12 @@ public sealed partial class ShaderPipelineRenderNode {
             buffers: m_gpu.BufferFactory,
             byteCount: UniformBytes(blockBytes: pass.ParametersLayout.SizeBytes),
             copyPipeline: null,
+            memory: GpuResidency.RingMemory(profile: m_device.MemoryProfile),
+            name: new GpuObjectName(
+                detail: "pass block",
+                owner: m_descriptor.Name,
+                part: pass.Name
+            ),
             policy: GpuResidencyPolicy.Ring,
             recorder: m_gpu.Recorder,
             slotCount: ((int)m_inFlight),
@@ -88,11 +94,23 @@ public sealed partial class ShaderPipelineRenderNode {
         for (var slot = 0; (slot < m_inFlight); slot++) {
             pass.FrameSets![slot] = bindings.AllocateSet(
                 descriptorPool,
-                layouts[((int)FrameGroup)]
+                layouts[((int)FrameGroup)],
+                name: new GpuObjectName(
+                    detail: "frame group",
+                    index: slot,
+                    owner: m_descriptor.Name,
+                    part: pass.Name
+                )
             );
             pass.Sets![slot] = bindings.AllocateSet(
                 descriptorPool,
-                layouts[((int)PassGroup)]
+                layouts[((int)PassGroup)],
+                name: new GpuObjectName(
+                    detail: "pass group",
+                    index: slot,
+                    owner: m_descriptor.Name,
+                    part: pass.Name
+                )
             );
             pass.Samplers![slot] = bindings.CreateSampler();
             bindings.WriteConstantBuffer(

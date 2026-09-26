@@ -122,7 +122,13 @@ public sealed partial class ShaderPipelineRenderNode {
             (pass.Grouped || (pass.PackageSetBindings != 0)) &&
             (descriptorPool == 0)
         ) {
-            descriptorPool = bindings.CreatePool(sizes: (graphPool ?? throw new InvalidOperationException(message: "The plan states no descriptor pool for a pass that binds descriptors.")));
+            descriptorPool = bindings.CreatePool(
+                name: new GpuObjectName(
+                    owner: m_descriptor.Name,
+                    part: "descriptors"
+                ),
+                sizes: (graphPool ?? throw new InvalidOperationException(message: "The plan states no descriptor pool for a pass that binds descriptors."))
+            );
             pass.DescriptorPool = descriptorPool;
         }
         if (pass.Grouped) {
@@ -133,10 +139,24 @@ public sealed partial class ShaderPipelineRenderNode {
         }
         for (var slot = 0; (slot < m_inFlight); slot++) {
             if (pass.Kind is ShaderPipelinePassKind.Compute or ShaderPipelinePassKind.Package) {
-                pass.Pools![slot] = m_gpu.CommandPoolFactory.Create();
+                pass.Pools![slot] = m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
+                    index: slot,
+                    owner: m_descriptor.Name,
+                    part: pass.Name
+                ));
             } else {
-                pass.Pre![slot] = m_gpu.CommandPoolFactory.Create();
-                pass.Draw![slot] = m_gpu.CommandPoolFactory.Create();
+                pass.Pre![slot] = m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
+                    detail: "barriers",
+                    index: slot,
+                    owner: m_descriptor.Name,
+                    part: pass.Name
+                ));
+                pass.Draw![slot] = m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
+                    detail: "draw",
+                    index: slot,
+                    owner: m_descriptor.Name,
+                    part: pass.Name
+                ));
             }
         }
     }

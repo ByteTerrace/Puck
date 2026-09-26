@@ -101,7 +101,8 @@ public sealed class UnifiedOverlayWorkLawTests {
             MaxSets: 1,
             StorageBufferCount: 1,
             StorageImageCount: 0
-        ));
+        ),
+ name: default);
 
         // The refusal is one more refused resource creation: the inner frame passes through and nothing throws.
         var refused = rig.Node.ProduceFrame(context: default);

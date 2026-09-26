@@ -11,7 +11,7 @@ pipeline.capture tint {run}/source.png
 pipeline.wait tint captured 10
 # The same instance names the relocated package, whose source copy the runner deleted, and carries the committed
 # override, which the server binds against the package's config schema.
-world.row.set views.pipelines {"name":"tint","source":"{run}/tint","overrides":{"tint":{"gain":0.25}}}
+world.row.set views.graphs {"name":"tint","source":"{run}/tint","overrides":{"tint":{"gain":0.25}}}
 pipeline.reload tint
 pipeline.wait tint compiled 40
 pipeline.wait tint installed 10

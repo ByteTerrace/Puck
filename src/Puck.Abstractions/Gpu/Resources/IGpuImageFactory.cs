@@ -10,8 +10,9 @@ public interface IGpuImageFactory {
     /// <param name="height">The height in pixels.</param>
     /// <param name="usage">The usages the image is created for; <see cref="GpuImageUsages.Validate"/> states which a
     /// format may declare.</param>
+    /// <param name="name">The object's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
     /// <returns>The created image, owned by the caller.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The extent is zero, or the format or usage is undefined.</exception>
     /// <exception cref="ArgumentException">The usage does not fit the format.</exception>
-    IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage);
+    IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name);
 }

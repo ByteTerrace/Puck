@@ -30,7 +30,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldEngine.*.cs`, `SdfEngineNode`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), `sdf-vm.hlsli` the interpreter (`mapCore`, `mapGradCore`), `sdf-world.hlsli` the view logic, one `*.comp.hlsl` wrapper per dispatch | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
 | Cameras and offscreen views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewStack`, `ViewTransition`) | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
-| World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldPipelineRuntime`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
+| World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldViewGraphHost`, `WorldRootGraph`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
 | Shader manifests, pipelines, builds | `src/Puck.Shaders`, `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
 | Image sources and producers | `src/Puck.Abstractions/Sources` (contract, upload layout, conversion reference, verdict); `src/Puck.Shaders/Assets/Shaders/Sources` (conversion kernels); `WorldImageProducerVocabulary`/`WorldImageProducerSettings` (`src/Puck.World.Schema`); `WorldImageProducers`, `WorldCaptureGate` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.Producers.cs` | [the World guide's image producers](../../../src/Puck.World/README.md#image-producers), [rendering plan P12](../../../docs/plans/rendering.md#p12--image-sources) |
 | Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds), [Vulkan](../../../docs/rendering/vulkan.md), [Direct3D 12](../../../docs/rendering/directx.md) |
@@ -102,10 +102,11 @@ register.
   ships. AO lives in `sdf-occlusion.hlsli` (called from the ambient pass's
   `sdfResolveAmbient` in `sdf-surface.hlsli`); normals and curvature in
   `sdfResolveSurface`.
-- **Make sure the image is an SDF image.** A `views.pipelines` pane (the
-  moth studio's side-by-side reference, for one) is a separate
-  `Puck.Shaders` pipeline with its own shader; no SDF kernel edit reaches it,
-  and it reloads with `pipeline.reload`, not `world.shaders.reload`.
+- **Make sure the image is an SDF image.** A `views.graphs` pane (the
+  moth studio's side-by-side reference, for one) is a render-graph instance
+  with its own shader, placed over the world by the root graph's `place` pass;
+  no SDF kernel edit reaches it, and it reloads with `pipeline.reload`, not
+  `world.shaders.reload`.
 - **Every `map*` call site is a full inlined copy of the interpreter.** Keep
   sample loops rolled (`[loop]`) and reuse an existing call site through a loop
   rather than adding one; a new call site costs register pressure in the
@@ -205,30 +206,37 @@ These are one-line cautions; the owning pages hold the derivations.
   stress test for handle reuse must render a frame between image swaps
   (`world.wait`); swaps inside one frame never publish the retired handle.
 - **Screens.** `SetScreenSource(i, 0)` unbinds to the procedural test card, not
-  black. Inside view V's own render, any screen wired to V binds 0. An image
-  another producer keeps writing reaches a node as a `Puck.Hosting.GpuImageLease`
-  and stays in a `LeaseRetireList` until the submission that sampled it
-  retires: `SdfEngineNode` keeps one list per frame-ring slot, and a
-  `ShaderPipelineRenderNode` one per frame slot, which the overlay package moves
-  its HUD frames' leases into (`OverlayFrameSlots.MoveTo`). A lease retires only
-  at its slot's next fence wait, so one source can have as many leases
-  outstanding as the node has frames in flight
-  (`RenderGraphRuntime.DefaultInFlightFrames`); a source that counts its
-  outstanding leases (`WorldOverlayFrameSources`) is sized by it. A new
-  sampled-lease path holds its leases in that list rather than its own array.
+  black. Inside view V's own render, any screen wired to V binds 0. A leased
+  image (`Puck.Hosting.GpuImageLease`) stays in a `LeaseRetireList` until the
+  submission that sampled it retires: `SdfEngineNode` keeps one list per
+  frame-ring slot, and a `ShaderPipelineRenderNode` one per frame slot, which
+  the overlay package moves its HUD frames' leases into
+  (`OverlayFrameSlots.MoveTo`). A lease retires only at its slot's next fence
+  wait, so one source can have as many leases outstanding as the node has
+  frames in flight (`RenderGraphRuntime.DefaultInFlightFrames`); a source that
+  counts its outstanding leases (`WorldOverlayFrameSources`) is sized by it. A
+  new sampled-lease path holds its leases in that list rather than its own
+  array. Not every image another producer keeps writing is leased yet: the
+  desktop capture's GPU route (`CaptureFeed.Handle`) and the offscreen views'
+  renders (`ScreenSlot.Handle`) bind a shared slot's bare handle, so nothing
+  stops the producer overwriting a slot a submission still samples. Rendering
+  plan P12b-2 leases them. Nothing orders two devices on the GPU either: a
+  producer's CPU wait before it publishes is the only ordering until P12b-4's
+  shared fence.
 - **Image sources.** An image from outside a pass is described once, by
   `ImageSourceDescriptor`, and a world names its producer by id
   (`WorldScreenSource.Producer`). A new producer registers a
   `WorldImageProducerShape` and an `IWorldImageProducer` under one id, class and
-  transport; it never adds a source kind. An external image (camera, capture,
+  transport; it never adds a source kind. Every feed it opens declares that
+  id, class and transport, or `WorldImageProducers.TryOpen` disposes it and
+  refuses it by name. An import's CPU staged-copy fallback (the camera and
+  capture CPU tiers) is still `Imported`. An external image (camera, capture,
   probe output) is resolved through the binder's `WorldCaptureGate`, never
   directly: a new path that samples one without the gate leaks it into
   captures. An uploaded source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`, the
   `source-conversion` canary and `SourceConversionCanaryFixtureTests` together.
-- **Children.** A child slot whose node has not produced yet clears its child
-  bit for that frame; never bind a zero image view.
 - **Builder exception safety.** A throwing `Instance`/`DynamicInstance` callback
   leaves the builder with an open instance; discard it.
 - **Captures.** Create the `FrameCaptureRequest`, arm it with
@@ -433,15 +441,30 @@ These are one-line cautions; the owning pages hold the derivations.
   [Vulkan](../../../docs/rendering/vulkan.md#pipeline-cache).
 - **`RenderFrame` submits and waits; `SubmitFrame` does not.** Harnesses use
   the first, the live node the second.
-- **Host uploads go through the mirrors.** The viewport, dynamic-transform and
-  instance-grid device-local tables persist across frames and receive only
-  changed ranges; the ring tables (screen surfaces, screen lights, volumes,
-  decals) owe each slot only the ranges it is behind by. Change those tables only
-  through `StageTableEntry`, `StageTableRow`, `StageInstanceGrid`, or
-  `SdfRingTable.Write` / `MarkChanged` (`SdfWorldEngine.Uploads.cs`); a direct
-  buffer write is lost or overwritten. A still frame writes only its viewport
-  rows. The byte counts are pinned by `SdfWorldEngineUploadLawTests` over
-  `UploadModelGpu`, which runs the upload kernel's copies.
+- **Host uploads go through regions.** Every table the engine's kernels read
+  from the host (program words, viewport rows, dynamic transforms, the frame
+  instance grid, screen surfaces, screen lights, volumes, glyph decals, mesh
+  draws) is a `GpuRegion` (`SdfWorldEngine.Regions.cs`, created by
+  `CreateRegion` under `GpuResidency.Select` with the frame ring's reader in
+  flight), and brick staging is a staged region whose destination is the brick
+  pool (`Target` names the brick's slot). Each region, brick staging included,
+  writes copy sets the engine reserved for it at construction, its
+  `GpuRegionCopySets` slice of the engine's one `GpuRegionCopyPool` (whatever
+  policy the device selects), so the engine creates and admits two pools, its
+  own and the copy pool, and no region the frame thread creates or grows takes
+  a descriptor range; a new region takes a slice of that pool too. Change a table only through its
+  region's `Write`, which owes each run of words that differs; a direct buffer
+  write is lost or overwritten. The upload pass flushes the slot's share, records
+  each staged copy, then one buffer transition per copied buffer; the region
+  tables are not in `SdfFrameBufferPlan`. What it writes and records follows the
+  device's policy, so `upload` is per-backend-deterministic
+  (`SdfWorldEngine.PassClasses`, a per-pass class `GpuWorkLedger.Configure`
+  carries into `world.counters --json`, which `puck counters` loosens its counts
+  by); keep region writes inside that pass. A copy past one row of 65,535 groups
+  dispatches more rows (`GpuRegion.CopyGroups`), so no table size is refused. A
+  still frame writes only the viewport word its time moved. The byte counts are
+  pinned by `SdfWorldEngineUploadLawTests` over `UploadModelGpu`, which runs the
+  copies.
 - **Dynamic transforms move by the moved set, never by a diff.**
   `SdfCompositionFrameSource` keeps the table across frames; an emitter repacks
   only owners whose inputs moved or that are still settling
@@ -474,21 +497,31 @@ These are one-line cautions; the owning pages hold the derivations.
   Vulkan through `GpuMemoryProfile.FromVulkan` over the device type and
   `vkGetPhysicalDeviceMemoryProperties`, Direct3D 12 through
   `DirectXNativeDeviceApi.MemoryProfile` over the architecture, adapter and
-  options 16 structures. `GpuResidency.Select(profile, bytes)` is the one choice
-  of `InPlace`, `Ring` or `Staged`, and the default profile selects `Staged`.
-  `GpuRegion` (`src/Puck.Abstractions/Gpu/Residency`) writes a region under any
-  policy; its staged copy is `Puck.Shaders`' `region-copy.comp`, created from
-  `GpuRegion.CopyPipeline` once per device by `GpuRegionCopyPipelineCache`
-  (built on the pool, leased by every owner, counted under `gpu.region-copy`)
-  and never by an owner, and its ranges are `GpuUploadRuns`, the same run list
-  the SDF engine's tables use. The SDF engine records its table upload with that
-  pipeline (its holder leases it beside the set, and the engine takes it at
-  construction) and writes its mesh region (`SdfFrame.MeshDraws` laid out by
-  `SdfMeshRegion`) through a region, which nothing reads until P4-2c. The
-  engine's host tables, brick staging and the overlay's buffer still upload by
-  hand, so a new host upload goes through a region rather than a fourth
-  hand-built path. `GpuResidencyLawTests` pins the selector and byte-identical
-  region contents over `UploadModelGpu` (`tests/Shared`),
+  options 16 structures. `GpuResidency.Select(profile, bytes, readersInFlight)`
+  is the one choice of `InPlace`, `Ring` or `Staged`: in place only on coherent
+  unified memory with no reader in flight while the host writes, so a per-frame
+  owner (every SDF engine region, a pipeline's parameters) never gets it; the
+  default profile selects `Staged`. `GpuRegion`
+  (`src/Puck.Abstractions/Gpu/Residency`) writes a region under any policy, or
+  stages into an external destination its owner keeps; its staged copy is
+  `Puck.Shaders`' `region-copy.comp`, created from `GpuRegion.CopyPipeline` once
+  per device by `GpuRegionCopyPipelineCache` (built on the pool, leased by every
+  owner, counted under `gpu.region-copy`) and never by an owner, and its ranges
+  are `GpuUploadRuns`. The copy takes no push constants: the staging buffer
+  leads with a header and a run table. The SDF engine records every region copy
+  with that pipeline (its holder leases it beside the set, and the engine takes
+  it at construction). The overlay's buffer still uploads by hand, so a new host
+  upload goes through a region rather than a second hand-built path. A ring's
+  buffers live where `GpuResidency.RingMemory(profile)` says: in the
+  device-local aperture on a discrete adapter that exposes one
+  (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, a Vulkan
+  `DEVICE_LOCAL|HOST_VISIBLE|HOST_COHERENT` allocation or a Direct3D 12
+  `GPU_UPLOAD` heap, role `GpuMemoryRole.HostVisibleDeviceLocal`, counted under
+  `memory.<backend>`), in host memory on unified memory
+  (`GpuMemoryProfile.UnifiedMemory`). `GpuResidencyLawTests` pins the policy
+  table, the ring memory, the staged header and runs, a copy past one dispatch
+  row, the external destination and byte-identical region
+  contents over `UploadModelGpu` (`tests/Shared`),
   `GpuRegionCopyPipelineCacheLawTests` one pipeline per device shared by its
   owners, and `pipeline.inspect` echoes the profile and the policy.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
@@ -519,13 +552,53 @@ These are one-line cautions; the owning pages hold the derivations.
   over `FakeGpuDevice` with `trackObjects`, whose `Created` and `Memory` show
   what was released and the device-local bytes still held, and a shader
   pipeline candidate over `FakePipelineGpu`.
+- **Every GPU object is named at creation, from its creator's identity.** Each
+  creating member of `GpuDeviceServices` (buffers, images, pipelines,
+  descriptor pools and sets, command pools, render passes) takes a
+  `GpuObjectName`: owner, part, optional detail and index, such as
+  `sdf.world/viewports[1]` (the SDF engine's objects by role through
+  `SdfWorldEngine.NameOf`, its pipelines by kernel pipeline name; a
+  `GpuRegion` takes its owner's name and names each slot's buffer and copy set
+  at the slot's index, its own destination and copy pool bare, and copy sets
+  an owner reserves in one `GpuRegionCopyPool` take each region's name the same
+  way, and the pool bare under a part of the owner's, `sdf.world/region-copies`),
+  `<instance>/<pass or resource>[slot]` for a shader pipeline or graph package,
+  `overlay/pass`, `render-graph/stand-in`, `gpu.region-copy/<pipeline>`.
+  `GpuObjectName.ToString` is the one place a name becomes text; a site never
+  formats one, and a name holds no handle, counter or clock, so it is the same
+  on every run. `GpuDeviceServices.Naming` (`GpuObjectNaming`) applies it:
+  `VulkanGpuObjectNaming` through `vkSetDebugUtilsObjectNameEXT`, on only with
+  validation and `VK_EXT_debug_utils`; `DirectXGpuObjectNaming` through
+  `ID3D12Object::SetName`, on only with the debug layer, for resources, pipeline
+  states, allocators and command lists (Direct3D 12 views, pools, sets and
+  render passes are not objects there). Off, `Name` returns before formatting,
+  so a named creation allocates nothing (`GpuObjectNamingLawTests`, over
+  `FakeGpuDevice` with `RecordingGpuObjectNaming`, which fails on a member
+  taking a name that it has no row for); the counting and fault
+  decorators pass every name through and carry `Naming` over. A new creating
+  member takes a name and its backends hand the object to the naming;
+  `SdfWorldEngineObjectNameLawTests` holds the engine's names, every region's
+  included. To trace a
+  validation message, run with `--debug-layers` (`puck canary --debug-layers`,
+  or the World flag) and read the name the message prints beside the handle:
+  the validation layer names each object a `[vulkan-debug] validation` line
+  lists, and a `[d3d12-debug]` message or teardown `live` line carries the
+  name of the object it reports (`DirectXDebugLayerLivenessTests` holds the
+  `live` line to its leaked buffer's name, and `VulkanValidationLivenessTests`
+  the object tracker's leak message, which lists each object on the line after
+  its prefix, as `VkBuffer 0x…[owner/part]`). A clean run prints no such line,
+  so names appear only when something is reported.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
   backends), created-object kinds `PerBackendDeterministic`, and anything
   paced by the clock or a cross-process cache `Pacing`.
   `world.counters --json` publishes the classes in its `kinds` legend, and
   `puck counters` compares only what the class allows, so a new kind's class
-  is part of its contract.
+  is part of its contract. A pass carries a class too
+  (`GpuWorkLedger.Configure`'s `passClasses`, written on each pass of the JSON):
+  a pass whose work follows the device, as the SDF engine's `upload` follows its
+  residency policy, is `PerBackendDeterministic`, and its deterministic kinds
+  read that class.
 - **Lifetime counts outside the nodes are `WorkCounterSet`s.** A source that
   needs only named kinds holds a `WorkCounterSet` (interlocked, allocation-free
   reads) rather than a hand-written `IWorkCounterSource`. `ShaderCompiler.Work`
@@ -772,7 +845,7 @@ inputs in `ShaderReadOnly`, and its render pass leaves the target in
 own barriers in the post and overlay laws). A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`
 and the node publishes the input in the output's place, never a copy
 (`PublishedLayout`), only when the recording was told it may
-(`RenderGraphPackageRecording.MayStandIn`): never over a host's image bound in
+(`RenderGraphPackageRecording.MayStandIn`): never for a previous frame's input, whose instance rests in the layout its own role left, never for an input a later pass overwrites, and never over a host's image bound in
 another layout than the node publishes in, since the node publishes in its
 output layout, the one its consumer's descriptor is written with, and hands a
 host's image back in the host's own. A lease declares the layout its producer's
@@ -806,21 +879,46 @@ bound to a completed output, never a stand-in, and an external producer from
 the next frame it produces; until then `UnservedCaptureReasonOf` names why.
 `RenderGraphRuntimeLawTests` pin the P11 checks on the fake, a steady frame
 at zero allocations included.
-The main view runs through the runtime. `WorldRootGraph` synthesizes a world's
-default graph as a document value the graph compiler plans: `world` (the
-`sdf.world` producer), then, when anything is drawn over it, the root `main`
-reading it with one `post.<id>` pass per `render.extensions` entry in order and
-the overlay last in a windowed World. With nothing drawn over it (offscreen, no
-extensions) `world` is the root. A config that does not bind is the compiler's
+The main view runs through the runtime. `WorldRootGraph`
+(`src/Puck.World.Client`) synthesizes a world's default graph, when
+`views.root` is absent, as a document value the graph compiler plans: `world`
+(the `sdf.world` producer), then the root `main`, which reads `world` and every
+pane and runs one `place` package pass per `views.graphs` instance a layout
+slot names (the pass named after the instance), then one `post.<id>` pass per
+`render.extensions` entry in order, then `overlay` in a windowed World. `main`
+is the root whenever anything is drawn over the world, panes included; with
+nothing drawn over it `world` is the root. With `views.root` set the runtime
+runs the rows alone. A config that does not bind is the compiler's
 `RENDERGRAPH_PACKAGE_CONFIG`, which the boot's pre-flight
 (`WorldPostBuildWiring`) reports as a refused definition. `WorldRenderRoot`
 builds the engine node, the packages and the runtime for both GPU shapes, and
 `RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
 what captures, `world.screenshot` and readiness read. A `captures` row may name
 `world` (`WorldCaptureRow.Instance`) to capture the world beneath the root's
-passes. Panes, screens and `views.graphs` rows still render through
-`SdfEngineNode`'s children, `ViewStack` and `WorldPipelineRuntime` until the
-rest of P11b moves them.
+passes.
+
+`views.graphs` rows run on the same runtime. `WorldViewGraphHost`
+(`src/Puck.World.Client/WorldViewGraphHost*.cs`) drives it through
+`IRenderGraphInstances` (`src/Puck.Shaders/Graph`, implemented by
+`RenderGraphRuntime`): each frame, before the runtime schedules, it reconciles
+the accepted `views` section into the runtime's instance set with
+`TryReconfigure` (a surviving instance keeps its node, graph and history; a
+removed one retires), compiles each source row in the background through
+`ShaderPackager.LoadSource`, and installs it with `TryInstall`, inputs taken
+from the row's `inputs`. A row naming an engine `package` (such as `sdf.world`)
+compiles nothing. Panes are placed by the `place` package (`PlacePackage`,
+`IRenderGraphPlacements`, which the host implements):
+`WorldFramePresenter.PrepareGraph`, installed as
+`RenderGraphRuntimeNode.Prepare`, places every instance a slot of the last
+composed layout shows at the slot's rect with `world.upscale-sharpness`'s
+sharpness, adds a footprint (consumer `main`, producer the pane, at the slot's
+width and height), advances the pane's clock and feeds its camera, pointer and
+time. A pane the active layout does not show draws nothing in its place pass
+and is not scheduled. The composer runs inside the world producer's frame, so a
+layout change places panes one frame later, and a layout transition's
+render-scale dip does not reach panes. A pane slot adds no SDF view, and the
+SDF composite composes SDF views only. Screens still render through
+`ViewStack` until later P11b work moves them.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):
@@ -876,7 +974,7 @@ the one statement of the stages a pass compiles (a fullscreen pass's HLSL
 vertex stage, then its fragment stage), which the loader compiles and the
 packager records, and `ShaderPipelineLoader.ParseDefinition` is the one rule
 for reading a source's definition. A package is named by its directory
-(`ShaderPackager.IsPackage`): a `views.pipelines` row whose `source` is a
+(`ShaderPackager.IsPackage`): a `views.graphs` row whose `source` is a
 directory loads through `ShaderPackager.LoadSource`, `ShaderPipelineSource.TryRead`
 reads it for the server's override gate (its identity is the canonical
 manifest's pin), and a package refusal fails the instance's compilation with
@@ -952,11 +1050,15 @@ the shipped ink pipeline rendering from its stored package and a relocated
 package from its binaries while an unpackaged source row is refused by
 `SHADERPKG_ABSENT`.
 Each proof runs once per backend, and an absent GPU or compiler is reported as
-unsupported rather than passed, except in a leg that hides the compiler. `pipeline-churn` and `pipeline-fault` fail on any `[vulkan-debug] validation`
-or `[d3d12-debug]` line (the Vulkan loader's `general` notices about the
-machine's own layers do not count, nor does a Direct3D 12 pipeline-library miss, which the
-cache counts instead), so run them with `puck canary --debug-layers` for the
-validation proof.
+unsupported rather than passed, except in a leg that hides the compiler. Under
+`puck canary --debug-layers` the runner fails every leg on any
+`[vulkan-debug] validation` or `[d3d12-debug]` line, and on
+`[d3d12] debug layer requested but not loaded` (`DebugLayerOutput` in
+`Puck.Cli`). The Vulkan loader's `general` notices about the machine's own
+layers do not count, and the Direct3D 12 drain never prints a pipeline-library
+miss, which the cache counts instead. No manifest asserts validation lines
+itself; run `pipeline-churn` and `pipeline-fault` with `--debug-layers` for
+the validation proof.
 `ShaderPipelineRenderNodeLawTests` drive the render node through its factory
 seams without a device: refusal of a candidate, a float-output candidate, a
 selection or a resize whose allocation fails partway (exact disposal counts),

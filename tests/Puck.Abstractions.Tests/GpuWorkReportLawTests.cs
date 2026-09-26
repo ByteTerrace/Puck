@@ -106,13 +106,19 @@ public sealed class GpuWorkReportLawTests {
         Assert.Equal(
             expected: string.Concat(
                 "{\"name\":\"world\",\"sample\":{\"submission\":1,\"revision\":7,\"passes\":[",
-                $"{{\"label\":\"alpha\",\"state\":\"executed\",\"counts\":{{\"gpu.dispatches\":2,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":0,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0}}}},",
-                "{\"label\":\"beta\",\"state\":\"skipped\"},{\"label\":\"gamma\",\"state\":\"not-reached\"}],",
+                $"{{\"label\":\"alpha\",\"class\":\"per-backend-deterministic\",\"state\":\"executed\",\"counts\":{{\"gpu.dispatches\":2,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":0,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0}}}},",
+                "{\"label\":\"beta\",\"class\":\"deterministic\",\"state\":\"skipped\"},{\"label\":\"gamma\",\"class\":\"deterministic\",\"state\":\"not-reached\"}],",
                 $"\"outside\":{{\"gpu.dispatches\":0,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":8,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0}}}},",
                 "\"lifetime\":{\"gpu.created.pipelines\":0,\"gpu.created.shader-modules\":1,\"gpu.created.images\":0,\"gpu.created.buffers\":0,\"gpu.created.descriptor-pools\":0,\"gpu.created.descriptor-sets\":0}}"
             ),
             actual: Encoding.UTF8.GetString(bytes: buffer.WrittenSpan)
         );
+
+        // A pass class is deterministic or per-backend-deterministic, one per pass or none.
+        var ledger = new GpuWorkLedger(framesInFlight: 1, name: "gpu.test");
+
+        _ = Assert.Throws<ArgumentException>(testCode: () => ledger.Configure(passClasses: [WorkClass.Pacing], passLabels: ["alpha"], revision: 1L));
+        _ = Assert.Throws<ArgumentException>(testCode: () => ledger.Configure(passClasses: [WorkClass.Deterministic], passLabels: ["alpha", "beta"], revision: 1L));
     }
 
     private sealed record Rig(GpuWorkLedger Ledger) {
@@ -126,7 +132,7 @@ public sealed class GpuWorkReportLawTests {
         );
             var services = GpuWorkCounting.Wrap(ledger: ledger, services: gpu.Services);
 
-            ledger.Configure(passLabels: ["alpha", "beta", "gamma"], revision: 7L);
+            ledger.Configure(passClasses: [WorkClass.PerBackendDeterministic, WorkClass.Deterministic, WorkClass.Deterministic], passLabels: ["alpha", "beta", "gamma"], revision: 7L);
             services.ShaderModuleFactory.Create(bytecode: ReadOnlyMemory<byte>.Empty, stage: GpuShaderStage.Compute).Dispose();
             services.Recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: 2, data: new byte[8], offset: 0, pipelineLayoutHandle: 3, stageFlags: GpuShaderStage.Compute);
             ledger.EnterPass(pass: 0);

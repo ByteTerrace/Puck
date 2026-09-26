@@ -115,6 +115,7 @@ public sealed class GpuCreationFaults {
                 inner: Guard(instance: services.CommandPoolFactory)
             ),
             Faults = faults,
+            Naming = services.Naming,
             ImageFactory = new FaultingImageFactory(
                 faults: faults,
                 inner: Guard(instance: services.ImageFactory)
@@ -241,6 +242,7 @@ public sealed class GpuCreationFaults {
             return (m_lossArmed != 0L);
         }
     }
+
     /// <summary>Gets how many frames GPU hosts have counted since the faults were last disarmed.</summary>
     public long FramesSeen {
         get {
@@ -318,9 +320,10 @@ file abstract class FaultingWrapper(GpuCreationFaults faults) {
         faults.Enter(kind: kind);
 }
 file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuBindings {
-    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) =>
+    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) =>
         inner.AllocateSet(
             descriptorSetLayoutHandle: descriptorSetLayoutHandle,
+            name: name,
             poolHandle: poolHandle
         );
 
@@ -332,10 +335,10 @@ file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults)
             pools: pools,
             refusal: out refusal
         );
-    public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
+    public nint CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.BindingsPool);
 
-        return inner.CreatePool(sizes: in sizes);
+        return inner.CreatePool(name: name, sizes: in sizes);
     }
     public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) =>
         inner.CreateSampler(filter: filter);
@@ -391,75 +394,90 @@ file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults)
         );
 }
 file sealed class FaultingBufferFactory(IGpuBufferFactory inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuBufferFactory {
-    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage) {
+    public IGpuBuffer CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Buffer);
 
         return inner.CreateDeviceLocal(
+            name: name,
             sizeBytes: sizeBytes,
             usage: usage
         );
     }
-    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage) {
+    public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Buffer);
 
         return inner.CreateHostVisible(
+            name: name,
             sizeBytes: sizeBytes,
             usage: usage
         );
     }
-    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage) {
+    public IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
+        Enter(kind: GpuCreationKind.Buffer);
+
+        return inner.CreateHostVisibleDeviceLocal(
+            name: name,
+            sizeBytes: sizeBytes,
+            usage: usage
+        );
+    }
+    public IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Buffer);
 
         return inner.CreateHostVisible(
             data: data,
+            name: name,
             usage: usage
         );
     }
 }
 file sealed class FaultingCommandPoolFactory(IGpuCommandPoolFactory inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuCommandPoolFactory {
-    public IGpuCommandPool Create() {
+    public IGpuCommandPool Create(in GpuObjectName name) {
         Enter(kind: GpuCreationKind.CommandPool);
 
-        return inner.Create();
+        return inner.Create(name: name);
     }
 }
 file sealed class FaultingImageFactory(IGpuImageFactory inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuImageFactory {
-    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Image);
 
         return inner.Create(
             format: format,
             height: height,
+            name: name,
             usage: usage,
             width: width
         );
     }
 }
 file sealed class FaultingPipelineFactory(IGpuPipelineFactory inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuPipelineFactory {
-    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
+    public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Pipeline);
 
         return inner.Create(
             computeShaderModule: computeShaderModule,
-            description: description
+            description: description,
+            name: name
         );
     }
-    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
+    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Pipeline);
 
         return inner.Create(
             description: description,
             fragmentShaderModule: fragmentShaderModule,
+            name: name,
             renderPass: renderPass,
             vertexShaderModule: vertexShaderModule
         );
     }
 }
 file sealed class FaultingRenderPassFactory(IGpuRenderPassFactory inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuRenderPassFactory {
-    public IGpuRenderPass Create(GpuRenderPassDescription description) {
+    public IGpuRenderPass Create(GpuRenderPassDescription description, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.RenderPass);
 
-        return inner.Create(description: description);
+        return inner.Create(description: description, name: name);
     }
     public IGpuFramebuffer CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) {
         Enter(kind: GpuCreationKind.Framebuffer);

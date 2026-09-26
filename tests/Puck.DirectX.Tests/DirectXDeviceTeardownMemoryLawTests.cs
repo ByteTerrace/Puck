@@ -23,6 +23,7 @@ public sealed class DirectXDeviceTeardownMemoryLawTests {
         var device = context.Device.Handle;
         var heapBytes = checked((long)(context.DescriptorHeaps.ViewHeapBytes + context.DescriptorHeaps.SamplerHeapBytes));
         var leaked = new DirectXGpuBufferFactory(deviceContext: context).CreateDeviceLocal(
+            name: default,
             sizeBytes: LeakedBytes,
             usage: GpuBufferUsage.Storage
         );
@@ -50,6 +51,7 @@ public sealed class DirectXDeviceTeardownMemoryLawTests {
         var memory = new GpuDeviceMemoryWork(backend: "directx");
         var context = WarpDevices.Context(memory: memory);
         var leaked = new DirectXGpuBufferFactory(deviceContext: context).CreateDeviceLocal(
+            name: default,
             sizeBytes: LeakedBytes,
             usage: GpuBufferUsage.Storage
         );
@@ -73,11 +75,13 @@ public sealed class DirectXDeviceTeardownMemoryLawTests {
         var context = WarpDevices.Context(memory: memory);
 
         new DirectXGpuBufferFactory(deviceContext: context).CreateDeviceLocal(
+            name: default,
             sizeBytes: LeakedBytes,
             usage: GpuBufferUsage.Storage
         ).Dispose();
         context.Recreate();
         new DirectXGpuBufferFactory(deviceContext: context).CreateDeviceLocal(
+            name: default,
             sizeBytes: LeakedBytes,
             usage: GpuBufferUsage.Storage
         ).Dispose();

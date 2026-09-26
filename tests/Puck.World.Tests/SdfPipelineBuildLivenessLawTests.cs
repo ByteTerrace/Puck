@@ -39,7 +39,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         };
         var reports = new List<string>();
         var answered = new List<string>();
-        using var runtime = new WorldPipelineRuntime(
+        using var runtime = new WorldViewGraphHost(
             documentDirectory: directory.RootPath,
             packager: new ShaderPackager(compiler: new ShaderCompiler(
                 cacheDirectory: directory.PathOf(name: "cache"),
@@ -50,16 +50,21 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         };
 
         // An instance nothing resizes, so a wait for another extent can only end at its deadline.
-        runtime.Register(
-            name: "ink",
-            node: new ShaderPipelineRenderNode(
+        using var instances = FakeGraphInstances.Attach(
+            create: name => new ShaderPipelineRenderNode(
                 deviceContext: gpu,
                 height: 4,
                 hostsOnDirectX: false,
-                name: "ink",
+                name: name,
                 width: 4
-            )
+            ),
+            host: runtime
         );
+
+        runtime.Reconcile(views: new WorldViewDefaults(Graphs: [new WorldViewGraph(
+            Name: "ink",
+            Source: "ink.hlsl"
+        )]));
 
         var source = new TextCommandSource(registry: new CommandRegistry(modules: [new ProbeModule(runtime: runtime)]));
         var session = source.CreateSession(
@@ -151,62 +156,6 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             timeout: TimeSpan.FromSeconds(value: 30)
         ));
         Assert.False(condition: node.ProduceFrame(context: in context).IsEmpty);
-    }
-    [Fact]
-    public void WhileTheEngineBuildIsHeldAHostedPaneStillProducesEveryFrame() {
-        using var gate = new ManualResetEventSlim(initialState: false);
-        using var entered = new ManualResetEventSlim(initialState: false);
-        var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version) {
-            BeforeComputePipeline = _ => {
-                entered.Set();
-                gate.Wait();
-            },
-        };
-        var pane = new CountingNode();
-        using var node = new SdfEngineNode(
-            brickPoolVoxelCapacity: 0,
-            frameSource: new FixedFrameSource(frame: Frame(child: "pane")),
-            height: Extent,
-            kernels: SdfTestPipelines.Kernels(),
-            pipelines: SdfTestPipelines.Cache(),
-            width: Extent
-        );
-        // Disposed before the node, so a failing assertion releases the held build instead of leaving the node's
-        // disposal waiting on it.
-        using var opener = new GateOpener(gate: gate);
-        var context = new FrameContext(
-            AccumulatorTicks: 0UL,
-            DeltaTicks: 0UL,
-            ElapsedTicks: 0UL,
-            FrameDeltaTicks: 0UL,
-            Host: new HostContext(capabilities: new Dictionary<Type, object> {
-                [typeof(IGpuDeviceContext)] = gpu,
-            }),
-            StepTicks: 0UL,
-            TargetHeight: Extent,
-            TargetWidth: Extent
-        );
-
-        node.RegisterChild(
-            name: "pane",
-            node: pane
-        );
-        Assert.True(condition: node.ProduceFrame(context: in context).IsEmpty);
-        Assert.True(condition: entered.Wait(
-                cancellationToken: TestContext.Current.CancellationToken,
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ));
-
-        for (var frame = 0; (frame < 4); frame++) {
-            Assert.True(condition: node.ProduceFrame(context: in context).IsEmpty);
-        }
-
-        Assert.False(condition: gate.IsSet);
-        Assert.False(condition: node.IsReady);
-        Assert.Equal(
-            actual: pane.Produced,
-            expected: 5
-        );
     }
     [Fact]
     public void ADeviceLossWaitsOnlyForThePipelinesInTheDriverAndTheNextFrameStartsAnother() {
@@ -322,7 +271,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
 
         return created;
     }
-    private static SdfFrame Frame(string? child = null) {
+    private static SdfFrame Frame() {
         var builder = new SdfProgramBuilder();
 
         builder.Sphere(
@@ -348,9 +297,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
                     X: 0f,
                     Y: 0f
                 )
-            ) {
-                Child = child,
-            }]
+            )]
         );
     }
 
@@ -401,27 +348,12 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             timeout: TimeSpan.FromSeconds(value: 30)
         ));
     }
-    // A hosted pane that has not published an image yet, counting how often its host produces it.
-    private sealed class CountingNode : IRenderNode {
-        public NodeDescriptor Descriptor { get; } = new(
-            Name: "pane",
-            SurfaceId: SurfaceId.New()
-        );
-        public int Produced { get; private set; }
-
-        public void Dispose() { }
-        public Surface ProduceFrame(in FrameContext context) {
-            Produced++;
-
-            return default;
-        }
-    }
     private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
             frame;
     }
     // "probe" answers at once; "arm" holds its session behind a one-second pipeline.wait for an extent no one requests.
-    private sealed class ProbeModule(WorldPipelineRuntime runtime) : ICommandModule {
+    private sealed class ProbeModule(WorldViewGraphHost runtime) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
                 bindability: CommandBindability.Unbindable,

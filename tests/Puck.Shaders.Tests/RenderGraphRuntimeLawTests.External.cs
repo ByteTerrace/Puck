@@ -612,6 +612,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             m_image ??= m_gpu.Create(
                 format: GpuPixelFormat.R8G8B8A8Unorm,
                 height: height,
+                name: default,
                 usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
                 width: width
             );

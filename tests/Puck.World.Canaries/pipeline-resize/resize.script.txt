@@ -11,7 +11,7 @@ pipeline.wait feedback captured 10
 pipeline.step feedback
 pipeline.wait feedback submitted 2 10
 # The layout slot shrinks to half the frame on each axis, so the host asks the instance for 32x32.
-world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":0.5,"pipeline":"feedback","width":0.5,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
+world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":0.5,"instance":"feedback","width":0.5,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
 pipeline.wait feedback resized 32 32 10
 # A resize is not a step: paused, the instance installs the graph at 32x32 without rendering and keeps presenting
 # submission 2 at 64x64.
@@ -30,7 +30,7 @@ pipeline.wait feedback captured 10
 # thread; resized is reached once that graph installs, so the reset below counts only submissions at 64x64.
 # After a reset and twenty-four submissions the history is past full scale, which the preview saturates to 1.
 pipeline.time feedback resume
-world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"pipeline":"feedback","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
+world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"instance":"feedback","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
 pipeline.wait feedback resized 64 64 10
 pipeline.reset feedback
 pipeline.wait feedback submitted 24 10

@@ -249,7 +249,9 @@ none of `orbit`, `offset`, or `path`, because it sits exactly at the possessed
 camera body's own pose.
 
 Named `cameras` resolve through authored anchors independently of the seat
-state. `views.layouts` maps normalized slots to joined seats or named cameras.
+state. `views.layouts` maps normalized slots to joined seats, named cameras,
+or `views.graphs` instances (`instance`; a slot names at most one of `camera`
+and `instance`).
 An empty list uses the built-in one-to-four-seat ladder. Layout transition
 duration and render scale remain authored on each layout. A layout whose
 `seatCount` no joined-seat count can reach (5+) is selectable only through
@@ -262,16 +264,24 @@ selection also publishes the `layout` context family every tick, so a world
 can flip a seat's binding group with the view (see documents.md, context
 rows).
 
-`views.graphs` rows are frame-graph instances (`WorldViewGraph`): a graph
-source, a camera, a `refresh` of exactly one positive `divisor` or `hertz`, and
-`inputs` binding a graph's external version to another row. The validator
+`views.graphs` rows are frame-graph instances (`WorldViewGraph`): a `name`, a
+`source` (a `puck.render.graph.v1` document, a one-off `.hlsl` read as a
+one-pass graph, or a `puck.shader.package.v1` directory) or an engine
+`package` producer (such as `sdf.world`), a camera, a `refresh` of exactly one
+positive `divisor` or `hertz`, `inputs` binding a graph's external version to
+another row, and the per-instance `timeScale`, `output` and `overrides`
+(documents-render.md owns those three). The validator
 (`WorldDefinitionValidator.Graphs.cs`) refuses a loop of same-frame inputs
 through `RenderGraphInstanceSet.TryCreate`, naming every instance; a self-input
 and a `previousFrame` input are legal. `views.graphBudget.passPixelsPerFrame`
 is the scheduler's price ceiling. `world.budget` echoes every row with its
 extent ceiling, rate and planned passes (`WorldPresentationCost`, priced by
-`WorldPipelineSources.PlanGraph`). No live view renders through a row yet;
-the `rendering` skill owns the graph document and the scheduler.
+`WorldPipelineSources.PlanGraph`). `views.root` names the row the display
+shows; absent, the host synthesizes the root graph (`WorldRootGraph`), which
+places every instance a layout slot names over the SDF world. A pane the
+active layout does not show is not scheduled, and a layout change places panes
+one frame later. The `rendering` skill owns the graph document, the scheduler
+and the host (`WorldViewGraphHost`).
 
 ## Pointer, cursor, Free Cam
 
@@ -316,7 +326,8 @@ Free Cam do not alter the logical movement basis.
   preference, held free-look state, motion-control gate/sample, and the exact
   live yaw/pitch state used by movement/rendering.
 - `world.view.state` — reads active layout, selection reason, transition, and
-  slot occupants.
+  slot occupants; an instance slot prints as `instance:<name>`, or
+  `instance:<name>:missing` when the runtime has no such instance.
 - `world.view.pointer` — reads pointer position, viewport mapping, visibility,
   arming reason, buttons, hover, and system-release generation.
 - `view.override camera|layout <name|auto>` — live composition override. It is

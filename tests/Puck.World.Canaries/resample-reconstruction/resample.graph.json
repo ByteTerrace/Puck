@@ -6,13 +6,32 @@
       "name": "step",
       "kind": "Image",
       "format": "R8G8B8A8Unorm",
-      "dimensions": { "mode": "Absolute", "width": 16, "height": 48 }
+      "dimensions": {
+        "mode": "Absolute",
+        "width": 16,
+        "height": 48
+      }
+    },
+    {
+      "name": "base",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Absolute",
+        "width": 64,
+        "height": 192
+      },
+      "initialization": "Zero"
     },
     {
       "name": "resampled",
       "kind": "Image",
       "format": "R8G8B8A8Unorm",
-      "dimensions": { "mode": "Absolute", "width": 64, "height": 192 }
+      "dimensions": {
+        "mode": "Absolute",
+        "width": 64,
+        "height": 192
+      }
     }
   ],
   "passes": [
@@ -21,16 +40,45 @@
       "source": "seed.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "outputs": [ { "name": "step" } ]
+      "outputs": [
+        {
+          "name": "step"
+        }
+      ]
     },
     {
       "name": "resample",
-      "source": "../../../src/Puck.Shaders/Assets/Shaders/Graph/resample.hlsl",
-      "entryPoint": "main",
+      "source": "../../../src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl",
+      "entryPoint": "CSMain",
       "kind": "Compute",
-      "inputs": [ { "name": "step", "as": "source" } ],
-      "outputs": [ { "name": "resampled", "as": "destination" } ],
+      "inputs": [
+        {
+          "name": "base"
+        },
+        {
+          "name": "step",
+          "as": "source"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "resampled",
+          "as": "destination"
+        }
+      ],
       "config": {
+        "rect": {
+          "default": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "max": 1,
+          "description": "The destination rect as fractions of the destination extent: left, top, width, height.",
+          "min": 0,
+          "type": "float4"
+        },
         "sharpness": {
           "default": 0,
           "max": 1,
@@ -41,5 +89,7 @@
       }
     }
   ],
-  "outputs": ["resampled"]
+  "outputs": [
+    "resampled"
+  ]
 }

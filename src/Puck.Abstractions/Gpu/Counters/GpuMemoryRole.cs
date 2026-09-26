@@ -12,4 +12,9 @@ public enum GpuMemoryRole {
     /// <summary>Memory the host maps: host-visible buffers, staging buffers, and Direct3D 12 <c>UPLOAD</c> and
     /// <c>READBACK</c> heaps.</summary>
     HostVisible,
+    /// <summary>Device memory the host maps through a discrete adapter's aperture: a host-visible device-local buffer
+    /// (a Vulkan <c>DEVICE_LOCAL</c>, <c>HOST_VISIBLE</c> and <c>HOST_COHERENT</c> allocation, a Direct3D 12
+    /// <c>GPU_UPLOAD</c>-heap buffer). It consumes the adapter's memory, so it counts like
+    /// <see cref="DeviceLocal"/>.</summary>
+    HostVisibleDeviceLocal,
 }

@@ -65,25 +65,29 @@ public sealed unsafe class DirectXGroupedLayoutDebugLayerTests {
         var bindings = services.Bindings;
         var layoutHandle = GCHandle.Alloc(value: layout);
         using var constants = services.BufferFactory.CreateHostVisible(
+            name: default,
             sizeBytes: IGpuBindings.ConstantBufferAlignment,
             usage: GpuBufferUsage.Uniform
         );
         using var image = services.ImageFactory.Create(
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 4,
+            name: default,
             usage: GpuImageUsage.Sampled,
             width: 4
         );
-        var pool = bindings.CreatePool(sizes: GpuDescriptorPoolSizes.ForGroups(groups: GpuGroupLayoutTables.FilmGrain(pushesIndex: true).Groups));
+        var pool = bindings.CreatePool(sizes: GpuDescriptorPoolSizes.ForGroups(groups: GpuGroupLayoutTables.FilmGrain(pushesIndex: true).Groups), name: default);
 
         try {
             var frame = bindings.AllocateSet(
                 descriptorSetLayoutHandle: layout.GroupHandles[0],
-                poolHandle: pool
+                poolHandle: pool,
+                name: default
             );
             var pass = bindings.AllocateSet(
                 descriptorSetLayoutHandle: layout.GroupHandles[3],
-                poolHandle: pool
+                poolHandle: pool,
+                name: default
             );
 
             foreach (var set in ((ReadOnlySpan<nint>)[frame, pass])) {
@@ -109,7 +113,7 @@ public sealed unsafe class DirectXGroupedLayoutDebugLayerTests {
                 samplerHandle: bindings.CreateSampler()
             );
 
-            using var commands = services.CommandPoolFactory.Create();
+            using var commands = services.CommandPoolFactory.Create(name: default);
             var command = commands.CommandBufferHandle;
 
             services.Recorder.BeginCommandBuffer(commandBufferHandle: command);

@@ -23,15 +23,13 @@
         <Content Include="Assets\Runtime\pipeline-preview.vert.hlsl;Assets\Runtime\pipeline-preview.frag.hlsl;Assets\Runtime\pipeline-preview.vert.spv;Assets\Runtime\pipeline-preview.frag.spv;Assets\Runtime\pipeline-preview.vert.dxil;Assets\Runtime\pipeline-preview.frag.dxil" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), compiled to SPIR-V and
-             DXIL at build and shipped by the shared CollectShaderBytecode target. -->
+        <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), the region copy and the
+             graph's place package, compiled to SPIR-V and DXIL at build and shipped by the shared CollectShaderBytecode
+             target. -->
         <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
         <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
         <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
         <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
-        <!-- The graph's package-library kernels: compute pass sources a graph package runs, compiled with their generated
-             interface when loaded rather than at build. -->
-        <RenderGraphPackageSource Include="Assets\Shaders\Graph\**\*.hlsl" />
     </ItemGroup>
     <ItemGroup>
         <!-- puck.probe.v1 kind manifests and their kernel HLSL sources ship as content; each kernel's entry points compile

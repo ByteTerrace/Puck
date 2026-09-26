@@ -69,9 +69,13 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                 Format: ShaderPipelineRenderNode.ParseFormat(format: context.Outputs[0].Format),
                 Load: GpuAttachmentLoad.Clear,
                 Store: GpuAttachmentStore.Store
-            )]));
+            )]), name: new GpuObjectName(
+                owner: context.Instance,
+                part: context.Pass
+            ));
             cancellationToken.ThrowIfCancellationRequested();
             built.Pipeline = services.PipelineFactory.Create(
+                name: new GpuObjectName(owner: context.Instance, part: context.Pass),
                 description: OverlayPassLayout.PipelineDescription(),
                 fragmentShaderModule: built.Fragment,
                 renderPass: built.RenderPass,
@@ -182,12 +186,14 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             m_themeRevision = package.m_themeRevision;
             // The vertex buffer comes from the device's own factory, as a shader pass's geometry does.
             m_geometry = context.Device.Services.BufferFactory.CreateHostVisible(
+                name: new GpuObjectName(owner: context.Instance, part: context.Pass, detail: "geometry"),
                 data: FullscreenTriangle.CreateVertexData(),
                 usage: GpuBufferUsage.Vertex
             );
 
             try {
                 m_data = m_services.BufferFactory.CreateHostVisible(
+                    name: new GpuObjectName(owner: context.Instance, part: context.Pass, detail: "data"),
                     sizeBytes: (((ulong)totalWords) * sizeof(uint)),
                     usage: GpuBufferUsage.Storage
                 );
@@ -196,7 +202,12 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                 for (var slot = 0; (slot < inFlight); slot++) {
                     m_sets[slot] = m_services.Bindings.AllocateSet(
                         descriptorPool,
-                        built.Pipeline!.DescriptorSetLayoutHandle
+                        built.Pipeline!.DescriptorSetLayoutHandle,
+                        name: new GpuObjectName(
+                            index: slot,
+                            owner: context.Instance,
+                            part: context.Pass
+                        )
                     );
                     m_services.Bindings.WriteBuffer(
                         binding: OverlayPassLayout.StorageBufferBinding,

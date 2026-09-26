@@ -39,8 +39,9 @@ public interface IGpuBindings {
     /// <see cref="DestroyPool"/>.</summary>
     /// <param name="poolHandle">The native descriptor pool handle, from <see cref="CreatePool"/>.</param>
     /// <param name="descriptorSetLayoutHandle">The pipeline's descriptor set layout handle.</param>
+    /// <param name="name">The set's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
     /// <returns>The native descriptor set handle, owned by the pool.</returns>
-    nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle);
+    nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name);
     /// <summary>Checks, before an owner allocates anything, whether the pools it would create fit the device's
     /// descriptor heaps now, allocating nothing. On Direct3D 12 each pool is a range of the device's one shader-visible
     /// view heap (<see cref="GpuDescriptorHeapBudget.CanAdmit"/>), and a candidate that does not fit is refused whole,
@@ -59,8 +60,9 @@ public interface IGpuBindings {
     /// <param name="sizes">The per-descriptor-kind capacity the pool must provide, derived from the binding lists
     /// of the sets it backs (see <see cref="GpuDescriptorPoolSizes.ForSets"/> and
     /// <see cref="GpuDescriptorPoolSizes.ForGroups"/>) rather than hand-tallied.</param>
+    /// <param name="name">The pool's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
     /// <returns>The native descriptor pool handle.</returns>
-    nint CreatePool(in GpuDescriptorPoolSizes sizes);
+    nint CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name);
     /// <summary>Creates a sampler with the given filter and clamp-to-edge addressing. On Direct3D 12 a pipeline created
     /// without a layout description reads its samplers as static samplers in its root signature, so this returns a
     /// non-zero sentinel and the filter is applied by the compute pipeline's static sampler instead.</summary>

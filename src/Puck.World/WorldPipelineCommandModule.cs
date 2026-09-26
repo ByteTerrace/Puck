@@ -11,15 +11,16 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>Live shader-pipeline authoring. Document mutations use the normal authority path;
+/// <summary>Live authoring of <c>views.graphs</c> instances. Document mutations use the normal authority path;
 /// presentation controls operate on accepted instances and never compile on the command thread.</summary>
 internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes,
-    WorldPipelineRuntime? pipelines = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
+    WorldViewGraphHost? pipelines = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
     // Long enough for a cold cross-backend compile of a small pipeline; a script names a longer bound explicitly.
     private const int DefaultWaitSeconds = 30;
 
     // Reopens the inspection record the node closed and ends it with the device's memory profile and the residency
-    // the selector chooses for the instance's parameter region; a host without a device reports the default profile.
+    // the selector chooses for the instance's parameter region, which the node writes while its frame ring still reads
+    // it; a host without a device reports the default profile.
     private void AppendResidency(StringBuilder builder, ShaderPipelinePlan plan) {
         var profile = (renderProbe?.Device?.MemoryProfile ?? default);
         var bytes = plan.ParameterBytes;
@@ -31,16 +32,17 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             provider: CultureInfo.InvariantCulture,
             handler: $"\n{ConsoleRecord.ContinuationIndent}residency: parameters={bytes} bytes policy={GpuResidency.Name(policy: GpuResidency.Select(
                 byteCount: bytes,
-                profile: profile
+                profile: profile,
+                readersInFlight: true
             ))}]"
         );
     }
-    private static string Clock(WorldPipelineRuntime.Entry entry) => string.Create(
+    private static string Clock(WorldViewGraphHost.Entry entry) => string.Create(
         CultureInfo.InvariantCulture,
         $"paused={entry.ClockPaused.ToString().ToLowerInvariant()} seconds={entry.ClockSeconds:0.###} scale={entry.ClockScale:0.###}"
     );
-    private WorldPipelineRuntime.Entry? FindEntry(string name) {
-        pipelines?.Reconcile(rows: server.Definition.Views.Pipelines);
+    private WorldViewGraphHost.Entry? FindEntry(string name) {
+        pipelines?.Reconcile(views: server.Definition.Views);
         return (((pipelines is not null) && pipelines.TryGet(
             entry: out var entry,
             name: name
@@ -59,14 +61,14 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
     // One line per overridden field: the committed value and the preview, where "-" is no value of its own and
     // "default" is a previewed pass that leaves the field at the source's default.
-    private static string DescribeOverrides(WorldViewPipeline row, WorldPipelineRuntime.Entry? entry) {
+    private static string DescribeOverrides(WorldViewGraph row, WorldViewGraphHost.Entry? entry) {
         entry?.Synchronize();
 
         var pending = (entry?.PendingOverrides ?? new Dictionary<string, JsonElement>());
         var committed = (row.Overrides ?? new Dictionary<string, JsonElement>());
         var result = new StringBuilder(value: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[pipeline.overrides: {row.Name} revision={WorldDefinitionFingerprint.ComputePipeline(pipeline: row)} installed={(entry?.InstalledSource?.SourceIdentity ?? "none")}"
+            handler: $"[pipeline.overrides: {row.Name} revision={WorldDefinitionFingerprint.ComputeGraph(graph: row)} installed={(entry?.InstalledSource?.SourceIdentity ?? "none")}"
         ));
         var fields = new SortedSet<(string Pass, string Field)>();
 
@@ -101,7 +103,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             name: "pipeline.load",
-            description: "pipeline.load <name> <source> [camera] — author a pipeline JSON, a one-off shader source, or a shader package directory, relative to the world document. Accepted rows compile in the background; pipeline.status reports the result.",
+            description: "pipeline.load <name> <source> [camera] — author a views.graphs row naming a graph document, a one-off shader source, or a shader package directory, relative to the world document. Accepted rows compile in the background; pipeline.status reports the result.",
             bindability: CommandBindability.Unbindable,
             routing: CommandRouting.Simulation,
             handler: (context, args) => {
@@ -112,9 +114,9 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 );
                 }
                 return link.Submit(
-                    mutation: new WorldMutation.UpsertViewPipeline(
+                    mutation: new WorldMutation.UpsertViewGraph(
                         Principal: context.Principal,
-                        Pipeline: new WorldViewPipeline(
+                        Graph: new WorldViewGraph(
                             Name: args[0].ToString(),
                             Source: args[1].ToString(),
                             Camera: ((args.Count == 3)
@@ -138,7 +140,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 );
                 }
                 if (pipelines is null) { return CommandResult.Error(output: "[pipeline.reload: requires a rendered host]"); }
-                pipelines.Reconcile(rows: server.Definition.Views.Pipelines);
+                pipelines.Reconcile(views: server.Definition.Views);
                 if (args.Count == 1) {
                     var name = args[0].ToString();
 
@@ -412,7 +414,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
         yield return CommandDefinition.WithWireArgs(
             name: "pipeline.commit",
-            description: "pipeline.commit <name> — commit the instance's previewed overrides, time scale and output into its views.pipelines row. The commit names the row revision and the installed source it was previewed against, and is refused by name when either has moved; world.save then writes it.",
+            description: "pipeline.commit <name> — commit the instance's previewed overrides, time scale and output into its views.graphs row. The commit names the row revision and the installed source it was previewed against, and is refused by name when either has moved; world.save then writes it.",
             bindability: CommandBindability.Unbindable,
             routing: CommandRouting.Simulation,
             handler: (context, args) => {
@@ -457,11 +459,14 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 }
                 var name = args[0].ToString();
 
-                if (WorldDefinitionRows.FindPipeline(
-                    name: name,
-                    pipelines: server.Definition.Views.Pipelines
-                ) is not { } row) {
-                    return CommandResult.Error(output: $"[pipeline.overrides: no views.pipelines row named '{name}']");
+                if (
+                    (WorldDefinitionRows.FindGraph(
+                        graphs: server.Definition.Views.Graphs,
+                        name: name
+                    ) is not { } row) ||
+                    (row.Source is null)
+                ) {
+                    return CommandResult.Error(output: $"[pipeline.overrides: no views.graphs row with a source named '{name}']");
                 }
                 return new CommandResult(DescribeOverrides(
                     entry: FindEntry(name: name),
@@ -504,7 +509,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
         yield return Immediate(
             "pipeline.wait",
-            $"pipeline.wait <name> compiled|installed|captured [seconds] | pipeline.wait <name> submitted|counted <frames> [seconds] | pipeline.wait <name> resized <width> <height> [seconds] — hold only this session until the instance's latest compilation completes, its compiled candidate is installed, it has submitted that many frames since its last reset (or since boot, never reset), the work counts of that many submissions since its last reset (or boot) have completed and pipeline.inspect shows them, its latest capture is written, or the host has requested that output extent and the instance has installed its graph at that extent. A reload, a row edit or a resize is not a step: a paused instance (pipeline.time pause, or time scale zero) builds and installs it too, reaching installed and resized, and keeps showing its last image until a step, resume or reset renders the new graph. The wait lasts at most seconds (default {DefaultWaitSeconds}, 1..{WorldPipelineRuntime.MaxWaitSeconds}) of presentation time. Exactly one '[pipeline: <name> wait <phase> …]' outcome follows on stderr: reached, failed, unsupported (a shader tool is absent), or timed out.",
+            $"pipeline.wait <name> compiled|installed|captured [seconds] | pipeline.wait <name> submitted|counted <frames> [seconds] | pipeline.wait <name> resized <width> <height> [seconds] — hold only this session until the instance's latest compilation completes, its compiled candidate is installed, it has submitted that many frames since its last reset (or since boot, never reset), the work counts of that many submissions since its last reset (or boot) have completed and pipeline.inspect shows them, its latest capture is written, or the host has requested that output extent and the instance has installed its graph at that extent. A reload, a row edit or a resize is not a step: a paused instance (pipeline.time pause, or time scale zero) builds and installs it too, reaching installed and resized, and keeps showing its last image until a step, resume or reset renders the new graph. The wait lasts at most seconds (default {DefaultWaitSeconds}, 1..{WorldViewGraphHost.MaxWaitSeconds}) of presentation time. Exactly one '[pipeline: <name> wait <phase> …]' outcome follows on stderr: reached, failed, unsupported (a shader tool is absent), or timed out.",
             (context, args) => {
                 const string Form = "<name> compiled|installed|captured [seconds] | <name> submitted|counted <frames> [seconds] | <name> resized <width> <height> [seconds]";
 
@@ -600,9 +605,9 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                         index: next,
                         value: out var authored
                     ) ||
-                        (authored is 0 or > WorldPipelineRuntime.MaxWaitSeconds)
+                        (authored is 0 or > WorldViewGraphHost.MaxWaitSeconds)
                     ) {
-                        return CommandResult.Error(output: $"[pipeline.wait: seconds must be a whole number in 1..{WorldPipelineRuntime.MaxWaitSeconds}]");
+                        return CommandResult.Error(output: $"[pipeline.wait: seconds must be a whole number in 1..{WorldViewGraphHost.MaxWaitSeconds}]");
                     }
                     seconds = ((int)authored);
                 }
@@ -721,9 +726,14 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                     verb: "pipeline.status"
                 );
                 }
-                var result = new StringBuilder(value: $"[pipeline.status: {server.Definition.Views.Pipelines.Count} row(s)");
+                var rows = (server.Definition.Views.Graphs ?? []);
+                var result = new StringBuilder(value: $"[pipeline.status: {rows.Count} row(s)");
 
-                foreach (var row in server.Definition.Views.Pipelines) {
+                foreach (var row in rows) {
+                    if (row.Package is { } package) {
+                        result.Append(handler: $"\n  {row.Name} package={package}");
+                        continue;
+                    }
                     result.Append(handler: $"\n  {row.Name} source={row.Source}");
                     if (FindEntry(name: row.Name) is not { } entry) { result.Append(value: " unrendered"); continue; }
                     result.Append(handler: $" {(entry.IsCompiling

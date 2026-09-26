@@ -1,8 +1,6 @@
-// Stage 2 of the two-stage SDF world compositor: the SOURCE-AGNOSTIC compositor. It places each viewport's source
-// texture — an SDF view rendered by Stage 1 OR a child node's output, bound uniformly into the same array slot —
-// into its screen region. Child images use their actual extent, allowing one source in differently sized regions. The
-// regions drive the layout; the compositor neither knows nor cares what produced each source. One invocation per
-// output pixel over an 8x8 workgroup.
+// Stage 2 of the two-stage SDF world compositor. It places each viewport's source texture, an SDF view rendered by
+// Stage 1, into its screen region; the regions drive the layout. One invocation per output pixel over an 8x8
+// workgroup.
 //
 // Every source pixel is valid every frame: the sky pre-pass (sdf-sky.comp) fills the whole source texture with the
 // authored sky before sdf-beam.comp culls any tile, and sdf-world-views.comp then overwrites the live tiles — so a
@@ -12,7 +10,7 @@
 struct CompositeParams2 {
     uint2 imageExtent;     // output image size in pixels
     uint viewportCount;
-    uint childMask;        // child sources use their image dimensions; SDF sources retain the valid render-scale region
+    uint padding;          // places rects on the 16-byte boundary Direct3D 12's constant-buffer packing gives a float4
     float4 rects[5];       // per viewport: xy = normalized origin, zw = normalized size (of the output image)
     // Per-view render-scale numerators q (1..255; 255 = native), 8 bits each: view v's q = (scaleQPacked[v / 4] >>
     // ((v % 4) * 8)) & 0xFF. Mirrors ViewportData.renderScale.x (Stage 1 renders at worldRenderDims(rectDims, q));
@@ -25,7 +23,7 @@ struct CompositeParams2 {
 [[vk::push_constant]] ConstantBuffer<CompositeParams2> params;
 
 [[vk::binding(0, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> Output : register(u0);
-// The per-view source textures (binding 1, an array): SDF views from Stage 1, or child surfaces, indexed by viewport.
+// The per-view source textures (binding 1, an array): SDF views from Stage 1, indexed by viewport.
 // The format is declared so the read is a formatted OpImageRead (no shaderStorageImageReadWithoutFormat dependency).
 [[vk::binding(1, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[5] : register(u1);
 
@@ -73,16 +71,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
             uint2 rectDims = max((uint2)(r.zw * float2(params.imageExtent)), uint2(1u, 1u));
             uint2 renderDims = max((((rectDims * q) + 127u) / 255u), uint2(1u, 1u));
-            if ((params.childMask & (1u << v)) != 0u) {
-                sources[v].GetDimensions(renderDims.x, renderDims.y);
-            }
 
             if (all(renderDims == rectDims)) {
-                // Preserve the exact-copy path for native SDF views and equally sized child surfaces.
+                // Preserve the exact-copy path for native SDF views.
                 color = sources[v][localPixel].rgb;
             } else {
-                // SDF valid dimensions match worldRenderDims; child dimensions come from the image itself.
-                // Reconstruct the source over this region with formatted loads, without a sampler.
+                // The valid dimensions match worldRenderDims. Reconstruct the source over this region with formatted loads, without a sampler.
                 float2 sourcePos = ((((float2(localPixel) + 0.5) * float2(renderDims)) / float2(rectDims)) - 0.5);
                 float2 clamped = clamp(sourcePos, float2(0.0, 0.0), (float2(renderDims) - 1.0));
                 uint2 p0 = (uint2)clamped;

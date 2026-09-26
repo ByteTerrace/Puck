@@ -11,7 +11,10 @@ namespace Puck.Cli.Counters;
 /// Turns one <c>world.counters --json</c> reading into a report run: every source's counts, each render node's newest
 /// completed submission (its passes and their counts, the work outside every pass, its submission and revision) and
 /// created objects, and the allocation reading, each count tagged with the class the World's <c>kinds</c> legend
-/// declares for it. The submission and revision identities are not work kinds; they are recorded as
+/// declares for it, loosened to its pass's class: a deterministic kind counted in a per-backend-deterministic pass (one
+/// whose work follows the device, as the SDF engine's upload follows its residency policy) is
+/// per-backend-deterministic there, so the two backends are not held to it. The submission and revision identities are
+/// not work kinds; they are recorded as
 /// <see cref="WorkClass.Pacing"/> under <see cref="SubmissionKind"/> and <see cref="RevisionKind"/>, since which
 /// submission a read lands on depends on when it ran.
 /// </summary>
@@ -133,7 +136,9 @@ internal static class CountersReading {
         var passes = new List<WorldCountersPass>();
         string? missing = null;
 
-        void Add(string source, string? node, string? pass, JsonElement values) {
+        // A count reads its kind's class, loosened to its pass's: a deterministic kind in a per-backend-deterministic
+        // pass, whose work follows the device, is per-backend-deterministic there.
+        void Add(string source, string? node, string? pass, JsonElement values, WorkClass passClass = WorkClass.Deterministic) {
             foreach (var count in values.EnumerateObject()) {
                 if (!classes.TryGetValue(
                     key: count.Name,
@@ -145,7 +150,10 @@ internal static class CountersReading {
                 }
 
                 counts.Add(item: new WorldCount(
-                    Class: workClass,
+                    Class: (((workClass == WorkClass.Deterministic) && (passClass == WorkClass.PerBackendDeterministic))
+                        ? WorkClass.PerBackendDeterministic
+                        : workClass
+                    ),
                     Kind: count.Name,
                     Node: node,
                     Pass: pass,
@@ -214,6 +222,19 @@ internal static class CountersReading {
                 foreach (var pass in sample.GetProperty(propertyName: "passes").EnumerateArray()) {
                     var label = pass.GetProperty(propertyName: "label").GetString()!;
                     var spelled = pass.GetProperty(propertyName: "state").GetString()!;
+                    var spelledClass = pass.GetProperty(propertyName: "class").GetString()!;
+
+                    if (
+                        !EnumWireName<WorkClass>.TryParse(
+                            name: spelledClass,
+                            value: out var passClass
+                        ) ||
+                        (passClass is not (WorkClass.Deterministic or WorkClass.PerBackendDeterministic))
+                    ) {
+                        reason = $"node '{name}' pass '{label}' has the unknown class '{spelledClass}'";
+
+                        return false;
+                    }
 
                     if (!EnumWireName<GpuPassState>.TryParse(
                         name: spelled,
@@ -237,6 +258,7 @@ internal static class CountersReading {
                         Add(
                             node: name,
                             pass: label,
+                            passClass: passClass,
                             source: GpuSection,
                             values: passCounts
                         );

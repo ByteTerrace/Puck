@@ -220,7 +220,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             expected: Puck.World.WorldHostPresentation.Offscreen,
             actual: definition!.Host.Presentation
         );
-        var row = Assert.Single(collection: definition.Views.Pipelines);
+        var row = Assert.Single(collection: (definition.Views.Graphs ?? []));
 
         Assert.Equal(
             expected: pipeline,

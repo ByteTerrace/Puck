@@ -18,10 +18,11 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public sealed class GpuDescriptorHeapBudget {
     /// <summary>The most descriptor pools live at once on one device. It bounds the range allocator's bookkeeping, not
-    /// descriptors: the documented worst cases are 69 SDF engines (one main, 64 registered views and 4 sessions, one
-    /// pool each), one overlay and a Direct3D 12 device's range for storage clears, which leave 953 pools for pipeline
-    /// nodes and their previews. A pipeline node holds one pool for all its passes and in-flight slots and one for its
-    /// float preview, which makes that 476 pipeline instances with previews, past any layout. Refused by name past it, like
+    /// descriptors: the documented worst cases are 69 SDF engines (one main, 64 registered views and 4 sessions, two
+    /// pools each: the engine's own and the one copy pool that holds every region's copy sets), one overlay and a
+    /// Direct3D 12 device's range for storage clears, which leave 884 pools for pipeline nodes and their previews. A
+    /// pipeline node holds one pool for all its passes and in-flight slots and one for its float preview, which makes
+    /// that 442 pipeline instances with previews, past any layout. Refused by name past it, like
     /// <c>ShaderPipelineLimits.MaxPasses</c>.</summary>
     public const int MaxLivePools = 1024;
     /// <summary>The code every refusal of a candidate that does not fit carries, whichever owner it names.</summary>

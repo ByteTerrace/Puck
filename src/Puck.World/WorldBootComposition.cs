@@ -60,12 +60,11 @@ public static class WorldBootComposition {
 
         return presenter;
     }
-    private static WorldPipelineRuntime BuildPipelineRuntime(IServiceProvider sp, bool hostsOnDirectX, uint width, uint height) {
-        var definition = sp.GetRequiredService<WorldDefinition>();
+    private static WorldViewGraphHost BuildGraphHost(IServiceProvider sp) {
         var documentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath);
         // The build's package store ships beside the shipped worlds (build/WorldAssets.targets), so a source row naming
         // a shipped pipeline loads its package, wherever the booted document lies, and compiles nothing.
-        var runtime = new WorldPipelineRuntime(
+        var host = new WorldViewGraphHost(
             packager: new ShaderPackager(
                 compiler: sp.GetRequiredService<ShaderCompiler>(),
                 store: Path.Combine(
@@ -77,14 +76,14 @@ public static class WorldBootComposition {
             documentDirectory: documentDirectory
         );
 
-        // The pipeline pointer's source: the process's one pointer store, read NON-destructively (position + primary
+        // The graph pointer's source: the process's one pointer store, read NON-destructively (position + primary
         // button — never the drained motion/wheel accumulators WorldSeatViewInput owns), on the seat the pointer rides.
-        // An offscreen boot registers no pointer, so its pipelines see no press.
+        // An offscreen boot registers no pointer, so its graphs see no press.
         if (
             (sp.GetService<WorldPointer>() is { } pointer) &&
             (sp.GetService<PlayerRoster>() is { } roster)
         ) {
-            runtime.ReadPointer = () => {
+            host.ReadPointer = () => {
                 var slot = WorldPointerSlot.Resolve(roster: roster);
 
                 return new WorldPipelinePointerSample(
@@ -98,25 +97,8 @@ public static class WorldBootComposition {
             };
         }
 
-        var deviceContext = sp.GetRequiredService<IGpuDeviceContext>();
-
-        // The same node shape for a pipeline loaded after boot (pipeline.load naming a new row) as for a boot-time row.
-        runtime.CreateNode = name => new ShaderPipelineRenderNode(
-            name: name,
-            deviceContext: deviceContext,
-            hostsOnDirectX: hostsOnDirectX,
-            width: width,
-            height: height
-        );
-
-        runtime.Report = (name, message) => Console.Error.WriteLine(value: $"[pipeline: {name} {message}]");
-        runtime.RegisterNode = (name, node) => sp.GetRequiredService<WorldRenderProbe>().Node?.RegisterChild(
-            name: name,
-            node: node
-        );
-        runtime.RemoveNode = name => sp.GetRequiredService<WorldRenderProbe>().Node?.RemoveChild(name: name);
-        runtime.Reconcile(rows: definition.Views.Pipelines);
-        return runtime;
+        host.Report = (name, message) => Console.Error.WriteLine(value: $"[pipeline: {name} {message}]");
+        return host;
     }
     // host.icon resolved the way every other document-relative path in this file is: against the world document's own
     // directory, so an author's icon travels beside their world file rather than having to be installed next to the
@@ -435,8 +417,8 @@ public static class WorldBootComposition {
                 facts: () => sp.GetRequiredService<WorldOverlayFacts>(),
                 // On the D3D12 host the window/monitor capture feeds publish GPU-side into shared textures the
                 // screens sample directly; the Vulkan host keeps the CPU-pixel transport for THOSE. The shared
-                // camera rides its GPU tier on both hosts (see CaptureCameraGpu). Headless never resolves either
-                // backend, so this bool only matters once presentation composes.
+                // camera rides its GPU tier on both hosts (see WorldScreenBinder.TryProvisionSharedRing). Headless
+                // never resolves either backend, so this bool only matters once presentation composes.
                 hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX,
                 // A session-sourced face's destination/reference lookup and resolver-owned instance — CORE, not
                 // presentation-only, so an observation lease attaches (and a destination instance starts) in every
@@ -792,7 +774,7 @@ public static class WorldBootComposition {
 
         // The shader-pipeline verb surface (pipeline.*). CORE-registered for the same command-vocabulary-parity reason
         // as WorldViewCommandModule above; pipeline.load's row upsert is core so it genuinely works headless, and
-        // WorldPipelineRuntime is OPTIONAL (default null) so every other verb refuses by name at use when it is absent
+        // WorldViewGraphHost is OPTIONAL (default null) so every other verb refuses by name at use when it is absent
         // (compiling/swapping a pipeline needs a live render tree).
         services.AddSingleton<ICommandModule, WorldPipelineCommandModule>();
 
@@ -1095,16 +1077,7 @@ public static class WorldBootComposition {
         // See the windowed factory's own remarks (AddWorldAuthoritativeCore) — the same shared runtime, built once
         // GPU services are live (WorldOffscreenGpuActivation runs before this factory resolves, at the same point
         // its own device-bring-up already does).
-        services.AddSingleton(implementationFactory: sp => {
-            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
-
-            return BuildPipelineRuntime(
-                sp: sp,
-                hostsOnDirectX: hostSettings.HostsOnDirectX,
-                width: ((uint)hostSettings.Width),
-                height: ((uint)hostSettings.Height)
-            );
-        });
+        services.AddSingleton(implementationFactory: BuildGraphHost);
 
         services.AddSingleton(implementationFactory: sp => new WorldFramePresenter(
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
@@ -1128,7 +1101,7 @@ public static class WorldBootComposition {
             adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
             markers: sp.GetRequiredService<MarkerStore>(),
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
-            pipelines: sp.GetRequiredService<WorldPipelineRuntime>(),
+            graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             bakes: sp.GetRequiredService<WorldBakeSchedule>()
         ) {
             // An offscreen capture shows bound state exactly as of the tick it is armed for.
@@ -1140,7 +1113,8 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => WorldRootGraph.Compose(
             extensions: sp.GetRequiredService<WorldDefinition>().Render.Extensions,
             overlay: false,
-            packages: RenderGraphPackageCatalog.Shipped
+            packages: RenderGraphPackageCatalog.Shipped,
+            panes: WorldRootGraph.PanesOf(views: sp.GetRequiredService<WorldDefinition>().Views)
         ));
 
         services.AddSingleton<IRenderNode>(implementationFactory: sp => {
@@ -1424,19 +1398,9 @@ public static class WorldBootComposition {
             ? "directx"
             : "vulkan"));
 
-        // The shader-pipeline runtime: one ShaderPipelineRenderNode + boot compile per views.pipelines row, shared by the frame
-        // presenter (resizes/feeds each node per produced frame) and the render root below (keys
-        // SdfWorldRenderSpec.Children by the same names) — see BuildPipelineRuntime's remarks.
-        services.AddSingleton(implementationFactory: sp => {
-            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
-
-            return BuildPipelineRuntime(
-                sp: sp,
-                hostsOnDirectX: hostSettings.HostsOnDirectX,
-                width: ((uint)hostSettings.Width),
-                height: ((uint)hostSettings.Height)
-            );
-        });
+        // The host of the views.graphs rows on the render graph, shared by the frame presenter (which prepares each
+        // frame's panes through it) and the render root below (which attaches the runtime it builds).
+        services.AddSingleton(implementationFactory: BuildGraphHost);
 
         // The composed frame source, registered on its own rather than built inside the render-root factory below:
         // it touches no GPU, and its constructor runs the ONE capacity probe, so the boot can resolve it before any
@@ -1464,7 +1428,7 @@ public static class WorldBootComposition {
             adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
             markers: sp.GetRequiredService<MarkerStore>(),
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
-            pipelines: sp.GetRequiredService<WorldPipelineRuntime>(),
+            graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             bakes: sp.GetRequiredService<WorldBakeSchedule>()
         ).RetargetTransforms(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
@@ -1475,7 +1439,8 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => WorldRootGraph.Compose(
             extensions: sp.GetRequiredService<WorldDefinition>().Render.Extensions,
             overlay: (sp.GetRequiredService<WorldOverlayGlyphs>().Pack is not null),
-            packages: RenderGraphPackageCatalog.Shipped
+            packages: RenderGraphPackageCatalog.Shipped,
+            panes: WorldRootGraph.PanesOf(views: sp.GetRequiredService<WorldDefinition>().Views)
         ));
 
         // The render root: the default render graph over the SDF world (WorldRenderRoot), with the engine node and the

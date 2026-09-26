@@ -11,7 +11,8 @@ namespace Puck.Vulkan;
 /// <param name="deviceContext">The device context whose current logical device every call reaches; a device recreated
 /// after a loss is picked up by the next call.</param>
 /// <param name="allocator">The Vulkan descriptor allocator.</param>
-public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, VulkanDescriptorAllocator allocator) : IGpuBindings {
+/// <param name="naming">The naming every created pool and set is handed to.</param>
+public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, VulkanDescriptorAllocator allocator, GpuObjectNaming naming) : IGpuBindings {
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
 
     // One pool size per descriptor type the pool holds any of.
@@ -45,7 +46,7 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
     /// <remarks>A set of a group's layout is recorded under that group in the device's
     /// <see cref="VulkanLogicalDevice.SetGroups"/>, which a <c>VkDescriptorSet</c> handle cannot carry, until its pool is
     /// destroyed.</remarks>
-    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle) {
+    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) {
         var logicalDevice = deviceContext.LogicalDevice;
         var set = allocator.AllocateSet(
             descriptorSetLayoutHandle: descriptorSetLayoutHandle,
@@ -57,6 +58,11 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
             poolHandle: poolHandle,
             setHandle: set,
             setLayoutHandle: descriptorSetLayoutHandle
+        );
+        naming.Name(
+            handle: set,
+            kind: GpuObjectKind.DescriptorSet,
+            name: in name
         );
 
         return set;
@@ -72,14 +78,21 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
         return true;
     }
     /// <inheritdoc/>
-    public nint CreatePool(in GpuDescriptorPoolSizes sizes) {
+    public nint CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) {
         var poolSizes = BuildPoolSizes(sizes: in sizes);
-
-        return allocator.CreatePool(
+        var pool = allocator.CreatePool(
             device: Device,
             maxSets: sizes.MaxSets,
             poolSizes: poolSizes
         );
+
+        naming.Name(
+            handle: pool,
+            kind: GpuObjectKind.DescriptorPool,
+            name: in name
+        );
+
+        return pool;
     }
     /// <inheritdoc/>
     public nint CreateSampler(GpuSamplerFilter filter = GpuSamplerFilter.Linear) {

@@ -6,7 +6,7 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// What a GPU device's memory is, as its backend reported it when the device was created: whether the device shares
 /// the host's memory coherently, how much device-local memory it has, its largest device-local heap, and how much
-/// device-local memory the host can write through a coherent mapping. Unlike <see cref="GpuDeviceIdentity"/>, which is
+/// device-local memory the host can write through a coherent mapping, and whether that memory is the host's own. Unlike <see cref="GpuDeviceIdentity"/>, which is
 /// recorded and never branched on, the profile is what <see cref="GpuResidency.Select"/> chooses a region's policy
 /// from, and it names no platform, product or driver. The default value reports nothing, and a profile that reports
 /// nothing selects the staged copy.
@@ -21,11 +21,15 @@ namespace Puck.Abstractions.Gpu;
 /// <param name="HostVisibleDeviceLocalBytes">The largest device-local heap the host can write through a host-visible,
 /// coherent mapping, in bytes: all of it on unified memory, the aperture on a discrete adapter that exposes one, and
 /// zero when there is none.</param>
+/// <param name="UnifiedMemory">Whether the device's memory is the host's memory, coherently or not: Direct3D 12's
+/// <c>UMA</c>, or a Vulkan integrated or CPU device. Its host-visible device-local memory is then host memory, not an
+/// aperture onto dedicated memory, so <see cref="GpuResidency.RingMemory"/> places a ring in host memory.</param>
 public readonly record struct GpuMemoryProfile(
     bool CoherentUnifiedMemory,
     ulong DeviceLocalBytes,
     ulong LargestDeviceLocalHeapBytes,
-    ulong HostVisibleDeviceLocalBytes
+    ulong HostVisibleDeviceLocalBytes,
+    bool UnifiedMemory
 ) {
     // VkMemoryPropertyFlagBits, VkMemoryHeapFlagBits and VkPhysicalDeviceType values (vulkan_core.h).
     private const uint VulkanCpuDevice = 4U;
@@ -59,7 +63,8 @@ public readonly record struct GpuMemoryProfile(
                 CoherentUnifiedMemory: cacheCoherentUnifiedMemory,
                 DeviceLocalBytes: pool,
                 HostVisibleDeviceLocalBytes: pool,
-                LargestDeviceLocalHeapBytes: pool
+                LargestDeviceLocalHeapBytes: pool,
+                UnifiedMemory: true
             );
         }
 
@@ -70,14 +75,15 @@ public readonly record struct GpuMemoryProfile(
                 ? dedicatedVideoMemory
                 : 0UL
             ),
-            LargestDeviceLocalHeapBytes: dedicatedVideoMemory
+            LargestDeviceLocalHeapBytes: dedicatedVideoMemory,
+            UnifiedMemory: false
         );
     }
     /// <summary>Fills a profile from what Vulkan reports: <c>VkPhysicalDeviceProperties.deviceType</c> and
     /// <c>vkGetPhysicalDeviceMemoryProperties</c>'s memory types and heaps, in their native layout. A device-local heap
     /// counts toward the device-local total and the largest heap; a heap some memory type reaches as device-local,
     /// host-visible and host-coherent counts toward the host-writable device-local memory; and an integrated or CPU
-    /// device with such a type is coherent unified memory.</summary>
+    /// device is unified memory, coherent when it has such a type.</summary>
     /// <param name="deviceType">The <c>VkPhysicalDeviceType</c>.</param>
     /// <param name="memoryTypes">The valid memory types as <c>{ propertyFlags, heapIndex }</c> pairs, two
     /// <see langword="uint"/>s per type (<c>VkMemoryType</c>).</param>
@@ -131,14 +137,17 @@ public readonly record struct GpuMemoryProfile(
             }
         }
 
+        var unified = ((deviceType == VulkanIntegratedDevice) || (deviceType == VulkanCpuDevice));
+
         return new GpuMemoryProfile(
             CoherentUnifiedMemory: (
-                ((deviceType == VulkanIntegratedDevice) || (deviceType == VulkanCpuDevice)) &&
+                unified &&
                 (hostWritable > 0UL)
             ),
             DeviceLocalBytes: deviceLocal,
             HostVisibleDeviceLocalBytes: hostWritable,
-            LargestDeviceLocalHeapBytes: largest
+            LargestDeviceLocalHeapBytes: largest,
+            UnifiedMemory: unified
         );
     }
 
@@ -147,7 +156,7 @@ public readonly record struct GpuMemoryProfile(
         ((((uint)memoryHeaps[((heap * 2) + 1)]) & VulkanHeapDeviceLocal) != 0U);
 
     /// <summary>Appends the profile as <c>key=value</c> fields on one line, every field present:
-    /// <c> unified.coherent=no device-local=… device-local.largest-heap=… device-local.host-visible=…</c>, sizes in
+    /// <c> unified=no unified.coherent=no device-local=… device-local.largest-heap=… device-local.host-visible=…</c>, sizes in
     /// bytes.</summary>
     /// <param name="builder">The text to append to.</param>
     /// <returns><paramref name="builder"/>.</returns>
@@ -157,7 +166,7 @@ public readonly record struct GpuMemoryProfile(
 
         return builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $" unified.coherent={(CoherentUnifiedMemory ? "yes" : "no")} device-local={DeviceLocalBytes} device-local.largest-heap={LargestDeviceLocalHeapBytes} device-local.host-visible={HostVisibleDeviceLocalBytes}"
+            handler: $" unified={(UnifiedMemory ? "yes" : "no")} unified.coherent={(CoherentUnifiedMemory ? "yes" : "no")} device-local={DeviceLocalBytes} device-local.largest-heap={LargestDeviceLocalHeapBytes} device-local.host-visible={HostVisibleDeviceLocalBytes}"
         );
     }
 }

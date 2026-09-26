@@ -49,7 +49,7 @@
       ]
     },
     "expect": [
-      { "type": "line", "name": "the commit applies", "stream": "stderr", "match": "exact", "text": "[world.mutation: CommitViewPipeline 'tint' applied]", "present": true },
+      { "type": "line", "name": "the commit applies", "stream": "stderr", "match": "exact", "text": "[world.mutation: CommitViewGraph 'tint' applied]", "present": true },
       { "type": "line", "name": "the committed gain is read back", "stream": "stdout", "match": "contains", "text": "  tint.gain committed=0.25 pending=-", "present": true },
       { "type": "line", "name": "no package is refused", "stream": "stderr", "match": "contains", "text": "[SHADERPKG_", "present": false },
       { "type": "imageRegion", "name": "source-row-renders-the-override", "capture": "source.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0.25, 0.75, 0.5, 1], "maximum": [0.25, 0.75, 0.5, 1], "toleranceCodes": 1, "holds": true },
@@ -74,7 +74,7 @@
       { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "nothing is committed", "stream": "stderr", "match": "contains", "text": "CommitViewPipeline", "present": false },
+      { "type": "line", "name": "nothing is committed", "stream": "stderr", "match": "contains", "text": "CommitViewGraph", "present": false },
       { "type": "line", "name": "the altered package is refused by its pin", "stream": "stderr", "match": "contains", "text": "[SHADERPKG_FILE_PIN]", "present": true },
       { "type": "imageRegion", "name": "source-row-renders-the-default", "capture": "source.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [1, 0, 0.5, 1], "maximum": [1, 0, 0.5, 1], "toleranceCodes": 1, "holds": true },
       { "type": "imageRegion", "name": "default-is-not-the-override", "capture": "source.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0.25, 0.75, 0.5, 1], "maximum": [0.25, 0.75, 0.5, 1], "toleranceCodes": 1, "holds": false }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Puck.Abstractions.Gpu;
 using Puck.Commands;
 using Puck.Launcher;
 using Puck.Overlays;
@@ -221,7 +222,14 @@ internal static class WorldPostBuildWiring {
         // toasts are presentation-only (AddWorldPresentation registers it); the stable
         // terminal-session proxy exists in both shapes and mirrors edit outcomes when a windowed bank is attached.
         var toasts = services.GetService<OverlayToastStore>();
-        var pipelineRuntime = services.GetService<WorldPipelineRuntime>();
+        var graphHost = services.GetService<WorldViewGraphHost>();
+
+        // A GPU shape resolves its device context here, before any presenter that creates objects on the device, so
+        // the container, which disposes singletons in reverse creation order, releases every presenter before it.
+        if (graphHost is not null) {
+            _ = services.GetRequiredService<IGpuDeviceContext>();
+        }
+
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
@@ -268,9 +276,9 @@ internal static class WorldPostBuildWiring {
                 (echo.RebuildOrigin is { } origin)
             ) {
                 definitionSource.SourcePath = origin;
-                // The rendering host resolves views.pipelines sources against this same moved directory from here
+                // The rendering host resolves views.graphs sources against this same moved directory from here
                 // on — presentation-only, so a headless boot has no runtime to rebase.
-                pipelineRuntime?.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: origin));
+                graphHost?.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: origin));
             }
 
             // toast/HUD narration is presentation-only; a headless boot simply has nowhere to paint it.

@@ -365,7 +365,8 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             CoherentUnifiedMemory: false,
             DeviceLocalBytes: bytes,
             HostVisibleDeviceLocalBytes: 0UL,
-            LargestDeviceLocalHeapBytes: bytes
+            LargestDeviceLocalHeapBytes: bytes,
+            UnifiedMemory: false
         );
 
         Assert.Equal(

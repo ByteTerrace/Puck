@@ -47,7 +47,7 @@ internal sealed record QualificationScript(string Text, QualificationExpectation
 /// <summary>What a pipeline workload's world authors for its instance: the layout row showing it and the source its
 /// row loads, both read from the world document inside the package.</summary>
 /// <param name="Layout">The <c>views.layouts</c> row, as authored.</param>
-/// <param name="Source">The <c>views.pipelines</c> row's source, relative to the world document.</param>
+/// <param name="Source">The <c>views.graphs</c> row's source, relative to the world document.</param>
 internal sealed record QualificationPipelineRows(JsonObject Layout, string Source);
 /// <summary>
 /// Expands a release profile into its stability matrix and writes what each cell runs: the overlay document that boots
@@ -141,7 +141,7 @@ internal static class QualificationPlan {
         );
         var source = (Row(
             name: pipeline.Instance,
-            rows: views?["pipelines"]
+            rows: views?["graphs"]
         )?["source"] as JsonValue);
 
         if (layout is null) {
@@ -150,7 +150,7 @@ internal static class QualificationPlan {
             return false;
         }
         if ((source is null) || !source.TryGetValue<string>(value: out var sourceText)) {
-            reason = $"the world authors no views.pipelines row named '{pipeline.Instance}' with a source";
+            reason = $"the world authors no views.graphs row named '{pipeline.Instance}' with a source";
 
             return false;
         }
@@ -277,7 +277,7 @@ internal static class QualificationPlan {
             for (var load = 1; (load <= pipeline.Loads); load++) {
                 Line(line: $"# Unload and load {Number(value: load)} of {Number(value: pipeline.Loads)}: the slot stops showing the instance and its row is removed, which releases it; the refused inspection proves the release.");
                 Line(line: $"world.row.set views.layouts {unloaded}");
-                Line(line: $"world.row.remove views.pipelines {name}");
+                Line(line: $"world.row.remove views.graphs {name}");
                 Line(line: $"pipeline.inspect {name}");
                 releases++;
                 Line(line: $"pipeline.load {name} {rows.Source}");
@@ -325,7 +325,7 @@ internal static class QualificationPlan {
         var index = -1;
 
         for (var candidate = 0; (candidate < (slots?.Count ?? 0)); candidate++) {
-            if (((slots![candidate]?["pipeline"] as JsonValue)?.TryGetValue<string>(value: out var shown) == true) && string.Equals(
+            if (((slots![candidate]?["instance"] as JsonValue)?.TryGetValue<string>(value: out var shown) == true) && string.Equals(
                 a: shown,
                 b: instance,
                 comparisonType: StringComparison.Ordinal
@@ -337,7 +337,7 @@ internal static class QualificationPlan {
         }
 
         if (index < 0) {
-            reason = $"no slot of the layout shows the pipeline '{instance}'";
+            reason = $"no slot of the layout shows the instance '{instance}'";
 
             return false;
         }
@@ -381,7 +381,7 @@ internal static class QualificationPlan {
 
         var emptied = layout.DeepClone().AsObject();
 
-        emptied["slots"]![index]!.AsObject()["pipeline"] = null;
+        emptied["slots"]![index]!.AsObject()["instance"] = null;
         unloaded = emptied.ToJsonString();
         reason = string.Empty;
 

@@ -31,14 +31,15 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
         }
 
         // The engine creates no pipeline, shader module, render pass or framebuffer: it records with the set it is
-        // handed. It creates buffers, images (the ISA handshake's two included), a command pool per ring slot and one
-        // descriptor pool.
+        // handed. It creates buffers, images (the ISA handshake's two included), a command pool per ring slot, its own
+        // descriptor pool, and whatever policy the device selects the one copy pool it reserves for all its regions: the
+        // eight tables, the mesh region and the brick staging.
         Assert.Equal(actual: expected[GpuCreationKind.Pipeline], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.ShaderModule], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.RenderPass], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.Framebuffer], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.CommandPool], expected: ((long)SdfWorldEngine.FrameRingSize));
-        Assert.Equal(actual: expected[GpuCreationKind.BindingsPool], expected: 1L);
+        Assert.Equal(actual: expected[GpuCreationKind.BindingsPool], expected: 2L);
         Assert.True(condition: (expected[GpuCreationKind.Buffer] > SdfBrickPoolLayout.MaxBricks));
         Assert.True(condition: (expected[GpuCreationKind.Image] > 2L));
 
@@ -144,7 +145,6 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
                 includeBrickPipelines: true,
                 kernels: (SdfTestPipelines.Kernels() with {
                     BrickBake = code,
-                    BrickUpload = code,
                 }),
                 ledger: m_work
             );

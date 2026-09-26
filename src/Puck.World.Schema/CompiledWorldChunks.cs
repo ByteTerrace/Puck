@@ -204,7 +204,7 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
     /// <inheritdoc/>
     public bool DerivesOnBoot => true;
     /// <inheritdoc/>
-    public uint Version => 1;
+    public uint Version => 2;
 
     /// <inheritdoc/>
     public AssetContentHash? ReadInput(CompiledWorldContext context, string name) => null;

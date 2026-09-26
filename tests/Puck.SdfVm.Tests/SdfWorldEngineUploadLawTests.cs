@@ -13,46 +13,97 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for the host-visible bytes <see cref="SdfWorldEngine"/> writes per frame, driven over
-/// <see cref="UploadModelGpu"/>, which backs every buffer with bytes and runs the table uploader's copies: a still frame
-/// writes only the viewport rows its presentation time moved; k dynamic transforms the producer's moved set owes write
-/// k strides plus one run-table entry per run of adjacent slots beyond the first, in one copy dispatch however
-/// scattered they are; a
-/// change reaches the device-local table once and stays there through every frame in flight after it, whichever ring
-/// slot those frames stage in; changes past the run bound still leave the table exact; a program edit writes only the
-/// program words that changed; and an engine rebuilt after a device loss owes every table again and reads back exact.
+/// <see cref="UploadModelGpu"/>, which backs every buffer with bytes and runs the region copies. Its default memory
+/// profile stages every region, so each copy writes a four-word header, one run-table entry per run and the owed words:
+/// a still frame writes only the viewport word its presentation time moved; k dynamic transforms the producer's moved
+/// set owes write the words of each that changed, in one copy dispatch however scattered they are; a change reaches the
+/// device-local buffer once and stays there through every frame in flight after it, whichever ring slot those frames
+/// stage in; changes past the run bound still leave the table exact; a program edit writes only the program words that
+/// changed; the program region holds the live program rather than the reserve and grows by half again past it; and an
+/// engine rebuilt after a device loss owes every table again and reads back exact.
 /// </summary>
 public sealed class SdfWorldEngineUploadLawTests {
-    // The packed widths: a ViewportData row (sdf-world.hlsli) and a dynamic transform (sdf-vm.hlsli sdfDynamicTransforms).
+    // The packed width of a dynamic transform (sdf-vm.hlsli sdfDynamicTransforms).
     private const int DynamicTransformBytes = 48;
     private const uint Extent = 64;
-    // A run-table entry, (table offset, prefix) in uints, staged only when a table owes two or more runs.
+    // A staged copy's header: count, run count, block base and destination word.
+    private const int HeaderBytes = (GpuRegion.CopyHeaderWords * sizeof(uint));
+    // A run-table entry, (block offset, first thread) in uints, staged for every run a copy carries.
     private const int RunEntryBytes = 8;
-    // SdfWorldEngine's run-table reserve at the front of each staging buffer: 256 runs × 2 uints.
-    private const int RunTableReserveBytes = 2048;
-    private const int ViewportBytes = 96;
+    // The header and run-table reserve at the front of each staging buffer: 256 runs × 2 uints.
+    private const int StagingReserveBytes = (HeaderBytes + (GpuRegion.MaxCopyRuns * RunEntryBytes));
 
     [Fact]
-    public void ATablePastOneCopyDispatchIsRefusedByNameWhereItIsSized() {
-        var fitting = checked((int)(SdfWorldEngine.MaxFrameUploadTableWords / (DynamicTransformBytes / sizeof(uint))));
+    public void AProgramPastOneDispatchRowUploadsByteExact() {
+        // Past one row of 65,535 groups of 64 threads, the copy dispatches a second row; the fake refuses a dispatch
+        // that is not exactly GpuRegion.CopyGroups and runs the kernel's thread numbering.
+        using var rig = new Rig(slots: 1);
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        using (var rig = new Rig(slots: fitting)) {
-            rig.Render(time: 0f);
+        // Each sphere is one instruction of 12 words.
+        for (var sphere = 0; (sphere < ((((int)GpuRegion.CopyRowThreads) / 12) + 4096)); sphere++) {
+            builder.Sphere(
+                material: material,
+                radius: 1f
+            );
         }
 
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => new Rig(slots: (fitting + 1)));
+        var large = builder.Build();
 
-        Assert.Contains(
-            expectedSubstring: "dynamic-transform",
-            actualString: refusal.Message
+        Assert.True(condition: (large.Words.Length > GpuRegion.CopyRowThreads));
+        Assert.True(condition: (GpuRegion.CopyGroups(count: ((uint)large.Words.Length)).Y >= 2U));
+        rig.Warm();
+        rig.Engine.UploadProgram(program: large);
+        rig.Render(time: 0f);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: large.Words).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: (((ulong)large.Words.Length) * sizeof(uint)))
         );
     }
     [Fact]
-    public void AStillFrameWritesOnlyTheViewportRowsItsTimeMoved() {
+    public void RingRegionsLiveInTheApertureOnADiscreteAdapterAndInHostMemoryOnUnifiedMemory() {
+        const ulong GiB = (1UL << 30);
+        var discrete = new GpuMemoryProfile(
+            CoherentUnifiedMemory: false,
+            DeviceLocalBytes: (12UL * GiB),
+            HostVisibleDeviceLocalBytes: (12UL * GiB),
+            LargestDeviceLocalHeapBytes: (12UL * GiB),
+            UnifiedMemory: false
+        );
+        var unified = new GpuMemoryProfile(
+            CoherentUnifiedMemory: true,
+            DeviceLocalBytes: (8UL * GiB),
+            HostVisibleDeviceLocalBytes: (8UL * GiB),
+            LargestDeviceLocalHeapBytes: (8UL * GiB),
+            UnifiedMemory: true
+        );
+
+        // Eight per-frame tables, each a ring of one buffer per slot, and nothing staged or copied.
+        using (var rig = new Rig(profile: discrete, slots: 40)) {
+            rig.Warm();
+            Assert.Equal(expected: (8 * SdfWorldEngine.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            rig.Move(slot: 3);
+            rig.Render(time: 0f);
+            Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
+        }
+
+        using (var rig = new Rig(profile: unified, slots: 40)) {
+            rig.Warm();
+            Assert.Equal(expected: 0, actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
+        }
+
+        Assert.Equal(expected: GpuHostVisibleMemory.DeviceLocal, actual: GpuResidency.RingMemory(profile: discrete));
+        Assert.Equal(expected: GpuHostVisibleMemory.Host, actual: GpuResidency.RingMemory(profile: unified));
+    }
+    [Fact]
+    public void AStillFrameWritesOnlyTheViewportWordItsTimeMoved() {
         using var rig = new Rig(slots: 40);
 
         rig.Warm();
         rig.Render(time: 1f);
-        Assert.Equal(expected: ((long)ViewportBytes), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: ((long)((HeaderBytes + RunEntryBytes) + sizeof(float))), actual: rig.Gpu.HostBytes());
         Assert.Equal(expected: 1, actual: rig.Gpu.UploadCopies);
 
         rig.Render(time: 1f);
@@ -60,7 +111,7 @@ public sealed class SdfWorldEngineUploadLawTests {
         Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
     }
     [Fact]
-    public void ChangingKTransformsWritesKStridesAndOneRunEntryPerRunInOneCopy() {
+    public void ChangingKTransformsWritesTheWordsThatMovedAndOneRunEntryPerRunInOneCopy() {
         using var rig = new Rig(slots: 40);
         ReadOnlySpan<int> changed = [3, 4, 5, 10, 20, 21];
 
@@ -71,7 +122,8 @@ public sealed class SdfWorldEngineUploadLawTests {
         }
 
         rig.Render(time: 0f);
-        Assert.Equal(expected: ((long)((changed.Length * DynamicTransformBytes) + (3 * RunEntryBytes))), actual: rig.Gpu.HostBytes());
+        // Each move changes one word, a slot's position.y; slots a stride apart are separate runs.
+        Assert.Equal(expected: ((long)(HeaderBytes + (changed.Length * (RunEntryBytes + sizeof(float))))), actual: rig.Gpu.HostBytes());
         Assert.Equal(expected: 1, actual: rig.Gpu.UploadCopies);
         rig.AssertDeviceTransforms();
     }
@@ -89,7 +141,7 @@ public sealed class SdfWorldEngineUploadLawTests {
 
         rig.Render(time: 1f);
         Assert.Equal(expected: 2, actual: rig.Gpu.UploadCopies);
-        Assert.Equal(expected: ((long)(ViewportBytes + (Changed * (DynamicTransformBytes + RunEntryBytes)))), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: ((long)((2 * HeaderBytes) + ((Changed + 1) * (RunEntryBytes + sizeof(float))))), actual: rig.Gpu.HostBytes());
         rig.AssertDeviceTransforms();
     }
     [Fact]
@@ -111,11 +163,11 @@ public sealed class SdfWorldEngineUploadLawTests {
         // A change on the next frame lands beside the earlier one rather than over it.
         rig.Move(slot: 9);
         rig.Render(time: 0f);
-        Assert.Equal(expected: ((long)DynamicTransformBytes), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: ((long)((HeaderBytes + RunEntryBytes) + sizeof(float))), actual: rig.Gpu.HostBytes());
         rig.AssertDeviceTransforms();
         rig.Move(slot: 7);
         rig.Render(time: 0f);
-        Assert.Equal(expected: ((long)DynamicTransformBytes), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: ((long)((HeaderBytes + RunEntryBytes) + sizeof(float))), actual: rig.Gpu.HostBytes());
         rig.AssertDeviceTransforms();
     }
     [Fact]
@@ -133,7 +185,7 @@ public sealed class SdfWorldEngineUploadLawTests {
 
         rig.Render(time: 0f);
         Assert.Equal(expected: 1, actual: rig.Gpu.UploadCopies);
-        Assert.InRange(actual: rig.Gpu.HostBytes(), high: ((600L * DynamicTransformBytes) + RunTableReserveBytes), low: (300L * DynamicTransformBytes));
+        Assert.InRange(actual: rig.Gpu.HostBytes(), high: ((600L * DynamicTransformBytes) + StagingReserveBytes), low: (300L * sizeof(float)));
         rig.AssertDeviceTransforms();
     }
     [Fact]
@@ -145,11 +197,11 @@ public sealed class SdfWorldEngineUploadLawTests {
         rig.Rebuild();
         rig.Render(time: 0f);
 
-        // The rebuilt engine's first frame stages the whole dynamic table, into one ring slot's buffer.
+        // The rebuilt engine's first frame stages the whole dynamic table as one run, into one ring slot's buffer.
         Assert.Equal(
-            expected: (40L * DynamicTransformBytes),
+            expected: (((40L * DynamicTransformBytes) + HeaderBytes) + RunEntryBytes),
             actual: rig.Gpu.HostWrites()
-                .Where(predicate: write => (write.SizeBytes == ((ulong)(RunTableReserveBytes + (40 * DynamicTransformBytes)))))
+                .Where(predicate: write => (write.SizeBytes == ((ulong)(StagingReserveBytes + (40 * DynamicTransformBytes)))))
                 .Sum(selector: write => write.Written)
         );
         rig.AssertDeviceTransforms();
@@ -210,9 +262,9 @@ public sealed class SdfWorldEngineUploadLawTests {
         gpu.ResetTallies();
         _ = node.ProduceFirstFrame(context: in context);
         Assert.Equal(
-            expected: (((long)Slots) * DynamicTransformBytes),
+            expected: (((((long)Slots) * DynamicTransformBytes) + HeaderBytes) + RunEntryBytes),
             actual: gpu.HostWrites()
-                .Where(predicate: write => (write.SizeBytes == ((ulong)(RunTableReserveBytes + (Slots * DynamicTransformBytes)))))
+                .Where(predicate: write => (write.SizeBytes == ((ulong)(StagingReserveBytes + (Slots * DynamicTransformBytes)))))
                 .Sum(selector: write => write.Written)
         );
         Assert.Equal(
@@ -238,15 +290,62 @@ public sealed class SdfWorldEngineUploadLawTests {
         var programBytes = (((ulong)rig.Engine.ProgramWordCapacity) * sizeof(uint));
         var writes = rig.Gpu.HostWrites();
 
-        Assert.Equal(expected: programBytes, actual: Assert.Single(collection: writes).SizeBytes);
-        Assert.InRange(actual: writes[0].Written, high: (edited.Words.Length * sizeof(uint)), low: 1L);
+        // One ring slot's program staging buffer takes the changed words, their runs and the header, and the copy
+        // leaves the device-local program exactly the edited words.
+        Assert.Equal(expected: (programBytes + StagingReserveBytes), actual: Assert.Single(collection: writes).SizeBytes);
+        Assert.InRange(actual: writes[0].Written, high: (StagingReserveBytes + (edited.Words.Length * sizeof(uint))), low: ((HeaderBytes + RunEntryBytes) + sizeof(uint)));
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: edited.Words).ToArray(),
-            actual: rig.Gpu.HostVisible(sizeBytes: programBytes).AsSpan(
+            actual: rig.Gpu.DeviceLocal(sizeBytes: programBytes).AsSpan(
                 length: (edited.Words.Length * sizeof(uint)),
                 start: 0
             ).ToArray()
         );
+    }
+    [Fact]
+    public void TheProgramRegionHoldsTheLiveProgramAndGrowsByHalfAgainPastIt() {
+        const int Reserve = (1 << 20);
+        using var rig = new Rig(
+            programWordReserve: Reserve,
+            slots: 1
+        );
+        var words = Program(albedo: Vector3.One).Words.Length;
+
+        rig.Warm();
+
+        // The reserve allocates nothing; the engine reports it as the words it is provisioned for.
+        Assert.Equal(expected: Reserve, actual: rig.Engine.ProgramWordCapacity);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => rig.Gpu.DeviceLocal(sizeBytes: (Reserve * sizeof(uint))));
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: Program(albedo: Vector3.One).Words).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(words * sizeof(uint))))
+        );
+
+        // A larger program grows the region by half again, and the grown region holds it whole.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        for (var sphere = 0; (sphere < 4); sphere++) {
+            builder.Sphere(
+                material: material,
+                radius: (1f + sphere)
+            );
+        }
+
+        var larger = builder.Build();
+        var grown = Math.Max(
+            val1: larger.Words.Length,
+            val2: (words + (words / 2))
+        );
+
+        Assert.True(condition: (larger.Words.Length > words));
+        rig.Engine.UploadProgram(program: larger);
+        rig.Render(time: 0f);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: larger.Words).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(grown * sizeof(uint))))[..(larger.Words.Length * sizeof(uint))]
+        );
+        Assert.Equal(expected: Reserve, actual: rig.Engine.ProgramWordCapacity);
     }
     [Fact]
     public void TheMeshRegionHoldsAKnownDrawSetAndOwesOnlyTheWordsANewSetChanges() {
@@ -330,7 +429,7 @@ public sealed class SdfWorldEngineUploadLawTests {
             meshDraws: shifted,
             time: 0f
         );
-        Assert.Equal(expected: (stillBytes + sizeof(uint)), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: (((stillBytes + HeaderBytes) + RunEntryBytes) + sizeof(uint)), actual: rig.Gpu.HostBytes());
 
         var shiftedWords = rig.Gpu.DeviceLocal(sizeBytes: layout.Bytes);
 
@@ -378,6 +477,128 @@ public sealed class SdfWorldEngineUploadLawTests {
 
         return MemoryMarshal.AsBytes(span: packed.AsSpan()).ToArray();
     }
+
+    /// <summary>Every region's copy sets are reserved when the engine is built, beside its pool, so another owner taking
+    /// every descriptor range left after that cannot refuse a region the frame thread creates or replaces: the first
+    /// frame that draws a mesh, a frame that grows the mesh region, and program uploads that grow the program region and
+    /// the instance grid all stage with no pool created after construction.</summary>
+    [Fact]
+    public void RegionsCreatedOrGrownAfterConstructionTakeNoDescriptorRangeAnotherOwnerCouldHaveFilled() {
+        var heap = new GpuDescriptorHeapBudget(capabilities: (GpuDeviceCapabilities.FromDirectX(
+            resourceBindingTier: 3,
+            rootSignatureVersion: "1.1",
+            samplerHeapSize: 0,
+            shaderModel: "6.6",
+            staticSamplerHeapSize: 0,
+            viewHeapSize: 0
+        ) with {
+            ViewHeapSize = 65536U,
+        }));
+
+        using var rig = new Rig(
+            heap: heap,
+            slots: 1
+        );
+
+        // The engine created exactly the pools its admission states: its own and the one copy pool of every region.
+        Assert.Equal(
+            actual: rig.Gpu.PoolsCreated.Count,
+            expected: 2
+        );
+        Assert.Equal(
+            actual: rig.Gpu.PoolsCreated.CountBy(keySelector: static pool => pool).ToDictionary(),
+            expected: SdfWorldEngine.DescriptorPools(brickPool: false).CountBy(keySelector: static pool => pool).ToDictionary()
+        );
+
+        var pools = rig.Gpu.PoolsCreated.Count;
+
+        // Another owner takes every range the engine left.
+        if (heap.FreeViewDescriptors > 0U) {
+            Assert.True(condition: heap.TryAdmit(
+                admission: out _,
+                owner: "another owner",
+                pools: [new GpuDescriptorPoolSizes(
+                    CombinedImageSamplerCount: 0U,
+                    MaxSets: 1U,
+                    StorageBufferCount: heap.FreeViewDescriptors,
+                    StorageImageCount: 0U
+                )],
+                refusal: out var refusal
+            ), userMessage: refusal);
+        }
+
+        var quad = new SdfMesh(
+            indices: new uint[] { 0, 1, 2, 0, 2, 3 },
+            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
+        );
+        SdfMeshDraw[] one = [new(Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)];
+        var many = Enumerable.Range(count: 8, start: 0).Select(selector: index => new SdfMeshDraw(
+            Material: index,
+            Mesh: quad,
+            ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: index, yPosition: 0f, zPosition: 0f)
+        )).ToArray();
+
+        rig.Render(
+            meshDraws: one,
+            time: 0f
+        );
+        Assert.Equal(expected: SdfMeshRegion.BytesOf(draws: one), actual: rig.Engine.MeshRegionBytes);
+
+        rig.Render(
+            meshDraws: many,
+            time: 0f
+        );
+        Assert.True(condition: (rig.Engine.MeshRegionBytes >= SdfMeshRegion.BytesOf(draws: many)));
+
+        // A program past the region's words grows the program region and stages whole into it; one with instances past
+        // the engine's reserve grows the instance grid.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        for (var sphere = 0; (sphere < 4); sphere++) {
+            builder.Sphere(
+                material: material,
+                radius: (1f + sphere)
+            );
+        }
+
+        var larger = builder.Build();
+        var words = Program(albedo: Vector3.One).Words.Length;
+        var grown = Math.Max(
+            val1: larger.Words.Length,
+            val2: (words + (words / 2))
+        );
+
+        rig.Engine.UploadProgram(program: larger);
+        rig.Render(time: 0f);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: larger.Words).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(grown * sizeof(uint))))[..(larger.Words.Length * sizeof(uint))]
+        );
+
+        builder = new SdfProgramBuilder();
+
+        var instanceMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        for (var instance = 0; (instance < 4); instance++) {
+            _ = builder.Instance(
+                boundCenter: new Vector3(x: (3f * instance), y: 0f, z: 0f),
+                boundRadius: 1f,
+                emit: emitter => emitter.Sphere(
+                    material: instanceMaterial,
+                    radius: 1f
+                )
+            );
+        }
+
+        var instanced = builder.Build();
+
+        Assert.True(condition: (instanced.Instances.Count > larger.Instances.Count));
+        rig.Engine.UploadProgram(program: instanced);
+        rig.Render(time: 0f);
+        Assert.Equal(expected: pools, actual: rig.Gpu.PoolsCreated.Count);
+    }
+
     private static SdfProgram Program(Vector3 albedo) {
         var builder = new SdfProgramBuilder();
 
@@ -412,13 +633,18 @@ public sealed class SdfWorldEngineUploadLawTests {
         private readonly List<int> m_pendingMoves = [];
 
         private readonly SdfProgram m_program;
+        private readonly int m_programWordReserve;
         private readonly DynamicTransform[] m_transforms;
 
         private SdfWorldPipelines m_pipelines = null!;
         private GpuRegionCopyPipeline m_regionCopy = null!;
 
-        public Rig(int slots) {
-            Gpu = new UploadModelGpu(reportVersion: SdfIsa.Version);
+        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null) {
+            Gpu = new UploadModelGpu(reportVersion: SdfIsa.Version) {
+                DescriptorHeap = heap,
+                MemoryProfile = profile,
+            };
+            m_programWordReserve = programWordReserve;
             m_program = Program(albedo: Vector3.One);
             m_transforms = Transforms(slots: slots);
             Engine = Build();
@@ -512,6 +738,7 @@ public sealed class SdfWorldEngineUploadLawTests {
                     BrickPoolVoxelCapacity: 0,
                     DynamicTransformCapacity: m_transforms.Length,
                     Program: m_program,
+                    ProgramWordCapacity: m_programWordReserve,
                     ViewportCapacity: 1,
                     WorkLedger: ledger
                 ),

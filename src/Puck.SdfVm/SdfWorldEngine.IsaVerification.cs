@@ -136,12 +136,14 @@ public sealed partial class SdfWorldEngine {
     private void VerifyIsaVersion() {
         using var reportImage = m_gpu.ImageFactory.Create(
             format: Format,
+            name: NameOf(part: "isa-report"),
             height: 1,
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: 1
         );
         using var sampledImage = m_gpu.ImageFactory.Create(
             format: Format,
+            name: NameOf(part: "isa-sampled"),
             height: 1,
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: 1
@@ -178,7 +180,7 @@ public sealed partial class SdfWorldEngine {
         _ = BitConverter.TryWriteBytes(
             destination: m_pushConstant.AsSpan(
                 length: sizeof(uint),
-                start: (8 * sizeof(uint))
+                start: (7 * sizeof(uint))
             ),
             value: SdfShaderSetVerification.ReportRequest
         );

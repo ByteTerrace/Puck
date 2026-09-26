@@ -91,7 +91,7 @@ public sealed class CompiledWorldLawTests {
     // The products the pinned fixture's derivations produce at their current versions. A derivation whose product
     // moves is a deliberate change to it: bump the chunk's Version and re-record its pin here.
     private static readonly (string Code, uint Version, string Product)[] Pins = [
-        ("DEFN", 1, "sha256-64/eba157373a1630f3"),
+        ("DEFN", 2, "sha256-64/08cbbeb8348644ab"),
         ("ASST", 1, "sha256-64/1bc8ff1f5742445f"),
     ];
     private static readonly WorldMachineCatalog Catalog = TestHookInstaller.CreateMachineCatalog();

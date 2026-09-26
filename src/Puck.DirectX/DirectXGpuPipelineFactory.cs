@@ -31,8 +31,30 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
         IGpuRenderPass renderPass,
         IGpuShaderModule vertexShaderModule,
         IGpuShaderModule fragmentShaderModule,
-        GpuGraphicsPipelineDescription description
-    ) {
+        GpuGraphicsPipelineDescription description,
+        in GpuObjectName name
+    ) =>
+        Named(
+            name: in name,
+            pipeline: CreateGraphics(
+                description: description,
+                fragmentShaderModule: fragmentShaderModule,
+                renderPass: renderPass,
+                vertexShaderModule: vertexShaderModule
+            )
+        );
+
+    // Names a created pipeline's state object.
+    private DirectXGpuPipeline Named(DirectXGpuPipeline pipeline, in GpuObjectName name) {
+        deviceContext.Services.Naming.Name(
+            handle: pipeline.Layout.PsoHandle,
+            kind: GpuObjectKind.Pipeline,
+            name: in name
+        );
+
+        return pipeline;
+    }
+    private DirectXGpuPipeline CreateGraphics(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
         ArgumentNullException.ThrowIfNull(description);
         description.ValidateAgainst(renderPass: renderPass);
 
@@ -98,7 +120,6 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
 
         return new DirectXGpuPipeline(layout: layout);
     }
-
     private static DXGI_FORMAT ToDxgiFormat(GpuVertexFormat format) {
         return format switch {
             GpuVertexFormat.R32G32Float => DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT,

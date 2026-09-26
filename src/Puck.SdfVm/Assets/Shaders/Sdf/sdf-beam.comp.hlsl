@@ -62,15 +62,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     uint tileIndex = worldTileIndex(id.z, id.xy, params.tileGrid);
 
-    // A child viewport shows another node's surface — there is no SDF camera to cone-march. No consumer reads this
-    // slot's cull entry: sdf-cull-args skips child viewports in its surviving-tile bbox reduction, Stage 1 returns
-    // for a child viewport before it ever reads the tile buffer, and the compositor does not bind the cull buffer
-    // (the sky pre-pass fills every source pixel, so it needs no tile-empty test). Leaving the slot's bits alone is
-    // safe.
-    if (isChildViewport(id.z)) {
-        return;
-    }
-
     ViewportData view = viewports[id.z];
 
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).

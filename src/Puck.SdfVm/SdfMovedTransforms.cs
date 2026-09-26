@@ -66,7 +66,7 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     /// <summary>Initializes a new instance of the <see cref="SdfMovedTransforms"/> class.</summary>
     public SdfMovedTransforms() {
         for (var index = 0; (index < History); index++) {
-            m_frames[index] = new GpuUploadRuns(capacity: SdfWorldEngine.MaxUploadRunsPerTable);
+            m_frames[index] = new GpuUploadRuns(capacity: GpuRegion.MaxCopyRuns);
         }
     }
 

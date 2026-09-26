@@ -1085,13 +1085,6 @@ public static partial class WorldDocumentEmitter {
                     target: viewsObj,
                     targetKey: "layouts"
                 );
-            } else if (subId is "pipeline" or "pipelines") {
-                AppendNamedBlock(
-                    block: subBlock,
-                    scope: scope,
-                    target: viewsObj,
-                    targetKey: "pipelines"
-                );
             } else if (subId is "graph" or "graphs") {
                 AppendNamedBlock(
                     block: subBlock,

@@ -46,7 +46,6 @@ struct CompositeParams {
     uint2 imageExtent;   // output image size in pixels
     uint2 tileGrid;      // tiles per viewport (row, column) — the cull buffer's per-viewport stride
     uint viewportCount;
-    uint childMask;      // bit v set => viewport v is backed by a CHILD node's surface, not an SDF camera
     uint screenMask;     // bit s set => screen source slot s is bound this frame (Stage 1 only; unused elsewhere)
     uint instanceMaskWordCount; // the LIVE uploaded program's derived per-tile mask width (SdfProgram.InstanceMaskWordCount), pushed per frame
     // The deterministic tick clock star twinkle reads; cloud motion is baked into the environment rows. Stage 1 only.
@@ -73,11 +72,6 @@ bool worldVisibilityCurrent(uint2 pixel) {
 }
 #endif
 
-// Whether viewport v is a hosted child surface (its source[] slot holds another node's output): the beam prepass
-// and Stage 1 skip such slots so the SDF render never overwrites the child's pixels.
-bool isChildViewport(uint viewportIndex) {
-    return (0u != (params.childMask & (1u << viewportIndex)));
-}
 uint worldInstanceMaskBase(uint tileIndex) {
     uint summaryWords = ((params.instanceMaskWordCount + 31u) >> 5u);
 
@@ -158,7 +152,7 @@ struct ScreenSurfaceData {
 // The screenSurfaces[] / sdfDecalCells[] / screenSourceN entry count — the width every screen index is bounded
 // against before it indexes one. KEEP IN SYNC with SdfProgramBuilder.MaxScreenSurfaces.
 static const uint SdfScreenSurfaceCount = 32u;
-// The screen source images (nearest-filtered, so emulator/child pixels stay crisp) — one per screen index (0..31),
+// The screen source images (nearest-filtered, so emulator pixels stay crisp) — one per screen index (0..31),
 // THIRTY-TWO separate combined-image-sampler bindings (12..43; DXC's vk::combinedImageSampler does not support an ARRAY
 // texture, only a scalar one, so a true single Vulkan combined-image-sampler array isn't expressible in this HLSL — see
 // the C# side for the derived binding indices). Each Texture2D+SamplerState pair shares one binding (fusing into ONE

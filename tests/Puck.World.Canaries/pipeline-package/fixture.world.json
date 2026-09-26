@@ -24,7 +24,7 @@
           {
             "camera": null,
             "height": 1,
-            "pipeline": "tint",
+            "instance": "tint",
             "width": 1,
             "x": 0,
             "y": 0
@@ -55,7 +55,7 @@
       ],
       "version": "puck.camera.program.v1"
     },
-    "pipelines": [
+    "graphs": [
       {
         "camera": null,
         "name": "tint",
