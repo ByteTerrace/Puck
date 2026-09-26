@@ -272,8 +272,54 @@ public sealed class SdfEngineNodeLeaseLawTests {
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
             frame;
     }
+
+    // An image another device writes is sampled only after that device's fence reaches the value its write signals:
+    // the wait rides the screen's lease into the frame submission that samples it, never into an earlier submission,
+    // and a lease retires only once that submission's frame-ring slot fence has passed.
+    [Fact]
+    public void AScreensExternalWaitLandsInTheSubmissionThatSamplesIt() {
+        using var fence = new SharedFence();
+        var released = 0;
+
+        using var rig = new Rig(screenSources: new Dictionary<int, Func<GpuImageLease>> {
+            [0] = () => new GpuImageLease(
+                ImageViewHandle: 0x51,
+                Release: _ => released++,
+                Wait: new GpuExternalWait(
+                    Fence: fence,
+                    Value: 7UL
+                )
+            ),
+        });
+
+        rig.ProduceFirst();
+
+        var (submission, fenced, wait) = Assert.Single(collection: rig.Gpu.CarriedWaits);
+
+        Assert.Equal(
+            actual: (submission, fenced, wait.Value, wait.Fence),
+            expected: (rig.Gpu.Submissions, true, 7UL, ((IGpuSharedFence)fence))
+        );
+        Assert.Equal(actual: released, expected: 0);
+
+        // Each later frame's lease carries its own wait into its own submission; a slot's lease retires only once the
+        // frame ring comes back to that slot.
+        for (var frame = 1; (frame <= SdfWorldEngine.FrameRingSize); frame++) {
+            rig.Produce(extent: Extent);
+            Assert.Equal(expected: (frame + 1), actual: rig.Gpu.CarriedWaits.Count);
+            Assert.Equal(expected: (rig.Gpu.Submissions, true), actual: (rig.Gpu.CarriedWaits[^1].Submission, rig.Gpu.CarriedWaits[^1].Fenced));
+        }
+
+        Assert.Equal(actual: released, expected: 1);
+    }
+
+    private sealed class SharedFence : IGpuSharedFence {
+        public ulong CompletedValue => 0UL;
+
+        public void Dispose() { }
+    }
     private sealed class Rig : IDisposable {
-        public Rig(bool trackObjects = false) {
+        public Rig(bool trackObjects = false, IReadOnlyDictionary<int, Func<GpuImageLease>>? screenSources = null) {
             var gpu = new FakeGpuDevice(
                 reportVersion: SdfIsa.Version,
                 trackObjects: trackObjects
@@ -314,6 +360,7 @@ public sealed class SdfEngineNodeLeaseLawTests {
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
                 pipelines: SdfTestPipelines.Cache(),
+                screenSources: screenSources,
                 width: Extent
             );
             Context = new FrameContext(

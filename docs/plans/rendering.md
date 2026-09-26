@@ -2821,7 +2821,7 @@ schema or planner change.
 graph. Today the screen binder resolves every screen's image into
 `SdfEngineNode`'s 32 screen slots through one lease callback per slot
 (`WorldScreenBinder.ScreenSources`, read through
-`SdfWorldRenderSpec.ScreenSourceFrames`), and the graph runtime never sees a
+`SdfWorldRenderSpec.ScreenSources`), and the graph runtime never sees a
 source. Four facts shape the order:
 
 - `sdf.world` is an external producer, and the runtime refuses an external
@@ -2923,14 +2923,17 @@ except step 8.
    2. The external wait rides the lease. `GpuImageLease` carries its
       `GpuExternalWait`, and the node that samples it adds the wait to the
       submission that samples it, never to whichever submission comes next.
+      The node's screen sources are leases only: `SetScreenSourceFrames` and
+      the handle-only `SdfWorldRenderSpec.ScreenSources` go, and the leased map
+      takes that name. Landed.
    3. Feeds are external producers and screens read source instances. Every
       `IWorldImageFeed` adapts to a source producer whose `TryAcquireOutput`
       is `WorldCaptureGate.Resolve`, and the machine and probe arms register
       producers of their reserved ids. `WorldSourceInstances` joins the live
       set, the world producer reads each shown source with a footprint, and
       `SdfEngineNode` maps the reads to its screen slots. `ScreenSourceCell`,
-      the binder's per-slot callbacks, `SetScreenSourceFrames` and
-      `SdfWorldRenderSpec.ScreenSources` and `ScreenSourceFrames` go.
+      the binder's per-slot callbacks and `SdfWorldRenderSpec.ScreenSources`
+      go.
    4. Live `screen.source` binds are source instances, so they publish
       mappings.
    5. The capture GPU route acquires its slot through `LatestSlotPublication`,
@@ -2982,9 +2985,10 @@ except step 8.
    11 producer), signals the next value on its immediate context after each
    write and flushes, and publishes the slot with that value
    (`LatestSlotPublication.Publish`, `INativeImageCaptureFeed.GpuSlotFenceValue`).
-   The consumer acquires the slot with its value and adds a `GpuExternalWait`
-   to the render device's queue submitter (`IGpuQueueSubmitter.AddExternalWait`),
-   whose next submission carries it: `ID3D12CommandQueue::Wait` before the
+   The consumer acquires the slot with its value, the lease carries a
+   `GpuExternalWait`, and the node that samples it adds the wait to the
+   submission that samples it (`IGpuQueueSubmitter.AddExternalWait` right
+   before that submit): `ID3D12CommandQueue::Wait` before the
    execute on Direct3D 12, and on Vulkan the fence imported as a timeline
    semaphore (`IGpuSurfaceTransferFactory.TryImportFence`, `VulkanSharedFence`,
    `VK_KHR_external_semaphore_win32` and the timeline-semaphore feature, both

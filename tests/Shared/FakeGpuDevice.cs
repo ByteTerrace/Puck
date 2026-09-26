@@ -136,6 +136,13 @@ internal sealed class FakeGpuDevice :
 
     /// <summary>Gets every external wait added, in the order the submitter took them.</summary>
     public List<GpuExternalWait> ExternalWaits { get; } = [];
+    /// <summary>Gets every external wait a submission carried, with the 1-based submission that carried it and whether
+    /// that submission was fenced: each submission with command buffers carries the waits added since the one before, as
+    /// a backend's submitter does.</summary>
+    public List<(int Submission, bool Fenced, GpuExternalWait Wait)> CarriedWaits { get; } = [];
+
+    // The waits added since the last submission with command buffers.
+    private readonly List<GpuExternalWait> m_pendingWaits = [];
 
     /// <summary>Gets the number of submissions made, fenced or not.</summary>
     public int Submissions { get; private set; }
@@ -376,21 +383,48 @@ internal sealed class FakeGpuDevice :
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) {
         Hit(key: "IGpuQueueSubmitter.Submit");
         Submissions++;
+        CarryWaits(
+            commandBuffers: commandBufferHandles.Length,
+            fenced: false
+        );
     }
+
+    // Moves the pending waits onto the submission just made, when it has command buffers.
+    private void CarryWaits(int commandBuffers, bool fenced) {
+        if (commandBuffers == 0) {
+            return;
+        }
+
+        foreach (var wait in m_pendingWaits) {
+            CarriedWaits.Add(item: (Submissions, fenced, wait));
+        }
+
+        m_pendingWaits.Clear();
+    }
+
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
         Hit(key: "IGpuQueueSubmitter.Submit(fence)");
         LastSubmittedFence = fence;
         // A backend accepts only its own fence type; a counting fence reaching here is a missed unwrap.
         ((Fence)fence).Arm();
         Submissions++;
+        CarryWaits(
+            commandBuffers: commandBufferHandles.Length,
+            fenced: true
+        );
     }
     void IGpuQueueSubmitter.AddExternalWait(GpuExternalWait wait) {
         Hit(key: "IGpuQueueSubmitter.AddExternalWait");
         ExternalWaits.Add(item: wait);
+        m_pendingWaits.Add(item: wait);
     }
     void IGpuQueueSubmitter.SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
         Hit(key: "IGpuQueueSubmitter.SubmitAndWait");
         Submissions++;
+        CarryWaits(
+            commandBuffers: commandBufferHandles.Length,
+            fenced: false
+        );
     }
     IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description, in GpuObjectName name) {
         Hit(key: "IGpuRenderPassFactory.Create");

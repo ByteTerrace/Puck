@@ -1674,18 +1674,17 @@ internal sealed partial class WorldScreenBinder {
 
             ++m_outstanding;
 
-            // The producer published the value its write signals; the submission that samples this lease waits for it
-            // on the GPU. Zero means the write finished before publication.
-            if (0UL != fenceValue) {
-                m_fence!.Wait(value: fenceValue);
-            }
-
             var handle = Handle(slot: slot);
 
+            // The producer published the value its write signals; the submission that samples this lease waits for it
+            // on the GPU. Zero means the write finished before publication.
             frame = new GpuImageLease(
                 ImageViewHandle: handle,
                 Release: m_release,
-                ReleaseToken: slot
+                ReleaseToken: slot,
+                Wait: ((0UL != fenceValue)
+                    ? m_fence!.WaitFor(value: fenceValue)
+                    : default)
             );
 
             return true;
@@ -1698,13 +1697,11 @@ internal sealed partial class WorldScreenBinder {
     private sealed class SharedRingFence : IDisposable {
         private readonly IGpuExportableFence? m_exported;
         private readonly IGpuSharedFence? m_imported;
-        private readonly IGpuQueueSubmitter m_submitter;
         private readonly IGpuSharedFence? m_waitable;
 
-        private SharedRingFence(IGpuExportableFence? exported, IGpuSharedFence? imported, IGpuSharedFence? waitable, IGpuQueueSubmitter submitter, string refusal) {
+        private SharedRingFence(IGpuExportableFence? exported, IGpuSharedFence? imported, IGpuSharedFence? waitable, string refusal) {
             m_exported = exported;
             m_imported = imported;
-            m_submitter = submitter;
             m_waitable = waitable;
             Refusal = refusal;
         }
@@ -1718,14 +1715,12 @@ internal sealed partial class WorldScreenBinder {
         [SupportedOSPlatform("windows10.0.10240")]
         public static SharedRingFence Create(DirectXGpuSurfaceExportFactory export, bool hostsOnDirectX, IGpuDeviceContext renderDevice) {
             var exported = export.CreateExportableFence();
-            var submitter = renderDevice.Services.QueueSubmitter;
 
             if (hostsOnDirectX) {
                 return new SharedRingFence(
                     exported: exported,
                     imported: null,
                     refusal: "",
-                    submitter: submitter,
                     waitable: exported
                 );
             }
@@ -1739,7 +1734,6 @@ internal sealed partial class WorldScreenBinder {
                     exported: exported,
                     imported: imported,
                     refusal: "",
-                    submitter: submitter,
                     waitable: imported
                 );
             }
@@ -1750,7 +1744,6 @@ internal sealed partial class WorldScreenBinder {
                 exported: null,
                 imported: null,
                 refusal: refusal,
-                submitter: submitter,
                 waitable: null
             );
         }
@@ -1758,9 +1751,9 @@ internal sealed partial class WorldScreenBinder {
             m_imported?.Dispose();
             m_exported?.Dispose();
         }
-        public void Wait(ulong value) => m_submitter.AddExternalWait(wait: new GpuExternalWait(
+        public GpuExternalWait WaitFor(ulong value) => new(
             Fence: m_waitable!,
             Value: value
-        ));
+        );
     }
 }

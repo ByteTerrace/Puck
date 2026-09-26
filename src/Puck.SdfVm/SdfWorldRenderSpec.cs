@@ -43,13 +43,9 @@ public sealed record SdfWorldRenderSpec(
     /// emits into the room (its framebuffer average), keyed by screen index.</summary>
     public IReadOnlyDictionary<int, Func<Vector3>>? ScreenLights { get; init; }
     /// <summary>Frame-scoped screen-source providers keyed by the program-declared screen index. The engine node
-    /// retires each returned acquisition only after the submission that sampled its view has completed. A provider in
-    /// this map replaces a same-index handle provider from <see cref="ScreenSources"/>.</summary>
-    public IReadOnlyDictionary<int, Func<GpuImageLease>>? ScreenSourceFrames { get; init; }
-    /// <summary>Screen-source handle providers keyed by the program-declared screen index (the diegetic-screen seam).
-    /// Use <see cref="ScreenSourceFrames"/> instead for an asynchronously updated source that needs submission-lifetime
-    /// protection.</summary>
-    public IReadOnlyDictionary<int, Func<nint>>? ScreenSources { get; init; }
+    /// retires each returned lease only after the submission that sampled its view has completed, and adds the wait the
+    /// lease carries to that submission.</summary>
+    public IReadOnlyDictionary<int, Func<GpuImageLease>>? ScreenSources { get; init; }
     // NOTE: screen-surface TRANSFORM providers are read straight off FrameSource.ScreenSurfaceTransforms (see
     // ISdfFrameSource) rather than threaded through their own spec field — a caller's own type coupling would
     // otherwise grow just to spell SdfScreenSurfaceTransform in its render-assembly call site.

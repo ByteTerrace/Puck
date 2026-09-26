@@ -49,8 +49,6 @@ public static class SdfWorldRenderBuilder {
             width: spec.Width
         );
 
-        producer.SetScreenSourceFrames(screenSourceFrames: spec.ScreenSourceFrames);
-
         return producer;
     }
     /// <summary>The kernel bytecode extension for a resolved host backend — the counterpart of the per-child

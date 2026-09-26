@@ -121,8 +121,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Green: false,
             Members: [
                 "SdfWorldEngine.SetScreenSource", "SdfWorldEngine.SetScreenSurface", "SdfWorldEngine.SetScreenLight",
-                "SdfWorldEngine.MaxScreenSurfaces", "SdfWorldRenderSpec.ScreenSources", "SdfWorldRenderSpec.ScreenSourceFrames",
-                "SdfWorldRenderSpec.ScreenLights",
+                "SdfWorldEngine.MaxScreenSurfaces", "SdfWorldRenderSpec.ScreenSources", "SdfWorldRenderSpec.ScreenLights",
             ]
         ),
         new(

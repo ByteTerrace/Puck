@@ -68,18 +68,21 @@ public sealed partial class SdfWorldEngine {
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The frame has zero views or more than the provisioned capacity.</exception>
     public void SubmitFrame(SdfFrame frame) => SubmitFrameCore(
+        addWaits: null,
         frame: frame,
         onFrameSlotAvailable: null
     );
 
-    // The live node's additive external-resource seam: keep the longstanding public SubmitFrame signature intact,
-    // while letting it retire/adopt leased screen sources in the exact frame-ring fence interval.
-    internal void SubmitFrameWithExternalResources(SdfFrame frame, Action<int> onFrameSlotAvailable) => SubmitFrameCore(
+    // The live node's leased screen sources: it retires and adopts them in the exact frame-ring fence interval
+    // (onFrameSlotAvailable), and adds the waits their images carry to the one submission that samples them (addWaits,
+    // called with the submitter immediately before it).
+    internal void SubmitFrameWithExternalResources(SdfFrame frame, Action<int> onFrameSlotAvailable, Action<IGpuQueueSubmitter> addWaits) => SubmitFrameCore(
+        addWaits: addWaits,
         frame: frame,
         onFrameSlotAvailable: onFrameSlotAvailable
     );
 
-    private void SubmitFrameCore(SdfFrame frame, Action<int>? onFrameSlotAvailable) {
+    private void SubmitFrameCore(SdfFrame frame, Action<int>? onFrameSlotAvailable, Action<IGpuQueueSubmitter>? addWaits) {
         // Publishes the newest frame whose fence has already signaled; the slot-fence wait in PrepareFrame completes
         // the frame FrameRingSize back regardless.
         m_work.Poll();
@@ -90,6 +93,7 @@ public sealed partial class SdfWorldEngine {
         );
 
         Record(viewportCount: viewportCount);
+        addWaits?.Invoke(obj: m_gpu.QueueSubmitter);
         m_gpu.QueueSubmitter.Submit(
             commandBufferHandles: [m_commandPools[m_currentSlot].CommandBufferHandle],
             fence: m_frameFences[m_currentSlot]

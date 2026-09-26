@@ -89,7 +89,7 @@ internal static class WorldRenderRoot {
                 // The diegetic screens' source + light providers — the test-pattern screen's CPU feed and its room glow;
                 // an unbound screen has no provider (the engine's procedural fallback lights it).
                 ScreenLights = binder.ScreenLights,
-                ScreenSourceFrames = binder.ScreenSources,
+                ScreenSources = binder.ScreenSources,
                 ViewportCapacity = WorldRootGraph.ViewsOf(views: definition.Views),
             }
         );

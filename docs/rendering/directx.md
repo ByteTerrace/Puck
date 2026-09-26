@@ -346,8 +346,9 @@ this device owns and orders its writes with a shared fence rather than a CPU wai
 mutex. `DirectXGpuSurfaceExportFactory.CreateExportableFence` creates a
 `D3D12_FENCE_FLAG_SHARED` fence and its NT handle (`DirectXExportableFence`); the producer opens
 the handle through `ID3D11Device5::OpenSharedFence` and signals the next value after each write.
-A consumer adds the value to the queue submitter with `IGpuQueueSubmitter.AddExternalWait` when
-it acquires the image, and `DirectXGpuQueueSubmitter` issues each wait as
+The value rides the image's lease (`GpuImageLease.Wait`), and the node that samples the image adds
+it to the queue submitter with `IGpuQueueSubmitter.AddExternalWait` immediately before the
+submission that samples it (`LeaseRetireList.AddWaits`). `DirectXGpuQueueSubmitter` issues each wait as
 `ID3D12CommandQueue::Wait` immediately before its next submission's `ExecuteCommandLists`, so
 that submission and every later one on the queue wait on the GPU. The wait goes through
 `DirectXCommandCalls.QueueWait`, so a removal it meets is a `DeviceLostException`. A fence

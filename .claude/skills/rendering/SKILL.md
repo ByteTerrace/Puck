@@ -242,13 +242,16 @@ These are one-line cautions; the owning pages hold the derivations.
   fence the consumer creates beside the targets: a Direct3D 11 producer signals
   it through `Win32D3D11CompletionSignal`, the one completion primitive every
   Direct3D 11 producer uses, and publishes each slot with the value, and the
-  code that acquires the slot adds a `GpuExternalWait` to the render device's
-  `IGpuQueueSubmitter.AddExternalWait`, which its next submission carries (a
-  Vulkan host imports the fence through `TryImportFence`). A published value
-  of zero means the write finished on the CPU (a device that cannot share the
-  fence, the probe kernel); never add a wait for it. A new path that samples a
-  shared slot adds its wait where it acquires, before the submission that
-  samples it is recorded.
+  code that acquires the slot puts a `GpuExternalWait` on the slot's lease
+  (`GpuImageLease.Wait`; a Vulkan host imports the fence through
+  `TryImportFence`). The node that samples the lease adds the wait to the one
+  submission that samples it (`LeaseRetireList.AddWaits`, right before the
+  submit: `ShaderPipelineRenderNode.SubmitCounted`, and the SDF engine's
+  frame submission through `SubmitFrameWithExternalResources`), never to
+  whichever submission the device makes next. A published value of zero means
+  the write finished on the CPU (a device that cannot share the fence, the
+  probe kernel); never add a wait for it. A new path that samples a shared
+  slot carries its wait on the lease, never through the submitter directly.
 - **Image sources.** An image from outside a pass is described once, by
   `ImageSourceDescriptor`, and a world names its producer by id
   (`WorldScreenSource.Producer`). A new producer registers a

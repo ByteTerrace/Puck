@@ -235,7 +235,6 @@ internal sealed partial class WorldScreenBinder {
         ));
         feed.GpuTargets = images;
         feed.GpuFence = fence;
-        feed.GpuSubmitter = deviceContext.Services.QueueSubmitter;
         feed.GpuAttachedSource = source;
 
         if (superseded is not null) {
@@ -463,7 +462,6 @@ internal sealed partial class WorldScreenBinder {
         // The shared fence the platform signals after each copy into GpuTargets, and the render device's submitter the
         // frame that samples a slot adds its wait to.
         public IGpuExportableFence? GpuFence { get; set; }
-        public IGpuQueueSubmitter? GpuSubmitter { get; set; }
         // The human label a fault reads under: a window title, or a whole-monitor index.
         public string Label => ((MonitorIndex is { } monitor)
             ? $"monitor {monitor}"
@@ -496,17 +494,15 @@ internal sealed partial class WorldScreenBinder {
             ) {
                 var fenceValue = source.GpuSlotFenceValue(slot: slot);
 
-                if (
-                    (0UL != fenceValue) &&
-                    (GpuFence is { } fence)
-                ) {
-                    GpuSubmitter!.AddExternalWait(wait: new GpuExternalWait(
-                        Fence: fence,
-                        Value: fenceValue
-                    ));
-                }
-
-                return targets[slot].ImageViewHandle;
+                return new GpuImageLease(
+                    ImageViewHandle: targets[slot].ImageViewHandle,
+                    Wait: (((0UL != fenceValue) && (GpuFence is { } fence))
+                        ? new GpuExternalWait(
+                            Fence: fence,
+                            Value: fenceValue
+                        )
+                        : default)
+                );
             }
 
             return Handle();

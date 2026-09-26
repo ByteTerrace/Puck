@@ -96,14 +96,18 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     private IReadOnlyList<SdfMeshDraw>? m_meshRegionDraws;
 
     private readonly Dictionary<int, Func<Vector3>> m_screenLights;
-
     // This frame's screen-source leases, moved into the frame-ring slot that samples them when the slot's fence has
     // retired the leases it held before.
-    private LeaseRetireList m_pendingScreenSourceFrames = new();
-    private LeaseRetireList[] m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: 0);
-    private Dictionary<int, Func<GpuImageLease>> m_screenSourceFrames = EmptyScreenSourceFrames;
+    private readonly LeaseRetireList m_pendingScreenSourceFrames;
 
-    private readonly Dictionary<int, Func<nint>> m_screenSources;
+    // The frame-ring slot this frame's screen-source leases were adopted into, and the two callbacks the engine's
+    // submission runs, converted once so a frame allocates no delegate.
+    private int m_adoptedScreenSourceSlot;
+
+    private readonly Action<IGpuQueueSubmitter> m_addScreenSourceWaits;
+    private readonly Action<int> m_retireAndAdoptScreenSourceFrames;
+    private readonly LeaseRetireList[] m_retainedScreenSourceFrames;
+    private readonly Dictionary<int, Func<GpuImageLease>> m_screenSourceFrames;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
     private readonly int m_viewportCapacity;
 
@@ -139,7 +143,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     // Concrete Dictionary<,> (not the read-only interface) so the per-frame foreach binds the struct enumerator
     // instead of boxing IEnumerator on the render thread every ProduceFrame; the ctor copies caller maps to match.
     private static readonly Dictionary<int, Func<GpuImageLease>> EmptyScreenSourceFrames = new();
-    private static readonly Dictionary<int, Func<nint>> EmptyScreenSources = new();
     private static readonly Dictionary<int, Func<Vector3>> EmptyScreenLights = new();
     private static readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> EmptyScreenSurfaceTransforms = new();
     private readonly NodeDescriptor m_descriptor = new(
@@ -270,7 +273,10 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         retained.RetireAll();
         m_pendingScreenSourceFrames.MoveTo(destination: retained);
+        m_adoptedScreenSourceSlot = frameSlot;
     }
+    // The leases the frame's submission samples are the slot's it adopted them into, so their waits ride that submission.
+    private void AddScreenSourceWaits(IGpuQueueSubmitter submitter) => m_retainedScreenSourceFrames[m_adoptedScreenSourceSlot].AddWaits(submitter: submitter);
     private void WriteDebugCapture(string path) {
         m_capturePng.ThrowIfUnavailable(path: path);
 
@@ -400,13 +406,6 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         // Screen sources: a provider returning 0 leaves the slot unbound this frame — the engine's material-shaded fallback applies.
         m_pendingScreenSourceFrames.RetireAll();
 
-        foreach (var (screenIndex, provider) in m_screenSources) {
-            m_engine!.SetScreenSource(
-                screenIndex: screenIndex,
-                imageViewHandle: provider()
-            );
-        }
-
         foreach (var (screenIndex, provider) in m_screenSourceFrames) {
             var source = provider();
 
@@ -494,8 +493,9 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             m_engine!.SubmitFrame(frame: frame);
         } else {
             m_engine!.SubmitFrameWithExternalResources(
+                addWaits: m_addScreenSourceWaits,
                 frame: frame,
-                onFrameSlotAvailable: RetireAndAdoptScreenSourceFrames
+                onFrameSlotAvailable: m_retireAndAdoptScreenSourceFrames
             );
         }
 
@@ -538,11 +538,11 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// <param name="width">The engine's extent width in pixels, the widest any view renders.</param>
     /// <param name="height">The engine's extent height in pixels, the tallest any view renders.</param>
     /// <param name="screenSources">An optional map from a program-declared <see cref="SdfScreenSurface.ScreenIndex"/>
-    /// to a provider of that screen's current same-device storage-image view (General layout, shader-readable),
-    /// called once per produced frame — a provider may close over any GPU image a host owns directly, e.g. an emulator's
-    /// native framebuffer image, unresampled (the screen seam samples the source itself, so no separate resample is
-    /// needed or wanted). A provider returning 0 leaves the slot unbound this frame, which falls back to the
-    /// flat/procedural screen material. See <see cref="SdfWorldEngine.SetScreenSource"/>.</param>
+    /// to a provider of that screen's image for the frame being produced, called once per produced frame: a lease on a
+    /// same-device, shader-readable image view, sampled unresampled. The node holds each lease until the fence of the
+    /// frame-ring slot whose submission sampled it, and adds the wait it carries (<see cref="GpuImageLease.Wait"/>) to
+    /// that submission. A lease of a zero handle leaves the slot unbound this frame, which falls back to the procedural
+    /// screen material. See <see cref="SdfWorldEngine.SetScreenSource"/>.</param>
     /// <param name="screenLights">An optional map, parallel to <paramref name="screenSources"/>, from a screen index to
     /// a provider of the colored light that screen emits into the room this frame (typically its framebuffer's average
     /// color). Polled right after <paramref name="screenSources"/>; see <see cref="SdfWorldEngine.SetScreenLight"/>.</param>
@@ -575,7 +575,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     /// carves (no pool is allocated).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfEngineNode(SdfWorldPipelineCache pipelines, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
+    public SdfEngineNode(SdfWorldPipelineCache pipelines, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, IReadOnlyDictionary<int, Func<GpuImageLease>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -599,10 +599,12 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         m_frameSource = frameSource;
         m_height = height;
         m_kernels = kernels;
-        m_screenSources = ((screenSources is null)
-            ? EmptyScreenSources
-            : new Dictionary<int, Func<nint>>(collection: screenSources)
+        m_screenSourceFrames = ((screenSources is null)
+            ? EmptyScreenSourceFrames
+            : new Dictionary<int, Func<GpuImageLease>>(collection: screenSources)
         );
+        m_pendingScreenSourceFrames = new LeaseRetireList(capacity: m_screenSourceFrames.Count);
+        m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: m_screenSourceFrames.Count);
         m_screenLights = ((screenLights is null)
             ? EmptyScreenLights
             : new Dictionary<int, Func<Vector3>>(collection: screenLights)
@@ -614,21 +616,8 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         m_pipelines = new SdfWorldPipelineSource(cache: pipelines);
         m_width = width;
         m_writeDebugCapture = WriteDebugCapture;
-    }
-
-    // Builder-only additive seam: keeps the longstanding public constructor's Func<nint> screenSources parameter
-    // source-compatible while a render spec can opt particular indices into fence-retired frame acquisitions.
-    internal void SetScreenSourceFrames(IReadOnlyDictionary<int, Func<GpuImageLease>>? screenSourceFrames) {
-        if (m_engine is not null) {
-            throw new InvalidOperationException(message: "screen-source frame providers must be configured before the first produced frame");
-        }
-
-        m_screenSourceFrames = ((screenSourceFrames is null)
-            ? EmptyScreenSourceFrames
-            : new Dictionary<int, Func<GpuImageLease>>(collection: screenSourceFrames)
-        );
-        m_pendingScreenSourceFrames = new LeaseRetireList(capacity: m_screenSourceFrames.Count);
-        m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: m_screenSourceFrames.Count);
+        m_addScreenSourceWaits = AddScreenSourceWaits;
+        m_retireAndAdoptScreenSourceFrames = RetireAndAdoptScreenSourceFrames;
     }
 
     /// <summary>Gets or sets the SDF debug view mode applied to the next submitted frame.</summary>
