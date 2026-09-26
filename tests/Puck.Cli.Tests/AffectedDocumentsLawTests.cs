@@ -87,7 +87,7 @@ public sealed class AffectedDocumentsLawTests {
 
         var kernels = AffectedStandIns.Kernels(
             projects: AffectedCommand.Projects(model: ArchitectureModel.Load(repositoryRoot: repositoryRoot), repositoryRoot: repositoryRoot),
-            repositoryRoot: repositoryRoot
+            tree: new AffectedWorkingTree(root: repositoryRoot)
         );
 
         Assert.Contains(collection: kernels, filter: static kernel => (kernel.Path == "src/Puck.Platform.Windows/Assets/Shaders/camera-conversion.hlsl"));
