@@ -10,12 +10,19 @@ namespace Puck.World;
 /// The render-side implementation of <see cref="IHudBindingResolver"/> for the closed <see cref="HudBindingVocabulary"/>:
 /// resolves each frame's live value for <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>,
 /// <c>population.active</c>, and <c>state.&lt;row&gt;[.&lt;key&gt;][.$target]</c>. Each token is parsed once, on first
-/// sight; a state token reads the slot the document's presentation manifest registered with the client's
-/// <see cref="WorldStateMirror"/>, found afresh each frame, so it never reads a slot a document swap retired. Presentation-only:
+/// sight. A state token on a world-scope panel reads the client's own <see cref="WorldStateMirror"/>; one on a seat's
+/// player-scope panel reads the mirror of the world that seat is routed to (<see cref="WorldSeatBindings.GetRoutedState"/>),
+/// where the seat registered its panel's reads, so a crossed seat's panel shows the world it is in. Either slot is found
+/// afresh each frame, so it never reads a slot a document swap retired. Presentation-only:
 /// every normalization here is cosmetic (which fraction of a gauge fills), never simulation state, and is free to
 /// change without a determinism concern.
 /// </summary>
-internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPopulation population, WorldContinuum continuum) : IHudBindingResolver {
+/// <param name="client">The client whose mirror world-scope panels read, and whose tick <c>world.tick</c> presents.</param>
+/// <param name="frameRate">The frame-rate monitor <c>world.fps</c> presents.</param>
+/// <param name="population">The population <c>population.active</c> counts.</param>
+/// <param name="continuum">The continuum a seat position resolves through.</param>
+/// <param name="seatBindings">The seat bindings, whose routed mirror a seat's panel reads.</param>
+public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPopulation population, WorldContinuum continuum, WorldSeatBindings seatBindings) : IHudBindingResolver {
     // A generous FPS ceiling a gauge fraction normalizes against (240 covers every target hertz World boots at).
     private const float FpsNormalizerCeiling = 240f;
     // A generous symmetric world-extent a seat-position gauge fraction normalizes against — cosmetic only; a body
@@ -30,6 +37,7 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
     private readonly FrameRateMonitor m_frameRate = frameRate;
     private readonly WorldPopulation m_population = population;
     private readonly WorldContinuum m_continuum = continuum;
+    private readonly WorldSeatBindings m_seatBindings = seatBindings;
     // Every token seen so far, parsed once; an unknown token is remembered as unresolvable.
     private readonly Dictionary<string, (bool Known, HudBinding Binding)> m_tokens = new(comparer: StringComparer.Ordinal);
 
@@ -98,11 +106,10 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
     // render path stays honest too), a keyed row bound with the plain state.<row> form, or a row carrying no declared
     // range draws an empty gauge (fraction 0), the same "an unbound gauge draws empty" precedent every other gauge
     // follows; a bool/text row carries no range at all, so its gauge fraction is always 0.
-    private void ResolveState(int slot, out float fraction, out string text) {
+    private static void ResolveState(WorldStateMirror mirror, int slot, out float fraction, out string text) {
         fraction = 0f;
         text = string.Empty;
 
-        var mirror = m_client.StateMirror;
         var sample = mirror.Sample(slot: slot);
         var value = sample.Value;
 
@@ -191,6 +198,21 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
         fraction = (((float)(tick % TickCycleLength)) / TickCycleLength);
         text = tick.ToString(provider: CultureInfo.InvariantCulture);
     }
+    // The mirror a panel's state tokens read: the client's for a world-scope panel, and for a seat's panel the mirror of
+    // the world the seat is routed to, or none before it is first routed.
+    private WorldStateMirror? MirrorFor(int seat) {
+        if (seat < 0) {
+            return m_client.StateMirror;
+        }
+
+        m_seatBindings.GetRoutedState(
+            definition: out _,
+            slot: seat,
+            state: out var routed
+        );
+
+        return routed;
+    }
     private (bool Known, HudBinding Binding) Token(string binding) {
         if (m_tokens.TryGetValue(
             key: binding,
@@ -211,7 +233,7 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
     }
 
     /// <inheritdoc/>
-    public bool TryResolve(string binding, out float fraction, out string text) {
+    public bool TryResolve(string binding, int seat, out float fraction, out string text) {
         fraction = 0f;
         text = string.Empty;
 
@@ -255,7 +277,11 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
 
                 return true;
             case HudBindingKind.StateNamed:
-                var slot = m_client.StateMirror.SlotOf(
+                if (MirrorFor(seat: seat) is not { } mirror) {
+                    return false;
+                }
+
+                var slot = mirror.SlotOf(
                     conversion: WorldStateConversion.Number,
                     token: binding
                 );
@@ -266,6 +292,7 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
 
                 ResolveState(
                     fraction: out fraction,
+                    mirror: mirror,
                     slot: slot,
                     text: out text
                 );

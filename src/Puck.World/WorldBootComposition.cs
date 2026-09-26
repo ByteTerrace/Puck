@@ -615,7 +615,8 @@ public static class WorldBootComposition {
             client: sp.GetRequiredService<WorldClient>(),
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
             population: sp.GetRequiredService<WorldPopulation>(),
-            continuum: sp.GetRequiredService<WorldContinuum>()
+            continuum: sp.GetRequiredService<WorldContinuum>(),
+            seatBindings: sp.GetRequiredService<WorldSeatBindings>()
         ));
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldHudCommandModule(
             server: sp.GetRequiredService<WorldServer>(),
