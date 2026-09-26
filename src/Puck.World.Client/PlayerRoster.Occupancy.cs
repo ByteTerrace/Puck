@@ -39,10 +39,8 @@ public sealed partial class PlayerRoster {
         // an ordinary human must report its own Principal.Seat from PrincipalOf, never the departed claimant's.
         m_slotPrincipal[slot] = null;
         // The departed claimant's remembered target, cached handle, locked subject, and alarm ALL die with the claim —
-        // see each field's own remarks. The subject was originally left out of this block (only TryClaimSlot cleared
-        // it), which was unobservable solely because every re-claim happened to route through TryClaimSlot; a future
-        // path re-seating a vacated slot any other way would have inherited the departed claimant's locked-in subject
-        // and had the belt "confirm" the new claimant's handle against the old claimant's body.
+        // see each field's own remarks. Clearing the subject here, not only in TryClaimSlot, keeps any path that re-seats
+        // a vacated slot from confirming the new claimant's handle against the departed claimant's body.
         m_slotDrivenBody[slot] = null;
         m_slotDriveHandle[slot] = null;
         m_slotDriveSubject[slot] = null;

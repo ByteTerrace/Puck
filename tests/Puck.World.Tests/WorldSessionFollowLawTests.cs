@@ -12,7 +12,7 @@ namespace Puck.World.Tests;
 /// <summary>
 /// THE LAW: a followed session reads through the one mirror path the local presentation reads. A snapshot's field
 /// cells reach the followed state mirror's field rows, as <see cref="WorldClient.DeliverSnapshot"/>'s reach the local
-/// mirror's, so a followed field row no longer reads zeros. A state-cell write that moves a bound color the session's
+/// mirror's, so a followed field row reads the session's cells. A state-cell write that moves a bound color the session's
 /// static build baked moves the session scene emitter's revision, so the view rebuilds, as the local scene emitter's
 /// baked-color component does.
 /// </summary>
