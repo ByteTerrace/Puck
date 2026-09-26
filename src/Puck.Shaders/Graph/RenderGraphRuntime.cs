@@ -88,6 +88,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private readonly bool m_hostsOnDirectX;
     private readonly uint m_inFlightFrames;
     private readonly RenderGraphPackageRecorders m_packages;
+    private readonly GpuPassPipelineCache m_pipelines;
 
     private Output[] m_current;
     // Each instance's graph, or null for an external instance and for a graph instance whose graph is not installed yet.
@@ -111,13 +112,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private int m_turn;
     private int m_unproduced;
 
-    private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, bool hostsOnDirectX, uint inFlightFrames) {
+    private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames) {
         m_current = new Output[nodes.Length];
         m_device = device;
         m_graphs = graphs;
         m_hostsOnDirectX = hostsOnDirectX;
         m_inFlightFrames = inFlightFrames;
         m_packages = packages;
+        m_pipelines = pipelines;
         m_history = RenderGraphHistory.Empty(set: set);
         m_inputs = inputs;
         m_nodes = nodes;
@@ -350,6 +352,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// renders nothing until <see cref="TryInstall"/> gives it one; its consumers bind a stand-in meanwhile.</param>
     /// <param name="root">The name of the instance the display shows and captures read, which renders a graph.</param>
     /// <param name="packages">The recorders the graphs' package passes run through, and the external producers.</param>
+    /// <param name="pipelines">The pass pipelines every instance's node leases its pipelines from.</param>
     /// <param name="deviceContext">The device every instance records on.</param>
     /// <param name="hostsOnDirectX">Whether the device is Direct3D 12.</param>
     /// <param name="runtime">The runtime, when this returns <see langword="true"/>. The caller owns it.</param>
@@ -359,16 +362,17 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// previous-frame reads live in its previous frame slot.</param>
     /// <returns><see langword="true"/> when the graphs installed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="set"/>, <paramref name="graphs"/>,
-    /// <paramref name="root"/>, <paramref name="packages"/> or <paramref name="deviceContext"/> is
-    /// <see langword="null"/>.</exception>
+    /// <paramref name="root"/>, <paramref name="packages"/>, <paramref name="pipelines"/> or
+    /// <paramref name="deviceContext"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlightFrames"/> is less than two.</exception>
     /// <exception cref="InvalidDataException">A graph cannot be installed on a node: its shader compilation failed, or
     /// its plan is not one a node runs.</exception>
-    public static bool TryCreate(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, string root, RenderGraphPackageRecorders packages, IGpuDeviceContext deviceContext, bool hostsOnDirectX, [NotNullWhen(returnValue: true)] out RenderGraphRuntime? runtime, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal, uint inFlightFrames = DefaultInFlightFrames) {
+    public static bool TryCreate(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, string root, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, [NotNullWhen(returnValue: true)] out RenderGraphRuntime? runtime, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal, uint inFlightFrames = DefaultInFlightFrames) {
         ArgumentNullException.ThrowIfNull(argument: set);
         ArgumentNullException.ThrowIfNull(argument: graphs);
         ArgumentNullException.ThrowIfNull(argument: root);
         ArgumentNullException.ThrowIfNull(argument: packages);
+        ArgumentNullException.ThrowIfNull(argument: pipelines);
         ArgumentNullException.ThrowIfNull(argument: deviceContext);
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 2U,
@@ -430,7 +434,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                         hostsOnDirectX: hostsOnDirectX,
                         inFlightFrames: inFlightFrames,
                         instance: instance,
-                        packages: packages
+                        packages: packages,
+                        pipelines: pipelines
                     );
                     installed[index] = sources[index]!.Graph;
                 } else {
@@ -472,7 +477,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     hostsOnDirectX: hostsOnDirectX,
                     inFlightFrames: inFlightFrames,
                     name: set.Instances[index].Name,
-                    packages: packages
+                    packages: packages,
+                    pipelines: pipelines
                 );
 
                 if (graphs[index] is { } graph) {
@@ -490,6 +496,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 inputs: inputs,
                 nodes: nodes,
                 packages: packages,
+                pipelines: pipelines,
                 producers: producers,
                 root: rootIndex,
                 set: set,
@@ -588,7 +595,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     ));
     // The extent is a placeholder: the instance's first render requests its scheduled extent before the node builds
     // anything.
-    private static ShaderPipelineRenderNode CreateNode(string name, RenderGraphPackageRecorders packages, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames) => new(
+    private static ShaderPipelineRenderNode CreateNode(string name, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames) => new(
         deviceContext: deviceContext,
         height: 1,
         hostsOnDirectX: hostsOnDirectX,
@@ -596,6 +603,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         name: name,
         outputLayout: GpuImageLayout.ShaderReadOnly,
         packages: packages,
+        pipelines: pipelines,
         width: 1
     );
     // What an instance publishes to its consumers: its graph's default output as its node presents it, or its external

@@ -36,8 +36,13 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         Outputs: outputs,
         Source: $"{name}.hlsl"
     );
-    private static CompiledShader Shader(string name, ShaderPipelineDocumentPassKind kind) {
-        ReadOnlyMemory<byte> bytecode = new byte[] { 0x03, 0x02, 0x23, 0x07 };
+    // Every stage's stand-in bytecode is the SPIR-V magic word; a nonzero revision appends a second word, so a candidate
+    // built with it is different bytecode, whose pass pipelines are new pass-pipeline cache entries rather than the ones
+    // an installed graph of revision zero already leases.
+    private static CompiledShader Shader(string name, ShaderPipelineDocumentPassKind kind, byte revision = 0) {
+        ReadOnlyMemory<byte> bytecode = ((revision == 0)
+            ? new byte[] { 0x03, 0x02, 0x23, 0x07 }
+            : new byte[] { 0x03, 0x02, 0x23, 0x07, revision, 0x00, 0x00, 0x00 });
         var stages = ((kind == ShaderPipelineDocumentPassKind.Compute)
             ? new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Compute] = bytecode }
             : new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Vertex] = bytecode, [ShaderStage.Fragment] = bytecode });
@@ -54,8 +59,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     /// <summary>The feedback graph; <paramref name="historyFormat"/> distinguishes a replacement whose history cannot
     /// be carried over, so every resource of the graph it replaces must retire. <paramref name="historyDimensions"/>
     /// replaces the history's fixed 32x32 extent, for a history whose extent follows the frame or differs.
-    /// <paramref name="convertConfig"/> gives the convert pass a config, for a law that sets it live.</summary>
-    private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null, IReadOnlyDictionary<string, ShaderConfigField>? convertConfig = null) {
+    /// <paramref name="convertConfig"/> gives the convert pass a config, for a law that sets it live.
+    /// <paramref name="revision"/> changes every pass's bytecode, for a candidate whose pass pipelines the pass-pipeline
+    /// cache must create rather than share with the graph it replaces.</summary>
+    private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null, IReadOnlyDictionary<string, ShaderConfigField>? convertConfig = null, byte revision = 0) {
         var definition = new RenderGraphDefinition(
             name: "feedback",
             outputs: ["image"],
@@ -114,9 +121,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         return new CompiledShaderPipeline(
             plan: plan,
             shaders: plan.Passes.ToDictionary(
-                elementSelector: static pass => Shader(
+                elementSelector: pass => Shader(
                     kind: pass.Declaration!.Kind,
-                    name: pass.Name
+                    name: pass.Name,
+                    revision: revision
                 ),
                 keySelector: static pass => pass.Name
             )
@@ -172,7 +180,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             )
         );
     }
-    private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu) => new(
+    // A node over its own pass-pipeline cache, or over one a law shares between nodes.
+    private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, GpuPassPipelineCache? pipelines = null) => new(
+        pipelines: (pipelines ?? new GpuPassPipelineCache()),
         deviceContext: gpu,
         height: Extent,
         hostsOnDirectX: false,
@@ -188,8 +198,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     }
     // A node with the feedback graph installed and every frame slot warm; with floatOutput, it publishes the float
     // history through the float preview, selected once the graph has installed.
-    private static ShaderPipelineRenderNode InstalledNode(FakePipelineGpu gpu, bool floatOutput = false, CompiledShaderPipeline? pipeline = null) {
-        var node = Node(gpu: gpu);
+    private static ShaderPipelineRenderNode InstalledNode(FakePipelineGpu gpu, bool floatOutput = false, CompiledShaderPipeline? pipeline = null, GpuPassPipelineCache? pipelines = null) {
+        var node = Node(
+            gpu: gpu,
+            pipelines: pipelines
+        );
 
         node.Swap(pipeline: (pipeline ?? Feedback()));
         _ = node.ProduceUntilInstalled();
@@ -212,7 +225,8 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
 
         return Produce(node: node);
     }
-    // How many objects a successful replacement of the warm graph creates, measured on a separate node.
+    // How many objects a successful replacement of the warm graph with changed shaders creates, measured on a separate
+    // node.
     private static int ReplacementCreationCount() {
         var gpu = new FakePipelineGpu();
         using var node = InstalledNode(gpu: gpu);
@@ -221,7 +235,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         _ = SwapAndProduce(
             gpu: gpu,
             node: node,
-            pipeline: Feedback(historyFormat: "R32G32B32A32Float")
+            pipeline: Feedback(
+                historyFormat: "R32G32B32A32Float",
+                revision: 1
+            )
         );
         Assert.Null(@object: node.LastSwapError);
 
@@ -236,7 +253,8 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         // a pipeline, and per slot a sampler and command pool; for the fullscreen pass two modules, a render pass and a
         // graphics pipeline, and per slot a framebuffer, a sampler, the barrier command pool and the draw command pool;
         // per slot a constant buffer for the frame group's block and one for each of the three passes' pass blocks; and the
-        // graph's one descriptor pool.
+        // graph's one descriptor pool. The candidate's shaders differ from the installed graph's, so the pass-pipeline
+        // cache creates its modules, render pass and pipelines as new entries, each a creation the fault can land on.
         Assert.Equal(
             actual: candidateCreations,
             expected: (((((3 * ((int)InFlight)) + (2 * (2 + (2 * ((int)InFlight))))) + (4 + (4 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1)
@@ -255,7 +273,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             var afterRefusal = SwapAndProduce(
                 gpu: gpu,
                 node: node,
-                pipeline: Feedback(historyFormat: "R32G32B32A32Float")
+                pipeline: Feedback(
+                    historyFormat: "R32G32B32A32Float",
+                    revision: 1
+                )
             );
 
             // Refused: the injected failure is the reason, and the installed graph is still the one that runs.
@@ -464,9 +485,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             collection: installed
         );
 
-        // Once the queue finishes, the next frame retires every object of the replaced graph exactly once. What the node
-        // keeps belongs to its frame slots, not to a graph: one fence and one output-finalizing command pool per slot,
-        // each still in use by the replacement.
+        // Once the queue finishes, the next frame retires every object of the replaced graph exactly once. What stays was
+        // never the replaced graph's alone: one fence and one output-finalizing command pool per slot, which belong to the
+        // node's frame slots and are still in use by the replacement; and the feedback graph's pass pipelines, which the
+        // replacement, whose shaders are the same, leased from the same pass-pipeline cache entries, so the replaced
+        // graph's retirement released its leases and disposed none of them.
         gpu.QueueHeld = false;
 
         var kept = installed.Where(predicate: static created => (created.Kind is "fence")).ToArray();
@@ -485,8 +508,12 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             collection: installed
         );
         Assert.Equal(
-            expected: [.. Enumerable.Repeat(count: ((int)InFlight), element: "fence"), .. Enumerable.Repeat(count: ((int)InFlight), element: "command pool")],
-            actual: installed.Where(predicate: static created => (created.DisposeCount == 0)).Select(selector: static created => created.Kind).OrderByDescending(keySelector: static kind => kind)
+            expected: ((string[])[.. Enumerable.Repeat(count: ((int)InFlight), element: "fence"), .. Enumerable.Repeat(count: ((int)InFlight), element: "command pool"), .. FeedbackPassPipelineKinds]).Order(comparer: StringComparer.Ordinal),
+            actual: installed.Where(predicate: static created => (created.DisposeCount == 0)).Select(selector: static created => created.Kind).Order(comparer: StringComparer.Ordinal)
+        );
+        Assert.DoesNotContain(
+            collection: gpu.CreatedObjects.Skip(count: installed.Length),
+            filter: IsPassPipelineObject
         );
         Assert.All(
             action: pair => Assert.True(condition: (pair.Created.UseCount > pair.Before)),
@@ -514,7 +541,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var installed = gpu.CreatedObjects.ToArray();
         var remaining = new List<nint[]>();
 
-        void Remaining() => remaining.Add(item: [.. installed.Where(predicate: static created => ((created.DisposeCount == 0) && (created.Kind is not ("fence" or "command pool")))).Select(selector: static created => created.Handle)]);
+        // The frame slots' fences and command pools are the node's, and the pass pipelines are shared with the replacement,
+        // whose shaders are the same: neither is the replaced graph's to retire.
+        void Remaining() => remaining.Add(item: [.. installed.Where(predicate: static created => ((created.DisposeCount == 0) && (created.Kind is not ("fence" or "command pool")) && !IsPassPipelineObject(created: created))).Select(selector: static created => created.Handle)]);
 
         // The fake queue finishes each submission as it is made, so at the install the node's latest submission has
         // completed and the replaced graph retires at once, except the images behind the two surfaces it published last.
@@ -543,6 +572,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         Assert.Equal(
             actual: remaining[3],
             expected: [last.ImageHandle]
+        );
+        // The replacement still draws with every pass pipeline the replaced graph was installed with.
+        Assert.Equal(
+            actual: installed.Where(predicate: IsPassPipelineObject).Select(selector: static created => (created.Kind, created.DisposeCount)).Order(),
+            expected: FeedbackPassPipelineKinds.Select(selector: static kind => (kind, 0)).Order()
         );
     }
 }

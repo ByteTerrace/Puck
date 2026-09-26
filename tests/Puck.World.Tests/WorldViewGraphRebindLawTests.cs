@@ -50,6 +50,7 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
         };
         m_instances = FakeGraphInstances.Attach(
             create: static name => new ShaderPipelineRenderNode(
+                pipelines: new GpuPassPipelineCache(),
                 deviceContext: new RefusingGpuDevice(),
                 height: 4,
                 hostsOnDirectX: false,

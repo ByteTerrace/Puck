@@ -23,8 +23,8 @@ public sealed partial class ShaderPipelineRenderNode {
     // The device's region-copy pipeline, leased by the build of the first graph whose package stages a region, or by the
     // first host buffer port that stages, and each slot's command pool the frame's copies are recorded in; all held until a
     // device loss or disposal.
-    private GpuRegionCopyPipelineLease? m_regionCopy;
-    private GpuRegionCopyPipeline? m_copyPipeline;
+    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_regionCopy;
+    private IGpuComputePipeline? m_copyPipeline;
     private IGpuCommandPool[]? m_copyPools;
 
     /// <summary>Creates the region the host writes for a named external buffer, a host buffer port, and binds it. The
@@ -82,7 +82,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     instance: m_descriptor.Name,
                     packages: m_packages
                 ).Acquire(device: m_device);
-                m_copyPipeline = m_regionCopy.Poll();
+                m_copyPipeline = m_regionCopy.Poll()?.Compute;
 
                 if (m_copyPipeline is null) {
                     return null;
@@ -127,7 +127,7 @@ public sealed partial class ShaderPipelineRenderNode {
             readersInFlight: true
         ) == GpuResidencyPolicy.Staged);
     // The host's region-copy pipelines, which a staged region needs.
-    private static GpuRegionCopyPipelineCache RegionCopyOf(IGpuDeviceContext device, string instance, RenderGraphPackageRecorders packages) =>
+    private static GpuRegionCopyPass RegionCopyOf(IGpuDeviceContext device, string instance, RenderGraphPackageRecorders packages) =>
         (packages.RegionCopy ?? throw new InvalidOperationException(message: $"Instance '{instance}' stages a region on this device ({device.MemoryProfile}), but its host offers no region-copy pipeline."));
     // Takes the finished build's lease on the region-copy pipeline once its graph has installed: the node's own when it
     // holds none, and otherwise released, since both share the one pipeline the device's cache keeps.

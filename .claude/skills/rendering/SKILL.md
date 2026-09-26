@@ -299,12 +299,30 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Buffer hazards are declared, not barriered.** A dispatch's device-local buffer
   uses live in `SdfFrameBufferPlan`; see
   [references/kernels.md](references/kernels.md#buffer-hazards).
-- **Pipelines are never created on the frame thread.** `SdfWorldEngine`'s
+- **Pipelines are never created on the frame thread, and every shared GPU build
+  is a `GpuBuildCache`.** `Puck.Hosting.GpuBuildCache<TKey, T>` is the one
+  mechanism: entries keyed by device (by reference) and a key's own equality,
+  a `GpuBuildLease` per holder, the entry built on the thread pool
+  (`BackgroundBuild`) by the first lease and joined by the rest (`Poll` on the
+  frame thread, `Wait` from a holder's own pool build), counted into the
+  cache's own `gpu.*` ledger, and disposed by the last release, which cancels a
+  build still running and waits only for the creation in the driver. Every
+  holder releases on device loss. Never write a second leased cache; make a
+  new shared build an instance or an entry of one. The pass pipelines are
+  `GpuPassPipelineCache` (`gpu.pass-pipelines`, keyed by `GpuPassPipelineKey`:
+  bytecode, the whole description with its name, and a graphics pass's render
+  pass): every pipeline a `ShaderPipelineRenderNode` installs, its float
+  preview's, each package pass's (the source conversions included) through
+  `RenderGraphPackageRecorderContext.Pipelines`, and each device's region copy
+  (`GpuRegionCopyPass`). A runtime pass releases its lease last, when its graph
+  retires, so an entry outlives every submission that recorded with it; a node's
+  own ledger counts no pipeline or shader module. `SdfWorldEngine`'s
   constructor takes a built `SdfWorldPipelines` and creates none. Nodes and
   views lease that set from the `SdfWorldPipelineCache` the composition hands
-  each of them, its one cache: one set per device, `SdfWorldKernels.ContentKey`
-  and brick-pipeline choice, built on the thread pool
-  (`Puck.Hosting.BackgroundBuild`) by the first lease and shared by the rest.
+  each of them, its one cache (a `GpuBuildCache` keyed by
+  `SdfWorldPipelineKey`: `SdfWorldKernels.ContentKey` and brick-pipeline
+  choice, whose `Progress` a holder reads), one set per device, built on the
+  thread pool by the first lease and shared by the rest.
   A build creates up to `SdfWorldPipelines.BuildConcurrency` pipelines at once
   on the pool, in `PipelineLayouts.BuildOrder` (the views variants last), and
   checks its token between pipelines, never inside a driver call; its counts do
@@ -360,9 +378,9 @@ These are one-line cautions; the owning pages hold the derivations.
   for exactly the `BuildConcurrency` creations in the driver, counted through
   the factory; `SdfWorldPipelinesLawTests` pins the concurrency bound, the
   build order, a cancel mid-build and two failures in the driver at once, both
-  named, the same way. `ShaderPipelineRenderNode` builds each candidate's
-  modules, pipelines and the render passes they are created for through
-  the same `BackgroundBuild`, started by the next produced frame (never by
+  named, the same way. `ShaderPipelineRenderNode` leases each candidate's
+  pipelines, with their modules and the render passes they are created for,
+  from the pass-pipeline cache inside the same `BackgroundBuild`, started by the next produced frame (never by
   `Swap`, `Resize` or `SelectOutput`, so the presenter's swap-then-resize builds
   once), allocates the candidate's resources on the frame thread when the build
   is taken, and presents the installed graph meanwhile; its install drains
@@ -533,8 +551,9 @@ These are one-line cautions; the owning pages hold the derivations.
   (`src/Puck.Abstractions/Gpu/Residency`) writes a region under any policy, or
   stages into an external destination its owner keeps; its staged copy is
   `Puck.Shaders`' `region-copy.comp`, created from `GpuRegion.CopyPipeline` once
-  per device by `GpuRegionCopyPipelineCache` (built on the pool, leased by every
-  owner, counted under `gpu.region-copy`) and never by an owner, and its ranges
+  per device as an entry of the pass-pipeline cache (`GpuRegionCopyPass`, built
+  on the pool, leased by every owner, counted under `gpu.pass-pipelines`) and
+  never by an owner, and its ranges
   are `GpuUploadRuns`. The copy takes no push constants: the staging buffer
   leads with a header and a run table. The SDF engine records every region copy
   with that pipeline (its holder leases it beside the set, and the engine takes
@@ -543,7 +562,7 @@ These are one-line cautions; the owning pages hold the derivations.
   (`IRenderGraphPackageFactory.Regions`, the overlay's buffer) and a host buffer
   port takes one from `BindRegion` (an uploaded source's); the node creates each
   under `GpuResidency.Select` with a reader in flight, takes the copy pipeline in
-  the candidate's build (`GpuRegionCopyPipelineLease.Take`), states and admits a
+  the candidate's build (`GpuBuildLease.Wait` on its `GpuRegionCopyPass` entry), states and admits a
   reserved copy pool per staged package pass in `DescriptorPools`
   (`regionCopies`), and records every owed copy in one command buffer ahead of the
   frame's passes, behind a memory barrier and followed by a buffer barrier per
@@ -561,7 +580,7 @@ These are one-line cautions; the owning pages hold the derivations.
   table, the ring memory, the staged header and runs, a copy past one dispatch
   row, the external destination and byte-identical region
   contents over `UploadModelGpu` (`tests/Shared`),
-  `GpuRegionCopyPipelineCacheLawTests` one pipeline per device shared by its
+  `GpuRegionCopyPassLawTests` one pipeline per device shared by its
   owners, and `pipeline.inspect` echoes the profile and the policy.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
@@ -603,7 +622,9 @@ These are one-line cautions; the owning pages hold the derivations.
   an owner reserves in one `GpuRegionCopyPool` take each region's name the same
   way, and the pool bare under a part of the owner's, `sdf.world/region-copies`),
   `<instance>/<pass or resource>[slot]` for a shader pipeline or graph package,
-  `overlay/pass`, `render-graph/stand-in`, `gpu.region-copy/<pipeline>`.
+  `overlay/pass`, `render-graph/stand-in`, and
+  `gpu.pass-pipelines/<name>/<content key>` for every pass pipeline, named from
+  its key whichever holder built it.
   `GpuObjectName.ToString` is the one place a name becomes text; a site never
   formats one, and a name holds no handle, counter or clock, so it is the same
   on every run. `GpuDeviceServices.Naming` (`GpuObjectNaming`) applies it:
@@ -652,8 +673,9 @@ These are one-line cautions; the owning pages hold the derivations.
   is an instance the command tables take through their constructors; its `Work`
   (`procedures.vulkan`) counts every device- and instance-level resolution made
   through it. `AddWorldShaderWork` registers the shader
-  sources and the `SdfWorldPipelineCache` singleton with its
-  `gpu.sdf-pipelines` ledger in both presentation shapes, and `AddVulkanFactories` registers
+  sources, the `SdfWorldPipelineCache` singleton with its `gpu.sdf-pipelines`
+  ledger and the `GpuPassPipelineCache` singleton with its `gpu.pass-pipelines`
+  ledger in both presentation shapes, and `AddVulkanFactories` registers
   the host's one resolver and its `procedures.vulkan` once.
 
 ## Performance work

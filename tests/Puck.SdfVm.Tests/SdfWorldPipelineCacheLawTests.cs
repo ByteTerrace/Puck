@@ -65,7 +65,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
         var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
         var other = new FakeGpuDevice(reportVersion: SdfIsa.Version);
         var cache = SdfTestPipelines.Cache();
-        SdfWorldPipelineLease[] leases = [
+        GpuBuildLease<SdfWorldPipelineKey, SdfWorldPipelines>[] leases = [
             cache.Acquire(device: gpu, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels()),
             cache.Acquire(device: other, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels()),
             cache.Acquire(device: gpu, includeBrickPipelines: false, kernels: SdfTestPipelines.Kernels(beam: 2)),
@@ -100,17 +100,17 @@ public sealed class SdfWorldPipelineCacheLawTests {
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.PipelinesCreated, source: second.WorkLifetime));
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.ShaderModulesCreated, source: first.WorkLifetime));
         // Both engines record their table uploads with the device's one region-copy pipeline.
-        Assert.Equal(expected: 1, actual: pipelines.RegionCopy.LeasedDevices);
-        Assert.Equal(expected: 1L, actual: Read(kind: GpuWork.PipelinesCreated, source: pipelines.RegionCopy.Work));
+        Assert.Equal(expected: 1, actual: pipelines.RegionCopy.Pipelines.SharedPipelines);
+        Assert.Equal(expected: 1L, actual: Read(kind: GpuWork.PipelinesCreated, source: pipelines.RegionCopy.Pipelines.Work));
 
         first.Dispose();
         Assert.Equal(expected: 1, actual: pipelines.SharedSets);
-        Assert.Equal(expected: 1, actual: pipelines.RegionCopy.LeasedDevices);
+        Assert.Equal(expected: 1, actual: pipelines.RegionCopy.Pipelines.SharedPipelines);
         Assert.False(condition: second.ProduceFrame(context: in context).IsEmpty);
 
         second.Dispose();
         Assert.Equal(expected: 0, actual: pipelines.SharedSets);
-        Assert.Equal(expected: 0, actual: pipelines.RegionCopy.LeasedDevices);
+        Assert.Equal(expected: 0, actual: pipelines.RegionCopy.Pipelines.SharedPipelines);
     }
     [Fact]
     public void ANodeWhoseSetAnotherEngineSharesRefusesAKernelReload() {
@@ -195,7 +195,7 @@ public sealed class SdfWorldPipelineCacheLawTests {
         return value;
     }
     // Polls until the lease's set has built on the thread pool. The bound is liveness for a build over a fake device.
-    private static SdfWorldPipelines Ready(SdfWorldPipelineLease lease) {
+    private static SdfWorldPipelines Ready(GpuBuildLease<SdfWorldPipelineKey, SdfWorldPipelines> lease) {
         SdfWorldPipelines? set = null;
 
         Assert.True(condition: SpinWait.SpinUntil(

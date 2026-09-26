@@ -68,6 +68,7 @@ public sealed class WorldSourceInstanceLawTests {
             set: out var set
         ), userMessage: setRefusal?.Message);
         Assert.True(condition: RenderGraphRuntime.TryCreate(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: Gpu,
             graphs: new RenderGraphRuntimeGraph?[set.Instances.Count],
             hostsOnDirectX: false,
@@ -182,6 +183,7 @@ public sealed class WorldSourceInstanceLawTests {
             set: out var set
         ), userMessage: setRefusal?.Message);
         Assert.True(condition: RenderGraphRuntime.TryCreate(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: Gpu,
             graphs: [null],
             hostsOnDirectX: false,
@@ -227,6 +229,7 @@ public sealed class WorldSourceInstanceLawTests {
             set: out var set
         ));
         Assert.True(condition: RenderGraphRuntime.TryCreate(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: Gpu,
             graphs: [null],
             hostsOnDirectX: false,

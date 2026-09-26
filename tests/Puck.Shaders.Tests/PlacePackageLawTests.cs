@@ -72,6 +72,7 @@ public sealed class PlacePackageLawTests {
 
         var plan = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: Graph(config: config));
         var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
             height: Extent,
             hostsOnDirectX: false,
