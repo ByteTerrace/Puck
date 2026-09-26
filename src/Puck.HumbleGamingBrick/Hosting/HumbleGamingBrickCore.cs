@@ -24,6 +24,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     private readonly IFramebuffer m_framebuffer;
     private readonly IJoypad m_joypad;
     private readonly IKey1 m_key1;
+    private readonly ILightGun m_lightGun;
     private readonly SystemBus m_systemBus;
     private readonly ITiltSensor m_tiltSensor;
     private readonly StateWriter m_timeTravelWriter = new(capacity: 4096);
@@ -69,6 +70,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
         m_framebuffer = m_machine.GetRequiredService<IFramebuffer>();
         m_joypad = m_machine.GetRequiredService<IJoypad>();
         m_key1 = m_machine.GetRequiredService<IKey1>();
+        m_lightGun = m_machine.GetRequiredService<ILightGun>();
         m_systemBus = m_machine.GetRequiredService<SystemBus>();
         m_tiltSensor = m_machine.GetRequiredService<ITiltSensor>();
 
@@ -101,6 +103,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     public void ApplyInput(in MachinePadState input) =>
         BrickPad.Apply(
             joypad: m_joypad,
+            lightGun: m_lightGun,
             pad: in input,
             tiltSensor: m_tiltSensor
         );

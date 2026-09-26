@@ -7,20 +7,23 @@ namespace Puck.HumbleGamingBrick;
 /// — the engine-internal adapter between the host's standard-controller vocabulary and the eight console buttons. The
 /// brick's d-pad is digital, so the left stick quantizes through a threshold; any explicit d-pad bits on the pad image
 /// pass through as well. The face/system buttons map by position: South→A, East→B, Start→Start, Back→Select. The right
-/// stick and triggers have no console equivalent and are ignored.</summary>
+/// stick and triggers have no console equivalent and are ignored; the pointer aims the light gun.</summary>
 internal static class BrickPad {
-    /// <summary>Applies one recorded pad image to a machine's input devices: the joypad image plus the recorded tilt
-    /// sample. The authoritative core and its lookahead fork drive this one seam, so the predicted branch applies the
-    /// SAME full input image the authority does; the tilt write is a no-op on a cart that never reads the sensor.</summary>
+    /// <summary>Applies one recorded pad image to a machine's input devices: the joypad image, the recorded tilt
+    /// sample and the light gun's aim. The authoritative core and its lookahead fork drive this one seam, so the
+    /// predicted branch applies the SAME full input image the authority does; the tilt write is a no-op on a cart that
+    /// never reads the sensor, and the aim on a game that never reads the receive line.</summary>
     /// <param name="pad">The neutral controller image.</param>
     /// <param name="joypad">The machine's joypad.</param>
     /// <param name="tiltSensor">The machine's tilt sensor.</param>
-    public static void Apply(in MachinePadState pad, IJoypad joypad, ITiltSensor tiltSensor) {
+    /// <param name="lightGun">The machine's light gun.</param>
+    public static void Apply(in MachinePadState pad, IJoypad joypad, ITiltSensor tiltSensor, ILightGun lightGun) {
         joypad.SetButtons(pressed: ToJoypad(pad: in pad));
         tiltSensor.SetTilt(
             x: pad.Tilt.X,
             y: pad.Tilt.Y
         );
+        lightGun.Aim(pointer: pad.Pointer);
     }
     /// <summary>Maps a normalized pad image to the brick's joypad image.</summary>
     /// <param name="pad">The neutral controller image.</param>

@@ -13,12 +13,14 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
     private readonly IFramebuffer m_framebuffer;
     private readonly MachineFork m_instance;
     private readonly IJoypad m_joypad;
+    private readonly ILightGun m_lightGun;
     private readonly ulong m_oneFrameCycles;
     private readonly ITiltSensor m_tiltSensor;
 
     public HumbleGamingBrickLookahead(MachineFork instance, ulong oneFrameCycles) {
         m_instance = instance;
         m_joypad = instance.GetRequiredService<IJoypad>();
+        m_lightGun = instance.GetRequiredService<ILightGun>();
         m_tiltSensor = instance.GetRequiredService<ITiltSensor>();
         m_framebuffer = instance.GetRequiredService<IFramebuffer>();
         m_oneFrameCycles = oneFrameCycles;
@@ -35,6 +37,7 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
     public void ApplyInput(in MachinePadState input) =>
         BrickPad.Apply(
             joypad: m_joypad,
+            lightGun: m_lightGun,
             pad: in input,
             tiltSensor: m_tiltSensor
         );
