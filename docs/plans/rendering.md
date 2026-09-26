@@ -945,7 +945,7 @@ P13b-2 has landed: the simulation destination runs end to end. A seat folds the
 optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
 flag byte on every intent path, so an absent ray costs one byte; the tape's
 `ShapeToken` is 4, the checkpoint's `SupportedVersion` 14 and the handshake's
-`WorldProtocol.WireProtocolKey` `PUCKWRL2`, each strict. The server keeps each
+`WorldProtocol.WireProtocolKey` `PUCKWRL2` and the federation's `WorldFederationCodec.WireKey` `PUCKFED3`, each strict. The server keeps each
 body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
 the row's mapping against a one-by-one source, for the rule operand
 `$pointer:<seat>:<screenIndex>:x|y|on`; `body.channels` echoes the ray and its
@@ -2760,8 +2760,9 @@ on P7b's groups.
      keep the sixteen lanes and add one flag byte, followed by the ray's six
      fixed-point values only when it is present.
    - The format moved with it, strictly and with no reader for the old shape:
-     the tape's `ShapeToken` is 4, the checkpoint's `SupportedVersion` 14, and
-     `WorldProtocol.WireProtocolKey` `PUCKWRL2`. No tape is checked in.
+     the tape's `ShapeToken` is 4, the checkpoint's `SupportedVersion` 14,
+     `WorldProtocol.WireProtocolKey` `PUCKWRL2`, and the federation's
+     `WorldFederationCodec.WireKey` `PUCKFED3`. No tape is checked in.
    - `PlayerCommandModule` registers `source.pointer.origin` and
      `source.pointer.direction` as Axis3D seat verbs, the seat keeps them for
      the tick, and `SeatController.HeldIntent` folds them into the intent.
