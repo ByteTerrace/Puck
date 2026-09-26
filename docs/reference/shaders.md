@@ -1079,8 +1079,18 @@ rebuilds the graph at that extent beside the installed one at the next frame
 boundary. History whose resolved extent is unchanged keeps its contents.
 History whose extent changes starts again from its declared initialization: the
 first frame at the new extent reads it as the previous frame's. If the rebuilt graph cannot be
-allocated, the installed graph keeps running at its old extent and the resize
-is not retried until the host asks for a different one.
+allocated, the installed graph keeps running at its old extent.
+
+A refused candidate, a reload or a resize, is not retried on a clock or per
+frame: it is tried again when the host asks for something different, when the
+operator's GPU faults change (`GpuCreationFaults.Revision`: `gpu.faults` arming
+or disarming a fault, or a fault firing elsewhere), and, for one the device's
+descriptor heap refused (`GpuDescriptorHeapRefusalException`,
+`GPU_DESCRIPTOR_HEAP`), when another owner returns heap space
+(`IGpuBindings.HeapReleaseRevision`). This is the rule the SDF engine's pipeline
+source follows. A package pass creates its framebuffers and every other object
+when its graph installs, so a creation fault refuses the install by name and
+never escapes a produced frame.
 
 A paused instance (`pipeline.time pause`, or a time scale of zero) treats each
 host request as either a replacement or a step:
@@ -1615,7 +1625,8 @@ paused waits for that graph's first frame. A swap followed by a
 resize before the next frame is built once. A resize rebuilds beside the installed
 graph and clears the slot of history whose extent changed that the next frame
 reads, carries history whose extent did not, installs on a paused instance
-without rendering, and is not retried after a refusal.
+without rendering, and is retried after a refusal only on a change it was
+refused on.
 `ShaderPipelineVersionLawTests` plan a forwarding chain declared out of order:
 a reader of a forwarded version runs before the overwrite, a reader that must
 also follow it is refused as a cycle naming both passes, each forward that

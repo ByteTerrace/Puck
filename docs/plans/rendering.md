@@ -658,10 +658,11 @@ sub-steps, in this order:
   - A package id is served by an `IRenderGraphPackageFactory`. Its `Build` runs
     in the candidate's `BackgroundBuild` beside the shader passes and creates the
     pass's modules, pipeline and render pass; its `Create` takes them when the
-    graph installs and allocates one descriptor set per frame slot from the
-    node's one pool, whose statement (`ShaderPipelineRenderNode.DescriptorPools`)
-    includes the factory's `SetBindings`, admitted through the heap budget. A
-    recording carries the pass's frame block and the frame's lease list, and an
+    graph installs and allocates a frame and a pass set per frame slot from the
+    node's one pool (`RenderGraphPackageSets`), whose statement
+    (`ShaderPipelineRenderNode.DescriptorPools`) counts them for every pass,
+    admitted through the heap budget. A recording carries the pass's pass block
+    and the frame's lease list, and an
     image a package draws into is created usable as a color attachment.
   - `PostProcessPackage` is the one factory for every `post.<id>`, registered
     per set under its id. Each frame it writes the input into the slot's set,
@@ -764,7 +765,7 @@ Each sub-step's gate:
   `src/Puck.Overlays` to four canaries: `instrument-clock-source`,
   `music-conditional-layer-and-embellishment`, `voice-babble` and
   `world-seat-binding-recompose`. Whether their captures include overlay pixels
-  is unverified, so 5c also runs `UnifiedOverlayWorkLawTests` and
+  is unverified, so 5c also runs `OverlayPackageLawTests` and
   `OverlayFrameSlotsLawTests` and states which of those canaries observes an
   overlay.
 - 5d: the 5b post canary and the 5c overlay canaries once the wiring commit
@@ -1971,7 +1972,7 @@ Phase 3, the groups, follows phase 2:
       (the reported and guaranteed sizes, the no-heap refusal, whole-or-nothing
       admission, release and reuse, the live-pool refusal, the bytes), and on
       the fakes one law per owner that its statement equals the pools it
-      creates (`SdfWorldEngineWorkLawTests`, `UnifiedOverlayWorkLawTests`,
+      creates (`SdfWorldEngineWorkLawTests`, `OverlayPackageLawTests`,
       `ShaderPipelineRenderNodeLawTests`, `GpuResidencyLawTests`). The choice and the two rejected sizings are in [the decisions](../decisions/rendering.md#how-worlds-reach-the-gpu).
     - 14a-3, done: the heap in place. `DirectXGpuBindings` creates the two
       shader-visible heaps, `DirectXShaderVisibleHeaps`, when its context
@@ -2056,8 +2057,8 @@ Phase 3, the groups, follows phase 2:
       and a failed set layout leaves nothing alive),
       `GpuDescriptorHeapBudgetLawTests` (sampler ranges and a refusal by the
       sampler heap), `GpuPipelineDescriptionLayoutLawTests` and
-      `UnifiedOverlayWorkLawTests` (an overlay refused before it creates
-      anything). `DirectXGroupedLayoutDebugLayerTests` creates the three root
+      `OverlayPackageLawTests` (an overlay graph the heap refuses before it
+      creates anything, installed once another owner returns heap space). `DirectXGroupedLayoutDebugLayerTests` creates the three root
       signatures and a film grain set on the default adapter with the debug
       layer on; it creates no pipeline state, and Vulkan has no device
       creation check. Canaries: the 18 the pipeline factories map to,
@@ -2093,7 +2094,7 @@ Phase 3, the groups, follows phase 2:
       `firstSet` on both bind points, a refused bind, and a destroyed pool's
       sets forgotten), `SdfEngineNodeBuildRefusalLawTests` (a heap-refused
       engine retries exactly once after another owner releases its pool),
-      `UnifiedOverlayWorkLawTests` (the same for the overlay's resources),
+      `OverlayPackageLawTests` (the same for the overlay's graph),
       and the wrapper coverage in `GpuWorkCountingLawTests` and
       `GpuCreationFaultsLawTests`. `DirectXGroupedLayoutDebugLayerTests`
       also writes and binds a film grain pass-group set under the debug

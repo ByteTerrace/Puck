@@ -69,7 +69,7 @@ public sealed class PostProcessPackageLawTests {
     private static JsonElement Json(string text) => JsonDocument.Parse(json: text).RootElement.Clone();
     // A node running the film-grain set as the graph's one package pass over the bound input, through the factory a law
     // wraps it in, if any.
-    private static ShaderPipelineRenderNode PackageNode(FakePipelineGpu gpu, JsonElement? config, Func<PostProcessPackage, IRenderGraphPackageFactory>? wrap = null) {
+    private static ShaderPipelineRenderNode PackageNode(FakePipelineGpu gpu, JsonElement? config, Func<PostProcessPackage, IRenderGraphPackageFactory>? wrap = null, GpuCreationFaults? faults = null) {
         var manifest = FilmGrain();
         var package = new PostProcessPackage(manifest: manifest);
         var packages = new RenderGraphPackageRecorders();
@@ -81,7 +81,12 @@ public sealed class PostProcessPackageLawTests {
 
         var plan = new RenderGraphCompiler(packages: Catalog()).Compile(definition: Graph(config: config));
         var node = new ShaderPipelineRenderNode(
-            deviceContext: gpu,
+            deviceContext: ((faults is null)
+                ? gpu
+                : new FaultingDevice(
+                    faults: faults,
+                    gpu: gpu
+                )),
             height: Extent,
             hostsOnDirectX: false,
             name: "post",
@@ -383,6 +388,97 @@ public sealed class PostProcessPackageLawTests {
         );
     }
 
+    /// <summary>Every creation a post pass's install makes, failed in turn through <see cref="GpuCreationFaults"/>, is
+    /// refused by name without escaping a produced frame, releases exactly what was created before it, and the same graph
+    /// swapped in again installs and publishes. The recorder's framebuffers are among the creations, made at install.</summary>
+    [Fact]
+    public void EveryCreationOfAPostPassFaultedInTurnIsRefusedByNameAndReleasesWhatWasCreated() {
+        var expected = new Dictionary<GpuCreationKind, long>();
+        var measuredFaults = new GpuCreationFaults();
+
+        using (var measured = PackageNode(
+            config: null,
+            faults: measuredFaults,
+            gpu: new FakePipelineGpu()
+        )) {
+            ProduceUntilPublished(node: measured);
+
+            foreach (var kind in GpuCreationFaults.Kinds) {
+                expected[kind] = measuredFaults.SeenOf(kind: kind);
+            }
+        }
+
+        Assert.True(condition: (expected[GpuCreationKind.Framebuffer] > 0L));
+
+        var faulted = 0;
+
+        foreach (var kind in GpuCreationFaults.Kinds) {
+            for (var nth = 1; (nth <= expected[kind]); nth++) {
+                var gpu = new FakePipelineGpu();
+                var faults = new GpuCreationFaults();
+                using var node = PackageNode(
+                    config: null,
+                    faults: faults,
+                    gpu: gpu
+                );
+
+                faults.Arm(
+                    kind: kind,
+                    nth: nth
+                );
+                Assert.True(
+                    condition: SpinWait.SpinUntil(
+                        condition: () => {
+                            _ = node.ProduceFrame(context: default);
+
+                            return (node.LastSwapError is not null);
+                        },
+                        timeout: TimeSpan.FromSeconds(value: 30)
+                    ),
+                    userMessage: $"The {GpuCreationFaults.NameOf(kind: kind)} creation {nth} fault was never reported."
+                );
+
+                var fault = Assert.IsType<GpuCreationFaultException>(@object: node.LastSwapError);
+
+                Assert.Equal(
+                    actual: (fault.Kind, fault.Creation),
+                    expected: (kind, nth)
+                );
+                Assert.Equal(
+                    actual: $"{kind} {nth}: unreleased [{string.Join(separator: ", ", values: gpu.CreatedObjects.Where(predicate: static created => (created.DisposeCount != 1)))}]",
+                    expected: $"{kind} {nth}: unreleased []"
+                );
+
+                // The same graph swapped in again installs and publishes.
+                node.Swap(pipeline: new CompiledShaderPipeline(
+                    plan: new RenderGraphCompiler(packages: Catalog()).Compile(definition: Graph(config: null)).Pipeline,
+                    shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)
+                ));
+                ProduceUntilPublished(node: node);
+                Assert.Null(@object: node.LastSwapError);
+                faulted++;
+            }
+        }
+
+        Assert.Equal(
+            actual: faulted,
+            expected: expected.Values.Sum()
+        );
+    }
+
+    // The fake as a device context whose services pass through creation faults, as a backend's do.
+    private sealed class FaultingDevice(FakePipelineGpu gpu, GpuCreationFaults faults) : IGpuDeviceContext {
+        public long AdapterLuid => gpu.AdapterLuid;
+        public GpuDeviceCapabilities? Capabilities => gpu.Capabilities;
+        public GpuDeviceIdentity? Identity => gpu.Identity;
+        public GpuMemoryProfile MemoryProfile => gpu.MemoryProfile;
+        public GpuDeviceServices Services { get; } = GpuCreationFaults.Wrap(
+            faults: faults,
+            services: gpu.Services
+        );
+
+        public void WaitIdle() => gpu.WaitIdle();
+    }
     private sealed record Recorded(string RenderPass, string Pipeline, IReadOnlyList<string> Commands, IReadOnlyList<string> Writes, IReadOnlyList<string> Blocks, int RenderPasses) {
         // Every push-constant write, which a post pass never makes.
         public IReadOnlyList<string> Pushes { get; init; } = [];
