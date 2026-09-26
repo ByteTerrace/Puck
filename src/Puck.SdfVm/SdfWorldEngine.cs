@@ -237,6 +237,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly nint[][][] m_boundScreenSourceViews;
     // Per ring slot and view slot, flattened ([slot * capacity + view]): the glyph atlas view that views set binds.
     private readonly nint[] m_boundGlyphAtlasViews;
+    // Per ring slot and view slot, flattened like the glyph atlas's: the mesh visibility view that views set binds.
+    private readonly nint[] m_boundMeshVisibilityViews;
 
     private readonly IGpuCommandPool[] m_commandPools = new IGpuCommandPool[FrameRingSize];
     // One per-submit fence per ring slot: PrepareFrame waits slot k's fence (frame k − FrameRingSize) before
@@ -401,6 +403,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_requestedViewExtents = new (uint Width, uint Height)[((int)m_viewportCapacity)];
         m_boundOutputViews = BuildRingViewCache(width: ((int)m_viewportCapacity));
         m_boundGlyphAtlasViews = new nint[(FrameRingSize * ((int)m_viewportCapacity))];
+        m_boundMeshVisibilityViews = new nint[(FrameRingSize * ((int)m_viewportCapacity))];
         m_boundScreenSourceViews = new nint[FrameRingSize][][];
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {
@@ -480,10 +483,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             region: MeshRegionIndex
         ));
         m_meshRegionBytes = SdfMeshRegion.DrawBytes;
-        (m_meshTarget, m_meshDepth, m_meshFramebuffer) = CreateMeshAttachments(
-            renderPass: m_meshRenderPass,
-            scope: scope
-        );
         // The cull buffer is GPU-written by the beam prepass (a UAV), so it is device-local (a Direct3D 12 default heap).
         // Four tile planes followed by two world-space bound corners per instance per viewport. The beam refits
         // those bounds from this frame's poses and camera; primary reads them after the existing compute barrier.
@@ -668,11 +667,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 WriteWorldBuffer(buffer: m_brickPoolBuffer, member: SdfWorldInterfaces.BrickPool, set: viewsSet);
                 WriteWorldBuffer(buffer: m_primaryHitBuffer, member: SdfWorldInterfaces.VisibilityRecordsWritten, set: viewsSet);
                 WriteWorldBuffer(buffer: m_primaryHitBuffer, member: SdfWorldInterfaces.VisibilityRecords, set: viewsSet);
-                m_bindings.WriteSampledImage(
-                    arrayElement: 0,
-                    binding: MeshVisibilityBinding,
-                    descriptorSetHandle: viewsSet,
-                    imageViewHandle: m_meshTarget.ImageViewHandle
+                // The mesh visibility target exists only once a frame draws a mesh (SdfWorldEngine.MeshPass.cs); until
+                // then the binding rides the filler, which no kernel reads while the world block's meshDraws is zero.
+                BindMeshVisibility(
+                    boundIndex: ((slot * ((int)m_viewportCapacity)) + view),
+                    viewsSet: viewsSet
                 );
             }
 
@@ -834,9 +833,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         DisposeViewOutputs();
         m_screenSourceFiller.Dispose();
-        m_meshFramebuffer.Dispose();
-        m_meshDepth.Dispose();
-        m_meshTarget.Dispose();
+        m_meshFramebuffer?.Dispose();
+        m_meshDepth?.Dispose();
+        m_meshTarget?.Dispose();
         m_glyphAtlasUpload?.Dispose();
     }
 }

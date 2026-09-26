@@ -88,7 +88,8 @@ public sealed partial class SdfEngineNode : ICaptureRequestTarget {
     /// before engine initialization.</summary>
     public ulong MeshRegionBytes => (m_engine?.MeshRegionBytes ?? 0UL);
     /// <summary>Gets the bytes the engine's mesh pass target and depth attachment hold
-    /// (<see cref="SdfWorldEngine.MeshAttachmentBytes"/>), or zero before engine initialization.</summary>
+    /// (<see cref="SdfWorldEngine.MeshAttachmentBytes"/>), or zero before engine initialization and until a frame draws a
+    /// mesh.</summary>
     public ulong MeshAttachmentBytes => (m_engine?.MeshAttachmentBytes ?? 0UL);
     /// <summary>Gets the mesh draws of the last captured frame, the ones the mesh region holds once the frame
     /// renders.</summary>
