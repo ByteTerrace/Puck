@@ -1221,6 +1221,8 @@ is served or refused, so a cold driver shader cache lengthens a leg instead of
 losing its first capture. After 60 seconds of holding in all, a capture the
 render chain still cannot serve is refused as `unserved`, naming the reason,
 and the leg runs on (see [the offscreen shape](../../src/Puck.World/README.md#usage)).
+Each leg runs until 30 ticks past the last tick the world's `captures` rows
+schedule, read from the world itself, so a new station needs no change here.
 The two manifest directories are then compared by `puck parity compare` under
 the contract versioned beside the world
 (`tests/Puck.Parity/parity.contract.json`).

@@ -282,8 +282,8 @@ capture the override's arithmetic, while an altered package file fails with
 P5 is complete. P8 extended the manifest: each pass entry records its
 interface hash, and the package carries its precompiled binaries.
 
-P7's gate spike has run its build-time half; P10 has not
-started. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
+P7's gate spike has run its build-time half and its GPU half, the `binding`
+parity station; P10 has not started. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
 lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
 `sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
 the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
@@ -1745,10 +1745,11 @@ the SDF engine's binding constants.
 
 **Gate:** the spike over two passes, `sdf-film-grain.frag.hlsl` and a pixelate
 compute pass, each with two frequency groups, has passed its build-time half,
-as the [implementation status](#implementation-status) records. Two legs
-remain. One build on Linux is compared byte for byte with the two on one host.
-The two-group layout runs on Direct3D 12 and Vulkan inside
-`tests/Puck.Parity/parity.contract.json`'s tolerances, with one parity station.
+as the [implementation status](#implementation-status) records, and its GPU
+half has passed: the two-group layout runs on Direct3D 12 and Vulkan inside
+`tests/Puck.Parity/parity.contract.json`'s tolerances, as the `binding` parity
+station (step 16). One leg remains: one build on Linux is compared byte for byte
+with the two on one host.
 Both backends' capability reports, read on the floor and ceiling devices, show that
 neither lacks what the grouped contract assumes. The gate still fails toward
 Slang when DXC output is not byte-stable across hosts, or when the second group
@@ -2151,7 +2152,13 @@ Phase 3, the groups, follows phase 2:
     from its interface's layout. Each pass is created through its interface's
     `PipelineLayout` and binds its two sets by group. 14b-3 landed here.
     Step 18 moved shader sets and package passes onto the same two groups.
-16. The gate spike's GPU half, a binding station in `tests/Puck.Parity`.
+16. Done: the gate spike's GPU half, the `binding` parity station
+    (`tests/Puck.Parity/binding.graph.json`, shown in a corner pane of the parity
+    layout and captured as its own instance): a compute pass and a fullscreen
+    pass reading a frame group and a pass group, with config, a formatted load, a
+    storage image and a pass-group sampler table, match on Direct3D 12 and Vulkan
+    exactly, well inside `parity.contract.json`. `puck parity` now runs each leg
+    until just past the world's last scheduled capture.
 17. Done: the region-copy kernel leaves the SDF engine for `Puck.Shaders`
     (`Assets/Shaders/Residency/region-copy.comp.hlsl`), each register at its
     binding number, so `ShaderRegisterBindingLawTests` no longer names it.
