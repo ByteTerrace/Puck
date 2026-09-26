@@ -742,7 +742,6 @@ pass's own config, so the row's other fields keep their values.
 | `PostProcessPackage` | The recorder factory that runs any post-process package as one fullscreen pass of a graph from its stages' deployed bytecode, recording through its instance's services. |
 | `IShaderModuleLoader` / `ShaderModuleLoader` / `ShaderStageInfo` / `ShaderStage` | Per-stage bytecode loading with content-hash caching. |
 | `ProbeKindManifest` / `ProbeKindCatalog` | A `puck.probe.manifest.v1` probe kind and the shipped kinds under a directory tree, by id. |
-| `ManifestCatalog<TManifest>` | The suffix-scanning, id-indexed discovery `ProbeKindCatalog` derives from. |
 | `ShaderInterface` / `ShaderInterfaceMember` / `ShaderInterfaceGroup` | A [pass interface](#pass-interfaces), one member, and its frequency group. |
 | `ShaderInterfaceLayout` / `ShaderInterfaceHlsl` | The engine-assigned sets, bindings and offsets; the generated include. |
 | `SpirvInterfaceReader` / `DxilInterfaceReader` / `ShaderInterfaceBinding` | The two bytecode readers and the record both return. |

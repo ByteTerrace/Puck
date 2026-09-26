@@ -32,7 +32,7 @@ public static partial class WorldConstructs {
         ),
         new(
             DocumentMember: "views",
-            Grammar: "views { layout … graph … seatRig … seatControl { … } }",
+            Grammar: "views { layout … graph … post … seatRig … seatControl { … } }",
             Keyword: "views",
             RootArm: WorldRootArm.Views,
             Shape: WorldConstructShape.Section,
@@ -61,6 +61,34 @@ public static partial class WorldConstructs {
             Snippet: "graph \"${1:main}\" {\n    source: \"$2\"\n}",
             Sugar: new(Fallback: "the generic value path", Open: true),
             Summary: "One named instance of a frame graph."
+        ),
+        new(
+            DocumentMember: "views.post[]",
+            Enclosing: "views",
+            Grammar: "post \"name\" { package: … config { … } }",
+            Keyword: "post",
+            Members: [
+                QuotedName(key: "name", summary: "The pass's name in the root graph, which a probe's post target names."),
+                new(
+                    DocumentKeys: ["package"],
+                    Kind: WorldMemberKind.Text,
+                    Name: "package",
+                    Position: WorldMemberPosition.Property,
+                    Required: true,
+                    Summary: "The post-process package the pass runs, such as sdf.film-grain."
+                ),
+                new(
+                    DocumentKeys: ["config"],
+                    Kind: WorldMemberKind.Value,
+                    Name: "config",
+                    Position: WorldMemberPosition.Property,
+                    Summary: "The package's config values; an absent field keeps its default."
+                ),
+            ],
+            Shape: WorldConstructShape.Row,
+            Snippet: "post \"${1:grain}\" {\n    package: \"${2:sdf.film-grain}\"\n}",
+            Sugar: new(Fallback: "the generic value path", Open: true),
+            Summary: "One post-process pass the root graph runs over the composed frame, in order."
         ),
         new(
             DocumentMember: "views.seatRig",

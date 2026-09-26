@@ -1092,6 +1092,13 @@ public static partial class WorldDocumentEmitter {
                     target: viewsObj,
                     targetKey: "graphs"
                 );
+            } else if (subId is "post") {
+                AppendNamedBlock(
+                    block: subBlock,
+                    scope: scope,
+                    target: viewsObj,
+                    targetKey: "post"
+                );
             } else if (subId is "seatrig") {
                 scope.SourceMap?.Register(
                     jsonPointer: $"{scope.CurrentPointer}/seatRig",
