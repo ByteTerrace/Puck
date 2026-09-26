@@ -16,6 +16,31 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     /// <summary>The canonical schema URI for world definitions.</summary>
     public const string Schema = "puck.world.definition.v1";
 
+    /// <summary>The annotation holding the directory the lowered document's relative file paths resolve against.</summary>
+    public const string DocumentDirectoryAnnotation = "DocumentDirectory";
+
+    // The position a file-path member's value fills: its value is re-expressed from the writing source's directory.
+    private static readonly object FileReferencePosition = new();
+
+    /// <summary>Re-expresses a file path written in the source a scope lowers, relative to that source's directory, for
+    /// the document being lowered: the one relocation every file reference a module writes takes, whichever source uses
+    /// the module (<see cref="WorldDocumentPaths.RelocateBetween"/>).</summary>
+    /// <param name="path">The path as the source writes it.</param>
+    /// <param name="scope">The scope lowering the source that writes the path.</param>
+    /// <returns>The path relative to the document's directory, or <paramref name="path"/> unchanged when the source
+    /// stands in the document's own directory or either directory is unknown.</returns>
+    public static string RelocateFileReference(string path, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(argument: path);
+        ArgumentNullException.ThrowIfNull(argument: scope);
+
+        return (((scope.BasePath is { } written) &&
+            (scope.Annotations.GetValueOrDefault(key: DocumentDirectoryAnnotation) is string document) &&
+            !Puck.Abstractions.PuckPaths.Comparer.Equals(x: Path.GetFullPath(path: written), y: Path.GetFullPath(path: document)))
+            ? WorldDocumentPaths.RelocateBetween(path: path, sourceDirectory: written, targetDirectory: document)
+            : path
+        );
+    }
+
     /// <summary>The shared instance; the vocabulary is a pure lookup and carries no per-pass state.</summary>
     public static WorldDocumentVocabulary Instance { get; } = new();
     /// <summary>Gets the described constructs this pass parses and lowers against.</summary>
@@ -46,8 +71,24 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
             value = null;
             if ((scope.Annotations.GetValueOrDefault(key: "AssetContext") is not Assets.AssetCompilationContext context) || (scope.BasePath is null)) {
                 scope.Diagnostics.ReportError(code: Puck.Transpiler.Diagnostics.PuckDiagnosticCodes.InvalidValue, message: "An asset reference requires a source path and its sibling asset lock.", span: asset.Span);
-            } else if (context.TryResolve(asset.Path, scope.BasePath, asset.Span, scope.Diagnostics, out var path)) {
-                value = System.Text.Json.Nodes.JsonValue.Create(path);
+            } else if (context.TryResolve(asset.Path, scope.BasePath, asset.Span, scope.Diagnostics, out _)) {
+                value = System.Text.Json.Nodes.JsonValue.Create(value: RelocateFileReference(path: asset.Path, scope: scope));
+            }
+            return true;
+        }
+        // A file path is written relative to the source that writes it, which a module used from another directory
+        // is not the document's own, so it is re-expressed for the document exactly as an asset path is.
+        if (
+            ReferenceEquals(objA: DocumentLowering.MemberContext(scope: scope), objB: FileReferencePosition) &&
+            (expression is LiteralExpressionNode { Value: string } or InterpolatedStringNode)
+        ) {
+            value = DocumentLowering.At(
+                context: null,
+                lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: scope),
+                scope: scope
+            );
+            if ((value is System.Text.Json.Nodes.JsonValue written) && written.TryGetValue<string>(value: out var path) && (path.Length > 0)) {
+                value = System.Text.Json.Nodes.JsonValue.Create(value: RelocateFileReference(path: path, scope: scope));
             }
             return true;
         }
@@ -83,8 +124,12 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     /// model does not declare (a template, a builtin) has no position.</remarks>
     public object? CallContext(object? context, string callName) => WorldCallArguments.ArmType(baseType: (context as Type), discriminator: callName);
     /// <inheritdoc />
+    /// <remarks>A member holding a file path (<see cref="WorldArgumentForm.Path"/>) is positioned as a file reference,
+    /// so the value written there is re-expressed for the document being lowered.</remarks>
     public object? MemberContext(object? context, string memberName) => ((context is Type owner)
-        ? WorldCallArguments.MemberType(member: memberName, owner: owner)
+        ? ((WorldCallArguments.Classify(member: memberName, owner: owner) == WorldArgumentForm.Path)
+            ? FileReferencePosition
+            : WorldCallArguments.MemberType(member: memberName, owner: owner))
         : null
     );
     /// <inheritdoc />
@@ -98,7 +143,7 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
         WorldArgumentForm.Key => DocumentValueForm.Key,
         WorldArgumentForm.Expression => DocumentValueForm.Expression,
         WorldArgumentForm.Choice => DocumentValueForm.Choice,
-        WorldArgumentForm.Text => DocumentValueForm.Text,
+        WorldArgumentForm.Text or WorldArgumentForm.Path => DocumentValueForm.Text,
         _ => DocumentValueForm.Unclassified,
     });
     /// <inheritdoc />

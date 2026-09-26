@@ -320,9 +320,7 @@ public sealed class AssetLock {
                 path: authoredPath.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'),
                 basePath: basePath
             );
-            var key = Path.GetRelativePath(path: fullPath, relativeTo: root).Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar);
-
-            key = NormalizeLogicalPath(path: key);
+            var key = NormalizeLogicalPath(path: WorldDocumentPaths.RelocateBetween(path: authoredPath, sourceDirectory: basePath, targetDirectory: root));
 
             if (normalized.TryGetValue(key: key, value: out var existing) &&
                 !string.Equals(a: existing.FullPath, b: fullPath, comparisonType: PuckPaths.Comparison)) {

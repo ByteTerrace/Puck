@@ -162,6 +162,7 @@ public static partial class WorldDocumentEmitter {
 
         scope.Annotations["WorldDocumentRoot"] = root;
         if (assets is not null) { scope.Annotations["AssetContext"] = assets; }
+        if (basePath is not null) { scope.Annotations[WorldDocumentVocabulary.DocumentDirectoryAnnotation] = basePath; }
         var composition = new Composition(statements: document.Statements);
 
         scope.Annotations[CompositionAnnotation] = composition;
@@ -968,7 +969,7 @@ public static partial class WorldDocumentEmitter {
                 annotations[catalogName] = new HashSet<string>(collection: catalog, comparer: StringComparer.Ordinal);
             }
         }
-        foreach (var sharedName in new[] { "EmbeddingLock", "DiscoveredEmbeddings", "AssetContext", GeneratedNamesAnnotation, "ModuleAliases" }) {
+        foreach (var sharedName in new[] { "EmbeddingLock", "DiscoveredEmbeddings", "AssetContext", WorldDocumentVocabulary.DocumentDirectoryAnnotation, GeneratedNamesAnnotation, "ModuleAliases" }) {
             if (scope.Annotations.TryGetValue(key: sharedName, value: out var value)) { annotations[sharedName] = value; }
         }
         return annotations;
@@ -1088,6 +1089,7 @@ public static partial class WorldDocumentEmitter {
             } else if (subId is "graph" or "graphs") {
                 AppendNamedBlock(
                     block: subBlock,
+                    row: typeof(WorldViewGraph),
                     scope: scope,
                     target: viewsObj,
                     targetKey: "graphs"
@@ -1149,11 +1151,14 @@ public static partial class WorldDocumentEmitter {
             );
         }
     }
+    // A row given its model type lowers each member at its own position, so a file path member is re-expressed for
+    // the document and a misspelled member is refused.
     private static void AppendNamedBlock(
         BlockNode block,
         DocumentScope scope,
         JsonObject target,
-        string targetKey
+        string targetKey,
+        Type? row = null
     ) {
         if (target[targetKey] is not JsonArray array) {
             array = [];
@@ -1163,9 +1168,9 @@ public static partial class WorldDocumentEmitter {
             jsonPointer: $"{scope.CurrentPointer}/{targetKey}/{array.Count}",
             span: block.Span
         );
-        var obj = LowerBlockToObject(
-            block: block,
-            scope: scope
+        var obj = ((row is null)
+            ? LowerBlockToObject(block: block, scope: scope)
+            : DocumentLowering.At(context: row, lower: () => LowerBlockToObject(block: block, scope: scope), scope: scope)
         );
 
         if (block.Name is not null) {

@@ -14,7 +14,7 @@ module level(centre: Point, record, layout, presentation = "Windowed") {
   // sees the room on the left and the board on the right; with no seat, the board fills the window.
   views {
     graph "board" {
-      source: asset "board.graph.json"
+      source: "board.graph.json"
       parameters {
         draw {
           tiles: "state.tiles"

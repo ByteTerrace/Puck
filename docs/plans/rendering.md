@@ -2734,12 +2734,12 @@ follow it.
    the World set the pass binds). Open: one region a bound row and element
    type shared by every pass that reads the row the same way, instead of one
    World block a pass; a staged World block through the node's region copies.
-3. Done, pending its first device run: the forcing case. The rulepush rules
+3. Done: the forcing case. The rulepush rules
    keep a `tiles` lattice (`rules.puck`), each cell the look of the last token
    standing on it, written by the `classify` rule and retained for undo. The
    board pass (`worlds/rulepush/board.graph.json` and `board.hlsl`) reads it
-   through a world-group `tiles` array, and each level names the graph as an
-   `asset` and shows it in a pane beside the room (`level.puck`). The
+   through a world-group `tiles` array, and each level names the graph by a
+   path relative to `level.puck` and shows it in a pane beside the room. The
    `rulepush-board` GPU canary boots Hedges offscreen, presses once, and holds
    the captured cells to the move; its discriminating leg presses the other
    way, so the pushed row's pixels cannot match. An array cannot bind a

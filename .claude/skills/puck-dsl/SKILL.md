@@ -148,9 +148,12 @@ run left under `<directory>`, one forward-slashed relative path per line, only
 for a run that succeeded; `build/WorldAssets.targets` ships exactly that report
 (`TreeCompileReportLawTests`), since the run is what wrote them. `asset "path"` references use one `<stem>.assets.json` lock
 beside the root source; ordinary compilation verifies its full SHA-256 pins,
-while `--update-assets` is the only compile mode that replaces them. An
-asset-bearing output currently has to stay in the source directory so its
-relative paths keep their meaning. Each destination and the lock is replaced
+while `--update-assets` is the only compile mode that replaces them. Every
+relative file path a module writes, `asset "…"` or plain (a member
+`WorldDocumentPaths.IsFileField` names), resolves beside the module and is
+re-expressed for the document that uses it (`WorldDocumentVocabulary.RelocateFileReference`);
+`--output` elsewhere re-expresses the written document's paths from where it
+lands. A path reached through a `let` or a module argument is not re-expressed. Each destination and the lock is replaced
 atomically on its own, but publication of the whole set is not transactional.
 
 ## Grammar, in brief

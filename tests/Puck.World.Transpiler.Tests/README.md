@@ -19,6 +19,10 @@ malformed lock refusals, bounded paths and bytes, imported-module-relative
 resolution, pin pruning, and the rule that a failed compile cannot replace the
 lock.
 
+`FileReferenceRelocationLawTests` holds a module's plain relative file path to
+the file beside the module, whichever directory the using source stands in,
+and holds the relocated document to decompile and recompile to itself.
+
 `MemberSpellingRegressionTests` covers computed pool-field references and decompile/recompile preservation of
 literal names containing spaces, punctuation, or a word also used by the language.
 It also checks that an interaction supplied through a binding reads pool fields even when that binding was

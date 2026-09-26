@@ -88,18 +88,10 @@ public static class WorldDocumentPaths {
             Path.IsPathRooted(path: sourceDocumentPath) ||
             Path.IsPathRooted(path: targetDocumentPath)
         ) {
-            var source = Path.GetFullPath(path: Path.Combine(
-                path1: (Path.GetDirectoryName(path: Path.GetFullPath(path: sourceDocumentPath)) ?? "."),
-                path2: path
-            ));
-            var target = (Path.GetDirectoryName(path: Path.GetFullPath(path: targetDocumentPath)) ?? ".");
-
-            return Path.GetRelativePath(
-                path: source,
-                relativeTo: target
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
+            return RelocateBetween(
+                path: path,
+                sourceDirectory: (Path.GetDirectoryName(path: Path.GetFullPath(path: sourceDocumentPath)) ?? "."),
+                targetDirectory: (Path.GetDirectoryName(path: Path.GetFullPath(path: targetDocumentPath)) ?? ".")
             );
         }
 
@@ -157,10 +149,56 @@ public static class WorldDocumentPaths {
             )
         );
     }
-    /// <summary>Re-expresses every document-authored file path of a composed fragment (asset rows, addon modules,
-    /// pipeline and graph sources, probe tracks, text fonts, the window icon) from the document that authored it to the
-    /// document it merges into. Document names (<c>references</c>, a <c>schedule</c> instance) stay as written, since a
-    /// world reaches its siblings by name. Machine configuration paths are relocated with the machine catalog
+    /// <summary>Re-expresses a path written beside one directory as the same file named from another. A rooted path
+    /// passes through unchanged; a relative one resolves against <paramref name="sourceDirectory"/> and is spelled
+    /// relative to <paramref name="targetDirectory"/>.</summary>
+    /// <param name="path">The path as it is written beside <paramref name="sourceDirectory"/>.</param>
+    /// <param name="sourceDirectory">The directory the path was written beside, absolute or relative to the current
+    /// directory.</param>
+    /// <param name="targetDirectory">The directory the path is re-expressed for, absolute or relative to the current
+    /// directory.</param>
+    /// <returns>The path relative to <paramref name="targetDirectory"/>, spelled with <c>/</c>.</returns>
+    public static string RelocateBetween(string path, string sourceDirectory, string targetDirectory) {
+        ArgumentNullException.ThrowIfNull(argument: path);
+        ArgumentNullException.ThrowIfNull(argument: sourceDirectory);
+        ArgumentNullException.ThrowIfNull(argument: targetDirectory);
+
+        if (Path.IsPathRooted(path: path)) {
+            return path;
+        }
+
+        return Path.GetRelativePath(
+            path: Path.GetFullPath(path: Path.Combine(
+                path1: Path.GetFullPath(path: sourceDirectory),
+                path2: path
+            )),
+            relativeTo: Path.GetFullPath(path: targetDirectory)
+        ).Replace(
+            newChar: '/',
+            oldChar: '\\'
+        );
+    }
+    /// <summary>Returns a value indicating whether a document member holds a file path its document authors, one
+    /// that resolves beside the document and moves with it.</summary>
+    /// <param name="declaringType">The model type declaring the member.</param>
+    /// <param name="member">The member's C# name.</param>
+    /// <returns><see langword="true"/> when the member is one of the document's file references.</returns>
+    public static bool IsFileField(Type declaringType, string member) {
+        ArgumentNullException.ThrowIfNull(argument: declaringType);
+
+        foreach (var field in FileFields) {
+            if ((field.Owner == declaringType) && string.Equals(a: field.Member, b: member, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    /// <summary>Re-expresses every document-authored file path of a composed fragment (each member
+    /// <see cref="IsFileField"/> names: asset rows, addon modules, graph sources, probe tracks, text fonts, the window
+    /// icon) from the document that authored it to the document it merges into. Document names (<c>references</c>, a
+    /// <c>schedule</c> instance) stay as written, since a world reaches its siblings by name. Machine configuration
+    /// paths are relocated with the machine catalog
     /// (<see cref="WorldModuleNamespace.TryRelocateConfigurationAssets"/>).</summary>
     /// <param name="module">The fragment's composed tree, rewritten in place.</param>
     /// <param name="sourceDocumentPath">The fragment's resolved name or path.</param>
@@ -168,37 +206,44 @@ public static class WorldDocumentPaths {
     public static void RelocateDocumentFields(JsonObject module, string sourceDocumentPath, string targetDocumentPath) {
         ArgumentNullException.ThrowIfNull(argument: module);
 
-        foreach (var family in AssetRowFamilies) {
-            RelocateRows(member: "source", rows: (module[family] as JsonArray), sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
-        }
+        foreach (var field in FileFields) {
+            JsonNode? holder = module;
 
-        RelocateRows(member: "modulePath", rows: (module["addons"] as JsonArray), sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
-        RelocateRows(member: "track", rows: (module["probes"] as JsonArray), sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
+            foreach (var segment in field.Section) {
+                holder = (holder as JsonObject)?[segment];
+            }
 
-        if (module["views"] is JsonObject views) {
-            RelocateRows(member: "source", rows: (views["pipelines"] as JsonArray), sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
-            RelocateRows(member: "source", rows: (views["graphs"] as JsonArray), sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
-        }
-
-        if (module["text"] is JsonObject text) {
-            RelocateRows(member: "source", rows: (text["fonts"] as JsonArray), sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
-        }
-
-        if (module["host"] is JsonObject host) {
-            RelocateMember(member: "icon", row: host, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
-        }
-    }
-
-    // The asset-row sections, in the order WorldAssetRowLoader.Rows lists them.
-    private static readonly string[] AssetRowFamilies = ["music", "tables", "tunes", "patches"];
-
-    private static void RelocateRows(JsonArray? rows, string member, string sourceDocumentPath, string targetDocumentPath) {
-        foreach (var row in (rows ?? [])) {
-            if (row is JsonObject item) {
-                RelocateMember(member: member, row: item, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
+            switch (holder) {
+                case JsonArray rows:
+                    foreach (var row in rows) {
+                        if (row is JsonObject item) {
+                            RelocateMember(member: field.JsonName, row: item, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
+                        }
+                    }
+                    break;
+                case JsonObject row:
+                    RelocateMember(member: field.JsonName, row: row, sourceDocumentPath: sourceDocumentPath, targetDocumentPath: targetDocumentPath);
+                    break;
             }
         }
     }
+
+    // One file reference a document authors: the model member, and the section of the document holding its rows (an
+    // array) or its one object.
+    private sealed record FileField(Type Owner, string Member, string JsonName, string[] Section);
+
+    private static readonly FileField[] FileFields = [
+        new(typeof(WorldMusicRow), nameof(WorldMusicRow.Source), "source", ["music"]),
+        new(typeof(Puck.State.TableRow), nameof(Puck.State.TableRow.Source), "source", ["tables"]),
+        new(typeof(WorldTune), nameof(WorldTune.Source), "source", ["tunes"]),
+        new(typeof(WorldPatch), nameof(WorldPatch.Source), "source", ["patches"]),
+        new(typeof(WorldAddonRow), nameof(WorldAddonRow.ModulePath), "modulePath", ["addons"]),
+        new(typeof(WorldProbe), nameof(WorldProbe.Track), "track", ["probes"]),
+        new(typeof(WorldViewGraph), nameof(WorldViewGraph.Source), "source", ["views", "graphs"]),
+        new(typeof(Puck.Text.TextFontDefinition), nameof(Puck.Text.TextFontDefinition.Source), "source", ["text", "fonts"]),
+        new(typeof(WorldHostDefaults), nameof(WorldHostDefaults.Icon), "icon", ["host"]),
+    ];
+
     private static void RelocateMember(JsonObject row, string member, string sourceDocumentPath, string targetDocumentPath) {
         if (
             (row[member] is JsonValue value) &&
