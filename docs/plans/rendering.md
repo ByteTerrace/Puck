@@ -284,8 +284,10 @@ P5 is complete. P8 extended the manifest: each pass entry records its
 interface hash, and the package carries its precompiled binaries.
 
 P7's gate spike has run its build-time half and its GPU half, the `binding`
-parity station. P10 is complete: all eight of its steps have landed, step 2's
-shared row regions and step 8's field rows included. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
+parity station. P10 is complete: all nine of its steps have landed, step 2's
+shared row regions, step 8's field rows and step 9's `bound` parity station
+included. Its one open check is the floor-tier parity leg on floor hardware, a
+deferred hardware check. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
 lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
 `sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
 the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
@@ -1095,8 +1097,14 @@ as `gun=`. The laws are the Humble battery's `light-gun` stage and
 white and a black half and publishes what it senses: a lit aim reads light in
 the running program, a dark aim, a miss, no ray and no application read dark,
 and a recorded tape of pointer intents replays to the same machine state and
-state hash. No canary drives it: `puck.cartridge.v1` has no light read, so no
-authored cartridge a headless World boots can see the gun.
+state hash. An authored cartridge reads the gun through the `puck.cartridge.v1`
+operand `$light`, 1 while the Color machine's infrared receiver sees light; the
+advanced target has no receiver and refuses it, and its Color weight is measured
+by `puck cartridge-cost`'s `light-condition` shape (`CartridgeLightTests`). The
+`light-gun` canary boots `light-gun.cgb.puck` headless on a `Simulation` screen,
+types the seat's ray each tick, and reads the cartridge's published light bit
+through a memory binding: 1 aimed at the lit half, 0 at the dark half, and never
+1 when aimed dark throughout.
 
 Panes publish their mappings from the live renderer (P13b-1's pane half, P13b-3's
 host half and P13b-6). `WorldFramePresenter.PrepareGraph` ends with
@@ -2974,6 +2982,29 @@ follow it.
    baked colors are in the mirror at install and followed through it) and
    `PipelineOverrideLawTests.Parameters` (the load gate binds a field row to an
    array only as long as its lattice).
+9. Done: the bound-row parity station. `puck parity` runs at one pinned
+   reference tier, `high`: the binding graph declares it and the parity world's
+   `bound` row names it, so the station renders the graph's `high` variant. The
+   row binds the grain pass's `seed` to the `grainSeed` state row, which the
+   world's `toGrainSeed` rule moves from 0 to 13 at tick 1210. Its captures sit
+   on both sides of the move, at ticks 1195 and 1215, and each must equal the
+   binding reference drawn with the value the row holds at that tick, which the
+   contract states as the row's steps (`reference.parameters` in
+   `parity.contract.json`, `ParityBindingReference`). Bound to any literal, the
+   station fails `REFERENCE-FAILED` on both backends at the capture whose value
+   the literal is not (0 fails tick 1215, 13 fails tick 1195), and left
+   unresolved so the graph's default draws, it fails both, while its pixel
+   verdict still holds. A
+   `world.screenshot` writes no manifest entry, so the comparator is the one
+   place a mid-burst capture's skew is judged: `ParityComparatorTests` hands it
+   a capture whose frame refreshed its regions after the armed tick and holds
+   it to `TICK-FAILED` with `PIXEL-OK`. Laws: `ParityBindingReferenceLawTests`
+   (the bound station's reference follows the stated steps, a frame drawn with
+   either literal or the default fails the capture it does not match, and a
+   parameter naming a field the reference does not read, a step key that is not
+   a tick or a value that is not a whole number is refused by name). The floor-tier
+   leg, the same stations at `low` on floor hardware, is a deferred hardware
+   check.
 
 ### P11 — The frame graph document and nested views
 
@@ -3527,17 +3558,17 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      the wire and the tape bit for bit and an absent one costs one byte; a
      three-tick burst gives three snapshots, each carrying the ray; and
      `Locate` answers what the cursor's own mapping answered.
-   - A machine reads the pointer as a light gun, landed:
+   - A machine reads the pointer as a light gun:
      `MachinePadState.Pointer` carries the aim through the one pad path,
      `WorldEngagement.Aim` maps the applied body's ray through the row's
      normalized mapping, and the Humble brick's `LightGunComponent` puts the
-     aimed LCD pixel's brightness on the infrared receive line. Laws: the
-     `light-gun` Post stage and `LightGunLawTests` (a lit aim changes the
-     running program's state, a dark aim, a miss, no ray and no application
-     read dark, and a tape replays to the same machine state and hash).
-     Remaining: a `puck.cartridge.v1` light read, with its measured cost
-     weight, so an authored cartridge can see the gun and a headless canary
-     can drive one.
+     aimed LCD pixel's brightness on the infrared receive line. An authored
+     cartridge reads it through the `puck.cartridge.v1` operand `$light`
+     (cgb only, with a measured cost weight). Laws: the `light-gun` Post
+     stage, `LightGunLawTests` (a lit aim changes the running program's
+     state, a dark aim, a miss, no ray and no application read dark, and a
+     tape replays to the same machine state and hash), `CartridgeLightTests`,
+     and the headless `light-gun` canary.
 3. The presentation destination. The CPU half has landed: the World host
    publishes its panes to its `SourcePanePicker` every frame, from the
    placements `place` draws, and the drawn cursor's feed (`WorldCursorFeed`)

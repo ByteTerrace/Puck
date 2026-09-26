@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using Puck.HumbleGamingBrick.Interfaces;
 using MachineInstance = Puck.GamingBricks.MachineInstance<Puck.HumbleGamingBrick.Machine, Puck.HumbleGamingBrick.MachineConfiguration>;
 
@@ -11,6 +12,7 @@ public sealed class VerifyMachineDriver : IDisposable {
     private readonly IFramebuffer m_framebuffer;
     private readonly IJoypad m_joypad;
     private readonly string m_label;
+    private readonly ILightGun m_lightGun;
     private readonly MachineInstance m_machine;
 
     /// <summary>Creates a driver over a machine running the cartridge.</summary>
@@ -35,8 +37,12 @@ public sealed class VerifyMachineDriver : IDisposable {
         m_framebuffer = m_machine.GetRequiredService<IFramebuffer>();
         m_cpu = m_machine.GetRequiredService<ICpu>();
         m_joypad = m_machine.GetRequiredService<IJoypad>();
+        m_lightGun = m_machine.GetRequiredService<ILightGun>();
     }
 
+    /// <summary>Aims the light gun on the infrared receive line, held until the next aim.</summary>
+    /// <param name="pointer">The aim: off the screen, or a fraction of the picture.</param>
+    public void Aim(MachinePointer pointer) => m_lightGun.Aim(pointer: pointer);
     public static void Assert(bool condition, string message, string label) {
         if (!condition) {
             throw new InvalidOperationException(message: $"{label} ROM verification failed: {message}");

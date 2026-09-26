@@ -1,0 +1,29 @@
+# The same run aimed at the dark right half throughout: the machine never sees light and seen never leaves 0.
+replay.record light-gun
+world.wait 10
+body.engage 0
+world.wait 3
+source.pointer.origin 0.5 1 5
+source.pointer.direction 0 0 -1
+world.wait 1
+source.pointer.origin 0.5 1 5
+source.pointer.direction 0 0 -1
+world.wait 1
+source.pointer.origin 0.5 1 5
+source.pointer.direction 0 0 -1
+screen.state 0
+world.wait 1
+world.state seen
+source.pointer.origin 0.5 1 5
+source.pointer.direction 0 0 -1
+world.wait 1
+source.pointer.origin 0.5 1 5
+source.pointer.direction 0 0 -1
+world.wait 1
+source.pointer.origin 0.5 1 5
+source.pointer.direction 0 0 -1
+screen.state 0
+world.wait 1
+world.state seen
+replay.stop
+replay.verify light-gun

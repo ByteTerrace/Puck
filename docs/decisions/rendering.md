@@ -365,17 +365,17 @@ steps no tick past the armed one until the capture is served or refused, and
 refuses it by name after a bounded hold. It also
 reports: `WorldCaptureScheduler` refuses a capture served by a frame showing
 another tick as `stale`, naming both ticks, rather than leaving it out of the
-manifest. P10 adds the pricing and the second tick. A world's bindings appear
-in the cost report as bytes per tick and bytes per frame, beside and separate
-from the simulation's cycle bound, and a document over its ceiling is refused
-at validation naming the pipeline and the binding. A state-bound parameter adds
-a second tick, the one its regions were refreshed at, which the fence does not
-pin. That tick is reported: a capture carries it, and `puck parity` has a
-verdict that the frame shows the tick it was armed for, ordered before the
-pixel verdict, so a skewed capture fails as a skew. `puck parity` is meant to
-pin one reference tier, with one station in the parity world whose pixels
-depend on a bound row, and a second leg at the floor tier; neither the station
-nor the leg exists yet.
+manifest. Bindings are priced too: a world's bindings appear in the cost report
+as bytes per tick and bytes per frame, beside and separate from the
+simulation's cycle bound, and a document over its ceiling is refused at
+validation naming the pipeline and the binding. A state-bound parameter adds a
+second tick, the one its regions were refreshed at, which the fence does not
+pin. That tick is reported: a capture carries it as its region tick, and
+`puck parity`'s tick verdict holds it to the armed tick, ordered before the
+pixel verdict, so a skewed capture fails as a skew. `puck parity` pins one
+reference tier, `high`, and its `bound` station's pixels depend on a bound row
+the world's own rules move. A second leg at the floor tier, `low`, on floor
+hardware is a deferred hardware check.
 
 ## The frame graph and nesting
 
