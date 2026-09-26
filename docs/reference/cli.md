@@ -653,6 +653,11 @@ break, and nothing wider:
 - A changed `Puck.World` source that neither the coverage index nor a stand-in
   places is listed as `unmapped`. It chooses no canary; the list says coverage
   is due for a fresh recording.
+- A file deleted since `--since` can never be recorded, so it is never
+  `unmapped`. The index as the base revision recorded it places it, choosing
+  the canaries that executed it; one neither index names is listed as
+  `deleted`, and its project's suites still run. Nothing reads a deleted file.
+
 - Build infrastructure (`build/`, `Directory.Build.*`, `global.json`,
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`
   and `experimental/` choose nothing.
