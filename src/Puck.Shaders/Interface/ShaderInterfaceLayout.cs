@@ -20,9 +20,6 @@ namespace Puck.Shaders;
 /// <item><description>An array is a binding of its own: a read-only structured buffer of its scalar element type
 /// (<see cref="GpuBindingKind.ReadOnlyBuffer"/>), whose stride is the element's size on both backends, so element
 /// <c>i</c> lies at byte <c>4i</c> of the buffer bound there.</description></item>
-/// <item><description>A pushed group's block (<see cref="ShaderInterface.PushConstants"/>) is a
-/// pushed <see cref="GpuBindingKind.ConstantBuffer"/> binding (<see cref="ShaderInterfaceBinding.Pushed"/>) at binding 0 of
-/// its set, placed by the same rule.</description></item>
 /// <item><description>A buffer binding carries its element stride (<see cref="ShaderInterfaceBinding.ElementStride"/>): a
 /// structured buffer's element size on both backends, and for a raw buffer the stride each backend's reflection reports
 /// for a byte-address buffer, <see cref="SpirvRawBufferStride"/> and <see cref="DxilRawBufferStride"/>. SPIR-V declares
@@ -67,8 +64,7 @@ public sealed class ShaderInterfaceLayout {
                 groups.Add(item: LayOutGroup(
                     group: group,
                     interfaceName: shaderInterface.Name,
-                    members: members,
-                    pushed: (shaderInterface.PushConstants == group)
+                    members: members
                 ));
             }
         }
@@ -81,7 +77,6 @@ public sealed class ShaderInterfaceLayout {
             )
                 ? DxilRawBufferStride
                 : binding.ElementStride),
-            Pushed = false,
         }))).ToList();
 
         if (shaderInterface.PushesIndex) {
@@ -109,17 +104,13 @@ public sealed class ShaderInterfaceLayout {
     }
 
     /// <summary>Gets every binding the interface declares as a SPIR-V module reflects them, in
-    /// <see cref="Ordered"/> order: a pushed block (the frame group's or the pushed index) at set 0, binding 0, and a raw
+    /// <see cref="Ordered"/> order: the pushed index, when the interface declares one, at set 0, binding 0, and a raw
     /// buffer at <see cref="SpirvRawBufferStride"/>.</summary>
     public IReadOnlyList<ShaderInterfaceBinding> Bindings { get; }
     /// <summary>Gets <see cref="Bindings"/> as a DXIL container reflects them: identical, except that no block is pushed
-    /// and a raw buffer's stride is <see cref="DxilRawBufferStride"/>. A pushed frame block is a root-constant block,
-    /// which Direct3D 12 reflects as the constant buffer at register <c>b0</c>, space 0, and a pushed index is the
-    /// constant buffer at register <c>b0</c> in space <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>.</summary>
+    /// and a raw buffer's stride is <see cref="DxilRawBufferStride"/>. A pushed index is the constant buffer at
+    /// register <c>b0</c> in space <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>.</summary>
     public IReadOnlyList<ShaderInterfaceBinding> DxilBindings { get; }
-    /// <summary>Gets the pushed group's layout, or <see langword="null"/> when the interface pushes no group.</summary>
-    public ShaderInterfaceGroupLayout? PushedGroup =>
-        Groups.FirstOrDefault(predicate: group => (group.Group == Interface.PushConstants));
     /// <summary>Gets the groups the interface uses, in set order.</summary>
     public IReadOnlyList<ShaderInterfaceGroupLayout> Groups { get; }
     /// <summary>Gets the interface this layout places.</summary>
@@ -131,15 +122,10 @@ public sealed class ShaderInterfaceLayout {
     /// <param name="stages">The pipeline's shader stages, from its pass kind
     /// (<see cref="ShaderPipelinePassKinds.Stages"/>).</param>
     /// <returns>The pipeline layout.</returns>
-    /// <exception cref="InvalidOperationException">The interface pushes a block, which is not a group.</exception>
     /// <exception cref="ArgumentException"><paramref name="stages"/> is not compute alone or graphics stages
     /// alone.</exception>
-    public GpuPipelineLayoutDescription PipelineLayout(GpuShaderStage stages) {
-        if (PushedGroup is { } pushed) {
-            throw new InvalidOperationException(message: $"Shader interface '{Interface.Name}' pushes its {pushed.Group} block; a pipeline layout binds groups and pushes only an index.");
-        }
-
-        return new GpuPipelineLayoutDescription(
+    public GpuPipelineLayoutDescription PipelineLayout(GpuShaderStage stages) =>
+        new(
             groups: Groups.Select(selector: static group => new GpuGroupLayoutDescription(
                 bindings: group.Bindings.Select(selector: static binding => new GpuGroupBinding(
                     binding: binding.Binding,
@@ -150,16 +136,14 @@ public sealed class ShaderInterfaceLayout {
             pushesIndex: Interface.PushesIndex,
             stages: stages
         );
-    }
     /// <summary>Returns why a compiled module binds something other than this layout places, or <see langword="null"/>
     /// when every binding it reads sits where the layout puts it. The module's bindings are held to one backend's view
     /// at a time, <see cref="Bindings"/> as SPIR-V reflects the layout or <see cref="DxilBindings"/> as DXIL does, and
     /// fit when every one of them fits the same view: each must be a binding of that view at its set and number, of the
     /// same kind, as pushed or bound as the view places it, with the same element stride; and a constant block's members
-    /// must be the view's, which is what tells a pushed frame block from a pushed index. A binding the module does not
-    /// read is not reflected, so it is not checked. A DXIL container cannot tell root constants from a bound constant
-    /// buffer, so in its view the pushed frame block is the constant buffer at register <c>b0</c>, space 0, and the
-    /// pushed index the one at <c>b0</c> in space <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>. When neither
+    /// must be the view's. A binding the module does not read is not reflected, so it is not checked. A DXIL container
+    /// cannot tell root constants from a bound constant buffer, so in its view the pushed index is the constant buffer
+    /// at register <c>b0</c> in space <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/>. When neither
     /// view fits, the disagreement is named against the view that fits more of the module's bindings in order.</summary>
     /// <param name="reflected">The module's bindings, as <see cref="SpirvInterfaceReader"/> or
     /// <see cref="DxilInterfaceReader"/> reads them.</param>
@@ -249,7 +233,7 @@ public sealed class ShaderInterfaceLayout {
                 paramName: nameof(kind)
             ),
         };
-    private static ShaderInterfaceGroupLayout LayOutGroup(ShaderInterfaceGroup group, string interfaceName, IReadOnlyList<ShaderInterfaceMember> members, bool pushed) {
+    private static ShaderInterfaceGroupLayout LayOutGroup(ShaderInterfaceGroup group, string interfaceName, IReadOnlyList<ShaderInterfaceMember> members) {
         var set = ((uint)group);
         var blockMembers = new List<ShaderInterfaceBlockMember>();
         var cursor = 0u;
@@ -300,7 +284,6 @@ public sealed class ShaderInterfaceLayout {
                 Kind: GpuBindingKind.ConstantBuffer,
                 Members: blockMembers.AsReadOnly(),
                 Name: blockVariableName,
-                Pushed: pushed,
                 Set: set
             ));
         }
@@ -337,7 +320,6 @@ public sealed class ShaderInterfaceLayout {
             BlockVariableName: blockVariableName,
             Bindings: bindings.AsReadOnly(),
             Group: group,
-            Pushed: pushed,
             Resources: resources.AsReadOnly(),
             Set: set
         );
@@ -364,8 +346,6 @@ public sealed record ShaderInterfaceResourceLayout(
 /// <param name="BlockSizeBytes">The block's size in bytes, a multiple of 16; zero when the group has no block.</param>
 /// <param name="Resources">The group's images, buffers, arrays and samplers in binding order.</param>
 /// <param name="Bindings">Every binding of the group, block first, in binding order.</param>
-/// <param name="Pushed">Whether the group's block is delivered as push constants rather than bound as a constant
-/// buffer.</param>
 public sealed record ShaderInterfaceGroupLayout(
     ShaderInterfaceGroup Group,
     uint Set,
@@ -374,6 +354,5 @@ public sealed record ShaderInterfaceGroupLayout(
     IReadOnlyList<ShaderInterfaceBlockMember> BlockMembers,
     uint BlockSizeBytes,
     IReadOnlyList<ShaderInterfaceResourceLayout> Resources,
-    IReadOnlyList<ShaderInterfaceBinding> Bindings,
-    bool Pushed
+    IReadOnlyList<ShaderInterfaceBinding> Bindings
 );

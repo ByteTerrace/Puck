@@ -187,10 +187,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         Message: message,
         Names: names
     );
-    private static GpuPixelFormat PixelFormatOf(SurfaceFormat format) => (format switch {
-        SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
-        _ => GpuPixelFormat.R8G8B8A8Unorm,
-    });
     // Validates one instance's graph against its instance and resolves its inputs to producer indices. A host buffer port
     // (an uploaded source's region) is the host's to bind, never an instance's output.
     private static bool TryResolve(RenderGraphInstanceSet set, int index, RenderGraphRuntimeGraph graph, RenderGraphPackageRecorders packages, Published?[] published, [NotNullWhen(returnValue: true)] out Binding[]? bindings, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal) {
@@ -615,7 +611,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private static Published? PublishedBy(RenderGraphRuntimeGraph? graph, IRenderGraphExternalProducer? producer) {
         if (producer is not null) {
             return new Published(
-                Format: PixelFormatOf(format: producer.Format),
+                Format: producer.Format,
                 SizeBytes: 0UL
             );
         }
@@ -716,7 +712,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 if (producer.TryAcquireOutput(output: out var external)) {
                     node.BindImage(
                         image: new ShaderPipelineExternalImage(
-                            Format: PixelFormatOf(format: external.Image.Format),
+                            Format: external.Image.Format,
                             Height: external.Image.Height,
                             ImageHandle: external.Image.ImageHandle,
                             ImageViewHandle: external.Image.ImageViewHandle,
@@ -758,7 +754,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             if (output.Image.IsSameDeviceImage) {
                 node.BindImage(
                     image: new ShaderPipelineExternalImage(
-                        Format: PixelFormatOf(format: output.Image.Format),
+                        Format: output.Image.Format,
                         Height: output.Image.Height,
                         ImageHandle: output.Image.ImageHandle,
                         ImageViewHandle: output.Image.ImageViewHandle,

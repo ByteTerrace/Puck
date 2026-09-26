@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+
 namespace Puck.Abstractions.Presentation;
 
 /// <summary>
@@ -8,6 +10,6 @@ namespace Puck.Abstractions.Presentation;
 public sealed class PresentationOptions {
     /// <summary>The preferred swapchain present mode. Defaults to <see cref="Presentation.PresentMode.Vsync"/>.</summary>
     public PresentMode PresentMode { get; init; } = PresentMode.Vsync;
-    /// <summary>The preferred back-buffer surface format. Defaults to <see cref="SurfaceFormat.R8G8B8A8Unorm"/>.</summary>
-    public SurfaceFormat SurfaceFormat { get; init; } = SurfaceFormat.R8G8B8A8Unorm;
+    /// <summary>The preferred back-buffer format. Defaults to <see cref="GpuPixelFormat.R8G8B8A8Unorm"/>.</summary>
+    public GpuPixelFormat SurfaceFormat { get; init; } = GpuPixelFormat.R8G8B8A8Unorm;
 }

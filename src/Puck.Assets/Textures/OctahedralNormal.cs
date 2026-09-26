@@ -1,10 +1,11 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 
 namespace Puck.Assets.Textures;
 
 /// <summary>
 /// A unit direction stored in two unsigned-normalized 8-bit channels by the octahedral map, so a two-channel format
-/// (<see cref="TextureFormat.Rg8Unorm"/>, <see cref="TextureFormat.Bc5Unorm"/>) holds any direction and the third
+/// (<see cref="GpuPixelFormat.R8G8Unorm"/>, <see cref="GpuPixelFormat.Bc5Unorm"/>) holds any direction and the third
 /// component is reconstructed. A direction <c>(x, y, z)</c> projects onto the octahedron <c>|x| + |y| + |z| = 1</c>;
 /// the upper half (<c>z</c> at or above zero) keeps its <c>(x, y)</c>, and the lower half folds across the diagonals to
 /// <c>((1 - |y|) sign x, (1 - |x|) sign y)</c>, with a zero component's sign positive. Each of the two coordinates maps

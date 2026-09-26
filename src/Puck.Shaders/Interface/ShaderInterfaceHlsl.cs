@@ -8,9 +8,7 @@ namespace Puck.Shaders;
 /// Generates the HLSL include a pass reads its <see cref="ShaderInterface"/> through. Every declaration carries its
 /// placement explicitly and for both backends at once: a block member carries <c>[[vk::offset(n)]]</c> and sits after
 /// named padding that makes Direct3D 12's packing land on the same offset, and a binding carries
-/// <c>[[vk::binding(b, set)]]</c> paired with <c>register(xb, spaceset)</c>, and a pushed group's block carries
-/// <c>[[vk::push_constant]]</c> paired with <c>register(b0, space0)</c>, where both backends' root constants live. Values
-/// reach a pass as members of a named struct per group, and an array is read through a generated accessor that hides how
+/// <c>[[vk::binding(b, set)]]</c> paired with <c>register(xb, spaceset)</c>. Values reach a pass as members of a named struct per group, and an array is read through a generated accessor that hides how
 /// its elements are stored. A buffer with an element type is a <c>StructuredBuffer&lt;T&gt;</c> or
 /// <c>RWStructuredBuffer&lt;T&gt;</c>, and one without is a <c>ByteAddressBuffer</c> or <c>RWByteAddressBuffer</c>. A
 /// pushed index (<see cref="ShaderInterface.PushesIndex"/>) follows the groups as a one-member struct carrying
@@ -63,9 +61,7 @@ public static class ShaderInterfaceHlsl {
                 text: text
             );
             Line(
-                line: (group.Pushed
-                    ? $"// The {group.Group} group: push constants, register space {group.Set}."
-                    : $"// The {group.Group} group: descriptor set {group.Set}, register space {group.Set}."),
+                line: $"// The {group.Group} group: descriptor set {group.Set}, register space {group.Set}.",
                 text: text
             );
 
@@ -89,7 +85,7 @@ public static class ShaderInterfaceHlsl {
                     text: text
                 );
                 Line(
-                    line: $"{(group.Pushed ? "[[vk::push_constant]]" : Binding(binding: 0, set: group.Set))} ConstantBuffer<{group.BlockTypeName}> {group.BlockVariableName}{Register(binding: 0, register: 'b', set: group.Set)};",
+                    line: $"{Binding(binding: 0, set: group.Set)} ConstantBuffer<{group.BlockTypeName}> {group.BlockVariableName}{Register(binding: 0, register: 'b', set: group.Set)};",
                     text: text
                 );
             }

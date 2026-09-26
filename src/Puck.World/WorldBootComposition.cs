@@ -1288,8 +1288,9 @@ public static class WorldBootComposition {
 
         // The drawn cursor: the per-seat viewport+camera publication the frame source fills each dressed frame, the
         // per-frame feed that reads the pointer store NON-destructively (position + held buttons; the drained
-        // motion/wheel accumulators stay WorldSeatViewInput's), and the store the unified overlay's cursor writer
-        // renders. All presentation/session state — nothing here reaches a CommandSnapshot or the simulation.
+        // motion/wheel accumulators stay WorldSeatViewInput's) and asks the render graph host's picker which pane it
+        // hovers, and the store the unified overlay's cursor writer renders. All presentation/session state — nothing
+        // here reaches a CommandSnapshot or the simulation.
         services.AddSingleton<WorldSeatViewports>();
         services.AddSingleton<CursorStore>();
         services.AddSingleton(implementationFactory: static sp => new WorldCursorFeed(
@@ -1300,7 +1301,8 @@ public static class WorldBootComposition {
             viewports: sp.GetRequiredService<WorldSeatViewports>(),
             hud: sp.GetRequiredService<HudStore>(),
             store: sp.GetRequiredService<CursorStore>(),
-            facts: sp.GetRequiredService<WorldOverlayFacts>()
+            facts: sp.GetRequiredService<WorldOverlayFacts>(),
+            panes: sp.GetRequiredService<WorldViewGraphHost>()
         ));
         // The one pointer consumer that does ride a CommandSnapshot: the ray a Simulation screen reads, cast each host
         // frame through the pointer seat's published camera and sustained on that seat's lane ahead of the frame's

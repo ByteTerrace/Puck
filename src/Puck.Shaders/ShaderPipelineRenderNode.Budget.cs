@@ -108,7 +108,11 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return (extent.Width, extent.Height, (declaration.IsExternal
             ? 0UL
-            : checked((((((ulong)extent.Width) * extent.Height) * BytesPerPixel(format: declaration.Format)) * ((ulong)count)))
+            : checked((ImageBytes(
+                format: declaration.Format,
+                height: extent.Height,
+                width: extent.Width
+            ) * ((ulong)count)))
         ));
     }
     // The bytes a graph planned at a frame extent owns, before its float preview: every storage's instances, and the
@@ -159,12 +163,12 @@ public sealed partial class ShaderPipelineRenderNode {
             : (((pass.Kind == ShaderPipelineDocumentPassKind.Fullscreen) && (pass.Vertex == ShaderPipelineVertexInput.Position))
                 ? FullscreenVertexBytes
                 : 0UL));
-    private static ulong BytesPerPixel(string? format) => ParseFormat(format: format) switch {
-        GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.D32Float => 4UL,
-        GpuPixelFormat.R16G16B16A16Float => 8UL,
-        GpuPixelFormat.R32G32B32A32Float => 16UL,
-        _ => throw new InvalidDataException(message: $"Unsupported format '{format}'.")
-    };
+    // The bytes of one image of a declared format, as the image factories allocate it.
+    private static ulong ImageBytes(string? format, uint width, uint height) => GpuPixelFormats.LevelByteLength(
+        format: ParseFormat(format: format),
+        height: height,
+        width: width
+    );
     // What installing a graph planned at an extent, with the float preview its selection needs and its arrays bound to
     // rows, costs from what the node owns now. History the graph carries from the installed one is moved, not allocated,
     // so the peak holds its bytes once.

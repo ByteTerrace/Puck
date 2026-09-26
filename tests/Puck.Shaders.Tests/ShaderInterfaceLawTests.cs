@@ -201,16 +201,7 @@ public sealed class ShaderInterfaceLawTests {
         }
     }
     [Fact]
-    public void An_interface_pushes_its_frame_block_or_an_index_never_both() {
-        Assert.Contains(
-            actualString: Assert.Throws<InvalidDataException>(testCode: () => new ShaderInterface(
-                members: ShaderFrameInterface.FrameGroupMembers,
-                name: "both",
-                pushConstants: ShaderInterfaceGroup.Frame,
-                pushesIndex: true
-            )).Message,
-            expectedSubstring: "Shader interface 'both' pushes both its Frame block and an index"
-        );
+    public void A_member_cannot_take_the_pushed_index_s_generated_name() {
         Assert.Contains(
             actualString: Assert.Throws<InvalidDataException>(testCode: () => new ShaderInterface(
                 members: [ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: ShaderInterface.PushedIndexVariableName)],
@@ -297,25 +288,24 @@ public sealed class ShaderInterfaceLawTests {
         Assert.Null(@object: layout.Mismatch(reflected: layout.DxilBindings));
     }
     [Fact]
-    public void A_pushed_frame_block_and_a_pushed_index_are_told_apart() {
-        var indexLayout = ShaderInterfaceSpike.TypedBuffers.Layout();
-        var frameLayout = new ShaderInterface(
-            members: ShaderFrameInterface.FrameGroupMembers,
-            name: "echo",
-            pushConstants: ShaderInterfaceGroup.Frame
-        ).Layout();
-        var pushedIndex = indexLayout.Bindings.Where(predicate: static binding => binding.Pushed).ToArray();
-        var pushedFrame = frameLayout.Bindings.Where(predicate: static binding => binding.Pushed).ToArray();
+    public void A_bound_frame_block_and_a_pushed_index_are_told_apart() {
+        // SPIR-V reflects both at set 0, binding 0: the frame group's block bound, the index pushed.
+        var layout = ShaderInterfaceSpike.TypedBuffers.Layout();
+        var frame = layout.Bindings.Single(predicate: static binding => string.Equals(
+            a: binding.Name,
+            b: "frameGroup",
+            comparisonType: StringComparison.Ordinal
+        ));
+        var index = layout.Bindings.Single(predicate: static binding => binding.Pushed);
 
-        Assert.Null(@object: frameLayout.Mismatch(reflected: pushedFrame));
-        Assert.Null(@object: indexLayout.Mismatch(reflected: pushedIndex));
+        Assert.Null(@object: layout.Mismatch(reflected: [frame, index]));
         Assert.StartsWith(
-            actualString: frameLayout.Mismatch(reflected: pushedIndex),
-            expectedStartString: "the module reads pushedIndex set 0 binding 0 pushed ConstantBuffer [index@0:uint];"
+            actualString: layout.Mismatch(reflected: [frame with { Pushed = true }]),
+            expectedStartString: "the module reads frameGroup set 0 binding 0 pushed ConstantBuffer ["
         );
         Assert.StartsWith(
-            actualString: indexLayout.Mismatch(reflected: pushedFrame),
-            expectedStartString: "the module reads frameGroup set 0 binding 0 pushed ConstantBuffer ["
+            actualString: layout.Mismatch(reflected: [index with { Pushed = false }]),
+            expectedStartString: "the module reads pushedIndex set 0 binding 0 ConstantBuffer [index@0:uint];"
         );
     }
     [Fact]

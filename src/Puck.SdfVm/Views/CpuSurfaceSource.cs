@@ -92,10 +92,10 @@ public sealed class CpuSurfaceSource : IDisposable {
     /// <param name="pixels">The tightly packed pixels, in <paramref name="format"/> order, rows without padding.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
-    /// <param name="format">The presentable pixel format the buffer is laid out in.</param>
+    /// <param name="format">The surface format the buffer is laid out in.</param>
     /// <returns>The published image-view handle (the current handle when nothing was uploaded).</returns>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public nint Publish(IGpuDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, uint width, uint height, SurfaceFormat format) {
+    public nint Publish(IGpuDeviceContext deviceContext, ReadOnlyMemory<byte> pixels, uint width, uint height, GpuPixelFormat format) {
         ArgumentNullException.ThrowIfNull(argument: deviceContext);
 
         if (
@@ -111,7 +111,7 @@ public sealed class CpuSurfaceSource : IDisposable {
         // The upload object owns the returned handle and recreates its image on a dimension/format change, so a
         // varying capture extent needs no manual reallocation here.
         m_handle = m_upload.Upload(
-            format: GpuPixelFormats.FromSurfaceFormat(format: format),
+            format: format,
             height: height,
             pixels: pixels,
             width: width

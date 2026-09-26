@@ -480,7 +480,7 @@ public sealed partial class RenderGraphRuntime {
                         acquired: output.Lease,
                         consumer: node,
                         image: new ShaderPipelineExternalImage(
-                            Format: PixelFormatOf(format: output.Image.Format),
+                            Format: output.Image.Format,
                             Height: output.Image.Height,
                             ImageHandle: output.Image.ImageHandle,
                             ImageViewHandle: output.Image.ImageViewHandle,
