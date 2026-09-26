@@ -1,3 +1,4 @@
+using Puck.Abstractions.Sources;
 using Puck.World.Client;
 
 using Xunit;
@@ -163,12 +164,22 @@ public sealed class WorldPresentationNameLawTests {
             actual: seat.Split(separator: GeneratedName.Joiner),
             expected: [SeatCamera, WorldViewNames.SeatPart, "2"]
         );
-        Assert.Equal(
-            actual: WorldViewNames.Source(screen: 4),
-            expected: "source$4"
+
+        var source = WorldViewNames.Source(
+            producer: "qr",
+            settings: null
         );
 
-        foreach (var name in ((string[])[WorldViewNames.Session(screen: 0), seat, WorldViewNames.Source(screen: 0)])) {
+        Assert.Equal(
+            actual: source.Split(separator: GeneratedName.Joiner),
+            expected: [WorldViewNames.SourceHead, "qr", ImageSourceSettings.Digest(settings: null)]
+        );
+        Assert.Matches(
+            actualString: ImageSourceSettings.Digest(settings: null),
+            expectedRegexPattern: "^[0-9a-f]{16}$"
+        );
+
+        foreach (var name in ((string[])[WorldViewNames.Session(screen: 0), seat, source])) {
             Assert.True(condition: GeneratedName.IsGenerated(name: name), userMessage: name);
             Assert.False(condition: GeneratedName.TryValidateAuthored(
                 name: name,

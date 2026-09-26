@@ -9,13 +9,15 @@ namespace Puck.World.Client;
 /// <summary>
 /// The render-graph source instances a world's screens read: one external instance per distinct producer, machine or
 /// probe source shown, whose package is <c>source.&lt;producer id&gt;</c> (<see cref="RenderGraphInstance.SourcePackage"/>)
-/// and which carries the source's settings. Screens showing equal sources read one instance, named after the first
-/// screen showing it (<see cref="WorldViewNames.Source"/>), so the scheduler renders it at most once a frame however many
-/// screens show it. A producer source carries its settings object as the document spelled it; a machine source is the
-/// <see cref="WorldImageProducerSettings.MachineId"/> source with <c>instance</c> and <c>output</c> settings, and a probe
-/// source the <see cref="WorldImageProducerSettings.ProbeId"/> source with an <c>id</c> setting. Every other arm (none,
-/// view, session, text) is no source instance: a view and a session are rendered instances of their own. An instance's
-/// <see cref="RenderGraphInstance.Handle"/> is its identity as a displayed source.
+/// and which carries the source's settings. Each instance is named by its content, its producer and the digest of its
+/// settings (<see cref="WorldViewNames.Source"/>), so screens showing equal sources read one instance, which the scheduler
+/// renders at most once a frame however many screens show it, and adding, removing or reordering screens renames no
+/// source and never gives a name to other content. A producer source carries its settings object as the document spelled
+/// it; a machine source is the <see cref="WorldImageProducerSettings.MachineId"/> source with <c>instance</c> and
+/// <c>output</c> settings, and a probe source the <see cref="WorldImageProducerSettings.ProbeId"/> source with an
+/// <c>id</c> setting. Every other arm (none, view, session, text) is no source instance: a view and a session are
+/// rendered instances of their own. An instance's <see cref="RenderGraphInstance.Handle"/> is its identity as a
+/// displayed source.
 /// </summary>
 public sealed class WorldSourceInstances {
     private const string IdSetting = "id";
@@ -68,10 +70,12 @@ public sealed class WorldSourceInstances {
     /// showing none.</param>
     /// <returns>The source instances and which one each screen reads.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shown"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Two different sources digest to one instance name.</exception>
     public static WorldSourceInstances Of(IReadOnlyList<WorldScreenSource?> shown) {
         ArgumentNullException.ThrowIfNull(argument: shown);
 
         var instances = new List<RenderGraphInstance>();
+        var byName = new Dictionary<string, RenderGraphInstance>(comparer: StringComparer.Ordinal);
         var byScreen = new string?[shown.Count];
 
         for (var screen = 0; (screen < shown.Count); screen++) {
@@ -79,29 +83,44 @@ public sealed class WorldSourceInstances {
                 continue;
             }
 
-            var package = RenderGraphInstance.SourcePackage(producer: source.Producer);
-            var existing = instances.Find(match: instance => (
-                string.Equals(
-                    a: instance.ExternalPackage,
-                    b: package,
-                    comparisonType: StringComparison.Ordinal
-                ) &&
-                ImageSourceSettings.Equal(
-                    left: instance.Settings,
-                    right: source.Settings
-                )
-            ));
+            var name = WorldViewNames.Source(
+                producer: source.Producer,
+                settings: source.Settings
+            );
 
-            if (existing is null) {
+            if (byName.TryGetValue(
+                key: name,
+                value: out var existing
+            )) {
+                // A name is its content's digest, so two contents under one name are a digest collision, which would
+                // alias two images under one handle.
+                if (
+                    !string.Equals(
+                        a: existing.SourceProducer,
+                        b: source.Producer,
+                        comparisonType: StringComparison.Ordinal
+                    ) ||
+                    !ImageSourceSettings.Equal(
+                        left: existing.Settings,
+                        right: source.Settings
+                    )
+                ) {
+                    throw new InvalidOperationException(message: $"Screen {screen}'s source and an earlier screen's differ, but both digest to the instance name '{name}'.");
+                }
+            } else {
                 existing = RenderGraphInstance.Source(
-                    name: WorldViewNames.Source(screen: screen),
+                    name: name,
                     producer: source.Producer,
                     settings: source.Settings
+                );
+                byName.Add(
+                    key: name,
+                    value: existing
                 );
                 instances.Add(item: existing);
             }
 
-            byScreen[screen] = existing.Name;
+            byScreen[screen] = name;
         }
 
         return new WorldSourceInstances(

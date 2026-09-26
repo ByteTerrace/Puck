@@ -240,7 +240,8 @@ These are one-line cautions; the owning pages hold the derivations.
   refuses it by name. An import's CPU staged-copy fallback (the camera and
   capture CPU tiers) is still `Imported`. A source is a render-graph instance:
   `WorldSourceInstances` makes one external instance per distinct producer,
-  machine or probe source the screens show (`source$<screen>`, package
+  machine or probe source the screens show (`source$<producer>$<digest>`, named by
+  its content through `ImageSourceSettings.Digest`, package
   `source.<producer id>`, carrying the settings), and
   `WorldImageProducers.RegisterPackages` registers one external-producer factory
   per producer id that opens the instance's feed through `TryOpen`. A typed

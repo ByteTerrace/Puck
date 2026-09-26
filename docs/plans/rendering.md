@@ -2618,8 +2618,11 @@ except step 8.
    screen source, a machine output and a probe output an external instance
    whose package is `source.<producer id>` (`machine` and `probe` for the typed
    arms, ids the vocabulary refuses to a document producer) and which carries
-   its settings; screens showing equal sources read one instance, named
-   `source$<screen>` after the first. `WorldImageProducers.RegisterPackages`
+   its settings. An instance is named by its content,
+   `source$<producer>$<digest>` over the canonical form of its settings
+   (`ImageSourceSettings`), so screens showing equal sources read one
+   instance, and adding, removing or reordering screens renames no source and
+   never gives a name to other content. `WorldImageProducers.RegisterPackages`
    registers one external-producer factory per producer id, which opens the
    instance's feed from its settings through `TryOpen`, so a feed that
    disagrees with its registration is refused by name. The scheduler schedules
@@ -2634,12 +2637,15 @@ except step 8.
    `RenderGraphSchedulerLawTests`: two screens on one camera publish it once a
    frame, counted; a source no visible consumer reads publishes nothing; a
    static source publishes once; a tick source once per completed tick; a rate
-   source never exceeds its rate over a fixed frame sequence. What is still
-   open moves to step 2: no screen reads a source instance yet, because
-   `sdf.world` takes no image reads, so the live set does not install them and
-   no host supplies `RenderGraphFrame.Sources`; and the live runtime node
-   passes a display rate of zero, under which a rate source may render on
-   every frame.
+   source never exceeds its rate over a fixed frame sequence. Laws in
+   `WorldSourceInstanceLawTests`: removing or reordering screens keeps every
+   remaining source's name and producer; no name is reused for other
+   content; equal settings in another member order or number spelling read
+   one instance. What is still open moves to step 2: no screen reads a source
+   instance yet, because `sdf.world` takes no image reads, so the live set
+   does not install them and no host supplies `RenderGraphFrame.Sources`; and
+   the live runtime node passes a display rate of zero, under which a rate
+   source may render on every frame.
 2. Feeds are external producers, and every screen image is a lease. Can land
    now; it edits `SdfEngineNode`, so it lands before or after P7b-20, not
    beside it. An `IWorldImageFeed` adapts to `IRenderGraphExternalProducer`:
@@ -2647,9 +2653,12 @@ except step 8.
    `WorldCaptureGate.Resolve`'s lease, so the gate sits at the one place a
    source's image is acquired. External producers take image reads: the runtime
    binds each read's latest completed output as a lease and hands the bound
-   leases to `Produce`, and `SdfEngineNode` maps them to its screen slots. The
-   refusal of external reads narrows to buffer and previous-frame reads. The
-   capture GPU route acquires its slot through `LatestSlotPublication` as the
+   leases to `Produce`, and `SdfEngineNode` maps them to its screen slots.
+   Before a host supplies `RenderGraphFrame.Sources`, the live runtime node
+   passes the display's real rate, or refuses a `Rate` source by name while
+   it has none, so no rate source renders on every frame. The refusal of
+   external reads narrows to buffer and previous-frame reads. The capture GPU
+   route acquires its slot through `LatestSlotPublication` as the
    camera does, and the offscreen views bind acquired leases rather than
    `ScreenSlot.Handle()` until P11b deletes `ViewStack`. This deletes
    `ScreenSourceCell`, the binder's per-slot callbacks,

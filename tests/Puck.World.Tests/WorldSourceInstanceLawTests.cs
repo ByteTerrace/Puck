@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
@@ -12,10 +13,12 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// Laws for a world's screen sources as render-graph instances. A producer, machine or probe source is an external
-/// instance of <c>source.&lt;producer id&gt;</c> that carries its settings, screens showing equal sources read one
-/// instance, and the instance's handle is its identity. Each registered producer registers one external-producer factory
-/// under its source package, which opens the instance's feed from the instance's settings and refuses by name a feed that
-/// disagrees with its registration. The typed arms' producer ids are closed to document producers.
+/// instance of <c>source.&lt;producer id&gt;</c> that carries its settings and is named by its content, so screens showing
+/// equal sources read one instance however its settings are spelled, removing or reordering screens keeps every other
+/// source's name and producer, and no name is ever given to other content; the instance's handle is its identity. Each
+/// registered producer registers one external-producer factory under its source package, which opens the instance's feed
+/// from the instance's settings and refuses by name a feed that disagrees with its registration. The typed arms' producer
+/// ids are closed to document producers.
 /// </summary>
 public sealed class WorldSourceInstanceLawTests {
     private static readonly FakeGpuDevice Gpu = new(reportVersion: 1);
@@ -27,6 +30,76 @@ public sealed class WorldSourceInstanceLawTests {
             Width: width
         )
     );
+    // Each instance's producer in a runtime, by instance name.
+    private static Dictionary<string, IRenderGraphExternalProducer> ProducersByName(RenderGraphRuntime runtime, WorldSourceInstances sources) => sources.Instances.Select(selector: (instance, index) => (instance.Name, Producer: runtime.Producer(instance: index)!)).ToDictionary(
+        comparer: StringComparer.Ordinal,
+        elementSelector: static entry => entry.Producer,
+        keySelector: static entry => entry.Name
+    );
+    private static void Reconfigure(RenderGraphRuntime runtime, WorldSourceInstances sources) {
+        Assert.True(condition: RenderGraphInstanceSet.TryCreate(
+            instances: sources.Instances,
+            refusal: out var setRefusal,
+            set: out var set
+        ), userMessage: setRefusal?.Message);
+        Assert.True(condition: runtime.TryReconfigure(
+            graphs: new RenderGraphRuntimeGraph?[set.Instances.Count],
+            refusal: out var refusal,
+            root: set.Instances[0].Name,
+            set: set
+        ), userMessage: refusal?.Message);
+    }
+    // A runtime over the test-pattern producer's source instances, and every opening its factory made.
+    private static (RenderGraphRuntime Runtime, List<WorldImageSourceOpening> Openings) Run(WorldSourceInstances sources) {
+        var producers = new WorldImageProducers();
+        var packages = new RenderGraphPackageRecorders();
+        var openings = new List<WorldImageSourceOpening>();
+
+        producers.Register(producer: new WorldTestPatternProducer());
+        producers.RegisterPackages(
+            adapt: opening => {
+                openings.Add(item: opening);
+
+                return new OpenedSource(opening: opening);
+            },
+            packages: packages
+        );
+        Assert.True(condition: RenderGraphInstanceSet.TryCreate(
+            instances: sources.Instances,
+            refusal: out var setRefusal,
+            set: out var set
+        ), userMessage: setRefusal?.Message);
+        Assert.True(condition: RenderGraphRuntime.TryCreate(
+            deviceContext: Gpu,
+            graphs: new RenderGraphRuntimeGraph?[set.Instances.Count],
+            hostsOnDirectX: false,
+            packages: packages,
+            refusal: out var refusal,
+            root: set.Instances[0].Name,
+            runtime: out var runtime,
+            set: set
+        ), userMessage: refusal?.Message);
+
+        return (runtime, openings);
+    }
+    // A test-pattern source whose settings are spelled as the given JSON object, members in its order.
+    private static WorldScreenSource.Producer Spelled(string json) {
+        using var document = JsonDocument.Parse(json: json);
+
+        var settings = new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal);
+
+        foreach (var member in document.RootElement.EnumerateObject()) {
+            settings.Add(
+                key: member.Name,
+                value: member.Value.Clone()
+            );
+        }
+
+        return new WorldScreenSource.Producer(
+            Id: WorldImageProducerSettings.TestPatternId,
+            Settings: settings
+        );
+    }
 
     [Fact]
     public void ScreensShowingEqualSourcesReadOneInstanceThatCarriesItsSettings() {
@@ -47,23 +120,21 @@ public sealed class WorldSourceInstanceLawTests {
             new WorldScreenSource.View(CameraName: "security"),
         ]);
 
+        var names = sources.Instances.Select(selector: static instance => instance.Name).ToArray();
+
         Assert.Equal(
-            actual: sources.Instances.Select(selector: static instance => (instance.Name, instance.ExternalPackage)),
-            expected: new (string, string?)[] {
-                ("source$0", "source.testPattern"),
-                ("source$3", "source.machine"),
-                ("source$5", "source.testPattern"),
-                ("source$6", "source.probe"),
-            }
+            actual: sources.Instances.Select(selector: static instance => instance.ExternalPackage),
+            expected: ["source.testPattern", "source.machine", "source.testPattern", "source.probe"]
         );
         Assert.Equal(
             actual: Enumerable.Range(count: 10, start: 0).Select(selector: sources.InstanceOf),
-            expected: new string?[] { "source$0", null, null, "source$3", "source$0", "source$5", "source$6", "source$3", null, null }
+            expected: new string?[] { names[0], null, null, names[1], names[0], names[2], names[3], names[1], null, null }
         );
-        Assert.Equal(expected: SourceHandle.Producer(name: "source$0"), actual: sources.HandleOf(screen: 4));
+        Assert.Equal(expected: SourceHandle.Producer(name: names[0]), actual: sources.HandleOf(screen: 4));
         Assert.All(
             action: static instance => {
                 Assert.True(condition: instance.IsSource);
+                Assert.Equal(expected: WorldViewNames.Source(producer: instance.SourceProducer!, settings: instance.Settings), actual: instance.Name);
                 Assert.Equal(expected: instance.Handle, actual: SourceHandle.Producer(name: instance.Name));
             },
             collection: sources.Instances
@@ -114,7 +185,7 @@ public sealed class WorldSourceInstanceLawTests {
             hostsOnDirectX: false,
             packages: packages,
             refusal: out var refusal,
-            root: "source$0",
+            root: set.Instances[0].Name,
             runtime: out var runtime,
             set: set
         ), userMessage: refusal?.Message);
@@ -123,7 +194,7 @@ public sealed class WorldSourceInstanceLawTests {
             // One factory call for the one instance both screens read, opened from its settings.
             var opening = Assert.Single(collection: openings);
 
-            Assert.Equal(expected: ("source$0", "source.testPattern"), actual: (opening.Context.Instance, opening.Context.Package));
+            Assert.Equal(expected: (set.Instances[0].Name, "source.testPattern"), actual: (opening.Context.Instance, opening.Context.Package));
             Assert.Null(@object: opening.Fault);
             Assert.Equal(
                 expected: (WorldImageProducerSettings.TestPatternId, 96U, 6U),
@@ -162,7 +233,7 @@ public sealed class WorldSourceInstanceLawTests {
             hostsOnDirectX: false,
             packages: packages,
             refusal: out var refusal,
-            root: "source$0",
+            root: set.Instances[0].Name,
             runtime: out var runtime,
             set: set
         ), userMessage: refusal?.Message);
@@ -173,6 +244,103 @@ public sealed class WorldSourceInstanceLawTests {
             Assert.Contains(actualString: opened.Value.Fault, comparisonType: StringComparison.Ordinal, expectedSubstring: "image producer 'testPattern' opened a feed declaring producer 'testPattern' with Deterministic over Imported, but it is registered as Deterministic over Uploaded");
             Assert.EndsWith(actualString: runtime.UnservedCaptureReason, expectedEndString: opened.Value.Fault);
         }
+    }
+    [Fact]
+    public void RemovingTheFirstScreenKeepsTheOtherSourcesNameAndProducer() {
+        var a = Pattern(width: 128);
+        var b = Pattern(width: 64);
+        var before = WorldSourceInstances.Of(shown: [a, b]);
+
+        var (runtime, openings) = Run(sources: before);
+
+        using (runtime) {
+            var kept = ProducersByName(runtime: runtime, sources: before)[before.InstanceOf(screen: 1)!];
+            var after = WorldSourceInstances.Of(shown: [b]);
+
+            Reconfigure(runtime: runtime, sources: after);
+
+            Assert.Equal(expected: before.InstanceOf(screen: 1), actual: after.InstanceOf(screen: 0));
+            Assert.Same(expected: kept, actual: ProducersByName(runtime: runtime, sources: after)[after.InstanceOf(screen: 0)!]);
+            Assert.Equal(expected: 2, actual: openings.Count);
+        }
+    }
+    [Fact]
+    public void ReorderingScreensKeepsEverySourcesNameAndProducer() {
+        var a = Pattern(width: 128);
+        var b = Pattern(width: 64);
+        var before = WorldSourceInstances.Of(shown: [a, b]);
+
+        var (runtime, openings) = Run(sources: before);
+
+        using (runtime) {
+            var producers = ProducersByName(runtime: runtime, sources: before);
+            var after = WorldSourceInstances.Of(shown: [b, a]);
+
+            Reconfigure(runtime: runtime, sources: after);
+
+            Assert.Equal(expected: (before.InstanceOf(screen: 0), before.InstanceOf(screen: 1)), actual: (after.InstanceOf(screen: 1), after.InstanceOf(screen: 0)));
+            var reordered = ProducersByName(runtime: runtime, sources: after);
+
+            Assert.Equal(expected: producers.Count, actual: reordered.Count);
+            Assert.All(
+                action: entry => Assert.Same(expected: entry.Value, actual: reordered[entry.Key]),
+                collection: producers
+            );
+            Assert.Equal(expected: 2, actual: openings.Count);
+        }
+    }
+    [Fact]
+    public void NoNameIsEverGivenToOtherContent() {
+        WorldScreenSource[] catalog = [
+            Pattern(width: 128),
+            Pattern(width: 64),
+            Spelled(json: """{ "width": 64, "height": 7 }"""),
+            new WorldScreenSource.Machine(Instance: "cabinet", Output: "lcd"),
+            new WorldScreenSource.Machine(Instance: "cabinet", Output: "top"),
+            new WorldScreenSource.Machine(Instance: "lcd", Output: "cabinet"),
+            new WorldScreenSource.Probe(Id: "relight"),
+            new WorldScreenSource.Probe(Id: "shadow"),
+            WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.QrId, settings: new WorldQrSettings(Payload: "relight")),
+        ];
+        var contentOf = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        var nameOf = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        // Every rotation of the catalog, forwards and backwards, with each screen in turn removed.
+        for (var rotation = 0; (rotation < catalog.Length); rotation++) {
+            WorldScreenSource[] rotated = [.. catalog[rotation..], .. catalog[..rotation]];
+
+            foreach (var order in ((WorldScreenSource[][])[rotated, [.. rotated.Reverse()]])) {
+                for (var removed = -1; (removed < order.Length); removed++) {
+                    var sources = WorldSourceInstances.Of(shown: [.. order.Where(predicate: (_, index) => (index != removed))]);
+
+                    foreach (var instance in sources.Instances) {
+                        var content = $"{instance.SourceProducer} {ImageSourceSettings.Canonical(settings: instance.Settings)}";
+
+                        Assert.Equal(expected: content, actual: contentOf.GetValueOrDefault(key: instance.Name, defaultValue: content));
+                        Assert.Equal(expected: instance.Name, actual: nameOf.GetValueOrDefault(key: content, defaultValue: instance.Name));
+                        contentOf[instance.Name] = content;
+                        nameOf[content] = instance.Name;
+                    }
+                }
+            }
+        }
+
+        Assert.Equal(expected: catalog.Length, actual: contentOf.Count);
+    }
+    [Fact]
+    public void EqualSettingsInAnotherMemberOrderOrNumberSpellingReadOneInstance() {
+        var sources = WorldSourceInstances.Of(shown: [
+            Spelled(json: """{ "width": 96, "height": 6 }"""),
+            Spelled(json: """{ "height": 6.0, "width": 9.6e1 }"""),
+            Spelled(json: """{ "width": 960e-1, "height": 0.6E+1 }"""),
+            Spelled(json: """{ "width": 97, "height": 6 }"""),
+        ]);
+
+        var name = sources.InstanceOf(screen: 0);
+
+        Assert.Equal(expected: 2, actual: sources.Instances.Count);
+        Assert.Equal(expected: new string?[] { name, name, name }, actual: Enumerable.Range(count: 3, start: 0).Select(selector: sources.InstanceOf));
+        Assert.NotEqual(expected: name, actual: sources.InstanceOf(screen: 3));
     }
     [Fact]
     public void TheTypedArmsProducerIdsAreClosedToDocumentProducers() {
