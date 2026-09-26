@@ -83,7 +83,7 @@ public sealed class WorldViewGraphParameterLawTests {
                 value: new BindableScalar(literal: 1f)
             )
         )),
-        expected: "takes no timeScale, output, overrides or parameters"
+        expected: "takes no timeScale, output, overrides, parameters or tier"
     );
     [Fact]
     public void ABindingNamingNoCellIsRefusedAndALiteralIsNot() => Refuses(
