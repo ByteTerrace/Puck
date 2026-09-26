@@ -38,7 +38,7 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         return (track ?? new WorldRenderCycleTrack()).Resolve(
             definition: definition,
-            mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition)),
+            mirror: ClientFixtures.StateMirror(definition: definition),
             resolveLightAnchor: resolveLightAnchor,
             revision: revision
         );
@@ -1496,6 +1496,12 @@ public sealed class WorldRenderLightingSkyLawTests {
         var lighting = SunAndSky(sunColor: new BindableColor(Raw: "state.colors.sun"));
         var definition = (Fixtures.BuildDocument().WithWorldState(rows: [ColorsRow(hex: "#FFD9A6")]) with { RenderRaw = BaseDefaults() with { Lighting = lighting } });
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
+
+        mirror.Install(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+
         var first = track.Resolve(
             definition: definition,
             mirror: mirror,

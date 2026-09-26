@@ -229,7 +229,7 @@ public sealed class WorldPresentationNameLawTests {
     [InlineData("$body$body")]
     [Theory]
     public void AKeyThatOnlyContainsTheBodyTokenReadsTheCellSpelledThatWay(string key) {
-        Assert.True(condition: WorldGaitDrivers.TryResolveBodyKey(
+        Assert.True(condition: StateBinding.TryResolveBodyKey(
             bodyIndex: 3,
             key: key,
             resolved: out var resolved
@@ -279,7 +279,7 @@ public sealed class WorldPresentationNameLawTests {
     // The control: a key that is exactly the token names the reading body, and refuses with no body reading.
     [Fact]
     public void AKeyThatIsTheBodyTokenNamesTheReadingBody() {
-        Assert.True(condition: WorldGaitDrivers.TryResolveBodyKey(
+        Assert.True(condition: StateBinding.TryResolveBodyKey(
             bodyIndex: 3,
             key: StateBinding.BodyKey,
             resolved: out var resolved
@@ -288,7 +288,7 @@ public sealed class WorldPresentationNameLawTests {
             actual: resolved,
             expected: "3"
         );
-        Assert.False(condition: WorldGaitDrivers.TryResolveBodyKey(
+        Assert.False(condition: StateBinding.TryResolveBodyKey(
             bodyIndex: -1,
             key: StateBinding.BodyKey,
             resolved: out _

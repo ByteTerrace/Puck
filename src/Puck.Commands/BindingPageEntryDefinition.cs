@@ -77,6 +77,30 @@ public sealed record BindingPageEntryDefinition(
     /// renders by. Null-tolerant on the sequence (a deserialized document can carry an activator with no
     /// <c>sequence</c>): the label labels a refusal, so it must never itself throw on the malformed shape it is
     /// describing.</summary>
+    /// <summary>Returns the authored action an entry names: its <see cref="Command"/>, else its named
+    /// <see cref="Channel"/>.</summary>
+    /// <param name="entry">The entry.</param>
+    /// <returns>The action, or <see langword="null"/> when the entry names neither.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="entry"/> is <see langword="null"/>.</exception>
+    public static string? ActionOf(BindingPageEntryDefinition entry) {
+        ArgumentNullException.ThrowIfNull(argument: entry);
+
+        return ((entry.Channel is ChannelRef.Name named)
+            ? named.Value
+            : entry.Command
+        );
+    }
+    /// <summary>Returns the key a presentation surface looks an entry up by: its <see cref="Id"/>, else its action
+    /// (<see cref="ActionOf"/>). A binding bar's icon row and a wheel's label and icon rows are keyed by it.</summary>
+    /// <param name="entry">The entry.</param>
+    /// <returns>The key, or <see langword="null"/> when the entry has neither.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="entry"/> is <see langword="null"/>.</exception>
+    public static string? KeyOf(BindingPageEntryDefinition entry) {
+        ArgumentNullException.ThrowIfNull(argument: entry);
+
+        return (entry.Id ?? ActionOf(entry: entry));
+    }
+
     internal string TriggerLabel => (((Sources is { Count: > 0 } sources)
         ? string.Join(
             separator: ',',

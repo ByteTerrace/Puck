@@ -210,10 +210,15 @@ separate constraint on dense populations; reusable appearances do not remove it.
 ## Bound state
 
 - `WorldClient.StateMirror` is the client's `WorldStateMirror` (in
-  `Puck.World.Protocol`), the one path presentation reads state through: the
-  HUD resolver, camera rigs, markers, render and theme colors, the binding bar,
-  the radial wheel and overlay predicates register their `StateBinding`s with
-  it. `WorldClient.DeliverState` refreshes the slots the delivery's
+  `Puck.World.Protocol`), the one path presentation reads state through. Its
+  slots are registered by the installed document's presentation manifest and by
+  each seat's own reads (`WorldPresentationManifest.SeatBindings`, which
+  `WorldSeatBindings` registers on the seat's routed mirror), and an install
+  retires what only the previous document registered. The HUD resolver, camera
+  rigs, markers, render and theme colors, the render cycle, the binding bar,
+  the radial wheel and overlay predicates only look slots up
+  (`WorldStateMirror.SlotOf`), which registers and reads nothing, and look them
+  up again when `WorldStateMirror.Generation` moves. `WorldClient.DeliverState` refreshes the slots the delivery's
   `WorldStateStamp` moved, `DeliverSnapshot` refreshes the trait-bearing slots
   still moving, `DeliverDefinition` re-resolves every slot, and
   `WorldFramePresenter.CaptureFrame` applies the frame's interpolation fraction
@@ -230,10 +235,11 @@ separate constraint on dense populations; reusable appearances do not remove it.
   mirror installs a document, so the mirror retires what nothing reads.
 - `WorldWheelRings.cs` is one seat's drawn radial: each sector's label and icon
   and the hub label, read from the wheel's label and icon rows through the
-  seat's routed mirror, and rebuilt only when one of the slots it read changes.
+  seat's routed mirror, and rebuilt only when one of the slots it read changes
+  or the mirror's registered bindings do.
 - `WorldStateCells.cs` is the one keyed-cell read the rings and the binding
   bar's action icons make: a row reference parsed once, and each row and key
-  registered with the mirror once and its slot kept, so a read repeated every
+  looked up once among the slots the seat registered, so a read repeated every
   frame allocates nothing and still answers the live cell.
 - `WorldTransformOwners.cs` is the rest state of a band of dynamic-transform
   owners, which the scene, adjacency and session emitters and the stamp pool

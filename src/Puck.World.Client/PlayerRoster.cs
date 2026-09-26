@@ -393,8 +393,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
                 participant.Seat.Profile = finalProfile;
                 participant.State = ParticipantState.Active;
                 m_seatBindings.SetProfileLayers(
-                    slot: slot,
-                    bindings: finalProfile.Bindings
+                    profile: finalProfile,
+                    slot: slot
                 );
 
                 if (device is { } confirmedBy) {
@@ -527,8 +527,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
                 // The seat resolves through its selected profile's binding layer (null = none of its own) — pushed once at
                 // fill so the seat's composed mapping is right from its first tick.
                 m_seatBindings.SetProfileLayers(
-                    slot: slot,
-                    bindings: profile.Bindings
+                    profile: profile,
+                    slot: slot
                 );
 
                 accepted = true;
@@ -1702,8 +1702,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             State = ParticipantState.Active,
         };
         m_seatBindings.SetProfileLayers(
-            slot: slot,
-            bindings: profile?.Bindings
+            profile: profile,
+            slot: slot
         );
         m_revision++;
 
@@ -1930,8 +1930,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
                 participant.Seat.Profile = profile;
                 participant.State = ParticipantState.Active;
                 m_seatBindings.SetProfileLayers(
-                    slot: slot,
-                    bindings: profile.Bindings
+                    profile: profile,
+                    slot: slot
                 );
 
                 m_revision++;
