@@ -1,0 +1,35 @@
+schema: "puck.world.definition.v1"
+basis: "../../../src/Puck.World/Assets/worlds/avatars/moth"
+documentId: "pointer-ray-canary"
+
+// One simulation screen facing +z at (0, 1, 0), two units square, and a rule copying seat 1's mapped pointer into
+// state every tick, so the tick a typed ray arrives in is the tick its hit is read.
+screens [
+  {
+    index: 0
+    origin [0, 1, 0]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 1
+    halfHeight: 1
+    halfDepth: 0.1
+    round: 0
+    source: none()
+    route { engageable: false, engageRadius: 0, input: Simulation }
+  }
+]
+
+state {
+  world {
+    slot pointerOn = 0
+    slot pointerX = 0.0
+    slot pointerY = 0.0
+  }
+}
+
+rule "copy" {
+  mode: Level
+  pointerOn = pointer(1, 0, on)
+  pointerX = pointer(1, 0, x)
+  pointerY = pointer(1, 0, y)
+}
