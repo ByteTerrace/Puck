@@ -2295,12 +2295,24 @@ Phase 3, the groups, follows phase 2:
 20. The SDF engine moves onto groups, its push blocks and hand-set binding
     constants included. It follows P4-1, which rewrites the same kernels.
 21. The owning guides and the `rendering` skill describe the result.
-22. In progress: the P7 deletions no earlier step owns. Vulkan's
-    `IVulkanGraphicsPipelineFactory` folds into the one `IGpuPipelineFactory`,
-    with the swapchain compositor's direct call;
-    `GpuGraphicsPipelineDescription`'s `TextureSamplerCount` and
-    `EnableStorageBuffer` are deleted; and the overlay's host-written buffer
-    uploads through a `GpuRegion` rather than by hand.
+22. In progress: the P7 deletions no earlier step owns. Done: Vulkan has one
+    pipeline factory, `VulkanGpuPipelineFactory`, which creates graphics
+    pipelines through `IVulkanGraphicsPipelineApi` itself, and the swapchain
+    compositor creates its blit through `IGpuPipelineFactory` for the
+    swapchain's render pass (`VulkanGpuRenderPass.Borrow`), opaque and with the
+    neutral dynamic viewport the presenter's recorder sets. A graphics
+    description states its groups alone: `GpuGraphicsPipelineDescription.Layout`
+    is required, and its `TextureSamplerCount`, `EnableStorageBuffer` and push
+    range are deleted with both backends' non-layout graphics paths. The
+    Direct3D 12 surface compositor has no second factory contract to fold; it
+    builds its root signature and pipeline state by hand. Remaining: the
+    overlay's host-written buffer uploads through a `GpuRegion` rather than by
+    hand, which under the staged policy needs the region-copy pipeline leased
+    at the package's build, a copy pool the node states and admits, the copy
+    and its two buffer transitions inside the package recording, and a
+    pixel-shader read state for a buffer on Direct3D 12; and
+    `VulkanGraphicsPipelineCreateRequest`'s fixed viewport, descriptor bindings
+    and push range, which no caller sets any more, leave the native API.
 
 **Decisions.** Root parameter indices are dense, and the push index sits at
 `b0` in space 4, outside every group's space. The spike's frame group is the
