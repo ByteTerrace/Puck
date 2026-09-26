@@ -27,10 +27,14 @@ public static partial class DocumentLowering {
             value: out _
         )
     );
-
-    // Internal evaluation returns borrowed, read-only values. Clone when constructing an output container, never
-    // merely to inspect a value or select one element of a cached array.
-    internal static JsonNode? EvaluateValue(ExpressionNode expr, DocumentScope scope, string? fieldKey = null) => Evaluate(
+    /// <summary>Evaluates an expression to a borrowed, read-only value: a binding's cached node, or one element of a
+    /// cached array, rather than a copy. Clone it before it enters an output container; never mutate it.</summary>
+    /// <param name="expr">The expression.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <param name="fieldKey">The key a unit on the value is classified by.</param>
+    /// <returns>The borrowed value, which keeps the identity a vocabulary observed it by
+    /// (<see cref="IDocumentVocabulary.NoteWrittenString"/>).</returns>
+    public static JsonNode? EvaluateValue(ExpressionNode expr, DocumentScope scope, string? fieldKey = null) => Evaluate(
         expr: expr,
         fieldKey: fieldKey,
         owned: out _,
@@ -88,7 +92,10 @@ public static partial class DocumentLowering {
                             );
                         }
                     }
-                    return JsonValue.Create(value: built.ToString());
+                    var interpolatedText = JsonValue.Create(value: built.ToString());
+
+                    scope.Vocabulary.NoteWrittenString(scope: scope, value: interpolatedText);
+                    return interpolatedText;
                 }
 
             case ColorExpressionNode color:
@@ -1006,7 +1013,10 @@ public static partial class DocumentLowering {
         }
 
         if (lit.Value is string s) {
-            return JsonValue.Create(value: s);
+            var literalText = JsonValue.Create(value: s);
+
+            scope.Vocabulary.NoteWrittenString(scope: scope, value: literalText);
+            return literalText;
         }
 
         var numVal = lit.Value switch {

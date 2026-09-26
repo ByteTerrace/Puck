@@ -15,34 +15,53 @@ namespace Puck.World.Transpiler.Lowering;
 public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = null) : IDocumentVocabulary {
     /// <summary>The canonical schema URI for world definitions.</summary>
     public const string Schema = "puck.world.definition.v1";
-
     /// <summary>The annotation holding the directory the lowered document's relative file paths resolve against.</summary>
     public const string DocumentDirectoryAnnotation = "DocumentDirectory";
 
     // The position a file-path member's value fills: its value is re-expressed from the writing source's directory.
     private static readonly object FileReferencePosition = new();
 
-    /// <summary>Re-expresses a file path written in the source a scope lowers, relative to that source's directory, for
-    /// the document being lowered: the one relocation every file reference a module writes takes, whichever source uses
-    /// the module (<see cref="WorldDocumentPaths.RelocateBetween"/>).</summary>
-    /// <param name="path">The path as the source writes it.</param>
-    /// <param name="scope">The scope lowering the source that writes the path.</param>
-    /// <returns>The path relative to the document's directory, or <paramref name="path"/> unchanged when the source
-    /// stands in the document's own directory or either directory is unknown.</returns>
-    public static string RelocateFileReference(string path, DocumentScope scope) {
+    /// <summary>Re-expresses a file path written relative to one source's directory for the document being
+    /// lowered: the one relocation every file reference takes, whichever source uses the module that wrote it
+    /// (<see cref="WorldDocumentPaths.RelocateBetween"/>).</summary>
+    /// <param name="path">The path as its source writes it.</param>
+    /// <param name="writtenBeside">The directory of the source that wrote the path, or <see langword="null"/> for the
+    /// document's own.</param>
+    /// <param name="scope">A scope of the lowering pass, carrying the document's directory.</param>
+    /// <returns>The path relative to the document's directory, or <paramref name="path"/> unchanged when it was written
+    /// in the document's own directory or either directory is unknown.</returns>
+    public static string RelocateFileReference(string path, string? writtenBeside, DocumentScope scope) {
         ArgumentNullException.ThrowIfNull(argument: path);
         ArgumentNullException.ThrowIfNull(argument: scope);
 
-        return (((scope.BasePath is { } written) &&
+        return (((writtenBeside is not null) &&
             (scope.Annotations.GetValueOrDefault(key: DocumentDirectoryAnnotation) is string document) &&
-            !Puck.Abstractions.PuckPaths.Comparer.Equals(x: Path.GetFullPath(path: written), y: Path.GetFullPath(path: document)))
-            ? WorldDocumentPaths.RelocateBetween(path: path, sourceDirectory: written, targetDirectory: document)
+            !Puck.Abstractions.PuckPaths.Comparer.Equals(x: WorldDocumentPaths.FullDirectory(directory: writtenBeside), y: document))
+            ? WorldDocumentPaths.RelocateBetween(path: path, sourceDirectory: writtenBeside, targetDirectory: document)
             : path
         );
     }
+    /// <inheritdoc />
+    /// <remarks>A string written in a source outside the document's directory is recorded with that source's
+    /// directory, so a file path reaching a file-path member through a <c>let</c>, a module argument or any other
+    /// expression is re-expressed from where its literal was written.</remarks>
+    public void NoteWrittenString(System.Text.Json.Nodes.JsonValue value, DocumentScope scope) {
+        if (
+            (scope.BasePath is { } written) &&
+            !((scope.Annotations.GetValueOrDefault(key: DocumentDirectoryAnnotation) is string document) &&
+            Puck.Abstractions.PuckPaths.Comparer.Equals(x: WorldDocumentPaths.FullDirectory(directory: written), y: document))
+        ) {
+            WrittenBeside.AddOrUpdate(key: value, value: WorldDocumentPaths.FullDirectory(directory: written));
+        }
+    }
+
+    // Each string node a literal outside the document's directory produced, to that source's directory. Keyed by the
+    // node, which every borrowed read of a binding returns, so the record follows the value rather than its syntax.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<System.Text.Json.Nodes.JsonNode, string> WrittenBeside = new();
 
     /// <summary>The shared instance; the vocabulary is a pure lookup and carries no per-pass state.</summary>
     public static WorldDocumentVocabulary Instance { get; } = new();
+
     /// <summary>Gets the described constructs this pass parses and lowers against.</summary>
     public WorldConstructTable Constructs { get; } = (constructs ?? WorldConstructs.Table);
 
@@ -72,24 +91,27 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
             if ((scope.Annotations.GetValueOrDefault(key: "AssetContext") is not Assets.AssetCompilationContext context) || (scope.BasePath is null)) {
                 scope.Diagnostics.ReportError(code: Puck.Transpiler.Diagnostics.PuckDiagnosticCodes.InvalidValue, message: "An asset reference requires a source path and its sibling asset lock.", span: asset.Span);
             } else if (context.TryResolve(asset.Path, scope.BasePath, asset.Span, scope.Diagnostics, out _)) {
-                value = System.Text.Json.Nodes.JsonValue.Create(value: RelocateFileReference(path: asset.Path, scope: scope));
+                value = System.Text.Json.Nodes.JsonValue.Create(value: RelocateFileReference(path: asset.Path, scope: scope, writtenBeside: scope.BasePath));
             }
             return true;
         }
-        // A file path is written relative to the source that writes it, which a module used from another directory
-        // is not the document's own, so it is re-expressed for the document exactly as an asset path is.
-        if (
-            ReferenceEquals(objA: DocumentLowering.MemberContext(scope: scope), objB: FileReferencePosition) &&
-            (expression is LiteralExpressionNode { Value: string } or InterpolatedStringNode)
-        ) {
-            value = DocumentLowering.At(
+        // A file path is written relative to the source that wrote its literal, which a module used from another
+        // directory is not the document's own, so the value is re-expressed from there whatever expression carries it.
+        if (ReferenceEquals(objA: DocumentLowering.MemberContext(scope: scope), objB: FileReferencePosition)) {
+            var borrowed = DocumentLowering.At(
                 context: null,
-                lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: scope),
+                lower: () => DocumentLowering.EvaluateValue(expr: expression, fieldKey: fieldKey, scope: scope),
                 scope: scope
             );
-            if ((value is System.Text.Json.Nodes.JsonValue written) && written.TryGetValue<string>(value: out var path) && (path.Length > 0)) {
-                value = System.Text.Json.Nodes.JsonValue.Create(value: RelocateFileReference(path: path, scope: scope));
-            }
+
+            value = (((borrowed is System.Text.Json.Nodes.JsonValue written) && written.TryGetValue<string>(value: out var path) && (path.Length > 0))
+                ? System.Text.Json.Nodes.JsonValue.Create(value: RelocateFileReference(
+                    path: path,
+                    scope: scope,
+                    writtenBeside: (WrittenBeside.TryGetValue(key: borrowed, value: out var beside) ? beside : null)
+                ))
+                : scope.Budget.Copy(span: expression.Span, value: borrowed)
+            );
             return true;
         }
         if (WorldDocumentEmitter.TryLowerInteractionValue(expression: expression, fieldKey: fieldKey, scope: scope, value: out value)) {

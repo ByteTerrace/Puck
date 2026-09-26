@@ -162,7 +162,7 @@ public static partial class WorldDocumentEmitter {
 
         scope.Annotations["WorldDocumentRoot"] = root;
         if (assets is not null) { scope.Annotations["AssetContext"] = assets; }
-        if (basePath is not null) { scope.Annotations[WorldDocumentVocabulary.DocumentDirectoryAnnotation] = basePath; }
+        if (basePath is not null) { scope.Annotations[WorldDocumentVocabulary.DocumentDirectoryAnnotation] = WorldDocumentPaths.FullDirectory(directory: basePath); }
         var composition = new Composition(statements: document.Statements);
 
         scope.Annotations[CompositionAnnotation] = composition;

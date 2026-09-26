@@ -16,12 +16,36 @@ public sealed class FileReferenceRelocationLawTests {
           }
         }
         """;
+    // The same file named through a `let`, and through a module argument written in the module's own directory.
+    private const string CarriedModule = """
+        let file = "board.graph.json"
 
-    private static (string Path, System.Text.Json.Nodes.JsonObject Json) CompileRoot(TemporaryDirectory directory, string name, string import) {
+        module board() {
+          views {
+            graph "board" {
+              source: file
+            }
+          }
+        }
+
+        module named(graphFile) {
+          views {
+            graph "named" {
+              source: graphFile
+            }
+          }
+        }
+
+        module wrapped() {
+          use named(graphFile: "board.graph.json")
+        }
+        """;
+
+    private static (string Path, System.Text.Json.Nodes.JsonObject Json) CompileRoot(TemporaryDirectory directory, string name, string import, string use = "use board()") {
         var source = $"""
             schema: "puck.world.definition.v1"
             import "{import}"
-            use board()
+            {use}
             """;
         var path = directory.WriteBytes(bytes: [], name: name);
         var compilation = WorldCompiler.Compile(
@@ -54,6 +78,42 @@ public sealed class FileReferenceRelocationLawTests {
                 actual: Path.GetFullPath(path: Path.Combine(path1: Path.GetDirectoryName(path: path)!, path2: GraphSource(json: json)))
             );
         }
+    }
+    [InlineData("use board()")]
+    [InlineData("use wrapped()")]
+    [Theory]
+    public void APathCarriedByALetOrAnArgumentNamesTheFileBesideItsLiteral(string use) {
+        using var directory = new TemporaryDirectory();
+
+        _ = directory.WriteText(name: "modules/board.puck", text: CarriedModule);
+        var graph = directory.WriteBytes(bytes: "{}"u8, name: "modules/board.graph.json");
+
+        var (path, json) = CompileRoot(directory: directory, import: "../modules/board.puck", name: "root/world.puck", use: use);
+
+        Assert.Equal(expected: "../modules/board.graph.json", actual: GraphSource(json: json));
+        Assert.Equal(
+            expected: Path.GetFullPath(path: graph),
+            actual: Path.GetFullPath(path: Path.Combine(path1: Path.GetDirectoryName(path: path)!, path2: GraphSource(json: json)))
+        );
+
+        var printed = WorldDecompiler.Decompile(root: json);
+        var recompiled = WorldCompiler.Compile(
+            source: printed,
+            sourcePath: path,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        Assert.False(condition: recompiled.Diagnostics.HasErrors, userMessage: recompiled.Diagnostics.FormatReport(sourceText: printed));
+        Assert.Equal(expected: json.ToJsonString(), actual: recompiled.RequireJson().ToJsonString());
+    }
+    [Fact]
+    public void AnArgumentWrittenInTheUsingSourceNamesTheFileBesideIt() {
+        using var directory = new TemporaryDirectory();
+
+        _ = directory.WriteText(name: "modules/board.puck", text: CarriedModule);
+        var (_, json) = CompileRoot(directory: directory, import: "../modules/board.puck", name: "root/world.puck", use: "use named(graphFile: \"local.graph.json\")");
+
+        Assert.Equal(expected: "local.graph.json", actual: GraphSource(json: json));
     }
     [Fact]
     public void ARelocatedPathDecompilesAndRecompilesToItself() {

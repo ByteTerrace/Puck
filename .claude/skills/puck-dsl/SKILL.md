@@ -151,9 +151,12 @@ beside the root source; ordinary compilation verifies its full SHA-256 pins,
 while `--update-assets` is the only compile mode that replaces them. Every
 relative file path a module writes, `asset "…"` or plain (a member
 `WorldDocumentPaths.IsFileField` names), resolves beside the module and is
-re-expressed for the document that uses it (`WorldDocumentVocabulary.RelocateFileReference`);
-`--output` elsewhere re-expresses the written document's paths from where it
-lands. A path reached through a `let` or a module argument is not re-expressed. Each destination and the lock is replaced
+re-expressed for the document that uses it (`WorldDocumentVocabulary.RelocateFileReference`).
+Relocation follows the value: a string is re-expressed from the directory of
+the source whose literal produced it (a `let`'s own file, a module argument's
+call site), whatever expression carries it to the file-path member
+(`IDocumentVocabulary.NoteWrittenString`). `--output` elsewhere re-expresses
+the written document's paths from where it lands. Each destination and the lock is replaced
 atomically on its own, but publication of the whole set is not transactional.
 
 ## Grammar, in brief

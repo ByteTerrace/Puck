@@ -149,6 +149,15 @@ public static class WorldDocumentPaths {
             )
         );
     }
+    /// <summary>Returns the full path of a directory, reading an empty one as the current directory, which is what a
+    /// file path with no directory part (<c>world.puck</c>) is beside.</summary>
+    /// <param name="directory">The directory, absolute, relative to the current directory, or empty.</param>
+    /// <returns>The full path.</returns>
+    public static string FullDirectory(string directory) {
+        ArgumentNullException.ThrowIfNull(argument: directory);
+
+        return Path.GetFullPath(path: ((directory.Length == 0) ? "." : directory));
+    }
     /// <summary>Re-expresses a path written beside one directory as the same file named from another. A rooted path
     /// passes through unchanged; a relative one resolves against <paramref name="sourceDirectory"/> and is spelled
     /// relative to <paramref name="targetDirectory"/>.</summary>
@@ -169,10 +178,10 @@ public static class WorldDocumentPaths {
 
         return Path.GetRelativePath(
             path: Path.GetFullPath(path: Path.Combine(
-                path1: Path.GetFullPath(path: sourceDirectory),
+                path1: FullDirectory(directory: sourceDirectory),
                 path2: path
             )),
-            relativeTo: Path.GetFullPath(path: targetDirectory)
+            relativeTo: FullDirectory(directory: targetDirectory)
         ).Replace(
             newChar: '/',
             oldChar: '\\'
