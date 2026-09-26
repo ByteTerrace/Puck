@@ -30,14 +30,15 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
             }
         }
 
-        // The engine creates no pipeline, shader module, render pass or framebuffer: it records with the set it is
-        // handed. It creates buffers, images (the ISA handshake's two included), a command pool per ring slot, its own
-        // descriptor pool, and whatever policy the device selects the one copy pool it reserves for all its regions: the
-        // eight tables, the mesh region and the brick staging.
+        // The engine creates no pipeline, shader module or render pass: it records with the set and the mesh pass pipeline
+        // it is handed, whose render pass its one framebuffer binds the mesh pass's target and depth attachment for. It
+        // creates buffers, images (the mesh pass's two and the ISA handshake's two included), a command pool per ring slot,
+        // its own descriptor pool, and whatever policy the device selects the one copy pool it reserves for all its
+        // regions: the eight tables, the mesh region and the brick staging.
         Assert.Equal(actual: expected[GpuCreationKind.Pipeline], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.ShaderModule], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.RenderPass], expected: 0L);
-        Assert.Equal(actual: expected[GpuCreationKind.Framebuffer], expected: 0L);
+        Assert.Equal(actual: expected[GpuCreationKind.Framebuffer], expected: 1L);
         Assert.Equal(actual: expected[GpuCreationKind.CommandPool], expected: ((long)SdfWorldEngine.FrameRingSize));
         Assert.Equal(actual: expected[GpuCreationKind.BindingsPool], expected: 2L);
         Assert.True(condition: (expected[GpuCreationKind.Buffer] > SdfBrickPoolLayout.MaxBricks));
@@ -110,6 +111,7 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
     // and staging buffers are created too) already built on it and the faults' counts cleared.
     private sealed class Rig : IDisposable {
         private readonly SdfWorldPipelines m_pipelines;
+        private readonly GpuPassPipeline m_meshRaster;
         private readonly GpuPassPipeline m_regionCopy;
         private readonly SdfProgram m_program;
         private readonly GpuWorkLedger m_work = new(
@@ -136,6 +138,10 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
                 gpu: Gpu
             );
             m_regionCopy = SdfTestPipelines.RegionCopy(
+                device: Device,
+                ledger: m_work
+            );
+            m_meshRaster = SdfTestPipelines.MeshRaster(
                 device: Device,
                 ledger: m_work
             );
@@ -189,12 +195,14 @@ public sealed class SdfWorldEngineCreationFaultLawTests {
                     WorkLedger: m_work
                 ),
                 pipelines: m_pipelines,
+                meshRaster: m_meshRaster,
                 regionCopy: m_regionCopy.Compute!,
                 width: Extent
             );
         public void Dispose() {
             m_pipelines.Dispose();
             m_regionCopy.Dispose();
+            m_meshRaster.Dispose();
         }
     }
 }

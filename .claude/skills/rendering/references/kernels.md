@@ -52,7 +52,7 @@ buffer-layout, or C# ISA changes need a rebuild.
 
 ## The frame
 
-Nine counted passes, labelled by `SdfWorldEngine.PassLabels` for
+Ten counted passes, labelled by `SdfWorldEngine.PassLabels` for
 `world.counters gpu`; the brick staging copy and bake dispatches are recorded in addition when
 work is pending, and count outside every pass. A cadence-skipped frame marks
 `sky` through `views` skipped (`SdfWorldEngine.CadenceSkippedPassLabels`):
@@ -64,6 +64,7 @@ work is pending, and count outside every pass. A cadence-skipped frame marks
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |
+| `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes mesh visibility before primary; records nothing when the frame has no mesh draws. |
 | `primary` | `sdf-world-primary.comp` | Camera traversal; writes every active hit record, misses included. |
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask. |
@@ -79,9 +80,12 @@ point through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`, and
 `SDF_PRIMARY_READ`, and `RecordHitPass` records each pass's buffer transitions
 before it dispatches. The wrapper defines `SDF_PRIMARY_READ` for every pass except
 primary, so the primary march in `renderView`'s `#else` branch compiles into the
-primary kernel, while the `#ifndef SDF_PRIMARY_READ` blocks inside the views
-branch (the in-line normal and AO) compile only when `SDF_MONOLITHIC_VIEWS` is
-defined by hand for an A/B comparison. No build defines it. A frame the
+primary kernel alone; `renderView` compiles only into the four hit-pass kernels.
+Before primary, the `mesh` pass (`SdfWorldEngine.MeshPass.cs`, `sdf-mesh.*.hlsl`)
+rasterizes the frame's mesh draws into the mesh visibility target that primary
+bounds its march by and surface reads the mesh normal from (`sdfMeshSampleAt`);
+it draws with its own `sdf-mesh` interface, one set per ring slot, and pushes
+the view and the draw (`SdfWorldInterfaces.MeshPushedIndex`). A frame the
 cadence gate skips records no view set, and each view's retained output
 stands; `world.cadence off` disables the gate for measurement.
 
@@ -108,10 +112,7 @@ lighting normal, while AO uses the geometric normal. Before accepting a record o
 pass-split change, compare material seams, detail and secondary shape modes,
 uneven viewport rectangles, reduced render scale, layout changes, and the
 diagnostic counters on both backends, and check buffer memory as well as the
-per-pass work `world.counters gpu` counts. For a monolithic A/B, pair the
-`SDF_MONOLITHIC_VIEWS` views kernel with
-no-op primary, surface, and ambient kernels that still answer the ISA report,
-so the reference is not charged for passes it does not run.
+per-pass work `world.counters gpu` counts.
 
 ## Buffer hazards
 

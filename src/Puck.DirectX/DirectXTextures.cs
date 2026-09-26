@@ -15,12 +15,14 @@ namespace Puck.DirectX;
 public static unsafe class DirectXTextures {
     /// <summary>Gets the resource flags and optimized clear value declared image usages need: a render target, a depth
     /// stencil, or unordered access, each only when its usage is declared. An optimized clear value is given only to a
-    /// render target (opaque black) or a depth stencil (1, the far plane), matching the clear a render pass records, so
-    /// the fast-clear path is taken and the debug layer never reports a mismatched clear.</summary>
+    /// render target (opaque black) or a depth stencil (the image's clear depth: 1 for a far plane at 1, 0 for a
+    /// reversed-Z pass), matching the clear a render pass records, so the fast-clear path is taken and the debug layer
+    /// never reports a mismatched clear.</summary>
     /// <param name="format">The texture format.</param>
     /// <param name="usage">The declared usages.</param>
+    /// <param name="clearDepth">The depth a depth attachment is cleared to (<see cref="GpuDepthAttachment.ClearDepth"/>).</param>
     /// <returns>The resource flags, and the optimized clear value or <see langword="null"/>.</returns>
-    public static (D3D12_RESOURCE_FLAGS Flags, D3D12_CLEAR_VALUE? ClearValue) OfUsage(DXGI_FORMAT format, GpuImageUsage usage) {
+    public static (D3D12_RESOURCE_FLAGS Flags, D3D12_CLEAR_VALUE? ClearValue) OfUsage(DXGI_FORMAT format, GpuImageUsage usage, float clearDepth = 1f) {
         var flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE;
         D3D12_CLEAR_VALUE? clearValue = null;
 
@@ -41,7 +43,7 @@ public static unsafe class DirectXTextures {
             };
 
             depthClear.Anonymous.DepthStencil = new D3D12_DEPTH_STENCIL_VALUE {
-                Depth = 1f,
+                Depth = clearDepth,
                 Stencil = 0,
             };
             clearValue = depthClear;

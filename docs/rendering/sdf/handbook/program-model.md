@@ -12,9 +12,9 @@ small.
 
 A signed distance field is a function: give it a point in space, it returns the
 distance to the nearest surface—negative inside, positive outside, zero on the
-skin. That single function defines a whole scene. There are no triangles, no
-vertices, no meshes anywhere in the pipeline. The renderer finds surfaces by
-*marching*: from each pixel's ray it repeatedly asks "how far to the nearest
+skin. That single function defines the SDF geometry without triangles or
+vertices; a frame can also carry opaque meshes beside it. The renderer finds SDF
+surfaces by *marching*: from each pixel's ray it repeatedly asks "how far to the nearest
 surface?" and steps that far, safe in the knowledge that a correct distance can
 never overshoot. A dozen or so steps later the ray has either converged on a
 surface or escaped to the sky.

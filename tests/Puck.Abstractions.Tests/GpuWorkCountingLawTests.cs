@@ -178,6 +178,7 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuBufferFactory.CreateHostVisible(data)"] = (rig => rig.Services.BufferFactory.CreateHostVisible(data: [1, 2, 3, 4], name: default, usage: GpuBufferUsage.Vertex), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 4L)]),
             ["IGpuBufferFactory.CreateDeviceLocal"] = (rig => rig.Services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 64UL, usage: GpuBufferUsage.Storage), [(GpuWork.BuffersCreated, 1L)]),
             ["IGpuImageFactory.Create"] = (rig => rig.Services.ImageFactory.Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, name: default, usage: GpuImageUsage.Storage, width: 4), [(GpuWork.ImagesCreated, 1L)]),
+            ["IGpuImageFactory.CreateDepth"] = (rig => rig.Services.ImageFactory.CreateDepth(attachment: new GpuDepthAttachment(ClearDepth: 0f, Format: GpuPixelFormat.D32Float, Load: GpuAttachmentLoad.Clear, Store: GpuAttachmentStore.Discard), height: 4, name: default, width: 4), [(GpuWork.ImagesCreated, 1L)]),
             ["IGpuSubmissionFence.Dispose"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Dispose(), none),
             ["IGpuSubmissionFence.IsSignaled"] = (rig => _ = rig.Services.QueueSubmitter.CreateSubmissionFence().IsSignaled, none),
             ["IGpuSubmissionFence.Wait"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Wait(), none),

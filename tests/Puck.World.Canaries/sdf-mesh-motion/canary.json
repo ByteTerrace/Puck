@@ -1,0 +1,50 @@
+{
+  "id": "sdf-mesh-motion",
+  "title": "A mesh moved across the beam's tiles leaves background records where it was and resolves where it went",
+  "binding": "The positive leg boots an offscreen 256x144 world with a block on the left and, in the centre, a static placement of a prototype whose inline mesh is a quad and whose only shape is out of view. It selects the visibility debug view, which colors each pixel by the kind of its visibility record, captures a frame, moves the quad to the right with a row edit, across several of the beam's 16-pixel tiles, and captures again. Each region's kind is the analytic oracle's (SdfMeshCanaryOracleLawTests), with the row edit applied to the document it reads for the second capture. The quad reads as mesh where it starts, the pixels it left read as background, and it reads as mesh where it went. The discriminating leg never moves the quad, so the vacated observation and the moved one both turn red.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sdf-mesh-motion/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "before-quad-is-mesh", "capture": "before.png", "extent": [256, 144], "region": [0.435, 0.447, 0.483, 0.54], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "after-vacated-pixels-are-background", "capture": "after.png", "extent": [256, 144], "region": [0.435, 0.447, 0.483, 0.54], "reduce": "every", "minimum": [0, 0, 0.2, 1], "maximum": [0.1, 0.15, 0.35, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "after-moved-quad-is-mesh", "capture": "after.png", "extent": [256, 144], "region": [0.595, 0.447, 0.647, 0.54], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sdf-mesh-motion/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "before-quad-is-mesh", "capture": "before.png", "extent": [256, 144], "region": [0.435, 0.447, 0.483, 0.54], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "unmoved-quad-is-not-background", "capture": "after.png", "extent": [256, 144], "region": [0.435, 0.447, 0.483, 0.54], "reduce": "every", "minimum": [0, 0, 0.2, 1], "maximum": [0.1, 0.15, 0.35, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "imageRegion", "name": "unmoved-right-is-not-mesh", "capture": "after.png", "extent": [256, 144], "region": [0.595, 0.447, 0.647, 0.54], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": false }
+    ]
+  }
+}

@@ -1,0 +1,228 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+schema: "puck.world.definition.v1"
+documentId: "sdf-mesh-visibility"
+
+cameras [
+  {
+    anchor: null
+    name: "mesh-cam"
+    renderHeight: 144
+    renderWidth: 256
+    rig {
+      name: "mesh-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 144
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 256
+}
+
+placements {
+  placement "front" {
+    prototype: "front"
+    position [-2.5, 0, 0]
+  }
+
+  placement "back" {
+    prototype: "back"
+    position [0, 0, 0]
+  }
+
+  placement "high" {
+    prototype: "high"
+    position [2.5, 0, 0]
+  }
+}
+
+prototypes {
+  prototype "front" {
+    document {
+      name: "front"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "base" {
+        chamfer: 0.2
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.6, 0.6, 0.6]
+      }
+    }
+    mesh {
+      indices [
+        0
+        1
+        2
+        0
+        2
+        3
+      ]
+      material: 1
+      vertices [
+        [-0.4, 0.2, -0.8]
+        [0.4, 0.2, -0.8]
+        [0.4, 1, -0.8]
+        [-0.4, 1, -0.8]
+      ]
+    }
+  }
+
+  prototype "back" {
+    document {
+      name: "back"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "base" {
+        chamfer: 0.2
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.6, 0.6, 0.6]
+      }
+    }
+    mesh {
+      indices [
+        0
+        1
+        2
+        0
+        2
+        3
+      ]
+      material: 1
+      vertices [
+        [-1.2, 0, 0.8]
+        [1.2, 0, 0.8]
+        [1.2, 1.8, 0.8]
+        [-1.2, 1.8, 0.8]
+      ]
+    }
+  }
+
+  prototype "high" {
+    document {
+      name: "high"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere "hidden" {
+        material: 0
+        position [0, -20, 0]
+        scale [0.05, 0.05, 0.05]
+      }
+    }
+    mesh {
+      indices [
+        0
+        1
+        2
+        0
+        2
+        3
+      ]
+      material: 1
+      vertices [
+        [-0.5, 2.2, 0]
+        [0.5, 2.2, 0]
+        [0.5, 2.8, 0]
+        [-0.5, 2.8, 0]
+      ]
+    }
+  }
+}
+
+simulation {
+  rateHz: 30
+}
+
+views {
+  layout "mesh" {
+    seatCount: 0
+    slots [
+      {
+        camera: "mesh-cam"
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: "World"
+  }
+
+  seatRig "mesh-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}

@@ -97,6 +97,10 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             result |= VulkanPipelineStageFlags.EarlyFragmentTests | VulkanPipelineStageFlags.LateFragmentTests;
         }
 
+        if (0 != (stage & GpuStage.VertexShader)) {
+            result |= VulkanPipelineStageFlags.VertexShader;
+        }
+
         return result;
     }
 

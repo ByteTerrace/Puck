@@ -20,18 +20,40 @@ internal static class SdfTestPipelines {
             ledger: ledger
         );
     // A composition's pipeline cache whose region-copy pipelines are created from a one-byte kernel of the caller's
-    // choosing (UploadModelGpu.RegionCopyBytecode for a GPU that runs the copies).
-    public static SdfWorldPipelineCache Cache(byte regionCopy = 1) =>
-        new(regionCopy: new GpuRegionCopyPass(
-            kernel: new byte[] { regionCopy },
-            pipelines: new GpuPassPipelineCache()
-        ));
+    // choosing (UploadModelGpu.RegionCopyBytecode for a GPU that runs the copies), and whose mesh pass pipelines from
+    // one-byte stages.
+    public static SdfWorldPipelineCache Cache(byte regionCopy = 1) {
+        var pipelines = new GpuPassPipelineCache();
+
+        return new(
+            meshRaster: new SdfMeshRasterPass(
+                fragment: new byte[] { 1 },
+                pipelines: pipelines,
+                vertex: new byte[] { 1 }
+            ),
+            regionCopy: new GpuRegionCopyPass(
+                kernel: new byte[] { regionCopy },
+                pipelines: pipelines
+            )
+        );
+    }
     // Builds a region-copy pipeline on the calling thread for an engine a harness drives directly, counting into the
     // ledger the engine will count into; the engine records with its Compute.
     public static GpuPassPipeline RegionCopy(IGpuDeviceContext device, GpuWorkLedger ledger, byte kernel = 1) =>
         GpuPassPipelineCache.Build(
             device: device,
             key: GpuRegionCopyPass.KeyOf(kernel: new byte[] { kernel }),
+            ledger: ledger
+        );
+    // Builds a mesh pass pipeline from one-byte stages on the calling thread for an engine a harness drives directly,
+    // counting into the ledger the engine will count into.
+    public static GpuPassPipeline MeshRaster(IGpuDeviceContext device, GpuWorkLedger ledger) =>
+        GpuPassPipelineCache.Build(
+            device: device,
+            key: SdfMeshRasterPass.KeyOf(
+                fragment: new byte[] { 1 },
+                vertex: new byte[] { 1 }
+            ),
             ledger: ledger
         );
     // A kernel set whose every kernel is one byte, the beam's chosen by the caller so two sets can differ by one kernel,

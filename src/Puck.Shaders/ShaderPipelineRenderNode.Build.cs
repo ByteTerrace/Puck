@@ -28,6 +28,14 @@ namespace Puck.Shaders;
 // nothing, so a persistent refusal is attempted once per change, never once per frame and never on a clock. A new
 // request, a swap or a resize, replaces the refused candidate.
 public sealed partial class ShaderPipelineRenderNode {
+    // A planned depth attachment as its render pass declares it, which its storage's images are also created for, so the
+    // depth they are cleared to has one statement.
+    internal static GpuDepthAttachment DepthAttachmentOf(ShaderPipelineAttachment attachment, GpuPixelFormat format) =>
+        new(
+            Format: format,
+            Load: attachment.Load,
+            Store: attachment.Store
+        );
     private readonly BackgroundBuild<GraphBuild> m_build = new();
 
     // The refused candidate: its pipeline, or null for a refused resize of the installed one, and the revisions it was
@@ -632,10 +640,9 @@ public sealed partial class ShaderPipelineRenderNode {
                 var format = ParseFormat(format: specs[attachment.Version].Format);
 
                 if (attachment.Depth) {
-                    depth = new GpuDepthAttachment(
-                        Format: format,
-                        Load: attachment.Load,
-                        Store: attachment.Store
+                    depth = DepthAttachmentOf(
+                        attachment: attachment,
+                        format: format
                     );
                 } else {
                     colors.Add(item: new GpuColorAttachment(

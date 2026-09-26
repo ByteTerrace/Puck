@@ -22,4 +22,6 @@ public static class VulkanPipelineStageFlags {
     public const uint TopOfPipe = 0x00000001;
     /// <summary>The <c>VK_PIPELINE_STAGE_TRANSFER_BIT</c> value.</summary>
     public const uint Transfer = 0x00001000;
+    /// <summary>The <c>VK_PIPELINE_STAGE_VERTEX_SHADER_BIT</c> value.</summary>
+    public const uint VertexShader = 0x00000008;
 }

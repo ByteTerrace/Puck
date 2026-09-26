@@ -72,7 +72,8 @@ public sealed partial class SdfWorldEngine {
             regionCount: CopyRegionCount(brickPool: brickPool),
             slotCount: FrameRingSize
         );
-    // Binds each region's buffer for this ring slot into every views set of the slot.
+    // Binds each region's buffer for this ring slot into every views set of the slot, and the tables the mesh pass reads
+    // into the slot's mesh set.
     private void BindRegions(int slot) {
         foreach (var views in m_viewsSets[slot]) {
             WriteWorldBuffer(buffer: m_programRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ProgramWords, set: views);
@@ -84,6 +85,8 @@ public sealed partial class SdfWorldEngine {
             WriteWorldBuffer(buffer: m_decalRegion.Buffer(slot: slot), member: SdfWorldInterfaces.DecalCells, set: views);
             WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldInterfaces.Volumes, set: views);
         }
+
+        BindMeshRegion(slot: slot);
     }
     // Binds the device-local buffers program growth replaces into every views set of the slot: the cull buffer and the
     // instance masks, each read-write for its writer and read-only for its readers.

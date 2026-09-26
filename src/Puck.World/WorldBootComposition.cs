@@ -979,6 +979,10 @@ public static class WorldBootComposition {
             bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX),
             pipelines: sp.GetRequiredService<GpuPassPipelineCache>()
         ));
+        services.TryAddSingleton(implementationFactory: static sp => new SdfMeshRasterPass(
+            bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX),
+            pipelines: sp.GetRequiredService<GpuPassPipelineCache>()
+        ));
         services.TryAddSingleton<SdfWorldPipelineCache>();
         services.TryAddSingleton(implementationFactory: static sp => new GpuPipelineCacheStore(
             contentKey: sp.GetRequiredService<SdfWorldPipelineCache>().LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)).ContentKey(),

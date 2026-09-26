@@ -1,0 +1,47 @@
+{
+  "id": "sdf-mesh-visibility",
+  "title": "Rasterized meshes and SDF surfaces resolve to the nearer one, and a mesh against the sky reaches the resolve",
+  "binding": "The positive leg boots an offscreen 256x144 world of three static placements in front of a fixed camera, each a prototype whose creation and inline mesh sit together: on the left a quad in front of its block, in the centre a wider quad behind its block, and on the right a quad against the sky whose only shape is out of view. It selects the visibility debug view, which colors each pixel by the kind of its visibility record, and captures a frame. Each region's kind is the analytic oracle's (SdfMeshCanaryOracleLawTests): the fixed-point raycast of the stamped program, bounded by the far distance and never by a mesh, beside exact intersections with the mesh draws' triangles. The quad in front of the left block and the wider quad above the centre block read as mesh, both blocks read as SDF where they are nearer than the mesh, the quad against the sky reads as mesh, and the corner reads as background. The discriminating leg boots the same world without its meshes, so every mesh observation turns red while the centre block still reads as SDF.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sdf-mesh-visibility/fixture.puck",
+    "script": "visibility.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "front-quad-is-mesh", "capture": "meshes.png", "extent": [256, 144], "region": [0.255, 0.537, 0.295, 0.607], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "front-block-above-its-quad-is-sdf", "capture": "meshes.png", "extent": [256, 144], "region": [0.275, 0.445, 0.336, 0.493], "reduce": "every", "minimum": [0.1, 0.8, 0.15, 1], "maximum": [0.2, 1, 0.35, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "centre-block-in-front-of-its-quad-is-sdf", "capture": "meshes.png", "extent": [256, 144], "region": [0.47, 0.46, 0.53, 0.6], "reduce": "every", "minimum": [0.1, 0.8, 0.15, 1], "maximum": [0.2, 1, 0.35, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "centre-quad-above-its-block-is-mesh", "capture": "meshes.png", "extent": [256, 144], "region": [0.45, 0.364, 0.547, 0.42], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "quad-against-the-sky-is-mesh", "capture": "meshes.png", "extent": [256, 144], "region": [0.689, 0.218, 0.741, 0.275], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "corner-is-background", "capture": "meshes.png", "extent": [256, 144], "region": [0.02, 0.035, 0.08, 0.11], "reduce": "every", "minimum": [0, 0, 0.2, 1], "maximum": [0.1, 0.15, 0.35, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sdf-mesh-visibility/plain.puck",
+    "script": "visibility.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "front-quad-is-mesh", "capture": "meshes.png", "extent": [256, 144], "region": [0.255, 0.537, 0.295, 0.607], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "imageRegion", "name": "centre-block-in-front-of-its-quad-is-sdf", "capture": "meshes.png", "extent": [256, 144], "region": [0.47, 0.46, 0.53, 0.6], "reduce": "every", "minimum": [0.1, 0.8, 0.15, 1], "maximum": [0.2, 1, 0.35, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "centre-quad-above-its-block-is-mesh", "capture": "meshes.png", "extent": [256, 144], "region": [0.45, 0.364, 0.547, 0.42], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "imageRegion", "name": "quad-against-the-sky-is-mesh", "capture": "meshes.png", "extent": [256, 144], "region": [0.689, 0.218, 0.741, 0.275], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": false }
+    ]
+  }
+}

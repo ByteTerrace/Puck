@@ -442,6 +442,16 @@ file sealed class FaultingImageFactory(IGpuImageFactory inner, GpuCreationFaults
             width: width
         );
     }
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
+        Enter(kind: GpuCreationKind.Image);
+
+        return inner.CreateDepth(
+            attachment: in attachment,
+            height: height,
+            name: name,
+            width: width
+        );
+    }
 }
 file sealed class FaultingPipelineFactory(IGpuPipelineFactory inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuPipelineFactory {
     public IGpuComputePipeline Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) {
