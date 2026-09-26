@@ -1109,17 +1109,34 @@ renders through `ViewStack` and is no instance of the live set. The laws are
 and the `view-screens` canary prints and holds each screen's mapping and a walk
 through each screen.
 
+Host passthrough runs on a windowed Windows host (P13b-4). The local user opens
+a pane's window capture with `source.passthrough open <instance>
+<windowTitle...>`, which only the host's own console may run as typed text, and
+the pane's published mapping then takes `Passthrough` with the local-user
+opener (`WorldViewGraphHost.OpenPassthrough`). The window pump offers every raw
+event to an `IWindowInputFilter` before anything else sees it, and the World's
+filter, `WorldSourcePassthrough`, hands it to `SourcePassthroughRouter` in
+`Puck.Input`, which hosts `SourceFocus`: pointer events over the pane reach the
+captured window at `SourcePassthrough.ToClient`'s client point, a click focuses
+it, keys and text follow focus, every release goes where its press went, and the
+chord returns focus to the game. `ToClient` maps into the captured frame, whose
+client area sits inside it at an offset, and gives the point in the window's own
+coordinates, DPI included. `Win32PassthroughWindow`, which a window capture's
+feed supplies, sends the window messages. A source whose pane is no longer
+published is revoked: its window hears the release of what it holds, and focus
+returns to the game. The laws are
+`SourcePassthroughRouterLawTests`,
+`WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+and `Win32PassthroughWindowTests`.
+
 P13b owes the rest. The screen shading still reads its own bezel constant,
 which `WorldScreenMappings` mirrors, and the GPU does not yet draw from the
-mapping. No host feeds
-`SourceFocus` or delivers a focused source's input to its window, and no machine
-reads a mapped pointer. The pointer's pane hover reads the picker on the CPU
-(P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`, outlined by the
-overlay's `CursorWriter` and echoed as `world.view.panes`' `hovered=`); GPU
-picking follows P4. The
-recorded Windows run, a click reaching a captured editor window at the mapped
-point and the chord returning input to the game, belongs to P13b-4 and is
-[deferred to the end](#deferred-to-the-end).
+mapping. No machine reads a mapped pointer. The pointer's pane hover reads the
+picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
+outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
+`hovered=`); GPU picking follows P4. The recorded Windows run, a click reaching
+a captured editor window at the mapped point and the chord returning input to
+the game, is [deferred to the end](#deferred-to-the-end).
 
 Rendering today runs the default render graph `WorldRootGraph` composes,
 through `RenderGraphRuntime` behind `RenderGraphRuntimeNode`, the host's render
@@ -3330,7 +3347,8 @@ A mapped point goes to one of three destinations:
 | Presentation | Hover and highlight | GPU picking is allowed |
 
 When a source has keyboard focus, keys go to it instead of the game, and a
-reserved chord always returns focus to the game. Host passthrough exists only
+reserved chord always returns focus to the game; with no source focused, the
+chord's Escape is the game's. Host passthrough exists only
 for a source the local user opened on their own machine. A world document can
 never create a passthrough source or send it input, whether it was authored
 locally or arrived through a portal. A hit on a rendered source continues as a
@@ -3347,8 +3365,9 @@ pick through a portal reaches the nested world's surface.
 **Depends on:** P11 and P12.
 
 **P13b, the rest of the package.** Panes and screens publish live mappings and
-the hit walk runs over the live instance set through both, but `SourceFocus` is
-called only by its laws and the screen shading reads its own bezel constant.
+the hit walk runs over the live instance set through both, and a windowed host
+routes a passthrough source's input to its window, but the screen shading reads
+its own bezel constant.
 Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
 
 1. Mappings are published from the live renderer, landed in both halves. The
@@ -3428,11 +3447,44 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
    frame allocates nothing in the host, the picker or the writer). The
    outline is checked on the CPU only; no capture has inspected it on either
    backend. GPU picking follows P4's visibility record.
-4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
-   `SourceFocus`, a focused capture source's window receives pointer and key
-   events at `SourcePassthrough.ToClient`'s client coordinates, and the chord
-   returns focus to the game. Its check, the recorded Windows run on real
-   hardware, is [deferred to the end](#deferred-to-the-end).
+4. Host passthrough, landed on Windows except its recorded run.
+   - Only the local user opens a passthrough source: `source.passthrough open
+     <instance> <windowTitle...>` runs only from the host's own console as typed
+     text, and opens a shown pane's window capture once the captured window's
+     title contains the title typed. The pane's mapping then takes
+     `Passthrough` with the local-user opener. The validator still refuses a
+     document's `Passthrough` route, and no document path reaches the verb or
+     the router.
+   - `SourcePassthroughRouter` in `Puck.Input` hosts `SourceFocus` for the
+     window pump, through `IWindowInputFilter`, a held capability the pump offers
+     every raw event before the observers and the command router. Pointer
+     events over the pane reach the captured window at
+     `SourcePassthrough.ToClient`'s client point, a click focuses it, keys and
+     text go to it instead of the game, each release goes where its press went,
+     and the chord returns focus to the game.
+   - `ToClient` maps into the captured frame, whose client area sits inside it,
+     and gives the point in the window's own coordinates, DPI included.
+     `Win32PassthroughWindow`, which a window capture's feed supplies
+     (`INativeImageCaptureFeed.Window`), sends the window messages in order:
+     pointer messages to the deepest child under the point, held by the child
+     a button was pressed on until the last release, and each key as
+     `WM_KEYDOWN`, its text as `WM_CHAR` and `WM_KEYUP` to the window thread's
+     keyboard focus.
+   - A source whose pane is no longer published is revoked before the next
+     event routes, and closing a source revokes it: its window hears the
+     release of every key and button it holds, and focus returns to the game.
+   - Laws: `SourcePassthroughRouterLawTests` (a focused source's pointer and
+     keys reach a fake window at the mapped client point, the chord returns
+     focus and is consumed while a source holds it, its Escape reaches the game
+     while none does, a document-declared source never focuses, releases follow
+     presses, a source whose pane is withdrawn stops taking keys and is
+     released), `WorldViewPaneMappingLawTests.APaneTheLocalUserOpenedTakesThePassthroughDestination`
+     and `Win32PassthroughWindowTests` (a hidden Puck window reads the pointer
+     events back at their client points; a recording window reads a key's
+     message sequence, Alt's system messages, each modifier side, and a drag
+     held by the child it was pressed on).
+   - Its check, the recorded Windows run on real hardware, is
+     [deferred to the end](#deferred-to-the-end).
 5. The GPU draws from the mapping. Waits on P7b-20. The screen shading reads
    each screen's UV layout, crop, letterbox and warp inset from the published
    mapping instead of `CrtBezel` in `sdf-world.hlsli`, and its mirror,
