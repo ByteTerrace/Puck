@@ -59,7 +59,6 @@ public sealed class GpuPipelineDescriptionLayoutLawTests {
         foreach (var description in ((GpuComputePipelineDescription[])[
             new(Bindings: [new GpuComputeBinding(Binding: 0, Kind: GpuComputeBindingKind.StorageImage)], Layout: compute, Name: "compute", PushConstantBinding: null),
             new(Bindings: [], Layout: compute, Name: "compute", PushConstantBinding: push),
-            new(Bindings: [], Layout: compute, Name: "compute", PushConstantBinding: null, Registers: GpuRegisterNumbering.PackedByClass),
         ])) {
             Assert.StartsWith(
                 actualString: Assert.Throws<ArgumentException>(testCode: () => description.RequireLayout()).Message,

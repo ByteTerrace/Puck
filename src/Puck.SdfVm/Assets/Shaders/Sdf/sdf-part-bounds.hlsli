@@ -8,16 +8,23 @@ static const uint SdfPartBoundFloatCount = 12u;
 static const uint SdfBoundCornerFloatCount = 6u;
 static const float SdfContactFieldLevel = 0.15;
 static uint sdfPartBoundsViewport = 0u;
+// The cull buffer as this kernel binds it: the beam, its one writer, reads and writes it through tilesRW; every other
+// kernel reads it through tiles.
+#ifdef SDF_TILES_READ_WRITE
+#define worldTiles tilesRW
+#else
+#define worldTiles tiles
+#endif
 
 uint sdfPartBoundIndex(uint viewport, uint instance) {
-    uint tileCount = params.tileGrid.x * params.tileGrid.y * params.viewportCount;
+    uint tileCount = passGroup.tileGrid.x * passGroup.tileGrid.y * passGroup.viewportCount;
     return WorldTilePlaneCount * tileCount + SdfBoundCornerFloatCount *
         (viewport * sdfProgramLayout.instanceCount + instance);
 }
 
 uint sdfContactBoundIndex(uint viewport, uint instance) {
     return sdfPartBoundIndex(viewport, instance) + SdfBoundCornerFloatCount *
-        params.viewportCount * sdfProgramLayout.instanceCount;
+        passGroup.viewportCount * sdfProgramLayout.instanceCount;
 }
 
 // Enclose a primitive's positive sublevel set, not merely its zero surface: primary accepts a band whose
@@ -252,24 +259,24 @@ void sdfWritePartBound(uint viewport, uint instance, float3 origin, float farDis
         }
     }
     uint base = sdfPartBoundIndex(viewport, instance);
-    tiles[base] = lower.x; tiles[base + 1u] = lower.y; tiles[base + 2u] = lower.z;
-    tiles[base + 3u] = upper.x; tiles[base + 4u] = upper.y; tiles[base + 5u] = upper.z;
+    worldTiles[base] = lower.x; worldTiles[base + 1u] = lower.y; worldTiles[base + 2u] = lower.z;
+    worldTiles[base + 3u] = upper.x; worldTiles[base + 4u] = upper.y; worldTiles[base + 5u] = upper.z;
     bool contactBounded;
     if ((part.z & 0x7FFFFFFFu) != 0u)
         contactBounded = sdfPartSublevelBox(part, 0.0, 0.0, SdfContactFieldLevel, lower, upper);
     else contactBounded = sdfFlatSublevelBox(instance, SdfContactFieldLevel, lower, upper);
     if (!contactBounded) { lower = -1e20; upper = 1e20; }
     base = sdfContactBoundIndex(viewport, instance);
-    tiles[base] = lower.x; tiles[base + 1u] = lower.y; tiles[base + 2u] = lower.z;
-    tiles[base + 3u] = upper.x; tiles[base + 4u] = upper.y; tiles[base + 5u] = upper.z;
+    worldTiles[base] = lower.x; worldTiles[base + 1u] = lower.y; worldTiles[base + 2u] = lower.z;
+    worldTiles[base + 3u] = upper.x; worldTiles[base + 4u] = upper.y; worldTiles[base + 5u] = upper.z;
 }
 #endif
 
 #if defined(SDF_PRIMARY_READ)
 bool sdfInstanceOutsideContactBox(uint instance, float3 low, float3 high) {
     uint base = sdfContactBoundIndex(sdfPartBoundsViewport, instance);
-    float3 lower = float3(tiles[base], tiles[base + 1u], tiles[base + 2u]);
-    float3 upper = float3(tiles[base + 3u], tiles[base + 4u], tiles[base + 5u]);
+    float3 lower = float3(worldTiles[base], worldTiles[base + 1u], worldTiles[base + 2u]);
+    float3 upper = float3(worldTiles[base + 3u], worldTiles[base + 4u], worldTiles[base + 5u]);
     return any(high < lower) || any(low > upper);
 }
 bool sdfPartCannotImprove(uint instance, float3 p, float distance) {
@@ -280,8 +287,8 @@ bool sdfPartCannotImprove(uint instance, float3 p, float distance) {
 
 bool sdfPartRayInterval(uint instance, float3 origin, float3 direction, inout float entry, inout float exit) {
     uint base = sdfPartBoundIndex(sdfPartBoundsViewport, instance);
-    float3 lower = float3(tiles[base], tiles[base + 1u], tiles[base + 2u]);
-    float3 upper = float3(tiles[base + 3u], tiles[base + 4u], tiles[base + 5u]);
+    float3 lower = float3(worldTiles[base], worldTiles[base + 1u], worldTiles[base + 2u]);
+    float3 upper = float3(worldTiles[base + 3u], worldTiles[base + 4u], worldTiles[base + 5u]);
     if (lower.x <= -1e19) return true;
     if (any(lower > upper)) return false;
     [unroll] for (uint axis = 0u; axis < 3u; axis++) {

@@ -100,6 +100,11 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
             func: static (sum, pool) => (sum + pool.HeapDescriptors),
             seed: 0U
         );
+        // The views sets hold the screen sampler, so the engine also needs sampler descriptors.
+        var samplers = SdfWorldEngine.DescriptorPools(brickPool: false, viewportCapacity: 1).Aggregate(
+            func: static (sum, pool) => (sum + pool.SamplerHeapDescriptors),
+            seed: 0U
+        );
         var heap = Heap(views: (demand - 1U));
 
         rig.Gpu.DescriptorHeap = heap;
@@ -110,7 +115,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         // it allocated: nothing but the pipeline set exists, no pool was created and the heap lent nothing.
         Assert.True(condition: refusal.IsEmpty);
         Assert.Contains(
-            expectedSubstring: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view descriptors",
+            expectedSubstring: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view and {samplers} sampler descriptors",
             actualString: rig.Node.NotReadyReason
         );
         rig.AssertNothingButThePipelineSetWasCreated();
@@ -163,6 +168,11 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
             func: static (sum, pool) => (sum + pool.HeapDescriptors),
             seed: 0U
         );
+        // The views sets hold the screen sampler, so the engine also needs sampler descriptors.
+        var samplers = SdfWorldEngine.DescriptorPools(brickPool: false, viewportCapacity: 1).Aggregate(
+            func: static (sum, pool) => (sum + pool.SamplerHeapDescriptors),
+            seed: 0U
+        );
         var heap = Heap(views: demand);
 
         rig.Gpu.DescriptorHeap = heap;
@@ -178,7 +188,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
 
         _ = rig.ProduceUntilRefused();
         Assert.Contains(
-            expectedSubstring: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view descriptors",
+            expectedSubstring: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world engine' needs {demand} view and {samplers} sampler descriptors",
             actualString: rig.Node.NotReadyReason
         );
 

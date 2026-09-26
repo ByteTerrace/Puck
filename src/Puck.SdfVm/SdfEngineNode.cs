@@ -3,6 +3,7 @@ using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Shaders;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -472,6 +473,21 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
         ApplyScheduledViewExtents(
             engine: m_engine!,
             viewCount: frame.Views.Count
+        );
+
+        // The frame group every dispatch binds: the host's tick and its presentation clock. No pointer or paired camera
+        // reaches the world engine; its cameras are the frame's views.
+        m_engine!.FrameTick = context.ElapsedTicks;
+        m_engine.FrameValues = new ShaderFrameValues(
+            CameraFov: 0f,
+            CameraPosition: default,
+            CameraTarget: default,
+            CameraUp: default,
+            Pointer: default,
+            PointerDown: false,
+            PointerPresses: 0,
+            Time: context.ElapsedSeconds,
+            TimeDelta: context.FrameDeltaSeconds
         );
 
         if (0 == m_screenSourceFrames.Count) {

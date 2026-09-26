@@ -60,7 +60,7 @@ work is pending, and count outside every pass. A cadence-skipped frame marks
 | Label | Kernel | Does |
 |---|---|---|
 | `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged region owes (program words, viewport rows, dynamic transforms, frame grid, screen surfaces, screen lights, volumes, decals, mesh draws) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldEngine.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A still frame copies only the viewport word its time moved. |
-| `sky` | `sdf-sky.comp` | Fills every pixel of the view's output image with sky before any tile is culled. Shares the views bindings. |
+| `sky` | `sdf-sky.comp` | Fills every pixel of the view's output image with sky before any tile is culled. Binds the same frame and views sets. |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |
@@ -152,25 +152,23 @@ together. `SdfViewsKernelVariantLawTests` pins the host half.
 
 ## Registers and bindings
 
-Bindings are shared across backends. A Direct3D 12 compute root signature
-numbers each register as `GpuComputePipelineDescription.Registers` says:
-`GpuRegisterNumbering.Binding`, the default and every pipeline pass's, puts it
-at the binding number (a sampled image's sampler at the same `s` number), and
-`PackedByClass`, which only the SDF engine's pipeline specs
-declare, numbers each class from zero in binding-list order. So the SDF
-engine's D3D12 registers still differ from their bindings and per consumer:
-`sdfInstanceMasks` is t37 by default and t3 in the beam via
-`SDF_INSTANCE_MASKS_REGISTER` defined before the include.
-`ShaderRegisterBindingLawTests` holds every register the build compiles, and
-every pipeline source the World's package store is built from
+No SDF kernel declares a binding or a register by hand. Every per-view kernel
+includes `sdf-world.interface.hlsli` (through `sdf-vm.hlsli`) and the baker
+`sdf-brick-bake.interface.hlsli`, both generated from `SdfWorldInterfaces` and
+owned by `puck shaders generate`; the engine creates each pipeline from its
+interface's layout and writes every binding by member name. A binding's
+Direct3D 12 register is its binding number in its group's space, as for every
+pass, and `ShaderRegisterBindingLawTests` holds every register the build
+compiles, and every pipeline source the World's package store is built from
 (`PuckWorldPipelineSource` in `build/WorldAssets.targets`, and the sources a
-shipped `*.graph.json` names), to its binding number and set, except its
-named list of today's violations, which may only shrink: a new declaration
-keeps register equal to binding, and a change that fixes one deletes its
-entry. Screen-source bindings
-are derived from `ScreenSourceBindingBase`, never hand-listed, so the descriptor
-pool sizes itself through `GpuDescriptorPoolSizes.ForSets`. The full binding map
-is in [sync-pairs.md](sync-pairs.md#engine-buffers-push-constants-and-bindings).
+shipped `*.graph.json` names), to its binding number and set, with no
+exception. A buffer one pass writes and a later pass reads is two members over
+the one buffer, the writer's with an `RW` suffix: shared code reaches the cull
+buffer through `worldTiles` and the visibility records through
+`sdfVisibilityRecordBuffer`, each resolving to its kernel's member. A new
+resource is a member of the interface, never a declaration in a kernel. The
+full binding map is in
+[sync-pairs.md](sync-pairs.md#engine-buffers-groups-and-bindings).
 
 ## Beam search limits
 

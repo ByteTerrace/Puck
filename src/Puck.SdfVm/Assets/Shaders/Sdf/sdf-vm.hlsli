@@ -7,11 +7,11 @@
 #define SDF_VM_HLSLI
 
 #include "sdf-isa.hlsli"
+#include "sdf-hash.hlsli"
+// Every resource and world value the world kernels read, generated from SdfWorldInterfaces.World.
+#include "sdf-world.interface.hlsli"
 
-// Program word stream (each element one uint4 = 16 bytes). A read-only StructuredBuffer. On Vulkan it is the
-// storage buffer at set 0, binding 1 (what the backend's descriptor layout expects); on DirectX it is an SRV at
-// t0 (DirectXGpuPipelineFactory's storage-buffer SRV slot — the program is never written, the buffer is on an
-// upload heap where UAVs are invalid, and an SRV avoids the pixel-shader u0/render-target clash). Layout:
+// Program word stream (sdfWords, each element one uint4 = 16 bytes), read-only: the program is never written. Layout:
 //   words[0]              = (instructionCount, materialCount, dataOffset, materialOffset)
 //   words[1 .. 1+N)       = instruction headers (op, shapeType, blendOp, materialId)
 //   words[dataOffset ..]  = instruction data, 2 uint4 per instruction (data0, data1 as float bits)
@@ -36,7 +36,6 @@
 //                           collapses Reset/Translate/Rotate/TransformDynamic/Shape chains into direct local poses; BOTH mapCore (scalar) and
 //                           mapGradCore (analytic-gradient dual) bypass the generic per-op switch for those segments — parallel rigid walks, KEEP
 //                           IN SYNC — while the authored instruction range stays intact for every non-rigid segment and the CPU SdfFieldEvaluator.
-[[vk::binding(1, 0)]] StructuredBuffer<uint4> sdfWords : register(t0);
 
 // The per-tile instance mask is a DERIVED ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the instance
 // ceiling SDF_MAX_INSTANCES caps it at SDF_MAX_INSTANCES/32 = 2048 words.
@@ -53,19 +52,9 @@
 // (SDF_INSTANCE_SEGMENT_END_MASK) so segmentEnd stays the true directory range and every rendered pixel is
 // byte-identical whether the bit is set or not.
 
-#ifdef SDF_INSTANCE_MASKS
-// The per-tile instance mask sdf-instance-cull.comp wrote (world render path): a flat uint buffer,
-// params.instanceMaskWordCount (the host-pushed live program width) elements per (viewport, tile) entry, same
-// (viewport, tile) indexing as the cull buffer. TWO readers, with different Direct3D 12 SRV registers (the register
-// follows each kernel's engine binding-list order): Stage 1 at the default t37 (the first slot free of its
-// program/viewport/dynamicTransforms/cullBounds/screenSurfaces/screenSources run, t0..t36 — 32 screen sources at
-// t5..t36) and the beam cone march at t3 (its list is program/viewports/dynamicTransforms + this) — the consumer
-// overrides SDF_INSTANCE_MASKS_REGISTER before including. KEEP IN SYNC with SdfWorldEngine's binding lists.
-#ifndef SDF_INSTANCE_MASKS_REGISTER
-#define SDF_INSTANCE_MASKS_REGISTER t37
-#endif
-[[vk::binding(7, 0)]] StructuredBuffer<uint> sdfInstanceMasks : register(SDF_INSTANCE_MASKS_REGISTER);
-#endif
+// The per-tile instance mask sdf-instance-cull.comp wrote (world render path), read through sdfInstanceMasks: a flat
+// uint buffer, passGroup.instanceMaskWordCount (the host-written live program width) elements per (viewport, tile)
+// entry, same (viewport, tile) indexing as the cull buffer.
 
 // === Shadow-ray instance cull (the world LIT path only) ==============================================================
 // A shadow-ray instance mask over the light ray's grid neighborhood, built by sdf-world.hlsli's
@@ -108,7 +97,7 @@ static bool sdfShadowParticipationActive = false;
 // The per-tile mask width in uints for a program: ceil(instanceCount/32), never below 1 (a zero-instance program
 // keeps one all-zero word so the mask buffer indexing stays uniform). Used ONLY for the reader's inner word
 // iteration — buffer INDEXING (entry width and tile base) comes from the host-pushed
-// params.instanceMaskWordCount (worldInstanceMaskBase in sdf-world.hlsli). KEEP IN SYNC with
+// passGroup.instanceMaskWordCount (worldInstanceMaskBase in sdf-world.hlsli). KEEP IN SYNC with
 // SdfProgram.InstanceMaskWordCount — the host derives the pushed value and sizes the mask buffer with the
 // identical formula.
 uint sdfInstanceMaskWordCount(uint instanceCount) {
@@ -203,7 +192,7 @@ uint sdfInstanceCount() {
 
 // The ceiling-clamped instance count. The mask-buffer indexing contract itself (entry width, tile base) lives in
 // sdf-world.hlsli's worldInstanceMaskBase: both world kernels resolve it from the host-pushed
-// params.instanceMaskWordCount (the beam prepass WRITES entry `tileIndex`'s words, Stage 1 hands mapCore the SAME
+// passGroup.instanceMaskWordCount (the beam prepass WRITES entry `tileIndex`'s words, Stage 1 hands mapCore the SAME
 // entry's base).
 uint sdfInstanceCountClamped() {
     return min(sdfInstanceCount(), SDF_MAX_INSTANCES);
@@ -230,12 +219,6 @@ uint sdfWordAt(uint wordIndex) {
 // Ring-local instance grid rebuilt from this frame's dynamic bound centers. Only the instance-cull and Stage-1
 // kernels opt in: the former builds camera-tile masks and the latter builds soft-shadow masks from the same table.
 // Keeping it separate from sdfWords lets animated instances move without rewriting the shared immutable program.
-#ifdef SDF_FRAME_INSTANCE_GRID
-#ifndef SDF_FRAME_INSTANCE_GRID_REGISTER
-#define SDF_FRAME_INSTANCE_GRID_REGISTER t42
-#endif
-[[vk::binding(47, 0)]] StructuredBuffer<uint> sdfFrameInstanceGrid : register(SDF_FRAME_INSTANCE_GRID_REGISTER);
-#endif
 // The grid block's base WORD offset (uint-granular), given the instance directory offset and the UNCLAMPED packed
 // instance count the caller already holds (mapCore and the beam both resolve them). The block sits one uint4 (the
 // world-segment header) plus the world-segment entries past the instance directory's own span.
@@ -306,45 +289,24 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #endif
 }
 
-#ifdef SDF_DYNAMIC_TRANSFORMS
 // Per-frame dynamic entity transforms (the world render path only). Each moving entity (player/enemy/carried screen)
 // owns a slot of THREE rows: element 3*slot is its world position (xyz) + soft-shadow participation (w),
 // 3*slot+1 its orientation quaternion (xyzw), 3*slot+2 its Lanes carrier (components 0 through 3 —
 // Puck.SignedDistance.DynamicTransform.Lanes). The SDF_OP_TRANSFORM_DYNAMIC opcode reads the rigid transform AND the
 // lanes from here by slot index, so an entity moves and its anonymous state updates by writing this small
 // buffer instead of re-uploading the static program — the same way the camera moves via the per-frame viewport
-// table. register(t2) follows the program (t0) and the world viewport table (t1, in sdf-world.hlsli).
-[[vk::binding(9, 0)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t2);
-#endif
+// table. The kernels read it through sdfDynamicTransforms.
 
-#ifdef SDF_GLYPH_ATLAS
 // The single font atlas the SDF_SHAPE_GLYPH primitive samples as a DISTANCE-level field (world-render path ONLY;
-// SetGlyphAtlas uploads it once). ONE combined-image-sampler binding APPENDED LAST in the views set — Vulkan binding
-// 44, Direct3D 12 register t39 (the first SRV free of the program/viewport/dynamicTransforms/cullBounds/screenSurfaces/
-// screenSources/instanceMasks/screenLights run, t0..t38 — 32 screen sources at t5..t36) with its static sampler at s32
-// (after the thirty-two screen samplers s0..s31). KEEP IN SYNC with SdfWorldEngine's viewsBindings ORDER (the D3D12
-// registers follow the array order, so the atlas must stay last) and GlyphAtlasBindingIndex. Sampled with EXPLICIT LOD
-// only (SampleLevel): implicit-derivative filtering is undefined inside the march's non-uniform control flow, and manual
-// bilinear (sdfGlyphSampleField) reads the true single-channel distance from ALPHA, so the nearest static sampler is all
-// this binding needs.
-[[vk::combinedImageSampler]] [[vk::binding(44, 0)]] Texture2D<float4> sdfGlyphAtlas : register(t39);
-[[vk::combinedImageSampler]] [[vk::binding(44, 0)]] SamplerState sdfGlyphAtlasSampler : register(s32);
-#endif
+// SetGlyphAtlas uploads it once), read through sdfGlyphAtlas and the views set's nearest screenSampler. Sampled with
+// EXPLICIT LOD only (SampleLevel): implicit-derivative filtering is undefined inside the march's non-uniform control
+// flow, and manual bilinear (sdfGlyphSampleField) reads the true single-channel distance from ALPHA, so a nearest
+// sampler is all it needs.
 
-#ifdef SDF_SAMPLED_REGIONS
-// The persistent brick pool the SDF_SHAPE_SAMPLED_REGION primitive samples: one float per voxel (f32), a flat
-// device-local StructuredBuffer the bake kernel writes and every brick instance indexes at its host-baked brickWordOffset
-// (data1.z). Guarded EXACTLY like sdfInstanceMasks/sdfGlyphAtlas: only the kernels that DEFINE SDF_SAMPLED_REGIONS bind
-// it (the world-views kernel + its core-ops variant, and the beam); every other kernel compiles the conservative
-// union-hull fallback instead. The Direct3D 12 register is per-consumer (the register follows each kernel's engine
-// binding-list order), so the consumer overrides SDF_BRICK_POOL_REGISTER before including — the views set appends it
-// LAST at t41 (after sdfDecalCells t40), the beam at t4 (after its instance mask t3). KEEP IN SYNC with SdfWorldEngine's
-// binding lists.
-#ifndef SDF_BRICK_POOL_REGISTER
-#define SDF_BRICK_POOL_REGISTER t41
-#endif
-[[vk::binding(46, 0)]] StructuredBuffer<float> sdfBrickPool : register(SDF_BRICK_POOL_REGISTER);
-#endif
+// The persistent brick pool the SDF_SHAPE_SAMPLED_REGION primitive samples through sdfBrickPool: one float per voxel
+// (f32), a flat device-local buffer the bake kernel writes and every brick instance indexes at its host-baked
+// brickWordOffset (data1.z). Only the kernels that DEFINE SDF_SAMPLED_REGIONS sample it (the world-views kernel and its
+// variants, and the beam); every other kernel compiles the conservative union-hull fallback instead.
 
 // --- instruction lanes ---
 // SDF_SHAPE_DETAIL_FLAG (Puck.SignedDistance.SdfInstruction.Detail) marks a SHADING-ONLY shape: skipped by
@@ -838,30 +800,6 @@ int sdfWallpaperCellKey(uint group, float2 cellIndex) {
         : (int)(sdfFloorMod((cellIndex.x + cellIndex.y), 2.0) + 0.5));
 }
 
-// --- integer hashes (the cross-backend-exact randomness substrate) ---------------------------------------------------
-// Every hashed DECISION in the ISA is integer-only on purpose: DXC lowers multiply/add/xor/shift bit-identically to
-// both SPIR-V and DXIL, while float codegen drifts +-1 LSB between the two. A cell index, a noise lattice, and a
-// dither pattern therefore come out the SAME on Vulkan and Direct3D.
-
-// Knuth's LCG step, the mixing core of PCG3D.
-#define SDF_PCG_MULTIPLIER 1664525u
-#define SDF_PCG_INCREMENT  1013904223u
-// Decorrelation multipliers for deriving independent hash streams from one seed (the golden-ratio and Murmur3 finalizer
-// constants). SDF_HASH_TUMBLE keys the CellJitter tumble stream apart from the position and material streams.
-#define SDF_HASH_STREAM_A 0x9E3779B9u
-#define SDF_HASH_STREAM_B 0x85EBCA6Bu
-#define SDF_HASH_TUMBLE   0x27D4EB2Fu
-
-// Canonical PCG3D integer hash (Jarzynski & Olano, "Hash Functions for GPU Rendering"): three uints in, three
-// well-mixed uints out. SDF_OP_CELL_JITTER keys this on the two's-complement cell index.
-uint3 sdfPcg3d(uint3 v) {
-    v = ((v * SDF_PCG_MULTIPLIER) + SDF_PCG_INCREMENT);
-    v.x += (v.y * v.z); v.y += (v.z * v.x); v.z += (v.x * v.y);
-    v ^= (v >> 16u);
-    v.x += (v.y * v.z); v.y += (v.z * v.x); v.z += (v.x * v.y);
-    return v;
-}
-
 // The R2 low-discrepancy lattice: alpha_i = round(2^32 / phi2^i) for the plastic number
 // phi2 = 1.32471795724474602596 (the real root of x^3 = x + 1). The uint multiply wraps mod 2^32, which IS the
 // fractional part of the additive recurrence — so the lattice is exact in fixed point.
@@ -1337,7 +1275,7 @@ float sdfGlyphTexelAlpha(int2 texel, int2 dims) {
     int2 clamped = clamp(texel, int2(0, 0), (dims - int2(1, 1)));
     float2 uv = ((float2(clamped) + 0.5) / float2(dims));
 
-    return sdfGlyphAtlas.SampleLevel(sdfGlyphAtlasSampler, uv, 0.0).a;
+    return sdfGlyphAtlas.SampleLevel(screenSampler, uv, 0.0).a;
 }
 // Manual bilinear of the true single-channel field: four point taps + arithmetic lerp, NOT a hardware LINEAR sampler,
 // so the reconstruction is bit-stable across both DXC backends (a driver's bilinear can differ ±1 LSB — the exact
@@ -1363,7 +1301,7 @@ float3 sdfGlyphTexelRgb(int2 texel, int2 dims) {
     int2 clamped = clamp(texel, int2(0, 0), (dims - int2(1, 1)));
     float2 uv = ((float2(clamped) + 0.5) / float2(dims));
 
-    return sdfGlyphAtlas.SampleLevel(sdfGlyphAtlasSampler, uv, 0.0).rgb;
+    return sdfGlyphAtlas.SampleLevel(screenSampler, uv, 0.0).rgb;
 }
 // Per-channel manual bilinear then MEDIAN-OF-3 — the classic MSDF reconstruction, for SHADE-TIME consumers ONLY (the
 // GlyphDecal tier): median restores the sharp corners the single channel rounds, and its C0 kinks at channel-crossover

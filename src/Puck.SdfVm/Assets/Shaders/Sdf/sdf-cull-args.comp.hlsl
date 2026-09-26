@@ -12,14 +12,8 @@
 // groupshared min/max via InterlockedMin/InterlockedMax; thread 0 emits the args after a group barrier.
 #include "sdf-world.hlsli"
 
-// register(t0) DELIBERATELY shadows sdf-vm.hlsli's sdfWords (and t1 shadows sdf-world.hlsli's viewports): this kernel
-// reads NEITHER, DXC dead-code-eliminates both declarations, and `tiles` ends up the only SRV — which the Direct3D 12
-// pipeline factory assigns t0 by binding order anyway. If you ever call map() or read viewports[] from here, the
-// overlap becomes real: split WorldParams out of sdf-world.hlsli rather than renumbering this
-// register, because the factory assigns registers POSITIONALLY and an annotation change alone desyncs the root signature.
-[[vk::binding(3, 0)]] StructuredBuffer<float> tiles : register(t0);       // read-only beam cull buffer
-[[vk::binding(5, 0)]] RWStructuredBuffer<uint> viewsArgs : register(u0);  // [groupCountX, groupCountY, groupCountZ]
-[[vk::binding(6, 0)]] RWStructuredBuffer<uint> cullBounds : register(u1); // [minGroupX, minGroupY, endGroupX, endGroupY]
+// It reads the beam's cull buffer through tiles and writes the three indirect group counts through viewsArgsRW and the
+// dispatch box (minGroupX, minGroupY, endGroupX, endGroupY) through cullBoundsRW.
 
 #define SDF_CULL_ARGS_THREADS 256u
 
@@ -45,14 +39,14 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
     // Every tile cull entry of the view this dispatch set renders, flattened: entry = ((ty * tileGrid.x) + tx). The
     // strided walk visits the SAME entry set as a serial double loop, and runs once per view per frame.
     uint v = worldViewOf(0u);
-    uint total = (params.tileGrid.x * params.tileGrid.y);
+    uint total = (passGroup.tileGrid.x * passGroup.tileGrid.y);
 
     for (uint entry = threadIndex; (entry < total); entry += SDF_CULL_ARGS_THREADS) {
-        uint ty = (entry / params.tileGrid.x);
-        uint tx = (entry - (ty * params.tileGrid.x));
+        uint ty = (entry / passGroup.tileGrid.x);
+        uint tx = (entry - (ty * passGroup.tileGrid.x));
 
         // Surviving tiles hold a non-negative march-start; empty tiles hold TileEmpty (-1.0).
-        if (tiles[worldTileIndex(v, uint2(tx, ty), params.tileGrid)] >= 0.0) {
+        if (tiles[worldTileIndex(v, uint2(tx, ty), passGroup.tileGrid)] >= 0.0) {
             InterlockedMin(minTileX, tx);
             InterlockedMin(minTileY, ty);
             InterlockedMax(maxTileX, tx);
@@ -84,11 +78,11 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
     // box's exclusive end is the extent the hit passes wrote this frame, which is where a visibility record is current.
     uint groupsPerTile = (WorldTileSize / 8u);
 
-    cullBounds[0] = (boxMinX * groupsPerTile);
-    cullBounds[1] = (boxMinY * groupsPerTile);
-    cullBounds[2] = ((boxMaxX + 1u) * groupsPerTile);
-    cullBounds[3] = ((boxMaxY + 1u) * groupsPerTile);
-    viewsArgs[0] = (((boxMaxX - boxMinX) + 1u) * groupsPerTile);
-    viewsArgs[1] = (((boxMaxY - boxMinY) + 1u) * groupsPerTile);
-    viewsArgs[2] = 1u;
+    cullBoundsRW[0] = (boxMinX * groupsPerTile);
+    cullBoundsRW[1] = (boxMinY * groupsPerTile);
+    cullBoundsRW[2] = ((boxMaxX + 1u) * groupsPerTile);
+    cullBoundsRW[3] = ((boxMaxY + 1u) * groupsPerTile);
+    viewsArgsRW[0] = (((boxMaxX - boxMinX) + 1u) * groupsPerTile);
+    viewsArgsRW[1] = (((boxMaxY - boxMinY) + 1u) * groupsPerTile);
+    viewsArgsRW[2] = 1u;
 }

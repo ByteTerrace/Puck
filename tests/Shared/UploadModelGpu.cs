@@ -108,14 +108,17 @@ internal sealed class UploadModelGpu :
     /// <returns>The buffer's current contents.</returns>
     public byte[] Memory(nint bufferHandle) => m_buffers[bufferHandle].Memory;
     /// <summary>Gets the host-visible bytes written since the last <see cref="ResetTallies"/>, per buffer size, for
-    /// every buffer that received any.</summary>
+    /// every storage buffer that received any; uniform blocks are <see cref="BlockBytes"/>'s.</summary>
     /// <returns>Each written buffer's size and the bytes written to it.</returns>
     public (ulong SizeBytes, long Written)[] HostWrites() => [.. m_buffers.Values
-        .Where(predicate: buffer => (buffer.Written > 0L))
+        .Where(predicate: buffer => (!buffer.Uniform && (buffer.Written > 0L)))
         .Select(selector: buffer => (buffer.SizeBytes, buffer.Written))];
-    /// <summary>Gets the host-visible bytes written since the last <see cref="ResetTallies"/>.</summary>
+    /// <summary>Gets the host-visible bytes written to storage buffers since the last <see cref="ResetTallies"/>.</summary>
     /// <returns>The byte count.</returns>
-    public long HostBytes() => m_buffers.Values.Sum(selector: buffer => buffer.Written);
+    public long HostBytes() => m_buffers.Values.Where(predicate: static buffer => !buffer.Uniform).Sum(selector: buffer => buffer.Written);
+    /// <summary>Gets the bytes written to uniform blocks since the last <see cref="ResetTallies"/>.</summary>
+    /// <returns>The byte count.</returns>
+    public long BlockBytes() => m_buffers.Values.Where(predicate: static buffer => buffer.Uniform).Sum(selector: buffer => buffer.Written);
     /// <summary>Zeroes the host-write and upload-copy tallies.</summary>
     public void ResetTallies() {
         foreach (var buffer in m_buffers.Values) {
@@ -127,7 +130,14 @@ internal sealed class UploadModelGpu :
     public void WaitIdle() { }
 
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) {
-        var pipeline = new Handles(handle: NextHandle(), layout: NextHandle(), setLayout: NextHandle());
+        var pipeline = new Handles(
+            groupLayouts: ((description.Layout is {} layout)
+                ? [.. Enumerable.Range(count: ((int)(layout.Groups.Max(selector: static group => group.Ordinal) + 1)), start: 0).Select(selector: _ => NextHandle())]
+                : []),
+            handle: NextHandle(),
+            layout: NextHandle(),
+            setLayout: NextHandle()
+        );
 
         if (m_uploadModules.ContainsKey(key: computeShaderModule.Handle)) {
             _ = m_uploadPipelines.TryAdd(
@@ -139,7 +149,7 @@ internal sealed class UploadModelGpu :
         return pipeline;
     }
     IGpuShaderModule IGpuShaderModuleFactory.Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
-        var module = new Handles(handle: NextHandle(), layout: 0, setLayout: 0);
+        var module = new Handles(groupLayouts: [], handle: NextHandle(), layout: 0, setLayout: 0);
 
         if (
             !bytecode.IsEmpty &&
@@ -153,8 +163,8 @@ internal sealed class UploadModelGpu :
 
         return module;
     }
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes);
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
     IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) => throw new NotSupportedException();
@@ -233,13 +243,14 @@ internal sealed class UploadModelGpu :
         }
     }
 
-    private MemoryBuffer Buffer(bool hostVisible, ulong sizeBytes, bool aperture = false) {
+    private MemoryBuffer Buffer(bool hostVisible, ulong sizeBytes, bool aperture = false, bool uniform = false) {
         var buffer = new MemoryBuffer(
             aperture: aperture,
             handle: NextHandle(),
             hostVisible: hostVisible,
             owner: m_buffers,
-            sizeBytes: sizeBytes
+            sizeBytes: sizeBytes,
+            uniform: uniform
         );
 
         m_buffers[buffer.BufferHandle] = buffer;
@@ -248,21 +259,24 @@ internal sealed class UploadModelGpu :
     }
     private nint NextHandle() => ((nint)Interlocked.Increment(location: ref m_nextHandle));
     private MemoryBuffer Single(bool hostVisible, ulong sizeBytes) => m_buffers.Values.Single(predicate: buffer =>
-        ((buffer.HostVisible == hostVisible) &&
+        (!buffer.Uniform &&
+        (buffer.HostVisible == hostVisible) &&
         (buffer.SizeBytes == sizeBytes))
     );
 
-    // A shader module or pipeline: its own handle, plus the layout handles a pipeline carries.
-    private sealed class Handles(nint handle, nint layout, nint setLayout) : IGpuComputePipeline, IGpuShaderModule {
+    // A shader module or pipeline: its own handle, plus the layout handles a pipeline carries: one per group ordinal up to
+    // its highest for a pipeline created from a layout.
+    private sealed class Handles(nint handle, nint layout, nint setLayout, IReadOnlyList<nint> groupLayouts) : IGpuComputePipeline, IGpuShaderModule {
         public nint DescriptorSetLayoutHandle => setLayout;
-        public IReadOnlyList<nint> GroupLayoutHandles => [];
+        public IReadOnlyList<nint> GroupLayoutHandles => groupLayouts;
         public nint Handle => handle;
         public nint LayoutHandle => layout;
 
         public void Dispose() { }
     }
-    private sealed class MemoryBuffer(nint handle, bool hostVisible, bool aperture, Dictionary<nint, MemoryBuffer> owner, ulong sizeBytes) : IGpuStorageBuffer {
+    private sealed class MemoryBuffer(nint handle, bool hostVisible, bool aperture, Dictionary<nint, MemoryBuffer> owner, ulong sizeBytes, bool uniform) : IGpuStorageBuffer {
         public bool Aperture => aperture;
+        public bool Uniform => uniform;
         public nint BufferHandle => handle;
         public bool HostVisible => hostVisible;
         public byte[] Memory { get; } = new byte[checked((int)sizeBytes)];

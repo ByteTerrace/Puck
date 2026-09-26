@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -27,46 +28,21 @@ namespace Puck.SdfVm;
 /// </para>
 /// </summary>
 public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
-    private const uint BrickBakePoolBindingIndex = 1;    // sdf-brick-bake.comp: brickPool RW (register u0)
-    private const int BrickBakePushByteLength = (sizeof(uint) * 4); // BrickBakePush { uint sliceVoxelStart, sliceVoxelCount, 2x pad }
-    private const uint BrickBakeRequestBindingIndex = 0; // sdf-brick-bake.comp: bakeRequest (register t0)
     private const int BrickBakeRequestHeaderFloat4Count = 3; // (boxMin+cellSize), (dims+carveCount), (destWordOffset+invLambda) — KEEP IN SYNC with sdf-brick-bake.comp
     private const uint BrickBakeWorkgroupSize = 64; // sdf-brick-bake.comp's [numthreads(64, 1, 1)]
-    // The sdfBrickPool binding number (sdf-vm.hlsli's [[vk::binding(46, 0)]]); the per-consumer Direct3D 12 register is
-    // POSITIONAL (views append it LAST -> t41, the beam after its instance mask -> t4). KEEP IN SYNC with sdf-vm.hlsli.
-    private const uint BrickPoolBindingIndex = 46;
-    private const uint CullArgsBindingIndex = 5; // sdf-cull-args.comp: views indirect dispatch args (register u0)
-    private const uint CullBoundsBindingIndex = 6; // sdf-cull-args.comp: bbox group origin and exclusive end (register u1); read by sdf-world-views.comp at binding 8
     private const ulong CullBoundsByteLength = (sizeof(uint) * 4); // the dispatch box sdf-cull-args.comp writes: the group origin, then the exclusive end
     private const int DecalBufferCells = (DecalDescriptorCount + (MaxScreenSurfaces * MaxScreenDecalCells));
     // The decal buffer's leading DESCRIPTOR band (one uint4 per screen slot) precedes the shared cell region; a screen's
     // cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells (KEEP IN SYNC with sdfSampleGlyphDecal).
     private const int DecalDescriptorCount = MaxScreenSurfaces;
     private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with sdf-world.hlsli's sdfDecalCells)
-    private const uint DynamicTransformBindingIndex = 9; // sdf-vm.hlsli's [[vk::binding(9, 0)]] / register(t2) (world path)
     private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = soft-shadow participation: 0 casts / 1 shadow-suppressed) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with sdf-vm.hlsli sdfDynamicTransforms: position.w is read by sdfShadowParticipationActive's per-instance skip in sdf-world.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's selected intensity lane)
     private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
-    // Ring-local frame instance grid (binding 47): rebuilt after dynamic transforms only when moving, maskable
-    // instances exist; invariant programs seed every slot once at UploadProgram. Instance-cull reads it at t3; views
-    // at t42.
-    private const uint FrameInstanceGridBindingIndex = 47;
-    private const uint InstanceMaskBindingIndex = 7; // sdf-instance-cull.comp (u0) writes the per-tile instance mask; sdf-beam.comp (t3) and the views layout (t37) read it; the per-tile word count is the LIVE uploaded program's InstanceMaskWordCount (pushed per frame, capped at the construction width the buffer was sized for)
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
-    private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
-    private const int PushConstantByteLength = (sizeof(uint) * 9); // 36-byte WorldParams; word 5 = screenMask, word 6 = instanceMaskWordCount, word 7 = sampleIndex (the deterministic tick clock the sky reads), word 8 = viewBase. KEEP IN SYNC with sdf-world.hlsli's WorldParams.
-    // The push word naming the view a dispatch set renders (WorldParams.viewBase). Record writes it per set into
-    // m_viewPush; m_pushConstant keeps it zero, so the cadence signature never depends on it.
-    private const int ViewBaseWord = 8;
-    private const uint ScreenLightBindingIndex = 11; // shared hit-pass layout: sdfScreenLights, register t38 (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
     private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfEnvBase
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
-    // The FIRST screen-source binding index; screenSource{i} binds at ScreenSourceBindingBase + i (sdf-world.hlsli's
-    // vk::binding). The glyph atlas follows the whole run, so ScreenSourceBindingBase + MaxScreenSurfaces is its binding.
-    private const uint ScreenSourceBindingBase = 12;
-    private const uint ScreenSurfaceBindingIndex = 10; // shared hit-pass layout: screenSurfaces, register t4
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli)
-    private const uint TileBindingIndex = 3; // the cull buffer: u0 in the beam (its writer), t0 in cull-args, t44 in the views layout
     // The tile cull buffer carries FOUR planes per (viewport, tile), each of stride
     // (tileGrid.x * tileGrid.y * viewportCount): plane 0 = the march-start lower bound (the classic beam
     // output; the ONLY plane cull-args reads, so its indexing is unchanged), plane 1 =
@@ -94,16 +70,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// count in. KEEP IN SYNC with <c>WorldTileSize</c> in sdf-world.hlsli.</summary>
     public const uint TileSize = 16;
 
-    private const uint ViewOutputBindingIndex = 4; // sdf-world-views.comp and sdf-sky.comp: the set's view's output image at u0
-    private const uint ViewportBindingIndex = 2; // matches sdf-world.hlsli's [[vk::binding(2, 0)]]
     private const int ViewportByteLength = ((sizeof(float) * 4) * 6); // 96-byte ViewportData incl. the renderScale row (KEEP IN SYNC with sdf-world.hlsli)
     private const ulong ViewsArgsByteLength = (sizeof(uint) * 3); // the three indirect group counts sdf-cull-args.comp writes
-    private const uint ViewsCullBoundsBindingIndex = 8; // sdf-world-views.comp: the dispatch box, its group origin and exclusive end (register t3)
-    // Bounded flow/cloud volumes (sdfVolumes), shared by the views and sky passes: appended LAST in the views binding
-    // list, so its SRV resolves to register t43 (after sdfFrameInstanceGrid t42). KEEP IN SYNC with sdf-world.hlsli.
-    private const uint VolumeBindingIndex = 48;
-    private const uint PrimaryHitBindingIndex = 49; // sdfVisibilityRecords written by primary, surface and ambient: u1, after the output image
-    private const uint PrimaryHitReadBindingIndex = 50; // the same buffer read-only for views: t45, after the cull buffer (sdf-visibility.hlsli)
     private const int PrimaryHitByteLength = (15 * sizeof(uint)); // the visibility record's fifteen words in its V, C, L, N and S rows; paired with sdf-visibility.hlsli's SdfVisibilityWords
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.
     private const int VolumeByteLength = ((sizeof(float) * 4) * SdfVolume.VectorsPerEntry);
@@ -133,11 +101,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     public const int MaxScreenDecalCells = SdfScreenDecalLayout.MaxScreenDecalCells;
     /// <summary>The kernels' screen-source count — the most screen surfaces one program may declare (the same
     /// ceiling as <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>, which this reads rather than
-    /// hand-syncing). 32 separate combined-image-sampler bindings (not one array binding): DXC's
-    /// <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState pair, so a true single Vulkan
-    /// combined-image-sampler array isn't expressible in the shared HLSL — see <see cref="ScreenSourceBindingIndices"/>.
-    /// Capped at 32 because <c>screenMask</c> (the per-frame bound-slot bitmask, WorldParams word 5) is a single
-    /// <c>uint</c> — raising past 32 needs a second mask word on both sides.</summary>
+    /// hand-syncing). Each screen is one sampled-image member of <see cref="SdfWorldInterfaces.World"/>, all sampled
+    /// through its one nearest <see cref="SdfWorldInterfaces.ScreenSampler"/>. Capped at 32 because the world block's
+    /// <see cref="SdfWorldInterfaces.ScreenMask"/> (the per-frame bound-slot bitmask) is a single <c>uint</c> — raising
+    /// past 32 needs a second mask word on both sides.</summary>
     public const int MaxScreenSurfaces = Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces;
     /// <summary>The most views one engine renders in a frame: its viewport capacity's ceiling, which sizes the per-view
     /// descriptor sets and output images the engine can hold.</summary>
@@ -168,7 +135,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly bool m_brickPoolEnabled;
     private readonly int m_brickPoolVoxelCapacity;
     private readonly IGpuComputePipeline m_cullArgsPipeline;
-    private readonly nint m_cullArgsSet;
     private readonly IGpuBuffer m_cullBoundsBuffer;
     private readonly IGpuBindings m_bindings;
     private readonly IGpuDeviceContext m_deviceContext;
@@ -197,9 +163,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly int m_programWordReserve;
     private readonly nint m_screenSampler;
     private readonly IGpuImage m_screenSourceFiller;
-    // Shares Stage 1's exact bindings array (PipelineLayouts.Views) and push/sampler shape, so its descriptor-set layout is
-    // identically defined and the shared per-slot, per-view m_viewsSets bind against it too — the same reuse m_viewsCorePipeline
-    // already established, so this pipeline needs no descriptor sets of its own.
+    // Like every per-view pipeline it binds the world interface's groups, so the frame sets and the per-slot, per-view
+    // m_viewsSets bind against it and it needs no descriptor sets of its own.
     private readonly IGpuComputePipeline m_skyPipeline;
 
     private IGpuBuffer m_tileBuffer;
@@ -208,15 +173,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly uint m_tileGridY;
     private readonly uint m_viewportCapacity;
     private readonly byte[] m_viewportScratch;
-    // The RETAINED copy of the last produced frame's packed viewport rows, and the ring of buffers Stage 1 reprojects
-    // through. Held explicitly rather than by reading the ring's other slot: the ring slot's contents are only defined
-    // relative to the produced-frame count, and an engine whose caller ever produces an odd number of frames between
-    // two renders would silently reproject through the wrong camera.
     private readonly IGpuBuffer m_viewsArgsBuffer;
-    // The core-ops Stage 1 variant (see SdfViewsKernelVariant): same bindings array as m_viewsPipeline, so its
-    // descriptor-set layout is identically defined — the per-slot m_viewsSets bind against WHICHEVER pipeline
-    // UploadProgram selected (compatible layouts on Vulkan; the same slot packing + root-signature shape on
-    // Direct3D 12), and no second set/descriptor-write path exists.
+    // The core-ops and fold Stage 1 variants (see SdfViewsKernelVariant): the same world interface as m_viewsPipeline, so
+    // the per-slot m_viewsSets bind against WHICHEVER pipeline UploadProgram selected, and no second set or
+    // descriptor-write path exists.
     private readonly IGpuComputePipeline m_viewsCorePipeline;
     private readonly IGpuComputePipeline m_viewsFoldsPipeline;
     private readonly IGpuComputePipeline m_viewsPipeline;
@@ -266,25 +226,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private bool m_skipThisFrame;
     private SdfViewsKernelVariant m_viewsVariant;
 
-    // shared hit-pass layout: screenSource0..MaxScreenSurfaces-1, registers t5.. — one binding per screen
-    // index (KEEP IN SYNC with sdf-world.hlsli's screenSource declarations). DERIVED from the base + count so the list
-    // can never drift from MaxScreenSurfaces (the D3D12 heap-packing discipline: never hand-count a binding run).
-    private static readonly uint[] ScreenSourceBindingIndices = BuildScreenSourceBindingIndices();
-    // shared hit-pass layout: the SDF_SHAPE_GLYPH font atlas, register t39 (SRV, after screenLights t38) +
-    // static sampler s32 (after the 32 screen samplers s0..s31) — APPENDED LAST in PipelineLayouts.Views so the D3D12 registers
-    // land there; DERIVED as the first binding past the 32 screen sources (12..43). KEEP IN SYNC with sdf-vm.hlsli's
-    // sdfGlyphAtlas.
-    private static readonly uint GlyphAtlasBindingIndex = (ScreenSourceBindingBase + ((uint)MaxScreenSurfaces));
-    // shared hit-pass layout: the GLYPH DECAL buffer, register t40 — appended AFTER the glyph atlas
-    // (t39), DERIVED so it can never drift when the screen-source run grows. KEEP IN SYNC with sdf-world.hlsli's
-    // sdfDecalCells (Vulkan binding 45).
-    private static readonly uint DecalCellsBindingIndex = (GlyphAtlasBindingIndex + 1u);
     // The render passes, in submission order — the GPU work ledger's column labels (see SdfWorldEngine.Work.cs, whose
     // public PassLabels exposes this list). Adding a pass is naming it here and adding its EnterPass/LeavePass bracket
     // where it submits (SdfWorldEngine.Record.cs); every reader (PassLabels, CadenceSkippedPassLabels, the ledger's
     // per-pass counts) then picks it up automatically.
     private static readonly string[] PassLabelTable = ["upload", "sky", "mask", "beam", "cull-args", "primary", "surface", "ambient", "views"];
-    private readonly nint[] m_beamSets = new nint[FrameRingSize];
 
     // The change-detected descriptor caches are PER RING SLOT: each slot's sets are only rewritten once that slot's
     // fence proves its previous frame retired, so a descriptor update can never race an in-flight command buffer.
@@ -299,17 +245,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // One per-submit fence per ring slot: PrepareFrame waits slot k's fence (frame k − FrameRingSize) before
     // rewriting slot k's resources; the fenced submit re-arms it.
     private readonly IGpuSubmissionFence[] m_frameFences = new IGpuSubmissionFence[FrameRingSize];
-    private readonly nint[] m_instanceCullSets = new nint[FrameRingSize];
-    private readonly byte[] m_pushConstant = new byte[PushConstantByteLength];
-    // The push one dispatch set records: m_pushConstant with its viewBase word set to the set's view.
-    private readonly byte[] m_viewPush = new byte[PushConstantByteLength];
     private readonly nint[] m_screenSourceViews = new nint[MaxScreenSurfaces];
     // The screen-light table (screen glow colors, environment, grid-overlay and lever rows) and the bounded-volume table
     // (views and sky), each packed here every frame and written into its region.
     private readonly byte[] m_screenLightScratch = new byte[ScreenLightByteLength];
     private readonly Vector3[] m_screenLightColors = new Vector3[MaxScreenSurfaces];
     private readonly byte[] m_volumeScratch = new byte[(MaxVolumes * VolumeByteLength)];
-    private readonly byte[] m_brickBakePush = new byte[BrickBakePushByteLength];
     private readonly IGpuStorageBuffer[] m_brickRequestBuffers = new IGpuStorageBuffer[SdfBrickPoolLayout.MaxBricks];
     private readonly nint[] m_brickBakeSets = new nint[SdfBrickPoolLayout.MaxBricks];
     private readonly BrickBakeState[] m_brickStates = new BrickBakeState[SdfBrickPoolLayout.MaxBricks];
@@ -318,8 +259,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly int[] m_brickVoxelCursor = new int[SdfBrickPoolLayout.MaxBricks];
     private readonly Vector4[] m_brickRequestScratch = new Vector4[(BrickBakeRequestHeaderFloat4Count + MaxBrickCarvesPerBake)];
 
-    // One views set per ring slot and view slot ([slot][view]): each binds that view's output image, and the sky, the hit
-    // passes and views of that view's dispatch set bind it.
+    // One views set per ring slot and view slot ([slot][view]): the pass group every dispatch of that view's dispatch set
+    // binds, its block the view's world values and its bindings every table, buffer and image the dispatches read.
     private readonly nint[][] m_viewsSets;
 
     private SdfProgram m_liveProgram = null!;
@@ -627,12 +568,24 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             usage: GpuBufferUsage.Storage
         ));
 
-        // One pool, one CULL-ARGS set (its bindings are all shared device-local buffers, never rewritten after
-        // construction) plus FrameRingSize copies of the beam and instance-cull sets and FrameRingSize x viewport-capacity
-        // views sets (they bind the per-slot host-visible buffers, and the views sets take per-frame descriptor
-        // rewrites) — the Direct3D 12 allocator bump-allocates a non-overlapping heap region per set (like a Vulkan
-        // pool), so they never clobber. The capacity is DERIVED from the binding lists, so it can never drift out of
-        // sync when a binding is added or the viewport capacity/FrameRingSize changes.
+        // The frame block, written once a frame, and one world block per view slot, each a uniform region with one
+        // constant buffer per ring slot.
+        m_frameRegion = scope.Own(created: CreateBlockRegion(
+            blockBytes: SdfWorldInterfaces.WorldParameters.FrameBlockSizeBytes,
+            name: NameOf(part: "frame-block")
+        ));
+        m_viewBlocks = new GpuRegion[((int)m_viewportCapacity)];
+
+        for (var view = 0; (view < m_viewBlocks.Length); view++) {
+            m_viewBlocks[view] = scope.Own(created: CreateBlockRegion(
+                blockBytes: SdfWorldInterfaces.WorldParameters.SizeBytes,
+                name: NameOf(detail: ViewDetails[view], part: "world-block")
+            ));
+        }
+
+        // One pool: per ring slot a frame set and one views set per view slot, and with a brick pool one bake set per
+        // brick slot. The Direct3D 12 allocator bump-allocates a non-overlapping heap region per set (like a Vulkan pool),
+        // so they never clobber, and the capacity is derived from the interfaces' groups.
         var poolSizes = DescriptorPoolSizes(
             brickPool: m_brickPoolEnabled,
             viewportCapacity: m_viewportCapacity
@@ -648,116 +601,62 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             release: m_bindings.DestroyPool
         );
 
-        // The cull buffer is read-only here (a stride-4 SRV on Direct3D 12); the args + bounds are written (UAVs).
-        m_cullArgsSet = m_bindings.AllocateSet(
-            name: NameOf(part: "cull-args"),
-            descriptorSetLayoutHandle: m_cullArgsPipeline.DescriptorSetLayoutHandle,
-            poolHandle: m_pool
-        );
-        WriteStorageBufferReadOnly(
-            binding: TileBindingIndex,
-            buffer: m_tileBuffer,
-            set: m_cullArgsSet
-        );
-        WriteStorageBufferReadWrite(
-            binding: CullArgsBindingIndex,
-            buffer: m_viewsArgsBuffer,
-            set: m_cullArgsSet
-        );
-        WriteStorageBufferReadWrite(
-            binding: CullBoundsBindingIndex,
-            buffer: m_cullBoundsBuffer,
-            set: m_cullArgsSet
-        );
-
-        // The screen sources (bindings 12..43) are (re)bound per frame by BindScreenSources.
+        // The screen sources and the glyph atlas are sampled through one nearest sampler, written into every views set
+        // once; the images themselves are (re)bound per frame by BindScreenSources.
         m_screenSampler = scope.Own(
             handle: m_bindings.CreateSampler(filter: GpuSamplerFilter.Nearest),
             release: m_bindings.DestroySampler
         );
 
+        var groupLayouts = m_viewsPipeline.GroupLayoutHandles;
+
         for (var slot = 0; (slot < FrameRingSize); slot++) {
-            var beamSet = m_bindings.AllocateSet(
-                name: NameOf(part: "beam", index: slot),
-                descriptorSetLayoutHandle: m_beamPipeline.DescriptorSetLayoutHandle,
+            m_frameSets[slot] = m_bindings.AllocateSet(
+                name: NameOf(detail: "frame group", index: slot, part: "world"),
+                descriptorSetLayoutHandle: groupLayouts[((int)FrameGroup)],
                 poolHandle: m_pool
             );
-
-            m_beamSets[slot] = beamSet;
-            WriteStorageBufferReadWrite(
-                binding: TileBindingIndex,
-                buffer: m_tileBuffer,
-                set: beamSet
+            m_bindings.WriteConstantBuffer(
+                arrayElement: 0,
+                binding: 0,
+                bufferHandle: m_frameRegion.Buffer(slot: slot).BufferHandle,
+                bufferSize: ((ulong)m_frameRegion.ByteCount),
+                descriptorSetHandle: m_frameSets[slot]
             );
-            WriteStorageBufferReadOnly(
-                binding: InstanceMaskBindingIndex,
-                buffer: m_instanceMaskBuffer,
-                set: beamSet
-            );
-            // The brick pool (a stride-4 float SRV, like the instance mask above — never the stride-16 program SRV).
-            WriteStorageBufferReadOnly(
-                binding: BrickPoolBindingIndex,
-                buffer: m_brickPoolBuffer,
-                set: beamSet
-            );
-
-            // The instance-cull set: the mask buffer written (the frame's first pass — the beam then reads it).
-            var instanceCullSet = m_bindings.AllocateSet(
-                name: NameOf(part: "instance-cull", index: slot),
-                descriptorSetLayoutHandle: m_instanceCullPipeline.DescriptorSetLayoutHandle,
-                poolHandle: m_pool
-            );
-
-            m_instanceCullSets[slot] = instanceCullSet;
-            WriteStorageBufferReadWrite(
-                binding: InstanceMaskBindingIndex,
-                buffer: m_instanceMaskBuffer,
-                set: instanceCullSet
-            );
-
             m_viewsSets[slot] = new nint[((int)m_viewportCapacity)];
 
             for (var view = 0; (view < ((int)m_viewportCapacity)); view++) {
                 var viewsSet = m_bindings.AllocateSet(
                     name: NameOf(detail: ViewDetails[view], index: slot, part: "views"),
-                    descriptorSetLayoutHandle: m_viewsPipeline.DescriptorSetLayoutHandle,
+                    descriptorSetLayoutHandle: groupLayouts[((int)PassGroup)],
                     poolHandle: m_pool
                 );
 
                 m_viewsSets[slot][view] = viewsSet;
-                WriteStorageBufferReadOnly(
-                    binding: TileBindingIndex,
-                    buffer: m_tileBuffer,
-                    set: viewsSet
+                m_bindings.WriteConstantBuffer(
+                    arrayElement: 0,
+                    binding: 0,
+                    bufferHandle: m_viewBlocks[view].Buffer(slot: slot).BufferHandle,
+                    bufferSize: ((ulong)m_viewBlocks[view].ByteCount),
+                    descriptorSetHandle: viewsSet
                 );
-                WriteStorageBufferReadOnly(
-                    binding: ViewsCullBoundsBindingIndex,
-                    buffer: m_cullBoundsBuffer,
-                    set: viewsSet
+                m_bindings.WriteSampler(
+                    arrayElement: 0,
+                    binding: ScreenSamplerBinding,
+                    descriptorSetHandle: viewsSet,
+                    samplerHandle: m_screenSampler
                 );
-                WriteStorageBufferReadOnly(
-                    binding: InstanceMaskBindingIndex,
-                    buffer: m_instanceMaskBuffer,
-                    set: viewsSet
-                );
-                // The brick pool (a stride-4 float SRV — the shared read side; the bake set below binds the same buffer as a UAV).
-                WriteStorageBufferReadOnly(
-                    binding: BrickPoolBindingIndex,
-                    buffer: m_brickPoolBuffer,
-                    set: viewsSet
-                );
-                WriteStorageBufferReadWrite(
-                    binding: PrimaryHitBindingIndex,
-                    buffer: m_primaryHitBuffer,
-                    set: viewsSet
-                );
-                WriteStorageBufferReadOnly(
-                    binding: PrimaryHitReadBindingIndex,
-                    buffer: m_primaryHitBuffer,
-                    set: viewsSet
-                );
+                // The shared device-local scratch: each buffer one pass writes binds twice, read-write for its writer and
+                // read-only for its readers.
+                WriteWorldBuffer(buffer: m_viewsArgsBuffer, member: SdfWorldInterfaces.ViewsArgsWritten, set: viewsSet);
+                WriteWorldBuffer(buffer: m_cullBoundsBuffer, member: SdfWorldInterfaces.CullBoundsWritten, set: viewsSet);
+                WriteWorldBuffer(buffer: m_cullBoundsBuffer, member: SdfWorldInterfaces.CullBounds, set: viewsSet);
+                WriteWorldBuffer(buffer: m_brickPoolBuffer, member: SdfWorldInterfaces.BrickPool, set: viewsSet);
+                WriteWorldBuffer(buffer: m_primaryHitBuffer, member: SdfWorldInterfaces.VisibilityRecordsWritten, set: viewsSet);
+                WriteWorldBuffer(buffer: m_primaryHitBuffer, member: SdfWorldInterfaces.VisibilityRecords, set: viewsSet);
             }
 
+            BindProgramBuffers(slot: slot);
             BindRegions(slot: slot);
 
             // Each view's output image is (re)bound per frame by BindViewOutputs, once the frame that renders the view
@@ -771,9 +670,20 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         // The carve-bake baker's per-slot request buffers + static descriptor sets (only when the pool is enabled). Each
         // slot owns a host-visible request buffer (header + up to MaxBrickCarvesPerBake carves) and a set binding that
-        // buffer (t0 SRV) + the shared pool (u0 UAV). These are NOT per-ring-slot: a bake spans frames and RequestBrickBake
-        // drains the ring (WaitForFrameRing) before rewriting a request buffer, so one buffer per brick slot is race-free.
+        // buffer and the shared pool, beside the one block every bake set shares. These are NOT per-ring-slot: a bake
+        // spans frames and RequestBrickBake drains the ring (WaitForFrameRing) before rewriting a request buffer, so one
+        // buffer per brick slot is race-free.
         if (m_brickPoolEnabled) {
+            var bakeBlockBytes = SdfWorldInterfaces.BrickBakeLayout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)).BlockSizeBytes;
+            var bakeBlock = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
+                name: NameOf(detail: "block", part: "brick-bake"),
+                sizeBytes: ((ulong)UniformBytes(blockBytes: bakeBlockBytes)),
+                usage: GpuBufferUsage.Uniform
+            ));
+
+            bakeBlock.Write<uint>(data: [((uint)MaxBrickBakeVoxelsPerSlice)]);
+            m_brickBakeBlock = bakeBlock;
+
             for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {
                 var requestBuffer = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
                     name: NameOf(detail: "request", index: brick, part: "brick-bake"),
@@ -785,22 +695,20 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
                 var bakeSet = m_bindings.AllocateSet(
                     name: NameOf(part: "brick-bake", index: brick),
-                    descriptorSetLayoutHandle: m_brickBakePipeline!.DescriptorSetLayoutHandle,
+                    descriptorSetLayoutHandle: m_brickBakePipeline!.GroupLayoutHandles[((int)PassGroup)],
                     poolHandle: m_pool
                 );
 
                 m_brickBakeSets[brick] = bakeSet;
-                // The request buffer is a float4 (stride-16) SRV; the pool is the stride-4 UAV the baker writes.
-                WriteStorageBuffer(
-                    binding: BrickBakeRequestBindingIndex,
-                    buffer: requestBuffer,
-                    set: bakeSet
+                m_bindings.WriteConstantBuffer(
+                    arrayElement: 0,
+                    binding: 0,
+                    bufferHandle: bakeBlock.BufferHandle,
+                    bufferSize: bakeBlock.SizeBytes,
+                    descriptorSetHandle: bakeSet
                 );
-                WriteStorageBufferReadWrite(
-                    binding: BrickBakePoolBindingIndex,
-                    buffer: m_brickPoolBuffer,
-                    set: bakeSet
-                );
+                WriteBuffer(buffer: requestBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakeRequest, set: bakeSet);
+                WriteBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakePool, set: bakeSet);
             }
         }
 
@@ -827,62 +735,31 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         return cache;
     }
-    // The screen-source binding indices — screenSource{i} at ScreenSourceBindingBase + i — derived from
-    // MaxScreenSurfaces so the run can never drift from the cap (never hand-listed).
-    private static uint[] BuildScreenSourceBindingIndices() {
-        var indices = new uint[MaxScreenSurfaces];
+    // Writes a buffer at an interface member's binding, as the kind its member declares and at its element's stride, the
+    // structured view the kernel's generated declaration reads on Direct3D 12.
+    private void WriteBuffer(nint set, ShaderInterfaceLayout layout, string member, IGpuBuffer buffer) {
+        var resource = layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)).Resources.Single(predicate: candidate => string.Equals(
+            a: candidate.Member.Name,
+            b: member,
+            comparisonType: StringComparison.Ordinal
+        ));
 
-        for (var index = 0; (index < MaxScreenSurfaces); index++) {
-            indices[index] = (ScreenSourceBindingBase + ((uint)index));
-        }
-
-        return indices;
-    }
-    // The MaxScreenSurfaces screen-source SampledImage bindings, spread into PipelineLayouts.Views in screen-index order so the
-    // D3D12 registers land contiguously (t5..t36). Derived from the same index list the per-frame (re)binds use, so the
-    // descriptor pool (GpuDescriptorPoolSizes.ForSets, which counts these) and the writes can never disagree.
-    private static GpuComputeBinding[] BuildScreenSourceBindings() {
-        var bindings = new GpuComputeBinding[MaxScreenSurfaces];
-
-        for (var index = 0; (index < MaxScreenSurfaces); index++) {
-            bindings[index] = new GpuComputeBinding(
-                Binding: ScreenSourceBindingIndices[index],
-                Kind: GpuComputeBindingKind.SampledImage
-            );
-        }
-
-        return bindings;
-    }
-    // The program words: a read-only StructuredBuffer<uint4>.
-    private void WriteStorageBuffer(nint set, uint binding, IGpuBuffer buffer) =>
         m_bindings.WriteBuffer(
-            binding: binding,
+            binding: resource.Binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            elementStride: (4 * sizeof(uint)),
-            kind: GpuBindingKind.ReadOnlyBuffer
+            elementStride: resource.Member.Type!.Value.SizeBytes(),
+            kind: resource.Kind
         );
-    // A read-only StructuredBuffer of 4-byte elements (the float cull buffer, the uint cull bounds). The program words'
-    // 16-byte stride over the 8-byte bounds buffer is a zero-element view on Direct3D 12.
-    private void WriteStorageBufferReadOnly(nint set, uint binding, IGpuBuffer buffer) =>
-        m_bindings.WriteBuffer(
-            binding: binding,
-            bufferHandle: buffer.BufferHandle,
-            bufferSize: buffer.SizeBytes,
-            descriptorSetHandle: set,
-            elementStride: sizeof(uint),
-            kind: GpuBindingKind.ReadOnlyBuffer
-        );
-    // A RWStructuredBuffer of 4-byte elements.
-    private void WriteStorageBufferReadWrite(nint set, uint binding, IGpuBuffer buffer) =>
-        m_bindings.WriteBuffer(
-            binding: binding,
-            bufferHandle: buffer.BufferHandle,
-            bufferSize: buffer.SizeBytes,
-            descriptorSetHandle: set,
-            elementStride: sizeof(uint),
-            kind: GpuBindingKind.ReadWriteBuffer
+    }
+    // Writes a buffer at a member of the world interface in a views set.
+    private void WriteWorldBuffer(nint set, string member, IGpuBuffer buffer) =>
+        WriteBuffer(
+            buffer: buffer,
+            layout: SdfWorldInterfaces.WorldLayout,
+            member: member,
+            set: set
         );
 
     /// <inheritdoc/>
@@ -908,7 +785,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         }
 
         DisposeRegions();
+        m_frameRegion.Dispose();
 
+        foreach (var block in m_viewBlocks) {
+            block.Dispose();
+        }
+
+        m_brickBakeBlock?.Dispose();
         m_cullBoundsBuffer.Dispose();
         m_viewsArgsBuffer.Dispose();
         m_tileBuffer.Dispose();

@@ -79,10 +79,11 @@ public sealed class SdfWorldEngineUploadLawTests {
             UnifiedMemory: true
         );
 
-        // Eight per-frame tables, each a ring of one buffer per slot, and nothing staged or copied.
+        // Eight per-frame tables and two blocks, the frame block and the one view's world block, each a ring of one buffer
+        // per slot, and nothing staged or copied.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (8 * SdfWorldEngine.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (10 * SdfWorldEngine.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
@@ -105,10 +106,14 @@ public sealed class SdfWorldEngineUploadLawTests {
         rig.Render(time: 1f);
         Assert.Equal(expected: ((long)((HeaderBytes + RunEntryBytes) + sizeof(float))), actual: rig.Gpu.HostBytes());
         Assert.Equal(expected: 1, actual: rig.Gpu.UploadCopies);
+        // Every rendered frame sends its frame block whole, one constant-buffer view; the view's world block owes nothing
+        // while no world value moves.
+        Assert.Equal(expected: ((long)IGpuBindings.ConstantBufferAlignment), actual: rig.Gpu.BlockBytes());
 
         rig.Render(time: 1f);
         Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
         Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
+        Assert.Equal(expected: ((long)IGpuBindings.ConstantBufferAlignment), actual: rig.Gpu.BlockBytes());
     }
     [Fact]
     public void ChangingKTransformsWritesTheWordsThatMovedAndOneRunEntryPerRunInOneCopy() {

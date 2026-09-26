@@ -108,7 +108,7 @@
           "  work ambient skipped",
           "  work views skipped",
           "  work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0",
-          "  work lifetime: created.pipelines=0 created.shader-modules=0 created.images=4 created.buffers=32 created.descriptor-pools=2 created.descriptor-sets=41"
+          "  work lifetime: created.pipelines=0 created.shader-modules=0 created.images=4 created.buffers=43 created.descriptor-pools=2 created.descriptor-sets=38"
         ]
       },
       {

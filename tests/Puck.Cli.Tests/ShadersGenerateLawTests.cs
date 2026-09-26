@@ -8,13 +8,18 @@ namespace Puck.Cli.Tests;
 /// <summary>
 /// Laws for <c>puck shaders generate</c>: it owns every generated shader interface, not only <c>sdf-isa.hlsli</c>.
 /// Over a tree whose includes match, the check passes; a drifted package include fails by name; an interface include
-/// no manifest or package owns fails by name; a package whose include is missing fails by name; and on the real tree
-/// the overlay, place and film-grain interfaces are among the includes it checks.
+/// no manifest, package or engine kernel owns fails by name; a package whose include is missing fails by name; a drifted
+/// or missing SDF engine kernel include fails by name; and on the real tree the overlay, place, film-grain and SDF engine
+/// interfaces are among the includes it checks.
 /// </summary>
 public sealed class ShadersGenerateLawTests {
     private const string IsaPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-isa.hlsli";
     private const string OverlayPath = "src/Puck.Overlays/Assets/Shaders/overlay.interface.hlsli";
     private const string PlacePath = "src/Puck.Shaders/Assets/Shaders/Graph/place.interface.hlsli";
+    private const string WorldPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-world.interface.hlsli";
+
+    // The SDF engine kernels' includes, each with the text its interface generates: owned whatever the tree holds.
+    private static readonly (string Path, string Text)[] EngineKernels = [.. SdfWorldInterfaces.Includes.Select(selector: static include => (include.Path, ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface)))];
 
     private static string InterfaceOf(string id) {
         Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(id: id, package: out var package));
@@ -25,8 +30,11 @@ public sealed class ShadersGenerateLawTests {
             package: package.Id
         ).Interface);
     }
-    // A tree holding the given files, each written with its text, checked by the verb over exactly those files.
-    private static (int ExitCode, string Error) Check(params (string Path, string Text)[] files) {
+    // A tree holding the given files and every SDF engine kernel include the files do not replace, checked by the verb.
+    private static (int ExitCode, string Error) Check(params (string Path, string Text)[] files) =>
+        CheckTree(files: [.. files, .. EngineKernels.Where(predicate: kernel => !files.Any(predicate: file => string.Equals(a: file.Path, b: kernel.Path, comparisonType: StringComparison.Ordinal)))]);
+    // A tree holding exactly the given files, each written with its text, checked by the verb over exactly those files.
+    private static (int ExitCode, string Error) CheckTree((string Path, string Text)[] files) {
         var root = Directory.CreateTempSubdirectory(prefix: "puck-shaders-generate-");
 
         try {
@@ -83,7 +91,7 @@ public sealed class ShadersGenerateLawTests {
         );
 
         Assert.Equal(actual: exitCode, expected: 1);
-        Assert.Contains(actualString: error, expectedSubstring: "src/Puck.Stray/Assets/stray.interface.hlsli is named as a generated interface, but no shader-set manifest or engine package owns it");
+        Assert.Contains(actualString: error, expectedSubstring: "src/Puck.Stray/Assets/stray.interface.hlsli is named as a generated interface, but no shader-set manifest, engine package or engine kernel owns it");
     }
     [Fact]
     public void APackageWhoseIncludeIsMissingFailsByName() {
@@ -94,6 +102,30 @@ public sealed class ShadersGenerateLawTests {
 
         Assert.Equal(actual: exitCode, expected: 1);
         Assert.Contains(actualString: error, expectedSubstring: "package 'place' declares an interface, but no place.interface.hlsli is checked in");
+    }
+    [Fact]
+    public void ADriftedEngineKernelIncludeFailsByName() {
+        var world = EngineKernels.Single(predicate: static kernel => string.Equals(a: kernel.Path, b: WorldPath, comparisonType: StringComparison.Ordinal));
+        var (exitCode, error) = Check(
+            (IsaPath, SdfIsaHlsl.Generate()),
+            (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
+            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
+            (WorldPath, world.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: "staleSampler", oldValue: "screenSampler"))
+        );
+
+        Assert.Equal(actual: exitCode, expected: 1);
+        Assert.Contains(actualString: error, expectedSubstring: WorldPath);
+    }
+    [Fact]
+    public void AMissingEngineKernelIncludeFailsByName() {
+        var (exitCode, error) = CheckTree(files: [
+            (IsaPath, SdfIsaHlsl.Generate()),
+            (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
+            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
+        ]);
+
+        Assert.Equal(actual: exitCode, expected: 1);
+        Assert.Contains(actualString: error, expectedSubstring: WorldPath);
     }
     [Fact]
     public void OnTheTreeEveryGeneratedInterfaceIsChecked() {
@@ -111,7 +143,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.Empty(collection: problems);
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.interface.hlsli", PlacePath]
+            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-brick-bake.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-film-grain.interface.hlsli", WorldPath, PlacePath]
         );
     }
 }

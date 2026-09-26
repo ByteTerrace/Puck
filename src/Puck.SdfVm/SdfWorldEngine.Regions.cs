@@ -73,33 +73,28 @@ public sealed partial class SdfWorldEngine {
             regionCount: CopyRegionCount(brickPool: brickPool),
             slotCount: FrameRingSize
         );
-    // Binds each region's buffer for this ring slot into the slot's beam, instance-cull and views sets.
+    // Binds each region's buffer for this ring slot into every views set of the slot.
     private void BindRegions(int slot) {
-        var beam = m_beamSets[slot];
-        var cull = m_instanceCullSets[slot];
-
-        foreach (var set in ((ReadOnlySpan<nint>)[beam, cull])) {
-            WriteSharedRegions(set: set, slot: slot);
-        }
-
-        WriteStorageBufferReadOnly(binding: FrameInstanceGridBindingIndex, buffer: m_instanceGridRegion.Buffer(slot: slot), set: cull);
-
         foreach (var views in m_viewsSets[slot]) {
-            WriteSharedRegions(set: views, slot: slot);
-            WriteStorageBufferReadOnly(binding: FrameInstanceGridBindingIndex, buffer: m_instanceGridRegion.Buffer(slot: slot), set: views);
-            // The views layout alone shades: screen surfaces (48-byte entries), screen lights and volumes (float4 rows)
-            // and decals (uint4 cells), each read at a 16-byte stride.
-            WriteStorageBuffer(binding: ScreenSurfaceBindingIndex, buffer: m_screenSurfaceRegion.Buffer(slot: slot), set: views);
-            WriteStorageBuffer(binding: ScreenLightBindingIndex, buffer: m_screenLightRegion.Buffer(slot: slot), set: views);
-            WriteStorageBuffer(binding: DecalCellsBindingIndex, buffer: m_decalRegion.Buffer(slot: slot), set: views);
-            WriteStorageBuffer(binding: VolumeBindingIndex, buffer: m_volumeRegion.Buffer(slot: slot), set: views);
+            WriteWorldBuffer(buffer: m_programRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ProgramWords, set: views);
+            WriteWorldBuffer(buffer: m_viewportRegion.Buffer(slot: slot), member: SdfWorldInterfaces.Viewports, set: views);
+            WriteWorldBuffer(buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldInterfaces.DynamicTransforms, set: views);
+            WriteWorldBuffer(buffer: m_instanceGridRegion.Buffer(slot: slot), member: SdfWorldInterfaces.FrameInstanceGrid, set: views);
+            WriteWorldBuffer(buffer: m_screenSurfaceRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ScreenSurfaces, set: views);
+            WriteWorldBuffer(buffer: m_screenLightRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ScreenLights, set: views);
+            WriteWorldBuffer(buffer: m_decalRegion.Buffer(slot: slot), member: SdfWorldInterfaces.DecalCells, set: views);
+            WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldInterfaces.Volumes, set: views);
         }
     }
-    // The program, viewport and dynamic-transform tables every per-slot set binds.
-    private void WriteSharedRegions(nint set, int slot) {
-        WriteStorageBuffer(binding: ProgramBindingIndex, buffer: m_programRegion.Buffer(slot: slot), set: set);
-        WriteStorageBuffer(binding: ViewportBindingIndex, buffer: m_viewportRegion.Buffer(slot: slot), set: set);
-        WriteStorageBuffer(binding: DynamicTransformBindingIndex, buffer: m_dynamicTransformRegion.Buffer(slot: slot), set: set);
+    // Binds the device-local buffers program growth replaces into every views set of the slot: the cull buffer and the
+    // instance masks, each read-write for its writer and read-only for its readers.
+    private void BindProgramBuffers(int slot) {
+        foreach (var views in m_viewsSets[slot]) {
+            WriteWorldBuffer(buffer: m_tileBuffer, member: SdfWorldInterfaces.TilesWritten, set: views);
+            WriteWorldBuffer(buffer: m_tileBuffer, member: SdfWorldInterfaces.Tiles, set: views);
+            WriteWorldBuffer(buffer: m_instanceMaskBuffer, member: SdfWorldInterfaces.InstanceMasksWritten, set: views);
+            WriteWorldBuffer(buffer: m_instanceMaskBuffer, member: SdfWorldInterfaces.InstanceMasks, set: views);
+        }
     }
     // Region index's region of byteCount bytes under the policy the device's profile selects, its ring in the memory the
     // profile selects, named by its table's role and writing the copy sets reserved for it.

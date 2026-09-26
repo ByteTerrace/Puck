@@ -12,8 +12,9 @@ internal sealed record GeneratedInclude(string Path, Func<string> Generate);
 /// <summary><c>puck shaders generate</c>: writes every HLSL include the C# model owns, each regenerated from the live
 /// types, or under <c>--check</c> regenerates them in memory and compares, the drift shape <c>puck schema --check</c>
 /// and <c>puck registry --check</c> share. The includes are <c>sdf-isa.hlsli</c> and every generated shader
-/// interface (<see cref="ShaderInterfaceHlsl"/>): each shader-set manifest's, beside the manifest, and each engine
-/// package's that declares pass-group members, found by its interface's file name. A checked-in
+/// interface (<see cref="ShaderInterfaceHlsl"/>): each shader-set manifest's, beside the manifest, each engine
+/// package's that declares pass-group members, found by its interface's file name, and the SDF engine kernels'
+/// (<see cref="SdfWorldInterfaces.Includes"/>) at the paths they name. A checked-in
 /// <c>*.interface.hlsli</c> no generator owns, and a package whose include cannot be found, fail both modes by name.
 /// Exit 0 wrote or matched, 1 check found drift or an include is unowned or missing, 2 missing repository
 /// root.</summary>
@@ -71,8 +72,12 @@ internal static class GenerateCommand {
 
             Own(path: found[0], shaderInterface: shaderInterface);
         }
+        // The SDF engine's kernels read interfaces it declares itself, at the fixed paths it names.
+        foreach (var (path, shaderInterface) in SdfWorldInterfaces.Includes) {
+            Own(path: path, shaderInterface: shaderInterface);
+        }
         foreach (var file in interfaceFiles.Where(predicate: file => !owned.ContainsKey(key: file))) {
-            problems.Add(item: $"{file} is named as a generated interface, but no shader-set manifest or engine package owns it");
+            problems.Add(item: $"{file} is named as a generated interface, but no shader-set manifest, engine package or engine kernel owns it");
         }
 
         return [new GeneratedInclude(Generate: SdfIsaHlsl.Generate, Path: $"src/Puck.SdfVm/Assets/Shaders/Sdf/{SdfIsaHlsl.FileName}"), .. owned.Values];
@@ -135,8 +140,10 @@ internal static class GenerateCommand {
 
         Every generated shader interface (<name>.interface.hlsli) is owned too: a shader-set
         manifest's, written beside the manifest, and an engine package's that declares pass-group
-        members (such as overlay and place), found by its file name. A checked-in interface include
-        no manifest or package owns, or a package whose include is missing, fails by name.
+        members (such as overlay and place), found by its file name, and the SDF engine kernels'
+        (sdf-world and sdf-brick-bake, declared by Puck.SdfVm.SdfWorldInterfaces) at their fixed
+        paths. A checked-in interface include no manifest, package or engine kernel owns, or a
+        package whose include is missing, fails by name.
         """,
         name: "generate",
         run: Run

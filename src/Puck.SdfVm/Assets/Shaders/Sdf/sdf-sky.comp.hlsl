@@ -6,9 +6,8 @@
 // later proves every tile live still runs this pass — the redundant write on a live tile's pixel is thrown away the
 // moment Stage 1 overwrites it moments later; a conditional dispatch would save nothing worth the branch.
 //
-// SHARES Stage 1's descriptor-set layout: SdfWorldEngine builds this kernel's pipeline from the SAME bindings array
-// sdf-world-views.comp.hlsl uses, so it binds against the SAME per-slot descriptor set Stage 1 already has — no new
-// descriptor set, no second binding layout. Reads viewports, sky/lighting rows, bounded volumes, and the dynamic
+// SHARES Stage 1's interface: SdfWorldEngine builds this kernel's pipeline from sdf-world, as it builds every per-view
+// kernel's, so it binds the SAME frame and views sets Stage 1 does — no descriptor set of its own. Reads viewports, sky/lighting rows, bounded volumes, and the dynamic
 // transforms their frames and optional intensity lanes use. SDF_SCREEN_SOURCES is required even though this
 // kernel never samples a screen source: it is
 // the only configuration under which sdfScreenLights — and the real (non-pinned-literal) skyColor/lighting
@@ -20,19 +19,17 @@
 #define SDF_SCREEN_SOURCES
 #include "sdf-world.hlsli"
 
-// The set's view's output image — the SAME binding/register as sdf-world-views.comp.hlsl's own declaration (binding
-// 4, register u0), so the shared views layout resolves identically regardless of which of the two kernels is bound.
-[[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> output : register(u0);
+// It writes the set's view's output image through output, as Stage 1 does.
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint viewIndex = worldViewOf(id.z);
 
-    if (viewIndex >= params.viewportCount) {
+    if (viewIndex >= passGroup.viewportCount) {
         return;
     }
 
-    ViewportData view = viewports[viewIndex];
+    ViewportData view = worldViewport(viewIndex);
     uint2 rectDims = worldViewDims(view);
 
     if ((id.x >= rectDims.x) || (id.y >= rectDims.y)) {

@@ -377,8 +377,7 @@ public sealed class GpuRegion : IDisposable {
     public static GpuComputePipelineDescription CopyPipeline { get; } = new(
         Bindings: CopyBindings,
         Name: "region-copy",
-        PushConstantBinding: null,
-        Registers: GpuRegisterNumbering.Binding
+        PushConstantBinding: null
     );
 
     /// <summary>Returns the groups a copy of <paramref name="count"/> words dispatches: one row of up to
