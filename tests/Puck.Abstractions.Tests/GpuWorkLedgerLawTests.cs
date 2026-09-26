@@ -309,39 +309,70 @@ public sealed class GpuWorkLedgerLawTests {
             _ = rig.Ledger.TryReadCompleted(sample: sample);
         }
     }
-    /// <summary>A reader on another thread never sees counts from two different submissions in one sample. A correct
-    /// ledger passes deterministically. How often reads overlap a publication depends on scheduling, so a run that
-    /// misses a deliberately broken ledger was a weaker run, not a flaky one.</summary>
+    /// <summary>A reader on another thread never sees counts from two different submissions in one sample. The two
+    /// threads meet at a barrier before every submission, and the reader then reads until it has seen that submission
+    /// published, so it is reading while the writer records and publishes every one of them, however the threads are
+    /// scheduled. A correct ledger passes deterministically; how many reads land inside a publication's own stores still
+    /// depends on scheduling, so a run that misses a deliberately broken ledger was a weaker run, not a flaky
+    /// one.</summary>
     [Fact]
     public void AReadOverlappingPublicationIsNeverTorn() {
+        const long Submissions = 4_000L;
+
         var rig = new Rig(framesInFlight: 2);
-        var done = 0;
+        using var meet = new Barrier(participantCount: 2);
+        var timeout = TimeSpan.FromSeconds(value: 30);
         var torn = 0L;
         var reads = 0L;
+        var stalled = false;
         var reader = new Thread(start: () => {
             var sample = new GpuWorkSample();
+            var seen = 0L;
 
-            while (Volatile.Read(location: ref done) == 0) {
-                if (!rig.Ledger.TryReadCompleted(sample: sample)) {
-                    continue;
+            for (var submission = 1L; (submission <= Submissions); submission++) {
+                if (!meet.SignalAndWait(timeout: timeout)) {
+                    stalled = true;
+
+                    return;
                 }
 
-                reads++;
+                var deadline = (Environment.TickCount64 + ((long)timeout.TotalMilliseconds));
 
-                var expected = (sample.Submission % 16L);
+                while (seen < submission) {
+                    if (Environment.TickCount64 > deadline) {
+                        stalled = true;
 
-                if (
-                    (sample.GetOutsidePassCount(column: DispatchColumn) != expected) ||
-                    (sample.GetOutsidePassCount(column: MemoryBarrierColumn) != expected)
-                ) {
-                    torn++;
+                        return;
+                    }
+                    if (!rig.Ledger.TryReadCompleted(sample: sample)) {
+                        continue;
+                    }
+
+                    reads++;
+                    seen = sample.Submission;
+
+                    var expected = (sample.Submission % 16L);
+
+                    if (
+                        (sample.GetOutsidePassCount(column: DispatchColumn) != expected) ||
+                        (sample.GetOutsidePassCount(column: MemoryBarrierColumn) != expected)
+                    ) {
+                        torn++;
+                    }
                 }
             }
         });
 
         reader.Start();
 
-        for (var submission = 1L; (submission <= 20_000L); submission++) {
+        for (var submission = 1L; (submission <= Submissions); submission++) {
+            if (!meet.SignalAndWait(
+                cancellationToken: TestContext.Current.CancellationToken,
+                timeout: timeout
+            )) {
+                break;
+            }
+
             for (var step = 0L; (step < (submission % 16L)); step++) {
                 rig.Dispatch(count: 1);
                 rig.Services.Recorder.MemoryBarrier(commandBufferHandle: 2, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader, sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader);
@@ -350,9 +381,10 @@ public sealed class GpuWorkLedgerLawTests {
             rig.Services.QueueSubmitter.SubmitAndWait(commandBufferHandles: []);
         }
 
-        Volatile.Write(location: ref done, value: 1);
         reader.Join();
-        Assert.True(condition: (reads > 0L));
+        Assert.False(condition: stalled);
+        // The reader saw every submission published, so it read at least once per publication.
+        Assert.True(condition: (reads >= Submissions));
         Assert.Equal(actual: torn, expected: 0L);
     }
 
