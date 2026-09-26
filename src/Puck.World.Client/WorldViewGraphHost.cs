@@ -230,6 +230,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private Func<IReadOnlyList<string>, WorldRootGraph>? m_compose;
     private bool m_disposed;
     private WorldViewDefaults? m_lastViews;
+    // The last refusal Reconcile reported, so a section it keeps retrying reports each refusal once.
+    private string? m_refusal;
     private IRenderGraphInstances? m_runtime;
     private WorldRootGraph? m_synthesized;
 
@@ -641,9 +643,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     }
     /// <summary>Reconciles the accepted <c>views</c> section onto the runtime before it schedules a frame: the instance
     /// set follows the section's rows and the panes its layouts place, every surviving instance keeps its node and
-    /// graph, a row with a new source compiles, and a removed row's instance retires. Refused mutations never reach
-    /// here, and a set the runtime refuses leaves the running one in place, reported by name. Does nothing before a
-    /// runtime is attached.</summary>
+    /// graph, a row with a new source compiles, and a removed row's instance retires. A row whose inputs moved keeps its
+    /// installed graph, rebound to them, only while it stays a graph instance and that graph declares exactly the
+    /// versions the new inputs name; otherwise its source compiles anew. Refused mutations never reach here, and a set
+    /// the runtime refuses leaves the running one in place, reported by name once, and is tried again on the next call.
+    /// Does nothing before a runtime is attached.</summary>
     /// <param name="views">The accepted document's <c>views</c> section.</param>
     public void Reconcile(WorldViewDefaults views) {
         ArgumentNullException.ThrowIfNull(argument: views);
@@ -659,8 +663,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return;
         }
 
-        m_lastViews = views;
-
         var synthesized = m_synthesized;
 
         if (views.Root is null) {
@@ -673,10 +675,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 try {
                     synthesized = m_compose!(arg: panes);
                 } catch (WorldRootGraphRefusedException exception) {
-                    Report?.Invoke(
-                        SetReportName,
-                        $"refused: {exception.Message}"
-                    );
+                    ReportRefusal(reason: exception.Message);
 
                     return;
                 }
@@ -694,10 +693,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             synthesized: synthesized,
             views: views
         )) {
-            Report?.Invoke(
-                SetReportName,
-                $"refused: {reason}"
-            );
+            ReportRefusal(reason: reason);
 
             return;
         }
@@ -718,8 +714,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         // A row whose inputs moved rebinds its installed graph to them in this same reconfiguration, whether or not its
         // source moved too: the set's reads follow the inputs, so the bindings it has may name a producer the instance no
-        // longer reads. The runtime rebinds a kept pipeline without building it again.
+        // longer reads. The runtime rebinds a kept pipeline without building it again. Only a graph instance whose
+        // installed graph declares exactly the versions the new inputs bind is rebound: an instance that became a
+        // package, or inputs naming a version the installed graph lacks, leave the slot empty for the new source.
         graphs = [.. graphs.Select(selector: (graph, index) => (((graph is null) &&
+            (set.Instances[index].Kind == RenderGraphInstanceKind.Graph) &&
             m_entries.TryGetValue(
                 key: set.Instances[index].Name,
                 value: out var entry
@@ -729,7 +728,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 graphs: views.Graphs,
                 name: entry.Name
             ) is { } row) &&
-            !installed.Inputs.SequenceEqual(second: InputsOf(row: row)))
+            !installed.Inputs.SequenceEqual(second: InputsOf(row: row)) &&
+            DeclaresExactly(
+                graph: installed,
+                inputs: InputsOf(row: row)
+            ))
             ? (installed with { Inputs = InputsOf(row: row) })
             : graph))];
 
@@ -739,14 +742,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             root: root,
             set: set
         )) {
-            Report?.Invoke(
-                SetReportName,
-                $"refused: {refusal.Code}: {refusal.Message}"
-            );
+            ReportRefusal(reason: $"{refusal.Code}: {refusal.Message}");
 
             return;
         }
 
+        m_lastViews = views;
+        m_refusal = null;
         m_synthesized = synthesized;
 
         for (var index = 0; (index < graphs.Count); index++) {
@@ -861,6 +863,43 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     ) && (entry.LastCompile?.Pipeline is { } pipeline))
         ? pipeline.Plan.Passes.Count
         : 1);
+    // Whether a graph's external versions are exactly the ones a list of inputs binds, so the runtime can rebind it to
+    // them.
+    private static bool DeclaresExactly(RenderGraphRuntimeGraph graph, IReadOnlyList<RenderGraphRuntimeInput> inputs) {
+        var external = graph.Pipeline.Plan.Storages
+            .Where(predicate: static storage => storage.IsExternal)
+            .Select(selector: static storage => storage.Name)
+            .ToHashSet(comparer: StringComparer.Ordinal);
+        var bound = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var input in inputs) {
+            if (
+                (input.Version is not { } version) ||
+                !external.Contains(item: version) ||
+                !bound.Add(item: version)
+            ) {
+                return false;
+            }
+        }
+
+        return (bound.Count == external.Count);
+    }
+    // Reports a refused section once: Reconcile tries the section again on every call until it is accepted or replaced.
+    private void ReportRefusal(string reason) {
+        if (string.Equals(
+            a: reason,
+            b: m_refusal,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return;
+        }
+
+        m_refusal = reason;
+        Report?.Invoke(
+            SetReportName,
+            $"refused: {reason}"
+        );
+    }
     private void ResetFootprints() {
         m_footprints.Clear();
 
