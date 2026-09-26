@@ -3053,8 +3053,8 @@ except step 8.
       lease taken once however many screens show it and held to the sampling
       slot's fence, before the offscreen views render; any other binds
       `Rendered`. The binder publishes before the runtime schedules, and a graph
-      input bound to an imported source is refused (`InputSource`), since it
-      hands out an image view alone. Laws:
+      input bound to an imported source draws a stand-in, since it hands out an
+      image view alone. Laws:
       `SdfEngineNodeLeaseLawTests.AScreensSourceLeaseRetiresOnlyAfterTheSamplingSlotsFence`
       and `ImageProducerLawTests.AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`.
    4. Live `screen.source` binds are source instances, so they publish

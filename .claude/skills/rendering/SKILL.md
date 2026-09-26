@@ -284,8 +284,8 @@ These are one-line cautions; the owning pages hold the derivations.
   out its fill and never acquires the feed; the machine and probe ids register
   the binder's `MachineSource` and `ProbeSource`. Such a source hands out an
   image view alone (an empty `RenderGraphExternalOutput.Image`, the view on the
-  lease), so only an external producer samples it and the runtime refuses a
-  graph input bound to it (`RenderGraphRuntimeRefusalCode.InputSource`).
+  lease), so only an external producer samples it, and a graph instance
+  reading it draws a stand-in (`RenderGraphRuntime.Bind`).
   `SdfEngineNode` maps the reads it is handed to its screens through
   `ISdfScreenSources` (`ReadOf` names a screen's instance; `Rendered` serves a
   view or a session), taking each read's lease once

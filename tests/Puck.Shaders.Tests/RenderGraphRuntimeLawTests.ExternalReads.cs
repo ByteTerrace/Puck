@@ -171,6 +171,62 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
     }
 
+    // A source that hands out an image view alone, as a camera or a capture does, names no image a graph's barriers can
+    // name: a graph instance reading it draws a stand-in, and the lease its acquisition returned is retired at once.
+    [Fact]
+    public void AGraphReadingAViewOnlySourceDrawsAStandIn() {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders();
+        var source = new FakeSource(
+            cadence: ImageSourceCadence.Tick,
+            gpu: gpu
+        ) {
+            ViewOnly = true,
+        };
+
+        recorders.Registry.RegisterProducer(
+            factory: _ => source,
+            package: RenderGraphInstance.SourcePackage(producer: ReadProducer)
+        );
+
+        using var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                RenderGraphInstance.Source(
+                    name: ReadSource,
+                    producer: ReadProducer
+                ),
+                Instance(
+                    name: "pane",
+                    reads: new RenderGraphRead(Producer: ReadSource)
+                )
+            ),
+            "pane",
+            null!,
+            Graph(ScreensGraph(false, "screen"), ("screen", ReadSource))
+        );
+
+        for (var index = 0; (index < 3); index++) {
+            var frame = new RenderGraphFrame(
+                DisplayHeight: Display,
+                DisplayHertz: 60,
+                DisplayWidth: Display,
+                Footprints: [new RenderGraphFootprint(Consumer: "pane", Height: 1.0, Producer: ReadSource, Width: 1.0)],
+                Index: index,
+                Roots: [new RenderGraphRoot(Height: 1.0, Instance: "pane", Width: 1.0)],
+                Tick: index
+            );
+
+            _ = runtime.ProduceFrame(
+                context: default,
+                frame: in frame
+            );
+        }
+
+        Assert.True(condition: (source.Acquired > 0));
+        Assert.Equal(expected: source.Acquired, actual: source.Released);
+    }
     /// <summary>A source producer over one image, declaring a fixed extent at a cadence, every acquisition and release
     /// counted.</summary>
     private sealed class FakeSource(FakePipelineGpu gpu, ImageSourceCadence cadence) : IRenderGraphSourceProducer {
@@ -199,6 +255,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public string? PendingCapturePath => null;
         public int Produced { get; private set; }
         public int Released { get; private set; }
+        // Whether the source hands out its image view alone, as one another thread or device writes does.
+        public bool ViewOnly { get; init; }
 
         public IGpuWorkSource Work { get; } = new GpuWorkLedger(
             framesInFlight: 3,
@@ -230,13 +288,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             Acquired++;
             output = new RenderGraphExternalOutput(
-                Image: Surface.SameDeviceImage(
+                Image: (ViewOnly ? default : Surface.SameDeviceImage(
                     format: SurfaceFormat.R8G8B8A8Unorm,
                     height: image.Height,
                     imageHandle: image.ImageHandle,
                     imageViewHandle: image.ImageViewHandle,
                     width: image.Width
-                ),
+                )),
                 Layout: GpuImageLayout.ShaderReadOnly,
                 Lease: new GpuImageLease(
                     ImageViewHandle: image.ImageViewHandle,

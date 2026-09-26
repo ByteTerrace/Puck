@@ -1146,7 +1146,7 @@ host's imported producer) renders through an external producer that owns the
 feed, publishes it when the runtime renders the instance and hands out its
 image through the capture gate, and the `machine` and `probe` ids register the
 binder's own. Such a source hands out an image view that only the SDF world
-samples, so a pane or graph input bound to one is refused.
+samples, so a pane or graph input bound to one draws a stand-in.
 
 The live render graph runs every source a screen shows, its row's or the one a
 presentation verb bound over the row (`screen.source <index> <kind>`, a

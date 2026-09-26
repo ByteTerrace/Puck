@@ -39,10 +39,6 @@ public enum RenderGraphRuntimeRefusalCode : byte {
     /// <summary>An external instance was given a graph, declares an output that is not an image, or names a package no
     /// external producer serves.</summary>
     ExternalProducer = 9,
-    /// <summary>A graph instance's input binds a source instance an external producer renders, whose image arrives from
-    /// another device or thread as an image view alone; only an external producer, the SDF world, samples one. A graph
-    /// reads an uploaded source's converted image.</summary>
-    InputSource = 10,
 }
 /// <summary>A refused set of graphs.</summary>
 /// <param name="Code">Why it was refused.</param>
@@ -293,20 +289,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 refusal = Refuse(
                     RenderGraphRuntimeRefusalCode.InputKind,
                     $"Instance '{instance.Name}' binds {storage.Declaration.Kind} '{input.Version}' to '{input.Producer}', whose output is {set.Instances[producer].Output}.",
-                    instance.Name,
-                    input.Version!,
-                    input.Producer!
-                );
-
-                return false;
-            }
-            if (
-                set.Instances[producer].IsSource &&
-                packages.ServesProducer(package: set.Instances[producer].ExternalPackage!)
-            ) {
-                refusal = Refuse(
-                    RenderGraphRuntimeRefusalCode.InputSource,
-                    $"Instance '{instance.Name}' binds '{input.Version}' to the source '{input.Producer}', whose producer hands out an image view alone, which only an external producer samples.",
                     instance.Name,
                     input.Version!,
                     input.Producer!
@@ -731,7 +713,19 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 continue;
             }
             if (m_producers[binding.Producer] is { } producer) {
-                if (producer.TryAcquireOutput(output: out var external)) {
+                var acquired = producer.TryAcquireOutput(output: out var external);
+
+                // A source whose image arrives from another thread or device as an image view alone hands out no image a
+                // graph's barriers can name, so its reader draws a stand-in, as one of a producer with no output does.
+                if (
+                    acquired &&
+                    !external.Image.IsSameDeviceImage
+                ) {
+                    external.Lease.Retire();
+                    acquired = false;
+                }
+
+                if (acquired) {
                     node.BindImage(
                         image: new ShaderPipelineExternalImage(
                             Format: PixelFormatOf(format: external.Image.Format),
