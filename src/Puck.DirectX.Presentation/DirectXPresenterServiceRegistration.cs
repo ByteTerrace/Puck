@@ -7,6 +7,7 @@ using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Puck.Hosting;
+using Puck.Shaders;
 
 namespace Puck.DirectX.Presentation;
 
@@ -55,8 +56,11 @@ public static class DirectXPresenterServiceRegistration {
         // before calling this to override the defaults (Vsync + R8G8B8A8).
         services.TryAddSingleton(instance: new PresentationOptions());
         services.TryAddSingleton<IDirectXCommandListRecorder>(implementationFactory: static _ => new DirectXCommandListRecorder());
+        // The composition's pass pipelines, which the blit is an entry of; a host that registers its own shares it.
+        services.TryAddSingleton<GpuPassPipelineCache>();
         services.TryAddSingleton<DirectXSurfaceCompositor>(implementationFactory: static sp => new DirectXSurfaceCompositor(
             commandListRecorder: sp.GetRequiredService<IDirectXCommandListRecorder>(),
+            pipelines: sp.GetRequiredService<GpuPassPipelineCache>(),
             presentationOptions: sp.GetRequiredService<PresentationOptions>(),
             shaderDirectory: Path.Combine(
                 path1: AppContext.BaseDirectory,

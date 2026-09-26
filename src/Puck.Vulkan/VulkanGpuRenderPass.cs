@@ -19,10 +19,7 @@ public sealed class VulkanGpuRenderPass : IGpuRenderPass {
     private const uint SampleCount1Bit = 1;
     private const uint SubpassExternal = uint.MaxValue;
 
-    private readonly bool m_owned;
-
-    private VulkanGpuRenderPass(GpuRenderPassDescription description, VulkanRenderPass renderPass, bool owned = true) {
-        m_owned = owned;
+    private VulkanGpuRenderPass(GpuRenderPassDescription description, VulkanRenderPass renderPass) {
         Description = description;
         RenderPass = renderPass;
         var clearValues = description.Colors.Select(selector: static _ => VkClearValue.OfColor(
@@ -152,31 +149,8 @@ public sealed class VulkanGpuRenderPass : IGpuRenderPass {
             )
         );
     }
-    /// <summary>Wraps a render pass another owner created and keeps, such as a swapchain's, so a pipeline can be created
-    /// for it through <see cref="IGpuPipelineFactory"/>. Disposing the wrapper leaves the render pass alone.</summary>
-    /// <param name="renderPass">The render pass; its owner destroys it after every pipeline created for it.</param>
-    /// <param name="description">What a pipeline created for the pass reads from it: its color attachment count and
-    /// whether it has a depth attachment. The native render pass carries its formats and layouts, which a swapchain's
-    /// need not match any <see cref="GpuPixelFormat"/> or <see cref="GpuImageLayout"/>.</param>
-    /// <returns>The wrapper.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="renderPass"/> or <paramref name="description"/> is
-    /// <see langword="null"/>.</exception>
-    public static VulkanGpuRenderPass Borrow(VulkanRenderPass renderPass, GpuRenderPassDescription description) {
-        ArgumentNullException.ThrowIfNull(renderPass);
-        ArgumentNullException.ThrowIfNull(description);
-
-        return new VulkanGpuRenderPass(
-            description: description,
-            owned: false,
-            renderPass: renderPass
-        );
-    }
-    /// <summary>Destroys the render pass when the wrapper created it; a borrowed one is left to its owner.</summary>
-    public void Dispose() {
-        if (m_owned) {
-            RenderPass.Dispose();
-        }
-    }
+    /// <summary>Destroys the render pass.</summary>
+    public void Dispose() => RenderPass.Dispose();
 }
 /// <summary>
 /// A Vulkan <see cref="IGpuFramebuffer"/>: a <c>VkFramebuffer</c> binding a <see cref="VulkanGpuRenderPass"/> to its

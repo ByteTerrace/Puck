@@ -6,6 +6,8 @@ using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
+using Puck.Hosting;
+using Puck.Shaders;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
@@ -19,8 +21,8 @@ namespace Puck.DirectX.Presentation;
 
 /// <summary>
 /// Owns the DXGI flip-model swap chain, back-buffer RTVs, a shader-visible SRV slot for the blit texture and a
-/// shader-visible sampler slot for its sampler, and the blit pipeline, which the device's
-/// <see cref="IGpuPipelineFactory"/> creates from <see cref="SurfaceBlitLayout"/>. On every frame it:
+/// shader-visible sampler slot for its sampler, and a lease on the blit pipeline, the <see cref="GpuPassPipelineCache"/>
+/// entry for <see cref="SurfaceBlitLayout"/> in the swap chain's format. On every frame it:
 /// <list type="bullet">
 ///   <item>resets the per-frame command allocator and command list,</item>
 ///   <item>delegates recording to the injected <see cref="IDirectXCommandListRecorder"/>,</item>
@@ -50,6 +52,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private const string BlitVertexFileName = "surface-blit.vert.dxil";
 
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
+    private readonly GpuPassPipelineCache m_pipelines;
     private readonly string m_shaderDirectory;
     private readonly GpuPixelFormat m_surfaceFormat;
     private readonly DXGI_FORMAT m_swapChainFormat;
@@ -67,9 +70,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private readonly nint[] m_commandLists = new nint[FrameCount];
     private readonly ulong[] m_frameFenceValues = new ulong[FrameCount];
 
-    private IGpuShaderModule? m_blitFragmentModule;
-    private IGpuPipeline? m_blitPipeline;
-    private IGpuShaderModule? m_blitVertexModule;
+    // The blit pipeline's lease on the device's pass pipelines, held from Initialize to Dispose.
+    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_blitLease;
     private DirectXDrawCommand[]? m_blitDrawCommands;
     private DirectXSurfaceUpload? m_cpuUpload;
     private nint m_frameFence;
@@ -105,19 +107,23 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <summary>Initializes a new instance of the <see cref="DirectXSurfaceCompositor"/> class.</summary>
     /// <param name="commandListRecorder">Records draw commands into the per-frame command list.</param>
     /// <param name="presentationOptions">The neutral present-mode and surface-format preferences.</param>
+    /// <param name="pipelines">The composition's pass pipelines, which the blit is an entry of.</param>
     /// <param name="shaderDirectory">The directory holding the blit's DXIL, <c>surface-blit.vert.dxil</c> and
     /// <c>surface-blit.frag.dxil</c>, which the build compiles; nothing compiles at run time.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/>, or <paramref name="shaderDirectory"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/>, <paramref name="pipelines"/>, or <paramref name="shaderDirectory"/> is <see langword="null"/>.</exception>
     public DirectXSurfaceCompositor(
         IDirectXCommandListRecorder commandListRecorder,
         PresentationOptions presentationOptions,
+        GpuPassPipelineCache pipelines,
         string shaderDirectory
     ) {
         ArgumentNullException.ThrowIfNull(commandListRecorder);
         ArgumentNullException.ThrowIfNull(presentationOptions);
+        ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(shaderDirectory);
 
         m_commandListRecorder = commandListRecorder;
+        m_pipelines = pipelines;
         m_shaderDirectory = shaderDirectory;
         m_presentMode = presentationOptions.PresentMode;
         // Map the neutral surface format to the back-buffer DXGI format (both are valid flip-model formats);
@@ -168,7 +174,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         AcquireBackBuffers(device: device);
         CreateSrvHeap(device: device);
         CreateSamplerHeap(device: device);
-        CreateBlitPipeline(deviceContext: deviceContext);
+        var blitPipeline = AcquireBlitPipeline(deviceContext: deviceContext);
+
         CreateCommandInfrastructure(device: device);
 
         // The blit draw command is invariant for the compositor's whole activation lifetime: every field it reads is
@@ -181,7 +188,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                     vertexCount: FullscreenTriangle.VertexCount
                 ),
                 Group: SurfaceBlitLayout.Group,
-                PipelineLayoutHandle: m_blitPipeline!.LayoutHandle,
+                PipelineLayoutHandle: blitPipeline.LayoutHandle,
                 SamplerHeapHandle: m_samplerHeap,
                 SamplerTableGpuHandle: GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_samplerHeap)).ptr,
                 ViewHeapHandle: m_srvHeap,
@@ -537,12 +544,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             m_frameFenceEvent = HANDLE.Null;
         }
 
-        m_blitPipeline?.Dispose();
-        m_blitPipeline = null;
-        m_blitFragmentModule?.Dispose();
-        m_blitFragmentModule = null;
-        m_blitVertexModule?.Dispose();
-        m_blitVertexModule = null;
+        // The device's pass pipelines dispose the blit once no other lease holds it.
+        m_blitLease?.Release();
+        m_blitLease = null;
         Release(pointer: ref m_samplerHeap);
         Release(pointer: ref m_srvHeap);
         Release(pointer: ref m_rtvHeap);
@@ -755,60 +759,39 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             pDesc: &sampler
         );
     }
-    // Creates the blit through the device's pipeline factory from the shared layout, for a render pass of one color
-    // attachment in the swap chain's format; its vertex stage draws the fullscreen triangle from SV_VertexID, so the
-    // pipeline reads no vertex input. A failure releases what was created before it.
-    private void CreateBlitPipeline(DirectXDeviceContext deviceContext) {
-        var services = deviceContext.Services;
-
-        using var scope = new GpuCreationScope();
-        var vertexModule = scope.Own(created: services.ShaderModuleFactory.Create(
-            bytecode: File.ReadAllBytes(path: Path.Combine(
-                path1: m_shaderDirectory,
-                path2: BlitVertexFileName
-            )),
-            stage: GpuShaderStage.Vertex
-        ));
-        var fragmentModule = scope.Own(created: services.ShaderModuleFactory.Create(
-            bytecode: File.ReadAllBytes(path: Path.Combine(
-                path1: m_shaderDirectory,
-                path2: BlitPixelFileName
-            )),
-            stage: GpuShaderStage.Fragment
-        ));
-        var name = new GpuObjectName(
-            owner: "surface-compositor",
-            part: "blit"
+    // Takes the blit from the device's pass pipelines: the shared layout, for a render pass of one color attachment in the
+    // swap chain's format, its vertex stage drawing the fullscreen triangle from SV_VertexID so the pipeline reads no
+    // vertex input. The pool builds it, and the compositor waits for it once, here.
+    private GpuPassPipeline AcquireBlitPipeline(DirectXDeviceContext deviceContext) {
+        m_blitLease = m_pipelines.Acquire(
+            device: deviceContext,
+            key: GpuPassPipelineKey.OfGraphics(
+                description: new GpuGraphicsPipelineDescription(
+                    Layout: SurfaceBlitLayout.Layout,
+                    Name: "surface-blit",
+                    VertexInput: new GpuVertexInputLayout(
+                        Attributes: [],
+                        StrideBytes: 0U
+                    )
+                ),
+                fragment: File.ReadAllBytes(path: Path.Combine(
+                    path1: m_shaderDirectory,
+                    path2: BlitPixelFileName
+                )),
+                renderPass: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
+                    FinalLayout: GpuImageLayout.RenderTarget,
+                    Format: m_surfaceFormat,
+                    Load: GpuAttachmentLoad.Clear,
+                    Store: GpuAttachmentStore.Store
+                )]),
+                vertex: File.ReadAllBytes(path: Path.Combine(
+                    path1: m_shaderDirectory,
+                    path2: BlitVertexFileName
+                ))
+            )
         );
 
-        using var presentPass = services.RenderPassFactory.Create(
-            description: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
-                FinalLayout: GpuImageLayout.RenderTarget,
-                Format: m_surfaceFormat,
-                Load: GpuAttachmentLoad.Clear,
-                Store: GpuAttachmentStore.Store
-            )]),
-            name: name
-        );
-        var pipeline = services.PipelineFactory.Create(
-            description: new GpuGraphicsPipelineDescription(
-                Layout: SurfaceBlitLayout.Layout,
-                Name: "surface-blit",
-                VertexInput: new GpuVertexInputLayout(
-                    Attributes: [],
-                    StrideBytes: 0U
-                )
-            ),
-            fragmentShaderModule: fragmentModule,
-            name: name,
-            renderPass: presentPass,
-            vertexShaderModule: vertexModule
-        );
-
-        scope.Complete();
-        m_blitVertexModule = vertexModule;
-        m_blitFragmentModule = fragmentModule;
-        m_blitPipeline = pipeline;
+        return m_blitLease.Wait(cancellationToken: CancellationToken.None);
     }
     private void CreateCommandInfrastructure(ID3D12Device* device) {
         for (var i = 0u; (i < FrameCount); i++) {

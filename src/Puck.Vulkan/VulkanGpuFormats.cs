@@ -41,9 +41,22 @@ public static class VulkanGpuFormats {
 
         return flags;
     }
-    /// <summary>Converts a <see cref="GpuPixelFormat"/> to its <c>VkFormat</c> value.</summary>
-    /// <param name="gpuPixelFormat">The backend-neutral pixel format.</param>
-    /// <returns>The corresponding <see cref="VulkanFormat"/> constant.</returns>
+    /// <summary>Converts a <c>VkFormat</c> value to the <see cref="GpuPixelFormat"/> <see cref="ToVkFormat"/> maps to
+    /// it, such as a swapchain's image format.</summary>
+    /// <param name="vkFormat">The <see cref="VulkanFormat"/> constant.</param>
+    /// <returns>The backend-neutral pixel format.</returns>
+    /// <exception cref="NotSupportedException"><paramref name="vkFormat"/> is no format <see cref="GpuPixelFormat"/>
+    /// names.</exception>
+    public static GpuPixelFormat FromVkFormat(uint vkFormat) => vkFormat switch {
+        VulkanFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
+        VulkanFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
+        VulkanFormat.R16G16B16A16Sfloat => GpuPixelFormat.R16G16B16A16Float,
+        VulkanFormat.R32G32B32A32Sfloat => GpuPixelFormat.R32G32B32A32Float,
+        VulkanFormat.D32Sfloat => GpuPixelFormat.D32Float,
+        _ => throw new NotSupportedException(message: $"VkFormat {vkFormat} is no GpuPixelFormat."),
+    };    /// <summary>Converts a <see cref="GpuPixelFormat"/> to its <c>VkFormat</c> value.</summary>
+          /// <param name="gpuPixelFormat">The backend-neutral pixel format.</param>
+          /// <returns>The corresponding <see cref="VulkanFormat"/> constant.</returns>
     public static uint ToVkFormat(GpuPixelFormat gpuPixelFormat) => gpuPixelFormat switch {
         GpuPixelFormat.R8G8B8A8Unorm => VulkanFormat.R8G8B8A8Unorm,
         GpuPixelFormat.B8G8R8A8Unorm => VulkanFormat.B8G8R8A8Unorm,

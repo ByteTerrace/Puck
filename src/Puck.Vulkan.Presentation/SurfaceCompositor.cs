@@ -1,6 +1,7 @@
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
+using Puck.Hosting;
 using Puck.Shaders;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
@@ -27,14 +28,19 @@ public sealed class SurfaceCompositor : IDisposable {
     private const string VertexShaderFileName = "fullscreen.vert.spv";
 
     private static readonly byte[] FullscreenTriangleVertexData = FullscreenTriangle.CreateVertexData();
-    // The swapchain's render pass as the pipeline factory reads it: one color attachment and no depth. Its format and
-    // present layout are the swapchain's, which the native render pass carries.
-    private static readonly GpuRenderPassDescription PresentPass = new(Colors: [new GpuColorAttachment(
-        FinalLayout: GpuImageLayout.RenderTarget,
-        Format: GpuPixelFormat.B8G8R8A8Unorm,
-        Load: GpuAttachmentLoad.Clear,
-        Store: GpuAttachmentStore.Store
-    )]);
+    // The blit's pipeline description: the shared group, and the fullscreen triangle's one float2 position.
+    private static readonly GpuGraphicsPipelineDescription BlitDescription = new(
+        Layout: SurfaceBlitLayout.Layout,
+        Name: "surface-blit",
+        VertexInput: new GpuVertexInputLayout(
+            Attributes: [new GpuVertexAttribute(
+                Format: GpuVertexFormat.R32G32Float,
+                Location: 0,
+                OffsetBytes: 0
+            )],
+            StrideBytes: FullscreenTriangle.StrideBytes
+        )
+    );
 
     private readonly IVulkanBufferApi m_bufferApi;
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
@@ -44,14 +50,16 @@ public sealed class SurfaceCompositor : IDisposable {
     private readonly IVulkanExternalMemoryApi m_externalMemoryApi;
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly IVulkanOffscreenImageApi m_offscreenImageApi;
+    private readonly GpuPassPipelineCache m_pipelines;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
     private readonly VulkanRenderer m_renderer;
     private readonly string m_shaderDirectory;
-    private readonly IVulkanShaderModuleFactory m_shaderModuleFactory;
     private readonly IShaderModuleLoader m_shaderModuleLoader;
 
-    private VulkanShaderModule? m_blitFragmentShader;
-    private IGpuPipeline? m_blitPipeline;
+    private ReadOnlyMemory<byte> m_blitFragmentBytecode;
+    // The blit pipeline's lease on the device's pass pipelines, held from the first presentation resources on a device
+    // until that device's resources are released.
+    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_blitLease;
     private AssetContentHash m_blitPipelineId;
     private nint m_descriptorPool;
     private int m_descriptorSetIndex;
@@ -64,13 +72,13 @@ public sealed class SurfaceCompositor : IDisposable {
     private nint m_sampler;
     private VulkanSurfaceImport? m_sharedImport;
     private VulkanBuffer? m_vertexBuffer;
-    private VulkanShaderModule? m_vertexShader;
+    private ReadOnlyMemory<byte> m_vertexBytecode;
 
     public SurfaceCompositor(
         VulkanRenderer renderer,
         string shaderDirectory,
         IShaderModuleLoader shaderModuleLoader,
-        IVulkanShaderModuleFactory shaderModuleFactory,
+        GpuPassPipelineCache pipelines,
         IVulkanBufferApi bufferApi,
         IVulkanDescriptorApi descriptorApi,
         IVulkanExternalMemoryApi externalMemoryApi,
@@ -87,10 +95,10 @@ public sealed class SurfaceCompositor : IDisposable {
         ArgumentNullException.ThrowIfNull(externalMemoryApi);
         ArgumentNullException.ThrowIfNull(framebufferSetApi);
         ArgumentNullException.ThrowIfNull(offscreenImageApi);
+        ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(queueSubmitter);
         ArgumentNullException.ThrowIfNull(renderer);
         ArgumentNullException.ThrowIfNull(shaderDirectory);
-        ArgumentNullException.ThrowIfNull(shaderModuleFactory);
         ArgumentNullException.ThrowIfNull(shaderModuleLoader);
 
         m_bufferApi = bufferApi;
@@ -100,10 +108,10 @@ public sealed class SurfaceCompositor : IDisposable {
         m_externalMemoryApi = externalMemoryApi;
         m_framebufferSetApi = framebufferSetApi;
         m_offscreenImageApi = offscreenImageApi;
+        m_pipelines = pipelines;
         m_queueSubmitter = queueSubmitter;
         m_renderer = renderer;
         m_shaderDirectory = shaderDirectory;
-        m_shaderModuleFactory = shaderModuleFactory;
         m_shaderModuleLoader = shaderModuleLoader;
     }
 
@@ -119,14 +127,6 @@ public sealed class SurfaceCompositor : IDisposable {
 
         // A creation that throws releases the ones before it, newest first; the fields hold only a complete set.
         using var scope = new GpuCreationScope();
-        var vertexShader = scope.Own(created: m_shaderModuleFactory.Create(
-            logicalDevice: device,
-            stageInfo: vertexShaderInfo
-        ));
-        var blitFragmentShader = scope.Own(created: m_shaderModuleFactory.Create(
-            logicalDevice: device,
-            stageInfo: blitFragmentShaderInfo
-        ));
         var vertexBuffer = scope.Own(created: VulkanBuffer.Create(
             bufferApi: m_bufferApi,
             device: m_renderer,
@@ -147,8 +147,8 @@ public sealed class SurfaceCompositor : IDisposable {
 
         scope.Complete();
         m_blitPipelineId = blitFragmentShaderInfo.ContentHash;
-        m_vertexShader = vertexShader;
-        m_blitFragmentShader = blitFragmentShader;
+        m_blitFragmentBytecode = blitFragmentShaderInfo.Content;
+        m_vertexBytecode = vertexShaderInfo.Content;
         m_vertexBuffer = vertexBuffer;
         m_sampler = sampler;
     }
@@ -180,10 +180,9 @@ public sealed class SurfaceCompositor : IDisposable {
         m_sampler = 0;
         m_vertexBuffer?.Dispose();
         m_vertexBuffer = null;
-        m_blitFragmentShader?.Dispose();
-        m_blitFragmentShader = null;
-        m_vertexShader?.Dispose();
-        m_vertexShader = null;
+        // The device's pass pipelines dispose the blit once no other lease holds it.
+        m_blitLease?.Release();
+        m_blitLease = null;
     }
     private void DisposeFrameResources(VulkanLogicalDevice device) {
         m_descriptorAllocator.DestroyPool(
@@ -194,8 +193,6 @@ public sealed class SurfaceCompositor : IDisposable {
         Array.Clear(array: m_descriptorSets);
         m_drawCommandsPerSet = null;
         m_graphicsPipelines = null;
-        m_blitPipeline?.Dispose();
-        m_blitPipeline = null;
     }
     private void OnPresentationResourcesRecreated() {
         var device = m_renderer.Device;
@@ -215,34 +212,29 @@ public sealed class SurfaceCompositor : IDisposable {
 
         m_resourceDevice = device;
 
-        // The blit is created through the device's one pipeline factory from SurfaceBlitLayout; the pool holds exactly one
-        // source image and one sampler per ring set, the pass group's two bindings.
-        using (var presentPass = VulkanGpuRenderPass.Borrow(
-            description: PresentPass,
-            renderPass: m_renderer.RenderPass
-        )) {
-            m_blitPipeline = m_renderer.Services.PipelineFactory.Create(
-                description: new GpuGraphicsPipelineDescription(
-                    Layout: SurfaceBlitLayout.Layout,
-                    Name: "surface-blit",
-                    VertexInput: new GpuVertexInputLayout(
-                        Attributes: [new GpuVertexAttribute(
-                            Format: GpuVertexFormat.R32G32Float,
-                            Location: 0,
-                            OffsetBytes: 0
-                        )],
-                        StrideBytes: FullscreenTriangle.StrideBytes
-                    )
-                ),
-                fragmentShaderModule: m_blitFragmentShader!,
-                name: new GpuObjectName(
-                    owner: "surface-compositor",
-                    part: "blit"
-                ),
-                renderPass: presentPass,
-                vertexShaderModule: m_vertexShader!
-            );
-        }
+        // The blit is the device's pass pipeline for SurfaceBlitLayout, created for a render pass of one color attachment in
+        // the swapchain's format, which a pipeline shares with the swapchain's own render pass. A lease on the new key is
+        // taken before the old one is released, so a recreation that keeps the format keeps the pipeline; the pool holds
+        // exactly one source image and one sampler per ring set, the pass group's two bindings.
+        var previousLease = m_blitLease;
+
+        m_blitLease = m_pipelines.Acquire(
+            device: m_renderer,
+            key: GpuPassPipelineKey.OfGraphics(
+                description: BlitDescription,
+                fragment: m_blitFragmentBytecode,
+                renderPass: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
+                    FinalLayout: GpuImageLayout.RenderTarget,
+                    Format: VulkanGpuFormats.FromVkFormat(vkFormat: m_renderer.Swapchain.ImageFormat),
+                    Load: GpuAttachmentLoad.Clear,
+                    Store: GpuAttachmentStore.Store
+                )]),
+                vertex: m_vertexBytecode
+            )
+        );
+        previousLease?.Release();
+
+        var blitPipeline = m_blitLease.Wait(cancellationToken: CancellationToken.None).Graphics!;
 
         m_descriptorPool = m_descriptorAllocator.CreatePool(
             device: device.Commands,
@@ -268,7 +260,7 @@ public sealed class SurfaceCompositor : IDisposable {
         for (var setIndex = 0; (setIndex < DescriptorSetRingSize); setIndex++) {
             m_descriptorSets[setIndex] = m_descriptorAllocator.AllocateSet(
                 device: device.Commands,
-                descriptorSetLayoutHandle: m_blitPipeline.GroupLayoutHandles[((int)SurfaceBlitLayout.Group)],
+                descriptorSetLayoutHandle: blitPipeline.GroupLayoutHandles[((int)SurfaceBlitLayout.Group)],
                 poolHandle: m_descriptorPool
             );
             m_descriptorAllocator.WriteSampler(
@@ -298,7 +290,7 @@ public sealed class SurfaceCompositor : IDisposable {
         m_descriptorSetIndex = 0;
         m_drawCommandsPerSet = drawCommandsPerSet;
         m_graphicsPipelines = new Dictionary<AssetContentHash, IGpuPipeline> {
-            [m_blitPipelineId] = m_blitPipeline,
+            [m_blitPipelineId] = blitPipeline,
         };
     }
     private ShaderStageInfo ValidateShader(string fileName, ShaderStage stage) {
@@ -316,7 +308,7 @@ public sealed class SurfaceCompositor : IDisposable {
     public void Blit(Surface surface) {
         if (
             !m_initialized ||
-            (m_blitPipeline is null) ||
+            (m_graphicsPipelines is null) ||
             (0 == m_descriptorSets[0]) ||
             surface.IsEmpty
         ) {
