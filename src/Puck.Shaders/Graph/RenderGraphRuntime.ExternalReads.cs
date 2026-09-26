@@ -6,9 +6,7 @@ namespace Puck.Shaders;
 // read to the latest completed output of the instance read, an external producer's under the lease its acquisition
 // returns and a graph instance's unleased, and hands the list to Produce. A read of the producer's own output therefore
 // binds the output it completed before this frame. On a capture frame a previous-frame read of a tainted output binds
-// nothing: the frame renders it again only after its reader, if at all, so the taint would otherwise ride a camera view
-// reading itself or another view from frame to frame and hold every capture it reaches. The producer takes the leases its
-// submission samples; the rest are retired once Produce returns.
+// nothing (Withholds). The producer takes the leases its submission samples; the rest are retired once Produce returns.
 public sealed partial class RenderGraphRuntime {
     // Each external instance's reads, or null for one that reads nothing, for the set they were made for.
     private RenderGraphExternalReads?[] m_externalReads = [];
@@ -39,13 +37,16 @@ public sealed partial class RenderGraphRuntime {
 
         for (var position = 0; (position < edges.Count); position++) {
             var producer = edges[position].Producer;
-            var withheld = (m_capturing && edges[position].PreviousFrame);
+            var previousFrame = edges[position].PreviousFrame;
 
             if (m_producers[producer] is { } external) {
                 if (external.TryAcquireOutput(output: out var output)) {
                     m_producerTainted[producer] = output.Tainted;
 
-                    if (withheld && output.Tainted) {
+                    if (Withholds(
+                        previousFrame: previousFrame,
+                        tainted: output.Tainted
+                    )) {
                         output.Lease.Retire();
 
                         continue;
@@ -84,7 +85,10 @@ public sealed partial class RenderGraphRuntime {
 
             if (
                 completed.Image.IsSameDeviceImage &&
-                !(withheld && completed.Tainted)
+                !Withholds(
+                    previousFrame: previousFrame,
+                    tainted: completed.Tainted
+                )
             ) {
                 NoteTaint(
                     index: index,
