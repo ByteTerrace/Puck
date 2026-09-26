@@ -96,6 +96,7 @@ public sealed class WorldViewPaneMappingLawTests : IDisposable {
     private void Prepare(NormalizedRect? pane) {
         m_host.BeginFrame(views: Views);
         m_host.PlaceViews(
+            panesCover: false,
             rendered: static _ => true,
             sharpness: 0f,
             views: m_views

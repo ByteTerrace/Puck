@@ -346,7 +346,7 @@ public sealed class VulkanRenderer(
     /// reference. A no-op until the first successful <see cref="BeginFrame"/>.</summary>
     public void Present(
         IReadOnlyList<VulkanDrawCommand> drawCommands,
-        IReadOnlyDictionary<AssetContentHash, VulkanGraphicsPipeline> graphicsPipelines
+        IReadOnlyDictionary<AssetContentHash, IGpuPipeline> graphicsPipelines
     ) {
         ArgumentNullException.ThrowIfNull(drawCommands);
         ArgumentNullException.ThrowIfNull(graphicsPipelines);

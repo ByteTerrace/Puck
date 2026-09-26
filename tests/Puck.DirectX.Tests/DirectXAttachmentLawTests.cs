@@ -65,10 +65,12 @@ public sealed class DirectXAttachmentLawTests {
     public void APipelineWhoseDepthTestDisagreesWithItsRenderPassIsRefused() {
         var factory = new DirectXGpuPipelineFactory(deviceContext: null!);
         var untested = new GpuGraphicsPipelineDescription(
-            EnableStorageBuffer: false,
+            Layout: new GpuPipelineLayoutDescription(
+                groups: [],
+                pushesIndex: false,
+                stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
+            ),
             Name: "geometry",
-            PushConstantBinding: null,
-            TextureSamplerCount: 0,
             VertexInput: new GpuVertexInputLayout(
                 Attributes: [],
                 StrideBytes: 0

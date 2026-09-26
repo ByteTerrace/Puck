@@ -282,9 +282,6 @@ public sealed partial class ShaderPipelineRenderNode {
                         Attributes: [],
                         StrideBytes: 0
                     ),
-                    0,
-                    false,
-                    null,
                     Layout: PreviewLayout
                 );
 

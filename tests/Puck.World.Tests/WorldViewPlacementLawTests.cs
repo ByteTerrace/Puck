@@ -101,8 +101,8 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         var left = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f);
         var right = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f);
 
-        Assert.True(condition: m_host.PlaceView(region: left, renderScale: 0.5f, sharpness: 0.25f, shown: false, view: 0));
-        Assert.True(condition: m_host.PlaceView(region: right, renderScale: 1f, sharpness: 0.25f, shown: false, view: 1));
+        Assert.True(condition: m_host.PlaceView(region: left, renderScale: 0.5f, sharpness: 0.25f, shown: false, uncovered: false, view: 0));
+        Assert.True(condition: m_host.PlaceView(region: right, renderScale: 1f, sharpness: 0.25f, shown: false, uncovered: false, view: 1));
         Assert.Equal(
             actual: WorldFootprints(),
             expected: new Dictionary<string, (double Width, double Height)>(comparer: StringComparer.Ordinal) {
@@ -112,8 +112,8 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         Assert.False(condition: PlacementOf(view: 1).Shown);
 
         m_host.BeginFrame(views: Views);
-        Assert.True(condition: m_host.PlaceView(region: left, renderScale: 0.5f, sharpness: 0.25f, shown: true, view: 0));
-        Assert.True(condition: m_host.PlaceView(region: right, renderScale: 1f, sharpness: 0.25f, shown: true, view: 1));
+        Assert.True(condition: m_host.PlaceView(region: left, renderScale: 0.5f, sharpness: 0.25f, shown: true, uncovered: false, view: 0));
+        Assert.True(condition: m_host.PlaceView(region: right, renderScale: 1f, sharpness: 0.25f, shown: true, uncovered: false, view: 1));
         Assert.Equal(
             actual: WorldFootprints(),
             expected: new Dictionary<string, (double Width, double Height)>(comparer: StringComparer.Ordinal) {
@@ -128,11 +128,12 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
 
         // A view the frame does not place is not shown, and one past the root's views is not placed at all.
         Assert.False(condition: PlacementOf(view: 2).Shown);
-        Assert.False(condition: m_host.PlaceView(region: Whole, renderScale: 1f, sharpness: 0f, shown: true, view: m_viewPasses.Count));
+        Assert.False(condition: m_host.PlaceView(region: Whole, renderScale: 1f, sharpness: 0f, shown: true, uncovered: false, view: m_viewPasses.Count));
     }
     [Fact]
     public void BeforeTheWorldsFirstFrameTheFirstViewIsPlacedHiddenOverTheWholeDisplay() {
         m_host.PlaceViews(
+            panesCover: false,
             rendered: static _ => true,
             sharpness: 0.5f,
             views: []
@@ -149,6 +150,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
     [Fact]
     public void ALoneWholeDisplayViewAtNativeScaleIsNeverShown() {
         m_host.PlaceViews(
+            panesCover: false,
             rendered: static _ => true,
             sharpness: 0f,
             views: [View(region: Whole)]
@@ -159,6 +161,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         // The same view at a reduced render scale, or over part of the display, is shown once rendered.
         m_host.BeginFrame(views: Views);
         m_host.PlaceViews(
+            panesCover: false,
             rendered: static _ => true,
             sharpness: 0f,
             views: [View(region: Whole, renderScale: 0.5f)]
@@ -171,15 +174,74 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
 
         m_host.BeginFrame(views: Views);
         m_host.PlaceViews(
+            panesCover: false,
             rendered: static _ => true,
             sharpness: 0f,
             views: [View(region: new NormalizedRect(Height: 0.8f, Width: 0.8f, X: 0.1f, Y: 0.1f))]
         );
         Assert.True(condition: PlacementOf(view: 0).Shown);
     }
+    // The first view's pass owes the letterbox wherever no rect the root shows covers the display, shown or not: a
+    // lone whole-display view, a shown whole-display view or a whole-display pane covers it, and anything else leaves
+    // part of it uncovered, including a split whose first view has not rendered yet and the frames before the first.
+    [Fact]
+    public void TheDisplayIsUncoveredUnlessOneShownRectCoversItWhole() {
+        var left = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f);
+        var right = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f);
+
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static view => (view == 1),
+            sharpness: 0f,
+            views: [View(region: left), View(region: right)]
+        );
+        Assert.Equal(
+            actual: (PlacementOf(view: 0).Shown, PlacementOf(view: 0).Uncovered),
+            expected: (false, true)
+        );
+
+        m_host.BeginFrame(views: Views);
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [View(region: Whole)]
+        );
+        Assert.Equal(
+            actual: (PlacementOf(view: 0).Shown, PlacementOf(view: 0).Uncovered),
+            expected: (false, false)
+        );
+
+        m_host.BeginFrame(views: Views);
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [View(region: Whole, renderScale: 0.5f)]
+        );
+        Assert.Equal(
+            actual: (PlacementOf(view: 0).Shown, PlacementOf(view: 0).Uncovered),
+            expected: (true, false)
+        );
+
+        foreach (var panesCover in ((ReadOnlySpan<bool>)[false, true])) {
+            m_host.BeginFrame(views: Views);
+            m_host.PlaceViews(
+                panesCover: panesCover,
+                rendered: static _ => true,
+                sharpness: 0f,
+                views: []
+            );
+            Assert.Equal(
+                actual: PlacementOf(view: 0).Uncovered,
+                expected: !panesCover
+            );
+        }
+    }
     [Fact]
     public void AViewTheWorldHasNotRenderedIsNotShown() {
         m_host.PlaceViews(
+            panesCover: false,
             rendered: static view => (view == 0),
             sharpness: 0f,
             views: [
@@ -198,6 +260,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         // With no render root attached, no view has an output, so none is shown.
         m_host.BeginFrame(views: Views);
         m_host.PlaceViews(
+            panesCover: false,
             rendered: null,
             sharpness: 0f,
             views: [View(region: new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f))]

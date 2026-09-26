@@ -93,7 +93,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
 | [`puck packages`](#puck-packagespublished-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report—id/description/tags—checked and regenerated against `docs/site/index.html`. |
-| [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots the authored parity world offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash, and per-tile pixels. |
+| [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots the authored parity world offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash, an exact reference image where a station names one, and per-tile pixels. |
 | [`puck publish`](#puck-publishunsigned-release-source-trees) | writes an unsigned `puck.release.manifest.v1` release-source tree from one runtime identifier's built output. |
 | [`puck pull-request`](#puck-pull-requestautomatic-pr-formatting) | the formatting bot's two halves: `format` prepares a pull request's formatting artifact, and `submit-format` is CI's trusted applier. |
 | [`puck qualify`](#puck-qualifypackage-qualification) | qualifies a producer-built `Puck.World` package against the release profile: the functional canaries on the package's own World, then the stability matrix offscreen, each cell judged pass, fail or blocked. |
@@ -102,7 +102,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck shaders`](#puck-shadersshader-compilation) | `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or shader set reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
+| [`puck shaders`](#puck-shadersshader-compilation) | `shaders collect` and `shaders compare` hand one host's compiled shaders to another and compare them byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or shader set reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
@@ -559,6 +559,8 @@ generated atlases preserve source glyph IDs for it.
 ## `puck shaders`—shader compilation
 
 ```sh
+puck shaders collect <directory>
+puck shaders compare <expected> [<actual>] [--build]
 puck shaders compile <source> --out <directory> [--name <name>] [--toolchain <directory>] [--stage compute|vertex|fragment] [--entry <name>]
 puck shaders generate [--check]
 puck shaders interface <source> [--write] [--echo]
@@ -576,6 +578,22 @@ plan returns exit code 1, and compilation errors identify the source location.
 A missing source, an unknown `--stage`, an unreadable file, a
 missing shader tool, or a source edited while it was read is a refusal: exit 2,
 reported as `puck shaders <verb>: <path>: <why>`.
+
+`compare` holds every compiled shader, each `.spv` and `.dxil`, in one tree to
+the same file in another, byte for byte. Both trees are walked for bytecode,
+skipping `artifacts`, `bin`, `obj`, `.git`, `.tmp` and `node_modules`, and
+matched by relative path; a file only one tree holds, or one whose bytes differ
+(named with its first differing byte), fails with exit 1, and a tree holding no
+bytecode is refused with exit 2. `<actual>` is the repository root when absent.
+`--build` first restores and runs the build's own `CompileShaders` target
+(`build/Shaders.targets`) in every tracked project outside `experimental/` that
+declares a vertex, fragment or compute shader item, with the `dxc` on the path,
+so a second host compiles with exactly the first host's arguments. `collect`
+copies the checkout's compiled shaders into one directory at their repository
+paths, the tree `compare` reads on the other host. CI collects the Windows
+build's shaders and compares a Linux DXC build of the same commit against them
+([CI tooling](../development/ci.md)), the binding contract's cross-host gate
+leg.
 
 `generate` writes the HLSL includes the C# model owns:
 `src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-isa.hlsli`, the SDF instruction set's
@@ -1236,7 +1254,9 @@ losing its first capture. After 60 seconds of holding in all, a capture the
 render chain still cannot serve is refused as `unserved`, naming the reason,
 and the leg runs on (see [the offscreen shape](../../src/Puck.World/README.md#usage)).
 Each leg runs until 30 ticks past the last tick the world's `captures` rows
-schedule, read from the world itself, so a new station needs no change here.
+schedule, read from the world itself, so a new station needs no change here; a
+world that cannot be read, or whose last tick leaves no room for those 30, is
+refused by name before a leg starts.
 The two manifest directories are then compared by `puck parity compare` under
 the contract versioned beside the world
 (`tests/Puck.Parity/parity.contract.json`).
@@ -1246,7 +1266,7 @@ puck parity                                            full run: both backends, 
 puck parity compare <leftDir> <rightDir> --contract <file> [--output <dir>]   compare two captured runs
 ```
 
-Per capture, three independent verdicts, in order:
+Per capture, these independent verdicts, in order:
 
 1. **Content gate**—a capture its producer refused by name (`cameraInside`,
    `busy`, `stale`, `failed`, `unserved`, `deviceLost`; see the
@@ -1255,22 +1275,28 @@ Per capture, three independent verdicts, in order:
    degenerate frames is vacuous.
 2. **State verdict**—`stateHash` equality, exact, no envelope. A one-bit
    sim-state divergence is a defect, never noise.
-3. **Pixel verdict**—per-tile mean/max deltas against the station's contract
+3. **Reference verdict**—only for a station whose contract entry names a
+   `reference`: each side must equal the frame computed on the CPU from the
+   station's own documents, byte for byte, so a mistake both backends share
+   still fails. `REFERENCE-FAILED` names the side, the differing byte count and
+   the first differing pixel.
+4. **Pixel verdict**—per-tile mean/max deltas against the station's contract
    thresholds. A localized defect cannot dilute itself across a whole-frame
    mean.
 
 Failures write both frames, a per-pixel delta heatmap, and a per-verdict
 summary into the run's `evidence/` directory—a red names its tile and shows
 its pixels. There are no stored baselines: both runs come from the same build,
-so content changes cannot fail the check, only a cross-backend divergence can.
+and a reference is computed from the documents the run renders, so a content
+change fails only where it and its reference disagree.
 The runner resolves the `Puck.World` build for the checkout's current sources,
 keeping the build's logs beside its transcripts when this run built it (see
 [where the World artifact is built](#where-the-world-artifact-is-built)), runs
 each leg from fresh state with its own `--state-dir`, and requires every
 scripted command accepted
 (`wire.errors` closes each transcript with zero rejections). It needs both
-GPU devices but takes over no display. Exit codes: 0 every capture held all
-three verdicts, 1 a verdict failed, 2 a leg/build refusal or a malformed
+GPU devices but takes over no display. Exit codes: 0 every capture held every
+verdict, 1 a verdict failed, 2 a leg/build refusal or a malformed
 manifest or contract.
 
 ---

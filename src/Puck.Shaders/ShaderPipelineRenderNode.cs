@@ -1659,18 +1659,14 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         m_selectedOutput = resourceName;
         m_outputRefreshRequested = true;
     }
-    /// <summary>Requests one render while <see cref="Paused"/>. The initialization frame a paused node owes after a
-    /// <see cref="Reset"/> never consumes a step, so a step requested before that frame renders one frame beyond it. A
-    /// step taken while a candidate or resize builds waits until it installs, then renders once through it.</summary>
-    public void Step() => m_steps = checked((m_steps + 1));
-    /// <summary>Queues an atomic compiled candidate. The next produced frame starts building its pipelines and shader
-    /// modules on the thread pool, so a resize or selection requested before that frame is built with it. The installed
-    /// graph keeps presenting until the build finishes; the candidate's resources are then allocated and it installs at
-    /// that frame boundary. A swap replaces the graph and is not a step: a paused instance builds and installs the
-    /// candidate too, without rendering or consuming a step, and keeps publishing the replaced graph's last image until
-    /// its next step, resume or reset renders the candidate. A newer candidate replaces a queued one; one whose build is
-    /// already running is discarded when that build is taken.</summary>
-    public void Swap(CompiledShaderPipeline pipeline) {
+    /// <summary>Checks, changing nothing, that <see cref="Swap"/> would accept a candidate, so a caller changing more than
+    /// one node can check every candidate before swapping any.</summary>
+    /// <param name="pipeline">The candidate.</param>
+    /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="pipeline"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The candidate's compilation failed, its plan is not one a node runs, it
+    /// names a package no recorder serves, or it keeps history on a node with fewer than two frame slots.</exception>
+    public void RequireSwappable(CompiledShaderPipeline pipeline) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -1687,6 +1683,33 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         ) {
             throw new InvalidDataException(message: "History requires at least two frame slots.");
         }
+    }
+    /// <summary>Gets whether a named external resource is bound: an image or a buffer a host bound for it, which the
+    /// installed graph samples when it renders.</summary>
+    /// <param name="name">The external resource's name.</param>
+    /// <returns><see langword="true"/> when an image or a buffer is bound for the name.</returns>
+    public bool IsBound(string name) => (
+        m_externalImages.ContainsKey(key: name) ||
+        m_externalBuffers.ContainsKey(key: name)
+    );
+    /// <summary>Requests one render while <see cref="Paused"/>. The initialization frame a paused node owes after a
+    /// <see cref="Reset"/> never consumes a step, so a step requested before that frame renders one frame beyond it. A
+    /// step taken while a candidate or resize builds waits until it installs, then renders once through it.</summary>
+    public void Step() => m_steps = checked((m_steps + 1));
+    /// <summary>Queues an atomic compiled candidate. The next produced frame starts building its pipelines and shader
+    /// modules on the thread pool, so a resize or selection requested before that frame is built with it. The installed
+    /// graph keeps presenting until the build finishes; the candidate's resources are then allocated and it installs at
+    /// that frame boundary. A swap replaces the graph and is not a step: a paused instance builds and installs the
+    /// candidate too, without rendering or consuming a step, and keeps publishing the replaced graph's last image until
+    /// its next step, resume or reset renders the candidate. A newer candidate replaces a queued one; one whose build is
+    /// already running is discarded when that build is taken.</summary>
+    /// <param name="pipeline">The candidate.</param>
+    /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="pipeline"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The candidate cannot be installed on this node
+    /// (<see cref="RequireSwappable"/>).</exception>
+    public void Swap(CompiledShaderPipeline pipeline) {
+        RequireSwappable(pipeline: pipeline);
         m_lastSwapError = null;
         m_pending = pipeline;
         ForgetRefusal();

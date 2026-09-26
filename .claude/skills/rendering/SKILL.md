@@ -851,7 +851,9 @@ clock, and the scheduler's `.Sources` laws pin each. The runtime withdraws a
 render an external producer could not produce (`RenderGraphHistory.Withdraw`),
 so a static source is asked again. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
-priced by `WorldPresentationCost` in the cost report and `world.budget`.
+priced by `WorldPresentationCost` in the cost report and `world.budget`, which
+also reads the live schedule back per instance through `RenderGraphLiveBudget`
+(`RenderGraphRuntime.Latest` and `Work`: counts, never timing).
 `RenderGraphRuntime` (`src/Puck.Shaders/Graph`, since `Puck.Hosting` cannot
 reach the node) runs a set: it alternates two schedules, renders each
 scheduled instance through its own `ShaderPipelineRenderNode` at the
@@ -957,7 +959,12 @@ graph still binds is held through `ShaderPipelineRenderNode.HoldBinding` until
 that consumer installs a graph that no longer reads it, rebinds the name or is
 released: a graph instance as the consumer bound it, an external producer
 through one more acquisition of its latest output, bound for every frame, and
-`RenderGraphRuntime.RetiredProducers` counts what is held),
+`RenderGraphRuntime.RetiredProducers` counts what is held; a consumer that never
+bound the name, `ShaderPipelineRenderNode.IsBound`, holds nothing. The
+reconfiguration prepares its nodes, checks every graph it hands one
+(`RequireSwappable`) and plans its holds before it changes anything, so a
+failure leaves the running set intact and disposes what it created; a new step
+that can fail joins that preparation, never the commit after it),
 compiles each source row in the background through
 `ShaderPackager.LoadSource`, and installs it with `TryInstall`, inputs taken
 from the row's `inputs`. A row naming an engine `package` (such as `sdf.world`)
@@ -985,7 +992,10 @@ and a lone full-display view at native scale is not shown, so `main` stands for
 placed one frame after a layout change. The first view's place pass carries
 the `place` config's `letterbox`, so pixels no view or pane covers show the
 letterbox color `place.comp.hlsl` states, and a layout covering the whole
-display pays nothing for it. Screens still render through `ViewStack` until
+display pays nothing for it. While the first view is not shown, its pass still
+letterboxes the whole output when `RenderGraphPlacement.Uncovered` says part of
+the display lies outside every shown rect (`WorldViewGraphHost.PlaceViews`
+counts it covered only when one shown view or pane covers it whole). Screens still render through `ViewStack` until
 later P11b work moves them.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
