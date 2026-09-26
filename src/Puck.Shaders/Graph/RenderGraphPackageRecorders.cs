@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
@@ -133,7 +134,9 @@ public sealed record RenderGraphPackageRecorderContext(string Instance, string P
 /// <param name="Package">The package id the instance names.</param>
 /// <param name="Device">The device the runtime records on.</param>
 /// <param name="HostsOnDirectX">Whether the device is Direct3D 12.</param>
-public sealed record RenderGraphExternalProducerContext(string Instance, string Package, IGpuDeviceContext Device, bool HostsOnDirectX);
+/// <param name="Settings">A source instance's settings object (<see cref="RenderGraphInstance.Settings"/>), which its
+/// producer opens the image with, or <see langword="null"/> for its defaults and for any other instance.</param>
+public sealed record RenderGraphExternalProducerContext(string Instance, string Package, IGpuDeviceContext Device, bool HostsOnDirectX, IReadOnlyDictionary<string, JsonElement>? Settings = null);
 /// <summary>The engine work a host offers render graphs, by package id: the recorders that run a package pass inside a
 /// graph instance's submission, and the external producers that render an external instance
 /// (<see cref="RenderGraphInstanceKind.External"/>) through submissions of their own. A graph whose package pass names an

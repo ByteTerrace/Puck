@@ -1,3 +1,5 @@
+using Puck.Abstractions.Sources;
+
 namespace Puck.Hosting;
 
 /// <summary>Schedules render-graph instances by demand. A schedule is a pure function of the instance set, what the
@@ -18,6 +20,12 @@ namespace Puck.Hosting;
 /// <item><description>A buffer read has no footprint: every consumer that renders reads it, so its producer is demanded
 /// whenever one of its consumers is, orders and refreshes as a shown producer does, and renders at no extent for no
 /// pass-pixels.</description></item>
+/// <item><description>A source (<see cref="RenderGraphInstance.IsSource"/>) is demanded as any shown producer is and renders
+/// at most once a frame however many instances show it, but at its producer's cadence and negotiated extent
+/// (<see cref="RenderGraphSourceState"/>), never a refresh or a footprint: a static source once, a tick source at most once
+/// per completed simulation tick (<see cref="RenderGraphFrame.Tick"/>), and a rate source at most its rate, counted in
+/// presented frames at the display's rate. Cadence is counted in ticks and frames, never the wall clock. A source whose
+/// producer declares no extent this frame does not render.</description></item>
 /// </list>
 /// </summary>
 public static class RenderGraphScheduler {
@@ -43,6 +51,7 @@ public static class RenderGraphScheduler {
             ScaleHeight = new double[count];
             ScaleWidth = new double[count];
             Shows = new List<Shown>[count];
+            SourceState = new int[count];
             Staleness = new long[count];
             Width = new int[count];
 
@@ -67,6 +76,8 @@ public static class RenderGraphScheduler {
         public double[] ScaleHeight { get; }
         public double[] ScaleWidth { get; }
         public List<Shown>[] Shows { get; }
+        // Each source's entry in the frame's source states, or -1 when its producer declares nothing this frame.
+        public int[] SourceState { get; }
         public long[] Staleness { get; }
         public int[] Width { get; }
 
@@ -83,6 +94,10 @@ public static class RenderGraphScheduler {
             Array.Clear(array: ScaleHeight);
             Array.Clear(array: ScaleWidth);
             Array.Clear(array: Width);
+            Array.Fill(
+                array: SourceState,
+                value: -1
+            );
 
             foreach (var list in Shows) {
                 list.Clear();
@@ -215,6 +230,89 @@ public static class RenderGraphScheduler {
             }
         }
     }
+    // Maps each source to its producer's declaration this frame, refusing one that names no source, names one twice,
+    // states a negative extent or an undefined cadence.
+    private static void SourceStates(RenderGraphInstanceSet set, RenderGraphFrame frame, int[] sourceState) {
+        if (frame.Sources is not { } sources) {
+            return;
+        }
+
+        for (var position = 0; (position < sources.Count); position++) {
+            var state = sources[position];
+            var index = set.IndexOf(name: (state.Instance ?? string.Empty));
+
+            if (
+                (index < 0) ||
+                !set.Instances[index].IsSource
+            ) {
+                throw new ArgumentException(
+                    message: $"Source state '{state.Instance}' names no source instance.",
+                    paramName: nameof(frame)
+                );
+            }
+            if (sourceState[index] >= 0) {
+                throw new ArgumentException(
+                    message: $"Source '{state.Instance}' is declared more than once this frame.",
+                    paramName: nameof(frame)
+                );
+            }
+            if (
+                (state.Width < 0) ||
+                (state.Height < 0)
+            ) {
+                throw new ArgumentException(
+                    message: $"Source '{state.Instance}' declares the extent {state.Width}x{state.Height}; an extent is not negative.",
+                    paramName: nameof(frame)
+                );
+            }
+            if (
+                !Enum.IsDefined(value: state.Cadence.Refresh) ||
+                ((state.Cadence.Refresh == ImageRefresh.Rate) != (state.Cadence.RateHz > 0U))
+            ) {
+                throw new ArgumentException(
+                    message: $"Source '{state.Instance}' declares the cadence {state.Cadence.Refresh} at {state.Cadence.RateHz} Hz; only a rate cadence states a rate, and it states a positive one.",
+                    paramName: nameof(frame)
+                );
+            }
+
+            sourceState[index] = position;
+        }
+    }
+    // Whether a source is due this frame, and its frame divisor: a static source until it has rendered once, a tick
+    // source whenever the frame's tick differs from the one it last rendered at, and a rate source as a refresh at its
+    // rate is. A source whose producer declares no extent is never due.
+    private static bool SourceDue(RenderGraphSourceState state, RenderGraphFrame frame, RenderGraphHistory history, int index, out int divisor) {
+        var rendered = history.LatestFrame(index: index);
+
+        divisor = 1;
+
+        if (
+            (state.Width == 0) ||
+            (state.Height == 0)
+        ) {
+            return false;
+        }
+
+        switch (state.Cadence.Refresh) {
+            case ImageRefresh.Static:
+                return (rendered < 0);
+            case ImageRefresh.Tick:
+                return (
+                    (rendered < 0) ||
+                    (frame.Tick != history.LatestTick(index: index))
+                );
+            default:
+                divisor = RenderGraphRefresh.At(hertz: ((int)Math.Min(
+                    val1: state.Cadence.RateHz,
+                    val2: int.MaxValue
+                ))).ResolveDivisor(displayHertz: frame.DisplayHertz);
+
+                return (
+                    (rendered < 0) ||
+                    ((frame.Index - rendered) >= divisor)
+                );
+        }
+    }
     // The stalest instance first, ties in render order: a total order, so the sort's result never depends on its
     // algorithm.
     private static bool Precedes(int left, int right, long[] staleness, int[] positionOf) => ((staleness[left] != staleness[right])
@@ -236,8 +334,8 @@ public static class RenderGraphScheduler {
     /// different number of instances, <paramref name="history"/> is <paramref name="schedule"/>'s own
     /// <see cref="RenderGraphSchedule.Next"/>, the frame's roots or footprints are <see langword="null"/>, the frame
     /// does not follow the history, the display extent is not positive, a root or footprint names an undeclared
-    /// instance or read, a root names an instance whose output is a buffer, or a footprint shows a buffer
-    /// read.</exception>
+    /// instance or read, a root names an instance whose output is a buffer, a footprint shows a buffer read, or a source
+    /// state names no source, names one twice, or declares a negative extent or an ill-formed cadence.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A root or footprint fraction is negative or not finite, or the
     /// budget is negative.</exception>
     public static void Schedule(RenderGraphInstanceSet set, RenderGraphFrame frame, RenderGraphHistory history, RenderGraphSchedule schedule) {
@@ -355,10 +453,31 @@ public static class RenderGraphScheduler {
             shown: shown
         );
 
+        var sourceState = work.SourceState;
+
+        SourceStates(
+            frame: frame,
+            set: set,
+            sourceState: sourceState
+        );
+
         var divisor = work.Divisor;
         var due = work.Due;
 
         for (var index = 0; (index < count); index++) {
+            if (set.Instances[index].IsSource) {
+                divisor[index] = 1;
+                due[index] = ((sourceState[index] >= 0) && SourceDue(
+                    divisor: out divisor[index],
+                    frame: frame,
+                    history: history,
+                    index: index,
+                    state: frame.Sources![sourceState[index]]
+                ));
+
+                continue;
+            }
+
             var rendered = history.LatestFrame(index: index);
 
             divisor[index] = set.Instances[index].Refresh.ResolveDivisor(displayHertz: frame.DisplayHertz);
@@ -390,10 +509,17 @@ public static class RenderGraphScheduler {
                     continue;
                 }
 
-                var (allocatedWidth, allocatedHeight) = history.Allocated(index: index);
-
                 decided[index] = true;
                 changed = true;
+
+                // A source renders at its producer's negotiated extent, so a footprint demands it without sizing it, and
+                // it reads nothing to pass demand on to.
+                if (set.Instances[index].IsSource) {
+                    continue;
+                }
+
+                var (allocatedWidth, allocatedHeight) = history.Allocated(index: index);
+
                 scaleWidth[index] = RenderGraphExtent.Quantize(
                     allocated: allocatedWidth,
                     fraction: demandWidth[index]
@@ -434,7 +560,15 @@ public static class RenderGraphScheduler {
         var price = work.Price;
 
         for (var index = 0; (index < count); index++) {
-            if (
+            if (set.Instances[index].IsSource) {
+                if (sourceState[index] >= 0) {
+                    var state = frame.Sources![sourceState[index]];
+
+                    width[index] = state.Width;
+                    height[index] = state.Height;
+                    price[index] = checked(((((long)set.Instances[index].Passes) * width[index]) * height[index]));
+                }
+            } else if (
                 decided[index] &&
                 (set.Instances[index].Output != ShaderPipelineResourceKind.Buffer)
             ) {
@@ -579,6 +713,10 @@ public static class RenderGraphScheduler {
                 ? frame.Index
                 : history.LatestFrame(index: index)
             );
+            following.Ticks[index] = (admitted[index]
+                ? frame.Tick
+                : history.LatestTick(index: index)
+            );
             following.Width[index] = (admitted[index]
                 ? scaleWidth[index]
                 : allocatedWidth
@@ -596,7 +734,7 @@ public static class RenderGraphScheduler {
             total += spentHere;
             rows[index] = new RenderGraphInstanceSchedule(
                 Divisor: divisor[index],
-                Height: (admitted[index]
+                Height: ((admitted[index] || set.Instances[index].IsSource)
                     ? height[index]
                     : ((allocatedHeight == 0)
                         ? 0
@@ -610,7 +748,7 @@ public static class RenderGraphScheduler {
                 Passes: set.Instances[index].Passes,
                 PassPixels: spentHere,
                 Status: status,
-                Width: (admitted[index]
+                Width: ((admitted[index] || set.Instances[index].IsSource)
                     ? width[index]
                     : ((allocatedWidth == 0)
                         ? 0

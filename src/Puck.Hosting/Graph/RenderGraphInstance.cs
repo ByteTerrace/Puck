@@ -1,3 +1,6 @@
+using System.Text.Json;
+using Puck.Commands;
+
 namespace Puck.Hosting;
 
 /// <summary>How often a render-graph instance refreshes: every <see cref="Divisor"/>-th presented frame, or at most
@@ -73,12 +76,65 @@ public readonly record struct RenderGraphRead(string Producer, bool PreviousFram
 /// extent and costs no pass-pixels.</param>
 /// <param name="ExternalPackage">The package id of the external producer that renders the instance through its own
 /// submissions, or <see langword="null"/> for an instance that renders a graph. An external producer reads no other
-/// instance, and hands its consumers only its latest completed output.</param>
-public sealed record RenderGraphInstance(string Name, RenderGraphRefresh Refresh, int Passes, IReadOnlyList<RenderGraphRead> Reads, ShaderPipelineResourceKind Output = ShaderPipelineResourceKind.Image, string? ExternalPackage = null) {
+/// instance, and hands its consumers only its latest completed output. A package spelled <c>source.&lt;producer id&gt;</c>
+/// (<see cref="SourcePackage"/>) makes the instance an image source (<see cref="IsSource"/>).</param>
+/// <param name="Settings">A source instance's settings object, which its producer opens the image with, or
+/// <see langword="null"/> for its producer's defaults. Only a source carries settings.</param>
+public sealed record RenderGraphInstance(string Name, RenderGraphRefresh Refresh, int Passes, IReadOnlyList<RenderGraphRead> Reads, ShaderPipelineResourceKind Output = ShaderPipelineResourceKind.Image, string? ExternalPackage = null, IReadOnlyDictionary<string, JsonElement>? Settings = null) {
+    /// <summary>The prefix of every source instance's package id: <c>source.</c> then the producer's id.</summary>
+    public const string SourcePackagePrefix = "source.";
+
+    /// <summary>Gets the instance's identity as a displayed source: a producer handle for a source instance, whose hit
+    /// ends at its pixels, and an instance handle for any other, whose hit continues into its camera. Either names the
+    /// instance.</summary>
+    public SourceHandle Handle => (IsSource
+        ? SourceHandle.Producer(name: Name)
+        : SourceHandle.Instance(name: Name)
+    );
+    /// <summary>Gets whether the instance is an image source: an external instance whose package is
+    /// <see cref="SourcePackage"/> of a producer id. A source reads nothing, is scheduled at its producer's cadence and
+    /// negotiated extent (<see cref="RenderGraphSourceState"/>) rather than a refresh and a footprint, and renders at most
+    /// once a frame however many instances read it.</summary>
+    public bool IsSource => (ExternalPackage?.StartsWith(
+        comparisonType: StringComparison.Ordinal,
+        value: SourcePackagePrefix
+    ) ?? false);
     /// <summary>Gets how the instance renders: a graph of its own, or an external producer's submissions.</summary>
     public RenderGraphInstanceKind Kind => ((ExternalPackage is null)
         ? RenderGraphInstanceKind.Graph
         : RenderGraphInstanceKind.External);
+    /// <summary>Gets the id of the producer a source instance names, or <see langword="null"/> for any other
+    /// instance.</summary>
+    public string? SourceProducer => (IsSource
+        ? ExternalPackage![SourcePackagePrefix.Length..]
+        : null
+    );
+
+    /// <summary>Returns the package id a source instance of a producer names.</summary>
+    /// <param name="producer">The producer's registered id.</param>
+    /// <returns><c>source.&lt;producer&gt;</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="producer"/> is empty.</exception>
+    public static string SourcePackage(string producer) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: producer);
+
+        return (SourcePackagePrefix + producer);
+    }
+    /// <summary>Creates a source instance: an external instance of <see cref="SourcePackage"/> of a producer, which reads
+    /// nothing, records one pass, is paced by its cadence rather than a refresh, and carries its settings.</summary>
+    /// <param name="name">The instance's unique name.</param>
+    /// <param name="producer">The producer's registered id.</param>
+    /// <param name="settings">The settings object the producer opens the image with, or <see langword="null"/> for its
+    /// defaults.</param>
+    /// <returns>The instance.</returns>
+    /// <exception cref="ArgumentException"><paramref name="producer"/> is empty.</exception>
+    public static RenderGraphInstance Source(string name, string producer, IReadOnlyDictionary<string, JsonElement>? settings = null) => new(
+        ExternalPackage: SourcePackage(producer: producer),
+        Name: name,
+        Passes: 1,
+        Reads: [],
+        Refresh: RenderGraphRefresh.EveryFrame,
+        Settings: settings
+    );
 }
 /// <summary>How a render-graph instance renders.</summary>
 public enum RenderGraphInstanceKind : byte {
@@ -114,6 +170,9 @@ public enum RenderGraphInstanceRefusalCode : byte {
     /// <summary>An instance reads an external producer's previous frame: the producer hands out only its latest
     /// completed output, which its next render overwrites.</summary>
     ExternalPreviousFrame = 10,
+    /// <summary>An instance carries settings but is no source, or a source names no producer id, refreshes other than on
+    /// every frame its cadence allows, or declares an output that is not an image.</summary>
+    SourceDeclaration = 11,
 }
 /// <summary>A refused set of render-graph instances.</summary>
 /// <param name="Code">Why it was refused.</param>

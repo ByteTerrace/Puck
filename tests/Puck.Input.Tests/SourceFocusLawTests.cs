@@ -18,7 +18,7 @@ public sealed class SourceFocusLawTests {
             X: 0f,
             Y: 0f
         ),
-        source: SourceHandle.Producer(id: "editor"),
+        source: SourceHandle.Producer(name: "editor"),
         width: 1280
     ) with {
         Destination = SourceDestination.Passthrough,
@@ -43,7 +43,7 @@ public sealed class SourceFocusLawTests {
             mapping: Editor
         ));
         Assert.Equal(
-            expected: SourceHandle.Producer(id: "editor"),
+            expected: SourceHandle.Producer(name: "editor"),
             actual: focus.Focused
         );
         Assert.Equal(

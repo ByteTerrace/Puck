@@ -81,7 +81,6 @@ public sealed class ImageProducerLawTests {
         Assert.True(condition: producers.TryOpen(
             fault: out var fault,
             feed: out var feed,
-            screenIndex: 0,
             source: WorldImageProducerSettings.SourceOf(
                 id: WorldImageProducerSettings.TestPatternId,
                 settings: new WorldTestPatternSettings(
@@ -225,7 +224,6 @@ public sealed class ImageProducerLawTests {
         Assert.True(condition: producers.TryOpen(
             fault: out _,
             feed: out var feed,
-            screenIndex: 0,
             source: source
         ));
         Assert.Equal(expected: ThirdId, actual: feed!.Descriptor.Producer);
@@ -256,7 +254,6 @@ public sealed class ImageProducerLawTests {
             Assert.False(condition: producers.TryOpen(
                 fault: out var fault,
                 feed: out var feed,
-                screenIndex: 0,
                 source: source
             ));
             Assert.Null(@object: feed);
@@ -276,7 +273,6 @@ public sealed class ImageProducerLawTests {
         Assert.True(condition: agreeing.TryOpen(
             fault: out _,
             feed: out _,
-            screenIndex: 0,
             source: source
         ));
     }
@@ -304,7 +300,6 @@ public sealed class ImageProducerLawTests {
         Assert.True(condition: producers.TryOpen(
             fault: out _,
             feed: out var feed,
-            screenIndex: 0,
             source: source
         ));
 
@@ -365,7 +360,7 @@ public sealed class ImageProducerLawTests {
         public string Id { get; } = id;
         public ImageSourceTransport Transport { get; } = transport;
 
-        public bool TryOpen(WorldScreenSource.Producer source, int screenIndex, out IWorldImageFeed? feed, out string? fault) {
+        public bool TryOpen(WorldScreenSource.Producer source, out IWorldImageFeed? feed, out string? fault) {
             Feed = new FakeFeed(descriptor: new ImageSourceDescriptor(
                 Cadence: ImageSourceCadence.Rate(rateHz: 30U),
                 Color: ImageColorEncoding.Srgb,

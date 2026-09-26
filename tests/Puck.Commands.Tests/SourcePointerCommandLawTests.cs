@@ -25,7 +25,7 @@ public sealed class SourcePointerCommandLawTests {
             Right: Vector3.UnitX,
             Up: Vector3.UnitY
         ),
-        Source: SourceHandle.Producer(id: "cabinet"),
+        Source: SourceHandle.Producer(name: "cabinet"),
         SourceHeight: 144,
         SourceWidth: 160
     );

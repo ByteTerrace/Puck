@@ -98,7 +98,7 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
         }
     }
     /// <inheritdoc/>
-    public bool TryOpen(WorldScreenSource.Producer source, int screenIndex, out IWorldImageFeed? feed, out string? fault) {
+    public bool TryOpen(WorldScreenSource.Producer source, out IWorldImageFeed? feed, out string? fault) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         var (settings, refusal) = WorldImageProducerSettings.Bind<WorldTestPatternSettings>(producer: source);

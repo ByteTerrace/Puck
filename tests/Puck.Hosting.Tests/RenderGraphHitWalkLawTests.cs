@@ -82,7 +82,7 @@ public sealed class RenderGraphHitWalkLawTests {
         );
         var scene = new Scene(placements: [
             [Screen(source: SourceHandle.Instance(name: "room"))],
-            [Screen(source: SourceHandle.Producer(id: "desktop"))],
+            [Screen(source: SourceHandle.Producer(name: "desktop"))],
         ]);
         // A screen fills the middle quarter of each camera's image, so a point e from the image's centre lands 4e from
         // the screen's centre, and after the second hop 16e from the centre of the room's screen.
@@ -110,7 +110,7 @@ public sealed class RenderGraphHitWalkLawTests {
             actual: path.Steps.Select(selector: static step => step.Instance)
         );
         Assert.Equal(
-            expected: SourceHandle.Producer(id: "desktop"),
+            expected: SourceHandle.Producer(name: "desktop"),
             actual: path.Steps[^1].Mapping.Source
         );
         // (0.5 + 0.1)·256 and (0.5 + 0.05)·256.
@@ -178,7 +178,7 @@ public sealed class RenderGraphHitWalkLawTests {
             ),
             scene: new Scene(placements: [
                 [Screen(source: SourceHandle.Instance(name: "room"))],
-                [Screen(source: SourceHandle.Producer(id: "desktop"))],
+                [Screen(source: SourceHandle.Producer(name: "desktop"))],
             ]),
             set: set
         );
@@ -271,7 +271,7 @@ public sealed class RenderGraphHitWalkLawTests {
             ),
             scene: new Scene(placements: [
                 [],
-                [Screen(source: SourceHandle.Producer(id: "desktop"))],
+                [Screen(source: SourceHandle.Producer(name: "desktop"))],
             ]),
             set: set
         );
