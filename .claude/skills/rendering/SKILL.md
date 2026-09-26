@@ -851,7 +851,9 @@ clock, and the scheduler's `.Sources` laws pin each. The runtime withdraws a
 render an external producer could not produce (`RenderGraphHistory.Withdraw`),
 so a static source is asked again. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
-priced by `WorldPresentationCost` in the cost report and `world.budget`.
+priced by `WorldPresentationCost` in the cost report and `world.budget`, which
+also reads the live schedule back per instance through `RenderGraphLiveBudget`
+(`RenderGraphRuntime.Latest` and `Work`: counts, never timing).
 `RenderGraphRuntime` (`src/Puck.Shaders/Graph`, since `Puck.Hosting` cannot
 reach the node) runs a set: it alternates two schedules, renders each
 scheduled instance through its own `ShaderPipelineRenderNode` at the

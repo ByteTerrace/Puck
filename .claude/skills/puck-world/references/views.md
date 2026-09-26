@@ -276,7 +276,10 @@ through `RenderGraphInstanceSet.TryCreate`, naming every instance; a self-input
 and a `previousFrame` input are legal. `views.graphBudget.passPixelsPerFrame`
 is the scheduler's price ceiling. `world.budget` echoes every row with its
 extent ceiling, rate and planned passes (`WorldPresentationCost`, priced by
-`WorldPipelineSources.PlanGraph`). `views.root` names the row the display
+`WorldPipelineSources.PlanGraph`), then the live budget: what the runtime's latest
+schedule decided for every instance, with its extent, divisor, passes,
+pass-pixels and its newest completed submission's counts (`RenderGraphLiveBudget`).
+`views.root` names the row the display
 shows; absent, the host synthesizes the root graph (`WorldRootGraph`), which
 places every instance a layout slot names over the SDF world. A pane the
 active layout does not show is not scheduled, and a layout change places panes
