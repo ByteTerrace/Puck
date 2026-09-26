@@ -19,7 +19,7 @@ public readonly record struct RenderGraphExternalOutput(Surface Image, GpuImageL
 /// frame it produces, from the image that frame completes. Every member runs on the thread that produces frames.</summary>
 public interface IRenderGraphExternalProducer : ICaptureRequestTarget, IDisposable {
     /// <summary>Gets the format of every image the producer hands out.</summary>
-    SurfaceFormat Format { get; }
+    GpuPixelFormat Format { get; }
     /// <summary>Gets why the producer has no completed output to hand out or capture, phrased as the refusal of a
     /// capture that waited on it reads, or <see langword="null"/> once it has one. A caller polls it only to
     /// report.</summary>

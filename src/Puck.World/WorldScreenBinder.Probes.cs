@@ -4,7 +4,6 @@ using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.DirectX;
 using Puck.DirectX.Interop;
-using Puck.Abstractions.Presentation;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Hosting;
@@ -171,7 +170,7 @@ internal sealed partial class WorldScreenBinder {
             objB: generation
         )) {
             feed.Input = new ProbeKernelInput.Ring(
-                Format: SurfaceFormat.R8G8B8A8Unorm,
+                Format: GpuPixelFormat.R8G8B8A8Unorm,
                 Height: ((int)camera.RenderHeight),
                 SharedTargetHandles: [handle],
                 Slots: feed.Slots,
@@ -352,7 +351,7 @@ internal sealed partial class WorldScreenBinder {
             deviceContext: deviceContext,
             fault: out var fault,
             fence: out var fence,
-            format: SurfaceFormat.R8G8B8A8Unorm,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: height,
             images: out var images,
             importedViews: out var views,
@@ -382,7 +381,7 @@ internal sealed partial class WorldScreenBinder {
         feed.Output = new ProbeKernelOutput(
             Width: width,
             Height: height,
-            TargetFormat: SurfaceFormat.R8G8B8A8Unorm,
+            TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
             SharedTargetHandles: targets.SharedHandles,
             Slots: slots
         );

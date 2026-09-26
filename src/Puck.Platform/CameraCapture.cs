@@ -100,7 +100,7 @@ public interface ICameraStream {
     int Width { get; }
 }
 /// <summary>A CPU-pixel stream: <see cref="IFrameCaptureSource.TryCapture"/> returns the newest frame as
-/// <see cref="SurfaceFormat.B8G8R8A8Unorm"/> pixels (latest-frame-wins, stale frames dropped). A stream returned by a
+/// <see cref="GpuPixelFormat.B8G8R8A8Unorm"/> pixels (latest-frame-wins, stale frames dropped). A stream returned by a
 /// successful <see cref="ICameraCaptureService.TryOpenPixels"/> already contains its first frame.</summary>
 public interface ICameraPixelStream : ICameraStream, IFrameCaptureSource;
 /// <summary>A shared-texture stream: the platform converts each frame on its own device and copies it into one of the
@@ -112,7 +112,7 @@ public interface ICameraPixelStream : ICameraStream, IFrameCaptureSource;
 /// remains acquired.</summary>
 public interface ICameraSharedStream : ICameraStream, ISharedSlotRing {
     /// <summary>Gets the pixel format the consumer must provision the shared targets in.</summary>
-    SurfaceFormat TargetFormat { get; }
+    GpuPixelFormat TargetFormat { get; }
     /// <summary>Gets how the stream orders its copies before the consumer's reads, once it has opened the targets.</summary>
     SharedFenceOrder FenceOrder { get; }
 

@@ -112,8 +112,6 @@ public sealed class BakeSamplingDeviceLawTests {
         );
     }
     private static void SampleTexture(string backend, GpuDeviceServices services, IGpuBindings bindings, GpuComputePipelineDescription description, IGpuComputePipeline pipeline, IGpuSurfaceReadback readback, nint sampler, JsonNode texture, List<string> failures) {
-        // The fixture names its formats in the baker's TextureFormat vocabulary, whose block-compressed members carry
-        // the same names as GpuPixelFormat's until the pixel-format fold makes them one.
         var format = Enum.Parse<GpuPixelFormat>(value: texture["format"]!.GetValue<string>());
         var width = texture["width"]!.GetValue<uint>();
         var height = texture["height"]!.GetValue<uint>();
@@ -139,11 +137,11 @@ public sealed class BakeSamplingDeviceLawTests {
         // The probe table: each probe's column, row, level, and the output texel its value lands in.
         using var probeTable = services.BufferFactory.CreateHostVisible(
             name: default,
-            sizeBytes: ((ulong)(probes.Count * 4 * sizeof(uint))),
+            sizeBytes: ((ulong)((probes.Count * 4) * sizeof(uint))),
             usage: GpuBufferUsage.Storage
         );
 
-        probeTable.Write<uint>(data: [.. probes.SelectMany(selector: static (probe, slot) => (uint[])[probe!["x"]!.GetValue<uint>(), probe["y"]!.GetValue<uint>(), probe["level"]!.GetValue<uint>(), ((uint)slot)])]);
+        probeTable.Write<uint>(data: [.. probes.SelectMany(selector: static (probe, slot) => ((uint[])[probe!["x"]!.GetValue<uint>(), probe["y"]!.GetValue<uint>(), probe["level"]!.GetValue<uint>(), ((uint)slot)]))]);
         var pool = bindings.CreatePool(
             name: default,
             sizes: GpuDescriptorPoolSizes.ForGroups(groups: description.Layout!.Groups)

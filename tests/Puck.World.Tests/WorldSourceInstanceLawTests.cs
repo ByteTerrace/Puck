@@ -359,7 +359,7 @@ public sealed class WorldSourceInstanceLawTests {
     // The host's adaptation of an opening, standing in for the producer that publishes the feed: it holds the opening,
     // disposes the feed with itself, and produces nothing.
     private sealed class OpenedSource(WorldImageSourceOpening opening) : IRenderGraphExternalProducer {
-        public SurfaceFormat Format => SurfaceFormat.R8G8B8A8Unorm;
+        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
         public string? NotReadyReason => (Opening.Fault ?? "the test source produces nothing");
 
         public WorldImageSourceOpening Opening { get; } = opening;

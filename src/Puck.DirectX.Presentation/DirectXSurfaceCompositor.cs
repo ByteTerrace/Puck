@@ -128,7 +128,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_presentMode = presentationOptions.PresentMode;
         // Map the neutral surface format to the back-buffer DXGI format (both are valid flip-model formats);
         // Vsync presents with sync interval 1, the other modes with 0.
-        m_surfaceFormat = ((SurfaceFormat.B8G8R8A8Unorm == presentationOptions.SurfaceFormat)
+        m_surfaceFormat = ((GpuPixelFormat.B8G8R8A8Unorm == presentationOptions.SurfaceFormat)
             ? GpuPixelFormat.B8G8R8A8Unorm
             : GpuPixelFormat.R8G8B8A8Unorm
         );
@@ -274,7 +274,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 pixels: surface.Pixels.Span,
                 width: surface.Width,
                 height: surface.Height,
-                format: GpuPixelFormats.FromSurfaceFormat(format: surface.Format)
+                format: surface.Format
             );
             sourceResource = m_cpuUpload.TextureHandle;
             sourceFormat = m_cpuUpload.TextureFormat;
@@ -282,7 +282,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             m_surfaceImport ??= deviceContext.Services.SurfaceTransferFactory.CreateImport();
             var imported = m_surfaceImport.Import(
                 sharedHandle: surface.SharedHandle,
-                format: GpuPixelFormats.FromSurfaceFormat(format: surface.Format),
+                format: surface.Format,
                 width: surface.Width,
                 height: surface.Height
             );

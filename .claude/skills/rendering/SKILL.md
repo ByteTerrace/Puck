@@ -210,8 +210,16 @@ These are one-line cautions; the owning pages hold the derivations.
   alike. `BakeSamplingDeviceLawTests` (`tests/Puck.World.Tests`, kernel
   `Assets/Shaders/bake-sampling.comp.hlsl`) samples each fixture probe on Vulkan,
   Direct3D 12 hardware and WARP; a fixture regeneration is checked there on the
-  GPU. The BC members share the baker's `TextureFormat` names until the
-  pixel-format fold (rendering plan P17) makes one vocabulary.
+  GPU.
+- **One pixel-format vocabulary.** `GpuPixelFormat` is the format of a GPU
+  image, a swapchain, a `Surface` (which admits only `R8G8B8A8Unorm` and
+  `B8G8R8A8Unorm`, `Surface.IsSurfaceFormat`) and a baked texture's levels;
+  `GpuPixelFormats.UnitBytes` is the one statement of a texel's or block's
+  bytes, which the codecs, `LevelByteLength` and the pipeline budget read. Never
+  add a second format enum or a conversion between two; a new format is a member
+  here with a row in each backend's map (`VulkanGpuFormats`, `DirectXGpuFormats`).
+  `ImagePixelFormat` is not a pixel format of an image: it is an uploaded
+  source's region-header code (a sync pair with `image-source.hlsli`).
 - **Bakes are presentation only** and nothing draws one yet. `BAKE` does not
   derive on boot (`ICompiledWorldChunk.DerivesOnBoot`); a presentation bakes a
   missing prototype through `WorldBakeSchedule`, never on the frame thread.

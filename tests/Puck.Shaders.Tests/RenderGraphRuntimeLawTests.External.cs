@@ -794,7 +794,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public int DeviceLosses { get; private set; }
         public int Disposals { get; private set; }
         public (uint Width, uint Height) Extent { get; private set; }
-        public SurfaceFormat Format => SurfaceFormat.R8G8B8A8Unorm;
+        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
         public bool Holding { get; set; }
         public nint Image => m_image!.ImageHandle;
         public nint ImageView => m_image!.ImageViewHandle;
@@ -867,7 +867,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Acquired++;
             output = new RenderGraphExternalOutput(
                 Image: Surface.SameDeviceImage(
-                    format: SurfaceFormat.R8G8B8A8Unorm,
+                    format: GpuPixelFormat.R8G8B8A8Unorm,
                     height: image.Height,
                     imageHandle: image.ImageHandle,
                     imageViewHandle: image.ImageViewHandle,
