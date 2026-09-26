@@ -199,8 +199,13 @@ public sealed class WorldCaptureFillLawTests {
                 m_held.Wait();
             };
 
+            var pipelines = new GpuPassPipelineCache();
             var producers = new WorldImageProducers();
-            var packages = new RenderGraphPackageRecorders();
+            // The fake device reports no memory, so a fill's region stages and its graph builds the region copy too.
+            var packages = new RenderGraphPackageRecorders(regionCopy: new GpuRegionCopyPass(
+                kernel: new byte[] { 1 },
+                pipelines: pipelines
+            ));
 
             producers.Register(producer: new FakeCaptureProducer());
             producers.Register(producer: new WorldTestPatternProducer());
@@ -223,7 +228,7 @@ public sealed class WorldCaptureFillLawTests {
                 graphs: new RenderGraphRuntimeGraph?[set.Instances.Count],
                 hostsOnDirectX: false,
                 packages: packages,
-                pipelines: new GpuPassPipelineCache(),
+                pipelines: pipelines,
                 refusal: out var refusal,
                 root: set.Instances[0].Name,
                 runtime: out var runtime,
