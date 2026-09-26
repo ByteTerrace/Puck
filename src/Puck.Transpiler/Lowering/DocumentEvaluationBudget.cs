@@ -17,9 +17,9 @@ public sealed class DocumentEvaluationBudget {
 
     private int m_depth;
     private int m_work;
-    // Each string node a vocabulary recorded as written beside a directory, by reference, so a record follows the node
-    // through every copy this budget makes.
-    private Dictionary<JsonNode, string>? m_writtenBeside;
+    // Each string node a vocabulary recorded as written beside a directory, keyed weakly by reference, so a record
+    // follows the node through every copy this budget makes and never keeps a discarded node alive.
+    private System.Runtime.CompilerServices.ConditionalWeakTable<JsonNode, string>? m_writtenBeside;
 
     /// <summary>Gets the cancellation signal shared by all evaluations in this compilation.</summary>
     public CancellationToken CancellationToken { get; init; }
@@ -54,7 +54,7 @@ public sealed class DocumentEvaluationBudget {
         );
         var copy = value?.DeepClone();
 
-        if ((m_writtenBeside is { Count: > 0 }) && (value is not null)) {
+        if ((m_writtenBeside is not null) && (value is not null)) {
             CarryWrittenBeside(copy: copy!, source: value);
         }
 
@@ -68,7 +68,7 @@ public sealed class DocumentEvaluationBudget {
         ArgumentNullException.ThrowIfNull(argument: value);
         ArgumentNullException.ThrowIfNull(argument: directory);
 
-        (m_writtenBeside ??= new(comparer: ReferenceEqualityComparer.Instance))[value] = directory;
+        (m_writtenBeside ??= new()).AddOrUpdate(key: value, value: directory);
     }
     /// <summary>Returns the directory recorded for a node by <see cref="NoteWrittenBeside"/>, carried through copies.</summary>
     /// <param name="value">The node.</param>
@@ -85,7 +85,7 @@ public sealed class DocumentEvaluationBudget {
         switch (source) {
             case JsonValue:
                 if (m_writtenBeside!.TryGetValue(key: source, value: out var directory)) {
-                    m_writtenBeside[copy] = directory;
+                    m_writtenBeside.AddOrUpdate(key: copy, value: directory);
                 }
                 break;
             case JsonArray array:
