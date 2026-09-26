@@ -170,7 +170,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Equal(expected: 2, actual: source.Produced);
         }
     }
-
     // A source that hands out an image view alone, as a camera or a capture does, names no image a graph's barriers can
     // name: a graph instance reading it draws a stand-in, and the lease its acquisition returned is retired at once.
     [Fact]
@@ -226,6 +225,108 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         Assert.True(condition: (source.Acquired > 0));
         Assert.Equal(expected: source.Acquired, actual: source.Released);
+    }
+    // A mirror is an external view reading its own output: each frame it is handed the output it completed the frame
+    // before, never the one it is producing, and before its first frame it is handed nothing.
+    [Fact]
+    public void AMirrorFacingItselfShowsThePreviousFrame() {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders();
+        var mirror = new MirrorView();
+
+        recorders.Registry.RegisterProducer(
+            factory: _ => mirror,
+            package: World
+        );
+
+        using var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(new RenderGraphInstance(
+                ExternalPackage: World,
+                Name: "mirror",
+                Passes: WorldPasses,
+                Reads: [new RenderGraphRead(Producer: "mirror")],
+                Refresh: RenderGraphRefresh.EveryFrame
+            )),
+            "mirror",
+            ((RenderGraphRuntimeGraph)null!)
+        );
+
+        for (var index = 0; (index < 4); index++) {
+            var frame = new RenderGraphFrame(
+                DisplayHeight: Display,
+                DisplayHertz: 60,
+                DisplayWidth: Display,
+                Footprints: [],
+                Index: index,
+                Roots: [new RenderGraphRoot(Height: 1.0, Instance: "mirror", Width: 1.0)],
+                Tick: index
+            );
+
+            _ = runtime.ProduceFrame(
+                context: default,
+                frame: in frame
+            );
+        }
+
+        Assert.Equal(expected: [0, 1, 2, 3], actual: mirror.Seen);
+        Assert.Equal(expected: mirror.Acquired, actual: mirror.Released);
+    }
+
+    /// <summary>An external view that reads itself: frame n's output is image n, and it records which completed frame it
+    /// was handed, zero for none.</summary>
+    private sealed class MirrorView : IRenderGraphExternalProducer {
+        private int m_completed;
+
+        public int Acquired { get; private set; }
+        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
+        public string? NotReadyReason => ((m_completed == 0) ? "the mirror has not produced" : null);
+        public string? PendingCapturePath => null;
+        public int Released { get; private set; }
+
+        public List<int> Seen { get; } = [];
+        public IGpuWorkSource Work { get; } = new GpuWorkLedger(
+            framesInFlight: 3,
+            name: "test.mirror"
+        );
+
+        public void Dispose() { }
+        public void OnDeviceLost() { }
+        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+            var self = reads![reads.IndexOf(producer: "mirror")];
+
+            Seen.Add(item: ((int)self.Lease.ImageViewHandle));
+            m_completed++;
+
+            return true;
+        }
+        public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException());
+        public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
+            if (m_completed == 0) {
+                output = default;
+
+                return false;
+            }
+
+            Acquired++;
+            output = new RenderGraphExternalOutput(
+                Image: Surface.SameDeviceImage(
+                    format: GpuPixelFormat.R8G8B8A8Unorm,
+                    height: 1,
+                    imageHandle: (0x100 + m_completed),
+                    imageViewHandle: m_completed,
+                    width: 1
+                ),
+                Layout: GpuImageLayout.ShaderReadOnly,
+                Lease: new GpuImageLease(
+                    ImageViewHandle: m_completed,
+                    Release: _ => Released++
+                )
+            );
+
+            return true;
+        }
     }
     /// <summary>A source producer over one image, declaring a fixed extent at a cadence, every acquisition and release
     /// counted.</summary>

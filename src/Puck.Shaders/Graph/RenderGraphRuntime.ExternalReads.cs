@@ -2,10 +2,10 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-// The images an external producer reads. An external instance may read other instances' images within the frame (the
-// set refuses its buffer and previous-frame reads): before it produces, the runtime binds each read to the latest
-// completed output of the instance read, an external producer's under the lease its acquisition returns and a graph
-// instance's unleased, and hands the list to Produce. The producer takes the leases its submission samples; the rest are
+// The images an external producer reads (the set refuses its buffer reads): before it produces, the runtime binds each
+// read to the latest completed output of the instance read, an external producer's under the lease its acquisition
+// returns and a graph instance's unleased, and hands the list to Produce. A read of the producer's own output therefore
+// binds the output it completed before this frame. The producer takes the leases its submission samples; the rest are
 // retired once Produce returns.
 public sealed partial class RenderGraphRuntime {
     // Each external instance's reads, or null for one that reads nothing, for the set they were made for.

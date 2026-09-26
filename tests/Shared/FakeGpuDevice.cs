@@ -83,7 +83,13 @@ internal sealed class FakeGpuDevice :
         };
     }
 
+    // The images created with a handle of their own, while DistinctImages is set.
+    private int m_distinctImages;
+
     public long AdapterLuid => 0L;
+    /// <summary>Gets or sets whether each image created from now on carries an image and view handle of its own rather than
+    /// the fake's one fixed pair, so a law can tell images apart by handle.</summary>
+    public bool DistinctImages { get; set; }
     /// <summary>Gets or sets a hook every compute pipeline creation runs first, with the pipeline's description, on
     /// whatever thread creates it — a law holds a pipeline build by blocking here, and counts or orders creations.</summary>
     public Action<GpuComputePipelineDescription>? BeforeComputePipeline { get; set; }
@@ -521,6 +527,10 @@ internal sealed class FakeGpuDevice :
     IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
         Hit(key: "IGpuImageFactory.Create");
 
+        var distinct = (DistinctImages
+            ? Interlocked.Increment(location: ref m_distinctImages)
+            : 0);
+
         return Named(
             kind: GpuObjectKind.Image,
             name: in name,
@@ -532,6 +542,8 @@ internal sealed class FakeGpuDevice :
                 ),
                 gpu: this,
                 height: height,
+                imageHandle: ((distinct == 0) ? 4 : (0x1000 + distinct)),
+                imageViewHandle: ((distinct == 0) ? 5 : (0x2000 + distinct)),
                 width: width
             )
         );
@@ -642,7 +654,7 @@ internal sealed class FakeGpuDevice :
             ? ((nint)(20 + ordinal))
             : 0))]);
 
-    private sealed class Resource(FakeGpuDevice gpu, Creation? creation = null, uint width = 1, uint height = 1, ulong sizeBytes = 0, IReadOnlyList<nint>? groupLayouts = null) :
+    private sealed class Resource(FakeGpuDevice gpu, Creation? creation = null, uint width = 1, uint height = 1, ulong sizeBytes = 0, IReadOnlyList<nint>? groupLayouts = null, nint imageHandle = 4, nint imageViewHandle = 5) :
         IGpuCommandPool,
         IGpuComputePipeline,
         IGpuFramebuffer,
@@ -665,8 +677,8 @@ internal sealed class FakeGpuDevice :
         nint IGpuShaderModule.Handle => 6;
 
         public uint Height => height;
-        public nint ImageHandle => 4;
-        public nint ImageViewHandle => 5;
+        public nint ImageHandle => imageHandle;
+        public nint ImageViewHandle => imageViewHandle;
         public nint LayoutHandle => 13;
         public ulong SizeBytes => sizeBytes;
         public uint Width => width;

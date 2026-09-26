@@ -1062,10 +1062,16 @@ buffer is larger than the producer's (`InputFormat`). An external instance
 through its own submissions, and each consumer binds its latest output under
 a `GpuImageLease` that the consumer node's per-slot `LeaseRetireList` holds
 until that slot's fence (the leased `BindImage` serves one frame). The set
-refuses an external instance's buffer, own and previous-frame reads, and any
-previous-frame read of one; its image reads reach `Produce` as a
-`RenderGraphExternalReads`, whose leases the producer `Take`s for what its
-submission samples, the runtime retiring the rest.
+refuses an external instance's buffer reads; it may read its own output and
+any instance's previous frame, and any instance an external producer's
+previous frame, which binds the producer's latest completed output as the
+reader renders (for a self-read, the reader's previous frame). Its image reads
+reach `Produce` as a `RenderGraphExternalReads`, whose leases the producer
+`Take`s for what its submission samples, the runtime retiring the rest. A view
+whose current output is bound as one of its own screens renders into another
+output (`SdfWorldEngine.ViewOutputs`, a replaced output of its extent reused
+once nothing holds it), so a mirror samples its previous image and never the
+one it writes.
 `SdfEngineNode` is the `sdf.world` producer for view 0 (`world`), and
 `SdfEngineNode.ViewProducer(view)` is the producer of each later view
 (`world$2..world$K`, named by `WorldViewNames.World`). The node renders every

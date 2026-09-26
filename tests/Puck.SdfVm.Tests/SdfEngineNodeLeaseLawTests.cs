@@ -430,6 +430,60 @@ public sealed class SdfEngineNodeLeaseLawTests {
         );
         Assert.Equal(actual: released, expected: 0);
     }
+    // A mirror: a screen sampling the node's own view binds the output the view completed before, and the engine renders
+    // the frame into another image, reusing a replaced one once nothing holds it, so a steady mirror cycles through at
+    // most three images: the one it writes, the one it samples, and the one a ring slot's fence still holds.
+    [Fact]
+    public void AViewSamplingItsOwnOutputNeverWritesTheImageItSamples() {
+        const string Self = "mirror";
+        var reads = new RenderGraphExternalReads(producers: [Self]);
+        var written = new HashSet<nint>();
+
+        using var rig = new Rig(
+            screenSources: new ScreenSources(
+                readOf: static _ => Self,
+                rendered: static _ => throw new InvalidOperationException(message: "A screen reading an instance is never rendered."),
+                screens: [0]
+            ),
+            trackObjects: true
+        );
+
+        rig.Gpu.DistinctImages = true;
+        rig.ProduceFirst();
+
+        var images = rig.LiveImages().Length;
+
+        for (var frame = 0; (frame < 8); frame++) {
+            Assert.True(condition: rig.Node.TryAcquireOutput(output: out var previous));
+            reads.Bind(
+                image: previous.Image,
+                index: 0,
+                layout: previous.Layout,
+                lease: previous.Lease
+            );
+            Assert.True(condition: rig.Node.Produce(
+                context: rig.Context,
+                height: Extent,
+                reads: reads,
+                width: Extent
+            ));
+            reads.RetireUntaken();
+            Assert.True(condition: rig.Node.TryAcquireOutput(output: out var current));
+            Assert.Equal(
+                actual: rig.Node.BoundScreenSource(screen: 0),
+                expected: previous.Image.ImageViewHandle
+            );
+            Assert.NotEqual(
+                actual: current.Image.ImageViewHandle,
+                expected: previous.Image.ImageViewHandle
+            );
+            current.Lease.Retire();
+            _ = written.Add(item: current.Image.ImageViewHandle);
+        }
+
+        Assert.Equal(actual: written.Count, expected: 3);
+        Assert.Equal(actual: rig.LiveImages().Length, expected: (images + 2));
+    }
 
     private sealed class ScreenSources(IReadOnlyList<int> screens, Func<int, string?> readOf, Func<int, GpuImageLease> rendered) : ISdfScreenSources {
         public IReadOnlyList<int> Screens => screens;

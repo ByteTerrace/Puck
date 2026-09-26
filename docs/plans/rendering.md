@@ -663,13 +663,10 @@ all four live. The notes below record how each landed.
   commit 6.
   - `RenderGraphInstance` has a kind (`RenderGraphInstanceKind`): a graph it
     renders, or an external producer named by `ExternalPackage`.
-    `RenderGraphInstanceSet.TryCreate` refuses an external instance that
-    declares reads (`ExternalReads`), and a previous-frame read of an external
-    producer (`ExternalPreviousFrame`), each by name. The engine writes each
-    view's output image (`SdfWorldEngine.OutputImageHandle` is view 0's) and
-    its next render overwrites it, so a previous-frame read would sample the current frame, and
-    the output is not double-buffered to allow one; the refusal covers every
-    external producer, and `sdf.world` is the only one until P14-6. The
+    `RenderGraphInstanceSet.TryCreate` refuses an external instance's buffer
+    reads (`ExternalReads`) by name. Each view writes its own output image
+    (`SdfWorldEngine.OutputImageHandle` is view 0's), and a view whose output
+    one of its own screens samples renders into another (commit 13). The
     scheduler is unchanged: demand, divisor, quantized extent, and the price
     the instance declares, `SdfWorldEngine.PassLabels.Length` passes for
     `sdf.world`.
@@ -1027,7 +1024,7 @@ P11b's last four commits are these; 11 and 12 have landed:
        (`SdfWorldEngine.ViewOutputs`), reusing a replaced output of its extent
        once nothing holds it, so a mirror samples its previous image and never
        the one it writes. Laws: a mirror facing itself shows the previous
-       frame; a self-reading view never writes the image it samples.
+       frame; a self-reading view never writes the image it samples. Landed.
     2. Camera views and sessions are `sdf.world` instances. Each camera a
        screen, a HUD frame or a probe export shows is an external instance of
        `sdf.world` named by its registration, rendered by an `SdfEngineNode` of

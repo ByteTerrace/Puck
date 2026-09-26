@@ -188,24 +188,12 @@ public sealed partial class SdfWorldEngine {
         m_retiredViewOutputs.Clear();
     }
     // Sizes each of this frame's views' outputs at its extent: the extent a host asked for, or the default, clamped to the
-    // engine's extent. A view whose extent moved gets a new image, and the replaced one retires. Called after the slot's
-    // fence wait, which also lets a retired image whose last writer has completed and whose last acquisition was
-    // released be disposed.
+    // engine's extent. A view whose extent moved, or whose output one of this frame's screens samples, gets another image
+    // (a replaced one of its extent that nothing holds, or a new one), and the replaced one retires, so a view filming
+    // itself samples the image it rendered before and never the one it writes. An export's image is fixed, so a screen
+    // sampling it is left unbound for the frame. Called after the slot's fence wait, which also lets a retired image whose
+    // last writer has completed and whose last acquisition was released be reused or disposed.
     private void EnsureViewOutputs(SdfFrame frame, uint viewportCount) {
-        for (var index = (m_retiredViewOutputs.Count - 1); (index >= 0); index--) {
-            var retired = m_retiredViewOutputs[index];
-
-            // The last frame that wrote it was the one before its retirement, whose slot fence this frame's or an earlier
-            // wait has passed once the ring has advanced past it.
-            if (
-                (retired.Holds == 0) &&
-                (m_ringFrame > (retired.RetiredAt + 1))
-            ) {
-                retired.Image.Dispose();
-                m_retiredViewOutputs.RemoveAt(index: index);
-            }
-        }
-
         m_viewOutputReplaced = false;
 
         for (var view = 0; (view < ((int)viewportCount)); view++) {
@@ -215,9 +203,19 @@ public sealed partial class SdfWorldEngine {
             );
 
             if (m_viewOutputs[view] is { } current) {
+                var sampled = SamplesAsScreen(imageView: current.Image.ImageViewHandle);
+
+                if ((view == 0) && m_exportMode) {
+                    if (sampled) {
+                        UnbindScreens(imageView: current.Image.ImageViewHandle);
+                    }
+
+                    continue;
+                }
                 if (
-                    ((current.Width == width) && (current.Height == height)) ||
-                    ((view == 0) && m_exportMode)
+                    (current.Width == width) &&
+                    (current.Height == height) &&
+                    !sampled
                 ) {
                     continue;
                 }
@@ -226,7 +224,10 @@ public sealed partial class SdfWorldEngine {
                 m_retiredViewOutputs.Add(item: current);
             }
 
-            m_viewOutputs[view] = new ViewOutput(
+            m_viewOutputs[view] = (TakeFreeOutput(
+                height: height,
+                width: width
+            ) ?? new ViewOutput(
                 height: height,
                 identity: NextOutputIdentity(),
                 image: m_gpu.ImageFactory.Create(
@@ -237,15 +238,71 @@ public sealed partial class SdfWorldEngine {
                     width: width
                 ),
                 width: width
-            );
+            ));
             m_viewOutputReplaced = true;
 
             foreach (var bound in m_boundOutputViews) {
                 bound[view] = 0;
             }
         }
+
+        for (var index = (m_retiredViewOutputs.Count - 1); (index >= 0); index--) {
+            var retired = m_retiredViewOutputs[index];
+
+            if (IsFree(output: retired)) {
+                retired.Image.Dispose();
+                m_retiredViewOutputs.RemoveAt(index: index);
+            }
+        }
     }
-    // The extent a view renders at this frame.
+    // Whether a retired output is free: no acquisition holds it, and the last frame that wrote it, the one before its
+    // retirement, has passed the fence wait of the slot it used, which the ring has done once it advanced past it.
+    private bool IsFree(ViewOutput output) => (
+        (output.Holds == 0) &&
+        (m_ringFrame > (output.RetiredAt + 1))
+    );
+    // Whether one of this frame's bound screens samples an image view.
+    private bool SamplesAsScreen(nint imageView) {
+        for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
+            if (
+                (0u != (m_screenSourceMask & (1u << screen))) &&
+                (m_screenSourceViews[screen] == imageView)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Takes a free retired output of an extent back into use, or returns null when none is.
+    private ViewOutput? TakeFreeOutput(uint width, uint height) {
+        for (var index = 0; (index < m_retiredViewOutputs.Count); index++) {
+            var retired = m_retiredViewOutputs[index];
+
+            if (
+                (retired.Width == width) &&
+                (retired.Height == height) &&
+                IsFree(output: retired) &&
+                !SamplesAsScreen(imageView: retired.Image.ImageViewHandle)
+            ) {
+                m_retiredViewOutputs.RemoveAt(index: index);
+                retired.Rendered = false;
+
+                return retired;
+            }
+        }
+
+        return null;
+    }
+    // Leaves every screen sampling an image view unbound for this frame.
+    private void UnbindScreens(nint imageView) {
+        for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
+            if (m_screenSourceViews[screen] == imageView) {
+                m_screenSourceViews[screen] = 0;
+                m_screenSourceMask &= ~(1u << screen);
+            }
+        }
+    }    // The extent a view renders at this frame.
     private (uint Width, uint Height) ViewExtentOf(SdfFrame frame, int view) {
         if ((view == 0) && m_exportMode) {
             return (m_width, m_height);
