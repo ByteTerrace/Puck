@@ -280,14 +280,14 @@ public sealed class RenderGraphPackageCatalog {
     );
 
     /// <summary>Gets what <see cref="Overlay"/>'s fragment stage reads from its pass group beside the extent: three
-    /// per-frame values its recorder writes (<c>counts</c>: panel and element counts and the atlas cell's width and
-    /// height; <c>sdf</c>: the distance range, the outline band and the panel and element bases; <c>misc</c>: the text,
-    /// atlas and clip bases and the glyph count), then its input image, its frame slot images, the one sampler they are
-    /// all read through, and its storage buffer.</summary>
+    /// per-frame values its recorder writes, in name order as a document writes config fields (<c>counts</c>: panel and
+    /// element counts and the atlas cell's width and height; <c>misc</c>: the text, atlas and clip bases and the glyph
+    /// count; <c>sdf</c>: the distance range, the outline band and the panel and element bases), then its input image, its
+    /// frame slot images, the one sampler they are all read through, and its storage buffer.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> OverlayMembers { get; } = [
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "counts", type: ShaderValueType.Float4),
-        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "sdf", type: ShaderValueType.Float4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "misc", type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "sdf", type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: OverlaySource, type: ShaderValueType.Float4),
         .. Enumerable.Range(
             count: OverlayFrameSlotCount,

@@ -239,12 +239,12 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             m_values = ((int)parameters.BlockOffsetOf(member: "counts"));
 
             if (
-                (parameters.BlockOffsetOf(member: "sdf") != (m_values + 16)) ||
-                (parameters.BlockOffsetOf(member: "misc") != (m_values + 32))
+                (parameters.BlockOffsetOf(member: "misc") != (m_values + 16)) ||
+                (parameters.BlockOffsetOf(member: "sdf") != (m_values + 32))
             ) {
                 built.Dispose();
 
-                throw new InvalidDataException(message: "The overlay's pass block does not hold counts, sdf and misc as three consecutive float4 rows.");
+                throw new InvalidDataException(message: "The overlay's pass block does not hold counts, misc and sdf as three consecutive float4 rows.");
             }
 
             try {
