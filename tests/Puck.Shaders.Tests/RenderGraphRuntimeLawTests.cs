@@ -19,18 +19,21 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
     private static readonly RenderGraphPackageCatalog Catalog = new(packages: [
         new RenderGraphPackage(
+            Members: [],
             Id: Camera,
             Inputs: [],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Summary: "A camera view whose recorder counts its renders."
         ),
         new RenderGraphPackage(
+            Members: [],
             Id: Over,
             Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
             Summary: "A pass drawn over its input, which may draw nothing."
         ),
         new RenderGraphPackage(
+            Members: [],
             Id: Pool,
             Inputs: [],
             Outputs: [RenderGraphPackagePort.Buffer(
@@ -225,10 +228,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
             }
         }
 
-        public IReadOnlyList<GpuComputeBinding> SetBindings => [];
-
         public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
-        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, nint descriptorPool) => Create(context: context);
+        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => Create(context: context);
 
         public Dictionary<string, Counter> ByInstance { get; } = new(comparer: StringComparer.Ordinal);
         public RenderGraphPackageRecorders Registry { get; } = new();

@@ -61,13 +61,10 @@ public sealed class ShaderFrameBlockLawTests {
     ]);
 
     private static uint Bits(float value) => BitConverter.SingleToUInt32Bits(value: value);
-    // The blocks the host writes for a layout, by set: a pushed layout's one block, holding the extent and the frame
-    // values; or a document pass's frame group block and its pass block, which holds its extent.
+    // The blocks the host writes for a layout, by set: the frame group block and the pass block, which holds the extent.
     private static Dictionary<uint, byte[]> HostBlocks(ShaderPipelineParameterLayout layout) {
         var pass = new byte[layout.SizeBytes];
-        var frame = (layout.IsPushed
-            ? pass
-            : new byte[layout.FrameBlockSizeBytes]);
+        var frame = new byte[layout.FrameBlockSizeBytes];
 
         layout.WriteExtent(
             block: pass,
@@ -81,9 +78,7 @@ public sealed class ShaderFrameBlockLawTests {
             values: Values
         );
 
-        return (layout.IsPushed
-            ? new() { [0] = pass }
-            : new() { [0] = frame, [3] = pass });
+        return new() { [0] = frame, [3] = pass };
     }
     // Holds every frame member the module reflects to the word the host writer put at the reflected offset.
     private static int AssertHostWords(ShaderInterfaceBinding reflected, byte[] block) {
@@ -110,8 +105,7 @@ public sealed class ShaderFrameBlockLawTests {
         return checkedMembers;
     }
     // Holds every block a module reflects to the host's block of its set, and every frame member of it to its word: a
-    // pushed block holds the extent and every frame value, a frame group block every frame value, and a pass block the
-    // extent.
+    // frame group block holds every frame value, and a pass block the extent.
     private static void AssertHostBlocks(IReadOnlyList<ShaderInterfaceBinding> reflected, Dictionary<uint, byte[]> blocks) {
         foreach (var binding in reflected.Where(predicate: static binding => (binding.Members.Count != 0))) {
             Assert.Equal(
@@ -119,11 +113,9 @@ public sealed class ShaderFrameBlockLawTests {
                     block: blocks[binding.Set],
                     reflected: binding
                 ),
-                expected: (binding.Pushed
-                    ? ShaderFrameInterface.PushedMembers.Count
-                    : ((binding.Set == 0)
-                        ? ShaderFrameInterface.FrameGroupMembers.Count
-                        : 1))
+                expected: ((binding.Set == 0)
+                    ? ShaderFrameInterface.FrameGroupMembers.Count
+                    : 1)
             );
         }
     }
@@ -131,9 +123,10 @@ public sealed class ShaderFrameBlockLawTests {
     [Fact]
     public void The_host_writer_puts_every_frame_member_where_the_layout_places_it() {
         foreach (var layout in (ShaderPipelineParameterLayout[])[
-            ShaderPipelineParameterLayout.Pushed(
+            ShaderPipelineParameterLayout.ForPackage(
                 config: null,
-                interfaceName: "writer"
+                members: [],
+                package: "writer"
             ),
             ShaderPipelineParameterLayout.Resolve(
                 pass: new ShaderPipelinePass(
@@ -226,7 +219,8 @@ public sealed class ShaderFrameBlockLawTests {
             )),
             expected: ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface)
         );
-        // The set's images are its manifest's bindings, not its interface's; its interface lays out the pushed block alone.
-        Assert.Null(@object: manifest.FrameLayout.Layout.Mismatch(reflected: [.. SpirvInterfaceReader.Read(module: manifest.Bytecode["sdf-film-grain.frag.spv"].Span).Where(predicate: static binding => binding.Pushed)]));
+        // The compiled set reads every block and binding where its interface places them, its manifest's image and sampler
+        // among them.
+        Assert.Null(@object: manifest.FrameLayout.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: manifest.Bytecode["sdf-film-grain.frag.spv"].Span)));
     }
 }

@@ -70,7 +70,12 @@ public static partial class ShaderPipelinePassPorts {
 
         void Add(ShaderInterfaceMember member, string port) {
             if (
-                ShaderFrameInterface.PushedMembers.Any(predicate: value => string.Equals(
+                string.Equals(
+                    a: member.Name,
+                    b: ShaderFrameInterface.Extent,
+                    comparisonType: StringComparison.Ordinal
+                ) ||
+                ShaderFrameInterface.FrameGroupMembers.Any(predicate: value => string.Equals(
                     a: value.Name,
                     b: member.Name,
                     comparisonType: StringComparison.Ordinal

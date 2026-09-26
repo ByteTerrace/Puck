@@ -9,7 +9,7 @@ A shader set is data: one HLSL source (or a vertex+fragment pair) and one
 `puck.shader.manifest.v1` manifest beside it. The manifest declares everything the
 engine needs to run the set—its stages, its descriptor bindings, and the
 configuration a document may author for it, which reaches the set's stages
-through its [frame block](#frame-values-extent-and-ports). The engine loads that manifest
+through its [pass block](#frame-values-extent-and-ports). The engine loads that manifest
 beside the compiled bytecode, so a document selects a set by id without a C#
 node, config parser, or registration for each shader.
 
@@ -30,7 +30,8 @@ Assets/Shaders/Sdf/sdf-film-grain.puck.shader.json
   "description": "Film grain: a per-pixel integer-hashed offset added over the rendered output.",
   "stages": { "vertex": "fullscreen.vert", "fragment": "sdf-film-grain.frag" },
   "bindings": [
-    { "kind": "sampledImage", "vulkanBinding": 0, "directXRegister": "t0" }
+    { "kind": "SampledImage", "name": "source" },
+    { "kind": "Sampler", "name": "sourceSampler" }
   ],
   "targetFloor": { "vulkan": "1.3", "shaderModel": "6.6" },
   "config": {
@@ -43,8 +44,9 @@ Assets/Shaders/Sdf/sdf-film-grain.puck.shader.json
 ```
 
 The fragment stage includes `sdf-film-grain.interface.hlsli`, the declarations
-generated from the set's [frame block](#frame-values-extent-and-ports), and reads
-`frameGroup.intensity`, `frameGroup.tick` and the rest through it. The build
+generated from the set's [interface](#frame-values-extent-and-ports), and reads
+`passGroup.intensity`, `frameGroup.tick` and the rest through it, sampling `source`
+with `sourceSampler`. The build
 compiles the HLSL to SPIR-V and DXIL, writes a `.hash` sidecar per bytecode
 file, and ships the manifest beside the bytecode. A world document then
 authors:
@@ -74,12 +76,13 @@ manifest's config schema into the world-document JSON Schema, so
 | `name` | The set's id; the manifest filename is `<name>.puck.shader.json`. |
 | `description` | Carried into the emitted config JSON Schema. |
 | `stages` | `{ "vertex", "fragment" }` (a graphics set) or `{ "compute" }`; each a sibling `<stem>.hlsl` compiled to `<stem>.spv` and `<stem>.dxil`. |
-| `bindings[]` | `{ kind, vulkanBinding, directXRegister, count }`; `kind` is `storageBuffer`, `sampledImage`, or `storageImage`. Authored by hand and cross-checked against the pipeline description built for the set. A fullscreen pass declares exactly one `sampledImage` (the inner surface). |
+| `bindings[]` | `{ kind, name }`: the resources the set reads, as members of its pass group after the config, in order. `kind` is a `GpuBindingKind`: `SampledImage`, `Sampler`, `ReadOnlyBuffer` or `ReadWriteBuffer`. Where each binds follows from the interface, never from the manifest. A fullscreen pass declares exactly one `SampledImage` (its input) and only samplers besides. |
 | `targetFloor` | `{ vulkan, shaderModel }` the bytecode was compiled against. |
 | `config` | Name → `{ type, default, min, max, description }`. `type` is an HLSL spelling: `float`, `float2..4`, `uint`, `uint2..4`, `int`, `int2..4`; a vector's document value is an array of that many numbers. A field without `default` is required. `min`/`max` are inclusive, per component. A field's name must not repeat a [frame member's](#frame-values-extent-and-ports). |
 
-A set's config reaches its stages through the set's frame block, the frame
-interface named for the set (`ShaderSetManifest.FrameLayout`). A set compiles
+A set's config reaches its stages through its pass block, laid out by the
+interface named for the set (`ShaderSetManifest.FrameLayout`), which binds the
+frame and pass groups a document pass binds. A set compiles
 at build, so its generated declarations are checked in beside its source:
 `puck shaders interface <manifest> --write` writes
 `<name>.interface.hlsli`, and `ShaderFrameBlockLawTests` holds the checked-in
@@ -211,19 +214,19 @@ each member in both bytecodes, and holds the bytes the host writer put there
 to the values it was given. A pass that reads nothing from a block leaves DXC
 free to drop it.
 
-A shader set's pass and an engine package's pass read one pushed block instead:
-the extent, the frame values and the config in that order, delivered as Vulkan
-push constants and Direct3D 12 root constants at register `b0`, space 0, with
-their resources at the bindings the manifest or package states.
+A shader set's pass and an engine package's pass bind the same two groups. Their
+pass group holds the extent, the config, and then the members they declare
+instead of ports: a package's catalog entry (`RenderGraphPackage.Members`) lists
+the values its recorder writes into the pass block each frame and the resources
+it binds, and a set's manifest lists its `bindings`. Nothing is pushed.
 
 Image formats are validated against `GpuPixelFormat`, and an image declares a
 color format. A graphics pass draws into its color output at that output's
 declared format. A compute pass writes its
 storage images through `[[vk::image_format(...)]]` declarations matching each
-image's format. Planner defaults admit the Vulkan portable minimums: a pushed
-block of at most 128 bytes, the frame members and config together
-(`SHADERPIPE_PUSH_CONSTANT_LIMIT`), a pass block of at most 16384 bytes, the
-extent and config together (`SHADERPIPE_PASS_BLOCK_LIMIT`), and workgroups of
+image's format. Planner defaults admit the Vulkan portable minimums: a pass
+block of at most 16384 bytes, the extent, config and declared values together
+(`SHADERPIPE_PASS_BLOCK_LIMIT`), and workgroups of
 at most 128x128x64 with 128 invocations; hosts with larger limits may supply an
 explicitly verified `ShaderPipelineLimits` policy.
 
@@ -388,12 +391,17 @@ resolved images carry the layout their planned access left them in.
 A package id is served by an `IRenderGraphPackageFactory`. Its `Build` creates
 the pass's shader modules, pipelines and render passes on the thread pool with
 the candidate graph's shader passes, and its `Create` takes them when the graph
-installs and allocates its per-slot descriptor sets from the instance's one
-pool, which states the factory's `SetBindings`. A recorder records into the
-command buffer it is handed and never submits, waits or creates a pipeline.
-Each recording carries the pass's frame block, written as a shader pass's is
-(the frame members, then the package's config), and the frame's lease list,
-which retires a lease after that frame slot's fence. A package pass may carry
+installs, with the pass's groups (`RenderGraphPackageGroups`): the instance's one
+descriptor pool, which holds a frame set and a pass set per frame slot for every
+pass, and each slot's frame and pass block buffers. The recorder allocates its
+sets from that pool against its own pipeline's group layouts
+(`RenderGraphPackageSets`). A recorder records into the command buffer it is
+handed and never submits, waits or creates a pipeline. Each recording carries the pass block, which the node has filled
+with the extent and config and into which the recorder writes the values its
+package declares (`RenderGraphPackageRecording.PassBlock`, placed by
+`ShaderPipelineParameterLayout.BlockOffsetOf`); the node uploads it once the
+recorder returns. A recording also carries the frame's lease list, which
+retires a lease after that frame slot's fence. A package pass may carry
 `config` values, which the graph compiler binds against the package's schema
 and refuses by name as `RENDERGRAPH_PACKAGE_CONFIG`. A recorder records no
 barrier: the instance records the pass's planned barriers first, so a
@@ -506,8 +514,8 @@ A pass interface is the grouped binding contract as data. It is the model the
 two-group binding spike built. Every pipeline pass, shader set and package pass
 reads its blocks through one. A document pass binds its frame group at set 0 and
 its pass group at set 3 as descriptor sets
-([frame values, extent and ports](#frame-values-extent-and-ports)); a shader
-set's pass and a package's pass push one block. The code lives in
+([frame values, extent and ports](#frame-values-extent-and-ports)), and so do a
+shader set's pass and a package's pass. The code lives in
 `src/Puck.Shaders/Interface/`; the spike's two variant passes and their laws
 live in `tests/Puck.Shaders.Tests`.
 
@@ -651,7 +659,7 @@ the non-throwing bind. `IShaderModuleLoader`/`ShaderModuleLoader` load and
 validate one shader stage's bytes from an `IAssetSource`, cached by content
 hash, for a caller building its own pipelines.
 `ShaderPipelineRenderNode.TrySetConfig(passName, config, out reason)` rebinds a
-pass's whole config, which its frame block carries from the next frame the node
+pass's whole config, which its pass block carries from the next frame the node
 renders; the World's parameter bindings write one scalar-`float` field of every
 pass composed from one `render.extensions` id through it
 (`WorldPostRenderExtensionPasses`), over each pass's own config, so an id the
@@ -990,9 +998,8 @@ The pass's source holds both stages: the vertex stage at `vertexEntryPoint` and
 the fragment stage at `entryPoint`. Attribute *n* is at location *n*, and the
 vertex stage reads it as `POSITIONn`, its *n*th declared input; a format is
 `R32G32Float`, `R32G32B32Float` or `R32G32B32A32Float`, at a four-byte-aligned
-offset inside the stride (`SHADERPIPE_VERTEX_LAYOUT`). The vertex stage
-receives no parameters, since the push-constant block reaches only the fragment
-stage, so positions are authored in clip space. `vertices` are 32-bit floats
+offset inside the stride (`SHADERPIPE_VERTEX_LAYOUT`). Positions are authored
+in clip space. `vertices` are 32-bit floats
 making whole, finite vertices (`SHADERPIPE_GEOMETRY_VERTICES`). `indices` are a
 triangle list, three per triangle (`SHADERPIPE_INDEX_COUNT`), each naming a
 declared vertex (`SHADERPIPE_INDEX_RANGE`), 16-bit by default or `UInt32`

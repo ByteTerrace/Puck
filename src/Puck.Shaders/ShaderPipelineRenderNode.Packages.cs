@@ -6,7 +6,7 @@ namespace Puck.Shaders;
 // A graph's package passes, recorded inside the node's own submission. The planner plans a package pass's barriers and
 // layouts from its ports' accesses as it plans a shader pass's, so the node allocates the versions it writes like any
 // pass's, records its planned barriers, and hands its recorder the command buffer with the versions bound to its ports
-// resolved for the frame slot in their planned layouts, the pass's frame block and the frame's lease list. The recorder
+// resolved for the frame slot in their planned layouts, the pass's pass block and the frame's lease list. The recorder
 // records no barrier. The package's factory builds its pipelines with the candidate's
 // shader passes on the thread pool; its recorder is created from those objects when the graph installs, records its own
 // work, binds its own descriptors from the graph's pool, and is disposed with the graph's passes, so a replacement, a
@@ -59,9 +59,6 @@ public sealed partial class ShaderPipelineRenderNode {
             return;
         }
 
-        var built = objects.PackageBuilt;
-
-        objects.PackageBuilt = null;
         runtime.PackageInputs = new RenderGraphPackageResource[runtime.Inputs.Length];
         runtime.PackageOutputs = new RenderGraphPackageResource[runtime.Outputs.Length];
         runtime.PackageInputLayouts = LayoutsOf(
@@ -76,12 +73,25 @@ public sealed partial class ShaderPipelineRenderNode {
             pass: runtime,
             planned: planned
         );
+
+        var built = objects.PackageBuilt;
+
+        // The recorder owns the build from here, whether or not it is created.
+        objects.PackageBuilt = null;
         runtime.Package = objects.PackageFactory!.Create(
             built: built,
             context: objects.PackageContext!,
-            descriptorPool: ((runtime.PackageSetBindings == 0)
-                ? 0
-                : descriptorPool)
+            groups: new RenderGraphPackageGroups(
+                DescriptorPool: descriptorPool,
+                FrameBlocks: [.. Enumerable.Range(
+                    count: ((int)m_inFlight),
+                    start: 0
+                ).Select(selector: slot => m_frameRegion!.Buffer(slot: slot))],
+                PassBlocks: [.. Enumerable.Range(
+                    count: ((int)m_inFlight),
+                    start: 0
+                ).Select(selector: slot => runtime.PassRegion!.Buffer(slot: slot))]
+            )
         );
     }
     // Why a pass that draws nothing cannot leave its outputs standing for its inputs, or null when it can: output i
@@ -209,7 +219,8 @@ public sealed partial class ShaderPipelineRenderNode {
         var recorder = m_gpu.Recorder;
         var inputs = pass.PackageInputs!;
         var outputs = pass.PackageOutputs!;
-        Span<byte> frameBlock = stackalloc byte[((int)pass.ParametersLayout.SizeBytes)];
+        var region = pass.PassRegion!;
+        Span<byte> passBlock = stackalloc byte[region.ByteCount];
 
         for (var index = 0; (index < inputs.Length); index++) {
             var input = pass.Inputs[index];
@@ -237,12 +248,9 @@ public sealed partial class ShaderPipelineRenderNode {
             );
         }
 
-        WriteFrameBlock(
-            bytes: frameBlock,
-            context: in context,
-            height: pass.Height,
-            pass: pass,
-            width: pass.Width
+        FillPassBlock(
+            block: passBlock,
+            pass: pass
         );
         recorder.BeginCommandBuffer(commandBufferHandle: handle);
         InitializeResources(
@@ -259,16 +267,23 @@ public sealed partial class ShaderPipelineRenderNode {
         var outcome = pass.Package!.Record(recording: new RenderGraphPackageRecording(
             CommandBuffer: handle,
             Context: context,
-            FrameBlock: frameBlock,
             Height: pass.Height,
             Inputs: inputs,
             Leases: m_frameLeases,
             MayStandIn: ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass) < 0)),
             Outputs: outputs,
+            PassBlock: passBlock,
             Recorder: recorder,
             Slot: slot,
             Width: pass.Width
         ));
+
+        // The recorder wrote its declared values beside the extent and config; the slot takes whichever words changed.
+        _ = region.Write(
+            bytes: passBlock,
+            offset: 0
+        );
+        region.Flush(slot: slot);
 
         ApplyOutcome(
             outcome: outcome,

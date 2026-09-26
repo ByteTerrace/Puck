@@ -7,10 +7,12 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// Laws of the <c>place</c> package (<see cref="PlacePackage"/>) on <see cref="FakePipelineGpu"/>: the deployed kernel
-/// run as a graph's package pass dispatches once over the output's extent with its base and source written at their
-/// bindings; a host placement replaces the pushed rect and sharpness without rebinding the config; a source the host
-/// shows nowhere draws nothing and the node publishes the base in the output's place; with no host placement the bound
-/// config's rect is what is pushed; and a steady placed frame allocates nothing.
+/// run as a graph's package pass dispatches once over the output's extent with its base and source written at the
+/// bindings its interface gives them and nothing pushed; a host placement replaces the rect and sharpness in the pass
+/// block the dispatch reads without rebinding the config; a source the host shows nowhere draws nothing and the node
+/// publishes the base in the output's place; with no host placement the bound config's rect is what the dispatch
+/// reads; a steady placed frame allocates nothing; and the kernel and its include read the interface the catalog
+/// declares.
 /// </summary>
 public sealed class PlacePackageLawTests {
     private const uint Extent = 64;
@@ -18,6 +20,12 @@ public sealed class PlacePackageLawTests {
 
     private static readonly ShaderPipelineExternalImage Base = Image(handle: 0x7000);
     private static readonly ShaderPipelineExternalImage Source = Image(handle: 0x8000);
+    // The layout the catalog declares for the package, which the plan lays every place pass out by.
+    private static readonly ShaderPipelineParameterLayout Layout = ShaderPipelineParameterLayout.ForPackage(
+        config: RenderGraphPackageCatalog.PlaceConfig,
+        members: RenderGraphPackageCatalog.PlaceMembers,
+        package: RenderGraphPackageCatalog.Place
+    );
 
     private static ShaderPipelineExternalImage Image(nint handle) => new(
         Format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -95,21 +103,30 @@ public sealed class PlacePackageLawTests {
         ),
         userMessage: "The pass never published a frame."
     );
-    // The rect and sharpness the last recorded frame pushed, read at the frame block's config offsets.
-    private static (float Left, float Top, float Width, float Height, float Sharpness) Pushed(FakePipelineGpu gpu) {
-        var block = gpu.PushedConstants[^1].Data;
+    // Where a member of the pass group binds.
+    private static uint BindingOf(string member) => Layout.Layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)).Resources.Single(predicate: resource => (resource.Member.Name == member)).Binding;
+    // The rect and sharpness the last recorded dispatch read, from the pass block of the pass set it bound; nothing is
+    // pushed.
+    private static (float Left, float Top, float Width, float Height, float Sharpness) Read(FakePipelineGpu gpu) {
+        Assert.Empty(collection: gpu.PushedConstants);
+
+        var block = gpu.ConstantBlock(
+            set: gpu.BoundSets.Last(predicate: static set => (set.Group == ((uint)ShaderInterfaceGroup.Pass))).Set,
+            sizeBytes: ((int)Layout.SizeBytes)
+        );
+        var rect = ((int)Layout.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceRect));
 
         return (
-            BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: 96)),
-            BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: 100)),
-            BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: 104)),
-            BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: 108)),
-            BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: 112))
+            BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: rect)),
+            BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: (rect + 4))),
+            BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: (rect + 8))),
+            BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: (rect + 12))),
+            BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: ((int)Layout.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceSharpness))))
         );
     }
 
     [Fact]
-    public void AHostPlacementIsPushedAndOneDispatchCoversTheOutput() {
+    public void AHostPlacementReachesThePassBlockAndOneDispatchCoversTheOutput() {
         var gpu = new FakePipelineGpu();
         var placements = new Placements(shown: new RenderGraphPlacement(
             Height: 0.5f,
@@ -135,21 +152,38 @@ public sealed class PlacePackageLawTests {
             expected: ((Extent / 8), (Extent / 8), 1u)
         );
         Assert.Equal(
-            actual: Pushed(gpu: gpu),
+            actual: Read(gpu: gpu),
             expected: (0.5f, 0.25f, 0.25f, 0.5f, 1f)
         );
         Assert.Contains(
             collection: gpu.DescriptorWrites,
-            filter: static write => ((write.Binding == PlacePackage.BaseBinding) && (write.Handle == Base.ImageViewHandle))
+            filter: static write => ((write.Binding == BindingOf(member: RenderGraphPackageCatalog.PlaceBase)) && (write.Handle == Base.ImageViewHandle))
         );
         Assert.Contains(
             collection: gpu.DescriptorWrites,
-            filter: static write => ((write.Binding == PlacePackage.SourceBinding) && (write.Handle == Source.ImageViewHandle))
+            filter: static write => ((write.Binding == BindingOf(member: RenderGraphPackageCatalog.PlaceSource)) && (write.Handle == Source.ImageViewHandle))
         );
         Assert.Equal(
             actual: placements.Asked,
             expected: [("placed", Pass)]
         );
+    }
+    [Fact]
+    public void TheKernelReadsTheInterfaceItsPackageDeclares() {
+        // The include is the generated declarations of the interface the catalog declares, byte for byte, so a document
+        // pass compiling the kernel with ports named base, source and destination reads the same one.
+        Assert.Equal(
+            actual: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders/Assets/Shaders/Graph/{ShaderFrameInterface.IncludeFileName(interfaceName: Layout.Interface.Name)}")),
+            expected: ShaderInterfaceHlsl.Generate(shaderInterface: Layout.Interface)
+        );
+        // The deployed kernel reads every block and binding where that interface places them.
+        Assert.Null(@object: Layout.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: File.ReadAllBytes(path: Path.Combine(paths: [
+            AppContext.BaseDirectory,
+            "Assets",
+            "Shaders",
+            "Graph",
+            $"{PlacePackage.KernelStem}.spv",
+        ])))));
     }
     [Fact]
     public void ASourceShownNowhereDrawsNothingAndTheBaseIsPublished() {
@@ -174,7 +208,7 @@ public sealed class PlacePackageLawTests {
         );
     }
     [Fact]
-    public void WithoutAHostPlacementTheBoundConfigIsPushed() {
+    public void WithoutAHostPlacementTheDispatchReadsTheBoundConfig() {
         var gpu = new FakePipelineGpu();
 
         using var node = Node(
@@ -189,7 +223,7 @@ public sealed class PlacePackageLawTests {
         gpu.Recording = false;
 
         Assert.Equal(
-            actual: Pushed(gpu: gpu),
+            actual: Read(gpu: gpu),
             expected: (0.25f, 0f, 0.5f, 1f, 0.5f)
         );
     }

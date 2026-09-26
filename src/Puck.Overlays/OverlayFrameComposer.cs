@@ -1,15 +1,15 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 
 namespace Puck.Overlays;
 
 /// <summary>
 /// The unified overlay's CPU half: every writer, the draw-order table, the frame-slot table and the builder that packs
 /// one frame's records, with the overflow narration. <see cref="Compose"/> runs the writers in draw order and reports
-/// whether anything is visible; <see cref="WritePushConstants"/> and <see cref="UploadFrameRegions"/> hand the packed
-/// frame to the GPU half, which binds the storage buffer the fragment shader reads (<see cref="OverlayPassLayout"/>).
-/// Both the overlay node and the <c>overlay</c> package's recorder draw through one, so a surface is a new writer, never
-/// a new node or shader.
+/// whether anything is visible; <see cref="WritePassValues"/> and <see cref="UploadFrameRegions"/> hand the packed
+/// frame to the GPU half: the pass block values and the storage buffer the fragment shader reads. The <c>overlay</c>
+/// package's recorder draws through one, so a surface is a new writer, never a new node or shader.
 /// </summary>
 public sealed class OverlayFrameComposer {
     // The four first-party writers' draw-order table size: Console..Toast (OverlayChannel 0..3). OverlayChannel.Hud (4)
@@ -18,6 +18,10 @@ public sealed class OverlayFrameComposer {
     // OverlayChannel.Wheel (6) are excluded too: they are the frame's last two channel scopes, drawn over everything and
     // outside the replace-band suppression.
     private const int FirstPartyChannelCount = 4;
+
+    /// <summary>The bytes <see cref="WritePassValues"/> writes: three float4 values.</summary>
+    public const int PassValueBytes = ((sizeof(float) * 4) * 3);
+
     // The glyph outline halo width, in encoded signed-distance units: the SDF contrast band that keeps overlay text
     // legible over any world content, kept clear of the atlas' saturation floor at the overlay's screenPxRange.
     private const float OutlineBand = 0.20f;
@@ -393,13 +397,14 @@ public sealed class OverlayFrameComposer {
             shiftWords: shiftWords
         );
     }
-    /// <summary>Writes the pass's push block: counts, glyph and outline figures, and the region bases the shader
-    /// reads, each dynamic base moved by <paramref name="shiftWords"/>. Its layout is the shader's
-    /// <c>OverlayPassData</c> in <c>overlay-unified.frag.hlsl</c>.</summary>
-    /// <param name="block">The destination, at least <see cref="OverlayPassLayout.PushConstantBytes"/> bytes.</param>
+    /// <summary>Writes the pass block's three per-frame values (<see cref="RenderGraphPackageCatalog.OverlayMembers"/>):
+    /// <c>counts</c>, <c>sdf</c> and <c>misc</c>, the counts, glyph and outline figures and region bases the shader reads,
+    /// each dynamic base moved by <paramref name="shiftWords"/>.</summary>
+    /// <param name="values">The destination: the pass block from <c>counts</c>' offset, where the three float4 values lie
+    /// one after another, at least <see cref="PassValueBytes"/> long.</param>
     /// <param name="shiftWords">How many words past the builder's own bases the frame's dynamic regions sit.</param>
-    public void WritePushConstants(Span<byte> block, int shiftWords) {
-        var floats = MemoryMarshal.Cast<byte, float>(span: block);
+    public void WritePassValues(Span<byte> values, int shiftWords) {
+        var floats = MemoryMarshal.Cast<byte, float>(span: values);
 
         floats[0] = m_builder.PanelCount;
         floats[1] = m_builder.ElementCount;

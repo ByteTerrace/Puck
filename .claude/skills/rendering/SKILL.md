@@ -303,11 +303,7 @@ These are one-line cautions; the owning pages hold the derivations.
   refusal reads it. It is never retried
   because a frame arrived and never on a clock; a new input to a build joins
   its `inputsOf`. The node has no previous engine then and presents nothing
-  new; a view serves the image it served before. `UnifiedOverlayNode`, which
-  no World composes any longer (the overlay package draws the live overlay),
-  refuses its resources the same way (`ResourceRefusal`), presents the inner
-  frame unchanged, forwards captures to it, and retries after `OnDeviceLost`,
-  or, for a heap refusal, once the release revision moves. `SdfWorldEngine`'s
+  new; a view serves the image it served before. `SdfWorldEngine`'s
   constructor owns its creations through one `GpuCreationScope`, which
   releases them newest first when a later step throws, so a refusal leaks
   nothing (`SdfWorldEngineCreationFaultLawTests`,
@@ -856,8 +852,10 @@ it in shows only as Vulkan validation errors, since the Direct3D 12 recorder
 corrects a stated old layout from its tracked resource state. A Direct3D 12
 device created with the debug layer says so on stderr (`[d3d12] debug layer
 live`). `PostProcessPackage` serves every `post.<id>` and
-`OverlayPackage` serves `overlay`, which shares `OverlayFrameComposer` with
-`UnifiedOverlayNode`; a package pass's `config` binds against its package's
+`OverlayPackage` serves `overlay`; each binds the frame and pass groups its catalog
+entry declares (`RenderGraphPackage.Members`), allocating its sets from the node's
+pool through `RenderGraphPackageSets` and writing its values into the pass block
+the node seeds (`RenderGraphPackageRecording.PassBlock`). A package pass's `config` binds against its package's
 schema in the graph compiler (`RENDERGRAPH_PACKAGE_CONFIG`). A graph naming an
 unserved package is refused at install, as
 is an input whose format differs from what its producer publishes or whose
@@ -949,8 +947,7 @@ binding: a load refuses a module whose reflected bindings differ from its layout
 (`SHADERPIPE_INTERFACE`). The host writes the frame group through
 `ShaderPipelineParameterLayout.WriteFrame` and the extent through `WriteExtent`
 alone, so a new frame value is a row in `ShaderFrameInterface.FrameGroupMembers`
-(and `PushedMembers`, which a package's pushed block reads) and a write there,
-nothing else. `ShaderFrameBlockLawTests` compiles every shipped pipeline source
+and a write there, nothing else. `ShaderFrameBlockLawTests` compiles every shipped pipeline source
 and holds the offsets DXC assigned in both bytecodes to the host writer's, so a
 new shipped pass joins its data; `ShaderInterfaceEcho` generates the echo pass
 the `pipeline-echo` canary runs with `pipeline.sentinels` on.

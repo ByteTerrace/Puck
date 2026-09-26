@@ -283,8 +283,9 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 Config: config,
                 InputAccesses: [.. package!.Inputs.Select(selector: static port => port.Access)],
                 Inputs: pass.InputReferences,
-                OutputAccesses: [.. package.Outputs.Select(selector: static port => port.Access)],
+                Members: package.Members,
                 Name: pass.Name,
+                OutputAccesses: [.. package.Outputs.Select(selector: static port => port.Access)],
                 Outputs: pass.OutputReferences,
                 Package: pass.Package
             ));

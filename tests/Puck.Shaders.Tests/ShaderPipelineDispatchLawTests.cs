@@ -38,6 +38,7 @@ public sealed class ShaderPipelineDispatchLawTests {
     // A package pass reaching every port through a compute dispatch.
     private static ShaderPipelinePackagePass Package(string name, ResourceReference[] inputs, ResourceReference[] outputs, ShaderPipelineDispatch? dispatch = null) => new(
         Dispatch: dispatch,
+        Members: [],
         InputAccesses: [.. inputs.Select(selector: static _ => RenderGraphPortAccess.ComputeRead)],
         Inputs: inputs,
         Name: name,

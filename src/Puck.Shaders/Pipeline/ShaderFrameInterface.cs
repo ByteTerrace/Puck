@@ -9,8 +9,8 @@ namespace Puck.Shaders;
 /// <see cref="ShaderPipelineParameterLayout.WriteFrame"/>. A document pass binds two groups (<see cref="ForPass"/>): the
 /// frame group every pass of a node shares at set 0, and its own pass group at set 3, whose block holds its extent and
 /// config and whose bindings are its ports, so it reads <c>frameGroup.time</c>, <c>passGroup.extent</c> or a config
-/// field such as <c>passGroup.decay</c>. An engine package and a shader set read one pushed block instead
-/// (<see cref="Pushed"/>).
+/// field such as <c>passGroup.decay</c>. A package pass and a shader set bind the same two groups, their pass group
+/// holding the members they declare (<see cref="ShaderPipelineParameterLayout.Grouped"/>).
 /// </summary>
 public static class ShaderFrameInterface {
     /// <summary>The frame member holding the pass's output extent in pixels, width then height (<c>uint2</c>).</summary>
@@ -61,12 +61,6 @@ public static class ShaderFrameInterface {
         Value(name: CameraTarget, type: ShaderValueType.Float3),
         Value(name: CameraUp, type: ShaderValueType.Float3),
     ];
-    /// <summary>Gets the members a pushed frame block holds before its config: the pass's extent, then every frame group
-    /// member, in declaration order.</summary>
-    public static IReadOnlyList<ShaderInterfaceMember> PushedMembers { get; } = [
-        Value(name: Extent, type: ShaderValueType.Uint2),
-        .. FrameGroupMembers,
-    ];
 
     /// <summary>Creates the interface of a document pass: the frame group (<see cref="FrameGroupMembers"/>), bound at set
     /// 0; then the pass group at set 3, whose block holds the pass's <see cref="Extent"/> and each config field in
@@ -108,29 +102,6 @@ public static class ShaderFrameInterface {
         return new ShaderInterface(
             members: members,
             name: name
-        );
-    }
-    /// <summary>Creates the interface of a block delivered as push constants: <see cref="PushedMembers"/>, then each
-    /// config field in ordinal name order, all in the frame group, which is pushed. An engine package and a shader set
-    /// read their frame data this way; a document pass binds groups instead (<see cref="ForPass"/>).</summary>
-    /// <param name="name">The interface's name (<see cref="NameOf"/>).</param>
-    /// <param name="config">The config schema, or <see langword="null"/> when there is none.</param>
-    /// <returns>The interface.</returns>
-    /// <exception cref="InvalidDataException"><paramref name="name"/> is not an interface name, or a config field's name
-    /// is not an identifier or repeats a frame member's.</exception>
-    public static ShaderInterface Pushed(string name, IReadOnlyDictionary<string, ShaderConfigField>? config) {
-        var members = new List<ShaderInterfaceMember>(collection: PushedMembers);
-
-        AddConfig(
-            config: config,
-            group: ShaderInterfaceGroup.Frame,
-            members: members
-        );
-
-        return new ShaderInterface(
-            members: members,
-            name: name,
-            pushConstants: ShaderInterfaceGroup.Frame
         );
     }
     /// <summary>Returns the file name a pass source includes to read its interface: the interface name followed by

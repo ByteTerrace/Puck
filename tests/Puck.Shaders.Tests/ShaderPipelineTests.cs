@@ -597,45 +597,48 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
-    public void Planner_rejects_a_pushed_block_that_exceeds_the_portable_push_constant_budget() {
-        var pass = Pass(
-            "draw",
-            [],
-            ["out"]
-        ) with {
-            Config = new Dictionary<string, ShaderConfigField> {
-                ["a"] = new(ShaderValueType.Float4),
-                ["b"] = new(ShaderValueType.Float4),
-                ["c"] = new(ShaderValueType.Float),
-            },
-        };
-        var definition = new RenderGraphDefinition(
-            "large-config",
-            [Image("out")],
-            [pass],
-            ["out"]
+    public void A_package_pass_block_is_bound_so_only_the_portable_uniform_range_limits_it() {
+        ShaderPipelinePackagePass Package(IReadOnlyDictionary<string, ShaderConfigField> config) => new(
+            Config: config,
+            InputAccesses: [],
+            Inputs: [],
+            Members: [],
+            Name: "draw",
+            OutputAccesses: [RenderGraphPortAccess.ComputeWrite],
+            Outputs: ["out"],
+            Package: "test.package"
+        );
+        ShaderPipelinePlan Compile(IReadOnlyDictionary<string, ShaderConfigField> config) => new ShaderPipelineCompiler().Compile(
+            definition: new RenderGraphDefinition(
+                "package-config",
+                [Image("out")],
+                [],
+                ["out"]
+            ),
+            packages: [Package(config: config)]
         );
 
-        // A package pass pushes its block: the frame values, its extent and its config.
-        var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(
-            definition: definition with { Passes = [] },
-            packages: [new ShaderPipelinePackagePass(
-                Config: pass.Config,
-                InputAccesses: [],
-                Inputs: [],
-                Name: "draw",
-                OutputAccesses: [RenderGraphPortAccess.ComputeWrite],
-                Outputs: ["out"],
-                Package: "test.package"
-            )]
-        ));
+        // Past the 128 bytes every Vulkan device can push, which a package's block no longer is.
+        Assert.Single(collection: Compile(config: Enumerable.Range(
+            count: 16,
+            start: 0
+        ).ToDictionary(
+            elementSelector: static _ => new ShaderConfigField(ShaderValueType.Float4),
+            keySelector: static index => $"field{index}"
+        )).Passes);
+
+        var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => Compile(config: Enumerable.Range(
+            count: 1024,
+            start: 0
+        ).ToDictionary(
+            elementSelector: static _ => new ShaderConfigField(ShaderValueType.Float4),
+            keySelector: static index => $"field{index}"
+        )));
 
         Assert.Contains(
             collection: error.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_PUSH_CONSTANT_LIMIT")
+            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_PASS_BLOCK_LIMIT")
         );
-        // The same config fits a document pass's pass block, which it binds as a constant buffer.
-        Assert.Single(collection: new ShaderPipelineCompiler().Compile(definition: definition).Passes);
     }
     [Fact]
     public void Planner_rejects_a_pass_block_that_exceeds_the_portable_uniform_range() {

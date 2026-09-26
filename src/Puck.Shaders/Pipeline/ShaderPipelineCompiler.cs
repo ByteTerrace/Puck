@@ -571,7 +571,7 @@ public sealed partial class ShaderPipelineCompiler {
             (limits.MaxPasses <= 0) ||
             (limits.MaxInputsPerPass <= 0) ||
             (limits.MaxOutputsPerPass <= 0) ||
-            (limits.MaxFrameBlockBytes == 0) ||
+            (limits.MaxPassBlockBytes == 0) ||
             (limits.MaxComputeWorkGroupSizeX == 0) ||
             (limits.MaxComputeWorkGroupSizeY == 0) ||
             (limits.MaxComputeWorkGroupSizeZ == 0) ||
@@ -918,6 +918,7 @@ public sealed partial class ShaderPipelineCompiler {
                 parameters = (package
                     ? ShaderPipelineParameterLayout.ForPackage(
                         config: pass.Config,
+                        members: packageByName[pass.Name].Members,
                         package: pass.Source
                     )
                     : ShaderPipelineParameterLayout.Resolve(
@@ -934,21 +935,7 @@ public sealed partial class ShaderPipelineCompiler {
                 continue;
             }
 
-            if (
-                parameters.IsPushed &&
-                (parameters.SizeBytes > m_limits.MaxFrameBlockBytes)
-            ) {
-                Add(
-                    diagnostics,
-                    "SHADERPIPE_PUSH_CONSTANT_LIMIT",
-                    $"Pass '{pass.Name}' frame block is {parameters.SizeBytes} bytes with its config; the portable limit is {m_limits.MaxFrameBlockBytes} bytes.",
-                    pass.Name
-                );
-            }
-            if (
-                !parameters.IsPushed &&
-                (parameters.SizeBytes > m_limits.MaxPassBlockBytes)
-            ) {
+            if (parameters.SizeBytes > m_limits.MaxPassBlockBytes) {
                 Add(
                     diagnostics,
                     "SHADERPIPE_PASS_BLOCK_LIMIT",

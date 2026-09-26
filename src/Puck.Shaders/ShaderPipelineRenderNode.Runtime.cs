@@ -96,17 +96,15 @@ public sealed partial class ShaderPipelineRenderNode {
             ? values
             : throw new InvalidDataException(message: $"Invalid parameters for pass {planned.Name}.")
         );
-        // A grouped pass's frame set per slot, its pass block's region, and where each of its ports binds in its pass
-        // group; null for a package pass.
+        // A document pass's frame set per slot, null for a package pass, whose recorder binds its own sets; every pass's pass
+        // block region; and where each of a document pass's ports binds in its pass group.
         public nint[]? FrameSets;
         public GpuRegion? PassRegion;
         public PortBinding[]? PortBindings;
-        // The graph's frame region, on the grouped pass that created it; null on every other pass.
+        // The graph's frame region, on the pass that created it; null on every other pass.
         public GpuRegion? FrameRegion;
         public bool Grouped => (PortBindings is not null);
 
-        // A package pass's per-slot set bindings, which its recorder allocates from the graph's pool.
-        public int PackageSetBindings;
         // Why a package pass's outputs cannot stand for its inputs when it draws nothing, or null when they can.
         public string? PackageAliasRefusal;
         public IGpuComputePipeline? Compute;

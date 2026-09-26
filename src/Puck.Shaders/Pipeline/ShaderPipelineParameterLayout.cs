@@ -20,9 +20,8 @@ public sealed record ShaderPipelineParameterSlot(
 /// A pass's frame data: its <see cref="ShaderFrameInterface"/> interface, where the interface's layout places every
 /// member, and the config schema its config fields bind through. A document pass reads two blocks: the frame group's,
 /// which every pass of a node shares (<see cref="FrameBlockSizeBytes"/>, written by <see cref="WriteFrame"/>), and its
-/// own pass block, holding its extent (<see cref="WriteExtent"/>) and config (<see cref="TryBind"/>). A pushed layout
-/// (<see cref="IsPushed"/>: an engine package or a shader set) holds all of it in the one block it pushes, so both
-/// writers write that block. Each writer places a member at the offset the layout gives it, which is the offset the
+/// own pass block, holding its extent (<see cref="WriteExtent"/>) and config (<see cref="TryBind"/>). A package pass or a
+/// shader set reads the same two blocks, its pass block also holding the values its recorder writes. Each writer places a member at the offset the layout gives it, which is the offset the
 /// generated declarations read it from.
 /// </summary>
 public sealed class ShaderPipelineParameterLayout {
@@ -32,6 +31,7 @@ public sealed class ShaderPipelineParameterLayout {
     private readonly uint m_cameraUp;
     private readonly uint m_extent;
     private readonly uint m_frame;
+    private readonly Dictionary<string, uint> m_passOffsets;
     private readonly uint m_pointer;
     private readonly uint m_pointerDown;
     private readonly uint m_pointerPresses;
@@ -42,14 +42,12 @@ public sealed class ShaderPipelineParameterLayout {
 
     private ShaderPipelineParameterLayout(ShaderInterface shaderInterface, IReadOnlyDictionary<string, ShaderConfigField>? schema) {
         var layout = shaderInterface.Layout();
-        var pushed = layout.PushedGroup;
-        var frameBlock = (pushed ?? layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Frame)));
-        var passBlock = (pushed ?? layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)));
+        var frameBlock = layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Frame));
+        var passBlock = layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass));
         var frameOffsets = Offsets(block: frameBlock);
         var offsets = Offsets(block: passBlock);
 
         Interface = shaderInterface;
-        IsPushed = (pushed is not null);
         FrameBlockSizeBytes = frameBlock.BlockSizeBytes;
         Layout = layout;
         SizeBytes = passBlock.BlockSizeBytes;
@@ -64,6 +62,7 @@ public sealed class ShaderPipelineParameterLayout {
                 Type: schema[name].Type
             )).ToArray()));
         m_extent = offsets[ShaderFrameInterface.Extent];
+        m_passOffsets = offsets;
         m_pointer = frameOffsets[ShaderFrameInterface.Pointer];
         m_tick = frameOffsets[ShaderFrameInterface.Tick];
         m_time = frameOffsets[ShaderFrameInterface.Time];
@@ -78,25 +77,36 @@ public sealed class ShaderPipelineParameterLayout {
         m_cameraUp = frameOffsets[ShaderFrameInterface.CameraUp];
     }
 
-    /// <summary>Gets the frame group block's size in bytes, a multiple of 16: the block <see cref="WriteFrame"/> writes,
-    /// which is the pushed block itself when <see cref="IsPushed"/>.</summary>
+    /// <summary>Gets the frame group block's size in bytes, a multiple of 16: the block <see cref="WriteFrame"/>
+    /// writes.</summary>
     public uint FrameBlockSizeBytes { get; }
     /// <summary>Gets the pass's interface.</summary>
     public ShaderInterface Interface { get; }
-    /// <summary>Gets whether one pushed block holds the frame values, the extent and the config, rather than a bound frame
-    /// group and a bound pass block.</summary>
-    public bool IsPushed { get; }
     /// <summary>Gets where the interface places every member.</summary>
     public ShaderInterfaceLayout Layout { get; }
     /// <summary>Gets the shared config schema, or <see langword="null"/> for no parameters.</summary>
     public IReadOnlyDictionary<string, ShaderConfigField>? Schema { get; }
-    /// <summary>Gets the size in bytes, a multiple of 16, of the block holding the extent and config: the pass block, or
-    /// the pushed block when <see cref="IsPushed"/>.</summary>
+    /// <summary>Gets the size in bytes, a multiple of 16, of the pass block, which holds the extent and config.</summary>
     public uint SizeBytes { get; }
     /// <summary>Gets the config fields in ordinal name order, each at its offset inside the block of
     /// <see cref="SizeBytes"/>.</summary>
     public IReadOnlyList<ShaderPipelineParameterSlot> Slots { get; }
 
+    /// <summary>Returns where a value of the pass block lies: the byte offset, in a block <see cref="SizeBytes"/> long, the
+    /// generated declarations read the member from. A package's recorder writes the values it declares there each
+    /// frame (<see cref="RenderGraphPackageRecording.PassBlock"/>).</summary>
+    /// <param name="member">The member's name.</param>
+    /// <returns>The offset.</returns>
+    /// <exception cref="ArgumentException">The pass block holds no member of that name.</exception>
+    public uint BlockOffsetOf(string member) => (m_passOffsets.TryGetValue(
+        key: member,
+        value: out var offset
+    )
+        ? offset
+        : throw new ArgumentException(
+            message: $"Interface '{Interface.Name}' holds no pass-block member '{member}'.",
+            paramName: nameof(member)
+        ));
     private static Dictionary<string, uint> Offsets(ShaderInterfaceGroupLayout block) =>
         block.BlockMembers.ToDictionary(
             comparer: StringComparer.Ordinal,
@@ -146,24 +156,28 @@ public sealed class ShaderPipelineParameterLayout {
             schema: Schema,
             description: description
         );
-    /// <summary>Resolves a package's frame block: the frame members, then its config fields, under an interface named
-    /// for the package id.</summary>
+    /// <summary>Resolves a package pass's frame data: the frame group, and a pass group holding its extent, its config
+    /// and the members the package declares (<see cref="RenderGraphPackage.Members"/>), under an interface named for the
+    /// package id.</summary>
     /// <param name="package">The package id.</param>
-    /// <param name="config">The package's config schema, or <see langword="null"/> for the frame members alone.</param>
+    /// <param name="config">The package's config schema, or <see langword="null"/> when it takes none.</param>
+    /// <param name="members">The pass-group members the package's shaders read beside its extent and config: values
+    /// its recorder writes into the pass block each frame, and the resources it binds.</param>
     /// <returns>The layout.</returns>
-    /// <exception cref="InvalidDataException">The package id spells no interface name, or the schema is invalid or a
-    /// field repeats a frame member's name.</exception>
-    public static ShaderPipelineParameterLayout ForPackage(string package, IReadOnlyDictionary<string, ShaderConfigField>? config) {
+    /// <exception cref="InvalidDataException">The package id spells no interface name, the schema is invalid, or a
+    /// member or config field's name is not an identifier or repeats another's.</exception>
+    public static ShaderPipelineParameterLayout ForPackage(string package, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> members) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
         ShaderConfigBinding.ValidateSchema(
             ownerName: package,
             schema: config
         );
 
-        // A package reads no generated declarations; its interface is named for its package id, each character an
-        // interface name cannot hold, such as the period of sdf.world, spelled as a hyphen.
-        return Pushed(
+        // A package's interface is named for its package id, each character an interface name cannot hold, such as the
+        // period of sdf.world, spelled as a hyphen.
+        return Grouped(
             config: config,
+            members: members,
             interfaceName: string.Concat(values: package.Select(selector: static character => ((char.IsAsciiLetterLower(c: character) || char.IsAsciiDigit(c: character))
                 ? character
                 : '-')))
@@ -199,21 +213,33 @@ public sealed class ShaderPipelineParameterLayout {
             )
         );
     }
-    /// <summary>Resolves a pushed block of a named interface over a config schema
-    /// (<see cref="ShaderFrameInterface.Pushed"/>): an engine package's or a shader set's.</summary>
+    /// <summary>Resolves the frame data of a named interface: the frame group, and a pass group holding the extent, the
+    /// config fields in ordinal name order and then <paramref name="members"/> in order, as
+    /// <see cref="ShaderFrameInterface.ForPass"/> lays them. It is the layout of every pass whose members are declared
+    /// rather than derived from a document: a package's and a shader set's.</summary>
     /// <param name="interfaceName">The interface's name.</param>
     /// <param name="config">The config schema, or <see langword="null"/> when there is none.</param>
+    /// <param name="members">The pass-group members after the config: block values, then or among them the resources the
+    /// pass binds.</param>
     /// <returns>The layout.</returns>
-    /// <exception cref="InvalidDataException"><paramref name="interfaceName"/> is not an interface name, or a config
-    /// field's name is not an identifier or repeats a frame member's.</exception>
-    public static ShaderPipelineParameterLayout Pushed(string interfaceName, IReadOnlyDictionary<string, ShaderConfigField>? config) =>
-        new(
+    /// <exception cref="ArgumentNullException"><paramref name="members"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException"><paramref name="interfaceName"/> is not an interface name, the schema is
+    /// invalid, a member is outside the pass group, or a name is not an identifier or repeats another's.</exception>
+    public static ShaderPipelineParameterLayout Grouped(string interfaceName, IReadOnlyDictionary<string, ShaderConfigField>? config, IReadOnlyList<ShaderInterfaceMember> members) {
+        ShaderConfigBinding.ValidateSchema(
+            ownerName: interfaceName,
+            schema: config
+        );
+
+        return new(
             schema: config,
-            shaderInterface: ShaderFrameInterface.Pushed(
+            shaderInterface: ShaderFrameInterface.ForPass(
                 config: config,
-                name: interfaceName
+                name: interfaceName,
+                ports: members
             )
         );
+    }
     /// <summary>Binds authored values and returns a complete frame block holding them at their offsets, with every
     /// frame member zero.</summary>
     /// <param name="config">The authored config object, or <see langword="null"/> for every default.</param>
@@ -248,8 +274,7 @@ public sealed class ShaderPipelineParameterLayout {
         );
         return true;
     }
-    /// <summary>Writes the pass's extent into its block (the pass block, or the pushed block when <see cref="IsPushed"/>)
-    /// at the offset the interface places it, leaving the rest as it is.</summary>
+    /// <summary>Writes the pass's extent into its pass block at the offset the interface places it, leaving the rest as it is.</summary>
     /// <param name="block">The block, at least <see cref="SizeBytes"/> long.</param>
     /// <param name="width">The pass's output width, in pixels.</param>
     /// <param name="height">The pass's output height, in pixels.</param>
@@ -262,8 +287,8 @@ public sealed class ShaderPipelineParameterLayout {
         WriteUInt32(block: block, offset: m_extent, value: width);
         WriteUInt32(block: block, offset: (m_extent + 4), value: height);
     }
-    /// <summary>Writes every frame group value into the frame block (or the pushed block when <see cref="IsPushed"/>) at
-    /// the offset the interface places it, leaving the extent, the config fields and the padding as they are.</summary>
+    /// <summary>Writes every frame group value into the frame block at the offset the interface places it, leaving the
+    /// padding as it is.</summary>
     /// <param name="block">The block, at least <see cref="FrameBlockSizeBytes"/> long.</param>
     /// <param name="values">The host's frame values.</param>
     /// <param name="tick">The engine tick the frame presents.</param>

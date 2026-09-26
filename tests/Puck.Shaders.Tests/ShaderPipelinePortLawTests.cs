@@ -56,7 +56,6 @@ public sealed class ShaderPipelinePortLawTests {
         ))).Passes);
         var group = PassGroup(pass: pass);
 
-        Assert.False(condition: pass.Parameters.IsPushed);
         Assert.Equal(
             actual: group.Set,
             expected: 3u

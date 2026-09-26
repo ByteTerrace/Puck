@@ -25,8 +25,11 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// <param name="Height">The pass's extent height, in pixels.</param>
 /// <param name="Inputs">The versions bound to its input ports, in port order.</param>
 /// <param name="Outputs">The versions bound to its output ports, in port order.</param>
-/// <param name="FrameBlock">The pass's frame block for this frame, written as the instance writes a shader pass's: the
-/// frame members and the pass's bound config (<see cref="RenderGraphPackageRecorderContext.Parameters"/>).</param>
+/// <param name="PassBlock">The pass's pass block for this frame, laid out by
+/// <see cref="RenderGraphPackageRecorderContext.Parameters"/>: the instance has written its extent and bound config, and
+/// the recorder writes the values its package declares (<see cref="RenderGraphPackage.Members"/>) at their offsets
+/// (<see cref="ShaderPipelineParameterLayout.BlockOffsetOf"/>). The instance uploads the block to the slot's constant
+/// buffer once the recording returns.</param>
 /// <param name="Leases">The frame's lease list: a lease held in it retires once this frame's submission has finished, on
 /// device loss or at disposal, and at once when the frame submits nothing.</param>
 /// <param name="Context">The host's frame context the instance renders the frame with.</param>
@@ -35,7 +38,7 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// stand for its inputs, and when an input is a host's image in another layout than the instance publishes in: the
 /// instance publishes every image in its output layout, and a host's image is handed back in the host's own, so the
 /// recording must draw.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, ReadOnlySpan<byte> FrameBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn) {
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -50,8 +53,8 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public ReadOnlySpan<RenderGraphPackageResource> Inputs { get; } = Inputs;
     /// <summary>Gets the versions bound to the output ports.</summary>
     public ReadOnlySpan<RenderGraphPackageResource> Outputs { get; } = Outputs;
-    /// <summary>Gets the pass's frame block for this frame.</summary>
-    public ReadOnlySpan<byte> FrameBlock { get; } = FrameBlock;
+    /// <summary>Gets the pass's pass block for this frame, which the recorder writes its declared values into.</summary>
+    public Span<byte> PassBlock { get; } = PassBlock;
     /// <summary>Gets the frame's lease list.</summary>
     public LeaseRetireList Leases { get; } = Leases;
     /// <summary>Gets the host's frame context.</summary>
@@ -88,12 +91,6 @@ public interface IRenderGraphPackageRecorder : IDisposable {
 /// <see cref="Build"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the graph
 /// installs, and <see cref="Create"/> takes those objects on the frame thread when it installs.</summary>
 public interface IRenderGraphPackageFactory {
-    /// <summary>Gets the bindings of the one descriptor set a recorder allocates per frame slot, or an empty list when
-    /// it binds none. The instance states them in its one descriptor pool
-    /// (<see cref="ShaderPipelineRenderNode.DescriptorPools"/>), which the device's heap admits before anything is
-    /// allocated.</summary>
-    IReadOnlyList<GpuComputeBinding> SetBindings { get; }
-
     /// <summary>Builds what a pass's recorder needs that the frame thread must not create: its shader modules,
     /// pipelines and render passes. It runs on the thread pool, creates objects through
     /// <see cref="RenderGraphPackageRecorderContext.Services"/> only, checks the token between creations, and releases
@@ -105,14 +102,14 @@ public interface IRenderGraphPackageFactory {
     /// nothing. The instance disposes them when the candidate never installs.</returns>
     IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken);
     /// <summary>Creates a pass's recorder on the frame thread when its graph installs. It takes ownership of
-    /// <paramref name="built"/>, allocates its descriptor sets from <paramref name="descriptorPool"/>, and creates no
-    /// pipeline.</summary>
+    /// <paramref name="built"/>, allocates its frame and pass group sets from the instance's pool
+    /// (<see cref="RenderGraphPackageSets"/>), and creates no pipeline.</summary>
     /// <param name="context">The pass it records.</param>
     /// <param name="built">What <see cref="Build"/> returned for this pass.</param>
-    /// <param name="descriptorPool">The instance's descriptor pool, which holds <see cref="SetBindings"/> once per frame
-    /// slot, or zero when <see cref="SetBindings"/> is empty.</param>
+    /// <param name="groups">The instance's pool, which holds the pass's two sets once per frame slot, and the constant
+    /// buffers its frame group and pass group blocks live in, one per frame slot.</param>
     /// <returns>The recorder, which the instance disposes with its graph.</returns>
-    IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, nint descriptorPool);
+    IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups);
 }
 /// <summary>What a recorder is built and created for: one package pass of one instance's graph, on one device.</summary>
 /// <param name="Instance">The instance's name.</param>
@@ -126,7 +123,10 @@ public interface IRenderGraphPackageFactory {
 /// <param name="Height">The pass's extent height, in pixels.</param>
 /// <param name="Inputs">The declarations of the versions bound to its input ports, in port order.</param>
 /// <param name="Outputs">The declarations of the versions bound to its output ports, in port order.</param>
-/// <param name="Parameters">The pass's frame block layout: the frame members, then the package's config fields.</param>
+/// <param name="Parameters">The pass's interface as the plan lays it out: the frame group at set 0, and the pass group at
+/// set 3, whose block holds the extent, the package's config and the values it declares, followed by its declared
+/// resources. A recorder creates its pipeline through its <see cref="ShaderInterfaceLayout.PipelineLayout"/> and reads
+/// its values' offsets and its resources' bindings from it.</param>
 public sealed record RenderGraphPackageRecorderContext(string Instance, string Pass, string Package, IGpuDeviceContext Device, GpuDeviceServices Services, bool HostsOnDirectX, int InFlightFrames, uint Width, uint Height, IReadOnlyList<ShaderPipelineResource> Inputs, IReadOnlyList<ShaderPipelineResource> Outputs, ShaderPipelineParameterLayout Parameters);
 /// <summary>What an external producer is created for: one external instance, on one device.</summary>
 /// <param name="Instance">The instance's name.</param>

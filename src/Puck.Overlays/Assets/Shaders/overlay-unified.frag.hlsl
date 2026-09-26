@@ -24,57 +24,32 @@
 // Panel/element positions are NORMALIZED [0,1] screen space; each record's clip index CONFINES its pixels to a
 // seat's viewport rect (placement inside a viewport is also clipping to it — the split-screen invariant); scalar
 // widths (radii, plate halves, badge offsets) are PIXELS. KEEP IN SYNC with
-// Puck.Overlays.OverlayFrameBuilder (record word layouts) and UnifiedOverlayNode (push constants).
+// Puck.Overlays.OverlayFrameBuilder (record word layouts) and OverlayFrameComposer.WritePassValues (pass block values).
 //
-// Combined image-sampler bindings, identical numbering on both backends: binding 0 the inner world image; bindings
-// 1..FRAME_SLOT_COUNT the frame-slot table (a Frame element's sampled WorldFrameSource content, e.g. a face cam) —
-// FRAME_SLOT_COUNT separate SCALAR Texture2D+SamplerState pairs, never one array binding, since DXC's
-// vk::combinedImageSampler only ever fuses a scalar pair; the storage buffer follows immediately after at binding
-// FRAME_SLOT_COUNT+1. On Vulkan each pair fuses into its own combined image sampler at set 0, its binding number; on
-// Direct3D 12 the textures are t0..t{FRAME_SLOT_COUNT} (one static linear-clamp sampler PER register, s0..s{FRAME_SLOT_COUNT},
-// all sharing the SAME filter/address description) and the storage SRV packs in immediately after at
-// t{FRAME_SLOT_COUNT+1} — see UnifiedOverlayNode's FrameSlotFirstBinding remarks for the C# side of this layout.
+// Everything it reads comes from the overlay package's generated interface (overlay.interface.hlsli, generated from
+// RenderGraphPackageCatalog.OverlayMembers; ShaderFrameBlockLawTests holds it to the generator): the frame group
+// at set 0, and the pass group at set 3 holding the extent and the three per-frame values below, the inner world image
+// (source), the frame-slot table (frameSlot0..frameSlot7, a Frame element's sampled WorldFrameSource content, e.g. a
+// face cam), the one sampler every image is read through (linearSampler) and the storage buffer (overlayData). The
+// slots are separate scalar images selected by a switch rather than one array binding, so every backend binds them
+// alike.
 #include "overlay-common.hlsli"
+#include "overlay.interface.hlsli"
 
-#define FRAME_SLOT_COUNT 8u
-
-[[vk::combinedImageSampler]][[vk::binding(0, 0)]] Texture2D sourceTexture : register(t0);
-[[vk::combinedImageSampler]][[vk::binding(0, 0)]] SamplerState sourceSampler : register(s0);
-
-[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D frameTexture0 : register(t1);
-[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState frameSampler0 : register(s1);
-[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] Texture2D frameTexture1 : register(t2);
-[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] SamplerState frameSampler1 : register(s2);
-[[vk::combinedImageSampler]] [[vk::binding(3, 0)]] Texture2D frameTexture2 : register(t3);
-[[vk::combinedImageSampler]] [[vk::binding(3, 0)]] SamplerState frameSampler2 : register(s3);
-[[vk::combinedImageSampler]] [[vk::binding(4, 0)]] Texture2D frameTexture3 : register(t4);
-[[vk::combinedImageSampler]] [[vk::binding(4, 0)]] SamplerState frameSampler3 : register(s4);
-[[vk::combinedImageSampler]] [[vk::binding(5, 0)]] Texture2D frameTexture4 : register(t5);
-[[vk::combinedImageSampler]] [[vk::binding(5, 0)]] SamplerState frameSampler4 : register(s5);
-[[vk::combinedImageSampler]] [[vk::binding(6, 0)]] Texture2D frameTexture5 : register(t6);
-[[vk::combinedImageSampler]] [[vk::binding(6, 0)]] SamplerState frameSampler5 : register(s6);
-[[vk::combinedImageSampler]] [[vk::binding(7, 0)]] Texture2D frameTexture6 : register(t7);
-[[vk::combinedImageSampler]] [[vk::binding(7, 0)]] SamplerState frameSampler6 : register(s7);
-[[vk::combinedImageSampler]] [[vk::binding(8, 0)]] Texture2D frameTexture7 : register(t8);
-[[vk::combinedImageSampler]] [[vk::binding(8, 0)]] SamplerState frameSampler7 : register(s8);
-
-[[vk::binding(9, 0)]] StructuredBuffer<uint4> overlayData : register(t9);
-
-// Dispatches to the slot's own scalar texture/sampler pair — the switch every multi-source shader in this codebase
-// uses in place of an unsupported combined-image-sampler array (see the binding comment above).
+// Dispatches to the slot's own scalar image, the switch that stands in for an array binding (see the note above).
 float2 frameSlotDimensions(uint slot) {
     uint w;
     uint h;
 
     switch (slot) {
-        case 0: frameTexture0.GetDimensions(w, h); break;
-        case 1: frameTexture1.GetDimensions(w, h); break;
-        case 2: frameTexture2.GetDimensions(w, h); break;
-        case 3: frameTexture3.GetDimensions(w, h); break;
-        case 4: frameTexture4.GetDimensions(w, h); break;
-        case 5: frameTexture5.GetDimensions(w, h); break;
-        case 6: frameTexture6.GetDimensions(w, h); break;
-        default: frameTexture7.GetDimensions(w, h); break;
+        case 0: frameSlot0.GetDimensions(w, h); break;
+        case 1: frameSlot1.GetDimensions(w, h); break;
+        case 2: frameSlot2.GetDimensions(w, h); break;
+        case 3: frameSlot3.GetDimensions(w, h); break;
+        case 4: frameSlot4.GetDimensions(w, h); break;
+        case 5: frameSlot5.GetDimensions(w, h); break;
+        case 6: frameSlot6.GetDimensions(w, h); break;
+        default: frameSlot7.GetDimensions(w, h); break;
     }
 
     return float2(w, h);
@@ -82,26 +57,21 @@ float2 frameSlotDimensions(uint slot) {
 
 float4 sampleFrameSlot(uint slot, float2 uv) {
     switch (slot) {
-        case 0: return frameTexture0.SampleLevel(frameSampler0, uv, 0);
-        case 1: return frameTexture1.SampleLevel(frameSampler1, uv, 0);
-        case 2: return frameTexture2.SampleLevel(frameSampler2, uv, 0);
-        case 3: return frameTexture3.SampleLevel(frameSampler3, uv, 0);
-        case 4: return frameTexture4.SampleLevel(frameSampler4, uv, 0);
-        case 5: return frameTexture5.SampleLevel(frameSampler5, uv, 0);
-        case 6: return frameTexture6.SampleLevel(frameSampler6, uv, 0);
-        default: return frameTexture7.SampleLevel(frameSampler7, uv, 0);
+        case 0: return frameSlot0.SampleLevel(linearSampler, uv, 0);
+        case 1: return frameSlot1.SampleLevel(linearSampler, uv, 0);
+        case 2: return frameSlot2.SampleLevel(linearSampler, uv, 0);
+        case 3: return frameSlot3.SampleLevel(linearSampler, uv, 0);
+        case 4: return frameSlot4.SampleLevel(linearSampler, uv, 0);
+        case 5: return frameSlot5.SampleLevel(linearSampler, uv, 0);
+        case 6: return frameSlot6.SampleLevel(linearSampler, uv, 0);
+        default: return frameSlot7.SampleLevel(linearSampler, uv, 0);
     }
 }
 
+// The pass block's per-frame values (passGroup):
 // counts: panelCount, elementCount, atlasCellW, atlasCellH (texels)
 // sdf:    distanceRange (texels), outlineBand (encoded units), panelBase (word index), elementBase (word index)
 // misc:   textBase (word index), atlasBase (word index), clipBase (word index), glyphCount (this boot's atlas total)
-struct OverlayPassData {
-    float4 counts;
-    float4 sdf;
-    float4 misc;
-};
-[[vk::push_constant]] ConstantBuffer<OverlayPassData> pc;
 
 // Words per record. KEEP IN SYNC with OverlayFrameBuilder.PanelWords / ElementWords.
 #define PANEL_WORDS 12u
@@ -152,22 +122,22 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     uint width;
     uint height;
 
-    sourceTexture.GetDimensions(width, height);
+    source.GetDimensions(width, height);
 
     float2 dims = float2(width, height);
     float2 uv = (fragCoord.xy / dims);
-    float3 color = sourceTexture.Sample(sourceSampler, uv).rgb;
+    float3 color = source.Sample(linearSampler, uv).rgb;
 
-    uint panelBase = (uint)pc.sdf.z;
-    uint elementBase = (uint)pc.sdf.w;
-    uint textBase = (uint)pc.misc.x;
-    uint atlasBase = (uint)pc.misc.y;
-    uint clipBase = (uint)pc.misc.z;
-    int glyphCount = (int)pc.misc.w;
-    int panelCount = (int)pc.counts.x;
-    int elementCount = (int)pc.counts.y;
-    int atlasCellW = (int)pc.counts.z;
-    int atlasCellH = (int)pc.counts.w;
+    uint panelBase = (uint)passGroup.sdf.z;
+    uint elementBase = (uint)passGroup.sdf.w;
+    uint textBase = (uint)passGroup.misc.x;
+    uint atlasBase = (uint)passGroup.misc.y;
+    uint clipBase = (uint)passGroup.misc.z;
+    int glyphCount = (int)passGroup.misc.w;
+    int panelCount = (int)passGroup.counts.x;
+    int elementCount = (int)passGroup.counts.y;
+    int atlasCellW = (int)passGroup.counts.z;
+    int atlasCellH = (int)passGroup.counts.w;
 
     float edgeAa = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_EDGE_AA);
     float haloBlur = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_BLOOM_HALO_BLUR);
@@ -307,8 +277,8 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             uint glyph = OverlayWord(overlayData, (textBase + OverlayWord(overlayData, (o + 5u)) + (uint)column));
             float2 cellLocal = float2((local.x - (column * cellSize.x)), local.y);
             // screenPxRange = distanceRange(texels) x screen-px-per-texel (the on-screen cell maps the atlas cell).
-            float screenPxRange = (pc.sdf.x * (cellSize.y / pc.counts.w));
-            float2 sample = SampleGlyphCoverage(overlayData, atlasBase, (int)glyph, glyphCount, cellLocal, cellSize, atlasCellW, atlasCellH, screenPxRange, pc.sdf.y);
+            float screenPxRange = (passGroup.sdf.x * (cellSize.y / passGroup.counts.w));
+            float2 sample = SampleGlyphCoverage(overlayData, atlasBase, (int)glyph, glyphCount, cellLocal, cellSize, atlasCellW, atlasCellH, screenPxRange, passGroup.sdf.y);
 
             color = lerp(color, float3(0.0, 0.01, 0.015), (sample.y * 0.85 * alpha));
             color = lerp(color, OverlayTokenColor(overlayData, role).rgb, (sample.x * alpha));
@@ -377,7 +347,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             }
         } else if (kind == 4u) {
             // A SAMPLED FRAME: a live WorldFrameSource picture-in-picture (e.g. the HUD face-cam element) drawn from
-            // one of the FRAME_SLOT_COUNT frame-slot bindings — "role" (bits 4..11) is this record's slot index.
+            // one of the eight frame-slot images — "role" (bits 4..11) is this record's slot index.
             // Bits 16.. carry the outgoing cross-fade slot plus one (0 = none); word 8 is the incoming slot's weight.
             uint slot = role;
             bool mirror = (((packed >> 12u) & 0x1u) != 0u);
@@ -542,7 +512,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                         float v = ((iconLocal.y + iconHalfH) / (2.0 * iconHalfH));
                         // screenPxRange from the on-screen glyph height (2*iconHalfH glyph-local units x iconHalf px).
                         float glyphPxH = ((2.0 * iconHalfH) * iconHalf);
-                        float screenPxRange = max((pc.sdf.x * (glyphPxH / float(atlasCellH))), 1.0);
+                        float screenPxRange = max((passGroup.sdf.x * (glyphPxH / float(atlasCellH))), 1.0);
                         float2 coverage = SampleGlyphCoverage(
                             overlayData, atlasBase, glyphIndex, glyphCount,
                             float2(u, v), float2(1.0, 1.0), atlasCellW, atlasCellH, screenPxRange, 0.25);
@@ -584,7 +554,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                         float v = ((glyphLocal.y + labelHalfH) / (2.0 * labelHalfH)); // [0, 1], top-down
                         // screenPxRange from the on-screen char height (2*labelHalfH glyph-local units x glyphHalf px).
                         float charPxH = ((2.0 * labelHalfH) * glyphHalf);
-                        float screenPxRange = max((pc.sdf.x * (charPxH / float(atlasCellH))), 1.0);
+                        float screenPxRange = max((passGroup.sdf.x * (charPxH / float(atlasCellH))), 1.0);
                         float2 coverage = SampleGlyphCoverage(
                             overlayData, atlasBase, glyphIndex, glyphCount,
                             float2(u, v), float2(1.0, 1.0), atlasCellW, atlasCellH, screenPxRange, 0.25);

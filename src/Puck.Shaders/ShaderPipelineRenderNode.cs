@@ -230,11 +230,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         if (declaration is not null) {
             runtime.PortBindings = PortBindingsOf(planned: planned);
             runtime.FrameSets = new nint[m_inFlight];
-
-            if (m_frameRegionOwner is { } frameRegion) {
-                runtime.FrameRegion = frameRegion;
-                m_frameRegionOwner = null;
-            }
+        }
+        if (m_frameRegionOwner is { } frameRegion) {
+            runtime.FrameRegion = frameRegion;
+            m_frameRegionOwner = null;
         }
 
         var objects = built.TakePass(index: planned.Index);
@@ -302,18 +301,25 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
         runtime.Sets = new nint[m_inFlight];
         runtime.Samplers = new nint[m_inFlight];
-        runtime.PackageSetBindings = (objects.PackageFactory?.SetBindings.Count ?? 0);
-        AllocateSlotObjects(
-            descriptorPool: ref descriptorPool,
-            graphPool: graphPool,
-            pass: runtime
-        );
-        InstallPackage(
-            descriptorPool: descriptorPool,
-            objects: objects,
-            planned: planned,
-            runtime: runtime
-        );
+        try {
+            AllocateSlotObjects(
+                descriptorPool: ref descriptorPool,
+                graphPool: graphPool,
+                pass: runtime
+            );
+            InstallPackage(
+                descriptorPool: descriptorPool,
+                objects: objects,
+                planned: planned,
+                runtime: runtime
+            );
+        } catch {
+            // A package's build belongs to no pass until its recorder takes it.
+            objects.PackageBuilt?.Dispose();
+            objects.PackageBuilt = null;
+
+            throw;
+        }
     }
     // A capture armed after a selection reads that selection: while its float preview builds, the published image is still
     // the previous selection's, so the capture waits for the frame that publishes the new one.
@@ -505,13 +511,12 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
             var graphPool = GraphDescriptorPool(
                 inFlight: m_inFlight,
-                packages: m_packages,
                 plan: plan
             );
             var descriptorPool = ((nint)0);
 
-            // The graph's frame group block, which every document pass binds at set 0; the first of them owns it.
-            m_frameLayout = plan.Passes.FirstOrDefault(predicate: static pass => (pass.Declaration is not null))?.Parameters;
+            // The frame group block every pass binds at set 0, held by the graph's leading pass.
+            m_frameLayout = plan.Passes.FirstOrDefault()?.Parameters;
             m_frameRegion = ((m_frameLayout is { } frameLayout)
                 ? new GpuRegion(
                     bindings: m_gpu.Bindings,
@@ -718,7 +723,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 owner: $"shader pipeline {m_descriptor.Name}",
                 pools: DescriptorPools(
                     inFlight: m_inFlight,
-                    packages: m_packages,
                     plan: next.Plan,
                     preview: key.Preview.HasValue
                 ),
@@ -1038,29 +1042,6 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     old.Parameters.Bytes.ToArray()
                 );
             }
-        }
-    }
-    // Writes the pass's frame block: its bound config, then every frame member through the layout's host writer, or, with
-    // sentinels on, every member's echo sentinel.
-    private void WriteFrameBlock(RuntimePass pass, in FrameContext context, uint width, uint height, Span<byte> bytes) {
-        if (Sentinels) {
-            ShaderInterfaceEcho.WriteSentinels(
-                block: bytes,
-                group: pass.ParametersLayout.Layout.PushedGroup!
-            );
-        } else {
-            pass.Parameters.Bytes.Span.CopyTo(destination: bytes);
-            pass.ParametersLayout.WriteExtent(
-                block: bytes,
-                height: height,
-                width: width
-            );
-            pass.ParametersLayout.WriteFrame(
-                block: bytes,
-                frame: m_frame,
-                tick: context.ElapsedTicks,
-                values: Frame
-            );
         }
     }
     private void Record(RuntimePass pass, int slot, in FrameContext context, List<nint> commands) {

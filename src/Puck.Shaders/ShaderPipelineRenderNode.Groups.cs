@@ -6,8 +6,8 @@ namespace Puck.Shaders;
 // A document pass binds groups (ShaderFrameInterface.ForPass): the frame group at set 0, whose block the node writes once
 // a frame into its frame region, and its pass group at set 3, whose block (the pass's extent and config) lives in the
 // pass's own region and whose bindings are its ports. Each slot's frame and pass sets take their constant buffers and
-// the pass's samplers once, when they are allocated; a frame writes only the ports. A package pass receives its frame
-// block pushed and binds its own resources.
+// the pass's samplers once, when they are allocated; a frame writes only the ports. A package pass binds the same two
+// groups: the node creates and seeds its pass region, and its recorder allocates its sets (RenderGraphPackageSets).
 public sealed partial class ShaderPipelineRenderNode {
     private const uint FrameGroup = ((uint)ShaderInterfaceGroup.Frame);
     private const uint PassGroup = ((uint)ShaderInterfaceGroup.Pass);
@@ -55,9 +55,14 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return bindings;
     }
-    // The graph pool's demand for one grouped pass: a frame set and a pass set per in-flight slot.
+    // The graph pool's demand for one pass: a frame set and a pass set per in-flight slot. A package pass's recorder
+    // allocates its sets from the same pool against its own pipeline's layouts, whose groups the pass's parameters
+    // describe; which stages a group is visible to does not change what its sets hold.
     private static GpuDescriptorPoolSizes GroupPoolSizes(ShaderPipelinePlannedPass planned, uint inFlight) {
-        var groups = GroupLayoutOf(planned: planned).Groups;
+        var groups = planned.Parameters.Layout.PipelineLayout(
+            pushesIndex: false,
+            stages: (planned.Declaration?.Kind.Stages() ?? GpuShaderStage.Fragment)
+        ).Groups;
         var sizes = default(GpuDescriptorPoolSizes);
 
         for (var slot = 0u; (slot < inFlight); slot++) {
@@ -67,16 +72,11 @@ public sealed partial class ShaderPipelineRenderNode {
         return sizes;
     }
 
-    // Allocates a grouped pass's per-slot sets, sampler and pass region, and writes what never changes into each set: the
-    // frame and pass blocks' constant buffers and the pass's samplers.
-    private void AllocateGroupSets(RuntimePass pass, nint descriptorPool) {
-        var bindings = m_gpu.Bindings;
-        var layouts = ((pass.Kind == ShaderPipelinePassKind.Compute)
-            ? pass.Compute!.GroupLayoutHandles
-            : pass.Graphics!.GroupLayoutHandles);
-
+    // Creates a pass's pass region, one constant buffer per slot, which SeedPassRegions fills once the install has
+    // preserved the live config.
+    private void CreatePassRegion(RuntimePass pass) {
         pass.PassRegion = new GpuRegion(
-            bindings: bindings,
+            bindings: m_gpu.Bindings,
             buffers: m_gpu.BufferFactory,
             byteCount: UniformBytes(blockBytes: pass.ParametersLayout.SizeBytes),
             copyPipeline: null,
@@ -91,6 +91,15 @@ public sealed partial class ShaderPipelineRenderNode {
             slotCount: ((int)m_inFlight),
             usage: GpuBufferUsage.Uniform
         );
+    }
+    // Allocates a document pass's per-slot sets and sampler, and writes what never changes into each set: the frame and
+    // pass blocks' constant buffers and the pass's samplers.
+    private void AllocateGroupSets(RuntimePass pass, nint descriptorPool) {
+        var bindings = m_gpu.Bindings;
+        var layouts = ((pass.Kind == ShaderPipelinePassKind.Compute)
+            ? pass.Compute!.GroupLayoutHandles
+            : pass.Graphics!.GroupLayoutHandles);
+
         for (var slot = 0; (slot < m_inFlight); slot++) {
             pass.FrameSets![slot] = bindings.AllocateSet(
                 descriptorPool,
@@ -123,7 +132,7 @@ public sealed partial class ShaderPipelineRenderNode {
             bindings.WriteConstantBuffer(
                 arrayElement: 0,
                 binding: 0,
-                bufferHandle: pass.PassRegion.Buffer(slot: slot).BufferHandle,
+                bufferHandle: pass.PassRegion!.Buffer(slot: slot).BufferHandle,
                 bufferSize: ((ulong)pass.PassRegion.ByteCount),
                 descriptorSetHandle: pass.Sets[slot]
             );
@@ -215,6 +224,17 @@ public sealed partial class ShaderPipelineRenderNode {
         var region = pass.PassRegion!;
         Span<byte> block = stackalloc byte[region.ByteCount];
 
+        FillPassBlock(
+            block: block,
+            pass: pass
+        );
+        _ = region.Write(
+            bytes: block,
+            offset: 0
+        );
+    }
+    // Fills a pass block with the pass's bound config and its extent, or, with sentinels on, every member's echo sentinel.
+    private void FillPassBlock(RuntimePass pass, Span<byte> block) {
         if (Sentinels) {
             ShaderInterfaceEcho.WriteSentinels(
                 block: block,
@@ -228,11 +248,6 @@ public sealed partial class ShaderPipelineRenderNode {
                 width: pass.Width
             );
         }
-
-        _ = region.Write(
-            bytes: block,
-            offset: 0
-        );
     }
 
     // Where one port binds in its pass group, and its sampler's binding or None.

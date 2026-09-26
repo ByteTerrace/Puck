@@ -16,9 +16,15 @@ namespace Puck.Shaders.Tests;
 internal sealed class FakePipelineGpu : IGpuDeviceContext,
     IGpuCommandPoolFactory, IGpuPipelineFactory, IGpuRecorder, IGpuBindings, IGpuQueueSubmitter, IGpuShaderModuleFactory,
     IGpuBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuRenderPassFactory {
+    // Where descriptor set handles start, far above every object handle the fake hands out.
+    private const long SetHandleBase = 0x4000_0000;
+
     private readonly Dictionary<nint, Created> m_byHandle = [];
     private readonly Dictionary<nint, GpuDescriptorAdmission> m_poolRanges = [];
     private readonly Lock m_gate = new();
+    private readonly Dictionary<(nint Set, uint Binding), nint> m_constantBuffers = [];
+    private readonly Dictionary<nint, FakeHostBuffer> m_hostBuffers = [];
+    private long m_sets;
 
     private int m_gateThread;
 
@@ -69,6 +75,9 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public List<(nint Image, GpuImageLayout Layout)> Readbacks { get; } = [];
     /// <summary>Gets every push-constant write recorded while <see cref="Recording"/>: its bind point, stages and bytes.</summary>
     public List<(GpuBindPoint BindPoint, GpuShaderStage Stages, byte[] Data)> PushedConstants { get; } = [];
+    /// <summary>Gets every descriptor set bound while <see cref="Recording"/> is on, in binding order: the group and the
+    /// set.</summary>
+    public List<(uint Group, nint Set)> BoundSets { get; } = [];
 
     /// <summary>Gets or sets the one-based creation number that throws instead of creating; 0 never throws.</summary>
     public int FailAtCreation { get; set; }
@@ -203,7 +212,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
 
-    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) => (poolHandle + 1);
+    // Each set is its own handle, above every object handle, so a law can tell apart the sets it binds.
+    public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) => ((nint)(SetHandleBase + Interlocked.Increment(location: ref m_sets)));
     public void BeginCommandBuffer(nint commandBufferHandle) {
         lock (m_gate) {
             if (m_byHandle.TryGetValue(
@@ -222,7 +232,11 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             RenderPasses.Add(item: (fake.RenderPass.Description, fake.Colors, fake.Depth));
         }
     }
-    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) { }
+    public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) {
+        if (Recording) {
+            BoundSets.Add(item: (group, descriptorSetHandle));
+        }
+    }
     public void BindIndexBuffer(nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format) => RecordGraphics(buffer: bufferHandle, command: ((format == GpuIndexFormat.UInt16) ? "indices16" : "indices32"), count: 0, offsetBytes: offsetBytes, sizeBytes: sizeBytes);
     public void BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) { }
     public void BindVertexBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes) => RecordGraphics(buffer: bufferHandle, command: "vertices", count: strideBytes, offsetBytes: 0, sizeBytes: sizeBytes);
@@ -240,13 +254,19 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             usage: usage
         );
 
-        return new FakeHostBuffer(
+        var buffer = new FakeHostBuffer(
             created: Create(
                 bytes: sizeBytes,
                 kind: $"host {usage} buffer"
             ),
             sizeBytes: sizeBytes
         );
+
+        lock (m_gate) {
+            m_hostBuffers[buffer.BufferHandle] = buffer;
+        }
+
+        return buffer;
     }
     // The fake has one memory, so a host-visible device-local buffer is a host-visible one.
     public IGpuStorageBuffer CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => CreateHostVisible(
@@ -460,7 +480,21 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             StructuredBufferWrites++;
         }
     }
-    public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) { }
+    /// <summary>Returns the first <paramref name="sizeBytes"/> bytes of the host-visible buffer last written as the constant
+    /// buffer at binding 0 of <paramref name="set"/>: the block a draw or dispatch binding that set reads.</summary>
+    /// <param name="set">The descriptor set.</param>
+    /// <param name="sizeBytes">The block's size.</param>
+    /// <returns>The block's bytes.</returns>
+    public byte[] ConstantBlock(nint set, int sizeBytes) {
+        lock (m_gate) {
+            return m_hostBuffers[m_constantBuffers[(set, 0U)]].Contents[..sizeBytes];
+        }
+    }
+    public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
+        lock (m_gate) {
+            m_constantBuffers[(descriptorSetHandle, binding)] = bufferHandle;
+        }
+    }
     public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
         if (Recording) {
             DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));

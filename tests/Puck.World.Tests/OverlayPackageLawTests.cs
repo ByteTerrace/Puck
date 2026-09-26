@@ -16,10 +16,12 @@ namespace Puck.World.Tests;
 /// <see cref="FakeGpuDevice"/>: a frame with nothing visible draws nothing and the instance publishes its input in the
 /// output's place, a frame with a drawn cursor publishes the instance's own output, a drawn frame is handed its input
 /// shader-readable and its target in render-target layout by the node's planned barriers and records none of its own,
-/// the bound frame-slot leases move into the frame's lease list, and a steady drawn frame allocates nothing.
+/// the bound frame-slot leases move into the frame's lease list, a steady drawn frame allocates nothing, and the
+/// compiled shader and its generated include read the interface the catalog declares for the package.
 /// </summary>
-public sealed class OverlayPackageLawTests {
+public sealed partial class OverlayPackageLawTests {
     private const uint Extent = 64;
+    private const uint InFlight = 3;
     private const nint WorldImage = 0x5100;
 
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
@@ -99,6 +101,27 @@ public sealed class OverlayPackageLawTests {
         );
     }
     [Fact]
+    public void TheOverlayShaderReadsTheInterfaceItsPackageDeclares() {
+        var layout = ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            members: RenderGraphPackageCatalog.OverlayMembers,
+            package: RenderGraphPackageCatalog.Overlay
+        );
+
+        // The include is the generated declarations of the interface the catalog declares, byte for byte.
+        Assert.Equal(
+            actual: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: $"src/Puck.Overlays/Assets/Shaders/{ShaderFrameInterface.IncludeFileName(interfaceName: layout.Interface.Name)}")),
+            expected: ShaderInterfaceHlsl.Generate(shaderInterface: layout.Interface)
+        );
+        // The compiled fragment shader reads every block and binding where that interface places them.
+        Assert.Null(@object: layout.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: File.ReadAllBytes(path: Path.Combine(
+            path1: AppContext.BaseDirectory,
+            path2: "Assets",
+            path3: "Shaders",
+            path4: "overlay-unified.frag.spv"
+        )))));
+    }
+    [Fact]
     public void BoundFrameSlotLeasesMoveIntoTheFramesLeaseList() {
         var retired = 0;
         var slots = new OverlayFrameSlots(sources: new LeasingFrameSources(retire: () => retired++));
@@ -115,7 +138,6 @@ public sealed class OverlayPackageLawTests {
             actual: (frame.Count, slots.BoundCount, retired)
         );
         slots.BeginFrame();
-        slots.RetirePending();
         Assert.Equal(
             actual: retired,
             expected: 0
@@ -150,11 +172,14 @@ public sealed class OverlayPackageLawTests {
     private sealed class Rig : IDisposable {
         private readonly CursorStore m_cursor = new();
 
-        public Rig() {
+        public Rig(GpuCreationFaults? faults = null, bool trackObjects = false) {
             var gpu = new FakeGpuDevice(
                 countCalls: true,
-                reportVersion: 0
+                reportVersion: 0,
+                trackObjects: trackObjects
             );
+
+            Gpu = gpu;
             var package = new OverlayPackage(
                 capacity: new OverlayCapacity(
                     BindingBarMaxBanks: 0,
@@ -205,18 +230,21 @@ public sealed class OverlayPackageLawTests {
                 package: RenderGraphPackageCatalog.Overlay
             );
             Node = new ShaderPipelineRenderNode(
-                deviceContext: gpu,
+                deviceContext: ((faults is null)
+                    ? gpu
+                    : new FaultingDevice(
+                        faults: faults,
+                        gpu: gpu
+                    )),
                 height: Extent,
                 hostsOnDirectX: false,
+                inFlightFrames: InFlight,
                 name: "root",
                 outputLayout: GpuImageLayout.ShaderReadOnly,
                 packages: packages,
                 width: Extent
             );
-            Node.Swap(pipeline: new CompiledShaderPipeline(
-                plan: new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: Graph()).Pipeline,
-                shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)
-            ));
+            Swap();
             Node.BindImage(
                 image: new ShaderPipelineExternalImage(
                     Format: GpuPixelFormat.R8G8B8A8Unorm,
@@ -230,11 +258,17 @@ public sealed class OverlayPackageLawTests {
             );
         }
 
+        public FakeGpuDevice Gpu { get; }
         public ShaderPipelineRenderNode Node { get; }
         // What the overlay's recorder was handed and recorded itself.
         public ObservedPackageFactory Observed { get; }
 
         public void Dispose() => Node.Dispose();
+        // Swaps the overlay graph in as the node's next candidate.
+        public void Swap() => Node.Swap(pipeline: new CompiledShaderPipeline(
+            plan: new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: Graph()).Pipeline,
+            shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)
+        ));
         public void ShowCursor() => m_cursor.Publish(frame: new OverlayCursorFrame(Seats: new[] {
             new OverlayCursorSeat(
                 Hover: false,

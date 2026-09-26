@@ -489,6 +489,8 @@ public sealed record ShaderPipelinePass(
 /// package states every access; there is no default.</param>
 /// <param name="OutputAccesses">How it writes each of <paramref name="Outputs"/>, one write access per output in
 /// order.</param>
+/// <param name="Members">The pass-group members its package declares (<see cref="RenderGraphPackage.Members"/>), which the
+/// planner lays out after its extent and config.</param>
 /// <param name="Dispatch">Its dispatch shape; <see langword="null"/> means
 /// <see cref="ShaderPipelineDispatchKind.Extent"/>.</param>
 /// <param name="Config">The package's config schema with each field defaulting to the pass's bound value, which lays out
@@ -500,11 +502,13 @@ public sealed record ShaderPipelinePackagePass(
     IReadOnlyList<ResourceReference> Outputs,
     IReadOnlyList<RenderGraphPortAccess> InputAccesses,
     IReadOnlyList<RenderGraphPortAccess> OutputAccesses,
+    IReadOnlyList<ShaderInterfaceMember> Members,
     ShaderPipelineDispatch? Dispatch = null,
     IReadOnlyDictionary<string, ShaderConfigField>? Config = null
 ) {
     // Whether each port access is declared once per reference, reads on the inputs and writes on the outputs.
     internal bool HasValidAccesses => (
+        (Members is not null) &&
         (InputAccesses is not null) &&
         (OutputAccesses is not null) &&
         (InputAccesses.Count == Inputs.Count) &&
@@ -529,16 +533,14 @@ public sealed record ShaderPipelinePackagePass(
         Source: Package
     );
 }
-/// <summary>Limits applied while compiling an execution plan. <c>MaxFrameBlockBytes</c> bounds a pushed block (a package's or
-/// a shader set's), frame members and config together: 128 bytes is the push-constant size every Vulkan device guarantees.
-/// <c>MaxPassBlockBytes</c> bounds a document pass's pass block, its extent and config, which it binds as a constant buffer:
-/// 16384 bytes is the uniform-buffer range every Vulkan device guarantees.</summary>
+/// <summary>Limits applied while compiling an execution plan. <c>MaxPassBlockBytes</c> bounds a pass's pass block, its
+/// extent, config and declared values, which it binds as a constant buffer: 16384 bytes is the uniform-buffer range every
+/// Vulkan device guarantees.</summary>
 public sealed record ShaderPipelineLimits(
     int MaxResources = 128,
     int MaxPasses = 128,
     int MaxInputsPerPass = 32,
     int MaxOutputsPerPass = 8,
-    uint MaxFrameBlockBytes = 128,
     uint MaxPassBlockBytes = 16384,
     uint MaxComputeWorkGroupSizeX = 128,
     uint MaxComputeWorkGroupSizeY = 128,

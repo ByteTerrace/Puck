@@ -4,7 +4,7 @@ The HUD is a world-document section rendered through the banded overlay
 pipeline. Document side: `src/Puck.World.Schema/WorldHud.cs` +
 `HudValidation.cs` (schema details in [documents.md](documents.md)). Render
 side: `src/Puck.World/WorldHudFeed.cs`, `WorldHudBindingResolver.cs`,
-`src/Puck.Overlays/HudWriter.cs`, `UnifiedOverlayNode.cs`,
+`src/Puck.Overlays/HudWriter.cs`, `OverlayFrameComposer.cs`, `OverlayPackage.cs`,
 `OverlayChannels.cs`, `OverlayFrameBuilder.cs`. Verbs:
 `src/Puck.World/WorldHudCommandModule.cs`. Mutation kinds: see
 [mutations.md](mutations.md) (ordinals 39–43).
