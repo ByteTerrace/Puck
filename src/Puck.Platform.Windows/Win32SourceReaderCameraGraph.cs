@@ -762,7 +762,7 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
             height: height,
             nativeFormat: nativeFormat,
             sensor: Request.Sensor,
-            targetFormat: SurfaceFormat.B8G8R8A8Unorm,
+            targetFormat: GpuPixelFormat.B8G8R8A8Unorm,
             width: width
         );
 

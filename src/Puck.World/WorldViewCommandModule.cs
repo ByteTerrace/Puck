@@ -108,8 +108,21 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         provider: CultureInfo.InvariantCulture,
         handler: $"{((step.Mapping.Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance")}:{step.Mapping.Source.Name} {(step.Hit.IsOnSource ? $"pixel {step.Hit.PixelX},{step.Hit.PixelY}" : "off-source")}"
     );
+    // A published pane's position in drawing order, found by reference; -1 when it is no longer published.
+    private static int IndexOf(IReadOnlyList<SourceMapping> panes, SourceMapping pane) {
+        for (var index = 0; (index < panes.Count); index++) {
+            if (ReferenceEquals(
+                objA: panes[index],
+                objB: pane
+            )) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
     // Lists the panes the render graph's root last published, in drawing order, and, given a display point, what the
-    // presentation picker and the hit walk through the live instance set answer there.
+    // presentation picker and the hit walk through the live instance set answer there, then the pane the pointer hovers.
     private CommandResult DescribePanes(WireArgs args) {
         if (graphs is not { } host) {
             return CommandResult.Error(output: "[world.view.panes: requires a GPU presentation — a headless boot publishes no panes]");
@@ -183,6 +196,16 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
                 handler: $" | at {x:0.###},{y:0.###} pick={picked} walk={ended}"
             );
         }
+
+        // The pane the pointer hovers, as the cursor feed last asked the picker; the overlay outlines it.
+        var hovered = ((host.HoveredPane is { } pane)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"pane{IndexOf(panes: host.Panes, pane: pane)} {((host.HoveredPick.Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance")}:{host.HoveredPick.Source.Name} pixel {host.HoveredPick.Hit.PixelX},{host.HoveredPick.Hit.PixelY}"
+            )
+            : "none");
+
+        _ = builder.Append(value: " | hovered=").Append(value: hovered);
 
         return new CommandResult(Output: builder.Append(value: ']').ToString());
     }
@@ -310,7 +333,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.pointer",
-            description: "Echoes the drawn cursor's last composed frame: world.view.pointer — the seat the pointer rides (1-based; the keyboard's seat, the one WorldPointerSink resolves the mouse onto), the cursor position in CLIENT pixels (position=), the same position mapped into the fixed FRAME extent the overlay draws in (frame= — the two diverge when the OS window is resized; WorldCursorFeed.Decide owns the mapping) and normalized within the seat's viewport (local=), the viewport rect, the visibility verdict (visible | no-position | no-view | outside-viewport | orbit-drag — WorldCursorFeed's one visibility rule), the held pointer buttons (buttons=, L/R/M in that order or '-' — the live store state, so an injected press is assertable before anything acts on it), the live hover target (hover=none, or the hovered panel/world row's label), and the seat's SYSTEM-RELEASE generation (syscount= — WorldPointer.SystemReleaseCount: how many times the store has force-cleared this seat's held buttons without a genuine release event; an edge-deriving consumer compares this against the value it captured at press time to tell a synthetic release from a real one). A query (always echoes) — the pipe-assertable pointer read, the world.view.camera sibling: live per-seat presentation state nothing else can echo.",
+            description: "Echoes the drawn cursor's last composed frame: world.view.pointer — the seat the pointer rides (1-based; the keyboard's seat, the one WorldPointerSink resolves the mouse onto), the cursor position in CLIENT pixels (position=), the same position mapped into the fixed FRAME extent the overlay draws in (frame= — the two diverge when the OS window is resized; WorldCursorFeed.Decide owns the mapping) and normalized within the seat's viewport (local=), the viewport rect, the visibility verdict (visible | no-position | no-view | outside-viewport | orbit-drag — WorldCursorFeed's one visibility rule), the held pointer buttons (buttons=, L/R/M in that order or '-' — the live store state, so an injected press is assertable before anything acts on it), the live hover target (hover=none, or the hovered HUD panel's label, else the hovered display pane's, pane '<instance>'), and the seat's SYSTEM-RELEASE generation (syscount= — WorldPointer.SystemReleaseCount: how many times the store has force-cleared this seat's held buttons without a genuine release event; an edge-deriving consumer compares this against the value it captured at press time to tell a synthetic release from a real one). A query (always echoes) — the pipe-assertable pointer read, the world.view.camera sibling: live per-seat presentation state nothing else can echo.",
             handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.view.pointer"
@@ -322,7 +345,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.panes",
-            description: "Echoes the panes the render graph's root last published, in drawing order (the world's shown views, then the views.graphs panes): world.view.panes [<x> <y>] — the display extent and, per pane, its SourceMapping (the source by its instance handle, the pane's normalized rect, the source extent the instance last rendered at, the crop, layout, fit, any warp and the destination). Given a display point in display pixels from the top-left corner, it also echoes what the presentation picker answers there (pick=<kind>:<instance> pixel <x>,<y>, or none off every source) and how the hit walk through the live instance set ends (walk=<end> steps=<n>, the instance whose world it ended in, and last <kind>:<source> pixel <x>,<y>, or off-source, for its last hit: a pane, or a screen standing in a view's world, whose mapping world.screens prints). The pipeline pane pointer maps through the same published mapping. A query (always echoes); refused by name in a boot with no GPU presentation.",
+            description: "Echoes the panes the render graph's root last published, in drawing order (the world's shown views, then the views.graphs panes): world.view.panes [<x> <y>] — the display extent and, per pane, its SourceMapping (the source by its instance handle, the pane's normalized rect, the source extent the instance last rendered at, the crop, layout, fit, any warp and the destination). Given a display point in display pixels from the top-left corner, it also echoes what the presentation picker answers there (pick=<kind>:<instance> pixel <x>,<y>, or none off every source) and how the hit walk through the live instance set ends (walk=<end> steps=<n>, the instance whose world it ended in, and last <kind>:<source> pixel <x>,<y>, or off-source, for its last hit: a pane, or a screen standing in a view's world, whose mapping world.screens prints). It ends with the pane the pointer hovers, as the drawn cursor's feed last asked the same picker for the pointer's display point each frame (hovered=pane<i> <kind>:<instance> pixel <x>,<y>, which the overlay outlines in the accent hue, or none: no pointer on the window, a steering drag, a hidden cursor policy, a letterbox bar, or no published pane beneath). The pipeline pane pointer maps through the same published mapping. A query (always echoes); refused by name in a boot with no GPU presentation.",
             handler: (context, args) => DescribePanes(args: args),
             routing: CommandRouting.Immediate
         );

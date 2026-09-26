@@ -357,11 +357,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 ) {
                     throw new InvalidOperationException(message: "A completed same-device output is required for capture.");
                 }
-                var format = m_lastSurface.Format switch {
-                    SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
-                    SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
-                    _ => throw new NotSupportedException(message: $"Capture does not support surface format {m_lastSurface.Format}.")
-                };
+                var format = m_lastSurface.Format;
 
                 m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback();
                 var sourceLayout = m_publishedLayout;
@@ -910,7 +906,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 target.ImageViewHandle,
                 target.Width,
                 target.Height,
-                SurfaceFormat.R8G8B8A8Unorm
+                GpuPixelFormat.R8G8B8A8Unorm
             );
         }
         var (published, publishedName, instance) = PublicationOf(
@@ -928,25 +924,17 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         var height = resolved.Height;
         var format = resolved.Format;
 
-        if (format == GpuPixelFormat.R8G8B8A8Unorm) {
-            return Surface.SameDeviceImage(
-                format: SurfaceFormat.R8G8B8A8Unorm,
-                height: height,
-                imageHandle: imageHandle,
-                imageViewHandle: imageView,
-                width: width
-            );
+        if (!Surface.IsSurfaceFormat(format: format)) {
+            throw new InvalidDataException(message: "The selected output must use an RGBA8 format.");
         }
-        if (format == GpuPixelFormat.B8G8R8A8Unorm) {
-            return Surface.SameDeviceImage(
-                format: SurfaceFormat.B8G8R8A8Unorm,
-                height: height,
-                imageHandle: imageHandle,
-                imageViewHandle: imageView,
-                width: width
-            );
-        }
-        throw new InvalidDataException(message: "The selected output must use an RGBA8 format.");
+
+        return Surface.SameDeviceImage(
+            format: format,
+            height: height,
+            imageHandle: imageHandle,
+            imageViewHandle: imageView,
+            width: width
+        );
     }
 
     // The format of the image a node publishes for an image output: a float or external output through the RGBA8

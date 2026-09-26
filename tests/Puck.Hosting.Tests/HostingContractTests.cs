@@ -1,4 +1,5 @@
 using Puck.Abstractions.Capture;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 
 namespace Puck.Hosting.Tests;
@@ -93,7 +94,7 @@ public sealed class HostingContractTests {
         using var controller = new FrameCaptureController();
         var readback = new FaultingReadback();
         var surface = Surface.SameDeviceImage(
-            format: SurfaceFormat.R8G8B8A8Unorm,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 1U,
             imageHandle: 1,
             imageViewHandle: 2,
@@ -141,7 +142,7 @@ public sealed class HostingContractTests {
             options: new CaptureOptions { FrameRate = 24 }
         );
         var surface = Surface.CpuPixels(
-            format: SurfaceFormat.R8G8B8A8Unorm,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 1U,
             pixels: new byte[4],
             width: 1U
@@ -169,7 +170,7 @@ public sealed class HostingContractTests {
         using var controller = new FrameCaptureController();
         var readback = new RecordingReadback();
         var surface = Surface.SameDeviceImage(
-            format: SurfaceFormat.B8G8R8A8Unorm,
+            format: GpuPixelFormat.B8G8R8A8Unorm,
             height: 1U,
             imageHandle: 11,
             imageViewHandle: 12,

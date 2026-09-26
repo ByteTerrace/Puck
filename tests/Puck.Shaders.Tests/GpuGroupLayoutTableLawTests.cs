@@ -50,20 +50,4 @@ public sealed class GpuGroupLayoutTableLawTests {
             expected: (GpuShaderStage.Compute, GpuShaderStage.Vertex | GpuShaderStage.Fragment, GpuShaderStage.Vertex | GpuShaderStage.Fragment)
         );
     }
-    [Fact]
-    public void An_interface_that_pushes_a_block_has_no_pipeline_layout() {
-        var pushed = new ShaderInterface(
-            members: ShaderFrameInterface.FrameGroupMembers,
-            name: "echo",
-            pushConstants: ShaderInterfaceGroup.Frame
-        );
-        var exception = Assert.Throws<InvalidOperationException>(testCode: () => pushed.Layout().PipelineLayout(
-            stages: GpuShaderStage.Compute
-        ));
-
-        Assert.Contains(
-            actualString: exception.Message,
-            expectedSubstring: "pushes its Frame block"
-        );
-    }
 }

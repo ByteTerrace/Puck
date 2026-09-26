@@ -1,4 +1,5 @@
 using Puck.Abstractions.Capture;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
 namespace Puck.Recording.Capture;
@@ -30,10 +31,10 @@ public sealed class CaptureSink : ICaptureSink {
         }
 
         switch (surface.Format) {
-            case SurfaceFormat.R8G8B8A8Unorm:
+            case GpuPixelFormat.R8G8B8A8Unorm:
                 pixels.CopyTo(destination: rgba);
                 break;
-            case SurfaceFormat.B8G8R8A8Unorm:
+            case GpuPixelFormat.B8G8R8A8Unorm:
                 for (var index = 0; (index < rgba.Length); index += 4) {
                     rgba[(index + 0)] = pixels[(index + 2)];
                     rgba[(index + 1)] = pixels[(index + 1)];

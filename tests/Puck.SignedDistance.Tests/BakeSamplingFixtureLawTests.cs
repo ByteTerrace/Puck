@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Gpu;
 using Puck.Assets.Textures;
 using Puck.SignedDistance.Baking;
 using Xunit;
@@ -54,8 +55,8 @@ public sealed class BakeSamplingFixtureLawTests {
         var at = ((y * width) + x);
 
         return texture.Format switch {
-            TextureFormat.Bc7Unorm => [decoded[(at * 4)], decoded[((at * 4) + 1)], decoded[((at * 4) + 2)], decoded[((at * 4) + 3)]],
-            TextureFormat.Bc5Unorm => [decoded[(at * 2)], decoded[((at * 2) + 1)]],
+            GpuPixelFormat.Bc7Unorm => [decoded[(at * 4)], decoded[((at * 4) + 1)], decoded[((at * 4) + 2)], decoded[((at * 4) + 3)]],
+            GpuPixelFormat.Bc5Unorm => [decoded[(at * 2)], decoded[((at * 2) + 1)]],
             _ => [
                 BinaryPrimitives.ReadUInt16LittleEndian(source: decoded.AsSpan(start: (at * 8))),
                 BinaryPrimitives.ReadUInt16LittleEndian(source: decoded.AsSpan(start: ((at * 8) + 2))),
@@ -133,7 +134,7 @@ public sealed class BakeSamplingFixtureLawTests {
         foreach (var node in textures) {
             var texture = new SdfBakedTexture(
                 ColorSpace: Enum.Parse<TextureColorSpace>(value: node!["colorSpace"]!.GetValue<string>()),
-                Format: Enum.Parse<TextureFormat>(value: node["format"]!.GetValue<string>()),
+                Format: Enum.Parse<GpuPixelFormat>(value: node["format"]!.GetValue<string>()),
                 Height: node["height"]!.GetValue<int>(),
                 Levels: [.. node["levels"]!.AsArray().Select(selector: static level => Convert.FromBase64String(s: level!.GetValue<string>()))],
                 TileTexels: node["tileTexels"]!.GetValue<int>(),

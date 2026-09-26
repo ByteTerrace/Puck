@@ -519,7 +519,7 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
             imageViewHandle: m_engine.OutputImageViewHandle,
             width: m_engine.OutputWidth,
             height: m_engine.OutputHeight,
-            format: SurfaceFormat.R8G8B8A8Unorm
+            format: GpuPixelFormat.R8G8B8A8Unorm
         );
     }
     /// <inheritdoc/>

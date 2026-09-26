@@ -107,7 +107,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] P6 representation experiments.
 - [ ] P7 the binding contract and the adapter memory profile, with the one-day spike as its gate.
 - [ ] P8 the shader package, the pass interface and its generated declarations, the echo pass, and HLSL as the one source language.
-- [ ] P9 the state mirror and presentation time, against [the presentation view's](runtime-and-delivery.md#the-presentation-view) state interface.
+- [x] P9 the state mirror and presentation time, against [the presentation view's](runtime-and-delivery.md#the-presentation-view) state interface.
 - [ ] P10 bound rows reaching a pass: the `parameter` and array statements, the deterministic tick, the capture's tick verdict, pricing, and tiers.
 - [ ] P11 the frame graph document (`puck.render.graph.v1`), views as graph instances scheduled by demand, and self-reference through the previous frame.
 - [ ] P12 image sources: uploaded, imported, and rendered transports, content classes, producer registration, shared conversion passes, and every `WorldScreenSource` kind migrated.

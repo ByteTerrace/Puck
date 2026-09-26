@@ -49,12 +49,6 @@ internal static partial class CompileCommand {
                 : Path.GetDirectoryName(path: (outputPath ?? sourcePath))!)
         );
 
-        if ((compilation.Assets is { PendingReferences.Count: > 0 }) && !string.Equals(
-            a: Path.GetFullPath(path: directory),
-            b: Path.GetDirectoryName(path: sourcePath), comparisonType: PuckPaths.Comparison)) {
-            Console.Error.WriteLine(value: "error: A source with asset references must be emitted beside its source so its pinned relative paths keep their meaning.");
-            return 1;
-        }
         // A document name is unique ignoring case, so no two outputs of one run may land on one document file: two
         // worlds of this source, or a world of this source and one an earlier source of the same tree run wrote. Both
         // are two files carrying one document name, refused in the words every door refuses that in.
@@ -81,6 +75,31 @@ internal static partial class CompileCommand {
         }
         var staged = new List<(string Temporary, string Destination)>();
         var documents = new byte[destinations.Length][];
+        // Each compiled world composes where its source sits, so it reads the document as the source wrote it.
+        var composedDocuments = outputs.Select(selector: static output => CanonicalJsonDocument.Serialize(node: output.Json)).ToArray();
+        var sourceDirectory = Path.GetDirectoryName(path: Path.GetFullPath(path: sourcePath))!;
+
+        // A document written away from its source names every file it references from where it lands; a mirrored tree
+        // keeps the source's layout, so its documents land where their paths already hold.
+        if ((written is null) && !PuckPaths.Comparer.Equals(x: Path.GetFullPath(path: directory), y: sourceDirectory)) {
+            var machines = CliWorldVocabulary.EnsureInstalled();
+
+            for (var index = 0; (index < destinations.Length); index++) {
+                var authored = Path.Combine(path1: sourceDirectory, path2: WorldDocumentName.DocumentFile(name: outputs[index].Name));
+
+                WorldDocumentPaths.RelocateDocumentFields(module: outputs[index].Json, sourceDocumentPath: authored, targetDocumentPath: destinations[index]);
+                if (!WorldModuleNamespace.TryRelocateConfigurationAssets(
+                    catalog: machines,
+                    module: outputs[index].Json,
+                    reason: out var reason,
+                    sourceDocumentPath: authored,
+                    targetDocumentPath: destinations[index]
+                )) {
+                    Console.Error.WriteLine(value: $"error: '{outputs[index].Name}' cannot be written away from its source: {reason}");
+                    return 1;
+                }
+            }
+        }
 
         try {
             for (var index = 0; (index < destinations.Length); index++) {
@@ -114,7 +133,7 @@ internal static partial class CompileCommand {
                         path1: Path.GetDirectoryName(path: sourcePath)!,
                         path2: WorldDocumentName.DocumentFile(name: outputs[index].Name)
                     ),
-                    document: documents[index],
+                    document: composedDocuments[index],
                     pack: pack,
                     written: written
                 );

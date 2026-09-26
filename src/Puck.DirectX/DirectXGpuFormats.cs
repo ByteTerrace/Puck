@@ -23,6 +23,8 @@ public static class DirectXGpuFormats {
         GpuPixelFormat.R8G8B8A8Srgb => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
         GpuPixelFormat.B8G8R8A8Srgb => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
         GpuPixelFormat.R10G10B10A2Unorm => DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_UNORM,
+        GpuPixelFormat.R8Unorm => DXGI_FORMAT.DXGI_FORMAT_R8_UNORM,
+        GpuPixelFormat.R8G8Unorm => DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM,
         _ => throw new ArgumentOutOfRangeException(
         actualValue: gpuPixelFormat,
         message: null,

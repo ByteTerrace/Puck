@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
 using Puck.SdfVm.Views;
@@ -162,7 +161,7 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
             );
             _ = m_surface.Publish(
                 deviceContext: deviceContext,
-                format: SurfaceFormat.B8G8R8A8Unorm,
+                format: GpuPixelFormat.B8G8R8A8Unorm,
                 height: Descriptor.Height,
                 pixels: m_pixels,
                 width: Descriptor.Width

@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+
 namespace Puck.Assets.Textures;
 
 /// <summary>
@@ -20,9 +22,7 @@ namespace Puck.Assets.Textures;
 /// every machine.</para>
 /// </summary>
 public static partial class Bc7Codec {
-    /// <summary>The bytes of one block.</summary>
-    public const int BlockBytes = 16;
-
+    private static readonly int BlockBytes = ((int)GpuPixelFormats.UnitBytes(format: GpuPixelFormat.Bc7Unorm));
     private static readonly byte[] Weights2 = [0, 21, 43, 64];
 
     // The three-bit index weights, which BC6H's two-region modes share.

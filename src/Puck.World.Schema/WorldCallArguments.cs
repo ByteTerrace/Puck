@@ -17,6 +17,9 @@ public enum WorldArgumentForm : byte {
     Choice,
     /// <summary>Free text.</summary>
     Text,
+    /// <summary>A file path the document authors, relative to the source that writes it
+    /// (<see cref="WorldDocumentPaths.IsFileField"/>).</summary>
+    Path,
 }
 /// <summary>The form of every member of every <c>$type</c> arm the document model declares, read from the model's
 /// shape (<see cref="WorldModelShape"/>): a member's <see cref="WorldNameRegistry"/> role where it carries one, and
@@ -129,6 +132,10 @@ public static class WorldCallArguments {
                 WorldNameRole.Expression => WorldArgumentForm.Expression,
                 _ => WorldArgumentForm.Unclassified,
             });
+        }
+
+        if (WorldDocumentPaths.IsFileField(declaringType: member.DeclaringType, member: member.Member)) {
+            return WorldArgumentForm.Path;
         }
 
         var leaf = WorldNameRegistry.Unwrap(type: member.Type);

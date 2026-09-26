@@ -11,15 +11,37 @@ public sealed class AbstractionsContractTests {
     [Fact]
     public void CpuSurfaceRejectsMismatchedPackedStorage() {
         _ = Assert.Throws<ArgumentException>(testCode: () => Surface.CpuPixels(
-            format: SurfaceFormat.R8G8B8A8Unorm,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 1,
             pixels: new byte[3],
             width: 1
         ));
         _ = Assert.Throws<ArgumentException>(testCode: () => Surface.CpuPixels(
-            format: SurfaceFormat.R8G8B8A8Unorm,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 1,
             pixels: new byte[5],
+            width: 1
+        ));
+    }
+    [Fact]
+    public void ASurfaceCarriesOnlyTheTwoEightBitOrders() {
+        foreach (var format in Enum.GetValues<GpuPixelFormat>()) {
+            Assert.Equal(
+                expected: (format is GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm),
+                actual: Surface.IsSurfaceFormat(format: format)
+            );
+        }
+
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Surface.CpuPixels(
+            format: GpuPixelFormat.R8G8B8A8Srgb,
+            height: 1,
+            pixels: new byte[4],
+            width: 1
+        ));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Surface.SharedTexture(
+            format: default,
+            height: 1,
+            sharedHandle: 23,
             width: 1
         ));
     }
@@ -198,20 +220,20 @@ public sealed class AbstractionsContractTests {
             new byte[8],
             width: 2,
             height: 1,
-            SurfaceFormat.R8G8B8A8Unorm
+            GpuPixelFormat.R8G8B8A8Unorm
         );
         var image = Surface.SameDeviceImage(
             imageHandle: 16,
             imageViewHandle: 17,
             width: 1,
             height: 1,
-            SurfaceFormat.B8G8R8A8Unorm
+            GpuPixelFormat.B8G8R8A8Unorm
         );
         var shared = Surface.SharedTexture(
             sharedHandle: 23,
             width: 1,
             height: 1,
-            SurfaceFormat.R8G8B8A8Unorm
+            GpuPixelFormat.R8G8B8A8Unorm
         );
 
         Assert.Equal(

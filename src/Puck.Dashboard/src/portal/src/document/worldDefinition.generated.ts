@@ -1257,6 +1257,8 @@ export type GeneratorWeightedNumeric = {
   multiplicity?: number | null;
 };
 
+export type GpuPixelFormat = "r8g8b8a8" | "b8g8r8a8";
+
 export type GrantSubject = string;
 
 export type Grantee = string;
@@ -2937,8 +2939,6 @@ export type StateVisibility = {
 };
 
 export type StringList = (string | null)[];
-
-export type SurfaceFormat = "r8g8b8a8" | "b8g8r8a8";
 
 export type TableRow = {
   /**
@@ -5593,9 +5593,9 @@ export type WorldHostDefaults = {
    */
   height: number;
   /**
-   * The swapchain surface format (Unknown is rejected by the validator).
+   * The preferred swapchain format: R8G8B8A8Unorm or B8G8R8A8Unorm, authored as r8g8b8a8 or b8g8r8a8.
    */
-  surfaceFormat: SurfaceFormat;
+  surfaceFormat: GpuPixelFormat;
   /**
    * Whether the window enters borderless fullscreen when first shown.
    */

@@ -124,7 +124,7 @@ internal sealed class Win32PixelStream(CameraSensor sensor, int width, int heigh
         }
 
         surface = Surface.CpuPixels(
-            format: SurfaceFormat.B8G8R8A8Unorm,
+            format: GpuPixelFormat.B8G8R8A8Unorm,
             height: ((uint)frameHeight),
             pixels: m_pullBuffer,
             width: ((uint)frameWidth)
@@ -136,7 +136,7 @@ internal sealed class Win32PixelStream(CameraSensor sensor, int width, int heigh
 /// <summary>A shared-texture stream: <see cref="Start"/> hands the consumer's targets and shared fence to the worker
 /// through <see cref="Targets"/> and <see cref="SharedFenceHandle"/>; the worker publishes each written slot with the
 /// fence value its copy signals and reports the order it opened (<see cref="FenceOrder"/>).</summary>
-internal sealed class Win32SharedStream(CameraSensor sensor, int width, int height, CameraCaptureFormat nativeFormat, SurfaceFormat targetFormat) : ICameraSharedStream {
+internal sealed class Win32SharedStream(CameraSensor sensor, int width, int height, CameraCaptureFormat nativeFormat, GpuPixelFormat targetFormat) : ICameraSharedStream {
     private readonly Lock m_orderGate = new();
     private readonly TaskCompletionSource<nint[]> m_targets = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     private SharedFenceOrder m_order = SharedFenceOrder.Pending;
@@ -164,7 +164,7 @@ internal sealed class Win32SharedStream(CameraSensor sensor, int width, int heig
     /// <summary>Gets the consumer's shared fence handle, or zero; read by the worker once <see cref="Targets"/>
     /// completes.</summary>
     public nint SharedFenceHandle { get; private set; }
-    public SurfaceFormat TargetFormat => targetFormat;
+    public GpuPixelFormat TargetFormat => targetFormat;
     public Task<nint[]> Targets => m_targets.Task;
     public int Width => width;
 

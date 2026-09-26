@@ -82,14 +82,14 @@ public sealed partial class ShaderPipelineRenderNode {
                 continue;
             }
 
-            var bytesPerPixel = ((resource.Spec.Kind != ShaderPipelineResourceKind.Buffer)
-                ? BytesPerPixel(format: resource.Spec.Format)
-                : 0UL);
-
-            if (resource.Images is { } images) {
+            if ((resource.Spec.Kind != ShaderPipelineResourceKind.Buffer) && (resource.Images is { } images)) {
                 foreach (var image in images) {
                     if (image is not null) {
-                        bytes = checked((bytes + ((((ulong)image.Width) * image.Height) * bytesPerPixel)));
+                        bytes = checked((bytes + ImageBytes(
+                            format: resource.Spec.Format,
+                            height: image.Height,
+                            width: image.Width
+                        )));
                     }
                 }
             }
@@ -126,7 +126,11 @@ public sealed partial class ShaderPipelineRenderNode {
                     if ((images[slot] is { } image) && (image.ImageHandle == imageHandle)) {
                         images[slot] = null!;
                         m_held.Add(item: new HeldImage(
-                            Bytes: ((((ulong)image.Width) * image.Height) * BytesPerPixel(format: resource.Spec.Format)),
+                            Bytes: ImageBytes(
+                                format: resource.Spec.Format,
+                                height: image.Height,
+                                width: image.Width
+                            ),
                             Handle: imageHandle,
                             Image: image
                         ));

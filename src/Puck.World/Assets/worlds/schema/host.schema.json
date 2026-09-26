@@ -22,8 +22,8 @@
       "type": "integer"
     },
     "surfaceFormat": {
-      "description": "The swapchain surface format (Unknown is rejected by the validator).",
-      "title": "SurfaceFormat",
+      "description": "The preferred swapchain format: R8G8B8A8Unorm or B8G8R8A8Unorm, authored as r8g8b8a8 or b8g8r8a8.",
+      "title": "GpuPixelFormat",
       "type": "string",
       "enum": [
         "r8g8b8a8",
