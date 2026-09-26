@@ -337,6 +337,24 @@
           1205,
           1225
         ]
+      },
+      {
+        "instance": "bound",
+        "palette": [
+          {
+            "color": "#000000",
+            "material": 0
+          },
+          {
+            "color": "#FFFFFF",
+            "material": 1
+          }
+        ],
+        "station": "bound",
+        "ticks": [
+          1215,
+          1235
+        ]
       }
     ]
   },
@@ -1006,6 +1024,25 @@
       },
       "mode": "Edge",
       "name": "toVocabulary"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "grainSeed",
+          "value": 13
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": {
+          "channel": "tick"
+        },
+        "value": 1210
+      },
+      "mode": "Edge",
+      "name": "toGrainSeed"
     }
   ],
   "schema": "puck.world.definition.v1",
@@ -1034,6 +1071,11 @@
       {
         "kind": "Int",
         "name": "station",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "name": "grainSeed",
         "value": 0
       },
       {
@@ -1070,6 +1112,18 @@
         "name": "binding",
         "source": "binding.graph.json",
         "timeScale": 1
+      },
+      {
+        "camera": null,
+        "name": "bound",
+        "parameters": {
+          "grain": {
+            "seed": "state.grainSeed"
+          }
+        },
+        "source": "binding.graph.json",
+        "tier": "high",
+        "timeScale": 1
       }
     ],
     "layouts": [
@@ -1090,6 +1144,14 @@
             "instance": "binding",
             "width": 0.25,
             "x": 0.75,
+            "y": 0.75
+          },
+          {
+            "camera": null,
+            "height": 0.25,
+            "instance": "bound",
+            "width": 0.25,
+            "x": 0.5,
             "y": 0.75
           }
         ],

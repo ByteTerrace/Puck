@@ -1,6 +1,7 @@
 {
   "$schema": "puck.render.graph.v1",
   "name": "binding",
+  "tiers": ["high"],
   "resources": [
     {
       "name": "pattern",

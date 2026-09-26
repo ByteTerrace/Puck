@@ -283,8 +283,10 @@ P5 is complete. P8 extended the manifest: each pass entry records its
 interface hash, and the package carries its precompiled binaries.
 
 P7's gate spike has run its build-time half and its GPU half, the `binding`
-parity station. P10 is complete: all eight of its steps have landed, step 2's
-shared row regions and step 8's field rows included. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
+parity station. P10 is complete: all nine of its steps have landed, step 2's
+shared row regions, step 8's field rows and step 9's `bound` parity station
+included. Its one open check is the floor-tier parity leg on floor hardware, a
+deferred hardware check. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
 lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
 `sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
 the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
@@ -2940,6 +2942,25 @@ follow it.
    baked colors are in the mirror at install and followed through it) and
    `PipelineOverrideLawTests.Parameters` (the load gate binds a field row to an
    array only as long as its lattice).
+9. Done: the bound-row parity station. `puck parity` runs at one pinned
+   reference tier, `high`: the binding graph declares it and the parity world's
+   `bound` row names it, so the station renders the graph's `high` variant. The
+   row binds the grain pass's `seed` to the `grainSeed` state row, which the
+   world's `toGrainSeed` rule moves from 0 to 13 at tick 1210, and its captures
+   at ticks 1215 and 1235 must equal the binding reference drawn with the value
+   the contract states for the bound field (`reference.parameters` in
+   `parity.contract.json`, `ParityBindingReference`). Bound to any other literal,
+   or left unresolved so the graph's default draws, the station fails
+   `REFERENCE-FAILED` on both backends while its pixel verdict still holds. A
+   `world.screenshot` writes no manifest entry, so the comparator is the one
+   place a mid-burst capture's skew is judged: `ParityComparatorTests` hands it
+   a capture whose frame refreshed its regions after the armed tick and holds
+   it to `TICK-FAILED` with `PIXEL-OK`. Laws: `ParityBindingReferenceLawTests`
+   (the bound station's reference reads the stated value, a frame drawn with the
+   default fails it, and a parameter naming a field the reference does not read
+   or a value that is not a whole number is refused by name). The floor-tier
+   leg, the same stations at `low` on floor hardware, is a deferred hardware
+   check.
 
 ### P11 — The frame graph document and nested views
 
