@@ -12,7 +12,7 @@ in the same change rather than preserving an obsolete workflow.
 
 `.puck` is the cartridge's authorial source; `puck.cartridge.v1` JSON is the derived, engine-consumed
 artifact and stays committed beside it (`tetromino.cgb.puck` / `tetromino.cgb.cartridge.json`, `hgb-mirror.cgb.puck`
-/ `hgb-mirror.cgb.cartridge.json`). The regeneration gate in `tests/Puck.GamingBricks.Transpiler.Tests`
+/ `hgb-mirror.cgb.cartridge.json`, and `light-gun.cgb.puck`, the target the `light-gun` canary aims at). The regeneration gate in `tests/Puck.GamingBricks.Transpiler.Tests`
 (`CartridgeRoundTripTests.TestCommittedSourceCompilesToTheCommittedDocument`) compiles every committed
 source and byte-compares it against its committed document, so the two can never drift apart quietly.
 Never hand-edit the generated JSON: regenerate it from the source. `src/Puck.World/Assets/cartridges/pip.agb.cartridge.json`

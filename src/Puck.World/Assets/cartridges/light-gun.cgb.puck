@@ -1,0 +1,49 @@
+schema: "puck.cartridge.v1"
+
+target: "cgb"
+
+title: "LIGHTGUN"
+
+gameCode: "LGUN"
+
+// A light gun's target: the left half of the picture is lit and the right half dark. Every frame the one rule
+// publishes the light sensor into `seen`, the first declared variable and so the first byte of the variable
+// window (0xC200): 1 while the gun is aimed at a lit pixel, 0 otherwise.
+let mapColumns = 32
+let litColumns = 10
+
+palettes {
+  background [[32767, 0, 0, 0]]
+  object [[32767, 0, 0, 0]]
+}
+
+tiles [
+  { name: "lit", pixels: map(range(0, 8), row => "00000000") }
+  { name: "dark", pixels: map(range(0, 8), row => "11111111") }
+]
+
+map: map(range(0, mapColumns * mapColumns), cell => minimum(floor(cell % mapColumns / litColumns), 1))
+
+variables [
+  { name: "seen", initial: 0 }
+]
+
+arrays []
+
+screens []
+
+sprites []
+
+layers []
+
+raster []
+
+sounds []
+
+scrollX: "0"
+
+scrollY: "0"
+
+rule "sense" {
+  seen = $light
+}

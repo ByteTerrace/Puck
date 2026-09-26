@@ -14,12 +14,12 @@ internal sealed record CanaryCeiling(int WorldBoots, int LegBudgetSeconds);
 internal static class CanaryCeilings {
     /// <summary>The automatic set: a bare <c>puck canary</c>, <c>puck landing</c>, and <c>--capability automatic</c>.</summary>
     public static readonly CanaryCeiling Automatic = new(
-        LegBudgetSeconds: 2920,
-        WorldBoots: 76
+        LegBudgetSeconds: 3010,
+        WorldBoots: 78
     );
     /// <summary>The merge gate: <c>puck canary --merge</c>.</summary>
     public static readonly CanaryCeiling Merge = new(
-        LegBudgetSeconds: 11360,
-        WorldBoots: 218
+        LegBudgetSeconds: 11450,
+        WorldBoots: 220
     );
 }
