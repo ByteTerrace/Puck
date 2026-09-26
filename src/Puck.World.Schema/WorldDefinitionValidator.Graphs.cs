@@ -159,11 +159,27 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"views.root '{root}' names no views.graphs row.");
         }
-        if (
-            (views.GraphBudget is { } budget) &&
-            (budget.PassPixelsPerFrame < 0)
-        ) {
-            errors.Add(item: $"views.graphBudget.passPixelsPerFrame {budget.PassPixelsPerFrame} must be non-negative.");
+        if (views.GraphBudget is { } budget) {
+            foreach (var (member, value) in ((ReadOnlySpan<(string, long)>)[
+                ("passPixelsPerFrame", budget.PassPixelsPerFrame),
+                ("bytesPerTick", budget.BytesPerTick),
+                ("bytesPerFrame", budget.BytesPerFrame),
+            ])) {
+                if (value < 0) {
+                    errors.Add(item: $"views.graphBudget.{member} {value} must be non-negative.");
+                }
+            }
+            // The bound parameters' bytes, priced from the document as the cost report prices them, against the
+            // authored ceilings.
+            if (
+                (errors.Count == shapeErrors) &&
+                (WorldPresentationCost.CeilingRefusal(
+                    bindings: WorldBindingCost.Measure(definition: definition),
+                    budget: budget
+                ) is { } ceilingRefusal)
+            ) {
+                errors.Add(item: ceilingRefusal);
+            }
         }
         if (
             (errors.Count == shapeErrors) &&

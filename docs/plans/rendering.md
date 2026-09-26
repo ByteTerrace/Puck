@@ -2790,9 +2790,19 @@ follow it.
    the rate divides the engine rate exactly; a capture records the tick its
    regions were refreshed at, and `puck parity` holds it to the armed tick
    between the state and pixel verdicts.
-6. The presentation dimension. The cost report prices every binding in bytes
-   per tick and per frame, with a per-document ceiling refusing by pipeline and
-   binding; `world.budget` prints it, and the browser report carries it.
+6. Done: the presentation dimension. The cost report prices every binding
+   (`WorldBindingCost`, from the document alone) in bytes per tick and per
+   frame: a literal owes nothing after its install, a scalar binding 4 bytes a
+   tick that moves its row and 4 a frame more when its cell advances or eases
+   and is read without `.$target`, and an array 16 bytes an element of its
+   bound row a tick. `views.graphBudget.bytesPerTick` and `bytesPerFrame` cap
+   the totals, and the validator refuses the binding that crosses one, naming
+   the graph and the binding. `world.budget` prints every binding and the
+   totals against their ceilings, and the browser report carries the dimension
+   (`BrowserPresentationCost`). Laws: `WorldPresentationCostLawTests` (the
+   prices and the refusals) and `BrowserParityRecordingTests`, whose baseline
+   holds the dimension the Node harness (`engine-wasm.test.cjs`) holds the
+   WebAssembly engine's `AnalyzeCosts` to.
 7. Tiers. A package builds its variants beyond `default`, and a row names its
    tier from `low`, `medium` and `high`.
 8. The field lattice as a region kind, replacing `WorldClientFieldLattice`'s

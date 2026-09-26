@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 using Puck.Testing;
 using Xunit;
@@ -7,9 +8,10 @@ using Xunit;
 namespace Puck.World.Browser.Tests;
 
 /// <summary>The determinism canary's native half: computes <see cref="StateArena.ComputeHash"/> over a fixed
-/// document, tick, and write sequence, and compares it against the recorded baseline in <c>Fixtures/browser-parity/expected.json</c>
-/// — the same file the Node harness (<c>engine-wasm.test.cjs</c>) reads to prove the wasm build folds the identical
-/// bytes. The test writes the freshly computed baseline beside its assembly (<see cref="TestRecords"/>) before comparing,
+/// document, tick, and write sequence, and the cost report's presentation dimension of
+/// <c>Fixtures/browser-parity/presentation.world.json</c>, and compares both against the recorded baseline in
+/// <c>Fixtures/browser-parity/expected.json</c> — the same file the Node harness (<c>engine-wasm.test.cjs</c>) reads to
+/// prove the wasm build folds the identical bytes and prices the identical presentation. The test writes the freshly computed baseline beside its assembly (<see cref="TestRecords"/>) before comparing,
 /// and <c>puck baselines browser-parity</c> promotes that copy over the committed one.</summary>
 /// <remarks>Only <c>games/tictactoe.world.json</c> composes standalone under <c>standard.world.json</c> among the
 /// fragments this suite sampled (bowling, billiards, poker, chess, dominoes, freecell, hexlines, klondike, mancala
@@ -99,19 +101,35 @@ public sealed class BrowserParityRecordingTests {
     // The scripted sequences, in the order the committed baseline lists them.
     private static readonly string[] FixtureNames = ["tictactoe-write-then-judge", "tictactoe-judge-twice"];
 
+    // The baseline entry holding the presentation dimension of presentation.world.json as the AnalyzeCosts export
+    // spells it, which the Node harness compares the wasm engine's report against whole.
+    private const string PresentationCostEntry = "presentation-cost";
+
+    // The presentation dimension the cost analysis prices for the fixture document, as the export's camelCase wire
+    // form.
+    private static JsonNode PresentationCost() {
+        var analysis = BrowserCostAnalyzer.Analyze(utf8Json: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Browser.Tests/Fixtures/browser-parity/presentation.world.json")));
+
+        Assert.True(condition: analysis.Ok, userMessage: string.Join(separator: "; ", values: (analysis.Errors ?? []).Select(selector: static error => error.Message)));
+
+        return JsonSerializer.SerializeToNode(
+            options: new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase },
+            value: analysis.Report!.Presentation
+        )!;
+    }
+
     [Fact]
-    public void StateHashes_match_the_recorded_baseline() {
-        var computed = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+    public void StateHashes_and_presentation_cost_match_the_recorded_baseline() {
+        var computed = new JsonObject();
 
         foreach (var fixture in FixtureNames) {
             computed[fixture] = RunFixture(name: fixture).ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
         }
 
+        computed[PresentationCostEntry] = PresentationCost();
+
         var path = ExpectedPath();
-        var rendered = (JsonSerializer.Serialize(
-            value: computed,
-            options: new JsonSerializerOptions { WriteIndented = true }
-        ).ReplaceLineEndings(replacementText: "\n") + "\n");
+        var rendered = (computed.ToJsonString(options: new JsonSerializerOptions { WriteIndented = true }).ReplaceLineEndings(replacementText: "\n") + "\n");
 
         _ = TestRecords.Write(
             artifact: "browser-parity",

@@ -5382,6 +5382,8 @@ public static partial class WorldModelShape {
             [],
             [
                 M("passPixelsPerFrame", typeof(global::System.Int64), typeof(global::Puck.World.WorldViewGraphBudget), "PassPixelsPerFrame", Read | Write),
+                M("bytesPerTick", typeof(global::System.Int64), typeof(global::Puck.World.WorldViewGraphBudget), "BytesPerTick", Read | Write),
+                M("bytesPerFrame", typeof(global::System.Int64), typeof(global::Puck.World.WorldViewGraphBudget), "BytesPerFrame", Read | Write),
             ],
             []),
         T(typeof(global::Puck.World.WorldViewGraphInput), true, JsonTypeInfoKind.Object, null,

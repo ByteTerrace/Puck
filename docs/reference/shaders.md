@@ -384,6 +384,20 @@ ceiling (one display), its rate, and the passes its graph plans to. The server
 plans each row's source for that price. A document analysed without its
 sources reports why the passes are unplanned.
 
+The same dimension prices every bound
+[parameter](#per-instance-overrides) in bytes, separately from the
+simulation's cycle bound and from the document alone, so a native host and the
+WebAssembly engine report it alike (`WorldBindingCost`). A literal is written
+once when its graph installs and owes nothing afterwards. A state binding owes
+its bytes on every tick that moves its row: 4 for a scalar field, and 16 an
+element for an array bound to a whole row, one World-block row per element the
+row presents. A scalar binding whose cell advances, or eases and is read
+without `.$target`, is presented interpolated between ticks, so it owes its 4
+bytes on every presented frame as well. `graphBudget.bytesPerTick` and
+`graphBudget.bytesPerFrame` cap the totals (0 sets no ceiling), and a document
+whose bindings exceed one is refused, naming the graph and the binding that
+crosses it.
+
 `RenderGraphRuntime` runs a set of instances. Each frame it schedules the set,
 then renders each scheduled instance through its own `ShaderPipelineRenderNode`
 at the scheduled extent. One submission per instance records the graph's

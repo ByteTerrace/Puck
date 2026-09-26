@@ -274,9 +274,13 @@ another row, and the per-instance `timeScale`, `output` and `overrides`
 (`WorldDefinitionValidator.Graphs.cs`) refuses a loop of same-frame inputs
 through `RenderGraphInstanceSet.TryCreate`, naming every instance; a self-input
 and a `previousFrame` input are legal. `views.graphBudget.passPixelsPerFrame`
-is the scheduler's price ceiling. `world.budget` echoes every row with its
+is the scheduler's price ceiling, and `bytesPerTick` and `bytesPerFrame` cap
+the bytes every bound parameter together owes its pass (`WorldBindingCost`,
+priced from the document alone), refused naming the graph and the binding that
+crosses one. `world.budget` echoes every row with its
 extent ceiling, rate and planned passes (`WorldPresentationCost`, priced by
-`WorldPipelineSources.PlanGraph`), then the live budget: what the runtime's latest
+`WorldPipelineSources.PlanGraph`) and every binding with its bytes per tick and
+per frame, then the live budget: what the runtime's latest
 schedule decided for every instance, with its extent, divisor, passes,
 pass-pixels and its newest completed submission's counts (`RenderGraphLiveBudget`).
 `views.root` names the row the display

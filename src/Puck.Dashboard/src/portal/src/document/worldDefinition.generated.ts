@@ -10929,6 +10929,14 @@ export type WorldViewGraphBudget = {
    * The pass-pixels (passes times rendered pixels) those instances may spend in one presented frame; the stalest due instance is admitted first and the rest read their latest completed output. 0 sets no ceiling.
    */
   passPixelsPerFrame?: number;
+  /**
+   * The bytes every bound parameter together may owe its pass on a tick that moves its row, or 0 for no ceiling. A document whose bindings exceed it is refused, naming the graph and the binding that crosses it.
+   */
+  bytesPerTick?: number;
+  /**
+   * The bytes every bound parameter together may owe its pass on each presented frame between ticks, or 0 for no ceiling, refused the same way.
+   */
+  bytesPerFrame?: number;
 };
 
 export type WorldViewGraphInput = {

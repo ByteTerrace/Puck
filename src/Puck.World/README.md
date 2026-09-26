@@ -416,8 +416,10 @@ the slot's pointer; a pane the active layout does not show is not rendered,
 and a layout change places panes one frame later. The row's optional camera
 supplies shader camera inputs, and `timeScale` seeds its presentation clock.
 A row also takes a refresh divisor or rate and inputs bound to other rows'
-outputs, with `views.graphBudget` as the scheduler's pass-pixel ceiling, and
-`world.budget` prices each row by planning its source, then reads back what the
+outputs, with `views.graphBudget` as the scheduler's pass-pixel ceiling and
+the bound parameters' byte ceilings, and
+`world.budget` prices each row by planning its source and each bound parameter
+in bytes per tick and per frame, then reads back what the
 render graph runtime scheduled for every instance in its latest frame: rendered
 or not, its extent, frame divisor, passes and pass-pixels, and the passes,
 dispatches and draws its newest completed submission counted. `views.shaderToolchain`
