@@ -1,7 +1,7 @@
 # Every frame renders every pass, and the visibility view colors each pixel by the kind of its visibility record.
 world.cadence off
 # The engine builds its pipelines before the first capture is armed, so the capture lands on a rendered frame.
-world.wait ready 120
+world.wait ready 45
 world.debug-view visibility
 world.wait 30
 world.screenshot {run}/before.png

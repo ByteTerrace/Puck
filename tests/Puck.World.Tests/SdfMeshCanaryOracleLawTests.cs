@@ -17,13 +17,13 @@ namespace Puck.World.Tests;
 /// The <c>sdf-mesh-visibility</c> and <c>sdf-mesh-motion</c> canaries' expectations are an analytic oracle's, not
 /// recorded colors. For every capture a leg's script takes, the oracle casts each pixel's camera ray, through the pixel
 /// center the SDF march casts through, two ways: the fixed-point raycast (<see cref="SdfFieldEvaluator.Raycast"/>) of the
-/// program the static stamper emits for rendering, and an exact intersection with the analytic triangles of the mesh draws
+/// program the static stamper emits for rendering, and an analytic intersection with the triangles of the mesh draws
 /// it emits beside the program. The raycast is the unbounded reference primary's mesh bound is checked against: it runs
-/// to the render far distance, where the engine's march ends, and never stops at a mesh. Only a converged march is an
-/// SDF surface, and no region is judged over a pixel whose march ended unproven. The nearer surface is the pixel's, the
-/// mesh at an equal distance, and no surface is the background. The visibility debug view colors each kind, so every
-/// <c>imageRegion</c> bound in the manifest is held to the oracle's colors over its region: a bound that holds must contain
-/// every pixel, and a bound that must fail must miss one by more than its tolerance. A row edit the script makes before a
+/// from the camera's near plane to the render far distance, where the engine's march ends, and never stops at a mesh.
+/// Only a converged march is an SDF surface, and no region is judged over a pixel whose march ended unproven. The nearer
+/// surface is the pixel's, the mesh at an equal distance, and no surface is the background. The visibility debug view
+/// colors each kind, so every <c>imageRegion</c> bound in the manifest is held to the oracle's colors over its region: a
+/// bound that holds must contain every pixel, and a bound that must fail must miss one by more than its tolerance. A row edit the script makes before a
 /// capture is applied to the document the oracle reads for it.
 /// </summary>
 public sealed class SdfMeshCanaryOracleLawTests {
@@ -164,7 +164,6 @@ public sealed class SdfMeshCanaryOracleLawTests {
         var triangles = Triangles(draws: draws);
         var field = new SdfFieldEvaluator(program: builder.Build());
         var farDistance = FixedQ4816.FromDouble(value: WorldRenderFarDistance.Resolve(defaults: definition.Render));
-        var origin = FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: camera.Position));
         var kinds = new int[width, height];
 
         for (var y = 0; (y < height); y++) {
@@ -176,11 +175,15 @@ public sealed class SdfMeshCanaryOracleLawTests {
                     x: x,
                     y: y
                 );
+                var near = (((double)SdfWorldEngine.ConeNear) / Vector3.Dot(
+                    vector1: direction,
+                    vector2: camera.Forward
+                ));
                 var marched = field.Raycast(
                     dir: FixedVector3.FromVector3(value: direction),
                     hit: out var hit,
-                    maxDist: farDistance,
-                    origin: origin
+                    maxDist: (farDistance - FixedQ4816.FromDouble(value: near)),
+                    origin: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: (camera.Position + (((float)near) * direction))))
                 );
 
                 // A march that could not prove its answer proves neither a surface nor its absence.
@@ -190,9 +193,10 @@ public sealed class SdfMeshCanaryOracleLawTests {
                     continue;
                 }
 
-                double? sdf = (marched ? ((double)hit.Distance) : null);
+                double? sdf = (marched ? (((double)hit.Distance) + near) : null);
                 var mesh = Nearest(
                     direction: direction,
+                    near: near,
                     origin: camera.Position,
                     triangles: triangles
                 );
@@ -231,7 +235,7 @@ public sealed class SdfMeshCanaryOracleLawTests {
             viewportWidth: width
         );
     }
-    // The normalized ray through a pixel's center, as sdf-viewport.hlsli's cameraRayDirection casts it.
+    // The normalized ray through a pixel's center, as sdf-world.hlsli's cameraRayDirection casts it.
     private static Vector3 Direction(CameraSnapshot camera, int width, int height, int x, int y) {
         var ndcX = ((((x + 0.5) / width) * 2.0) - 1.0);
         var ndcY = -((((y + 0.5) / height) * 2.0) - 1.0);
@@ -257,8 +261,8 @@ public sealed class SdfMeshCanaryOracleLawTests {
 
         return triangles;
     }
-    // The distance along a unit ray to the nearest triangle it crosses, in double precision (Möller–Trumbore), or none.
-    private static double? Nearest(Vector3 origin, Vector3 direction, List<(Vector3 A, Vector3 B, Vector3 C)> triangles) {
+    // The distance along a unit ray to the nearest triangle beyond the near plane (Möller–Trumbore), or none.
+    private static double? Nearest(Vector3 origin, Vector3 direction, double near, List<(Vector3 A, Vector3 B, Vector3 C)> triangles) {
         double? nearest = null;
 
         foreach (var (a, b, c) in triangles) {
@@ -277,7 +281,7 @@ public sealed class SdfMeshCanaryOracleLawTests {
             var v = (Vector3.Dot(vector1: direction, vector2: q) / determinant);
             var t = (Vector3.Dot(vector1: e2, vector2: q) / determinant);
 
-            if ((u >= 0.0) && (v >= 0.0) && ((u + v) <= 1.0) && (t > 0.0) && ((nearest is null) || (t < nearest))) {
+            if ((u >= 0.0) && (v >= 0.0) && ((u + v) <= 1.0) && (t >= near) && ((nearest is null) || (t < nearest))) {
                 nearest = t;
             }
         }

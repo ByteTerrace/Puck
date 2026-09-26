@@ -52,7 +52,7 @@ buffer-layout, or C# ISA changes need a rebuild.
 
 ## The frame
 
-Nine counted passes, labelled by `SdfWorldEngine.PassLabels` for
+Ten counted passes, labelled by `SdfWorldEngine.PassLabels` for
 `world.counters gpu`; the brick staging copy and bake dispatches are recorded in addition when
 work is pending, and count outside every pass. A cadence-skipped frame marks
 `sky` through `views` skipped (`SdfWorldEngine.CadenceSkippedPassLabels`):
@@ -64,6 +64,7 @@ work is pending, and count outside every pass. A cadence-skipped frame marks
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |
+| `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes mesh visibility before primary; records nothing when the frame has no mesh draws. |
 | `primary` | `sdf-world-primary.comp` | Camera traversal; writes every active hit record, misses included. |
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask. |

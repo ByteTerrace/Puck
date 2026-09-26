@@ -103,7 +103,7 @@ uint; "uint4" and "float4" name 16-byte vectors.
 | The instance-mask buffer | `sdfInstanceMasksRW` in instance-cull; `sdfInstanceMasks` in the beam and the hit passes | |
 | `DebugViewModes.Names` | `DebugViewModeCount` and mode ids in `sdf-world.hlsli`, `sdf-surface.hlsli`, `sdf-beam.comp.hlsl` | Twelve modes, the same order on both sides; mode 11 is `visibility`. |
 | `PrimaryMarchSteps` = 128 | `MaxSteps` in `sdf-world.hlsli` | |
-| `ConeNear` = 0.02 | `ConeNear` in `sdf-viewport.hlsli` (the beam's cone start and the mesh pass's near plane) | The camera cone's start and the near plane a `ViewProjection` for the same view is created with, so rasterized depth and the march agree on where a view begins. |
+| `ConeNear` = 0.02 | `ConeNear` in `sdf-viewport.hlsli` (the beam's cone start and the mesh pass's near plane) | The beam starts conservatively at this ray distance; primary starts no earlier than `ConeNear / dot(ray, forward)`, the intersection with the forward-distance near plane that the mesh projection and `ViewProjection` share. |
 | `SdfProgram.MaxDynamicTransformSlot` = int.MaxValue − 1 | the `TransformDynamic` slot decode | `slot + 1` must fit. The C# validation compares the float lane in double, because `(float)int.MaxValue` rounds up to 2³¹. |
 
 ## Image sources

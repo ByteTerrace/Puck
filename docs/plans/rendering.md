@@ -41,8 +41,8 @@ node, the SDF world engine, its views, and the unified overlay all report
 through that model, and `world.counters`, `pipeline.inspect`, and
 `puck counters` read it. The SDF engine builds its pipelines off the frame
 thread and keeps a persistent pipeline cache per device. Neutral vertex and
-draw infrastructure exists to extend. SDF traversal and shading passes exist
-with no shared mesh visibility path. The live authoring and compiler foundation
+draw infrastructure exists to extend. SDF traversal and rasterized meshes share
+opaque visibility. The live authoring and compiler foundation
 exists, with its relocatable package form and the committed per-instance
 overrides that survive a save and a relaunch, so P5's persistence is complete.
 
@@ -1720,9 +1720,9 @@ promised speedup; expected visible objects verified, not only cross-backend
 agreement; `puck search -M 0` finding no reader of the retired hit-record
 layout outside the test reference.
 
-**Build sequence.** The first six commits have landed; the rest follow P7b's
-device-bound services and its one recorder, which have landed, and the SDF
-engine's groups (P7b-20).
+**Build sequence.** The first eight steps have landed, including the raster pass
+and its canaries, on P7b's device-bound services, shared recorder and SDF engine
+groups. The remaining work follows below.
 
 1. P4-0, landed, the depth clear value: a depth attachment names the depth it
    clears to in `GpuDepthAttachment.ClearDepth` (1 by default, refused outside
@@ -1810,8 +1810,8 @@ engine's groups (P7b-20).
    the shadow march for a mesh pixel. While a frame draws a mesh (the world
    block's `meshDraws`), cull-args covers the whole tile grid. The cadence
    signature folds a mesh revision, `world.budget` prints the attachments'
-   bytes (20 a pixel), `GpuStage.VertexShader` orders the region copies before
-   the vertex stage, and `SDF_MONOLITHIC_VIEWS` is deleted with the views
+   bytes (20 a pixel), and region copies are ordered before compute, vertex
+   and fragment readers. `SDF_MONOLITHIC_VIEWS` is deleted with the views
    branches only it compiled.
 8. P4-2d, landed, the canaries: `sdf-mesh-visibility` (a mesh in front of a
    block, a block in front of a wider mesh, a mesh against the sky, and the
@@ -1831,9 +1831,10 @@ engine's groups (P7b-20).
 **Decisions.** Meshes rasterize first, into a sampled `RGBA32F` target (ray
 parameter, draw id plus one, octahedral normal) and a reversed-Z `D32Float`
 depth cleared to 0, compared `Greater`, with an infinite far plane and the cone
-near distance (0.02) as the near plane. Primary traversal takes the smaller of
-its far bound and the mesh's ray parameter as its bound and skips the march when
-it starts beyond it. At equal depth the mesh wins; the SDF surface wins only
+near distance (0.02) as the near plane. Primary starts no earlier than its ray's
+intersection with that plane, ends at the nearest of the far distance, the tile's
+far bound and the mesh's ray parameter, and skips the march when
+it starts at or beyond it. At equal depth the mesh wins; the SDF surface wins only
 when strictly nearer. While a mesh draws, the cull arguments cover the full
 extent and the resolve runs over it, and the cadence signature includes the mesh
 draws. The compact record may move presentation pixels by at most one

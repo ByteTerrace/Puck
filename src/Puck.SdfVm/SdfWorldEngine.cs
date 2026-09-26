@@ -64,7 +64,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     public const int PrimaryMarchSteps = 128;
     /// <summary>The distance at which every camera cone begins, and so the near plane a rasterized view shares with
     /// the SDF march (<see cref="Puck.Abstractions.Cameras.ViewProjection.Create"/>'s <c>near</c>). KEEP IN SYNC with
-    /// <c>ConeNear</c> in sdf-world.hlsli.</summary>
+    /// <c>ConeNear</c> in sdf-viewport.hlsli.</summary>
     public const float ConeNear = 0.02f;
     /// <summary>The edge of one screen tile in pixels, the unit the beam, the instance masks and the cull buffer
     /// count in. KEEP IN SYNC with <c>WorldTileSize</c> in sdf-world.hlsli.</summary>
@@ -398,7 +398,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_regionCopyPipeline = regionCopy;
         m_regionCopies = new GpuRegionCopyRecording(
             begin: BeginUpload,
-            readers: GpuStage.ComputeShader | GpuStage.VertexShader,
+            readers: GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader,
             recorder: gpu.Recorder
         );
 
@@ -603,8 +603,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             ));
         }
 
-        // One pool: per ring slot a frame set and one views set per view slot, and with a brick pool one bake set per
-        // brick slot. The Direct3D 12 allocator bump-allocates a non-overlapping heap region per set (like a Vulkan pool),
+        // One pool: per ring slot a frame set, a mesh set and one views set per view slot, and with a brick pool one bake
+        // set per brick slot. The Direct3D 12 allocator bump-allocates a non-overlapping heap region per set (like a Vulkan pool),
         // so they never clobber, and the capacity is derived from the interfaces' groups.
         var poolSizes = DescriptorPoolSizes(
             brickPool: m_brickPoolEnabled,

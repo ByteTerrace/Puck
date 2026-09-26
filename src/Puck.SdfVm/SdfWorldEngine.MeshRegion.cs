@@ -33,8 +33,6 @@ public sealed partial class SdfWorldEngine {
     // Packs a new draw list into the region, growing it first when the list needs more bytes; the upload pass sends the
     // slot what it owes. Called with the slot's fence retired.
     private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws) {
-        m_meshDrawCount = ((uint)draws.Count);
-
         if (!ReferenceEquals(
             objA: draws,
             objB: m_meshDraws
@@ -71,6 +69,8 @@ public sealed partial class SdfWorldEngine {
             m_meshLayout = layout;
             m_meshRevision++;
         }
+
+        m_meshDrawCount = ((uint)draws.Count);
     }
     // Replaces the region with one grown by half again (or to the need, if larger), after every frame-ring fence retires,
     // and binds the replacement's buffers into every set. The replacement starts owing every word, so the next write
@@ -91,16 +91,32 @@ public sealed partial class SdfWorldEngine {
         grown = (((grown + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint));
 
         WaitForFrameRing();
-        m_meshRegion.Dispose();
-        m_meshRegion = CreateRegion(
+
+        using var scope = new GpuCreationScope();
+        var replacement = scope.Own(created: CreateRegion(
             byteCount: checked((int)grown),
             region: MeshRegionIndex
-        );
+        ));
+        var previous = m_meshRegion;
 
-        for (var slot = 0; (slot < FrameRingSize); slot++) {
-            BindMeshRegion(slot: slot);
+        m_meshRegion = replacement;
+
+        try {
+            for (var slot = 0; (slot < FrameRingSize); slot++) {
+                BindMeshRegion(slot: slot);
+            }
+        } catch {
+            m_meshRegion = previous;
+
+            for (var slot = 0; (slot < FrameRingSize); slot++) {
+                BindMeshRegion(slot: slot);
+            }
+
+            throw;
         }
 
+        scope.Complete();
+        previous.Dispose();
         Volatile.Write(
             location: ref m_meshRegionBytes,
             value: grown

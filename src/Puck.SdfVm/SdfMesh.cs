@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 /// <summary>An indexed triangle list in object space: opaque geometry a frame draws beside its SDF program.</summary>
 /// <remarks>Triangles wind counter-clockwise seen from their front, in the right-handed convention of
 /// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. A world prototype's inline mesh becomes one, placed by its static
-/// placements; no pass draws it yet.</remarks>
+/// placements and rasterized by the mesh pass.</remarks>
 public sealed record SdfMesh {
     /// <summary>Creates a mesh, refusing a malformed index list or a non-finite position.</summary>
     /// <param name="positions">The object-space vertex positions.</param>
@@ -63,7 +63,7 @@ public sealed record SdfMesh {
 public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material);
 /// <summary>
 /// The raw word layout of the region a frame's mesh draws upload into (<see cref="SdfWorldEngine.MeshRegionLayout"/>),
-/// read as a byte-address buffer so every backend reads the same offsets: first one record a draw
+/// read as a structured buffer of uints so every backend reads the same word offsets: first one record a draw
 /// (<see cref="DrawWords"/> words), then each distinct <see cref="SdfMesh"/> once, however many draws share it, as its
 /// positions (three floats a vertex), then those meshes' indices (one word each), meshes in the order their first draw
 /// names them.

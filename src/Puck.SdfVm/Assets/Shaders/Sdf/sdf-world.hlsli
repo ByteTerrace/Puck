@@ -1946,6 +1946,11 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     float time = view.position.w;
     float farDistance = worldFarDistance(view);
 
+    // Cone entry is a conservative ray distance; rasterization clips at forward distance ConeNear.
+    if (marchStart >= 0.0) {
+        marchStart = max(marchStart, (ConeNear / dot(rayDirection, view.forward.xyz)));
+    }
+
     sdfEvalCount = 0.0; // fresh tally for this pixel — see world.debug-view evals (case 10 below)
 
     float traveled = max(marchStart, 0.0);
@@ -2007,11 +2012,11 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         meshHit = sdfMeshSampleAt(pixel);
     }
 
-    // The march ends at the nearer of the tile's far bound and the mesh, and does not start past it: nothing it could
-    // accept there would win.
-    float marchBound = (meshHit.covered ? min(farBound, meshHit.t) : farBound);
+    // The march ends at the nearest of the far distance, the tile's far bound and the mesh, and does not start at or
+    // past it: nothing it could accept there would win.
+    float marchBound = min(farDistance, (meshHit.covered ? min(farBound, meshHit.t) : farBound));
 
-    if ((marchStart >= 0.0) && !(meshHit.covered && (marchStart >= marchBound)) && (viewMode != DebugViewModeSlice) && (viewMode != DebugViewModeMask) && (viewMode != DebugViewModeOvershoot)) {
+    if ((marchStart >= 0.0) && (marchStart < marchBound) && (viewMode != DebugViewModeSlice) && (viewMode != DebugViewModeMask) && (viewMode != DebugViewModeOvershoot)) {
         SdfPrimaryHit primary = sdfTracePrimary(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
             marchBound, farDistance, instanceMaskBase, pixelFootprint);
         traveled = primary.traveled;

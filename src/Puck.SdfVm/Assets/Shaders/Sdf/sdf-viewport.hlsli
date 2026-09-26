@@ -4,8 +4,8 @@
 #ifndef SDF_VIEWPORT_HLSLI
 #define SDF_VIEWPORT_HLSLI
 
-// The near plane every camera ray starts at: the beam's cone march and the mesh pass's reversed-Z projection, whose depth is
-// ConeNear / d at forward distance d. KEEP IN SYNC with SdfWorldEngine.ConeNear, the near plane ViewProjection shares.
+// The mesh projection's near plane at forward distance ConeNear. The beam starts conservatively at ray distance ConeNear;
+// renderView raises each primary ray's start to the plane. KEEP IN SYNC with SdfWorldEngine.ConeNear and ViewProjection.
 static const float ConeNear = 0.02;
 
 // The viewport table — cameras + regions — as DATA: six float4 rows per view in the viewports buffer, read through
@@ -20,7 +20,7 @@ struct ViewportData {
     // it into the view's rect. zw are zero.
     float4 extent;
     // x is zero. yz = the off-axis (asymmetric) frustum's tangent-space center offset (SdfAsymmetricFrustum) — (0,0)
-    // for an ordinary symmetric camera, consumed by cameraRayDirection below. w = the frame's FAR DISTANCE
+    // for an ordinary symmetric camera, consumed by sdf-world.hlsli's cameraRayDirection. w = the frame's FAR DISTANCE
     // (SdfFrame.FarDistance, read through worldFarDistance below).
     // KEEP IN SYNC with SdfWorldEngine.PackViewports (the 96-byte row).
     float4 lens;

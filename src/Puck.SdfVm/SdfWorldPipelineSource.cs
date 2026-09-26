@@ -35,8 +35,8 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     // The device's ready mesh pass pipeline, or null before it has built.
     public GpuPassPipeline? MeshRaster => m_meshRaster?.Current;
 
-    // Returns the ready set once the region-copy and mesh pass pipelines are ready too; the first call starts taking both leases and
-    // every call until both have built returns null. A lease or build that failed rethrows its exception here, on the
+    // Returns the ready set once the region-copy and mesh pass pipelines are ready too; the first call starts taking the
+    // leases and every call until all have built returns null. A lease or build that failed rethrows its exception here, on the
     // frame thread, so a device loss reaches the host's recovery; the next call starts again.
     public SdfWorldPipelines? Poll(IGpuDeviceContext device, SdfWorldKernels? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
         if (m_lease is null) {
