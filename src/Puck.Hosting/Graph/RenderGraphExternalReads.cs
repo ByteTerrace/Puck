@@ -6,7 +6,8 @@ namespace Puck.Hosting;
 /// <summary>One image an external producer reads when it produces: the latest completed output of an instance its own
 /// instance reads, bound by the render-graph runtime.</summary>
 /// <param name="Producer">The name of the instance read.</param>
-/// <param name="Image">The image, or an empty surface when the instance read has completed no output.</param>
+/// <param name="Image">The image, or an empty surface when the instance read has completed no output or hands out its
+/// image view through the lease alone.</param>
 /// <param name="Layout">The layout the image is in between its producer's submissions; a sampling submission hands it
 /// back in this layout.</param>
 /// <param name="Lease">The acquisition that keeps the image alive; handle-only for an instance that needs none.</param>
@@ -77,6 +78,11 @@ public sealed class RenderGraphExternalReads {
 
         return -1;
     }
+    /// <summary>Returns whether one read's lease was taken this frame, so a producer that samples one image in several
+    /// places takes it once.</summary>
+    /// <param name="index">The read's position.</param>
+    /// <returns><see langword="true"/> once <see cref="Take"/> has taken it this frame.</returns>
+    public bool IsTaken(int index) => m_taken[index];
     /// <summary>Retires every lease no producer took and clears every read's image, which the runtime does once
     /// <see cref="IRenderGraphExternalProducer.Produce"/> returns.</summary>
     public void RetireUntaken() {

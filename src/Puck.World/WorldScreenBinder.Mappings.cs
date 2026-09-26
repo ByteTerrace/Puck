@@ -17,8 +17,8 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
         !m_liveBinds.Contains(item: screen)
     );
     /// <inheritdoc/>
-    /// <remarks>A machine output's extent is its framebuffer's, a producer feed's its descriptor's, and a probe
-    /// output's its provisioned ring's.</remarks>
+    /// <remarks>A machine output's extent is its framebuffer's, a producer feed's its descriptor's (the feed its source
+    /// instance opened), and a probe output's its provisioned ring's.</remarks>
     public bool TryExtent(int screen, out int width, out int height) {
         (width, height) = (0, 0);
 
@@ -36,10 +36,20 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
             ) is { } output) {
                 (width, height) = (output.Width, output.Height);
             }
-        } else if ((slot.LiveFeed ?? slot.DeclaredFeed) is { } feed) {
-            (width, height) = (((int)feed.Descriptor.Width), ((int)feed.Descriptor.Height));
-        } else if (slot.Probe?.Output is { } probe) {
-            (width, height) = (probe.Width, probe.Height);
+        } else if (
+            (slot.DeclaredSource is WorldScreenSource.Probe probe) &&
+            m_probeFeeds.TryGetValue(
+                key: probe.Id,
+                value: out var feed
+            ) &&
+            (feed.Output is { } ring)
+        ) {
+            (width, height) = (ring.Width, ring.Height);
+        } else if (
+            (ReadOf(screen: screen) is { } instance) &&
+            (FeedOf(instance: instance) is { } source)
+        ) {
+            (width, height) = (((int)source.Descriptor.Width), ((int)source.Descriptor.Height));
         }
 
         return ((width > 0) && (height > 0));

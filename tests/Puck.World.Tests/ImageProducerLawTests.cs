@@ -4,6 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Assets.Qr;
 using Puck.Hosting;
+using Puck.Shaders;
 using Puck.Testing;
 using Puck.World.Client;
 using Xunit;
@@ -348,6 +349,71 @@ public sealed class ImageProducerLawTests {
         Assert.False(condition: offscreen.Fills(content: ImageContentClass.Deterministic));
         Assert.False(condition: offscreen.Fills(content: ImageContentClass.Presentation));
         Assert.Equal(expected: 2, actual: desktop.Feed.Acquisitions);
+    }
+    // A source instance's producer is the one place its image is acquired, and it acquires through the gate: while the gate
+    // fills, every acquisition hands out the source's fill and the feed is never acquired, so nothing it holds is leased.
+    [Fact]
+    public void AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed() {
+        var producers = new WorldImageProducers();
+        var desktop = new FakeProducer(
+            content: ImageContentClass.External,
+            id: WorldImageProducerSettings.CaptureId,
+            transport: ImageSourceTransport.Imported
+        );
+
+        producers.Register(producer: desktop);
+        Assert.True(condition: producers.TryOpen(
+            fault: out _,
+            feed: out var feed,
+            source: Desktop()
+        ));
+
+        var filling = true;
+        var filled = new List<uint>();
+
+        GpuImageLease Fill(uint rgba) {
+            filled.Add(item: rgba);
+
+            return ((nint)0xF111);
+        }
+
+        using var source = new WorldImageFeedProducer(
+            fill: Fill,
+            gate: new WorldCaptureGate(
+                alwaysFills: false,
+                captureArmed: () => filling
+            ),
+            opening: new WorldImageSourceOpening(
+                Context: new RenderGraphExternalProducerContext(
+                    Device: null!,
+                    HostsOnDirectX: false,
+                    Instance: "source$capture$0",
+                    Package: RenderGraphInstance.SourcePackage(producer: WorldImageProducerSettings.CaptureId)
+                ),
+                Fault: null,
+                Feed: feed
+            )
+        );
+
+        for (var frame = 0; (frame < 3); frame++) {
+            Assert.True(condition: source.TryAcquireOutput(output: out var output));
+            Assert.Equal(
+                actual: (output.Lease.ImageViewHandle, output.Lease.RequiresRetirement, output.Layout),
+                expected: (((nint)0xF111), false, GpuImageLayout.ShaderReadOnly)
+            );
+        }
+
+        Assert.Equal(expected: 0, actual: desktop.Feed!.Acquisitions);
+        Assert.Equal(actual: filled, expected: [ImageSourceDescriptor.DefaultCaptureFill, ImageSourceDescriptor.DefaultCaptureFill, ImageSourceDescriptor.DefaultCaptureFill]);
+
+        // Once the gate stops filling, each acquisition is the feed's own.
+        filling = false;
+        Assert.True(condition: source.TryAcquireOutput(output: out var shown));
+        Assert.Equal(
+            actual: (shown.Lease.ImageViewHandle, desktop.Feed.Acquisitions),
+            expected: (FakeFeed.DesktopHandle, 1)
+        );
+        Assert.Null(@object: source.Fault);
     }
 
     // A producer standing in for a real one: every feed it opens answers one fixed handle and counts acquisitions. Its

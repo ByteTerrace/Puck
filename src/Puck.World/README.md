@@ -1141,9 +1141,20 @@ from the region its feed writes, through the shipped conversion its format
 names. A `views.graphs` row names an uploaded producer's source package with
 its `settings` (`"package": "source.qr", "settings": { "payload": "puck" }`),
 so a layout slot shows the source as a pane and a `captures` row can capture
-it before composition; a row naming an imported producer (`camera`,
-`capture`) is refused. Screens still bind their images through the binder's
-slots until the runtime binds sources (P12b-2 in
+it before composition. Any other producer's instance (`camera`, `capture`, a
+host's imported producer) renders through an external producer that owns the
+feed, publishes it when the runtime renders the instance and hands out its
+image through the capture gate, and the `machine` and `probe` ids register the
+binder's own. Such a source hands out an image view that only the SDF world
+samples, so a pane or graph input bound to one is refused.
+
+The live render graph runs every source a screen row shows: the SDF world
+producer reads each one, and each frame the engine binds the image the runtime
+hands it for a source to every screen whose row shows it, under a lease it holds
+until the submission that sampled it has finished. A screen showing a view, a
+session or a source a presentation verb bound live (`screen.source <index>
+<kind>`) is bound by the binder instead, until live binds become source
+instances (P12b-2 in
 [the rendering plan](../../docs/plans/rendering.md#p12--image-sources)).
 
 The engine ships four producers, each with its settings record in
@@ -1159,9 +1170,9 @@ The engine ships four producers, each with its settings record in
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
 the one contract for an image entering rendering from outside a pass: its
 producer, transport, extent, pixel format, color encoding, cadence, stamp and
-content class. A feed whose content is external is the slot's live feed, which
-`screen.eject` clears. Any other feed is its declared feed, which survives an
-eject. A deterministic feed states the exact image it shows
+content class. `screen.eject` blanks a screen showing external content (a
+camera, a capture, a probe) and gives a screen back its row's source when that
+is not external. A deterministic feed states the exact image it shows
 (`IImageSourceReference`), which the exact verdict `ImageSourceVerdict`
 compares a read-back against.
 
@@ -1248,10 +1259,12 @@ outputs. `machine.operation` carries expected generation and named-machine Contr
 authority; `screen.insert` and `forge.play` use that executor for named producers,
 while `screen.eject` detaches the display. Legacy screen operations remain in the
 protocol. Generic provider operations are refused during recording until the tape
-can capture their execution. `WorldScreenBinder.cs` reads a machine output's
-framebuffer handle and light and calls
-`IMachineVideoOutput.PublishFrame` each produced frame—the one GPU call this
-project still makes on a machine's behalf. The machines outlive the render
+can capture their execution. A screen showing a machine output reads it as a
+render-graph source instance (package `source.machine`), whose producer in
+`WorldScreenBinder.Sources.cs` calls `IMachineVideoOutput.PublishFrame` once
+per completed tick—the one GPU call this project still makes on a machine's
+behalf—and hands the output's image to the SDF world producer, which binds it
+to every screen showing it. The machines outlive the render
 device, so the binder that published an output's upload also retires it: on
 device loss and when the render chain is torn down, it calls
 `IMachineVideoOutput.NotifyDeviceLost` for every output it has published on
@@ -1263,13 +1276,8 @@ device is disposed only after the last image made on it is released
 (`DisposeAfterDependents`), however late a submitted frame's lease releases
 it. It recreates its own slot for a
 screen index removed and later restored by `world.reset`/`.load` exactly as
-`WorldMachineHost` does (bounded to indices the render engine's boot-frozen
-provider key set already names). A recreate re-points a `ScreenSourceCell`'s
-`Slot` field rather than writing a fresh delegate into the engine's
-provider maps—`SdfEngineNode` copies those maps' delegates ONCE, at
-construction, and never re-reads this binder's own dictionaries again, so
-only the cell indirection (never a brand-new delegate) is visible to an
-already-running renderer after a remove+reset. It still OWNS the genuinely presentation
+`WorldMachineHost` does (bounded to the indices declared at boot, which the
+engine node binds every frame through the binder's `ISdfScreenSources`). It still OWNS the genuinely presentation
 sources—every producer feed and every jumbotron view—bound through `screen.source <index> <kind>`
 (`camera`, `capture`, `desktop`, `probe`, `view`, `qr`; it ejects a
 present machine first, through the ordered domain) and `screen.eject` (which

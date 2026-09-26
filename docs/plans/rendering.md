@@ -1154,7 +1154,8 @@ submission waits for it on the GPU (a Vulkan host through the fence imported as
 a timeline semaphore); a device that cannot share the fence, and the probe
 kernel, which reads its channels on the CPU, wait on the CPU instead. The
 consumer holds a CPU slot lease until its submission retires. The capture GPU
-route and the offscreen views' renders sample a slot with no lease at all.
+route, and an offscreen view's render of a screen showing a live presentation
+source, sample a slot with no lease at all.
 Every image that enters rendering from outside a pass is
 described by `ImageSourceDescriptor` (`Puck.Abstractions.Sources`): producer,
 transport, extent, pixel format (including palette-indexed and NV12), color
@@ -1181,10 +1182,12 @@ carries a BGRA swizzle, and `source-transfer` decodes sRGB, linear or PQ into
 linear light. `ImageSourceConversion` is their CPU reference, and the
 `source-conversion` canary holds all four kernels to it on both backends. The
 test pattern and the QR code write regions, which an uploaded source
-instance's one-pass graph converts in the render-graph runtime; screens still
-show them through `CpuSurfaceSource`. The emulators still publish through
-`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, and the capture and camera CPU
-tiers and the fills through `CpuSurfaceSource`. Only the camera's CPU tier hands the screen a counted
+instance's one-pass graph converts in the render-graph runtime, and a screen
+reading its row samples that output; a live verb's QR code still shows through
+`CpuSurfaceSource`. The emulators still publish through
+`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, from the machine source
+instance's producer, and the capture and camera CPU tiers and the fills through
+`CpuSurfaceSource`. Only the camera's CPU tier hands the screen a counted
 lease; the others and the machine outputs hand it a bare handle. Each waits
 for P12b to record its region flush and conversion dispatch as a graph source
 node. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
@@ -2818,20 +2821,18 @@ schema or planner change.
 **Depends on:** P11 and P7.
 
 **P12b, the rest of the package.** P12b moves the source contract into the
-graph. Today the screen binder resolves every screen's image into
-`SdfEngineNode`'s 32 screen slots through one lease callback per slot
-(`WorldScreenBinder.ScreenSources`, read through
-`SdfWorldRenderSpec.ScreenSources`), and the graph runtime never sees a
-source. Four facts shape the order:
+graph. A screen row's producer, machine or probe source is a source instance
+the live set runs, and `SdfEngineNode` binds the image the runtime hands it for
+each through `ISdfScreenSources`; a live presentation bind, a view and a
+session are still images the binder hands the node itself. Four facts shape
+the order:
 
-- `sdf.world` is an external producer, and the runtime refuses an external
-  instance that declares reads, so a screen inside the SDF frame cannot read a
-  source instance through a graph edge until external producers take image
-  reads or P14-6 makes the engine a package. P12b takes the first path, so it
-  does not wait on P14.
+- `sdf.world` is an external producer, which takes image reads (step 2), so a
+  screen inside the SDF frame reads a source instance through a graph edge
+  without waiting on P14-6.
 - Two paths sample a shared slot with no lease (see the implementation status).
 - Only the test pattern and the QR code write upload regions, which a source
-  instance's graph converts, and no screen reads one yet.
+  instance's graph converts and a screen reading its row samples.
 - Few canaries reach this path. The coverage index maps no canary to the
   capture feed, the camera converter, the QR binder or the descriptor, and the
   62 it maps to `WorldScreenBinder.cs` mostly construct the binder, because the
@@ -2933,7 +2934,22 @@ except step 8.
       set, the world producer reads each shown source with a footprint, and
       `SdfEngineNode` maps the reads to its screen slots. `ScreenSourceCell`,
       the binder's per-slot callbacks and `SdfWorldRenderSpec.ScreenSources`
-      go.
+      go. Landed: a producer that is not uploaded adapts to
+      `WorldImageFeedProducer`, which owns the feed its instance's factory
+      opened, publishes it when the runtime renders the instance and hands out
+      an image view through the gate; `machine` and `probe` register the
+      binder's `MachineSource` and `ProbeSource`. `WorldViewGraphHost.TryCompose`
+      runs the rows' sources (`WorldScreenMappingSet.Sources`) ahead of the
+      world producer, which reads each with a footprint, and recomposes when
+      the rows move. `SdfEngineNode` takes `ISdfScreenSources` (the render
+      spec's `ScreenSources`): a screen reading an instance binds the read, its
+      lease taken once however many screens show it and held to the sampling
+      slot's fence, before the offscreen views render; any other binds
+      `Rendered`. The binder publishes before the runtime schedules, and a graph
+      input bound to an imported source is refused (`InputSource`), since it
+      hands out an image view alone. Laws:
+      `SdfEngineNodeLeaseLawTests.AScreensSourceLeaseRetiresOnlyAfterTheSamplingSlotsFence`
+      and `ImageProducerLawTests.AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`.
    4. Live `screen.source` binds are source instances, so they publish
       mappings.
    5. The capture GPU route acquires its slot through `LatestSlotPublication`,
@@ -2970,11 +2986,12 @@ except step 8.
    palette and NV12 kernels, and `uploaded-sources` captures a test-pattern
    source instance before composition and shows it and a QR code in panes.
    The conversion packages bind the frame and pass groups as every package
-   does. The node records a staged region's copy (P7b-22). Still open: screens
-   still read the binder's `CpuSurfaceSource` uploads of the same feeds until
-   step 2 connects them; the capture and camera CPU tiers and the capture fills
-   move onto `source-rgba` and static sources after that, and
-   `CpuSurfaceSource`'s screen role goes with its last caller.
+   does. The node records a staged region's copy (P7b-22). A screen reading its
+   row's test pattern or QR code samples the instance's converted output. Still
+   open (step 2): a live verb's QR code still uploads through the binder's
+   `CpuSurfaceSource`, the capture and camera CPU tiers and the capture fills
+   move onto `source-rgba` and static sources, and `CpuSurfaceSource`'s screen
+   role goes with its last caller.
 4. Fences across devices. Landed. The consumer creates a
    `D3D12_FENCE_FLAG_SHARED` fence beside the shared targets it provisions
    (`DirectXGpuSurfaceExportFactory.CreateExportableFence`, an

@@ -172,8 +172,9 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
     /// <param name="context">The host's frame context, which resolves the device.</param>
     /// <param name="width">View 0's extent width, in pixels.</param>
     /// <param name="height">View 0's extent height, in pixels.</param>
-    /// <param name="reads">The images the world's instance reads, which the node takes no lease of: its screens bind
-    /// through its screen sources.</param>
+    /// <param name="reads">The latest completed image of each source instance the world's instance reads: each screen
+    /// that reads one binds its image, and the node takes its lease once however many screens show it, holding it until
+    /// the frame-ring slot that samples it has passed its fence.</param>
     /// <returns><see langword="true"/> when the frame was submitted; <see langword="false"/> while the engine's
     /// pipelines build or the context resolves no device.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is
@@ -192,8 +193,13 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
         }
 
         m_scheduledViewExtents[0] = (width, height);
+        m_reads = reads;
 
-        return !ProduceFrame(context: in context).IsEmpty;
+        try {
+            return !ProduceFrame(context: in context).IsEmpty;
+        } finally {
+            m_reads = null;
+        }
     }
     /// <summary>Acquires view 0's latest completed output: its image, in the layout the engine leaves it in between its
     /// submissions (<see cref="SdfWorldEngine.OutputLayout"/>), which a consumer's planned barriers start from and hand

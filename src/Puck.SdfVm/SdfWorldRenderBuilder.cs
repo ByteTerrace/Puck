@@ -40,7 +40,6 @@ public static class SdfWorldRenderBuilder {
             kernels: pipelines.LoadDeployed(bytecodeExtension: BytecodeExtension(hostsOnDirectX: spec.HostsOnDirectX)),
             programWordCapacity: spec.ProgramWordCapacity,
             screenSources: spec.ScreenSources,
-            screenLights: spec.ScreenLights,
             // Read straight off the frame source (ISdfFrameSource.ScreenSurfaceTransforms, default null) rather than
             // a spec field: this is the ONE place that needs to know the seam exists at all.
             screenSurfaceTransforms: frameSource.ScreenSurfaceTransforms,

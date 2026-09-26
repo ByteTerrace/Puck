@@ -77,11 +77,11 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
-    /// <summary>Publishes every screen's producer feed for this produced frame. Deterministic machines have already
-    /// advanced server-side, inside <c>WorldServer.Step</c> (<c>Server.WorldMachineHost.Advance</c>); this seam only
-    /// uploads their latest framebuffer (the one GPU call this project makes on a machine's behalf) and services each
-    /// producer feed on its own cadence. It advances the capture gate first, so every source this frame resolves sees
-    /// the same answer, and uploads the fills a filled external source resolves to. It ends by publishing every screen's
+    /// <summary>Publishes the screens' content for this produced frame, before the render graph schedules it: it advances
+    /// the capture gate first, so every source this frame resolves sees the same answer, uploads the fills a filled
+    /// external source resolves to, services the shared camera feeds, the probe outputs and the HUD's captures, and
+    /// publishes each live feed a presentation verb bound. A row's producer, machine or probe source is a source
+    /// instance the runtime publishes at its cadence when it renders the instance. It ends by publishing every screen's
     /// mapping (<see cref="Mappings"/>) at the extents its images now have.</summary>
     /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
     /// <param name="deviceContext">The live GPU device context to upload on, through its services.</param>
@@ -117,31 +117,8 @@ internal sealed partial class WorldScreenBinder {
         ServiceProbeFeeds(deviceContext: deviceContext);
         PublishFrameCaptures(deviceContext: deviceContext);
 
-        m_publishedMachineOutputs.Clear();
-
         foreach (var slot in m_slots.Values) {
-            if (slot.MachineSource is { } source) {
-                if (
-                    (m_machines.VideoOutput(
-                    instance: source.Instance,
-                    output: source.Output
-                ) is { } machine) &&
-                    m_publishedMachineOutputs.Add(item: (source.Instance, source.Output))
-                ) {
-                    m_presentedMachineOutputs.Publish(
-                        deviceContext: deviceContext,
-                        instance: source.Instance,
-                        machine: machine,
-                        output: source.Output
-                    );
-                }
-
-                // A named output is one producer shared by every display that references it. Once the first
-                // consumer has published the current frame, the remaining consumers only resolve that same handle.
-                continue;
-            }
-
-            // A live feed hides the declared one, so only the shown feed publishes; a probe output was published once
+            // A live feed hides the live QR code, so only the shown feed publishes; a probe output was published once
             // above (ServiceProbeFeeds), and the shared webcam's feed publishes nothing of its own.
             if (slot.LiveFeed is { } live) {
                 live.Publish(
@@ -165,8 +142,8 @@ internal sealed partial class WorldScreenBinder {
         Mappings.Publish(images: this);
     }
     /// <summary>Renders this frame's jumbotron views against the live device — called from the frame source's
-    /// <see cref="ISdfFrameSource.RenderViews"/> seam after the CPU-fed screens have published and before the engine polls
-    /// the source providers, so a View screen's provider returns a handle to this frame's offscreen render. Each view's
+    /// <see cref="ISdfFrameSource.RenderViews"/> seam after the engine node has bound the screens reading source instances
+    /// and before it binds the rest, so a View screen binds this frame's offscreen render. Each view's
     /// own render sees every other screen surface as the room shows it (a jumbotron films the lit test pattern / booted
     /// machine beside it) and its own face as unbound (the self-reference rule). A no-op with no view pool.</summary>
     /// <param name="context">This frame's host frame context (resolves the offscreen device).</param>
@@ -217,8 +194,9 @@ internal sealed partial class WorldScreenBinder {
             ProgramRevision: revision,
             Time: time,
             AuthoritativeTick: authoritativeTick,
-            // What each screen surface binds INSIDE a jumbotron's render: the same handle the room shows (the ViewStack
-            // zeroes the view's own wired screens per the self-reference rule, so this need not).
+            // What each screen surface binds INSIDE a jumbotron's render: the same handle the room shows, a source
+            // instance's image under the lease the engine node holds (the ViewStack zeroes the view's own wired screens
+            // per the self-reference rule, so this need not).
             ResolveScreenSource: CurrentHandle
         ));
     }

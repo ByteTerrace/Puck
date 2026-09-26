@@ -1,5 +1,6 @@
 using Puck.Abstractions.Machines;
 using Puck.Platform;
+using Puck.SdfVm;
 
 namespace Puck.World;
 
@@ -30,16 +31,26 @@ internal sealed partial class WorldScreenBinder {
         output: output
     );
     /// <summary>Returns the current same-device image-view handle bound to a screen index, or 0 when the index is unbound, not
-    /// declared, or nothing has been published yet — the live state <c>world.screens</c> reports.</summary>
+    /// declared, or nothing has been published yet — the live state <c>world.screens</c> reports, and what an offscreen
+    /// view binds for the screen. A screen reading a source instance reports the image the engine node bound for it
+    /// in its latest frame.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <returns>The bound handle, or 0.</returns>
-    public nint CurrentHandle(int index) => (m_slots.TryGetValue(
-        key: index,
-        value: out var slot
-    )
-        ? slot.Handle()
-        : 0
-    );
+    public nint CurrentHandle(int index) {
+        if (!m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        )) {
+            return 0;
+        }
+
+        return ((ReadOf(screen: index) is null)
+            ? slot.Handle()
+            : (((index < SdfWorldEngine.MaxScreenSurfaces) && (m_renderProbe?.Node is { } node))
+                ? node.BoundScreenSource(screen: index)
+                : 0)
+        );
+    }
     /// <summary>Returns how the image a screen shows crosses from its producer's device to the render device: through the
     /// shared fence the producer signals and the render device's submission waits for, or by the producer's CPU wait
     /// and why. Only a camera on its GPU tier and a capture on its GPU route cross devices.</summary>
@@ -53,7 +64,11 @@ internal sealed partial class WorldScreenBinder {
             return null;
         }
 
-        return ((slot.LiveFeed ?? slot.DeclaredFeed) switch {
+        var feed = ((ReadOf(screen: index) is { } instance)
+            ? FeedOf(instance: instance)
+            : slot.LiveFeed);
+
+        return (feed switch {
             CameraSlotFeed camera => CameraFenceOrderFor(
                 seat: camera.Seat,
                 sensor: camera.Sensor
@@ -107,12 +122,17 @@ internal sealed partial class WorldScreenBinder {
         return new WorldScreenState(
             Assigned: false,
             Engine: null,
-            Handle: slot.Handle(),
+            Handle: CurrentHandle(index: index),
             FramesStepped: 0,
             PendingSteps: 0,
             MaximumPendingSteps: 0,
             BackpressureEvents: 0,
-            Fault: slot.CurrentFault()
+            Fault: ((ReadOf(screen: index) is { } instance)
+                ? SourceFault(
+                    instance: instance,
+                    slot: slot
+                )
+                : slot.CurrentFault())
         );
     }
     /// <summary>Gets the live decal-text source at a screen index, or <see langword="null"/> when the slot's current

@@ -38,14 +38,17 @@ public sealed class WorldScreenMappingSet {
     private const string Unpublished = "not published";
 
     private readonly List<SourceMapping> m_published = [];
-
     private Row[] m_rows = [];
 
     /// <summary>Gets the mapping of every screen that publishes one, in row order, as <see cref="Publish"/> last
     /// published them. The set rewrites the list in place.</summary>
     public IReadOnlyList<SourceMapping> Mappings => m_published;
+
     /// <summary>Gets the screen rows the set last reconciled, in order.</summary>
     public IReadOnlyList<WorldScreen> Screens { get; private set; } = [];
+    /// <summary>Gets the source instances the reconciled rows read, a new value on every <see cref="Reconcile"/>: the
+    /// render graph runs them, and each screen whose row reads one samples its image.</summary>
+    public WorldSourceInstances Sources { get; private set; } = WorldSourceInstances.Of(shown: []);
 
     // The row a screen's source names: its handle and document extent, or why it names none.
     private static Row RowOf(WorldScreen screen, int position, WorldSourceInstances sources, IReadOnlyList<WorldCamera> cameras) {
@@ -154,6 +157,20 @@ public sealed class WorldScreenMappingSet {
         m_rows = rows;
         m_published.Clear();
         Screens = screens;
+        Sources = sources;
+    }
+    /// <summary>Returns the name of the source instance a screen's row reads, without allocating.</summary>
+    /// <param name="screen">The screen's index.</param>
+    /// <returns>The instance's name, or <see langword="null"/> when no reconciled row has that index or its source is
+    /// no source instance.</returns>
+    public string? InstanceOf(int screen) {
+        for (var position = 0; (position < m_rows.Length); position++) {
+            if (m_rows[position].Screen.Index == screen) {
+                return Sources.InstanceOf(screen: position);
+            }
+        }
+
+        return null;
     }
     /// <summary>Finds the mapping a screen last published.</summary>
     /// <param name="screen">The screen's index.</param>

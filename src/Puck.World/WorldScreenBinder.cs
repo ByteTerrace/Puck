@@ -18,10 +18,13 @@ namespace Puck.World;
 /// producer's feed (<see cref="WorldImageProducers"/>: the test pattern, a QR code, the shared webcam, a desktop
 /// capture, or any producer the host registers), a machine output, a jumbotron view, a probe output, a session view,
 /// or nothing (the engine's procedural no-signal fallback). Every external image resolves through the capture gate
-/// (<see cref="WorldCaptureGate"/>), so a capture shows its declared fill and never its pixels. A provider is registered for every declared index up front — returning the slot's current handle or 0 — so
-/// a runtime <c>screen.source &lt;index&gt; camera</c>/<c>capture</c> binds without rebuilding the engine (the engine copies the
-/// provider key set once but polls each provider live, and a 0 handle reads as unbound).
-/// A shared singleton so the render factory, the screen verbs, and <c>world.screens</c> read one instance.
+/// (<see cref="WorldCaptureGate"/>), so a capture shows its declared fill and never its pixels. A row's producer, machine
+/// or probe source is a render-graph source instance (<see cref="WorldSourceInstances"/>), opened and published by the
+/// runtime, whose image the engine node binds from the reads the graph hands it (<see cref="ISdfScreenSources.ReadOf"/>);
+/// every other image a screen shows (a view, a session, a live presentation source) the binder hands the node itself
+/// (<see cref="ISdfScreenSources.Rendered"/>). The node binds every screen declared at boot each frame, and a zero handle
+/// reads as unbound, so a runtime <c>screen.source &lt;index&gt; camera</c>/<c>capture</c> binds without rebuilding the
+/// engine. A shared singleton so the render factory, the screen verbs, and <c>world.screens</c> read one instance.
 /// </summary>
 /// <remarks>
 /// This type is a pure reader of <see cref="Server.WorldMachineHost"/>'s outputs
@@ -37,9 +40,8 @@ namespace Puck.World;
 /// <c>ScreenCommandModule</c> submitting a <c>WorldScreenOp</c> through
 /// <c>IServerLink.SubmitScreenOp</c> instead, landing in the ordered submission domain (see <c>WorldScreenOp</c>'s
 /// own remarks). Producer, jumbotron-view, probe and session screen sources remain genuinely presentation-owned.
-/// <para>An unbound slot (a <see cref="WorldScreenSource.None"/> screen, or a live feed with no signal) registers a
-/// provider returning 0, so the engine leaves its surface unbound and lights it with the procedural no-signal
-/// fallback — never black. One webcam session is opened engine-wide per sensor and shared by every camera screen
+/// <para>An unbound slot (a <see cref="WorldScreenSource.None"/> screen, or a live feed with no signal) binds 0, so the
+/// engine leaves its surface unbound and lights it with the procedural no-signal fallback — never black. One webcam session is opened engine-wide per sensor and shared by every camera screen
 /// naming that sensor. A capture device may expose both streams while supporting only one at a time; a dual open must
 /// prove both streams live before it replaces the established feed. Thus N camera screens sample at most two feeds. Single-threaded:
 /// <see cref="Publish"/> and simulation-routed screen mutations all run on the launcher's window-pump thread, so no
@@ -152,23 +154,18 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
     private DynamicTransform[] m_viewTransforms = [];
     private readonly Dictionary<int, ScreenSlot> m_slots = new();
-    // The screen indices declared at BOOT (construction) — the render engine's frozen provider key set, copied
-    // ONCE and never grown. Distinct from m_slots.Keys, which shrinks/grows as ReconcileScreens removes/recreates
-    // entries: an index in this set can always have its m_slots/m_sources/m_lights entries safely RECREATED after
-    // removal (the engine's own frozen key list still names it), while a genuinely new index (never in this set)
-    // still cannot bind live.
+    // The screen indices declared at boot (construction): the screens the engine node binds, fixed for its lifetime.
+    // Distinct from m_slots.Keys, which shrinks and grows as ReconcileScreens removes and recreates entries: an index in
+    // this set can always have its slot recreated after removal, while a genuinely new index (never in this set) cannot
+    // bind live.
     private readonly HashSet<int> m_bootScreenIndices = new();
-    private readonly Dictionary<int, Func<GpuImageLease>> m_sources = new();
-    private readonly Dictionary<int, Func<Vector3>> m_lights = new();
-    // One publication per named producer output, even when several screens fan out from it.
-    private readonly HashSet<(string Instance, string Output)> m_publishedMachineOutputs = new();
-    // Every producer output this binder has published on the current device; RetireMachineOutputs releases their uploads.
+
+    // The boot indices in ascending order, the screens the engine node binds every frame.
+    private readonly int[] m_screenIndices;
+
+    // Every machine output a machine source instance has published on the current device; RetireMachineOutputs releases
+    // their uploads.
     private readonly PublishedMachineOutputs m_presentedMachineOutputs = new();
-    // SdfEngineNode copies m_sources/m_lights into its own dictionary once, at construction, and never re-reads
-    // these dictionaries again — writing a new delegate into m_sources[index] after boot is invisible to the
-    // renderer. Each boot index's cell is instead a stable, never-replaced delegate target; only the cell's own
-    // Slot field is re-pointed when ReconcileScreens recreates a boot index's slot after a remove+reset.
-    private readonly Dictionary<int, ScreenSourceCell> m_sourceCells = new();
     // Reused scratch for ReconcileScreens' removal pass, so a screen mutation collects the vanished indices without
     // allocating and never mutates m_slots while enumerating it.
     private readonly List<int> m_reconcileRemovals = new();
@@ -185,12 +182,12 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // once every N produced frames. Frame-count cadence is deterministic and avoids introducing a wall clock.
     private int m_viewRefreshDivisor = 4;
 
-    /// <summary>Initializes the binder over the world's declared screens: each producer source opens its feed through the
-    /// registered producer (an absent camera or an unopenable window leaves the slot unbound and the fault visible in
-    /// <c>world.screens</c>/<c>screen.state</c> — loud data, no crash), plus a source + light provider for every
-    /// declared index. A declared machine screen
-    /// registers no local producer here — <see cref="Server.WorldMachineHost"/> (a peer singleton, already booted by
-    /// the time this constructor runs) owns it; this binder's providers read the host directly for those indices.</summary>
+    /// <summary>Initializes the binder over the world's declared screens. A producer, machine or probe row opens nothing
+    /// here: it is a source instance the render graph's runtime opens through the registered producers (an absent
+    /// camera or an unopenable window leaves the screen unbound and the fault visible in
+    /// <c>world.screens</c>/<c>screen.state</c> — loud data, no crash), and a machine's
+    /// <see cref="Server.WorldMachineHost"/> (a peer singleton, already booted by the time this constructor runs) owns
+    /// the machine itself.</summary>
     /// <param name="screens">The world's diegetic screens (<see cref="WorldDefinition.Screens"/>).</param>
     /// <param name="machines">The authoritative screen-machine host this binder reads outputs from.</param>
     /// <param name="cameraCapture">The platform webcam service (CPU tier) the camera screens share one session of.</param>
@@ -268,21 +265,13 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         foreach (var screen in screens) {
             _ = m_bootScreenIndices.Add(item: screen.Index);
 
-            var slot = new ScreenSlot { Binder = this, DeclaredSource = screen.Source, Index = screen.Index, MachineSource = (screen.Source as WorldScreenSource.Machine), Machines = m_machines };
+            var slot = new ScreenSlot { Binder = this, DeclaredSource = screen.Source, Index = screen.Index, MachineSource = (screen.Source as WorldScreenSource.Machine) };
 
             switch (screen.Source) {
-                case WorldScreenSource.Producer producer:
-                    // A producer the host cannot open (no webcam, a window capture on a platform without one) leaves
-                    // the slot unbound with its fault visible in world.screens/screen.state — loud data, no crash.
-                    OpenProducer(
-                        slot: slot,
-                        source: producer
-                    );
-
-                    break;
+                case WorldScreenSource.Producer:
                 case WorldScreenSource.Machine:
-                    // WorldMachineHost already booted this index (if it could) at ITS OWN construction — nothing to
-                    // do here; Handle()/Light() below read the host directly for a machine-owning index.
+                    // A source instance the render graph opens and publishes; WorldMachineHost already booted a machine
+                    // row's index (if it could) at its own construction.
                     break;
                 case WorldScreenSource.View view:
                     // The declared jumbotron: resolve its camera name against the world's placeable cameras. An unknown
@@ -318,28 +307,20 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
                     break;
                 case WorldScreenSource.Probe probe:
-                    // The declared probe output: the feed exists from here on, dark until the probes host declares
-                    // the probe writes a texture and its kernel publishes a first frame.
-                    slot.Probe = GetOrAddProbeFeed(id: probe.Id);
+                    // The declared probe output, a source instance: the feed exists from here on, dark until the probes
+                    // host declares the probe writes a texture and its kernel publishes a first frame.
+                    _ = GetOrAddProbeFeed(id: probe.Id);
 
                     break;
                 default:
-                    // None: no producer — the provider returns 0 (procedural fallback).
+                    // None: no producer — the screen binds 0 (procedural fallback).
                     break;
             }
 
             m_slots[screen.Index] = slot;
-
-            // The boot-time, never-replaced cell — m_sources/m_lights register the CELL's own ResolveHandle/
-            // ResolveLight, not the slot's, so a later slot recreation only ever needs to re-point Slot below,
-            // never touch these dictionaries (or the renderer's already-copied ones) again.
-            var cell = new ScreenSourceCell { Slot = slot };
-
-            m_sourceCells[screen.Index] = cell;
-            m_sources[screen.Index] = cell.ResolveFrame;
-            m_lights[screen.Index] = cell.ResolveLight;
         }
 
+        m_screenIndices = [.. m_bootScreenIndices.Order()];
         ReconcileMappings(screens: screens);
     }
 
@@ -348,13 +329,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// has not been configured yet. Removing the last screen wired to a camera releases its view, so this count drops
     /// (the pipe-observable witness that a removed View screen's offscreen render stopped).</summary>
     public int ActiveCameraViewCount => (m_viewStack?.ActiveViewCount ?? 0);
-    /// <summary>Gets the screen-light providers keyed by screen index — parallel to <see cref="ScreenSources"/>, the room glow
-    /// each slot emits (its framebuffer average, or zero when unbound).</summary>
-    public IReadOnlyDictionary<int, Func<Vector3>> ScreenLights => m_lights;
-    /// <summary>Gets the screen-source providers keyed by screen index — the map the render spec's <c>ScreenSources</c> field
-    /// takes. A provider is present for every declared screen; it returns 0 while the slot carries no producer, which the
-    /// engine reads as unbound (the procedural fallback), so a runtime insert binds with no engine rebuild.</summary>
-    public IReadOnlyDictionary<int, Func<GpuImageLease>> ScreenSources => m_sources;
     /// <summary>Gets the current produced-frame divisor for jumbotron offscreen renders.</summary>
     public int ViewRefreshDivisor => m_viewRefreshDivisor;
 
@@ -364,21 +338,38 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     //
     // Every transition away from View clears the slot's jumbotron reference and releases the camera registration
     // when no surviving slot films it; a View->View re-point releases the previously-registered camera inside
-    // TryView. A slot whose source is no longer a producer drops its declared producer feed the same way.
-    private (bool Ok, string Message) ApplySource(int index, ScreenSlot slot, WorldScreenSource source) {
+    // TryView. A slot whose source is no longer a producer drops its declared producer feed the same way. A row's producer
+    // or probe source (not live) is a source instance the render graph opens, so the slot only drops what it shows
+    // locally.
+    private (bool Ok, string Message) ApplySource(int index, ScreenSlot slot, WorldScreenSource source, bool live) {
         slot.MachineSource = (source as WorldScreenSource.Machine);
 
         var outcome = source switch {
             WorldScreenSource.None => (slot.HasLive
-            ? TryEject(index: index)
+            ? EjectLive(
+                index: index,
+                slot: slot
+            )
             : (Ok: true, Message: $"screen {index} unbound")),
             WorldScreenSource.Machine => (slot.HasLive
-            ? TryEject(index: index)
+            ? EjectLive(
+                index: index,
+                slot: slot
+            )
             : (Ok: true, Message: $"screen {index} machine (host-owned)")),
+            WorldScreenSource.Producer producer when !live => ShowRow(
+            message: $"screen {index} showing producer '{producer.Id}'",
+            slot: slot
+        ),
             WorldScreenSource.Producer producer => ApplyProducer(
             index: index,
             slot: slot,
             source: producer
+        ),
+            WorldScreenSource.Probe probe when !live => ShowProbeRow(
+            index: index,
+            probe: probe,
+            slot: slot
         ),
             WorldScreenSource.View view => ApplyViewChange(
             index: index,
@@ -426,24 +417,35 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private void ApplySourceChange(int index, ScreenSlot slot, WorldScreenSource source) {
         var outcome = ApplySource(
             index: index,
+            live: false,
             slot: slot,
             source: source
         );
 
         Console.Error.WriteLine(value: $"[world.screen: {outcome.Message}]");
     }
+    // A row whose source is a source instance: the slot drops every image it showed locally, so the screen samples the
+    // instance.
+    private static (bool Ok, string Message) ShowRow(ScreenSlot slot, string message) {
+        slot.ClearLive();
+        slot.ReleaseDeclared();
+
+        return (Ok: true, Message: message);
+    }
+    // A probe row's feed exists from here on, as a declared probe's does from boot.
+    private (bool Ok, string Message) ShowProbeRow(int index, ScreenSlot slot, WorldScreenSource.Probe probe) {
+        _ = GetOrAddProbeFeed(id: probe.Id);
+
+        return ShowRow(
+            message: $"screen {index} showing probe '{probe.Id}'",
+            slot: slot
+        );
+    }
     // The reconcile/verb-side text bind: drop any live local producer (the decal shades instead of an image), then
     // record the text for the frame source's decal providers. The engine change-detects the resulting cells, so
     // re-applying identical text uploads nothing.
-    private (bool Ok, string Message) ApplyTextSource(int index, ScreenSlot slot, WorldScreenSource.Text text) {
-        if (slot.HasLive) {
-            var ejected = TryEject(index: index);
-
-            if (!ejected.Ok) {
-                return ejected;
-            }
-        }
-
+    private static (bool Ok, string Message) ApplyTextSource(int index, ScreenSlot slot, WorldScreenSource.Text text) {
+        slot.ClearLive();
         slot.Text = text;
 
         return (Ok: true, Message: $"screen {index} text ({text.Lines.Count} line(s))");
@@ -500,6 +502,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         return ApplySource(
             index: index,
+            live: true,
             slot: slot,
             source: source
         );
@@ -574,9 +577,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <summary>Reconciles the binder's runtime source machinery to a mutated screen list — the live-application half of
     /// an <c>UpsertScreen</c>/<c>RemoveScreen</c> world mutation, called by the frame source when the definition
     /// revision moves. Removals are reconciled first: a slot whose index is no longer declared has any engaged player
-    /// disengaged (their avatar resumes normal intent), its owned machine/pattern/capture state disposed, and its
-    /// entries dropped from <c>m_slots</c>/<c>m_sources</c>/<c>m_lights</c> — so a removed screen stops advancing,
-    /// publishing, and answering screen commands (the shared webcam session and the boot-sized view pool are not
+    /// disengaged (their avatar resumes normal intent), its owned machine/pattern/capture state disposed, and its slot
+    /// dropped — so a removed screen stops advancing, publishing, and answering screen commands, and its source instance
+    /// leaves the render graph's set (the shared webcam session and the boot-sized view pool are not
     /// disposed here — the binder owns their lifetime). A removed <c>View</c> screen additionally releases its camera's
     /// offscreen render when no surviving slot still films that camera (the orphaned <see cref="ViewStack"/> entry
     /// is disposed so it stops consuming refresh budget), while a camera two jumbotrons share stays live for the
@@ -584,10 +587,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// the new source through the same insert/eject/camera/capture/view machinery a <c>screen.*</c> verb uses
     /// (best-effort — a failed bind logs a loud line, never throws). Screen slab geometry (adds/moves/removes) rides the
     /// program rebuild in the frame source, not this method. Capacity honesty, precisely: an index that was declared
-    /// at boot (<see cref="m_bootScreenIndices"/>) always gets its slot/provider entries recreated on re-declaration
-    /// after a removal — the render engine's frozen key list still names it, so this is safe. A genuinely new
-    /// index (never in the boot set) still cannot bind live — its slab renders the
-    /// procedural fallback until the next boot, since the render engine's provider key set cannot grow.
+    /// at boot (<see cref="m_bootScreenIndices"/>) always gets its slot recreated on re-declaration after a removal — the
+    /// render node still binds it, so this is safe. A genuinely new index (never in the boot set) still cannot bind
+    /// live — its slab renders the procedural fallback until the next boot, since the screens the node binds are fixed
+    /// at boot.
     /// Not migrated onto <c>Puck.World.Client.KeyedReconciler</c> — the removal, source-change, and boot-index
     /// re-declaration passes interleave lifetime rules the generic shape cannot express.</summary>
     /// <param name="screens">The mutated screen list (the live definition's screens).</param>
@@ -641,12 +644,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                 slot.DisposeOwned();
             }
 
-            // These two removals are this binder's OWN bookkeeping only — SdfEngineNode copied its screen-source
-            // dictionaries once, at boot, and never reads m_sources/m_lights again, so dropping an entry here has no
-            // renderer-visible effect either way. m_sourceCells is deliberately NEVER
-            // touched here: a boot index's cell must survive removal so a later re-declare can re-point Slot (below).
-            _ = m_sources.Remove(key: index);
-            _ = m_lights.Remove(key: index);
             _ = m_liveBinds.Remove(item: index);
             Console.Error.WriteLine(value: $"[world.screen: {index} removed — slot disposed]");
         }
@@ -661,33 +658,16 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                 value: out var slot
             ) is false) {
                 if (!m_bootScreenIndices.Contains(item: screen.Index)) {
-                    Console.Error.WriteLine(value: $"[world.screen: {screen.Index} added — its source applies at next boot (render provider key set frozen at boot)]");
+                    Console.Error.WriteLine(value: $"[world.screen: {screen.Index} added — its source applies at next boot (the render node binds the screens declared at boot)]");
 
                     continue;
                 }
 
-                // A boot-declared index that was removed and is now re-declared — recreate the slot; safe because
-                // the render engine's frozen key list still names this index. DeclaredSource starts null so the
-                // Equals check below never short-circuits a fresh slot. Never write a new delegate into
-                // m_sources/m_lights here (see m_sourceCells' own remarks) — re-point the boot-time cell's Slot
-                // field instead, which the renderer's already-copied delegate reads through immediately.
-                slot = new ScreenSlot { Binder = this, DeclaredSource = null, Index = screen.Index, Machines = m_machines };
+                // A boot-declared index that was removed and is now re-declared — recreate the slot; safe because the
+                // render node still binds this index. DeclaredSource starts null so the Equals check below never
+                // short-circuits a fresh slot.
+                slot = new ScreenSlot { Binder = this, DeclaredSource = null, Index = screen.Index };
                 m_slots[screen.Index] = slot;
-
-                if (m_sourceCells.TryGetValue(
-                    key: screen.Index,
-                    value: out var cell
-                )) {
-                    cell.Slot = slot;
-                } else {
-                    // Should not happen for a boot index (its cell is created once, at construction, and never
-                    // removed) — guarded defensively rather than assumed, since a first poll before this branch
-                    // would otherwise throw a KeyNotFoundException reading m_sources/m_lights.
-                    cell = new ScreenSourceCell { Slot = slot };
-                    m_sourceCells[screen.Index] = cell;
-                    m_sources[screen.Index] = cell.ResolveFrame;
-                    m_lights[screen.Index] = cell.ResolveLight;
-                }
             }
 
             // The magazine and its live selector are authoritative server state now (Server.WorldMachineHost owns
@@ -715,10 +695,12 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_seatCameraControls = ResolveSeatCameraControls(screens: screens);
     }
     /// <summary>Clears a screen's live local producer — the runtime <c>screen.eject</c> path — for any live feed this
-    /// binder itself owns (the webcam, a window capture, any external producer, a probe output). Ejecting a machine is
-    /// <c>ScreenCommandModule</c>'s <c>WorldScreenOp.Eject</c> submission instead (see this type's own remarks). The slot
-    /// reverts to its declared producer feed (a test pattern, a QR code) or to unbound (the procedural fallback). Fails for an undeclared screen or a slot with no live
-    /// local producer to clear.</summary>
+    /// binder itself owns (the webcam, a window capture, any external producer, a probe output), or blanks a row whose
+    /// external source (a camera, a capture, a probe) the screen shows. Ejecting a machine is
+    /// <c>ScreenCommandModule</c>'s <c>WorldScreenOp.Eject</c> submission instead (see this type's own remarks). The
+    /// screen reverts to its row's source when that is a producer whose content is not external (a test pattern, a QR
+    /// code), or to unbound (the procedural fallback). Fails for an undeclared screen or a screen with nothing live to
+    /// clear.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <returns>Whether the eject succeeded, and a message describing the outcome.</returns>
     public (bool Ok, string Message) TryEject(int index) {
@@ -729,38 +711,56 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
-        if (!slot.HasLive) {
+        var external = ShowsExternalRow(slot: slot);
+
+        if (
+            !slot.HasLive &&
+            !external
+        ) {
             return (Ok: false, Message: $"screen {index} has no source to eject");
         }
 
+        var outcome = EjectLive(
+            index: index,
+            slot: slot
+        );
+
+        if (
+            !external &&
+            (slot.DeclaredSource is WorldScreenSource.Producer declared) &&
+            !IsExternal(source: declared)
+        ) {
+            _ = m_liveBinds.Remove(item: index);
+        } else {
+            ShowLive(index: index);
+        }
+
+        return outcome;
+    }
+
+    // Clears the slot's live local producer, leaving what the screen shows next to the caller.
+    private static (bool Ok, string Message) EjectLive(int index, ScreenSlot slot) {
         slot.ClearLive();
-        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} ejected");
     }
+    // Whether a screen shows its row's source instance, and that source is external content.
+    private bool ShowsExternalRow(ScreenSlot slot) => (
+        (ReadOf(screen: slot.Index) is not null) &&
+        IsExternal(source: slot.DeclaredSource)
+    );
 
-    // The delegate indirection cell: ResolveFrame/ResolveLight are the stable delegate targets m_sources/m_lights
-    // register. A cell is created once per boot-declared index and never replaced; only its Slot field is ever
-    // reassigned (by ReconcileScreens, when a removed index is re-declared), so the renderer's one-time copy of
-    // ResolveFrame/ResolveLight keeps reading whichever ScreenSlot is current.
-    private sealed class ScreenSourceCell {
-        public required ScreenSlot Slot { get; set; }
-
-        public GpuImageLease ResolveFrame() => Slot.AcquireFrame();
-        public Vector3 ResolveLight() => Slot.Light();
-    }
-    // One declared screen's slot: at most one declared producer feed (a test pattern, a QR code — anything not
-    // external, which survives an eject), at most one live feed (the shared webcam, a window capture, any external
-    // producer — what an eject clears), and the typed machine, probe, view and session paths. A machine-owning index
-    // carries no local producer here (Server.WorldMachineHost owns it); every read checks Machines first. Every
-    // external image is resolved through the binder's capture gate, so a capture shows the fill instead. A mutable class
-    // so the producer references flip in place with no engine rebuild.
+    // One declared screen's slot: what it shows locally — at most one live feed (the shared webcam, a window capture,
+    // any external producer — what an eject clears), the live QR code a verb authored, and the probe, view and session
+    // paths. A row's producer, machine or probe source is no local state: it is a source instance the render graph
+    // runs, which the screen reads while it shows its row. Every external image is resolved through the binder's capture
+    // gate, so a capture shows the fill instead. A mutable class so the references flip in place with no engine rebuild.
     private sealed class ScreenSlot {
         public required WorldScreenBinder Binder { get; init; }
-        // The declared producer feed: a producer whose content is not external.
+        // The QR code a live verb authored (screen.source <index> qr, world.identify), which survives an eject.
         public IWorldImageFeed? DeclaredFeed { get; set; }
-        // The ctor-time or bind-time fault (a producer that would not open, an unknown view camera); a live feed's own
-        // fault is read from the feed instead (see CurrentFault). Machine faults are Machines.State's concern.
+        // The bind-time fault (a producer that would not open, an unknown view camera); a live feed's own fault is read
+        // from the feed instead (see CurrentFault). Machine faults are Machines.State's concern.
         public string? DeclaredFault { get; set; }
         // The WorldScreenSource this slot currently reflects — set at construction and updated by ReconcileScreens, so a
         // live UpsertScreen only re-applies its source through the runtime machinery when the source actually changed.
@@ -771,10 +771,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         public required int Index { get; init; }
         // The live feed: a producer whose content is external.
         public IWorldImageFeed? LiveFeed { get; set; }
+        // The row's machine source, whose output the source instance publishes and whose extent a mapping reads.
         public WorldScreenSource.Machine? MachineSource { get; set; }
-        // The authoritative screen-machine host — consulted FIRST by Handle()/Light()/CurrentFault() for this slot's
-        // index, before any locally-owned producer.
-        public required WorldMachineHost Machines { get; init; }
         public ProbeFeed? Probe { get; set; }
         public SessionFeed? Session { get; set; }
         // The live decal-text source (declared row or a live source change) — no producer, no handle: the decal tier
@@ -782,22 +780,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         public WorldScreenSource.Text? Text { get; set; }
         public ViewFeed? View { get; set; }
 
-        private IMachineVideoOutput? MachineOutput() => ((MachineSource is { } source)
-            ? Machines.VideoOutput(
-                instance: source.Instance,
-                output: source.Output
-            )
-            : null
-        );
-
-        // The current source for one submitted frame: the host's machine (if this index has one), else the live feed,
-        // the probe output, the jumbotron view, the session view, or the declared feed, else 0. A probe output is
-        // external content: it processes a camera's frames.
+        // The image the slot shows locally for one submitted frame: the live feed, the probe output, the jumbotron view,
+        // the session view, or the live QR code, else 0. A probe output is external content: it processes a camera's
+        // frames.
         public GpuImageLease AcquireFrame() {
-            if (MachineOutput() is { } machine) {
-                return machine.NativeImageViewHandle;
-            }
-
             if (LiveFeed is { } live) {
                 return Binder.Resolve(feed: live);
             }
@@ -822,17 +808,16 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                 : 0
             );
         }
-        // Clears the live local producer (webcam, capture, probe) and reverts to the declared feed or to unbound. The
-        // webcam feed itself is shared and outlives this slot's reference; a window capture is per-slot and disposed.
+        // Clears the live local producer (webcam, capture, probe). The webcam feed itself is shared and outlives this
+        // slot's reference; a window capture is per-slot and disposed.
         public void ClearLive() {
             LiveFeed?.Dispose();
             LiveFeed = null;
             Probe = null;
             DeclaredFault = null;
         }
-        // The fault surfaced by screen.state's non-machine branch: a live feed's own reason, else a not-live probe's,
-        // else the declared feed's, else the bind-time fault. A machine-owning index's fault comes from Machines.State
-        // instead (see the outer type's own State(int) composer).
+        // The fault surfaced by screen.state's non-machine branch for a screen showing no source instance: a live
+        // feed's own reason, else a not-live probe's, else the live QR code's, else the bind-time fault.
         public string? CurrentFault() {
             if (LiveFeed?.Fault is { } liveFault) {
                 return liveFault;
@@ -858,13 +843,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             View = null;
         }
         // Diagnostic handle lookup only; unlike AcquireFrame it never submits GPU work and therefore does not acquire
-        // an asynchronously-written camera slot. It is also what a jumbotron's own render binds for this screen, so it
-        // resolves through the capture gate exactly as AcquireFrame does.
+        // an asynchronously-written camera slot. It resolves through the capture gate exactly as AcquireFrame does.
         public nint Handle() {
-            if (MachineOutput() is { } machine) {
-                return machine.NativeImageViewHandle;
-            }
-
             if (LiveFeed is { } live) {
                 return Binder.ResolveHandle(feed: live);
             }
@@ -889,13 +869,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                 : 0
             );
         }
-        // The current emitted light, in the same precedence as Handle; a filled external image lights the room with
-        // its fill.
+        // The emitted light of what the slot shows locally, in the same precedence as Handle; a filled external image
+        // lights the room with its fill.
         public Vector3 Light() {
-            if (MachineOutput() is { } machine) {
-                return machine.EmittedLight;
-            }
-
             if (LiveFeed is { } live) {
                 return Binder.ResolveLight(feed: live);
             }
@@ -920,8 +896,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                 : Vector3.Zero
             );
         }
-        // Drops the declared producer feed and disposes what it owns — run whenever the slot stops showing it (a
-        // re-author, or a declared source that is no longer a producer).
+        // Drops the live QR code and disposes what it owns.
         public void ReleaseDeclared() {
             DeclaredFeed?.Dispose();
             DeclaredFeed = null;

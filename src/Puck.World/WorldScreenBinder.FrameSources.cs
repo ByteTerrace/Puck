@@ -345,16 +345,29 @@ internal sealed partial class WorldScreenBinder {
         m_cameraDemand.Clear();
 
         foreach (var slot in m_slots.Values) {
-            if (slot.LiveFeed is not CameraSlotFeed { Seat: var seat, Sensor: var sensor }) {
+            var rowCamera = WorldImageProducerSettings.TryCamera(
+                camera: out var declared,
+                source: slot.DeclaredSource
+            );
+            int seat;
+            WorldCameraSensor sensor;
+
+            if (slot.LiveFeed is CameraSlotFeed live) {
+                (seat, sensor) = (live.Seat, live.Sensor);
+            } else if (
+                rowCamera &&
+                (ReadOf(screen: slot.Index) is not null)
+            ) {
+                // A screen showing its camera row reads the row's source instance, whose feed resolves the seat's
+                // shared feed this demand opens.
+                (seat, sensor) = ((declared!.Seat ?? DefaultViewSeat), declared.Sensor);
+            } else {
                 continue;
             }
 
             var requested = ((
-                WorldImageProducerSettings.TryCamera(
-                    camera: out var declared,
-                    source: slot.DeclaredSource
-                ) &&
-                ((declared.Seat ?? seat) == seat) &&
+                rowCamera &&
+                ((declared!.Seat ?? seat) == seat) &&
                 (declared.Sensor == sensor)
             )
                 ? (declared.Profile ?? WorldFeedProfile.Default)
@@ -559,9 +572,9 @@ internal sealed partial class WorldScreenBinder {
         return false;
     }
 
-    // Whether a frame source's content is external: a producer whose registered shape says so, or a probe, which
-    // processes a camera's frames.
-    private static bool IsExternal(WorldFrameSource source) => source switch {
+    // Whether a source's content is external: a producer whose registered shape says so, or a probe, which processes a
+    // camera's frames.
+    private static bool IsExternal(WorldScreenSource? source) => source switch {
         WorldScreenSource.Producer producer => (WorldImageProducerVocabulary.TryGet(
             id: producer.Id,
             shape: out var shape

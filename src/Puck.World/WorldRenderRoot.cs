@@ -69,6 +69,7 @@ internal static class WorldRenderRoot {
             reason: out var composeReason,
             root: out var rootName,
             set: out var set,
+            sources: binder.Mappings.Sources.Instances,
             synthesized: synthesized,
             views: definition.Views
         )) {
@@ -86,10 +87,9 @@ internal static class WorldRenderRoot {
                 HostsOnDirectX = hostSettings.HostsOnDirectX,
                 InstanceCapacity = frameSource.InstanceCapacity,
                 ProgramWordCapacity = frameSource.ProgramWordCapacity,
-                // The diegetic screens' source + light providers — the test-pattern screen's CPU feed and its room glow;
-                // an unbound screen has no provider (the engine's procedural fallback lights it).
-                ScreenLights = binder.ScreenLights,
-                ScreenSources = binder.ScreenSources,
+                // The diegetic screens: the source instance each row reads, or the image the binder renders for it, and
+                // the light each casts into the room.
+                ScreenSources = binder,
                 ViewportCapacity = WorldRootGraph.ViewsOf(views: definition.Views),
             }
         );
@@ -130,12 +130,20 @@ internal static class WorldRenderRoot {
         }
 
         // An uploaded producer's source instance converts the region its feed writes through the conversion its
-        // descriptor names. An imported producer's instance has no external producer yet, so an instance of one is
-        // refused by name.
+        // descriptor names; any other producer's instance, and a machine or probe source, renders through an external
+        // producer that hands out its image through the binder's capture gate.
         SourceConversionPackage.RegisterAll(packages: packages);
         binder.Producers.RegisterPackages(
-            adapt: null,
+            adapt: binder.Adapt,
             packages: packages
+        );
+        packages.RegisterProducer(
+            factory: binder.MachineSource,
+            package: RenderGraphInstance.SourcePackage(producer: WorldImageProducerSettings.MachineId)
+        );
+        packages.RegisterProducer(
+            factory: binder.ProbeSource,
+            package: RenderGraphInstance.SourcePackage(producer: WorldImageProducerSettings.ProbeId)
         );
 
         if (!RenderGraphRuntime.TryCreate(
@@ -153,6 +161,8 @@ internal static class WorldRenderRoot {
 
             throw new InvalidOperationException(message: $"The document's render graph was refused: {refusal.Code}: {refusal.Message}");
         }
+
+        binder.Runtime = runtime;
 
         var post = definition.Views.Post;
         var overlaid = (overlay is not null);

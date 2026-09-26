@@ -189,6 +189,7 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
                 bytes: m_pixels,
                 offset: ImageSourceUploadLayout.HeaderBytes
             );
+            Light = WorldImageLight.Average(bgra: m_pixels);
             m_stamp = new ImageSourceStamp(
                 Sequence: (m_stamp.Sequence + 1UL),
                 Tick: ((ulong)Math.Max(

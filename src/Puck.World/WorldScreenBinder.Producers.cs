@@ -15,13 +15,13 @@ internal sealed partial class WorldScreenBinder {
     // Whether an external image resolves to its capture fill this frame.
     private bool FillsExternal => m_captureGate.Fills(content: ImageContentClass.External);
 
-    // Whether any screen shows external content: a live feed, a probe output, or an external declared feed.
+    // Whether any screen shows external content: a live feed, a probe output, or a row's external source instance.
     private bool BindsExternal() {
         foreach (var slot in m_slots.Values) {
             if (
                 (slot.LiveFeed is not null) ||
                 (slot.Probe is not null) ||
-                (slot.DeclaredFeed is { Descriptor.FillsCaptures: true })
+                ShowsExternalRow(slot: slot)
             ) {
                 return true;
             }
@@ -29,8 +29,8 @@ internal sealed partial class WorldScreenBinder {
 
         return false;
     }
-    // Opens a producer source's feed through the registry and places it: an external feed is the slot's live feed, any
-    // other its declared feed. A producer that cannot open leaves its fault on the slot.
+    // Opens a live producer source's feed through the registry and places it: an external feed is the slot's live feed,
+    // any other its declared feed. A producer that cannot open leaves its fault on the slot.
     private bool OpenProducer(ScreenSlot slot, WorldScreenSource.Producer source) {
         if (!m_producers.TryOpen(
             fault: out var fault,
@@ -54,8 +54,8 @@ internal sealed partial class WorldScreenBinder {
 
         return true;
     }
-    // The reconcile/select-side producer bind: the previous live feed and declared feed both give way to the new
-    // source, so the slot shows exactly what the document now names.
+    // The live producer bind (screen.select): the previous live feed and declared feed both give way to the new source,
+    // so the slot shows exactly what the entry names.
     private (bool Ok, string Message) ApplyProducer(int index, ScreenSlot slot, WorldScreenSource.Producer source) {
         slot.ClearLive();
         slot.ReleaseDeclared();
@@ -88,10 +88,13 @@ internal sealed partial class WorldScreenBinder {
                 );
             }
 
-            if (slot.DeclaredFeed is { Descriptor.FillsCaptures: true } declared) {
+            if (
+                (ReadOf(screen: slot.Index) is { } instance) &&
+                (FeedOf(instance: instance) is { Descriptor.FillsCaptures: true } source)
+            ) {
                 EnsureFill(
                     deviceContext: deviceContext,
-                    rgba: declared.Descriptor.CaptureFill
+                    rgba: source.Descriptor.CaptureFill
                 );
             }
         }

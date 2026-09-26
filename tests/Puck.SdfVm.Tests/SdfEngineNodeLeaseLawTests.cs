@@ -281,8 +281,9 @@ public sealed class SdfEngineNodeLeaseLawTests {
         using var fence = new SharedFence();
         var released = 0;
 
-        using var rig = new Rig(screenSources: new Dictionary<int, Func<GpuImageLease>> {
-            [0] = () => new GpuImageLease(
+        using var rig = new Rig(screenSources: new ScreenSources(
+            readOf: static _ => null,
+            rendered: _ => new GpuImageLease(
                 ImageViewHandle: 0x51,
                 Release: _ => released++,
                 Wait: new GpuExternalWait(
@@ -290,7 +291,8 @@ public sealed class SdfEngineNodeLeaseLawTests {
                     Value: 7UL
                 )
             ),
-        });
+            screens: [0]
+        ));
 
         rig.ProduceFirst();
 
@@ -312,14 +314,78 @@ public sealed class SdfEngineNodeLeaseLawTests {
 
         Assert.Equal(actual: released, expected: 1);
     }
+    // A screen reading a source instance binds the image the graph hands the frame, and the node takes that read's lease
+    // once however many screens show it: the runtime's retirement of untaken leases leaves it held, and it retires only
+    // once the frame ring comes back to the slot whose submission sampled it. A frame produced outside the graph hands the
+    // screen nothing, and it binds nothing.
+    [Fact]
+    public void AScreensSourceLeaseRetiresOnlyAfterTheSamplingSlotsFence() {
+        const string Source = "source$camera$0";
+        var released = new List<int>();
 
+        using var rig = new Rig(screenSources: new ScreenSources(
+            readOf: static _ => Source,
+            rendered: static _ => throw new InvalidOperationException(message: "A screen reading a source is never rendered."),
+            screens: [0, 3]
+        ));
+
+        rig.ProduceFirst();
+        Assert.Equal(
+            actual: (rig.Node.BoundScreenSource(screen: 0), rig.Node.BoundScreenSource(screen: 3)),
+            expected: (((nint)0), ((nint)0))
+        );
+
+        var reads = new RenderGraphExternalReads(producers: [Source]);
+
+        for (var frame = 0; (frame <= SdfWorldEngine.FrameRingSize); frame++) {
+            reads.Bind(
+                image: default,
+                index: 0,
+                layout: GpuImageLayout.ShaderReadOnly,
+                lease: new GpuImageLease(
+                    ImageViewHandle: (0x60 + frame),
+                    Release: released.Add,
+                    ReleaseToken: frame
+                )
+            );
+            Assert.True(condition: rig.Node.Produce(
+                context: rig.Context,
+                height: Extent,
+                reads: reads,
+                width: Extent
+            ));
+            Assert.True(condition: reads.IsTaken(index: 0));
+            reads.RetireUntaken();
+            Assert.Equal(
+                actual: (rig.Node.BoundScreenSource(screen: 0), rig.Node.BoundScreenSource(screen: 3)),
+                expected: (((nint)(0x60 + frame)), ((nint)(0x60 + frame)))
+            );
+
+            if (frame < SdfWorldEngine.FrameRingSize) {
+                Assert.Empty(collection: released);
+            }
+        }
+
+        Assert.Equal(
+            actual: released,
+            expected: new[] { 0 }
+        );
+    }
+
+    private sealed class ScreenSources(IReadOnlyList<int> screens, Func<int, string?> readOf, Func<int, GpuImageLease> rendered) : ISdfScreenSources {
+        public IReadOnlyList<int> Screens => screens;
+
+        public Vector3 Light(int screen) => Vector3.Zero;
+        public string? ReadOf(int screen) => readOf(arg: screen);
+        public GpuImageLease Rendered(int screen) => rendered(arg: screen);
+    }
     private sealed class SharedFence : IGpuSharedFence {
         public ulong CompletedValue => 0UL;
 
         public void Dispose() { }
     }
     private sealed class Rig : IDisposable {
-        public Rig(bool trackObjects = false, IReadOnlyDictionary<int, Func<GpuImageLease>>? screenSources = null) {
+        public Rig(bool trackObjects = false, ISdfScreenSources? screenSources = null) {
             var gpu = new FakeGpuDevice(
                 reportVersion: SdfIsa.Version,
                 trackObjects: trackObjects

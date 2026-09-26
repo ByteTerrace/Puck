@@ -1131,8 +1131,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <see langword="null"/> before a render root is attached, when no view is shown.</summary>
     public Func<int, bool>? ViewRendered { get; set; }
 
-    /// <summary>Prepares the render graph's frame before its runtime schedules it: reconciles the document's
-    /// <c>views.graphs</c> rows onto the runtime, hands every graph instance this frame's presented tick and
+    /// <summary>Prepares the render graph's frame before its runtime schedules it: publishes the screens' content for the
+    /// frame first (<see cref="IWorldScreenPresenter.Publish"/>), so every source the frame acquires sees one answer from
+    /// the capture gate, then reconciles the document's <c>views.graphs</c> rows and the screens' source instances onto
+    /// the runtime, hands every graph instance this frame's presented tick and
     /// presentation time, then places each view of the world the last composed frame rendered in its rect at its render
     /// scale and the live upscale sharpness, and, for each graph instance a slot of the last composed layout shows,
     /// places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer and its own time, and
@@ -1146,6 +1148,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// layout change places its views and panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) {
+        if (context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)) {
+            m_binder.Publish(
+                deviceContext: device,
+                tick: m_simulation.Tick
+            );
+        }
+
         if (m_graphs is not { } graphs) {
             return;
         }
@@ -1633,15 +1642,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     public void NotifyDeviceLost() {
         m_binder.NotifyDeviceLost();
     }
-    public void PrepareScreenSources(IGpuDeviceContext deviceContext) {
-        // Render + upload every CPU-fed screen for this frame off the sim tick advanced during CaptureFrame, so the
-        // provider polled just after this call returns a handle to THIS frame's image. The engine seam calls this
-        // AFTER capture and BEFORE the source poll.
-        m_binder.Publish(
-            tick: m_simulation.Tick,
-            deviceContext: deviceContext
-        );
-    }
     /// <inheritdoc/>
     public void RenderViews(in Puck.Hosting.FrameContext context) {
         // The frame context's target extent IS the launcher's live client area (window.Width/Height at this frame's
@@ -1654,8 +1654,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         // Render this frame's jumbotron views (the View screens) against the live device, feeding each the SAME world
         // program / dynamic transforms / content clock the room renders with, so a jumbotron shows this world from its
-        // placeable camera. Called AFTER PrepareScreenSources (the CPU-fed screens the views sample are already this
-        // frame's) and BEFORE the source poll (so a View screen's provider returns this frame's offscreen render).
+        // placeable camera. Called AFTER the screens reading source instances are bound (the views sample this frame's
+        // images of them) and BEFORE the screens showing views bind (so they bind this frame's offscreen render).
         // The dressed frame is required, not optional: an offscreen view DERIVES its submission from it, so a frame
         // this produced frame never dressed has nothing to derive from and the views hold their last resolved image
         // for one frame rather than rendering off a fabricated one.

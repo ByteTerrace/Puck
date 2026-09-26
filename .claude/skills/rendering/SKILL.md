@@ -235,10 +235,12 @@ These are one-line cautions; the owning pages hold the derivations.
   counts its outstanding leases (`WorldOverlayFrameSources`) is sized by it. A
   new sampled-lease path holds its leases in that list rather than its own
   array. Not every image another producer keeps writing is leased yet: the
-  desktop capture's GPU route (`CaptureFeed.Handle`) and the offscreen views'
-  renders (`ScreenSlot.Handle`) bind a shared slot's bare handle, so nothing
-  stops the producer overwriting a slot a submission still samples. Rendering
-  plan P12b-2 leases them. Two devices are ordered by a Direct3D 12 shared
+  desktop capture's GPU route reads its latest slot without acquiring it, and
+  an offscreen view's render of a screen showing a live presentation source
+  binds `ScreenSlot.Handle`'s bare handle, so nothing stops the producer
+  overwriting a slot a submission still samples. Rendering plan P12b-2 leases
+  them; a screen reading a source instance is already bound under the world
+  node's lease before the views render. Two devices are ordered by a Direct3D 12 shared
   fence the consumer creates beside the targets: a Direct3D 11 producer signals
   it through `Win32D3D11CompletionSignal`, the one completion primitive every
   Direct3D 11 producer uses, and publishes each slot with the value, and the
@@ -268,7 +270,25 @@ These are one-line cautions; the owning pages hold the derivations.
   per producer id that opens the instance's feed through `TryOpen`. A typed
   arm's source takes the reserved id `machine` or `probe`, which the vocabulary
   refuses to a document producer. Its `RenderGraphInstance.Handle` is its
-  identity, never the producer id. An external image (camera, capture,
+  identity, never the producer id. The live set runs every source a screen row
+  reads (`WorldScreenMappingSet.Sources`): `WorldViewGraphHost.TryCompose` puts
+  the sources first and adds a read of each to the instance the engine renders
+  its first view through, with a footprint each, and recomposes when the rows
+  move. A producer that is not uploaded is adapted to `WorldImageFeedProducer`
+  (`WorldScreenBinder.Adapt`), whose `TryAcquireOutput` is the one place its
+  image is acquired, through `WorldCaptureGate.Resolve`, so a filled source hands
+  out its fill and never acquires the feed; the machine and probe ids register
+  the binder's `MachineSource` and `ProbeSource`. Such a source hands out an
+  image view alone (an empty `RenderGraphExternalOutput.Image`, the view on the
+  lease), so only an external producer samples it and the runtime refuses a
+  graph input bound to it (`RenderGraphRuntimeRefusalCode.InputSource`).
+  `SdfEngineNode` maps the reads it is handed to its screens through
+  `ISdfScreenSources` (`ReadOf` names a screen's instance; `Rendered` serves a
+  view, a session or a live presentation source), taking each read's lease once
+  however many screens show it, and binds every read before the offscreen views
+  render, which sample the same images (`BoundScreenSource`). The binder
+  publishes before the runtime schedules (`WorldFramePresenter.PrepareGraph`),
+  so the gate answers once per frame. An external image (camera, capture,
   probe output) is resolved through the binder's `WorldCaptureGate`, never
   directly: a new path that samples one without the gate leaks it into
   captures. An uploaded producer registers an upload for its source package
@@ -280,8 +300,10 @@ These are one-line cautions; the owning pages hold the derivations.
   conversion a catalog package per shipped kernel (`SourceConversionPackage`,
   its interface generated beside the kernel). The runtime declares the
   upload's cadence and extent to the scheduler itself. A new uploaded producer
-  writes its planes in `IWorldUploadFeed.TryWrite`; screens still read the
-  binder's `CpuSurfaceSource` uploads until P12b-2 connects them. An uploaded
+  writes its planes in `IWorldUploadFeed.TryWrite`, which a screen reading its
+  row's source samples as the instance's converted output; a live verb's feed
+  (`screen.source <index> qr`) still uploads through `CpuSurfaceSource` until
+  P12b-2 makes live binds source instances. An uploaded
   source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`, the

@@ -59,7 +59,7 @@ public sealed class WorldSourceInstanceLawTests {
         producers.Register(producer: pattern);
         SourceConversionPackage.RegisterAll(packages: packages);
         producers.RegisterPackages(
-            adapt: null,
+            adapt: static opening => new OpenedSource(opening: opening),
             packages: packages
         );
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(
@@ -219,7 +219,7 @@ public sealed class WorldSourceInstanceLawTests {
 
         SourceConversionPackage.RegisterAll(packages: packages);
         producers.RegisterPackages(
-            adapt: null,
+            adapt: static opening => new OpenedSource(opening: opening),
             packages: packages
         );
 

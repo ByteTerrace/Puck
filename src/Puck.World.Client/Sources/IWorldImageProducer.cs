@@ -7,10 +7,12 @@ using Puck.Shaders;
 namespace Puck.World.Client;
 
 /// <summary>
-/// One open image source on a screen: the feed a <see cref="IWorldImageProducer"/> opened for a
-/// <see cref="WorldScreenSource.Producer"/> source. The screen binder publishes it once per produced frame, samples it
-/// through <see cref="WorldCaptureGate"/> (so an external feed never reaches a capture), and disposes it when the
-/// screen stops showing it. Every member runs on the presentation thread.
+/// One open image source: the feed a <see cref="IWorldImageProducer"/> opened for a
+/// <see cref="WorldScreenSource.Producer"/> source. A source instance's producer (<see cref="WorldImageFeedProducer"/>,
+/// or the runtime's upload for an <see cref="IWorldUploadFeed"/>) owns it, publishes it at its cadence, hands its image
+/// out through <see cref="WorldCaptureGate"/> (so an external feed never reaches a capture), and disposes it when the set
+/// no longer runs the instance; the screen binder does the same for a feed a live presentation verb bound. Every member
+/// runs on the presentation thread.
 /// </summary>
 public interface IWorldImageFeed : IDisposable {
     /// <summary>Gets the feed's descriptor: its producer, transport, format, cadence, content class and capture fill.</summary>
@@ -115,12 +117,14 @@ public sealed class WorldImageProducers {
     /// through <see cref="TryOpen"/>, so a feed that disagrees with its registration is refused by name there.</summary>
     /// <param name="packages">The packages the host's render-graph runtime installs instances from.</param>
     /// <param name="adapt">Adapts one opening of a producer that is not uploaded to the render-graph producer the runtime
-    /// owns, which owns the feed, or <see langword="null"/> to leave those producers unregistered.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="packages"/> is <see langword="null"/>.</exception>
+    /// owns, which owns the feed (<see cref="WorldImageFeedProducer"/>).</param>
+    /// <exception cref="ArgumentNullException"><paramref name="packages"/> or <paramref name="adapt"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A producer's source package already has an external producer or an
     /// upload.</exception>
-    public void RegisterPackages(RenderGraphPackageRecorders packages, Func<WorldImageSourceOpening, IRenderGraphExternalProducer>? adapt) {
+    public void RegisterPackages(RenderGraphPackageRecorders packages, Func<WorldImageSourceOpening, IRenderGraphExternalProducer> adapt) {
         ArgumentNullException.ThrowIfNull(argument: packages);
+        ArgumentNullException.ThrowIfNull(argument: adapt);
 
         foreach (var producer in m_registry.Producers) {
             var id = producer.Id;
@@ -134,7 +138,7 @@ public sealed class WorldImageProducers {
                     )),
                     package: package
                 );
-            } else if (adapt is not null) {
+            } else {
                 packages.RegisterProducer(
                     factory: context => adapt(arg: Open(
                         context: context,

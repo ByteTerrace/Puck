@@ -7,7 +7,9 @@ namespace Puck.Hosting;
 /// <summary>One acquisition of an external producer's latest completed output: the image, the layout the producer
 /// leaves it in between its submissions, and the lease that keeps it alive until the submission that samples it has
 /// finished.</summary>
-/// <param name="Image">The same-device image the producer last completed.</param>
+/// <param name="Image">The same-device image the producer last completed, or an empty surface for a source whose image
+/// arrives from another thread or device as an image view alone, which the lease carries and only an external producer
+/// samples.</param>
 /// <param name="Layout">The layout the image is in whenever the producer is not recording into it; a consumer hands it
 /// back in this layout.</param>
 /// <param name="Lease">The acquisition, retired exactly once by the consumer that sampled it, after that submission's
