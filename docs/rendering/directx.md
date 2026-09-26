@@ -296,6 +296,17 @@ the set's two tables, which `DirectXCommandListRecorder` binds at the group's
 `ViewTableIndex` and `SamplerTableIndex`. A CPU surface reaches the blit through
 the device's `IGpuSurfaceUpload`, whose texture holds no descriptor of its own.
 
+The compositor creates its swap chain as SDR in the preferred 8-bit unsigned
+normalized format, then chooses its `DisplayOutput` through
+`DisplayOutput.TrySelect` from what the display reports: SDR in either 8-bit
+order always, and HDR10 and scRGB when the containing output's
+`IDXGIOutput6::GetDesc1` color space is `G2084_NONE_P2020`, which is how Windows
+reports HDR turned on. A requested HDR output (`PresentationOptions.ColorSpace`,
+which every host leaves at `Srgb`) resizes the buffers into its format and sets
+its color space when `CheckColorSpaceSupport` allows presenting it, and returns
+to SDR otherwise. `DirectXSurfaceCompositor.Output` exposes the choice, which
+`ISurfacePresenter.Output` reports for either backend.
+
 ---
 
 ## Result handling

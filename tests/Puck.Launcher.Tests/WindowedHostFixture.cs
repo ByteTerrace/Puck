@@ -49,6 +49,8 @@ internal static class WindowedHostFixture {
         public int DisposeCalls { get; private set; }
         public Exception? Failure { get; } = failure;
 
+        public DisplayOutput? Output => null;
+
         public void Activate(NativeSurfaceBinding binding, uint width, uint height) {
             ActivateCalls++;
 

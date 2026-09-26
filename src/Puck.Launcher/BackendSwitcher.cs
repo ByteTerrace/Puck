@@ -49,6 +49,9 @@ public sealed class BackendSwitcher : ISurfacePresenter, IPresentSurfaceReadback
         );
 
     /// <inheritdoc/>
+    public DisplayOutput? Output => m_current.Output;
+
+    /// <inheritdoc/>
     public void Activate(NativeSurfaceBinding binding, uint width, uint height) {
         m_binding = binding;
         m_width = width;

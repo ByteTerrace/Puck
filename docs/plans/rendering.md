@@ -2593,16 +2593,16 @@ Phase 3, the groups, follows phase 2:
     sampler at `s1`, space 3), and lease their blit from the device's
     `GpuPassPipelineCache` for a render pass in the swapchain's format, opaque
     and with the neutral dynamic viewport the presenter's recorder sets. A
-    Vulkan swapchain is created only in a `GpuPixelFormat`
-    (`VulkanSwapchain.Format`): `VulkanSwapchainFactory.SelectSurfaceFormat`
-    chooses from `SwapchainFormats` (8-bit unsigned normalized, 8-bit sRGB,
-    10-bit, half float, all mapped by both backends) in its own order, and a
-    surface offering none of them refuses swapchain creation by name, never a
-    frame. The Direct3D 12 compositor's
-    hand-built root signature and pipeline state and `VulkanGpuRenderPass.Borrow`
-    are deleted. The Direct3D 12 compositor keeps a one-SRV and a one-sampler
-    shader-visible heap until P16, and `DirectXDrawCommand` names the group, both
-    heaps and both tables. A graphics description states its groups alone:
+    Vulkan swapchain is created only in a `DisplayOutput`
+    (`VulkanSwapchain.Output`): `VulkanSwapchainFactory.SelectOutput` chooses
+    through `DisplayOutput.TrySelect`, SDR from `DisplayOutput.SdrFormats`
+    (8-bit unsigned normalized, 8-bit sRGB, 10-bit, half float, all mapped by
+    both backends) in its own order, and a surface offering none of them
+    refuses swapchain creation by name, never a frame. The Direct3D 12
+    compositor's hand-built root signature and pipeline state and
+    `VulkanGpuRenderPass.Borrow` are deleted. The Direct3D 12 compositor binds
+    a set of a pool in the device's heaps, and `DirectXDrawCommand` names the
+    group, both heaps and both tables. A graphics description states its groups alone:
     `GpuGraphicsPipelineDescription.Layout` is required, and its
     `TextureSamplerCount`, `EnableStorageBuffer` and push range are deleted with
     both backends' non-layout graphics paths, and

@@ -56,11 +56,17 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     // The name the blit's pool is admitted and named under.
     private const string BlitOwner = "surface-blit";
 
+    // The SDR outputs a flip-model swap chain presents on any display: 8-bit unsigned normalized, in either channel order.
+    private static readonly DisplayOutput[] SdrOutputs = [
+        DisplayOutput.Sdr(format: GpuPixelFormat.B8G8R8A8Unorm),
+        DisplayOutput.Sdr(format: GpuPixelFormat.R8G8B8A8Unorm),
+    ];
+
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
     private readonly GpuPassPipelineCache m_pipelines;
     private readonly string m_shaderDirectory;
-    private readonly GpuPixelFormat m_surfaceFormat;
-    private readonly DXGI_FORMAT m_swapChainFormat;
+    private readonly GpuPixelFormat m_preferredFormat;
+    private readonly DisplayColorSpace m_requestedColorSpace;
     private readonly PresentMode m_presentMode;
     private readonly uint m_syncInterval;
 
@@ -94,6 +100,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     // Set when the swap chain is created: the ALLOW_TEARING swap-chain flag (carried into ResizeBuffers too) and the
     // matching Present flag, both non-zero only for Immediate mode on a display that supports tearing.
     private uint m_presentFlags;
+    // What the swap chain presents, chosen when it is created (SelectOutput), and its back buffers' two formats.
+    private DisplayOutput m_output;
+    private GpuPixelFormat m_surfaceFormat;
+    private DXGI_FORMAT m_swapChainFormat;
     private nint m_rtvHeap;
     private uint m_rtvStride;
     private uint m_swapChainFlags;
@@ -133,21 +143,21 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_pipelines = pipelines;
         m_shaderDirectory = shaderDirectory;
         m_presentMode = presentationOptions.PresentMode;
-        // Map the neutral surface format to the back-buffer DXGI format (both are valid flip-model formats);
+        m_preferredFormat = presentationOptions.SurfaceFormat;
+        m_requestedColorSpace = presentationOptions.ColorSpace;
         // Vsync presents with sync interval 1, the other modes with 0.
-        m_surfaceFormat = ((GpuPixelFormat.B8G8R8A8Unorm == presentationOptions.SurfaceFormat)
-            ? GpuPixelFormat.B8G8R8A8Unorm
-            : GpuPixelFormat.R8G8B8A8Unorm
-        );
-        m_swapChainFormat = m_surfaceFormat switch {
-            GpuPixelFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
-            _ => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
-        };
         m_syncInterval = ((PresentMode.Vsync == m_presentMode)
             ? 1u
             : 0u
         );
     }
+
+    /// <summary>Gets what the swap chain presents, its format and color space, or <see langword="null"/> while no swap
+    /// chain exists.</summary>
+    public DisplayOutput? Output => ((0 == m_swapChain)
+        ? null
+        : m_output
+    );
 
     /// <summary>
     /// Creates the DXGI swap chain, blit pipeline, and all supporting D3D12 objects against the shared device.
@@ -168,6 +178,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         m_width = width;
         m_height = height;
+        SetOutput(output: Select(
+            reported: SdrOutputs,
+            requested: DisplayColorSpace.Srgb
+        ));
 
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
@@ -177,6 +191,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             height: height,
             width: width
         );
+        SelectOutput();
         CreateRtvHeap(device: device);
         AcquireBackBuffers(device: device);
         var blitPipeline = AcquireBlitPipeline(deviceContext: deviceContext);
@@ -695,6 +710,109 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         } finally {
             _ = ((IUnknown*)factory)->Release();
         }
+    }
+    private DisplayOutput Select(IReadOnlyCollection<DisplayOutput> reported, DisplayColorSpace requested) {
+        // Every list offered holds SdrOutputs, so an output is always chosen.
+        _ = DisplayOutput.TrySelect(
+            chosen: out var chosen,
+            preferredSdrFormat: m_preferredFormat,
+            reported: reported,
+            requested: requested
+        );
+
+        return chosen;
+    }
+    private void SetOutput(DisplayOutput output) {
+        m_output = output;
+        m_surfaceFormat = output.Format;
+        m_swapChainFormat = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: output.Format);
+    }
+    // Chooses what the swap chain, just created in SDR and holding no back buffer yet, presents: the requested HDR output
+    // when the display reports it and the swap chain can present its color space, otherwise the SDR it was created in.
+    private void SelectOutput() {
+        var chosen = Select(
+            reported: ReportedOutputs(),
+            requested: m_requestedColorSpace
+        );
+
+        if (!chosen.IsHdr) {
+            return;
+        }
+
+        var sdr = m_output;
+        var swapChain = ((IDXGISwapChain3*)m_swapChain);
+        var colorSpace = DirectXGpuFormats.ToDxgiColorSpace(colorSpace: chosen.ColorSpace);
+
+        SetOutput(output: chosen);
+        swapChain->ResizeBuffers(
+            BufferCount: FrameCount,
+            Height: m_height,
+            NewFormat: m_swapChainFormat,
+            SwapChainFlags: m_swapChainFlags,
+            Width: m_width
+        );
+        swapChain->CheckColorSpaceSupport(
+            ColorSpace: colorSpace,
+            pColorSpaceSupport: out var support
+        );
+
+        if (0U != (support & ((uint)DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG.DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT))) {
+            swapChain->SetColorSpace1(ColorSpace: colorSpace);
+
+            return;
+        }
+
+        SetOutput(output: sdr);
+        swapChain->ResizeBuffers(
+            BufferCount: FrameCount,
+            Height: m_height,
+            NewFormat: m_swapChainFormat,
+            SwapChainFlags: m_swapChainFlags,
+            Width: m_width
+        );
+    }
+    // The outputs the display the swap chain presents on reports: SDR always, and both HDR outputs when the display's
+    // own color space is HDR10 (IDXGIOutput6::GetDesc1), which is how Windows reports HDR turned on. A display DXGI cannot
+    // describe reports SDR alone.
+    private List<DisplayOutput> ReportedOutputs() {
+        var reported = new List<DisplayOutput>(collection: SdrOutputs);
+        IDXGIOutput* output = null;
+        IDXGIOutput6* output6 = null;
+
+        try {
+            ((IDXGISwapChain3*)m_swapChain)->GetContainingOutput(ppOutput: &output);
+
+            var iid = IDXGIOutput6.IID_Guid;
+
+            if (((IUnknown*)output)->QueryInterface(
+                ppvObject: ((void**)&output6),
+                riid: &iid
+            ).Failed) {
+                return reported;
+            }
+
+            if (DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 == output6->GetDesc1().ColorSpace) {
+                reported.Add(item: new DisplayOutput(
+                    ColorSpace: DisplayColorSpace.Hdr10,
+                    Format: DisplayOutput.HdrFormatOf(colorSpace: DisplayColorSpace.Hdr10)
+                ));
+                reported.Add(item: new DisplayOutput(
+                    ColorSpace: DisplayColorSpace.ScRgb,
+                    Format: DisplayOutput.HdrFormatOf(colorSpace: DisplayColorSpace.ScRgb)
+                ));
+            }
+        } catch (COMException) {
+            // No containing output (a window off every display) reports SDR alone.
+        } finally {
+            if (null != output6) {
+                _ = ((IUnknown*)output6)->Release();
+            }
+            if (null != output) {
+                _ = ((IUnknown*)output)->Release();
+            }
+        }
+
+        return reported;
     }
     private void CreateRtvHeap(ID3D12Device* device) {
         m_rtvHeap = ((nint)DirectXDescriptorHeaps.Create(

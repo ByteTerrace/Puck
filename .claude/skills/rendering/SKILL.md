@@ -703,9 +703,14 @@ These are one-line cautions; the owning pages hold the derivations.
   own profile with no host-visible device-local bytes and reads an uploaded
   source's conversion back byte-exact on Vulkan, Direct3D 12 hardware (debug
   layer on, no `[d3d12-debug]` line) and WARP.
-  A Vulkan swapchain is created only in a `GpuPixelFormat`
-  (`VulkanSwapchainFactory.SelectSurfaceFormat` over `SwapchainFormats`); a
+  A swapchain on either backend is created in a `DisplayOutput` (format and
+  `DisplayColorSpace`) chosen by `DisplayOutput.TrySelect`: SDR in
+  `SdrFormats` unless an HDR color space is requested
+  (`PresentationOptions.ColorSpace`, `Srgb` everywhere) and reported
+  (`VulkanSwapchainFactory.SelectOutput` over the surface's pairs, the
+  Direct3D 12 compositor's `ReportedOutputs` over `IDXGIOutput6`); a Vulkan
   surface offering none of them refuses at creation, never mid-frame.
+  `ISurfacePresenter.Output` exposes the chosen one.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
