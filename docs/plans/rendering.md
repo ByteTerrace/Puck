@@ -488,8 +488,10 @@ words. `pipeline.inspect` ends with the profile and the policy chosen for the
 instance's parameter bytes. Every host upload of the SDF engine is a region
 (P7b-19): its program words, per-frame tables and mesh draws each under the
 policy the selector chooses with the frame ring's reader in flight, and its
-brick staging a staged region whose destination is the brick pool. The
-overlay's host-written buffer still uploads by hand until P7b step 22. A ring's
+brick staging a staged region whose destination is the brick pool. A shader
+pipeline instance owns every host-written region its graph reads, a package's
+(the overlay's buffer) and a host buffer port's (an uploaded source's), and
+records their staged copies ahead of its frame's passes (P7b-22). A ring's
 buffers live
 where `GpuResidency.RingMemory` says: in the device-local aperture
 (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, counted under
@@ -2396,16 +2398,28 @@ Phase 3, the groups, follows phase 2:
     neutral dynamic viewport the presenter's recorder sets. A graphics
     description states its groups alone: `GpuGraphicsPipelineDescription.Layout`
     is required, and its `TextureSamplerCount`, `EnableStorageBuffer` and push
-    range are deleted with both backends' non-layout graphics paths. The
-    Direct3D 12 surface compositor has no second factory contract to fold; it
-    builds its root signature and pipeline state by hand. Remaining: the
-    overlay's host-written buffer uploads through a `GpuRegion` rather than by
-    hand, which under the staged policy needs the region-copy pipeline leased
-    at the package's build, a copy pool the node states and admits, the copy
-    and its two buffer transitions inside the package recording, and a
-    pixel-shader read state for a buffer on Direct3D 12; and
-    `VulkanGraphicsPipelineCreateRequest`'s fixed viewport, descriptor bindings
-    and push range, which no caller sets any more, leave the native API.
+    range are deleted with both backends' non-layout graphics paths, and
+    `VulkanGraphicsPipelineCreateRequest` takes its caller's layout and a
+    dynamic viewport alone (its fixed viewport, descriptor bindings, push range
+    and the native API's owned-layout branch are deleted). The overlay's
+    host-written buffer is a `GpuRegion` through one node mechanism: a package
+    states its regions (`IRenderGraphPackageFactory.Regions`), and
+    `ShaderPipelineRenderNode` creates them under `GpuResidency.Select`, takes
+    the region-copy pipeline in the candidate's build, states and admits a
+    reserved copy pool per staged pass in `DescriptorPools`, and records every
+    owed copy with its barriers in one command buffer ahead of the frame's
+    passes; recorders record no barrier. `BindRegion`'s host buffer ports go
+    through the same mechanism, so a staged uploaded source is no longer
+    refused. On Direct3D 12 a buffer the fragment stage reads is in
+    `ALL_SHADER_RESOURCE`. Laws: `OverlayPackageLawTests` (a steady drawn frame
+    uploads nothing under a ring or staged; the staged copy pool stated and
+    copies recorded), `RenderGraphRuntimeLawTests.AStagedSourceRegionReachesItsConversionByteExact`
+    and `DirectXBufferStatesLawTests`. Remaining: the Direct3D 12 surface
+    compositor's hand-built root signature and pipeline state move onto
+    `IGpuPipelineFactory`, as Vulkan's blit did, with its surface-blit shader on
+    the group registers; its shader-visible heaps stay until P16.
+    `VulkanGpuRenderPass.Borrow` keeps its stated format until P17's pixel-format
+    fold gives it the swapchain's.
 
 **Decisions.** Root parameter indices are dense, and the push index sits at
 `b0` in space 4, outside every group's space. The spike's frame group is the

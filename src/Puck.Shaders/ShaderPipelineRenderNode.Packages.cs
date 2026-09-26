@@ -76,7 +76,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 ? carry.Old.Images
                 : resource.Images) ?? []);
         })];
-    private void InstallPackage(ShaderPipelinePlannedPass planned, RuntimePass runtime, PassObjects objects, nint descriptorPool, IReadOnlyList<IReadOnlyList<IGpuImage>> outputImages) {
+    private void InstallPackage(ShaderPipelinePlannedPass planned, RuntimePass runtime, PassObjects objects, nint descriptorPool, IReadOnlyList<IReadOnlyList<IGpuImage>> outputImages, IGpuComputePipeline? copyPipeline) {
         if (planned.Package is null) {
             return;
         }
@@ -96,6 +96,12 @@ public sealed partial class ShaderPipelineRenderNode {
             planned: planned
         );
 
+        CreatePackageRegions(
+            copyPipeline: copyPipeline,
+            declared: (objects.Regions ?? []),
+            runtime: runtime
+        );
+
         var built = objects.PackageBuilt;
 
         // The recorder owns the build from here, whether or not it is created.
@@ -113,7 +119,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 PassBlocks: [.. Enumerable.Range(
                     count: ((int)m_inFlight),
                     start: 0
-                ).Select(selector: slot => runtime.PassRegion!.Buffer(slot: slot))]
+                ).Select(selector: slot => runtime.PassRegion!.Buffer(slot: slot))],
+                Regions: (runtime.Regions ?? [])
             )
         );
     }

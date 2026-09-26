@@ -1,4 +1,4 @@
-// Generated from shader interface 'overlay' (sha256/91cdb434e26a7f13f9e37c12f46cbb0cf3d4560f0f7971df6fcf7c83d585c278). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'overlay' (sha256/10413a520b1b76525c0927727d5264a746309e3834374ebb22fd993229f79705). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_OVERLAY
 #define PUCK_SHADER_INTERFACE_OVERLAY
 
@@ -28,8 +28,8 @@ struct OverlayPass {
     [[vk::offset(8)]] uint _pad8;
     [[vk::offset(12)]] uint _pad12;
     [[vk::offset(16)]] float4 counts;
-    [[vk::offset(32)]] float4 sdf;
-    [[vk::offset(48)]] float4 misc;
+    [[vk::offset(32)]] float4 misc;
+    [[vk::offset(48)]] float4 sdf;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<OverlayPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] Texture2D<float4> source : register(t1, space3);

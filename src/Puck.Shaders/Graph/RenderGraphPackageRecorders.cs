@@ -111,7 +111,20 @@ public interface IRenderGraphPackageFactory {
     /// buffers its frame group and pass group blocks live in, one per frame slot.</param>
     /// <returns>The recorder, which the instance disposes with its graph.</returns>
     IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups);
+    /// <summary>States the host-written regions a pass's recorder writes, which the instance creates for it when its graph
+    /// installs and hands over in <see cref="RenderGraphPackageGroups.Regions"/>, in this order. The instance chooses each
+    /// region's residency (<see cref="GpuResidency.Select"/>, with a reader in flight), flushes each frame slot's share
+    /// after the frame's recordings and records every staged copy with its buffer barriers ahead of the frame's passes,
+    /// so a recorder only writes a region's contents and binds <see cref="GpuRegion.Buffer"/>. It runs on the thread
+    /// pool with <see cref="Build"/>; a package that writes no region states none.</summary>
+    /// <param name="context">The pass it states the regions of.</param>
+    /// <returns>The regions, in the order the recorder receives them.</returns>
+    IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) => [];
 }
+/// <summary>A host-written region a package pass's recorder writes (<see cref="IRenderGraphPackageFactory.Regions"/>).</summary>
+/// <param name="Name">The region's part name, which names its buffers after the instance and the pass.</param>
+/// <param name="ByteCount">The region's size, in bytes; positive and a whole number of uints.</param>
+public readonly record struct RenderGraphPackageRegion(string Name, int ByteCount);
 /// <summary>What a recorder is built and created for: one package pass of one instance's graph, on one device.</summary>
 /// <param name="Instance">The instance's name.</param>
 /// <param name="Pass">The pass's name in the instance's graph.</param>
@@ -146,10 +159,16 @@ public sealed record RenderGraphExternalProducerContext(string Instance, string 
 /// source instance's graph converts. A package id has at most one producer or upload. A graph whose package pass names an
 /// id no recorder serves, and an external instance whose package neither a producer nor an upload serves, are refused by
 /// name when they are installed.</summary>
-public sealed class RenderGraphPackageRecorders {
+/// <param name="regionCopy">The device's region-copy pipelines, which an instance leases when a region it records selects
+/// the staged policy, or <see langword="null"/> for a host whose regions never stage; an instance refuses a staged
+/// region by name then.</param>
+public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = null) {
     private readonly Dictionary<string, IRenderGraphPackageFactory> m_factories = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphExternalProducer>> m_producers = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphSourceUpload>> m_sources = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Gets the device's region-copy pipelines the host offers, or <see langword="null"/> for none.</summary>
+    public GpuRegionCopyPass? RegionCopy { get; } = regionCopy;
 
     /// <summary>Gets the package ids a recorder serves, in ordinal order.</summary>
     public IReadOnlyList<string> Ids => [.. m_factories.Keys.Order(comparer: StringComparer.Ordinal)];

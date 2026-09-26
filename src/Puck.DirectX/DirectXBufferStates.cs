@@ -31,10 +31,14 @@ public sealed class DirectXBufferStates {
     /// <param name="access">The neutral access. A write through a read-write binding, a read through one (declared with
     /// the write the binding permits), and a transfer write, which Direct3D 12 performs as a UAV clear, all need
     /// <c>UNORDERED_ACCESS</c>.</param>
+    /// <param name="stages">The stages that make the access. A shader read by the fragment stage needs the pixel shader
+    /// resource state as well as the non-pixel one, since the one state covers every shader stage that may read the
+    /// buffer.</param>
     /// <returns><c>UNORDERED_ACCESS</c> for a transfer write, then <c>INDIRECT_ARGUMENT</c> for an indirect-argument
-    /// read, then <c>UNORDERED_ACCESS</c> for a shader write, then <c>NON_PIXEL_SHADER_RESOURCE</c> for a shader read,
-    /// otherwise <c>COMMON</c>; the first match wins.</returns>
-    public static D3D12_RESOURCE_STATES RequiredState(GpuAccess access) {
+    /// read, then <c>UNORDERED_ACCESS</c> for a shader write, then for a shader read <c>ALL_SHADER_RESOURCE</c> when
+    /// <paramref name="stages"/> holds the fragment stage and <c>NON_PIXEL_SHADER_RESOURCE</c> otherwise, then
+    /// <c>COMMON</c>; the first match wins.</returns>
+    public static D3D12_RESOURCE_STATES RequiredState(GpuAccess access, GpuStage stages) {
         if (0 != (access & GpuAccess.TransferWrite)) {
             return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
         }
@@ -48,7 +52,10 @@ public sealed class DirectXBufferStates {
         }
 
         if (0 != (access & GpuAccess.ShaderRead)) {
-            return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+            return ((0 != (stages & GpuStage.FragmentShader))
+                ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE
+                : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+            );
         }
 
         return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;

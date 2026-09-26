@@ -327,6 +327,12 @@ public sealed partial class ShaderPipelineRenderNode {
 
         public PassObjects?[] Passes { get; }
         public PreviewObjects? Preview { get; set; }
+        // The staged regions of each package pass that states any, in pass order: one reserved copy pool each
+        // (DescriptorPools' regionCopies). When there is one, the build holds a lease on the device's region-copy
+        // pipeline, taken ready.
+        public int[] RegionCopies { get; private set; } = [];
+        public IGpuComputePipeline? CopyPipeline { get; private set; }
+        public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? RegionCopy { get; set; }
 
         // Builds every pass's modules and pipelines, then the preview's. Safe on any thread: it only creates objects on
         // the device, counted through the node's wrapped services. The token is checked before each pass and the preview,
@@ -352,6 +358,11 @@ public sealed partial class ShaderPipelineRenderNode {
                         specs: specs
                     );
                 }
+
+                build.StateRegions(
+                    cancellationToken: cancellationToken,
+                    request: request
+                );
 
                 if (request.Key.Preview is { } preview) {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -382,6 +393,53 @@ public sealed partial class ShaderPipelineRenderNode {
 
             Preview?.Dispose();
             Preview = null;
+            RegionCopy?.Release();
+            RegionCopy = null;
+            CopyPipeline = null;
+        }
+
+        // States the graph's package regions under the device's residency choice and, when one stages, takes the
+        // region-copy pipeline ready, so the install on the frame thread never waits for it.
+        private void StateRegions(BuildRequest request, CancellationToken cancellationToken) {
+            var copies = new List<int>();
+
+            foreach (var pass in Passes) {
+                var staged = 0;
+
+                foreach (var region in (pass?.Regions ?? [])) {
+                    if (Staged(device: request.Device, byteCount: ((ulong)region.ByteCount))) {
+                        staged++;
+                    }
+                }
+
+                if (staged > 0) {
+                    copies.Add(item: staged);
+                }
+            }
+
+            RegionCopies = [.. copies];
+
+            if (copies.Count == 0) {
+                return;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            RegionCopy = RegionCopyOf(
+                device: request.Device,
+                instance: request.Instance,
+                packages: request.Packages
+            ).Acquire(device: request.Device);
+            CopyPipeline = RegionCopy.Wait(cancellationToken: cancellationToken).Compute;
+        }
+
+        // Takes the build's lease: the node's own when it holds none, and otherwise released, since both share the one
+        // pipeline the device's cache keeps.
+        public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? TakeRegionCopy() {
+            var lease = RegionCopy;
+
+            RegionCopy = null;
+
+            return lease;
         }
         public PassObjects TakePass(int index) {
             var objects = (Passes[index] ?? throw new InvalidOperationException(message: $"The build has no objects for pass {index}."));
@@ -400,6 +458,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public RenderGraphPackageRecorderContext? PackageContext;
         public IDisposable? PackageBuilt;
         public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? Pipeline;
+        public RenderGraphPackageRegion[]? Regions;
 
         public void Create(ShaderPipelinePlannedPass planned, CompiledShader? compiled, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs, CancellationToken cancellationToken) {
             // A package pass's objects are whatever its factory builds; its recorder binds its own descriptors.
@@ -421,6 +480,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     request: request,
                     specs: specs
                 );
+                Regions = [.. PackageFactory.Regions(context: PackageContext)];
                 PackageBuilt = PackageFactory.Build(
                     cancellationToken: cancellationToken,
                     context: PackageContext
