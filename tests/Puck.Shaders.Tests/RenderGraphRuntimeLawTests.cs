@@ -19,18 +19,21 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
     private static readonly RenderGraphPackageCatalog Catalog = new(packages: [
         new RenderGraphPackage(
+            Members: [],
             Id: Camera,
             Inputs: [],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Summary: "A camera view whose recorder counts its renders."
         ),
         new RenderGraphPackage(
+            Members: [],
             Id: Over,
             Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
             Summary: "A pass drawn over its input, which may draw nothing."
         ),
         new RenderGraphPackage(
+            Members: [],
             Id: Pool,
             Inputs: [],
             Outputs: [RenderGraphPackagePort.Buffer(
@@ -106,11 +109,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
         )],
         Schema: RenderGraphSchemas.Graph
     ));
-    // A view that shows its screens, and reads the pool when asked: one compute pass reading every screen at bindings
-    // 0.., then the pool, and writing the image at the next binding.
+    // A view that shows its screens, and reads the pool when asked: one compute pass whose pass group binds its block at
+    // 0, every screen from 1 (each image, then its sampler), then the pool, and the image it writes last. A law reads a
+    // pass's first input at binding 1.
     private static CompiledShaderPipeline ScreensGraph(bool pool, params string[] screens) {
         var inputs = screens.Select(selector: static (screen, index) => new ResourceReference(
-            Binding: ((uint)index),
             Name: screen
         )).ToList();
         var resources = screens.Select(selector: static screen => Image(
@@ -120,7 +123,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         if (pool) {
             inputs.Add(item: new ResourceReference(
-                Binding: ((uint)screens.Length),
                 Name: "pool"
             ));
             resources.Add(item: new ShaderPipelineResource(
@@ -140,7 +142,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Kind: ShaderPipelineDocumentPassKind.Compute,
                 Name: "compose",
                 Outputs: [new ResourceReference(
-                    Binding: ((uint)inputs.Count),
                     Name: "image"
                 )],
                 Source: "compose.hlsl"
@@ -152,25 +153,23 @@ public sealed partial class RenderGraphRuntimeLawTests {
     // A mirror facing itself: one compute pass reading the frame's previous contents and writing them again.
     private static CompiledShaderPipeline MirrorGraph() => Compile(definition: new RenderGraphDefinition(
         Name: "mirror",
-        Outputs: ["frame"],
+        Outputs: ["mirror"],
         Passes: [new ShaderPipelinePass(
             EntryPoint: "main",
             Inputs: [new ResourceReference(
-                Binding: 0,
-                Name: "frame",
+                Name: "mirror",
                 PreviousFrame: true
             )],
             Kind: ShaderPipelineDocumentPassKind.Compute,
             Name: "reflect",
             Outputs: [new ResourceReference(
-                Binding: 1,
-                Name: "frame"
+                Name: "mirror"
             )],
             Source: "reflect.hlsl"
         )],
         Resources: [Image(
             history: true,
-            name: "frame"
+            name: "mirror"
         )],
         Schema: RenderGraphSchemas.Graph
     ));
@@ -229,10 +228,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
             }
         }
 
-        public IReadOnlyList<GpuComputeBinding> SetBindings => [];
-
         public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
-        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, nint descriptorPool) => Create(context: context);
+        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => Create(context: context);
 
         public Dictionary<string, Counter> ByInstance { get; } = new(comparer: StringComparer.Ordinal);
         public RenderGraphPackageRecorders Registry { get; } = new();

@@ -56,10 +56,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         // image the fullscreen pass draws into); two compute modules and the fullscreen pass's two; two compute
         // pipelines and a graphics one; one descriptor pool for the graph's three passes; per slot a command pool
         // for each compute pass and the fullscreen pass's barrier and draw pools; one framebuffer per slot; one render
-        // pass; and no buffer. Samplers are the one creation the fake counts that the decorator cannot fail.
+        // pass; and per slot one host-visible constant buffer for the frame group's block and one for each pass's pass
+        // block. Samplers are the one creation the fake counts that the decorator cannot fail.
         var expected = new Dictionary<GpuCreationKind, long> {
             [GpuCreationKind.Pipeline] = 3L,
-            [GpuCreationKind.Buffer] = 0L,
+            [GpuCreationKind.Buffer] = (4L * InFlight),
             [GpuCreationKind.Image] = (3L * InFlight),
             [GpuCreationKind.RenderPass] = 1L,
             [GpuCreationKind.Framebuffer] = InFlight,

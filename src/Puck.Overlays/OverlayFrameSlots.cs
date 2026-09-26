@@ -1,22 +1,20 @@
 namespace Puck.Overlays;
 
-using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Shaders;
 
 /// <summary>
-/// The unified overlay's per-frame frame-slot table: maps each key a <c>Frame</c> HUD element names to one of
-/// <see cref="SlotCount"/> combined image-sampler bindings (the compositor's fixed frame-slot descriptor range,
-/// immediately after the inner world image's own binding), acquiring the underlying lease through
-/// <see cref="IOverlayFrameSources"/> on first use each frame. Owned by <c>UnifiedOverlayNode</c> and driven once per
-/// produced frame: <see cref="BeginFrame"/> before the writers run, <see cref="Bind"/> from <c>HudWriter</c> for each
-/// visible <c>Frame</c> element, then <see cref="RetirePending"/> once the node's frame fence proves the PREVIOUS
-/// frame's sampling pass has retired. The leases awaiting that wait sit in a <see cref="LeaseRetireList"/>, the list
-/// the SDF engine node holds its screen-source leases in.
+/// The overlay's per-frame frame-slot table: maps each key a <c>Frame</c> HUD element names to one of
+/// <see cref="SlotCount"/> sampled-image bindings (the overlay pass group's frame slots, after its source image),
+/// acquiring the underlying lease through <see cref="IOverlayFrameSources"/> on first use each frame. Owned by
+/// <see cref="OverlayFrameComposer"/> and driven once per recording: <see cref="BeginFrame"/> before the writers run,
+/// <see cref="Bind"/> from <c>HudWriter</c> for each visible <c>Frame</c> element, then <see cref="MoveTo"/> hands every
+/// held lease to the recording's <see cref="LeaseRetireList"/>, which retires it after the submission that sampled it.
 /// </summary>
 public sealed class OverlayFrameSlots {
     /// <summary>The number of frame-slot bindings the compositor reserves — the widest slot index
     /// <see cref="Bind"/> can hand back is <c>SlotCount - 1</c>.</summary>
-    public const int SlotCount = 8;
+    public const int SlotCount = RenderGraphPackageCatalog.OverlayFrameSlotCount;
 
     private readonly IOverlayFrameSources m_sources;
 
@@ -43,9 +41,8 @@ public sealed class OverlayFrameSlots {
     /// availability.</summary>
     public bool CapacityExceeded => m_capacityExceeded;
 
-    /// <summary>Starts a new produced frame: moves the leases bound over the frame just finished into the
-    /// retire-pending set (<see cref="RetirePending"/> releases them once the fence proves that frame's pass
-    /// retired) and clears the slot table for this frame's binds.</summary>
+    /// <summary>Starts a new produced frame: holds any lease still bound from the frame before, which <see cref="MoveTo"/>
+    /// hands on with this frame's, and clears the slot table for this frame's binds.</summary>
     public void BeginFrame() {
         HoldBound();
         m_capacityExceeded = false;
@@ -90,21 +87,11 @@ public sealed class OverlayFrameSlots {
     /// <param name="slot">The slot index, <c>0..</c><see cref="BoundCount"/><c>-1</c>.</param>
     /// <returns>The slot's acquired lease.</returns>
     public GpuImageLease LeaseAt(int slot) => m_leases[slot];
-    /// <summary>Retires every lease this table currently holds, bound or still pending retirement — the caller's
-    /// responsibility to call only after a final fence wait proves no pass can still be sampling them, or after
-    /// device loss invalidates every such pass.</summary>
+    /// <summary>Retires every lease this table currently holds, bound or held from an earlier frame. Call it only for
+    /// leases no submission samples: ones a recording bound but never handed to its frame.</summary>
     public void RetireAll() {
         HoldBound();
         m_pendingRetire.RetireAll();
-    }
-    /// <summary>Waits for the last overlay submission and then retires every bound or pending host-owned lease.
-    /// This is the pass-through/disposal path: unlike <see cref="RetirePending"/>, no current-frame submission will
-    /// adopt the bound leases.</summary>
-    /// <param name="fence">The overlay submission fence, or <see langword="null"/> before the overlay has ever
-    /// submitted GPU work.</param>
-    public void RetireAllAfter(IGpuSubmissionFence? fence) {
-        fence?.Wait();
-        RetireAll();
     }
     /// <summary>Moves every lease the table holds, bound this frame or still pending retirement, into
     /// <paramref name="destination"/> and empties the table: a recorder hands them to its instance's frame, whose slot
@@ -117,11 +104,6 @@ public sealed class OverlayFrameSlots {
         HoldBound();
         m_pendingRetire.MoveTo(destination: destination);
     }
-    /// <summary>Retires the leases <see cref="BeginFrame"/> moved aside from the previous produced frame. Call once
-    /// the node's frame fence wait proves that frame's sampling pass has retired.</summary>
-    public void RetirePending() =>
-        m_pendingRetire.RetireAll();
-
     // Moves the bound leases to the retire-pending list, after any still pending, and empties the slot table.
     private void HoldBound() {
         for (var index = 0; (index < m_boundCount); index++) {

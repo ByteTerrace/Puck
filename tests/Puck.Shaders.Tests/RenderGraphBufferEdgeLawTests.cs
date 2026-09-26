@@ -17,6 +17,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
     private static RenderGraphPackageCatalog Catalog { get; } = new(packages: [
         .. RenderGraphPackageCatalog.Engine.Packages,
         new RenderGraphPackage(
+            Members: [],
             Id: Reader,
             Inputs: [RenderGraphPackageCatalog.BrickPool with { Access = RenderGraphPortAccess.ComputeRead }],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
@@ -200,6 +201,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
     public void AMalformedPortIsRefusedByTheCatalog() {
         Assert.Throws<ArgumentException>(testCode: static () => new RenderGraphPackageCatalog(packages: [
             new RenderGraphPackage(
+                Members: [],
                 Id: "odd",
                 Inputs: [new RenderGraphPackagePort(Access: RenderGraphPortAccess.ComputeRead, Kind: ShaderPipelineResourceKind.Image, StrideBytes: 4)],
                 Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
@@ -208,6 +210,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
         ]));
         Assert.Throws<ArgumentException>(testCode: static () => new RenderGraphPackageCatalog(packages: [
             new RenderGraphPackage(
+                Members: [],
                 Id: "odd",
                 Inputs: [],
                 Outputs: [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: 6)],
@@ -216,6 +219,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
         ]));
         Assert.Throws<ArgumentException>(testCode: static () => new RenderGraphPackageCatalog(packages: [
             new RenderGraphPackage(
+                Members: [],
                 Id: "odd",
                 Inputs: [],
                 Outputs: [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ColorAttachmentWrite, count: null, strideBytes: 4)],
@@ -224,6 +228,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
         ]));
         Assert.Throws<ArgumentException>(testCode: static () => new RenderGraphPackageCatalog(packages: [
             new RenderGraphPackage(
+                Members: [],
                 Id: "odd",
                 Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
                 Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],

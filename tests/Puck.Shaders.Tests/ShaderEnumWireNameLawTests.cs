@@ -77,15 +77,6 @@ public sealed class ShaderEnumWireNameLawTests {
         );
     }
     [Fact]
-    public void AShaderSetBindingKindCrossesTheWireInLowerCamelCase() => AssertWireNames(
-        expected: new Dictionary<ShaderSetManifestBindingKind, string> {
-            [ShaderSetManifestBindingKind.StorageBuffer] = "storageBuffer",
-            [ShaderSetManifestBindingKind.SampledImage] = "sampledImage",
-            [ShaderSetManifestBindingKind.StorageImage] = "storageImage",
-        },
-        typeInfo: ShaderManifestJsonContext.Default.ShaderSetManifestBindingKind
-    );
-    [Fact]
     public void AProbeSocketClassCrossesTheWireInLowerCamelCase() => AssertWireNames(
         expected: new Dictionary<ProbeSocketClass, string> {
             [ProbeSocketClass.Frame] = "frame",

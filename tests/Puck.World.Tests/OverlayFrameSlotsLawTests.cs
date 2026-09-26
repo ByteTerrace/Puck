@@ -1,9 +1,5 @@
-using System.Runtime.CompilerServices;
-using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Overlays;
-using Puck.Testing;
 
 using Xunit;
 
@@ -11,53 +7,6 @@ namespace Puck.World.Tests;
 
 /// <summary>Laws for the fixed frame-slot table's host-owned lease lifecycle and visible capacity refusal.</summary>
 public sealed class OverlayFrameSlotsLawTests {
-    // The node wraps its GPU services at construction; the early-exit and device-loss paths this suite drives never
-    // record through them.
-    private static readonly FakeGpuDevice Unused = new(reportVersion: 0);
-
-    private static UnifiedOverlayNode BuildNode(List<string> events, IRenderNode inner) => new(
-        capacity: new OverlayCapacity(
-            BindingBarMaxBanks: 0,
-            BindingBarMaxModifiers: 0,
-            BindingBarMaxSlotsPerBank: 0,
-            HudElementsPerPanel: 0,
-            HudElementsPerSeatPanel: 0,
-            HudPanels: 0,
-            HudSeatPanelsPerSeat: 0,
-            MarkerMaxChipsPerSeat: 0,
-            Seats: 0,
-            WheelMaxRings: 0,
-            WheelMaxSectorsPerRing: 0
-        ),
-        fragmentBytecode: ReadOnlyMemory<byte>.Empty,
-        glyphs: CreateGlyphs(
-            atlasCellHeight: 1,
-            atlasCellWidth: 1,
-            distanceRange: 1f,
-            glyphCount: 1,
-            packedSdf: [0u]
-        ),
-        height: 1,
-        inner: inner,
-        deviceContext: Unused,
-        frameSources: new RecordingFrameSources(events: events),
-        sources: new UnifiedOverlaySources(
-            Console: null,
-            BindingBar: null,
-            Toast: null,
-            FeedTick: null
-        ),
-        vertexBytecode: ReadOnlyMemory<byte>.Empty,
-        width: 1
-    );
-    [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
-    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "m_frameFence")]
-    private static extern ref IGpuSubmissionFence? FrameFence(UnifiedOverlayNode node);
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "m_composer")]
-    private static extern ref OverlayFrameComposer Composer(UnifiedOverlayNode node);
-    private static OverlayFrameSlots FrameSlots(UnifiedOverlayNode node) => Composer(node: node).FrameSlots;
-
     [Fact]
     public void ADistinctNinthSourceSetsTheCapacitySignalWithoutAcquiringIt() {
         var events = new List<string>();
@@ -92,7 +41,7 @@ public sealed class OverlayFrameSlotsLawTests {
         expected: WorldHudCapacity.MaxFrameSources
     );
     [Fact]
-    public void DeviceLossRetiresEveryHeldLeaseWithoutWaitingOnTheFence() {
+    public void RetiringAllReleasesEveryBoundAndHeldLeaseAtOnce() {
         var events = new List<string>();
         var slots = new OverlayFrameSlots(sources: new RecordingFrameSources(events: events));
 
@@ -117,157 +66,7 @@ public sealed class OverlayFrameSlotsLawTests {
             actual: slots.BoundCount
         );
     }
-    [Fact]
-    public void NoContentAfterBeginFrameWaitsThenRetiresPendingAndNewLeases() {
-        var events = new List<string>();
-        var slots = new OverlayFrameSlots(sources: new RecordingFrameSources(events: events));
-        var fence = new RecordingFence(events: events);
 
-        Assert.Equal(
-            expected: 0,
-            actual: slots.Bind(key: 11)
-        );
-        slots.BeginFrame();
-        Assert.Equal(
-            expected: 0,
-            actual: slots.Bind(key: 12)
-        );
-
-        slots.RetireAllAfter(fence: fence);
-
-        Assert.Equal(
-            actual: events,
-            expected: ["wait", "release:11", "release:12"]
-        );
-        Assert.Equal(
-            expected: 0,
-            actual: slots.BoundCount
-        );
-    }
-    [InlineData(OverlayFrameExit.NoInnerFrame, false)]
-    [InlineData(OverlayFrameExit.NoOverlayContent, false)]
-    [InlineData(OverlayFrameExit.DeviceLost, true)]
-    [Theory]
-    public void OnlyDeviceLossRetiresImmediately(OverlayFrameExit exit, bool expected) => Assert.Equal(
-        expected: expected,
-        actual: OverlayFrameRetirementPolicy.RetiresImmediately(exit: exit)
-    );
-    [Fact]
-    public void OverlayNodeDeviceLoss_RetiresItsHeldLeaseWithoutWaitingOnTheFence() {
-        var events = new List<string>();
-        var node = BuildNode(
-            events: events,
-            inner: new FixedRenderNode(surface: default)
-        );
-
-        Assert.Equal(
-            expected: 0,
-            actual: FrameSlots(node: node).Bind(key: 51)
-        );
-        FrameFence(node: node) = new RecordingFence(events: events);
-
-        node.OnDeviceLost();
-
-        Assert.Equal(
-            actual: events,
-            expected: ["release:51"]
-        );
-        Assert.Equal(
-            expected: 0,
-            actual: FrameSlots(node: node).BoundCount
-        );
-    }
-    [Fact]
-    public void OverlayNodeEmptyInnerFrame_WaitsBeforeRetiringItsBoundLease() {
-        var events = new List<string>();
-        var node = BuildNode(
-            events: events,
-            inner: new FixedRenderNode(surface: default)
-        );
-
-        Assert.Equal(
-            expected: 0,
-            actual: FrameSlots(node: node).Bind(key: 31)
-        );
-        FrameFence(node: node) = new RecordingFence(events: events);
-
-        var result = node.ProduceFrame(context: default);
-
-        Assert.True(condition: result.IsEmpty);
-        Assert.Equal(
-            actual: events,
-            expected: ["wait", "release:31"]
-        );
-        Assert.Equal(
-            expected: 0,
-            actual: FrameSlots(node: node).BoundCount
-        );
-    }
-    [Fact]
-    public void OverlayNodeNoContentAfterBeginFrame_WaitsBeforeRetiringItsPendingLease() {
-        var events = new List<string>();
-        var inner = Surface.SameDeviceImage(
-            format: SurfaceFormat.R8G8B8A8Unorm,
-            height: 1,
-            imageHandle: 1,
-            imageViewHandle: 2,
-            width: 1
-        );
-        var node = BuildNode(
-            events: events,
-            inner: new FixedRenderNode(surface: inner)
-        );
-
-        Assert.Equal(
-            expected: 0,
-            actual: FrameSlots(node: node).Bind(key: 32)
-        );
-        FrameFence(node: node) = new RecordingFence(events: events);
-
-        var result = node.ProduceFrame(context: default);
-
-        Assert.Equal(
-            actual: result,
-            expected: inner
-        );
-        Assert.Equal(
-            actual: events,
-            expected: ["wait", "release:32"]
-        );
-        Assert.Equal(
-            expected: 0,
-            actual: FrameSlots(node: node).BoundCount
-        );
-    }
-    [Fact]
-    public void PassThroughWaitsBeforeRetiringTheCurrentlyBoundLease() {
-        var events = new List<string>();
-        var slots = new OverlayFrameSlots(sources: new RecordingFrameSources(events: events));
-        var fence = new RecordingFence(events: events);
-
-        Assert.Equal(
-            expected: 0,
-            actual: slots.Bind(key: 41)
-        );
-
-        slots.RetireAllAfter(fence: fence);
-
-        Assert.Equal(
-            actual: events,
-            expected: ["wait", "release:41"]
-        );
-        Assert.Equal(
-            expected: 0,
-            actual: slots.BoundCount
-        );
-    }
-
-    private sealed class RecordingFence(List<string> events) : IGpuSubmissionFence {
-        public bool IsSignaled => true;
-
-        public void Dispose() { }
-        public void Wait() => events.Add(item: "wait");
-    }
     private sealed class RecordingFrameSources(List<string> events) : IOverlayFrameSources {
         public int AcquisitionCount { get; private set; }
 
@@ -281,14 +80,5 @@ public sealed class OverlayFrameSlotsLawTests {
 
             return true;
         }
-    }
-    private sealed class FixedRenderNode(Surface surface) : IRenderNode {
-        public NodeDescriptor Descriptor { get; } = new(
-            Name: "overlay-law-inner",
-            SurfaceId: SurfaceId.New()
-        );
-
-        public void Dispose() { }
-        public Surface ProduceFrame(in FrameContext context) => surface;
     }
 }

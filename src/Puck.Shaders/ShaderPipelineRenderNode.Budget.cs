@@ -6,7 +6,8 @@ namespace Puck.Shaders;
 // The node's memory account. Every byte count the node reports or refuses by comes from the plan through Footprint and
 // GraphBytes, which mirror what Allocate and the build create: one image or buffer per frame slot of each storage the
 // node owns (the images a graphics pass draws into among them), one geometry buffer per geometry pass and per
-// fullscreen pass that reads the Position input, and one float-preview image per frame slot.
+// fullscreen pass that reads the Position input, one constant buffer per frame slot for the frame group's block and for
+// each pass's pass block (ConstantBytes), and one float-preview image per frame slot.
 // ShaderPipelineRenderNode.Retirement.cs's LiveBytes counts the same kinds from a replaced graph's objects. The capture
 // readback is the node's, not a graph's: it creates its staging buffer on the first capture, sized to the published
 // surface, and OwnedBytes counts it from then on, so every later replacement's peak includes it. Like every other count
@@ -115,7 +116,27 @@ public sealed partial class ShaderPipelineRenderNode {
             }
         }
 
-        return bytes;
+        return checked((bytes + ConstantBytes(
+            inFlight: inFlight,
+            plan: plan
+        )));
+    }
+    // The bytes of the constant buffers a graph's passes bind, one per frame slot: the frame group's block, which every
+    // pass shares, and each pass's own pass block, each in whole constant-buffer views.
+    private static ulong ConstantBytes(ShaderPipelinePlan plan, uint inFlight) {
+        var grouped = plan.Passes;
+
+        if (grouped.Count == 0) {
+            return 0UL;
+        }
+
+        var views = ((ulong)UniformBytes(blockBytes: grouped[0].Parameters.FrameBlockSizeBytes));
+
+        foreach (var pass in grouped) {
+            views = checked((views + ((ulong)UniformBytes(blockBytes: pass.Parameters.SizeBytes))));
+        }
+
+        return checked((views * inFlight));
     }
     // The bytes of a pass's one geometry buffer: a geometry pass's vertices and indices, the shared fullscreen triangle
     // of a fullscreen pass that reads the Position input, and nothing for any other pass.

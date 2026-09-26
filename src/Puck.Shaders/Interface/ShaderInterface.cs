@@ -137,7 +137,7 @@ public sealed partial class ShaderInterface {
             throw new InvalidDataException(message: $"{where}: its accessor '{AccessorName(member: member)}' collides with another name.");
         }
 
-        var needsType = (member.Kind != ShaderInterfaceMemberKind.Sampler);
+        var needsType = (member.Kind is not (ShaderInterfaceMemberKind.Sampler or ShaderInterfaceMemberKind.ReadOnlyBuffer or ShaderInterfaceMemberKind.ReadWriteBuffer));
 
         if (!Enum.IsDefined(value: member.Kind)) {
             throw new InvalidDataException(message: $"{where}: kind {((int)member.Kind)} is not a member kind.");

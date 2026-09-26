@@ -21,8 +21,7 @@
       "kind": "Compute",
       "outputs": [
         {
-          "name": "echo",
-          "binding": 0
+          "name": "echo"
         }
       ],
       "config": {

@@ -362,7 +362,8 @@ lies; a source with no stored package compiles in a checkout that has DXC and
 is refused by `SHADERPKG_ABSENT` where nothing can compile it. The shipped rows
 name the ink pipeline and the Moth shader; film grain is a shader set whose
 bytecode the SDF build compiles. The `pipeline-echo` canary runs the generated
-echo with `pipeline.sentinels` on and a hand-perturbed copy of the declarations.
+echo with `pipeline.sentinels` on and a copy that expects two members to hold
+each other's sentinel.
 The `no-device-compile` canary hides DXC from the World's path and renders the
 shipped ink pipeline from its stored package and a relocated package from its
 binaries, while an unpackaged source is refused. Both canaries wait for their
@@ -685,11 +686,9 @@ sub-steps, in this order:
     thread and released on replacement, device loss and disposal; the config
     refusal by name; and a steady frame allocating nothing.
 - 5c has landed: `overlay` is a package recorder, and commit 6 draws the live
-  overlay through it. It shares `OverlayFrameComposer` (every writer, the
-  builder, the frame-slot table and the overflow narration) and
-  `OverlayPassLayout` (today's nine combined image samplers, storage buffer and
-  48-byte push block) with `UnifiedOverlayNode`, which no World composes any
-  longer.
+  overlay through it. It runs `OverlayFrameComposer` (every writer, the
+  builder, the frame-slot table and the overflow narration) and binds the
+  frame and pass groups its catalog entry declares (P7b step 18).
   - A recording that draws nothing returns
     `RenderGraphPackageOutcome.DrewNothing`, and each output stands for the input
     at its position: the node publishes that input's image with no copy, in its
@@ -701,10 +700,10 @@ sub-steps, in this order:
     beside an input image of its format is refused by name when its pass draws
     nothing.
   - `OverlayPackage` builds its modules, render pass and pipeline in the
-    candidate's build. Its recorder keeps a descriptor set per frame slot and a
-    storage-buffer region per slot after the shared static prefix (the token
-    slab and glyph pack), whose bases it pushes, because it no longer waits a
-    fence of its own. The `Frame` elements' leases move into the frame's lease
+    candidate's build. Its recorder keeps a frame and a pass set per frame slot
+    and a storage-buffer region per slot after the shared static prefix (the
+    token slab and glyph pack), whose bases it writes into the pass block,
+    because it no longer waits a fence of its own. The `Frame` elements' leases move into the frame's lease
     list (`OverlayFrameSlots.MoveTo`), which retires them after the slot's
     fence. With nothing visible it draws nothing.
   - `RenderGraphRuntimeLawTests.Alias` hold the aliasing on `FakePipelineGpu`
@@ -715,10 +714,6 @@ sub-steps, in this order:
     `FakeGpuDevice`: nothing visible publishes the input, a drawn cursor
     publishes the output, bound frame-slot leases move into the frame's list,
     and a steady drawn frame allocates nothing.
-  - What waits on P7b-14b and 18: converting `overlay-unified.frag.hlsl`'s
-    combined declarations to separate images and a sampler table, moving the
-    overlay onto binding groups, and sizing its pool without
-    `CombinedImageSamplerCount`.
 - 5d has landed: the one planner plans a package pass's barriers and layouts,
   on the fake GPU only.
   - A package port declares the stage and access its package reaches it by
@@ -798,8 +793,8 @@ captures come from the graph's root output.
   producer beside the post and overlay packages, and installs the runtime
   behind `RenderGraphRuntimeNode`, the host's render root, in both shapes. The
   `Decorate` chain, the `SdfWorldRender` probe split, `IDebugViewTarget` and
-  `FullscreenPassNode` are deleted. `UnifiedOverlayNode` stays, composed by no
-  World, until commit 14 makes the overlay a true package.
+  `FullscreenPassNode` are deleted, and so is `UnifiedOverlayNode`, which the
+  overlay package eclipsed (P7b step 18); its laws hold the package.
 - `world.screenshot`, the capture scheduler and readiness read the root:
   `WorldRenderProbe.IsReady` holds once the engine is ready and the root has
   rendered over a completed world output, so a hold spends the build budget
@@ -1748,8 +1743,7 @@ directly, does not survive beside it. The closed set of binding kinds replaces
 `GpuComputeBindingKind`, `ShaderSetManifestBindingKind`, the positional
 `TextureSamplerCount` and `EnableStorageBuffer` fields of
 `GpuGraphicsPipelineDescription`, and every binding index set by hand, such as
-the unified overlay's `UnifiedOverlayNode.StorageBufferBinding` and the SDF
-engine's binding constants.
+the SDF engine's binding constants.
 
 **Gate:** the spike over two passes, `sdf-film-grain.frag.hlsl` and a pixelate
 compute pass, each with two frequency groups, has passed its build-time half,
@@ -1798,9 +1792,8 @@ Phase 0 needs nothing else, and all of it has landed:
 Phase 1 follows P3, which has landed, and all of it has landed:
 
 5. Done: destroying descriptor pool zero does nothing and reaches no device on
-   either backend, so `GpuRegion.Dispose`, `UnifiedOverlayNode` and
-   `ShaderPipelineRenderNode` and its float preview destroy their pools
-   unguarded.
+   either backend, so `GpuRegion.Dispose` and `ShaderPipelineRenderNode` and
+   its float preview destroy their pools unguarded.
 6. Done: `memory.vulkan` and `memory.directx` (`GpuDeviceMemoryWork`) count
    device-local bytes allocated and released (per-backend-deterministic) at
    their actual allocation size, and the peak held (pacing), where each backend
@@ -1915,11 +1908,12 @@ Phase 3, the groups, follows phase 2:
     create root signatures and pipeline layouts. `DirectXRootLayoutLawTests`,
     `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
     planners and the spike's interfaces to the same tables. The combined image
-    sampler that `GpuComputeBindingKind` and `ShaderSetManifestBindingKind`
-    still state is not in the closed set, so their users, and the 15 sources
-    declaring `vk::combinedImageSampler` (8 under `src` and 7 canary shaders),
-    move to a separate image and sampler with 14b's sampler tables, and both
-    enums are deleted there.
+    sampler that `GpuComputeBindingKind` still states is not in the closed
+    set, so its users, and the 2 sources still declaring
+    `vk::combinedImageSampler` (the SDF engine's `sdf-vm.hlsli` and
+    `sdf-world.hlsli`), move to a separate image and sampler with 14b's
+    sampler tables, and the enum is deleted there; the overlay and film grain
+    moved with step 18, which deleted `ShaderSetManifestBindingKind`.
 14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
     of it (14a). Both backends then realize several groups, with sampler
     tables and one 4-byte push range (14b), the riskiest step, which lands as
@@ -1958,7 +1952,7 @@ Phase 3, the groups, follows phase 2:
       `SamplerHeapSize`, each as the device reports it, and refuses by name a
       device that reports neither, as a Vulkan device does. Every pool owner
       states its pools statically and creates them from that statement:
-      `SdfWorldEngine.DescriptorPoolSizes`, `UnifiedOverlayNode.DescriptorPoolSizes`,
+      `SdfWorldEngine.DescriptorPoolSizes`,
       `ShaderPipelineRenderNode.DescriptorPools` (one pool for the graph, then
       `PreviewDescriptorPool` for a float preview) and
       `GpuRegionCopyPool.SizesOf`. `TryAdmit` takes a candidate's statement
@@ -1989,8 +1983,7 @@ Phase 3, the groups, follows phase 2:
       SDF engine's construction checks through `SdfWorldEngine.CheckAdmission`
       before it allocates, which its holder's build refuses by name.
       A refusal carries `GPU_DESCRIPTOR_HEAP` and names the owner, and the
-      installed graph keeps presenting. `UnifiedOverlayNode` checks its one
-      pool before it creates its resources. A standalone `GpuRegion` is not admitted
+      installed graph keeps presenting. A standalone `GpuRegion` is not admitted
       beforehand; the SDF engine admits one copy pool for all its regions with
       its own and reserves every region's sets in it at construction
       (`GpuRegionCopyPool`), so an engine holds two pools. The pipeline node
@@ -2044,9 +2037,7 @@ Phase 3, the groups, follows phase 2:
       whole-or-nothing with its view range, and a group's set takes its
       sampler table from that range. No shipped pipeline moves yet; the
       writes a group's set needs and binding a set by its group's ordinal are
-      14b-1b's.
-      `UnifiedOverlayNode` checks its pool through `CanAdmit` before it
-      creates anything. Laws: `DirectXGroupedLayoutLawTests` (the serialized
+      14b-1b's. Laws: `DirectXGroupedLayoutLawTests` (the serialized
       root signature, read back through the runtime's deserializer, holds the
       plan's tables for film grain, pixelate and the arrays table, with no
       static sampler; on a WARP device the film grain and pixelate root
@@ -2113,49 +2104,55 @@ Phase 3, the groups, follows phase 2:
       `world-seat-binding-recompose`, and the windowed `post-pass`,
       `view-screens`, `hud-frame-slots` and `device-loss-windowed`, which draw
       through the presenter.
-    - 14b-3, the pipeline node and the sources it runs, lands with step 15,
-      not before it. Every pipeline pass pushes its whole frame block, and a
-      separate sampler is stated only through a pipeline description's
-      `Layout`, which pushes nothing but a 4-byte index
-      (`RequireLayout` refuses a push-constant binding beside it); the
-      legacy binding list has no sampler kind, and adding one would patch
-      `GpuComputeBindingKind`, which 14b-7 deletes. So the node's sources
-      split their samplers when the frame block moves into the frame group:
-      `ShaderPipelineRenderNode` and its float preview
-      (`pipeline-preview.frag.hlsl`), the shipped ink pipeline
-      (`ink-simulation.hlsl`, `ink-visualize.hlsl`), the package library's
-      `place.comp.hlsl`, `PostProcessPackage`'s writes, and the seven canary
-      sources under `pipeline-edit`, `pipeline-feedback`, `pipeline-shapes`
-      and `pipeline-supersede`. Canaries: `no-device-compile`, every
+    - 14b-3, done with step 15: the pipeline node and the sources it runs.
+      A separate sampler is stated only through a pipeline description's
+      `Layout`, which pushes nothing but a 4-byte index, so the node's sources
+      split their samplers as their frame block moved into the frame group.
+      Every document pass reads a `Texture2D` and a `SamplerState` its
+      generated interface declares; the float preview
+      (`pipeline-preview.frag.hlsl`) reads a separate image and sampler in
+      the pass group, set 3. Canaries: `no-device-compile`, every
       `pipeline-*`, `source-conversion` and `resample-reconstruction`.
-    - 14b-4, the overlay: `overlay-unified.frag.hlsl`'s nineteen combined
-      declarations and `UnifiedOverlayNode`'s pool. Canaries:
+    - 14b-4, done with step 18: the overlay. `overlay-unified.frag.hlsl`
+      reads its source image, its eight frame-slot images and one
+      `linearSampler` separately, and its overlay data as a raw buffer, all
+      in the pass group its catalog entry declares
+      (`RenderGraphPackageCatalog.OverlayMembers`). `UnifiedOverlayNode`, its
+      pool and its pass layout are deleted. Canaries:
       `instrument-clock-source`, `music-conditional-layer-and-embellishment`,
       `voice-babble` and `world-seat-binding-recompose`.
-    - 14b-5, film grain and the fullscreen passes: `sdf-film-grain.frag.hlsl`,
-      `FullscreenPassNode`, and `ShaderSetManifest` with its binding record.
-      Canaries: 21, the 14b-1 set with the overlay's three audio canaries.
+    - 14b-5, done with step 18: film grain. `sdf-film-grain.frag.hlsl` reads
+      a separate image and sampler, which its manifest declares as
+      `{ kind, name }` members of its pass group; `FullscreenPassNode` was
+      deleted with P11b commit 6. Canaries: 21, the 14b-1 set with the
+      overlay's three audio canaries.
     - 14b-6, the SDF engine, last: `sdf-world.hlsli`'s thirty-two screen
       sources (bindings 12 to 43), the glyph atlas in `sdf-vm.hlsli`
       (binding 44), and the engine's binding lists in
       `SdfWorldEngine.Pipelines.cs`. Canaries: 20 mapped, the 14b-5 set
       without `sdf-decode-sign-refusal`, plus `sdf-visibility-fresh`, which
       the index has not recorded yet. The package library's `place.comp.hlsl`,
-      which took the SDF-side kernel's place, moves with the pipeline node's
-      sources in 14b-3, with step 15.
+      which took the SDF-side kernel's place, is a package pass and moved
+      onto groups with the other package passes in step 18.
     - 14b-7, the deletions: `GpuComputeBindingKind`, whose `GpuComputeBinding`
-      then states a `GpuBindingKind`, `ShaderSetManifestBindingKind`, and
+      then states a `GpuBindingKind`, and
       `GpuDescriptorPoolSizes.CombinedImageSamplerCount`, with their last
       users in `GpuRegion`, the backends' pipeline factories and the
       contract and wire-name laws. Canaries: the 19 `GpuDescriptorPoolSizes`
       and `GpuRegion` map to.
-15. Pipelines move onto groups: `WriteFrame` writes the frame group, set 0, into
-    a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
-    3; passes include their generated interface; the graph document's
-    binding fields are deleted; and a load checks `SHADERPIPE_INTERFACE`.
-    14b-3 lands here: each of the node's sources declares a separate image and
-    sampler, the sampler at the binding after its image, as the spike's film
-    grain table does.
+15. Done: pipelines are on groups. `WriteFrame` writes the frame group, set 0,
+    into a per-node frame `GpuRegion` of uniform usage, a ring of whole
+    constant-buffer views; each pass's extent and config form its pass block at
+    `b0` of set 3, in a region of its own, followed by its ports in document
+    order, each image input's sampler at the binding after its image. Every
+    pass includes its generated interface, and the graph document names no
+    binding: a port reads as its resource's name in camel case or its
+    `"as"`, and a load refuses by name, as `SHADERPIPE_INTERFACE`, a source
+    that never names a port, two ports reading as one identifier, an `"as"`
+    that is not an identifier, and a module whose reflected bindings differ
+    from its interface's layout. Each pass is created through its interface's
+    `PipelineLayout` and binds its two sets by group. 14b-3 landed here.
+    Step 18 moved shader sets and package passes onto the same two groups.
 16. The gate spike's GPU half, a binding station in `tests/Puck.Parity`.
 17. Done: the region-copy kernel leaves the SDF engine for `Puck.Shaders`
     (`Assets/Shaders/Residency/region-copy.comp.hlsl`), each register at its
@@ -2187,7 +2184,25 @@ Phase 3, the groups, follows phase 2:
     one region-copy pipeline), `SdfWorldEngineUploadLawTests` (the mesh
     region's words for a known draw set, and a moved draw owing one word), with
     the upload laws and `GpuResidencyLawTests` unchanged.
-18. The overlay and fullscreen passes move onto groups.
+18. Done: the overlay and fullscreen passes are on groups. A package pass and a
+    shader set bind the frame group and a pass group holding the extent, the
+    config and then the members they declare: a package's catalog entry
+    (`RenderGraphPackage.Members`) lists the values its recorder writes into
+    the pass block each frame (`RenderGraphPackageRecording.PassBlock`) and the
+    resources it binds, and a set's manifest lists its bindings as
+    `GpuBindingKind` members, which retires `ShaderSetManifestBindingKind`.
+    The node seeds every pass's pass region and sizes its one pool for every
+    pass's frame and pass sets, from which a recorder allocates its own
+    (`RenderGraphPackageSets`); nothing a pipeline pass records is pushed.
+    `PostProcessPackage`, `OverlayPackage` and `PlacePackage` bind this way.
+    `place.comp.hlsl` reads the members a document pass compiling it derives
+    from ports named `base`, `source` and `destination`, so one checked-in
+    include serves the package and the `resample-reconstruction` canary's
+    document pass. `UnifiedOverlayNode`, which the overlay package eclipsed, is
+    deleted with its laws re-homed onto the package (`OverlayPackageLawTests`,
+    `TeardownAfterFaultLawTests`). `puck shaders interface --package <id>`
+    writes an engine package's include, which a law holds to the generator and
+    to the compiled shader's reflection.
 19. Done: the SDF engine uploads through `GpuRegion`
     (`SdfWorldEngine.Regions.cs`). Its program words, viewport rows, dynamic
     transforms, frame instance grid, screen surfaces, screen lights, volumes,
@@ -2478,9 +2493,8 @@ and its `Children` wiring in `WorldBootComposition` give way to graph
 instances. The SDF composite kernel `sdf-world-composite.comp`, its
 `MaxViewports` limit and push block, `SdfEngineNode`'s child map and
 `RegisterChild`, and `ViewStack` itself are deleted, not only its budget. The
-unified overlay becomes a package the graph names, so `UnifiedOverlayNode`'s
-fixed `OverlayFrameSlots` and its hand-built node wiring are deleted with the
-composition they served.
+unified overlay is a package the graph names, and `UnifiedOverlayNode`, its
+hand-built node wiring, is deleted.
 
 **Check:** a graph document validates, and `puck schema --check` exits 0; a
 camera shown on two screens renders once per frame, counted; a camera whose
@@ -3168,13 +3182,12 @@ independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
 **Contracts.** P7's memory profile and residency selector have landed, and P7b
-is under way: steps 1 to 13, 14a, 14b-1 and 14b-1b have landed. The groups
-run in order from step 13, the GPU-free group contract, which the rest of
-phase 3 builds on; step 20, the SDF
-engine's groups, also follows P4-1. P8 has landed pending its GPU canaries, and
-its frame group moves from push constants to a descriptor set when step 15
-puts pipelines on groups. P7 and P8 do not read simulation state, so they do
-not wait on the state rebuild.
+is under way: steps 1 to 13, 14a, 14b-1 to 14b-3, 15 and 17 have landed. The
+groups run in order from step 13, the GPU-free group contract, which the rest
+of phase 3 builds on; step 20, the SDF engine's groups, also follows P4-1. P8
+has landed pending its GPU canaries, and its frame group became a descriptor set
+when step 15 put pipelines on groups. P7 and P8 do not read simulation state, so
+they do not wait on the state rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
 P11b items its implementation status lists, the main view through the graph

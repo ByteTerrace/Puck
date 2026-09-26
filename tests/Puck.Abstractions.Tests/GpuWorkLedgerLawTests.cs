@@ -61,6 +61,28 @@ public sealed class GpuWorkLedgerLawTests {
         Assert.Equal(expected: 2L, actual: sample.GetOutsidePassCount(column: DispatchColumn));
     }
     [Fact]
+    public void DiscardedWorkReachesNoSubmissionAndKeepsThePublishedOne() {
+        var rig = new Rig(framesInFlight: 2);
+        var fence = rig.NewFence();
+
+        rig.Dispatch(count: 1);
+        rig.Submit(fence: fence);
+        fence.Counted.Wait();
+        rig.Dispatch(count: 5);
+        rig.Ledger.Discard();
+
+        Assert.Equal(expected: 1L, actual: rig.Read()!.Submission);
+
+        rig.Dispatch(count: 2);
+        rig.Submit(fence: fence);
+        fence.Counted.Wait();
+
+        var sample = rig.Read()!;
+
+        Assert.Equal(expected: 2L, actual: sample.Submission);
+        Assert.Equal(expected: 2L, actual: sample.GetOutsidePassCount(column: DispatchColumn));
+    }
+    [Fact]
     public void SubmissionIdentityIncreasesStrictlyAcrossResetAndReload() {
         var rig = new Rig(framesInFlight: 2);
         var fence = rig.NewFence();

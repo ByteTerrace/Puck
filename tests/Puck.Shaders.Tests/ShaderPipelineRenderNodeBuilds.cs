@@ -30,7 +30,7 @@ internal static class ShaderPipelineRenderNodeBuilds {
                 },
                 timeout: TimeSpan.FromSeconds(value: 30)
             ),
-            userMessage: "The first graph never installed."
+            userMessage: $"The first graph never installed: {node.LastSwapError}"
         );
 
         return surface;

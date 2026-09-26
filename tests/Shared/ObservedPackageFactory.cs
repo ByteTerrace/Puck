@@ -20,19 +20,16 @@ internal sealed class ObservedPackageFactory(IRenderGraphPackageFactory inner, F
     /// <summary>Gets the outcome the last recording returned.</summary>
     public RenderGraphPackageOutcome Outcome { get; private set; }
     /// <inheritdoc/>
-    public IReadOnlyList<GpuComputeBinding> SetBindings => inner.SetBindings;
-
-    /// <inheritdoc/>
     public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => inner.Build(
         cancellationToken: cancellationToken,
         context: context
     );
     /// <inheritdoc/>
-    public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, nint descriptorPool) => new Recorder(
+    public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(
         inner: inner.Create(
             built: built,
             context: context,
-            descriptorPool: descriptorPool
+            groups: groups
         ),
         owner: this
     );

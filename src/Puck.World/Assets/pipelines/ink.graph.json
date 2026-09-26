@@ -44,14 +44,12 @@
       "inputs": [
         {
           "name": "simulation",
-          "previousFrame": true,
-          "binding": 1
+          "previousFrame": true
         }
       ],
       "outputs": [
         {
-          "name": "simulation",
-          "binding": 0
+          "name": "simulation"
         }
       ],
       "config": {
@@ -71,14 +69,12 @@
       "kind": "Compute",
       "inputs": [
         {
-          "name": "simulation",
-          "binding": 1
+          "name": "simulation"
         }
       ],
       "outputs": [
         {
-          "name": "color",
-          "binding": 0
+          "name": "color"
         }
       ],
       "config": {
@@ -98,8 +94,7 @@
       "kind": "Fullscreen",
       "inputs": [
         {
-          "name": "color",
-          "binding": 0
+          "name": "color"
         }
       ],
       "outputs": [

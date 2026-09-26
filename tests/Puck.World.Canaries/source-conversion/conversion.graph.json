@@ -31,23 +31,23 @@
       "source": "seed.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "outputs": [ { "name": "palette-region", "binding": 0 }, { "name": "nv12-region", "binding": 1 } ]
+      "outputs": [ { "name": "palette-region" }, { "name": "nv12-region" } ]
     },
     {
       "name": "convert-palette",
       "source": "../../../src/Puck.Shaders/Assets/Shaders/Sources/source-palette.comp.hlsl",
       "entryPoint": "CSMain",
       "kind": "Compute",
-      "inputs": [ { "name": "palette-region", "binding": 0 } ],
-      "outputs": [ { "name": "palette", "binding": 1 } ]
+      "inputs": [ { "name": "palette-region", "as": "region" } ],
+      "outputs": [ { "name": "palette", "as": "image" } ]
     },
     {
       "name": "convert-nv12",
       "source": "../../../src/Puck.Shaders/Assets/Shaders/Sources/source-nv12.comp.hlsl",
       "entryPoint": "CSMain",
       "kind": "Compute",
-      "inputs": [ { "name": "nv12-region", "binding": 0 } ],
-      "outputs": [ { "name": "nv12", "binding": 1 } ]
+      "inputs": [ { "name": "nv12-region", "as": "region" } ],
+      "outputs": [ { "name": "nv12", "as": "image" } ]
     }
   ],
   "outputs": ["palette", "nv12"]

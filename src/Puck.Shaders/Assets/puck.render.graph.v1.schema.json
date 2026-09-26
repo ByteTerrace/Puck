@@ -226,13 +226,13 @@
             "title": "ShaderPipelineDocumentPassKind"
           },
           "inputs": {
-            "description": "Named resource bindings. Set PreviousFrame explicitly for feedback.",
+            "description": "The versions the pass reads, each a port of its interface. Set PreviousFrame explicitly for feedback.",
             "type": [
               "array",
               "null"
             ],
             "items": {
-              "description": "A pass\u0027s reference to one resource version: which version it reads or writes, which frame\u0027s instance, and its descriptor binding.",
+              "description": "A pass\u0027s reference to one resource version: which version it reads or writes, which frame\u0027s instance, and the identifier its source reads it by. Where it binds follows from the pass\u0027s interface (ShaderPipelinePassPorts), never from the document.",
               "type": [
                 "object",
                 "null"
@@ -247,10 +247,10 @@
                   "type": "boolean",
                   "default": false
                 },
-                "binding": {
-                  "description": "The descriptor binding, or null for the planner to assign one.",
+                "as": {
+                  "description": "The HLSL identifier the pass\u0027s source reads the port by, or null for the version\u0027s name in camel case (Identifier). A source that several passes bind to differently named versions names each port the same way with it.",
                   "type": [
-                    "integer",
+                    "string",
                     "null"
                   ],
                   "default": null
@@ -570,7 +570,7 @@
             "type": "string"
           },
           "inputs": {
-            "description": "The versions the package reads, one per input port in port order, each carrying what its port carries (RenderGraphPackagePort). A reference may read a history version\u0027s previous frame. A package binds its own descriptors, so no reference declares a binding.",
+            "description": "The versions the package reads, one per input port in port order, each carrying what its port carries (RenderGraphPackagePort). A reference may read a history version\u0027s previous frame. A package compiles no source, so no reference names an as.",
             "type": [
               "array",
               "null"

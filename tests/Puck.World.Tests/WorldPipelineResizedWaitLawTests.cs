@@ -25,10 +25,7 @@ public sealed class WorldPipelineResizedWaitLawTests {
                 Inputs: [],
                 Kind: ShaderPipelineDocumentPassKind.Compute,
                 Name: "fill",
-                Outputs: [new ResourceReference(
-                    Binding: 0,
-                    Name: "image"
-                )],
+                Outputs: ["image"],
                 Source: "fill.hlsl"
             )],
             resources: [new ShaderPipelineResource(

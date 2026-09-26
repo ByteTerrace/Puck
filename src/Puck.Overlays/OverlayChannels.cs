@@ -2,9 +2,9 @@ namespace Puck.Overlays;
 
 /// <summary>
 /// The overlay's seven declared writer channels. The value is the priority for the four first-party writers (0 draws
-/// first/bottom, 3 draws last/top), pinned to the order <see cref="UnifiedOverlayNode"/> emits them in when they run
+/// first/bottom, 3 draws last/top), pinned to the order <see cref="OverlayFrameComposer"/> emits them in when they run
 /// — draw order stops being an implicit contract nobody states and becomes the lease table's first column.
-/// <see cref="Hud"/> is the odd one out: it is not part of that fixed loop at all — <see cref="UnifiedOverlayNode"/>'s
+/// <see cref="Hud"/> is the odd one out: it is not part of that fixed loop at all — <see cref="OverlayFrameComposer"/>'s
 /// banded pipeline opens it up to four separate times per frame (under, base-slot-when-replacing, over — the
 /// world-scope bands — plus one unbanded pass for the player-scope per-seat panels), each its own
 /// <see cref="OverlayFrameBuilder.BeginChannel"/>/<see cref="OverlayFrameBuilder.EndChannel"/> scope charged

@@ -1,9 +1,8 @@
-// The shared overlay decode toolkit: the word loader over the uint4-strided storage buffer, the design-token-block
-// accessors, and the SDF glyph-reconstruction trio every overlay surface shades text with.
+// The shared overlay decode toolkit: the word loader over the raw storage buffer, the design-token-block accessors,
+// and the SDF glyph-reconstruction trio every overlay surface shades text with.
 //
-// BUFFER SHAPE — StructuredBuffer<uint4>, not <uint>: UnifiedOverlayNode binds the buffer with a 16-byte element
-// stride (IGpuBindings.WriteBuffer), so on Direct3D 12 a <uint>-declared buffer would read every fourth word. Vulkan is stride-agnostic either way. All OFFSETS stay in
-// 32-bit words (the C# packers' unit); OverlayWord() folds a word index into the element/lane pair.
+// BUFFER SHAPE: a ByteAddressBuffer, the raw buffer a pass group binds, so both backends address it in bytes. All
+// OFFSETS stay in 32-bit words (the C# packers' unit); OverlayWord() turns a word index into its byte address.
 //
 // TOKEN BLOCK — the slab Puck.Overlays.OverlayTokenBlock uploads at buffer word 0: one RGBA float4 per color role
 // (role r IS uint4 element r), then the geometry scalars. KEEP IN SYNC with OverlayTokenBlock.cs — that file and
@@ -26,22 +25,22 @@
 #define OVERLAY_ROLE_CUSTOM 255u
 
 // One 32-bit word at word index i.
-uint OverlayWord(StructuredBuffer<uint4> data, uint i) {
-    return data[i >> 2u][i & 3u];
+uint OverlayWord(ByteAddressBuffer data, uint i) {
+    return data.Load(i * 4u);
 }
 
 // One 32-bit word reinterpreted as float.
-float OverlayFloat(StructuredBuffer<uint4> data, uint i) {
+float OverlayFloat(ByteAddressBuffer data, uint i) {
     return asfloat(OverlayWord(data, i));
 }
 
 // A color role's RGBA from the token block (role r occupies uint4 element r exactly).
-float4 OverlayTokenColor(StructuredBuffer<uint4> data, uint role) {
-    return asfloat(data[role]);
+float4 OverlayTokenColor(ByteAddressBuffer data, uint role) {
+    return asfloat(data.Load4(role * 16u));
 }
 
 // A geometry scalar from the token block (indexed by OverlayTokenBlock.Scalar).
-float OverlayTokenScalar(StructuredBuffer<uint4> data, uint index) {
+float OverlayTokenScalar(ByteAddressBuffer data, uint index) {
     return OverlayFloat(data, ((OVERLAY_TOKEN_ROLE_COUNT * 4u) + index));
 }
 
@@ -83,7 +82,7 @@ float OverlayTokenScalar(StructuredBuffer<uint4> data, uint index) {
 
 // One glyph SDF texel's RGB channels (edge-clamped): decode the packed RGBA word (each channel encoded =
 // 0.5 + d/range). `atlasBase` is the buffer's starting word offset for the atlas pack.
-float3 OverlaySdfTexel(StructuredBuffer<uint4> data, uint atlasBase, int glyph, int2 texel, int cellW, int cellH) {
+float3 OverlaySdfTexel(ByteAddressBuffer data, uint atlasBase, int glyph, int2 texel, int cellW, int cellH) {
     texel = clamp(texel, int2(0, 0), int2((cellW - 1), (cellH - 1)));
 
     uint word = OverlayWord(data, atlasBase + (uint)((glyph * cellW * cellH) + (texel.y * cellW) + texel.x));
@@ -95,7 +94,7 @@ float3 OverlaySdfTexel(StructuredBuffer<uint4> data, uint atlasBase, int glyph, 
 // reconstruction, legitimate at shade time (only geometry marching bans the median). A replicated single-channel
 // atlas medians to exactly its own value (bit-identical to an alpha-only decode); a true MTSDF atlas medians to
 // sharp corners.
-float OverlaySdfBilinear(StructuredBuffer<uint4> data, uint atlasBase, int glyph, float2 atlasCoord, int cellW, int cellH) {
+float OverlaySdfBilinear(ByteAddressBuffer data, uint atlasBase, int glyph, float2 atlasCoord, int cellW, int cellH) {
     float2 t = (atlasCoord - 0.5);
     int2 b = int2(floor(t));
     float2 f = (t - float2(b));
@@ -112,7 +111,7 @@ float OverlaySdfBilinear(StructuredBuffer<uint4> data, uint atlasBase, int glyph
 // band's coverage (the floats-over-a-lit-world contrast toolkit, from the SAME field at zero extra taps).
 // `screenPxRange` is the caller's own distanceRange(texels) x screen-px-per-texel; `glyphCount` bounds-checks a
 // resolved-but-out-of-range glyph index to blank (zero coverage) rather than wrapping into the next glyph's cell.
-float2 SampleGlyphCoverage(StructuredBuffer<uint4> data, uint atlasBase, int glyph, int glyphCount, float2 cellLocal, float2 cellSize, int atlasCellW, int atlasCellH, float screenPxRange, float outlineBand) {
+float2 SampleGlyphCoverage(ByteAddressBuffer data, uint atlasBase, int glyph, int glyphCount, float2 cellLocal, float2 cellSize, int atlasCellW, int atlasCellH, float screenPxRange, float outlineBand) {
     if ((glyph < 0) || (glyph >= glyphCount)) {
         return float2(0.0, 0.0);
     }

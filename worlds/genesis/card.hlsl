@@ -62,10 +62,8 @@
 #define MAT_IVORY_ARMOR   12.0
 #define MAT_PIP_HEART     13.0
 
-// The frame block is the pass's generated interface: the frame values. This pass declares no config fields.
+// The generated interface declares the frame group, the pass block and the output image, 'output'.
 #include "card.interface.hlsli"
-
-[[vk::binding(0, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> image : register(u0);
 
 // The output image's extent in pixels, assigned once at the top of main.
 static float2 resolution;
@@ -1142,12 +1140,12 @@ void main(uint3 id : SV_DispatchThreadID) {
     uint width;
     uint height;
 
-    image.GetDimensions(width, height);
+    output.GetDimensions(width, height);
     if ((id.x >= width) || (id.y >= height)) {
         return;
     }
     resolution = float2(width, height);
     // y grows up the image in the shading functions: the pixel's origin is the bottom-left corner.
     float2 pixel = float2(float(id.x) + 0.5, float(height) - (float(id.y) + 0.5));
-    image[id.xy] = shade(pixel);
+    output[id.xy] = shade(pixel);
 }

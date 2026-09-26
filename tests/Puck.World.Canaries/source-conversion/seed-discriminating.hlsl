@@ -3,4 +3,5 @@
 // the neutral white quadrant holds.
 #define SEED_NV12_MATRIX 0u
 #define SEED_INDEX_BASE 6u
-#include "seed.hlsl"
+#include "seed-discriminating.interface.hlsli"
+#include "seed.hlsli"

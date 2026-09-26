@@ -15,7 +15,7 @@
       "source": "fill.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "outputs": [ { "name": "image", "binding": 0 } ]
+      "outputs": [ { "name": "image" } ]
     }
   ],
   "outputs": ["image"]

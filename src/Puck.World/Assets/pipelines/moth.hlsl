@@ -46,9 +46,8 @@
 #define MAX_STEPS 220
 #define SHADOW_STEPS 96
 
-// The frame block is the pass's generated interface: the frame values; this pass has no config fields.
+// The generated interface declares the frame group, the pass block and the output image, 'output'.
 #include "moth.interface.hlsli"
-[[vk::binding(0, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> image : register(u0);
 
 // The output image's size in pixels.
 static float2 resolution;
@@ -1635,11 +1634,11 @@ void main(uint3 id : SV_DispatchThreadID) {
     uint width;
     uint height;
 
-    image.GetDimensions(width, height);
+    output.GetDimensions(width, height);
     if ((id.x >= width) || (id.y >= height)) {
         return;
     }
     resolution = float2(width, height);
     // Pixel centers with y growing up the image, as the shading functions above expect.
-    image[id.xy] = shade(float2(id.x + 0.5, height - (id.y + 0.5)));
+    output[id.xy] = shade(float2(id.x + 0.5, height - (id.y + 0.5)));
 }

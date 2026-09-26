@@ -4,55 +4,55 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 /// <summary>The <c>post.&lt;id&gt;</c> package of one shipped post-process shader set: a fullscreen draw of the set's
-/// vertex and fragment stages that samples the pass's one input image and writes its one output, with the pass's frame
-/// block (the frame members, then the set's config) pushed as its push constants. One type serves every
+/// vertex and fragment stages that samples the pass's one input image and writes its one output. It binds the set's
+/// interface (<see cref="ShaderSetManifest.FrameLayout"/>), which the plan lays out for the pass: the frame group, and the
+/// pass group holding the extent, the set's config, the input image and the set's samplers. One type serves every
 /// <c>post.&lt;id&gt;</c>, registered once per set under <see cref="Id"/>.
 /// <para>
-/// Its build creates the two shader modules, the render pass and the graphics pipeline on the thread pool. Its recorder
-/// takes them when the graph installs, creates the fullscreen triangle's vertex buffer and one sampler per frame slot,
-/// and allocates one descriptor set per frame slot from the instance's pool. Each frame it writes the input into the
-/// slot's set and records the render pass and the draw over a framebuffer on the output image, created the first time
-/// that image is drawn into and kept for the recorder's life. Its ports are a fragment-sampled input and a
-/// color-attachment output, so the input arrives shader-readable and the output in render-target layout, which its
-/// render pass leaves it in; it records no barrier.
+/// Its build creates the two shader modules, the render pass and the graphics pipeline, through the pass's pipeline
+/// layout, on the thread pool. Its recorder takes them when the graph installs, creates the fullscreen triangle's vertex
+/// buffer and one sampler per frame slot, and allocates its frame and pass group sets per frame slot from the instance's
+/// pool (<see cref="RenderGraphPackageSets"/>), writing the slot's sampler into every sampler the set declares. Each frame
+/// it writes the input into the slot's pass set, binds both sets and records the render pass and the draw over a
+/// framebuffer on the output image, created the first time that image is drawn into and kept for the recorder's life.
+/// Its ports are a fragment-sampled input and a color-attachment output, so the input arrives shader-readable and the
+/// output in render-target layout, which its render pass leaves it in; it records no barrier.
 /// </para>
 /// </summary>
 public sealed class PostProcessPackage : IRenderGraphPackageFactory {
-    private readonly GpuComputeBinding[] m_bindings;
+    private readonly string m_input;
+    private readonly string[] m_samplers;
 
     /// <summary>Initializes a new instance of the <see cref="PostProcessPackage"/> class for one loaded shader set.</summary>
     /// <param name="manifest">The loaded graphics set, whose bytecode the build reads.</param>
     /// <exception cref="ArgumentNullException"><paramref name="manifest"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException"><paramref name="manifest"/> is a compute set, or declares anything but one
-    /// sampled image.</exception>
+    /// sampled image (the input) and the samplers it is read through.</exception>
     public PostProcessPackage(ShaderSetManifest manifest) {
         ArgumentNullException.ThrowIfNull(argument: manifest);
 
         if (!manifest.IsGraphics) {
             throw new InvalidDataException(message: $"'{manifest.Name}' is a compute set; a post-process package needs vertex and fragment stages.");
         }
+
+        var images = manifest.Bindings.Where(predicate: static binding => (binding.Kind == GpuBindingKind.SampledImage)).ToArray();
+
         if (
-            (manifest.Bindings.Count != 1) ||
-            (manifest.Bindings[0].Kind != ShaderSetManifestBindingKind.SampledImage) ||
-            (manifest.Bindings[0].Count != 1)
+            (images.Length != 1) ||
+            manifest.Bindings.Any(predicate: static binding => (binding.Kind is not (GpuBindingKind.SampledImage or GpuBindingKind.Sampler)))
         ) {
-            throw new InvalidDataException(message: $"'{manifest.Name}' must declare exactly one sampledImage binding (the input image) and nothing else to run as a post-process package.");
+            throw new InvalidDataException(message: $"'{manifest.Name}' must declare exactly one SampledImage binding (the input image) and only Sampler bindings beside it to run as a post-process package.");
         }
 
         Manifest = manifest;
-        m_bindings = [new GpuComputeBinding(
-            manifest.Bindings[0].VulkanBinding,
-            GpuComputeBindingKind.SampledImage
-        )];
+        m_input = images[0].Name;
+        m_samplers = [.. manifest.Bindings.Where(predicate: static binding => (binding.Kind == GpuBindingKind.Sampler)).Select(selector: static binding => binding.Name)];
     }
 
     /// <summary>Gets the package id the set is registered under: <c>post.&lt;set id&gt;</c>.</summary>
     public string Id => (RenderGraphPackageCatalog.PostProcessPrefix + Manifest.Name);
     /// <summary>Gets the shader set the package draws.</summary>
     public ShaderSetManifest Manifest { get; }
-    /// <inheritdoc/>
-    /// <remarks>One sampled image, the pass's input, at the set's binding.</remarks>
-    public IReadOnlyList<GpuComputeBinding> SetBindings => m_bindings;
 
     // The stage bytecode of the backend the instance records on, read from the manifest's validated bytes.
     private ReadOnlyMemory<byte> Bytecode(string stem, bool directX) {
@@ -70,8 +70,8 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The pass does not read one image and write one, its frame block is not the
-    /// set's, or the set lacks a stage's bytecode for the backend.</exception>
+    /// <exception cref="InvalidDataException">The pass does not read one image and write one, the plan laid out another
+    /// interface than the set's, or the set lacks a stage's bytecode for the backend.</exception>
     public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
@@ -82,6 +82,11 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             (context.Outputs[0].Kind != ShaderPipelineResourceKind.Image)
         ) {
             throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{Id}' must read one image and write one.");
+        }
+        // The plan lays the pass out from the catalog's declaration of the set; the bytecode reads the set's own. They
+        // must bind alike, whatever each interface is named.
+        if (!context.Parameters.Layout.Bindings.SequenceEqual(second: Manifest.FrameLayout.Layout.Bindings)) {
+            throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{Id}' was planned with another interface than the set's; the catalog and the loaded set disagree.");
         }
 
         var services = context.Services;
@@ -113,30 +118,26 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 owner: context.Instance,
                 part: context.Pass
             ));
-
-            var description = new GpuGraphicsPipelineDescription(
-                Manifest.Name,
-                new GpuVertexInputLayout(
-                    FullscreenTriangle.StrideBytes,
-                    [new GpuVertexAttribute(
-                        Format: GpuVertexFormat.R32G32Float,
-                        Location: 0,
-                        OffsetBytes: 0
-                    )]
-                ),
-                1,
-                false,
-                new GpuPushConstantBinding(
-                    data: new byte[context.Parameters.SizeBytes],
-                    offset: 0,
-                    stageFlags: ShaderPipelineRenderNode.FrameBlockStages
-                )
-            );
-
-            Manifest.ValidateBindings(description: description);
             cancellationToken.ThrowIfCancellationRequested();
             built.Pipeline = services.PipelineFactory.Create(
-                description: description,
+                description: new GpuGraphicsPipelineDescription(
+                    EnableStorageBuffer: false,
+                    Layout: context.Parameters.Layout.PipelineLayout(
+                        pushesIndex: false,
+                        stages: (GpuShaderStage.Vertex | GpuShaderStage.Fragment)
+                    ),
+                    Name: Manifest.Name,
+                    PushConstantBinding: null,
+                    TextureSamplerCount: 0,
+                    VertexInput: new GpuVertexInputLayout(
+                        FullscreenTriangle.StrideBytes,
+                        [new GpuVertexAttribute(
+                            Format: GpuVertexFormat.R32G32Float,
+                            Location: 0,
+                            OffsetBytes: 0
+                        )]
+                    )
+                ),
                 fragmentShaderModule: built.Fragment,
                 name: new GpuObjectName(
                     owner: context.Instance,
@@ -154,11 +155,13 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
         return built;
     }
     /// <inheritdoc/>
-    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
+    /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="built"/> is not this package's build, or
-    /// <paramref name="descriptorPool"/> is zero.</exception>
-    public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, nint descriptorPool) {
+    /// <paramref name="groups"/> holds no pool or no block buffer per frame slot.</exception>
+    public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
         ArgumentNullException.ThrowIfNull(argument: context);
+        ArgumentNullException.ThrowIfNull(argument: groups);
 
         if (built is not Built objects) {
             built?.Dispose();
@@ -168,20 +171,13 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 paramName: nameof(built)
             );
         }
-        if (descriptorPool == 0) {
-            objects.Dispose();
-
-            throw new ArgumentException(
-                message: $"Package '{Id}' allocates its sets from the instance's pool, and none was created.",
-                paramName: nameof(descriptorPool)
-            );
-        }
 
         return new Recorder(
-            binding: m_bindings[0].Binding,
             built: objects,
             context: context,
-            descriptorPool: descriptorPool
+            groups: groups,
+            input: m_input,
+            samplers: m_samplers
         );
     }
 
@@ -206,25 +202,23 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
     // Records one post-process pass. Everything a frame slot binds is per slot, since the instance waits only that
     // slot's previous submission before recording into it.
     private sealed class Recorder : IRenderGraphPackageRecorder {
-        private readonly uint m_binding;
         private readonly Built m_built;
         private readonly Dictionary<nint, IGpuFramebuffer> m_framebuffers;
         private readonly IGpuBuffer m_geometry;
+        private readonly uint m_input;
         private readonly nint[] m_samplers;
         private readonly GpuDeviceServices m_services;
-        private readonly nint[] m_sets;
+        private readonly RenderGraphPackageSets? m_sets;
 
         private bool m_disposed;
 
-        public Recorder(RenderGraphPackageRecorderContext context, Built built, nint descriptorPool, uint binding) {
+        public Recorder(RenderGraphPackageRecorderContext context, Built built, RenderGraphPackageGroups groups, string input, string[] samplers) {
             var inFlight = context.InFlightFrames;
 
-            m_binding = binding;
             m_built = built;
             m_framebuffers = new Dictionary<nint, IGpuFramebuffer>(capacity: inFlight);
             m_samplers = new nint[inFlight];
             m_services = context.Services;
-            m_sets = new nint[inFlight];
 
             // The vertex buffer comes from the device's own factory, as a shader pass's geometry does, so it counts as no
             // created storage buffer.
@@ -239,17 +233,24 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             );
 
             try {
+                m_sets = new RenderGraphPackageSets(
+                    context: context,
+                    groupLayoutHandles: built.Pipeline!.GroupLayoutHandles,
+                    groups: groups
+                );
+                m_input = m_sets.BindingOf(member: input);
+
                 for (var slot = 0; (slot < inFlight); slot++) {
-                    m_sets[slot] = m_services.Bindings.AllocateSet(
-                        descriptorPool,
-                        built.Pipeline!.DescriptorSetLayoutHandle,
-                        name: new GpuObjectName(
-                            index: slot,
-                            owner: context.Instance,
-                            part: context.Pass
-                        )
-                    );
                     m_samplers[slot] = m_services.Bindings.CreateSampler();
+
+                    foreach (var sampler in samplers) {
+                        m_services.Bindings.WriteSampler(
+                            arrayElement: 0,
+                            binding: m_sets.BindingOf(member: sampler),
+                            descriptorSetHandle: m_sets.PassSet(slot: slot),
+                            samplerHandle: m_samplers[slot]
+                        );
+                    }
                 }
             } catch {
                 Dispose();
@@ -287,7 +288,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             var command = recording.CommandBuffer;
             var recorder = recording.Recorder;
             var pipeline = m_built.Pipeline!;
-            var set = m_sets[recording.Slot];
+            var sets = m_sets!;
 
             if (!m_framebuffers.TryGetValue(
                 key: target.ImageHandle,
@@ -304,12 +305,11 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 );
             }
 
-            m_services.Bindings.WriteCombinedImageSampler(
+            m_services.Bindings.WriteSampledImage(
                 arrayElement: 0,
-                binding: m_binding,
-                descriptorSetHandle: set,
-                imageViewHandle: input.Image.ImageViewHandle,
-                samplerHandle: m_samplers[recording.Slot]
+                binding: m_input,
+                descriptorSetHandle: sets.PassSet(slot: recording.Slot),
+                imageViewHandle: input.Image.ImageViewHandle
             );
             recorder.BeginRenderPass(
                 command,
@@ -326,20 +326,12 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 m_geometry.SizeBytes,
                 FullscreenTriangle.StrideBytes
             );
-            recorder.PushConstants(
+            sets.Bind(
                 bindPoint: GpuBindPoint.Graphics,
-                commandBufferHandle: command,
-                data: recording.FrameBlock,
-                offset: 0,
-                pipelineLayoutHandle: pipeline.LayoutHandle,
-                stageFlags: ShaderPipelineRenderNode.FrameBlockStages
-            );
-            recorder.BindDescriptorSet(
-                bindPoint: GpuBindPoint.Graphics,
-                commandBufferHandle: command,
-                descriptorSetHandle: set,
-                group: 0,
-                pipelineLayoutHandle: pipeline.LayoutHandle
+                commandBuffer: command,
+                pipelineLayout: pipeline.LayoutHandle,
+                recorder: recorder,
+                slot: recording.Slot
             );
             recorder.Draw(
                 commandBufferHandle: command,

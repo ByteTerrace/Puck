@@ -42,8 +42,7 @@
       "kind": "Compute",
       "outputs": [
         {
-          "name": "step",
-          "binding": 0
+          "name": "step"
         }
       ]
     },
@@ -54,18 +53,17 @@
       "kind": "Compute",
       "inputs": [
         {
-          "name": "base",
-          "binding": 1
+          "name": "base"
         },
         {
           "name": "step",
-          "binding": 2
+          "as": "source"
         }
       ],
       "outputs": [
         {
           "name": "resampled",
-          "binding": 0
+          "as": "destination"
         }
       ],
       "config": {

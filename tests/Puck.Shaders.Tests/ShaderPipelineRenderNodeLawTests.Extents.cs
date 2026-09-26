@@ -15,10 +15,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             name: "extents",
             outputs: ["fixed", "sum"],
             passes: [
-                Pass(inputs: [], kind: ShaderPipelineDocumentPassKind.Compute, name: "fill", outputs: [new ResourceReference(Binding: 0, Name: "half")]),
-                Pass(inputs: [new ResourceReference(Binding: 1, Name: "half")], kind: ShaderPipelineDocumentPassKind.Compute, name: "draw", outputs: [new ResourceReference(Binding: 0, Name: "fixed")]),
-                Pass(inputs: [new ResourceReference(Binding: 1, Name: "fixed")], kind: ShaderPipelineDocumentPassKind.Compute, name: "count", outputs: [new ResourceReference(Binding: 0, Name: "counts")]),
-                Pass(inputs: [new ResourceReference(Binding: 1, Name: "counts")], kind: ShaderPipelineDocumentPassKind.Compute, name: "total", outputs: [new ResourceReference(Binding: 0, Name: "sum")]),
+                Pass(inputs: [], kind: ShaderPipelineDocumentPassKind.Compute, name: "fill", outputs: [new ResourceReference(Name: "half")]),
+                Pass(inputs: [new ResourceReference(Name: "half")], kind: ShaderPipelineDocumentPassKind.Compute, name: "draw", outputs: [new ResourceReference(Name: "fixed")]),
+                Pass(inputs: [new ResourceReference(Name: "fixed")], kind: ShaderPipelineDocumentPassKind.Compute, name: "count", outputs: [new ResourceReference(Name: "counts")]),
+                Pass(inputs: [new ResourceReference(Name: "counts")], kind: ShaderPipelineDocumentPassKind.Compute, name: "total", outputs: [new ResourceReference(Name: "sum")]),
             ],
             resources: [
                 Image(dimensions: ShaderPipelineDimensions.Relative(height: 0.5, width: 0.5), format: "R8G8B8A8Unorm", name: "half"),

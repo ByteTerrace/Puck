@@ -603,6 +603,104 @@ public sealed class GpuResidencyLawTests {
         _ = Assert.Throws<InvalidOperationException>(testCode: () => region.Target(destinationWord: 0));
     }
 
+    /// <summary>A uniform region is a constant buffer of whole 256-byte views that a host writes: under the ring and in
+    /// place it needs no copy kernel and gives each slot its buffer, and it is refused staged or at a size a
+    /// constant-buffer view cannot take. A staged region of either usage is refused without its copy kernel.</summary>
+    [Fact]
+    public void AUniformRegionIsAHostWrittenConstantBufferOfWholeViews() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        var alignment = ((int)IGpuBindings.ConstantBufferAlignment);
+
+        GpuRegion Uniform(GpuResidencyPolicy policy, int byteCount) => new(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: byteCount,
+            copyPipeline: null,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: policy,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2,
+            usage: GpuBufferUsage.Uniform
+        );
+
+        using (var ring = Uniform(policy: GpuResidencyPolicy.Ring, byteCount: alignment)) {
+            Assert.NotSame(
+                expected: ring.Buffer(slot: 0),
+                actual: ring.Buffer(slot: 1)
+            );
+        }
+        using (var inPlace = Uniform(policy: GpuResidencyPolicy.InPlace, byteCount: (alignment * 2))) {
+            Assert.Same(
+                expected: inPlace.Buffer(slot: 0),
+                actual: inPlace.Buffer(slot: 1)
+            );
+        }
+
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Uniform(policy: GpuResidencyPolicy.Staged, byteCount: alignment));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Uniform(policy: GpuResidencyPolicy.Ring, byteCount: (alignment - 4)));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: null,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2,
+            usage: GpuBufferUsage.Storage
+        ));
+    }
+
+    [Fact]
+    public void ASlotOwingEverythingAgainSendsTheWholeRegionWhateverItHeld() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        var alignment = ((int)IGpuBindings.ConstantBufferAlignment);
+        using var ring = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: alignment,
+            copyPipeline: null,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Ring,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2,
+            usage: GpuBufferUsage.Uniform
+        );
+
+        _ = ring.Write(
+            bytes: [1, 2, 3, 4],
+            offset: 0
+        );
+        ring.Flush(slot: 0);
+        ring.Flush(slot: 1);
+
+        // Each slot holds the region now, so an unchanged write owes nothing and a flush sends nothing.
+        var settled = gpu.HostBytes();
+
+        _ = ring.Write(
+            bytes: [1, 2, 3, 4],
+            offset: 0
+        );
+        ring.Flush(slot: 0);
+        Assert.Equal(
+            actual: gpu.HostBytes(),
+            expected: settled
+        );
+
+        ring.OweAll(slot: 0);
+        ring.Flush(slot: 0);
+        Assert.Equal(
+            actual: (gpu.HostBytes() - settled),
+            expected: alignment
+        );
+        Assert.Equal(
+            actual: gpu.Memory(bufferHandle: ring.Buffer(slot: 0).BufferHandle)[..4],
+            expected: [1, 2, 3, 4]
+        );
+    }
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {
         using var module = gpu.Services.ShaderModuleFactory.Create(
             bytecode: new byte[] { UploadModelGpu.RegionCopyBytecode },

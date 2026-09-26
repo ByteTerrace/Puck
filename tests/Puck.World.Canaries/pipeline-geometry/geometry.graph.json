@@ -68,7 +68,7 @@
       "source": "present.hlsl",
       "entryPoint": "main",
       "kind": "Fullscreen",
-      "inputs": [ { "name": "c1", "binding": 0 } ],
+      "inputs": [ { "name": "c1", "as": "layers" } ],
       "outputs": [ { "name": "image" } ]
     },
     {
@@ -76,14 +76,14 @@
       "source": "stripes.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "outputs": [ { "name": "stripes", "binding": 0 } ]
+      "outputs": [ { "name": "stripes" } ]
     },
     {
       "name": "orient",
       "source": "present.hlsl",
       "entryPoint": "main",
       "kind": "Fullscreen",
-      "inputs": [ { "name": "stripes", "binding": 0 } ],
+      "inputs": [ { "name": "stripes", "as": "layers" } ],
       "outputs": [ { "name": "oriented" } ]
     }
   ],

@@ -1,7 +1,7 @@
 {
   "id": "pipeline-counters",
   "title": "Each pass of the feedback pipeline reports exactly the GPU work it recorded, identically on both backends, once its submission has completed",
-  "binding": "The positive leg boots the pipeline-feedback world offscreen, waits for compilation and installation, pauses and resets, and waits until the first submission since the reset has completed. Two inspections read that same submission, and each pass's work line equals the count the plan derives for what the pass records: the accumulator's one zero clear of the history slot it reads as the previous frame's, that clear's transition, the transition for its read and the transition of the discarded slot it writes, the conversion's two transitions, the fullscreen copy's two command buffers, render pass, draw and two transitions, a 96-byte frame block per pass, and one publishing transition outside every pass. A step completes the second submission, in which the accumulator clears nothing and needs only the transition of the slot it writes. After a second reset, its initialization frame completes with a larger identity than any submission before the reset. The same exact lines on Vulkan and Direct3D 12 are the cross-backend proof. Each inspection also echoes the device's memory profile with a nonzero largest device-local heap, and the residency policy the selector chooses for the three passes' 288 bytes of parameters, whichever policy the device's profile selects. The discriminating leg boots a four-pass variant whose extra pass, kept live as a second named output, reads the history before the conversion, so the conversion needs one transition, not two, and its creation counts grow; the positive's exact lines turn red.",
+  "binding": "The positive leg boots the pipeline-feedback world offscreen, waits for compilation and installation, pauses and resets, and waits until the first submission since the reset has completed. Two inspections read that same submission, and each pass's work line equals the count the plan derives for what the pass records: the accumulator's one zero clear of the history slot it reads as the previous frame's, that clear's transition, the transition for its read and the transition of the discarded slot it writes, the conversion's two transitions, the fullscreen copy's two command buffers, render pass, draw and two transitions, the frame and pass group sets each pass binds with nothing pushed or uploaded, and outside every pass one publishing transition and the frame group's one 256-byte constant-buffer view. A step completes the second submission, in which the accumulator clears nothing and needs only the transition of the slot it writes. After a second reset, its initialization frame completes with a larger identity than any submission before the reset. The same exact lines on Vulkan and Direct3D 12 are the cross-backend proof. Each inspection also echoes the device's memory profile with a nonzero largest device-local heap, and the residency policy the selector chooses for the three passes' 144 bytes of parameters (a 96-byte frame group block and three 16-byte pass blocks), whichever policy the device's profile selects. The discriminating leg boots a four-pass variant whose extra pass, kept live as a second named output, reads the history before the conversion, so the conversion needs one transition, not two, and its creation counts grow; the positive's exact lines turn red.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -134,7 +134,7 @@
         "name": "inspect-echoes-the-policy-for-the-parameter-region",
         "stream": "stdout",
         "match": "contains",
-        "text": "  residency: parameters=288 bytes policy=",
+        "text": "  residency: parameters=144 bytes policy=",
         "present": true
       },
       {
@@ -217,7 +217,7 @@
         "name": "accumulate-clears-only-the-slot-it-reads",
         "stream": "stdout",
         "match": "exact",
-        "text": "  work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=3 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=1",
+        "text": "  work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=3 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=1",
         "present": true
       },
       {
@@ -225,7 +225,7 @@
         "name": "accumulate-transitions-its-discarded-slot-next",
         "stream": "stdout",
         "match": "exact",
-        "text": "  work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
+        "text": "  work accumulate executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0",
         "present": true
       },
       {
@@ -233,7 +233,7 @@
         "name": "convert-transitions-twice",
         "stream": "stdout",
         "match": "exact",
-        "text": "  work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
+        "text": "  work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0",
         "present": true
       },
       {
@@ -241,7 +241,7 @@
         "name": "copy-draws-once-through-its-render-pass",
         "stream": "stdout",
         "match": "exact",
-        "text": "  work copy executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=2 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=1 uploads.host-visible=0 clears=0",
+        "text": "  work copy executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=2 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=1 uploads.host-visible=0 clears=0",
         "present": true
       },
       {
@@ -249,7 +249,7 @@
         "name": "finalization-counts-outside-every-pass",
         "stream": "stdout",
         "match": "exact",
-        "text": "  work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0",
+        "text": "  work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=256 clears=0",
         "present": true
       },
       {
@@ -257,7 +257,7 @@
         "name": "inspect-reports-what-the-node-created",
         "stream": "stdout",
         "match": "exact",
-        "text": "  work lifetime: created.pipelines=3 created.shader-modules=4 created.images=9 created.buffers=0 created.descriptor-pools=1 created.descriptor-sets=9",
+        "text": "  work lifetime: created.pipelines=3 created.shader-modules=4 created.images=9 created.buffers=12 created.descriptor-pools=1 created.descriptor-sets=18",
         "present": true
       },
       {
@@ -265,7 +265,7 @@
         "name": "status-reports-the-node-counters",
         "stream": "stdout",
         "match": "exact",
-        "text": "      work lifetime: created.pipelines=3 created.shader-modules=4 created.images=9 created.buffers=0 created.descriptor-pools=1 created.descriptor-sets=9]",
+        "text": "      work lifetime: created.pipelines=3 created.shader-modules=4 created.images=9 created.buffers=12 created.descriptor-pools=1 created.descriptor-sets=18]",
         "present": true
       }
     ]
@@ -359,7 +359,7 @@
         "name": "peek-takes-the-history-transition",
         "stream": "stdout",
         "match": "exact",
-        "text": "  work peek executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
+        "text": "  work peek executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0",
         "present": true
       },
       {
@@ -367,7 +367,7 @@
         "name": "convert-after-peek-transitions-once",
         "stream": "stdout",
         "match": "exact",
-        "text": "  work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
+        "text": "  work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0",
         "present": true
       },
       {
@@ -375,7 +375,7 @@
         "name": "convert-never-transitions-twice",
         "stream": "stdout",
         "match": "exact",
-        "text": "  work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=96 descriptor-writes=2 uploads.host-visible=0 clears=0",
+        "text": "  work convert executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=2 uploads.host-visible=0 clears=0",
         "present": false
       }
     ]

@@ -32,15 +32,15 @@
       "source": "seed.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "outputs": [ { "name": "field", "binding": 4 }, { "name": "words", "binding": 9 } ]
+      "outputs": [ { "name": "field" }, { "name": "words" } ]
     },
     {
       "name": "combine",
       "source": "combine.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "inputs": [ { "name": "field", "binding": 2 }, { "name": "words", "binding": 7 } ],
-      "outputs": [ { "name": "mixed", "binding": 5 } ]
+      "inputs": [ { "name": "field" }, { "name": "words" } ],
+      "outputs": [ { "name": "mixed" } ]
     },
     {
       "name": "present",
@@ -48,7 +48,7 @@
       "entryPoint": "main",
       "kind": "Fullscreen",
       "vertex": "Position",
-      "inputs": [ { "name": "mixed", "binding": 0 } ],
+      "inputs": [ { "name": "mixed" } ],
       "outputs": [ { "name": "image" } ]
     }
   ],

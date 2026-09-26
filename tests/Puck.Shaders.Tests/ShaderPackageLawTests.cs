@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using Puck.Abstractions;
 using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
@@ -86,14 +87,16 @@ public sealed partial class ShaderPackageLawTests {
         using var fixture = new Fixture(name: "transitive");
         var present = fixture.PathOf(logicalPath: "present.hlsl");
         var closure = ShaderSourceClosure.Collect(
+            generated: fixture.Generated(logicalPath: "present.hlsl"),
             limits: ShaderSourceLimits.Default,
             sources: [(present, File.ReadAllText(path: present))]
         );
 
-        // tone.hlsli is named only on the fourth line, and math.hlsli only by common.hlsli.
+        // tone.hlsli is named only on the fourth line, math.hlsli only by common.hlsli, and the generated interface is
+        // read from the text handed in.
         Assert.Equal(
             actual: closure.Includes.Select(selector: include => fixture.LogicalPathOf(path: include.Path)),
-            expected: ["lib/common.hlsli", "lib/math.hlsli", "lib/tone.hlsli"]
+            expected: ["lib/common.hlsli", "lib/math.hlsli", "lib/tone.hlsli", "present.interface.hlsli"]
         );
         Assert.Equal(
             actual: closure.Depth,
@@ -507,9 +510,10 @@ public sealed partial class ShaderPackageLawTests {
         // Binaries built for another interface: the pin is well formed and the file matches it, but the document's pass
         // now reads a different interface.
         var blur = manifest.Passes[0];
-        var other = ShaderFrameInterface.For(
+        var other = ShaderFrameInterface.ForPass(
             config: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) { ["radius"] = new(Type: ShaderValueType.Float) },
-            name: blur.Interface.Path[..blur.Interface.Path.IndexOf(value: '.')]
+            name: blur.Interface.Path[..blur.Interface.Path.IndexOf(value: '.')],
+            ports: []
         ).ToJson();
 
         File.WriteAllText(
@@ -952,6 +956,7 @@ public sealed partial class ShaderPackageLawTests {
             toolchainDirectory: toolchain
         );
         public ShaderCompilationRequest Compute(string logicalPath) => new(
+            generatedIncludes: Generated(logicalPath: logicalPath),
             name: System.IO.Path.GetFileNameWithoutExtension(path: logicalPath),
             stages: [new ShaderStageSource(
                 ShaderStage.Compute,
@@ -964,7 +969,35 @@ public sealed partial class ShaderPackageLawTests {
             recursive: true
         );
         public void Dispose() => m_scratch.Dispose();
+        // The interface declarations a load generates for the pass of the fixture's graph that compiles a source, by path; none
+        // when no graph pass compiles it.
+        public Dictionary<string, string> Generated(string logicalPath) {
+            var generated = new Dictionary<string, string>(comparer: PuckPaths.Comparer);
+
+            foreach (var document in Directory.EnumerateFiles(path: Root, searchOption: SearchOption.AllDirectories, searchPattern: "*.graph.json")) {
+                IReadOnlyList<ShaderPipelinePlannedPass> passes;
+
+                try {
+                    passes = new ShaderPipelineCompiler().Compile(definition: ShaderPipelineLoader.ReadDefinition(name: "fixture", path: document)).Passes;
+                } catch (Exception exception) when (exception is InvalidDataException or ShaderPipelineCompilationException or System.Text.Json.JsonException) {
+                    continue;
+                }
+
+                foreach (var pass in passes) {
+                    var source = System.IO.Path.GetFullPath(path: pass.Declaration!.Source, basePath: System.IO.Path.GetDirectoryName(path: document)!);
+
+                    if (PuckPaths.Comparer.Equals(x: source, y: PathOf(logicalPath: logicalPath))) {
+                        var (path, text) = ShaderPipelineLoader.GeneratedIncludeOf(pass: pass, sourcePath: source);
+
+                        generated[path] = text;
+                    }
+                }
+            }
+
+            return generated;
+        }
         public ShaderCompilationRequest Fragment(string logicalPath) => new(
+            generatedIncludes: Generated(logicalPath: logicalPath),
             name: System.IO.Path.GetFileNameWithoutExtension(path: logicalPath),
             stages: [new ShaderStageSource(
                 ShaderStage.Fragment,
