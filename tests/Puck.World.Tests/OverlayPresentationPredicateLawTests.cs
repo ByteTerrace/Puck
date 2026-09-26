@@ -346,6 +346,27 @@ public sealed class OverlayPresentationPredicateLawTests {
         var definition = WithPanel();
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
 
+        // The predicates are not the document's, so each binding is registered as its manifest would register it; an
+        // unregistered binding holds nothing.
+        mirror.Install(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+        Assert.False(condition: OverlayStateComparison.Holds(
+            state: new OverlayPredicate.State(
+                Binding: "state.phase",
+                Text: "lobby"
+            ),
+            mirror: mirror
+        ));
+        _ = mirror.Bind(
+            conversion: WorldStateConversion.Number,
+            token: "state.phase"
+        );
+        _ = mirror.Bind(
+            conversion: WorldStateConversion.Number,
+            token: "state.score"
+        );
         Assert.True(condition: OverlayStateComparison.Holds(
             state: new OverlayPredicate.State(
                 Binding: "state.phase",

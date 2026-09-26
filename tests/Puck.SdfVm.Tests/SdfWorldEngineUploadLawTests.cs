@@ -642,7 +642,7 @@ public sealed class SdfWorldEngineUploadLawTests {
         private readonly DynamicTransform[] m_transforms;
 
         private SdfWorldPipelines m_pipelines = null!;
-        private GpuRegionCopyPipeline m_regionCopy = null!;
+        private GpuPassPipeline m_regionCopy = null!;
 
         public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null) {
             Gpu = new UploadModelGpu(reportVersion: SdfIsa.Version) {
@@ -748,7 +748,7 @@ public sealed class SdfWorldEngineUploadLawTests {
                     WorkLedger: ledger
                 ),
                 pipelines: m_pipelines,
-                regionCopy: m_regionCopy,
+                regionCopy: m_regionCopy.Compute!,
                 width: Extent
             );
         }

@@ -230,7 +230,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
             staticSamplers[((int)samplerIndex)] = DirectXRootSignatures.ClampStaticSampler(
                 filter: ((samplerFilter == GpuSamplerFilter.Nearest)
                 ? D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT
-                : D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR),
+                : D3D12_FILTER.D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT),
                 shaderRegister: bindings[index].Binding,
                 shaderVisibility: D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL
             );

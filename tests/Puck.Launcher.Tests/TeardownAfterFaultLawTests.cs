@@ -102,6 +102,7 @@ public sealed class TeardownAfterFaultLawTests {
         );
 
         var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: device,
             height: 32U,
             hostsOnDirectX: false,

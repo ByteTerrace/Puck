@@ -9,8 +9,9 @@ namespace Puck.Shaders;
 /// pass group holding the extent, the set's config, the input image and the set's samplers. One type serves every
 /// <c>post.&lt;id&gt;</c>, registered once per set under <see cref="Id"/>.
 /// <para>
-/// Its build creates the two shader modules, the render pass and the graphics pipeline, through the pass's pipeline
-/// layout, on the thread pool. Its recorder takes them when the graph installs, creates the fullscreen triangle's vertex
+/// Its build leases the graphics pipeline, its two shader modules and the render pass it draws in, through the pass's
+/// pipeline layout, from the pass-pipeline cache on the thread pool, so every pass of one set into one format shares
+/// them. Its recorder takes them when the graph installs, creates the fullscreen triangle's vertex
 /// buffer and one sampler per frame slot, and allocates its frame and pass group sets per frame slot from the instance's
 /// pool (<see cref="RenderGraphPackageSets"/>), writing the slot's sampler into every sampler the set declares. Each frame
 /// it writes the input into the slot's pass set, binds both sets and records the render pass and the draw over a
@@ -89,37 +90,9 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{Id}' was planned with another interface than the set's; the catalog and the loaded set disagree.");
         }
 
-        var services = context.Services;
-        var built = new Built();
-
-        try {
-            cancellationToken.ThrowIfCancellationRequested();
-            built.Vertex = services.ShaderModuleFactory.Create(
-                bytecode: Bytecode(
-                    directX: context.HostsOnDirectX,
-                    stem: Manifest.Stages.Vertex!
-                ),
-                stage: GpuShaderStage.Vertex
-            );
-            cancellationToken.ThrowIfCancellationRequested();
-            built.Fragment = services.ShaderModuleFactory.Create(
-                bytecode: Bytecode(
-                    directX: context.HostsOnDirectX,
-                    stem: Manifest.Stages.Fragment!
-                ),
-                stage: GpuShaderStage.Fragment
-            );
-            built.RenderPass = services.RenderPassFactory.Create(description: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
-                FinalLayout: GpuImageLayout.RenderTarget,
-                Format: ShaderPipelineRenderNode.ParseFormat(format: context.Outputs[0].Format),
-                Load: GpuAttachmentLoad.Clear,
-                Store: GpuAttachmentStore.Store
-            )]), name: new GpuObjectName(
-                owner: context.Instance,
-                part: context.Pass
-            ));
-            cancellationToken.ThrowIfCancellationRequested();
-            built.Pipeline = services.PipelineFactory.Create(
+        var lease = context.Pipelines.Acquire(
+            device: context.Device,
+            key: GpuPassPipelineKey.OfGraphics(
                 description: new GpuGraphicsPipelineDescription(
                     Layout: context.Parameters.Layout.PipelineLayout(
                         stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
@@ -134,21 +107,32 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                         )]
                     )
                 ),
-                fragmentShaderModule: built.Fragment,
-                name: new GpuObjectName(
-                    owner: context.Instance,
-                    part: context.Pass
+                fragment: Bytecode(
+                    directX: context.HostsOnDirectX,
+                    stem: Manifest.Stages.Fragment!
                 ),
-                renderPass: built.RenderPass,
-                vertexShaderModule: built.Vertex
-            );
+                renderPass: new GpuRenderPassDescription(Colors: [new GpuColorAttachment(
+                    FinalLayout: GpuImageLayout.RenderTarget,
+                    Format: ShaderPipelineRenderNode.ParseFormat(format: context.Outputs[0].Format),
+                    Load: GpuAttachmentLoad.Clear,
+                    Store: GpuAttachmentStore.Store
+                )]),
+                vertex: Bytecode(
+                    directX: context.HostsOnDirectX,
+                    stem: Manifest.Stages.Vertex!
+                )
+            )
+        );
+
+        try {
+            _ = lease.Wait(cancellationToken: cancellationToken);
         } catch {
-            built.Dispose();
+            lease.Release();
 
             throw;
         }
 
-        return built;
+        return new Built(lease: lease);
     }
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
@@ -177,23 +161,13 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
         );
     }
 
-    // The modules, render pass and pipeline one pass's build creates, which its recorder owns once created.
-    private sealed class Built : IDisposable {
-        public IGpuShaderModule? Fragment;
-        public IGpuPipeline? Pipeline;
-        public IGpuRenderPass? RenderPass;
-        public IGpuShaderModule? Vertex;
+    // One pass's lease on its pipeline and the render pass it draws in, which its recorder owns once created.
+    private sealed class Built(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) : IDisposable {
+        public IGpuPipeline Pipeline { get; } = lease.Current!.Graphics!;
+        public IGpuRenderPass RenderPass { get; } = lease.Current!.RenderPass!;
 
-        public void Dispose() {
-            Pipeline?.Dispose();
-            Pipeline = null;
-            RenderPass?.Dispose();
-            RenderPass = null;
-            Fragment?.Dispose();
-            Fragment = null;
-            Vertex?.Dispose();
-            Vertex = null;
-        }
+        public void Dispose() =>
+            lease.Release();
     }
     // Records one post-process pass. Everything a frame slot binds is per slot, since the instance waits only that
     // slot's previous submission before recording into it.
@@ -237,7 +211,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                             value: m_services.RenderPassFactory.CreateFramebuffer(
                                 colors: [image],
                                 depth: null,
-                                renderPass: built.RenderPass!
+                                renderPass: built.RenderPass
                             )
                         );
                     }
@@ -245,7 +219,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
 
                 m_sets = new RenderGraphPackageSets(
                     context: context,
-                    groupLayoutHandles: built.Pipeline!.GroupLayoutHandles,
+                    groupLayoutHandles: built.Pipeline.GroupLayoutHandles,
                     groups: groups
                 );
                 m_input = m_sets.BindingOf(member: input);
@@ -297,7 +271,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             var target = (output.Owned ?? throw new InvalidDataException(message: $"Output '{output.Version}' is not an image the instance owns, so it cannot be drawn into."));
             var command = recording.CommandBuffer;
             var recorder = recording.Recorder;
-            var pipeline = m_built.Pipeline!;
+            var pipeline = m_built.Pipeline;
             var sets = m_sets!;
 
             var framebuffer = (m_framebuffers.GetValueOrDefault(key: target.ImageHandle) ?? throw new InvalidDataException(message: $"Output '{output.Version}' is an image the pass was not installed with."));

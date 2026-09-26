@@ -8,8 +8,9 @@ namespace Puck.Vulkan.Factories;
 /// <summary>
 /// The default <see cref="IVulkanLogicalDeviceFactory"/>: it creates a logical device, enabling the
 /// swapchain extension always and the optional pipeline-executable-properties,
-/// storage-image-without-format, external memory and semaphore, timeline-semaphore, and GPU capability-floor (fp16,
-/// 16-bit storage, subgroup-size-control) features only when the physical device supports them.
+/// storage-image-without-format, block-compressed texture (<c>textureCompressionBC</c>), external memory and semaphore,
+/// timeline-semaphore, and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control) features only when the
+/// physical device supports them.
 /// </summary>
 public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     /// <summary>Diagnostic introspection extension (compiled register counts etc.); enabled
@@ -64,11 +65,17 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         "VK_KHR_present_id",
         "VK_KHR_present_wait",
     ];
-    // 0-based VkPhysicalDeviceFeatures flag indices for storage-image read/write without a
-    // shader format qualifier (shaderStorageImage*WithoutFormat) — needed to write image
-    // views whose format (commonly BGRA8) has no GLSL format qualifier. Enabled only when
-    // the device reports them; callers that need them probe separately and fall back otherwise.
-    private static readonly uint[] StorageImageFeatureIndices = [31u, 32u, 36u];
+
+    // The 0-based VkPhysicalDeviceFeatures flag index of textureCompressionBC: every BC1 to BC7 format is sampleable
+    // from optimal-tiling images. VulkanLogicalDevice.SamplesBlockCompression records whether it was enabled, and an
+    // upload of a block-compressed format refuses a device without it.
+    private const uint TextureCompressionBcFeatureIndex = 22u;
+
+    // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: textureCompressionBC,
+    // and storage-image read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to
+    // write image views whose format (commonly BGRA8) has no GLSL format qualifier; callers that need those probe
+    // separately and fall back otherwise.
+    private static readonly uint[] OptionalBaseFeatureIndices = [TextureCompressionBcFeatureIndex, 31u, 32u, 36u];
 
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
     private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
@@ -210,7 +217,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         );
         var featureIndices = new List<uint>();
 
-        foreach (var index in StorageImageFeatureIndices) {
+        foreach (var index in OptionalBaseFeatureIndices) {
             if (
                 (index < support.Count) &&
                 support[((int)index)]
@@ -331,11 +338,12 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
         );
+        var featureIndices = ComposeFeatureIndices(
+            instance: instance.Commands,
+            physicalDeviceHandle: physicalDevice.Handle
+        );
         var request = new VulkanLogicalDeviceCreateRequest(
-            EnabledFeatureIndices: ComposeFeatureIndices(
-                instance: instance.Commands,
-                physicalDeviceHandle: physicalDevice.Handle
-            ),
+            EnabledFeatureIndices: featureIndices,
             EnabledFeatureStructureTypes: featureStructureTypes,
             ExtensionNames: extensionNames,
             Instance: instance.Commands,
@@ -393,6 +401,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
                 Identity = identity,
                 MemoryProfile = memoryProfile,
                 PipelineCache = pipelineCache,
+                SamplesBlockCompression = featureIndices.Contains(value: TextureCompressionBcFeatureIndex),
             };
         } catch {
             pipelineCache?.Dispose();

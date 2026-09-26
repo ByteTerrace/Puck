@@ -1,7 +1,7 @@
 // The region copy — moves the owed word ranges of a host-written block from its host-visible staging buffer into the
 // buffer GPU work reads, one thread per copied uint and one dispatch per block. It is the staged policy's copy for every
 // GpuRegion owner: the SDF engine's per-frame regions, its mesh region, and its brick staging, whose destination is the
-// brick pool. One pipeline serves a device (GpuRegionCopyPipelineCache). Words outside every range keep what earlier
+// brick pool. One pipeline serves a device (GpuRegionCopyPass). Words outside every range keep what earlier
 // copies wrote. Bit-exact: uints move as uints, whatever the block stores in them.
 //
 // Source layout: a four-uint header (count, runCount, blockBase, destinationBase), then runCount (block offset, first

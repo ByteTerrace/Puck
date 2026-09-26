@@ -243,7 +243,7 @@ public sealed class WorldPresentationManifestLawTests {
         );
 
         // Registering each binding finds its slot rather than allocating one.
-        var slots = ExpectedBindings.Select(selector: entry => mirror.Register(
+        var slots = ExpectedBindings.Select(selector: entry => mirror.SlotOf(
             binding: entry.Binding,
             conversion: entry.Conversion
         )).ToArray();
@@ -265,7 +265,7 @@ public sealed class WorldPresentationManifestLawTests {
             expected: ExpectedBindings.Length
         );
         Assert.Equal(
-            actual: ExpectedBindings.Select(selector: entry => mirror.Register(
+            actual: ExpectedBindings.Select(selector: entry => mirror.SlotOf(
                 binding: entry.Binding,
                 conversion: entry.Conversion
             )).ToArray(),
@@ -308,7 +308,7 @@ public sealed class WorldPresentationManifestLawTests {
             tick: 0UL
         );
 
-        var slot = mirror.Register(
+        var slot = mirror.SlotOf(
             binding: new StateBinding(
                 Key: null,
                 Row: "clock",

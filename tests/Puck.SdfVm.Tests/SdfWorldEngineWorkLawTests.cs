@@ -355,7 +355,7 @@ public sealed class SdfWorldEngineWorkLawTests {
                     WorkLedger: owned
                 ),
                 pipelines: Pipelines,
-                regionCopy: RegionCopy,
+                regionCopy: RegionCopy.Compute!,
                 width: Extent
             );
             // Side by side: each view takes an equal column of the extent.
@@ -387,7 +387,7 @@ public sealed class SdfWorldEngineWorkLawTests {
         public SdfFrame Frame { get; }
         public FakeGpuDevice Gpu { get; }
         public SdfWorldPipelines Pipelines { get; }
-        public GpuRegionCopyPipeline RegionCopy { get; }
+        public GpuPassPipeline RegionCopy { get; }
 
         public void Dispose() {
             Engine.Dispose();

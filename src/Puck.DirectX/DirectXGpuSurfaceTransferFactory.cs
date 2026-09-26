@@ -315,13 +315,15 @@ file sealed class DirectXGpuSurfaceUpload(DirectXSurfaceUpload upload) : IGpuSur
         ReadOnlyMemory<byte> pixels,
         GpuPixelFormat format,
         uint width,
-        uint height
+        uint height,
+        uint levels = 1U
     ) {
         upload.Upload(
-            pixels: pixels.Span,
-            width: width,
+            format: format,
             height: height,
-            format: format
+            levels: levels,
+            pixels: pixels.Span,
+            width: width
         );
 
         if (m_currentToken.IsAllocated) {

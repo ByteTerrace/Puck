@@ -1375,7 +1375,8 @@ public static class QueuedHostContractProbe {
             ReadOnlyMemory<byte> pixels,
             GpuPixelFormat format,
             uint width,
-            uint height
+            uint height,
+            uint levels = 1U
         ) {
             var call = Interlocked.Increment(location: ref m_callCount);
             var active = Interlocked.Increment(location: ref m_activeCalls);

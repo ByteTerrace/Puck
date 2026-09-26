@@ -207,6 +207,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private static RenderGraphRuntime Runtime(IGpuDeviceContext gpu, Recorders recorders, RenderGraphInstanceSet set, string root, params RenderGraphRuntimeGraph[] graphs) {
         Assert.True(
             condition: RenderGraphRuntime.TryCreate(
+                pipelines: new GpuPassPipelineCache(),
                 deviceContext: gpu,
                 graphs: graphs,
                 hostsOnDirectX: false,
@@ -246,7 +247,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public Dictionary<string, Counter> ByInstance { get; } = new(comparer: StringComparer.Ordinal);
         // A fake's default profile stages a host buffer port's region, which copies through this kernel's pipeline, the
         // one UploadModelGpu runs.
-        public RenderGraphPackageRecorders Registry { get; } = new(regionCopy: new GpuRegionCopyPipelineCache(kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }));
+        public RenderGraphPackageRecorders Registry { get; } = new(regionCopy: new GpuRegionCopyPass(pipelines: new GpuPassPipelineCache(), kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }));
 
         public Counter Of(string instance) => (ByInstance.TryGetValue(
             key: instance,

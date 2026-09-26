@@ -97,7 +97,7 @@ public sealed class WorldStateMirrorLawTests {
         var slots = new int[BoundRows];
 
         for (var index = 0; (index < BoundRows); index++) {
-            slots[index] = mirror.Register(
+            slots[index] = mirror.Bind(
                 binding: new StateBinding(
                 Key: null,
                 Row: $"row{index}",
@@ -155,7 +155,7 @@ public sealed class WorldStateMirrorLawTests {
     public void AnEasingSlotKeepsRefreshingAfterItsRowStopsMoving_AndStopsOnceItsFollowerRests() {
         var definition = Easing();
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
-        var slot = mirror.Register(
+        var slot = mirror.Bind(
             binding: new StateBinding(
             Key: null,
             Row: "gauge",
@@ -226,7 +226,7 @@ public sealed class WorldStateMirrorLawTests {
     public void TheEasedAndTargetFormsOfADynamicsRowDifferMidFollower_AndAgreeAtRest() {
         var definition = Easing();
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
-        var eased = mirror.Register(
+        var eased = mirror.Bind(
             binding: new StateBinding(
             Key: null,
             Row: "gauge",
@@ -234,7 +234,7 @@ public sealed class WorldStateMirrorLawTests {
         ),
             conversion: WorldStateConversion.Number
         );
-        var target = mirror.RegisterToken(
+        var target = mirror.Bind(
             conversion: WorldStateConversion.Number,
             token: "state.gauge.$target"
         );
@@ -319,6 +319,11 @@ public sealed class WorldStateMirrorLawTests {
             engineTick: 0UL,
             tick: 0UL
         );
+        // The program is not the document's, so its operand is registered as the document's manifest would register it.
+        _ = mirror.Bind(
+            conversion: WorldStateConversion.Number,
+            token: "state.heading"
+        );
 
         var (atRest, _, _) = rig.Resolve(
             anchor: in anchor,
@@ -348,7 +353,7 @@ public sealed class WorldStateMirrorLawTests {
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
 
         for (var index = 0; (index < BoundRows); index++) {
-            _ = mirror.Register(
+            _ = mirror.Bind(
                 binding: new StateBinding(
                 Key: null,
                 Row: $"row{index}",

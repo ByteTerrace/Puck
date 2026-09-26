@@ -13,14 +13,14 @@ namespace Puck.SdfVm;
 // builds its engines here (TryBuild), which refuses a failed build by name instead of throwing it, and tries it again only
 // when an input it was built from changes.
 //
-// The holder also leases its device's region-copy pipeline from the cache's GpuRegionCopyPipelineCache in the same
-// background acquire, and the set is ready only once that pipeline is too: an engine records its table upload and mesh
+// The holder also leases its device's region-copy pipeline from the cache's GpuRegionCopyPass in the same background
+// acquire, and the set is ready only once that pipeline is too: an engine records its table upload and mesh
 // region with it.
 internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     private readonly BackgroundBuild<Leases> m_acquire = new();
 
-    private SdfWorldPipelineLease? m_lease;
-    private GpuRegionCopyPipelineLease? m_regionCopy;
+    private GpuBuildLease<SdfWorldPipelineKey, SdfWorldPipelines>? m_lease;
+    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_regionCopy;
     // The latest refused engine build and what it was built from, until a build succeeds or the lease is released.
     private Exception? m_refusal;
     private long m_refusedHeapRevision;
@@ -30,7 +30,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
     // The ready set, or null before the lease's set has built.
     public SdfWorldPipelines? Current => m_lease?.Current;
     // The device's ready region-copy pipeline, or null before it has built.
-    public GpuRegionCopyPipeline? RegionCopy => m_regionCopy?.Current;
+    public IGpuComputePipeline? RegionCopy => m_regionCopy?.Current?.Compute;
 
     // Returns the ready set once the region-copy pipeline is ready too; the first call starts taking both leases and
     // every call until both have built returns null. A lease or build that failed rethrows its exception here, on the
@@ -76,7 +76,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
             ? " or another owner returns descriptor heap space"
             : string.Empty)}: {refusal.Message}"
         : ((m_lease is { } lease)
-            ? $"the engine's pipeline set is {lease.Progress.Describe()}"
+            ? $"the engine's pipeline set is {lease.Key.Progress.Describe()}"
             : (m_acquire.IsPending
                 ? "the engine's pipeline set is queued behind loading its kernels"
                 : "the engine's pipeline set has not been requested: no frame has been produced"
@@ -199,7 +199,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
         (m_lease?.TryMakePrivate() ?? false);
 
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
-    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfWorldKernels? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuRegionCopyPipeline? RegionCopy, SdfWorldPipelines? Set, SdfWorldKernels? SetKernels);
+    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfWorldKernels? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, SdfWorldKernels? SetKernels);
 
     // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. A region-copy
     // acquire that throws releases the set's lease it took first.
@@ -223,7 +223,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCache cache) {
         });
 
     // The two leases one background acquire takes.
-    private sealed record Leases(SdfWorldPipelineLease Set, GpuRegionCopyPipelineLease RegionCopy) {
+    private sealed record Leases(GpuBuildLease<SdfWorldPipelineKey, SdfWorldPipelines> Set, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> RegionCopy) {
         public void Release() {
             Set.Release();
             RegionCopy.Release();

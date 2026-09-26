@@ -6,12 +6,12 @@ namespace Puck.Vulkan;
 
 /// <summary>
 /// Materializes CPU pixels onto a Vulkan device so a host can sample them like any other
-/// image. It owns a host-visible staging buffer, a sampled image, and that image's view on the device of its first
-/// upload, and rebuilds them when the extent or format changes. It never moves to another device: its owner releases
-/// it before that device goes, a device loss included, and creates a new one on the replacement, so an upload handed a
-/// different device refuses it. Each <see cref="Upload"/> writes the pixels
-/// into the staging buffer, copies them into the image, leaves it shader-readable, and returns the image-view
-/// handle. This is the generic counterpart to <see cref="VulkanGpuImage"/> for surfaces that crossed a
+/// image. It owns a host-visible staging buffer, a sampled image, and that image's view over every level on the device
+/// of its first upload, and rebuilds them when the extent, format or level count changes. It never moves to another
+/// device: its owner releases it before that device goes, a device loss included, and creates a new one on the
+/// replacement, so an upload handed a different device refuses it. Each <see cref="Upload"/> writes the levels
+/// into the staging buffer, copies each into its level of the image, leaves the image shader-readable, and returns the
+/// image-view handle. This is the generic counterpart to <see cref="VulkanGpuImage"/> for surfaces that crossed a
 /// device boundary as host memory — the consumer half of the CPU-pixel transport, reusable by any Vulkan host.
 /// <para>
 /// With a <c>frameSynchronizationApi</c> supplied, <see cref="Upload"/> is PIPELINED: it waits only for its own
@@ -34,10 +34,11 @@ public sealed class VulkanSurfaceUpload : IDisposable {
     private VulkanLogicalDevice? m_device;
     private bool m_disposed;
     private nint m_fence;
-    private uint m_format;
+    private GpuPixelFormat m_format;
     private uint m_height;
     private nint m_imageHandle;
     private nint m_imageViewHandle;
+    private uint m_levels;
     private nint m_memoryHandle;
     private VulkanBuffer? m_stagingBuffer;
     private bool m_uploadPending;
@@ -115,7 +116,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_imageHandle = 0;
         m_memoryHandle = 0;
     }
-    private void EnsureResources(uint width, uint height, uint vulkanFormat) {
+    private void EnsureResources(uint width, uint height, GpuPixelFormat format, uint levels, ulong stagingBytes) {
         var device = m_deviceContext.LogicalDevice;
 
         VulkanDeviceOwnership.ThrowIfOtherDevice(
@@ -125,13 +126,23 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         );
 
         if (
+            GpuPixelFormats.IsBlockCompressed(format: format) &&
+            !device.SamplesBlockCompression
+        ) {
+            throw new NotSupportedException(message: $"The Vulkan device cannot sample {format} images: it was created without textureCompressionBC.");
+        }
+
+        if (
             (0 != m_imageViewHandle) &&
             (m_width == width) &&
             (m_height == height) &&
-            (m_format == vulkanFormat)
+            (m_format == format) &&
+            (m_levels == levels)
         ) {
             return;
         }
+
+        var vulkanFormat = VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format);
 
         // A resize or format change destroys the image and view that in-flight GPU work — the SDF views kernel's
         // screen sampler, the presenter blit — may still be reading. WaitForPendingUpload (inside DisposeResources)
@@ -151,6 +162,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
                 Format: vulkanFormat,
                 Height: height,
                 Instance: m_deviceContext.Instance.Commands,
+                MipLevels: levels,
                 PhysicalDeviceHandle: device.PhysicalDevice.Handle,
                 UsageFlags: VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferDestination,
                 Width: width
@@ -164,7 +176,8 @@ public sealed class VulkanSurfaceUpload : IDisposable {
                 request: new VulkanImageViewCreateRequest(
                     Device: device.Commands,
                     Format: vulkanFormat,
-                    ImageHandle: m_imageHandle
+                    ImageHandle: m_imageHandle,
+                    LevelCount: levels
                 )
             ).ThrowIfFailed(operation: "vkCreateImageView");
             m_imageViewHandle = imageViewHandle;
@@ -177,10 +190,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
                 bufferApi: m_bufferApi,
                 device: m_deviceContext,
                 memory: VulkanBufferMemory.HostCoherent,
-                sizeBytes: checked((ulong)Surface.RequiredByteLength(
-                    height: height,
-                    width: width
-                )),
+                sizeBytes: stagingBytes,
                 usage: VulkanBufferUsageFlags.Storage
             );
 
@@ -201,8 +211,9 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             throw;
         }
 
-        m_format = vulkanFormat;
+        m_format = format;
         m_height = height;
+        m_levels = levels;
         m_width = width;
     }
     // Drains the pipelined path's outstanding copy (fence wait + reset); a no-op when none is outstanding. A lost
@@ -249,39 +260,42 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         DisposeResources();
         m_disposed = true;
     }
-    /// <summary>Uploads a CPU-pixel surface and returns the handle of a shader-readable image view over it.</summary>
-    /// <param name="pixels">The CPU-pixel data to upload; it must be tightly packed.</param>
-    /// <param name="width">The width of the image.</param>
-    /// <param name="height">The height of the image.</param>
-    /// <param name="vulkanFormat">The Vulkan format of the image.</param>
+    /// <summary>Uploads an image's levels and returns the handle of a shader-readable image view over every one of
+    /// them.</summary>
+    /// <param name="pixels">The image's levels from level 0, tightly packed and back to back
+    /// (<see cref="GpuPixelFormats.ChainByteLength"/>).</param>
+    /// <param name="format">The pixel format.</param>
+    /// <param name="width">The width of level 0, in texels.</param>
+    /// <param name="height">The height of level 0, in texels.</param>
+    /// <param name="levels">The number of mip levels <paramref name="pixels"/> holds.</param>
     /// <returns>The native <c>VkImageView</c> handle to sample the uploaded image through.</returns>
-    /// <exception cref="ArgumentException"><paramref name="pixels"/> is empty, or a dimension is zero.</exception>
+    /// <exception cref="ArgumentException"><paramref name="pixels"/> is not exactly the chain's length.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension or the level count is zero, or the level count
+    /// exceeds the extent's full chain.</exception>
+    /// <exception cref="NotSupportedException"><paramref name="format"/> is block-compressed and the device was created
+    /// without <c>textureCompressionBC</c>.</exception>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The context's device is not the one an earlier upload created this
     /// instance's resources on.</exception>
-    public nint Upload(ReadOnlyMemory<byte> pixels, uint width, uint height, uint vulkanFormat) {
+    public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height, uint levels = 1U) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
 
-        ArgumentOutOfRangeException.ThrowIfZero(value: width);
-        ArgumentOutOfRangeException.ThrowIfZero(value: height);
-        var requiredByteLength = Surface.RequiredByteLength(
+        var chainBytes = GpuPixelFormats.RequireChain(
+            byteLength: pixels.Length,
+            format: format,
             height: height,
+            levels: levels,
             width: width
         );
 
-        if (pixels.Length != requiredByteLength) {
-            throw new ArgumentException(
-                message: $"The upload requires exactly {requiredByteLength} tightly packed bytes for its declared extent.",
-                paramName: nameof(pixels)
-            );
-        }
-
         EnsureResources(
+            format: format,
             height: height,
-            vulkanFormat: vulkanFormat,
+            levels: levels,
+            stagingBytes: chainBytes,
             width: width
         );
 
@@ -311,23 +325,41 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             destinationStageMask: VulkanPipelineStageFlags.Transfer,
             device: device.Commands,
             imageHandle: m_imageHandle,
-            mipLevelCount: 1,
+            mipLevelCount: m_levels,
             newLayout: VulkanImageLayout.TransferDestinationOptimal,
             oldLayout: VulkanImageLayout.Undefined,
             sourceAccessMask: 0,
             sourceStageMask: VulkanPipelineStageFlags.ComputeShader | VulkanPipelineStageFlags.FragmentShader
         );
-        m_commandBufferRecordingApi.CopyBufferToImage(
-            bufferHandle: m_stagingBuffer.BufferHandle,
-            commandBufferHandle: commandBufferHandle,
-            device: device.Commands,
-            height: m_height,
-            imageHandle: m_imageHandle,
-            imageLayout: VulkanImageLayout.TransferDestinationOptimal,
-            imageOffsetX: 0,
-            imageOffsetY: 0,
-            width: m_width
-        );
+
+        var bufferOffset = 0UL;
+
+        for (var level = 0U; (level < m_levels); level++) {
+            var (levelWidth, levelHeight) = GpuPixelFormats.LevelExtent(
+                height: m_height,
+                level: level,
+                width: m_width
+            );
+
+            m_commandBufferRecordingApi.CopyBufferToImage(
+                bufferHandle: m_stagingBuffer.BufferHandle,
+                bufferOffset: bufferOffset,
+                commandBufferHandle: commandBufferHandle,
+                device: device.Commands,
+                height: levelHeight,
+                imageHandle: m_imageHandle,
+                imageLayout: VulkanImageLayout.TransferDestinationOptimal,
+                imageOffsetX: 0,
+                imageOffsetY: 0,
+                mipLevel: level,
+                width: levelWidth
+            );
+            bufferOffset += GpuPixelFormats.LevelByteLength(
+                format: m_format,
+                height: levelHeight,
+                width: levelWidth
+            );
+        }
         // Visible to BOTH consumer stages — a compute sampler (the SDF views kernel's screen sources) and a
         // fragment sampler (the presenter blit path).
         m_commandBufferRecordingApi.TransitionImageLayout(
@@ -338,7 +370,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             destinationStageMask: VulkanPipelineStageFlags.ComputeShader | VulkanPipelineStageFlags.FragmentShader,
             device: device.Commands,
             imageHandle: m_imageHandle,
-            mipLevelCount: 1,
+            mipLevelCount: m_levels,
             newLayout: VulkanImageLayout.ShaderReadOnlyOptimal,
             oldLayout: VulkanImageLayout.TransferDestinationOptimal,
             sourceAccessMask: VulkanAccessFlags.TransferWrite,

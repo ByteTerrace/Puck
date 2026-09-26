@@ -322,6 +322,20 @@ its material texels still name the slot. How bakes are keyed, shipped in a
 build's bake pack, and baked on a device is in
 [creation bakes](../../../architecture/worlds.md#creation-bakes).
 
+Both backends upload a bake's textures as they are stored. `GpuPixelFormat`
+names BC4, BC5, BC6H (unsigned) and BC7, and the one image upload,
+`IGpuSurfaceUpload.Upload`, takes a whole mip chain: every level, largest first,
+tightly packed and back to back, rows of 4x4 blocks for a compressed format
+(`GpuPixelFormats.ChainByteLength`). The view it returns covers every level, and
+the samplers `IGpuBindings.CreateSampler` makes select levels by point and clamp
+no level away, so an explicit level reaches the level asked for on both
+backends. A device that cannot sample a compressed format refuses the upload by
+name: a Vulkan device created without `textureCompressionBC`, and a Direct3D 12
+device whose format support lacks two-dimensional sampling. BC7 albedo is
+sampled as stored codes, without sRGB decode. `BakeSamplingDeviceLawTests`
+samples each probe texel of the bake sampling fixture on Vulkan, Direct3D 12
+hardware and WARP and holds it to the CPU decoder. Nothing draws a bake yet.
+
 ---
 
 ## Related resources

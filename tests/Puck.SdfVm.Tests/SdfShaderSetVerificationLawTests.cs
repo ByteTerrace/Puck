@@ -88,7 +88,7 @@ public sealed class SdfShaderSetVerificationLawTests {
                 WorkLedger: ledger
             ),
             pipelines: pipelines,
-            regionCopy: regionCopy,
+            regionCopy: regionCopy.Compute!,
             width: Extent
         );
 

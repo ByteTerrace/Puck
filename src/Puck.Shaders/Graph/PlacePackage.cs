@@ -39,8 +39,8 @@ public interface IRenderGraphPlacements {
 /// block without rebinding anything, and one that shows the source nowhere this frame has the pass draw nothing, so the
 /// output stands for the base; when the pass may not stand in, it copies the base everywhere. A letterboxing pass whose
 /// source is not shown writes the letterbox color everywhere instead when the host says part of the output is
-/// uncovered (<see cref="RenderGraphPlacement.Uncovered"/>). Its build creates the shader module and the compute
-/// pipeline on the thread pool; its recorder allocates its sets from the instance's pool and one sampler, which the kernel never reads through but its interface binds. Its
+/// uncovered (<see cref="RenderGraphPlacement.Uncovered"/>). Its build leases the compute pipeline, one for every place
+/// pass on the device, from the pass-pipeline cache on the thread pool; its recorder allocates its sets from the instance's pool and one sampler, which the kernel never reads through but its interface binds. Its
 /// ports are compute reads and a compute write, so the node's planned barriers leave the inputs shader-readable and the
 /// output in the storage layout; it records no barrier.</para>
 /// </summary>
@@ -90,17 +90,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 ? ".dxil"
                 : ".spv"))
         ));
-        var built = new Built();
-
-        try {
-            cancellationToken.ThrowIfCancellationRequested();
-            built.Module = context.Services.ShaderModuleFactory.Create(
+        var lease = context.Pipelines.Acquire(
+            device: context.Device,
+            key: GpuPassPipelineKey.OfCompute(
                 bytecode: bytecode,
-                stage: GpuShaderStage.Compute
-            );
-            cancellationToken.ThrowIfCancellationRequested();
-            built.Pipeline = context.Services.PipelineFactory.Create(
-                computeShaderModule: built.Module,
                 description: new GpuComputePipelineDescription(
                     Bindings: [],
                     Layout: context.Parameters.Layout.PipelineLayout(
@@ -108,19 +101,19 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                     ),
                     Name: RenderGraphPackageCatalog.Place,
                     PushConstantBinding: null
-                ),
-                name: new GpuObjectName(
-                    owner: context.Instance,
-                    part: context.Pass
                 )
-            );
+            )
+        );
+
+        try {
+            _ = lease.Wait(cancellationToken: cancellationToken);
         } catch {
-            built.Dispose();
+            lease.Release();
 
             throw;
         }
 
-        return built;
+        return new Built(lease: lease);
     }
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
@@ -148,17 +141,12 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         );
     }
 
-    // The module and pipeline one pass's build creates, which its recorder owns once created.
-    private sealed class Built : IDisposable {
-        public IGpuShaderModule? Module;
-        public IGpuComputePipeline? Pipeline;
+    // One pass's lease on its pipeline, which its recorder owns once created.
+    private sealed class Built(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) : IDisposable {
+        public IGpuComputePipeline Pipeline { get; } = lease.Current!.Compute!;
 
-        public void Dispose() {
-            Pipeline?.Dispose();
-            Pipeline = null;
-            Module?.Dispose();
-            Module = null;
-        }
+        public void Dispose() =>
+            lease.Release();
     }
     // Records one place pass. Everything a frame slot binds is per slot, since the instance waits only that slot's
     // previous submission before recording into it.
@@ -194,7 +182,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 m_sharpnessOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceSharpness));
                 m_sets = new RenderGraphPackageSets(
                     context: context,
-                    groupLayoutHandles: built.Pipeline!.GroupLayoutHandles,
+                    groupLayoutHandles: built.Pipeline.GroupLayoutHandles,
                     groups: groups
                 );
                 m_base = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceBase);
@@ -284,7 +272,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
 
             var command = recording.CommandBuffer;
             var recorder = recording.Recorder;
-            var pipeline = m_built.Pipeline!;
+            var pipeline = m_built.Pipeline;
             var set = m_sets.PassSet(slot: recording.Slot);
 
             m_services.Bindings.WriteStorageImage(

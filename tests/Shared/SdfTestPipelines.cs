@@ -22,13 +22,16 @@ internal static class SdfTestPipelines {
     // A composition's pipeline cache whose region-copy pipelines are created from a one-byte kernel of the caller's
     // choosing (UploadModelGpu.RegionCopyBytecode for a GPU that runs the copies).
     public static SdfWorldPipelineCache Cache(byte regionCopy = 1) =>
-        new(regionCopy: new GpuRegionCopyPipelineCache(kernel: new byte[] { regionCopy }));
+        new(regionCopy: new GpuRegionCopyPass(
+            kernel: new byte[] { regionCopy },
+            pipelines: new GpuPassPipelineCache()
+        ));
     // Builds a region-copy pipeline on the calling thread for an engine a harness drives directly, counting into the
-    // ledger the engine will count into.
-    public static GpuRegionCopyPipeline RegionCopy(IGpuDeviceContext device, GpuWorkLedger ledger, byte kernel = 1) =>
-        GpuRegionCopyPipelineCache.Build(
+    // ledger the engine will count into; the engine records with its Compute.
+    public static GpuPassPipeline RegionCopy(IGpuDeviceContext device, GpuWorkLedger ledger, byte kernel = 1) =>
+        GpuPassPipelineCache.Build(
             device: device,
-            kernel: new byte[] { kernel },
+            key: GpuRegionCopyPass.KeyOf(kernel: new byte[] { kernel }),
             ledger: ledger
         );
     // A kernel set whose every kernel is one byte, the beam's chosen by the caller so two sets can differ by one kernel,

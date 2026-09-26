@@ -32,7 +32,7 @@ namespace Puck.Abstractions.Gpu;
 /// <c>i</c>, takes <c>word</c> as that run's block offset plus <c>i</c> minus its first thread, and copies
 /// <c>destination[destinationBase + word] = source[blockBase + word]</c>. That kernel is <c>Puck.Shaders</c>'
 /// <c>region-copy.comp</c>, created from <see cref="CopyPipeline"/> once per device and leased by every owner
-/// (<c>GpuRegionCopyPipelineCache</c>). Its copy sets are its share of a <see cref="GpuRegionCopyPool"/>: one the region
+/// (<c>GpuRegionCopyPass</c>, an entry of the pass-pipeline cache). Its copy sets are its share of a <see cref="GpuRegionCopyPool"/>: one the region
 /// creates for itself alone, or its owner's, reserved for all its regions when the owner was admitted, so a region the
 /// owner creates at a later frame takes no descriptor range.
 /// </para>

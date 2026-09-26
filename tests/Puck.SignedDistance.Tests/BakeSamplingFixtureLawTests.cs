@@ -16,7 +16,7 @@ namespace Puck.SignedDistance.Tests;
 /// <para>These laws hold the fixture to a fresh bake, byte for byte, and each probe to the decoder, so the fixture is a
 /// real bake of the current baker and its expectations are the oracle's. When the baker moves, the first law writes the
 /// regenerated fixture to the temporary directory and names it.</para>
-/// <para>The device half uploads each texture as an image of its format (<c>BC7_UNORM</c> sampled without sRGB decode,
+/// <para>The device half (<c>BakeSamplingDeviceLawTests</c> in <c>tests/Puck.World.Tests</c>) uploads each texture as an image of its format (<c>BC7_UNORM</c> sampled without sRGB decode,
 /// <c>BC5_UNORM</c>, <c>BC6H_UFLOAT</c>) with every level, samples each probe's texel center at its level through a
 /// point sampler (<c>SampleLevel</c>), and compares on both backends: BC7 within half a code of the expected code over
 /// 255, BC5 within one code (a device interpolates BC4 in float), and BC6H exactly the expected half.</para>

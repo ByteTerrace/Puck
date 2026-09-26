@@ -131,6 +131,9 @@ public readonly record struct RenderGraphPackageRegion(string Name, int ByteCoun
 /// <param name="Package">The package id the pass names.</param>
 /// <param name="Device">The device the instance records on.</param>
 /// <param name="Services">The instance's services, which count what they create under the instance.</param>
+/// <param name="Pipelines">The composition's pass pipelines, which a package leases every pipeline it records with from,
+/// so the same pass in two instances or two installs is one pipeline, counted under the cache rather than the
+/// instance.</param>
 /// <param name="HostsOnDirectX">Whether the device is Direct3D 12.</param>
 /// <param name="InFlightFrames">The instance's frames in flight, the range of <see cref="RenderGraphPackageRecording.Slot"/>.</param>
 /// <param name="Width">The pass's extent width, in pixels, at which its graph installs.</param>
@@ -141,7 +144,7 @@ public readonly record struct RenderGraphPackageRegion(string Name, int ByteCoun
 /// set 3, whose block holds the extent, the package's config and the values it declares, followed by its declared
 /// resources. A recorder creates its pipeline through its <see cref="ShaderInterfaceLayout.PipelineLayout"/> and reads
 /// its values' offsets and its resources' bindings from it.</param>
-public sealed record RenderGraphPackageRecorderContext(string Instance, string Pass, string Package, IGpuDeviceContext Device, GpuDeviceServices Services, bool HostsOnDirectX, int InFlightFrames, uint Width, uint Height, IReadOnlyList<ShaderPipelineResource> Inputs, IReadOnlyList<ShaderPipelineResource> Outputs, ShaderPipelineParameterLayout Parameters);
+public sealed record RenderGraphPackageRecorderContext(string Instance, string Pass, string Package, IGpuDeviceContext Device, GpuDeviceServices Services, GpuPassPipelineCache Pipelines, bool HostsOnDirectX, int InFlightFrames, uint Width, uint Height, IReadOnlyList<ShaderPipelineResource> Inputs, IReadOnlyList<ShaderPipelineResource> Outputs, ShaderPipelineParameterLayout Parameters);
 /// <summary>What an external producer is created for: one external instance, on one device.</summary>
 /// <param name="Instance">The instance's name.</param>
 /// <param name="Package">The package id the instance names.</param>
@@ -159,13 +162,13 @@ public sealed record RenderGraphExternalProducerContext(string Instance, string 
 /// <param name="regionCopy">The device's region-copy pipelines, which an instance leases when a region it records selects
 /// the staged policy, or <see langword="null"/> for a host whose regions never stage; an instance refuses a staged
 /// region by name then.</param>
-public sealed class RenderGraphPackageRecorders(GpuRegionCopyPipelineCache? regionCopy = null) {
+public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = null) {
     private readonly Dictionary<string, IRenderGraphPackageFactory> m_factories = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphExternalProducer>> m_producers = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, Func<RenderGraphExternalProducerContext, IRenderGraphSourceUpload>> m_sources = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Gets the device's region-copy pipelines the host offers, or <see langword="null"/> for none.</summary>
-    public GpuRegionCopyPipelineCache? RegionCopy { get; } = regionCopy;
+    public GpuRegionCopyPass? RegionCopy { get; } = regionCopy;
 
     /// <summary>Gets the package ids a recorder serves, in ordinal order.</summary>
     public IReadOnlyList<string> Ids => [.. m_factories.Keys.Order(comparer: StringComparer.Ordinal)];

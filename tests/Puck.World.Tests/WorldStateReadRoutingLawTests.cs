@@ -230,7 +230,7 @@ public sealed class WorldStateReadRoutingLawTests {
         );
 
         Assert.Equal(
-            actual: mirror.Register(
+            actual: mirror.Bind(
                 binding: in binding,
                 conversion: WorldStateConversion.Number
             ),
@@ -488,6 +488,18 @@ public sealed class WorldStateReadRoutingLawTests {
             )],
             Version: WorldCameraProgram.CurrentVersion
         );
+
+        // The program is no document's, so both mirrors register its operand as a document's manifest would.
+        var slot = routed.Bind(
+            conversion: WorldStateConversion.Number,
+            token: "state.heading"
+        );
+
+        _ = client.StateMirror.Bind(
+            conversion: WorldStateConversion.Number,
+            token: "state.heading"
+        );
+
         var anchor = new SdfAnchor(
             Orientation: Quaternion.Identity,
             Position: Vector3.Zero
@@ -520,10 +532,6 @@ public sealed class WorldStateReadRoutingLawTests {
         );
 
         // A later delivery from the remote authority moves the routed read, and only through the remote stamp.
-        var slot = routed.RegisterToken(
-            conversion: WorldStateConversion.Number,
-            token: "state.heading"
-        );
 
         Assert.True(condition: routed.TryNumber(
             slot: slot,
@@ -587,7 +595,7 @@ public sealed class WorldStateReadRoutingLawTests {
         var slots = new int[rows.Length];
 
         for (var index = 0; (index < rows.Length); index++) {
-            slots[index] = state.Register(
+            slots[index] = state.Bind(
                 binding: new StateBinding(
                     Key: null,
                     Row: $"row{index}",
@@ -677,7 +685,7 @@ public sealed class WorldStateReadRoutingLawTests {
 
         var state = session.FollowState();
 
-        _ = state.RegisterToken(
+        _ = state.Bind(
             conversion: WorldStateConversion.Number,
             token: "state.gauge"
         );
