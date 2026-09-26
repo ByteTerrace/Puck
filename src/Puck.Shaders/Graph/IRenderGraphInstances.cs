@@ -7,6 +7,11 @@ namespace Puck.Shaders;
 /// compiled graph on one instance, and reading the node an instance renders through. <see cref="RenderGraphRuntime"/>
 /// implements it; a host that owns a world's rows drives it without a device.</summary>
 public interface IRenderGraphInstances {
+    /// <summary>Gets the instance set the runtime schedules, which a hit walk continues through.</summary>
+    RenderGraphInstanceSet Instances { get; }
+    /// <summary>Gets the latest frame's schedule, whose rows state the extent each instance renders at, or
+    /// <see langword="null"/> before the first frame the current set scheduled.</summary>
+    RenderGraphSchedule? Latest { get; }
     /// <summary>Gets the name of the instance the display shows and captures read.</summary>
     string Root { get; }
 

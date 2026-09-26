@@ -2,7 +2,6 @@ using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
-using Puck.Commands;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.Overlays;
@@ -933,11 +932,18 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // Updates a pipeline instance's pointer state for this frame, in the slot's OWN pixel space (origin top-left, y
     // down): the pointer's CLIENT position maps to FRAME pixels by the same per-axis frame/client scale
     // WorldCursorFeed.Decide applies (the presenters stretch the produced frame over the whole back buffer), then into
-    // the instance's pixels through its pane's published SourceMapping, which reports a point off the pane too, so a drag
-    // that leaves it keeps tracking. The position moves only while the pointer is pressed. No pointer feed (an offscreen
-    // boot), no reported position yet, or a pane with no area leaves the state untouched.
-    private void UpdatePipelinePointer(WorldViewGraphHost.Entry entry, string name, NormalizedRect region, uint width, uint height) {
-        if (m_graphs?.ReadPointer is not { } readPointer) {
+    // the instance's pixels through the mapping its pane last published (WorldViewGraphHost.PublishPanes), the pane as the
+    // display last showed it, which reports a point off the pane too, so a drag that leaves it keeps tracking. The
+    // position moves only while the pointer is pressed. No pointer feed (an offscreen boot), no reported position yet, or
+    // a pane that published no mapping leaves the state untouched.
+    private void UpdatePipelinePointer(WorldViewGraphHost.Entry entry, string name, uint width, uint height) {
+        if (
+            (m_graphs is not { ReadPointer: { } readPointer } graphs) ||
+            !graphs.TryGetPane(
+                instance: name,
+                mapping: out var pane
+            )
+        ) {
             return;
         }
 
@@ -959,37 +965,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 x: (sample.ClientPosition.X * (width / ((float)clientWidth))),
                 y: (sample.ClientPosition.Y * (height / ((float)clientHeight)))
             );
-        }
-
-        // The instance renders at the extent its slot's footprint gives it.
-        var sourceWidth = Math.Max(
-            val1: 1,
-            val2: ((int)(region.Width * width))
-        );
-        var sourceHeight = Math.Max(
-            val1: 1,
-            val2: ((int)(region.Height * height))
-        );
-
-        if (
-            (entry.Pane is not { Placement: SourcePlacement.Pane { Region: var shown } } pane) ||
-            (shown != region) ||
-            (pane.SourceWidth != sourceWidth) ||
-            (pane.SourceHeight != sourceHeight)
-        ) {
-            pane = SourceMapping.WholePane(
-                height: sourceHeight,
-                region: region,
-                source: SourceHandle.Instance(name: name),
-                width: sourceWidth
-            );
-
-            // A pane with no area mid-transition maps no point.
-            if (!pane.TryValidate(refusal: out _)) {
-                return;
-            }
-
-            entry.Pane = pane;
         }
 
         var coordinate = pane.MapDisplayPoint(
@@ -1156,8 +1131,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <c>views.graphs</c> rows onto the runtime, then places each view of the world the last composed frame rendered
     /// in its rect at its render scale and the live upscale sharpness, and, for each graph instance a slot of the last
     /// composed layout shows, places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer
-    /// and time. A lone view covering the whole display at native scale is not shown: the root then stands for the world
-    /// itself. The views and slots are the ones the last captured frame composed, since the world producer captures its
+    /// and time, and then publishes the mapping of every pane the root draws (<see cref="WorldViewGraphHost.PublishPanes"/>),
+    /// which the pane pointer, the picker and the hit walk read. A lone view covering the whole display at native scale
+    /// is not shown: the root then stands for the world itself. The views and slots are the ones the last captured frame composed, since the world producer captures its
     /// frame inside the runtime's schedule, so a layout change places its views and panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) {
@@ -1223,13 +1199,16 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 cameraTarget = (camera.Position + camera.Forward);
                 cameraUp = camera.Up;
                 cameraFov = (2f * MathF.Atan(x: camera.TanHalfFieldOfView));
+                graphs.SetCamera(
+                    camera: in camera,
+                    instance: name
+                );
             }
 
             UpdatePipelinePointer(
                 entry: entry,
                 height: height,
                 name: name,
-                region: region,
                 width: width
             );
             entry.Node.Frame = new ShaderFrameValues(
@@ -1244,6 +1223,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 TimeDelta: instanceDeltaSeconds
             );
         }
+
+        graphs.PublishPanes(
+            displayHeight: height,
+            displayWidth: width
+        );
     }
     /// <inheritdoc/>
     public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);

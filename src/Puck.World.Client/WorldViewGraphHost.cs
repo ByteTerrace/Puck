@@ -13,7 +13,8 @@ namespace Puck.World.Client;
 public readonly record struct WorldPipelinePointerSample(Vector2 ClientPosition, bool HasPosition, bool Pressed);
 /// <summary>Hosts a world's <c>views.graphs</c> rows on its render-graph runtime: it composes the runtime's instance set
 /// from the rows and the default graph it synthesizes, compiles each row's source in the background and installs the
-/// graph on the row's instance, and places the panes a layout shows. Clocks and history are presentation state.</summary>
+/// graph on the row's instance, places the panes a layout shows and publishes their mappings. Clocks and history are
+/// presentation state.</summary>
 public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDisposable {
     /// <summary>Gets the directory against which authored graph source paths resolve — the same directory the
     /// server's override gate resolves <c>views.graphs</c> rows against. See <see cref="Rebase"/>.</summary>
@@ -72,9 +73,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         public bool PointerWasDown { get; set; }
         /// <summary>How many presses the pointer has made over the instance.</summary>
         public uint PointerPresses { get; set; }
-        /// <summary>The published mapping of the pane the instance is shown in, kept while its region and extent hold,
-        /// or <see langword="null"/> before the instance is first shown.</summary>
-        public Puck.Commands.SourceMapping? Pane { get; set; }
         /// <summary>Gets the node the runtime renders the instance through, which the runtime owns.</summary>
         public required ShaderPipelineRenderNode Node { get; init; }
         /// <summary>Gets why the instance can show nothing, or <see langword="null"/> while it has a graph installed or on
@@ -333,14 +331,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         ResetFootprints();
     }
     /// <summary>Starts a frame before the runtime schedules it: reconciles the accepted <c>views</c> section, installs
-    /// complete candidates and polls dependency watches, and clears the previous frame's placements, leaving the
-    /// footprints the synthesized root always shows.</summary>
+    /// complete candidates and polls dependency watches, and clears the previous frame's placements and cameras, leaving
+    /// the footprints the synthesized root always shows. The panes published last stay published until
+    /// <see cref="PublishPanes"/> replaces them.</summary>
     /// <param name="views">The accepted document's <c>views</c> section.</param>
     public void BeginFrame(WorldViewDefaults views) {
         Reconcile(views: views);
         PumpWatches();
         ResetFootprints();
         m_placements.Clear();
+        m_cameras.Clear();
     }
     /// <summary>Places a pane this frame: the synthesized root shows the instance inside a normalized rect of the display,
     /// renders it at that rect's extent, and reconstructs it at the given sharpness. An instance the root does not place
@@ -419,7 +419,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             m_footprints.Add(item: new RenderGraphFootprint(
                 Consumer: WorldViewGraphs.MainInstance,
                 Height: (region.Height * scale),
-                Producer: WorldRootGraph.ProducerOf(view: view),
+                Producer: synthesized.Producers[view].Name,
                 Width: (region.Width * scale)
             ));
         }
@@ -427,7 +427,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return true;
     }
     /// <summary>Places every view a composed frame of the world rendered (<see cref="PlaceView"/>), each in its rect at
-    /// its render scale. A view is shown once the world has rendered it, except a lone view covering the whole display at
+    /// its render scale, and records each view's camera for its producer (<see cref="SetCamera"/>). A view is shown once the world has rendered it, except a lone view covering the whole display at
     /// native scale, which is never shown, so the root stands for the world itself. Before the world has composed a frame
     /// there are no views, but the world must still be scheduled, since it composes inside its own frame, so the first
     /// view is placed, not shown, over the whole display at native scale, which it renders at until its first frame names
@@ -462,6 +462,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         for (var view = 0; (view < views.Count); view++) {
             var snapshot = views[view];
+
+            if (
+                (m_synthesized is { } synthesized) &&
+                (view < synthesized.Producers.Count)
+            ) {
+                SetCamera(
+                    camera: snapshot.Camera,
+                    instance: synthesized.Producers[view].Name
+                );
+            }
 
             _ = PlaceView(
                 region: snapshot.Region,
@@ -758,6 +768,20 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return;
         }
 
+        ReconcileChanged(
+            runtime: runtime,
+            views: views
+        );
+    }
+    /// <summary>Looks up an instance the host runs without creating one.</summary>
+    public bool TryGet(string name, out Entry entry) => m_entries.TryGetValue(
+        key: name,
+        value: out entry!
+    );
+
+    // Reconciles a views section that differs from the one last accepted. Apart from Reconcile, so the closures its
+    // rebinding captures are allocated only when the section moved, never on a steady frame.
+    private void ReconcileChanged(IRenderGraphInstances runtime, WorldViewDefaults views) {
         var synthesized = m_synthesized;
 
         if (views.Root is null) {
@@ -909,12 +933,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             m_entries.Remove(key: name);
         }
     }
-    /// <summary>Looks up an instance the host runs without creating one.</summary>
-    public bool TryGet(string name, out Entry entry) => m_entries.TryGetValue(
-        key: name,
-        value: out entry!
-    );
-
     // Installs a compiled graph on its row's instance, binding each input the row declares to the instance it names.
     private bool Install(string name, CompiledShaderPipeline pipeline, out string reason) {
         if (
