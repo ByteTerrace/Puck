@@ -615,6 +615,22 @@ public sealed partial class ShaderPipelineCompiler {
             return;
         }
         if (
+            resource.IsHostBuffer &&
+            (
+                (resource.Kind != ShaderPipelineResourceKind.Buffer) ||
+                (resource.SizeBytes is null) ||
+                (resource.Count is not null) ||
+                resource.History
+            )
+        ) {
+            Add(
+                diagnostics,
+                "SHADERPIPE_INITIALIZATION",
+                $"Resource '{resource.Name}' is a host buffer port, which is a buffer of a fixed sizeBytes and keeps no history.",
+                resource.Name
+            );
+        }
+        if (
             (resource.Dimensions is { } dimensions) &&
             !Enum.IsDefined(value: dimensions.Mode)
         ) {

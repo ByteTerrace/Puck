@@ -172,8 +172,11 @@ attachment, and a dynamic viewport and scissor. `VulkanGpuRecorder` begins a ren
 setting a viewport of negative height over the area the pass draws, so clip-space +y is the
 top of the attachment as on Direct3D 12, and a scissor over the same area. The presenter's
 recorder (`VulkanCommandBufferRecorder`) sets the same viewport over the swapchain image, and
-its compositor creates the blit for the swapchain's render pass through
-`VulkanGpuRenderPass.Borrow`, which wraps a render pass another owner keeps. `BindIndexBuffer`
+its compositor leases the blit from the device's `GpuPassPipelineCache` for a render pass
+in the swapchain's format (`VulkanGpuRenderPass.PresentDescription` over
+`VulkanGpuFormats.FromVkFormat`); the swapchain's own render pass is that description's request in
+the swapchain's `VkFormat` ending in `PRESENT_SRC_KHR` (`VulkanGpuRenderPass.PresentRequestOf`), so the two
+are compatible: attachments and dependencies match and only a final layout differs. `BindIndexBuffer`
 and `DrawIndexed` record `vkCmdBindIndexBuffer` and `vkCmdDrawIndexed`.
 
 | Kind | Usage | Memory |

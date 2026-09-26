@@ -81,7 +81,8 @@ internal sealed partial class WorldScreenBinder {
     /// advanced server-side, inside <c>WorldServer.Step</c> (<c>Server.WorldMachineHost.Advance</c>); this seam only
     /// uploads their latest framebuffer (the one GPU call this project makes on a machine's behalf) and services each
     /// producer feed on its own cadence. It advances the capture gate first, so every source this frame resolves sees
-    /// the same answer, and uploads the fills a filled external source resolves to.</summary>
+    /// the same answer, and uploads the fills a filled external source resolves to. It ends by publishing every screen's
+    /// mapping (<see cref="Mappings"/>) at the extents its images now have.</summary>
     /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
     /// <param name="deviceContext">The live GPU device context to upload on, through its services.</param>
     public void Publish(ulong tick, IGpuDeviceContext deviceContext) {
@@ -160,6 +161,8 @@ internal sealed partial class WorldScreenBinder {
                 tick: tick
             );
         }
+
+        Mappings.Publish(images: this);
     }
     /// <summary>Renders this frame's jumbotron views against the live device — called from the frame source's
     /// <see cref="ISdfFrameSource.RenderViews"/> seam after the CPU-fed screens have published and before the engine polls

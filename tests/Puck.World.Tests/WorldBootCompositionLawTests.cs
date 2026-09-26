@@ -1,13 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
-using Puck.Hosting;
 using Puck.Testing;
-using Puck.World.Machines;
-using Puck.World.Protocol;
-using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -37,110 +32,11 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
     // one.
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-boot-");
 
-    private HostApplicationBuilder ComposeBoot(WorldHostPresentation presentation) {
-        var extensions = WorldBootComposition.ComposeExtensions(directories: []);
-        var machineCatalog = WorldMachineCatalog.From(extensions: extensions);
-
-        Assert.True(
-            condition: WorldDefinitionLoader.TryResolve(
-                catalog: machineCatalog,
-                catalogFingerprint: WorldBootComposition.MachineCatalogFingerprint(machineCatalog: machineCatalog),
-                explicitPath: Path.Combine(
-                    path1: AuthoredGameFixtures.Root,
-                    path2: WorkloadWorld
-                ),
-                failure: out var failure,
-                source: out var source
-            ),
-            userMessage: failure
-        );
-
-        var builder = new HostApplicationBuilder(settings: new HostApplicationBuilderSettings { DisableDefaults = true });
-
-        builder.Services.AddWorldBoot(inputs: new WorldBootInputs(
-            Authenticator: new WorldAttestedAuthenticator(),
-            Caches: new WorldCacheRoots(
-                bakes: m_stateDirectory.PathOf(name: "bakes"),
-                compilations: m_stateDirectory.PathOf(name: "compilations"),
-                compiledWorlds: m_stateDirectory.PathOf(name: "compiled-worlds")
-            ),
-            Extensions: extensions,
-            HostSettings: WorldHostSettings.Resolve(
-                backendOverride: null,
-                defaults: source.Definition.Host,
-                directXAvailable: OperatingSystem.IsWindowsVersionAtLeast(
-                    major: 10,
-                    minor: 0,
-                    build: 10240
-                ),
-                exitAfterSecondsOverride: null,
-                heightOverride: null,
-                presentationOverride: presentation,
-                presentModeOverride: null,
-                widthOverride: null
-            ),
-            MachineCatalog: machineCatalog,
-            Source: source,
-            StateRoot: new WorldStateRoot(path: m_stateDirectory.RootPath)
-        ));
-        SealDevice(services: builder.Services);
-
-        return builder;
-    }
-    // The backend assemblies, and the neutral services whose resolution brings a device up: the presenter, the root
-    // render node, and the offscreen shape's device activation (internal to Puck.World, so named).
-    private static bool BringsUpDevice(Type type) {
-        var assembly = (type.Assembly.GetName().Name ?? string.Empty);
-
-        return (
-            assembly.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.DirectX") ||
-            assembly.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.Vulkan") ||
-            (type == typeof(IRenderNode)) ||
-            (type == typeof(ISurfacePresenter)) ||
-            (type.Name == "WorldOffscreenGpuActivation")
-        );
-    }
-    // A neutral GPU service the fake stands in for: the device context, whose services the fake also is, and the
-    // optional surface export a backend registers beside it.
-    private static bool IsNeutralGpuService(Type type, FakeGpuDevice fake) => (
-        type.IsInterface &&
-        string.Equals(a: type.Namespace, b: typeof(IGpuDeviceContext).Namespace, comparisonType: StringComparison.Ordinal) &&
-        type.IsInstanceOfType(o: fake)
+    private HostApplicationBuilder ComposeBoot(WorldHostPresentation presentation) => WorldBootHarness.Compose(
+        presentation: presentation,
+        stateDirectory: m_stateDirectory,
+        world: WorkloadWorld
     );
-    // Replaces the neutral GPU services with one device-free fake and every registration that brings up a device with
-    // one that throws when resolved.
-    private static void SealDevice(IServiceCollection services) {
-        var fake = new FakeGpuDevice(reportVersion: 0);
-
-        for (var index = 0; (index < services.Count); ++index) {
-            var descriptor = services[index];
-            var serviceType = descriptor.ServiceType;
-
-            if (descriptor.IsKeyedService || serviceType.IsGenericTypeDefinition) {
-                Assert.False(
-                    condition: BringsUpDevice(type: serviceType),
-                    userMessage: $"{serviceType.FullName} is registered in a shape the device seal does not cover."
-                );
-
-                continue;
-            }
-
-            if (IsNeutralGpuService(fake: fake, type: serviceType)) {
-                services[index] = new ServiceDescriptor(
-                    instance: fake,
-                    serviceType: serviceType
-                );
-            } else if (BringsUpDevice(type: serviceType)) {
-                var reason = $"a composition law resolved {serviceType.FullName}, which brings up a GPU device";
-
-                services[index] = new ServiceDescriptor(
-                    factory: _ => throw new InvalidOperationException(message: reason),
-                    lifetime: descriptor.Lifetime,
-                    serviceType: serviceType
-                );
-            }
-        }
-    }
     // The verbs the workload sends: the command word of every line its script runs, read from the script the collector
     // reads (blank lines and # comments are skipped, as the console skips them), then the collector's closing pair.
     private static IReadOnlyList<string> WorkloadVerbs() {

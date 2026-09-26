@@ -339,6 +339,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             m_sources[screen.Index] = cell.ResolveFrame;
             m_lights[screen.Index] = cell.ResolveLight;
         }
+
+        ReconcileMappings(screens: screens);
     }
 
     /// <summary>Gets the number of camera views registered in the offscreen view pool right now — each one is a live
@@ -494,6 +496,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
+        ShowLive(index: index);
+
         return ApplySource(
             index: index,
             slot: slot,
@@ -643,6 +647,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             // touched here: a boot index's cell must survive removal so a later re-declare can re-point Slot (below).
             _ = m_sources.Remove(key: index);
             _ = m_lights.Remove(key: index);
+            _ = m_liveBinds.Remove(item: index);
             Console.Error.WriteLine(value: $"[world.screen: {index} removed — slot disposed]");
         }
 
@@ -700,7 +705,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                 source: screen.Source
             );
             slot.DeclaredSource = screen.Source;
+            _ = m_liveBinds.Remove(item: screen.Index);
         }
+
+        ReconcileMappings(screens: screens);
 
         // One physical camera has one authored control state. Re-resolve it from the mutated list; the per-frame service
         // path lands it on the device at the next live frame (vendor writes are firmware-ignored on an idle stream).
@@ -726,6 +734,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         }
 
         slot.ClearLive();
+        ShowLive(index: index);
 
         return (Ok: true, Message: $"screen {index} ejected");
     }

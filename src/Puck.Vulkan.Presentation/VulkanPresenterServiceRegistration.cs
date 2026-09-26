@@ -276,6 +276,8 @@ public static class VulkanPresenterServiceRegistration {
         // context (e.g. adding a DirectX device) without referencing the renderer type.
         services.TryAddSingleton<IVulkanDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
         services.TryAddSingleton<VulkanQueueSubmitter>();
+        // The composition's pass pipelines, which the blit is an entry of; a host that registers its own shares it.
+        services.TryAddSingleton<GpuPassPipelineCache>();
         services.TryAddSingleton(implementationFactory: sp => new SurfaceCompositor(
             bufferApi: sp.GetRequiredService<IVulkanBufferApi>(),
             commandBufferRecordingApi: sp.GetRequiredService<IVulkanCommandBufferRecordingApi>(),
@@ -284,10 +286,10 @@ public static class VulkanPresenterServiceRegistration {
             externalMemoryApi: sp.GetRequiredService<IVulkanExternalMemoryApi>(),
             framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
             offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>(),
+            pipelines: sp.GetRequiredService<GpuPassPipelineCache>(),
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>(),
             renderer: sp.GetRequiredService<VulkanRenderer>(),
             shaderDirectory: blitShaderDirectory,
-            shaderModuleFactory: sp.GetRequiredService<IVulkanShaderModuleFactory>(),
             shaderModuleLoader: sp.GetRequiredService<IShaderModuleLoader>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new VulkanSurfacePresenter(

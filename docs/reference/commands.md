@@ -632,9 +632,26 @@ in drawing order, showing the instance's whole image at the extent it last
 rendered at. The host hands them to its `SourcePanePicker`, a pipeline pane's
 pointer maps through its pane's mapping, and the hit walk starts from them.
 `world.view.panes` echoes each mapping and, given a display point, what the
-picker and the walk answer there. Screens in the world publish no mapping yet,
-the GPU does not yet draw from one, and delivery of passthrough input to a
-window is Windows-specific host work. These are open in
+picker and the walk answer there, down to the walk's last hit.
+
+Every screen in the world publishes a mapping too. The World's screen binder
+builds each row's mapping through `WorldScreenMappings.Of`, with the screen
+glass's bezel as its warp, and names it by the instance its source is: a
+producer, machine or probe source by its source instance
+(`source$<producer>$<digest>`, from `WorldSourceInstances`), a view by its
+camera's registration and a session by its screen's session view. A view's and
+a session's extent is document data, and a source instance's is the running
+image's. `WorldScreenMappingSet` holds them, republishing a steady frame's
+mappings without allocating. A screen showing no image or text, a live
+presentation source bound with `screen.source` over its row, or an image whose
+extent is not known yet publishes none. `world.screens` prints each screen's
+mapping in the line `world.view.panes` prints for a pane, or why it has none.
+Each view's world producer reports the screens as the placements standing in
+its world, so the walk continues from a view's pane through a screen: it ends
+on a producer source's pixel, or, for a screen showing another view, on that
+view, which is not yet an instance of the live set. The GPU does not yet draw
+from a mapping, and delivery of passthrough input to a window is
+Windows-specific host work. These are open in
 [the rendering programme](../plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
 
 ## Core types

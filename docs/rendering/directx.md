@@ -229,9 +229,10 @@ device up and releases them when the context releases it, on `Recreate` and
   an SDF engine's construction checks through `SdfWorldEngine.CheckAdmission`
   before it allocates, so its holder records the refusal like any other failed
   engine build and tries again only when the build's inputs change; a
-  pipeline candidate's statement includes the region-copy pool of each package
-  pass whose regions stage, and a staged host buffer port admits its own copy
-  pool when it binds. A candidate that
+  pipeline candidate's statement includes its graph's one region-copy pool,
+  which reserves a copy set per frame slot for every package region and host
+  buffer port that stages, so binding a port later takes no range. A candidate
+  that
   does not fit is refused by name, and whatever is installed
   keeps presenting. Heap space is a build input for that refusal alone: the
   heap's `GpuDescriptorHeapBudget.ReleaseRevision`, read through
@@ -269,7 +270,15 @@ device up and releases them when the context releases it, on `Recreate` and
 
 The surface compositor and the surface upload in `Puck.DirectX.Presentation`
 still create shader-visible heaps of their own, which they bind on command
-lists of their own.
+lists of their own. The compositor's blit is the device's pass pipeline for
+`SurfaceBlitLayout`, the pass group both compositors bind (the source at `t0`
+and its sampler at `s1`, space 3), leased from `GpuPassPipelineCache` for a
+render pass in the swap chain's format: its root signature has a view table and
+a sampler table, so the compositor keeps a one-SRV heap and a one-sampler heap,
+writes the sampler clamp-addressed with a linear filter
+(`DirectXGpuBindings.ClampSampler`), and each `DirectXDrawCommand` names the
+group, both heaps and both tables, which `DirectXCommandListRecorder` binds at
+the group's `ViewTableIndex` and `SamplerTableIndex`.
 
 ---
 

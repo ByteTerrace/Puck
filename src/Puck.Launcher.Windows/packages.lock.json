@@ -393,6 +393,7 @@
         "dependencies": {
           "ByteTerrace.Puck.DirectX": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
           "Microsoft.Extensions.Hosting": "[10.*, )"
         }
       },

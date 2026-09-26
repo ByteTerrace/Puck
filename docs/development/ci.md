@@ -108,7 +108,11 @@ through the build's own `CompileShaders` target, and holds each SPIR-V and DXIL
 output byte for byte to the Windows build of the same commit
 (`puck shaders compare --build`); the artifacts job collects the Windows
 build's shaders with `puck shaders collect` into the `shader-bytecode-windows`
-artifact rather than a second build.
+artifact rather than a second build. The Windows build compiles the whole
+solution, so a test project's kernels are in that artifact beside the engine's,
+and the Linux job compiles them too: every tracked project outside
+`experimental/` that owns a vertex, fragment or compute stage source, test
+projects included, is in the compare.
 HGB and AGB share a job matrix while retaining their separate lanes, timeouts,
 corpus caches, and `hgb` and `agb` report artifacts.
 Linux world verification invokes each compiled assembly's portable xUnit

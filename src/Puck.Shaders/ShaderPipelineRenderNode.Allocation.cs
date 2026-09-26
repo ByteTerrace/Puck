@@ -30,40 +30,43 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
 
-    /// <summary>States the descriptor pools a node creates for an installed <paramref name="plan"/>: one pool holding
-    /// every pass's frame group and pass group sets once per in-flight frame, then one region-copy pool
-    /// (<see cref="GpuRegionCopyPool.SizesOf"/>) for each package pass whose regions stage, then the float preview's one
-    /// pool (<see cref="PreviewDescriptorPool"/>) when it has a preview. A package pass's sets are laid out by the plan as
-    /// a document pass's are, and its recorder allocates them from the same pool (<see cref="RenderGraphPackageSets"/>).
-    /// The node's own pool creation reads the same statement, so an admission computed from it before anything is
-    /// allocated is what the node requests.</summary>
+    /// <summary>States the descriptor pools a node creates for an installed <paramref name="plan"/>: the graph's one
+    /// region-copy pool (<see cref="GpuRegionCopyPool.SizesOf"/>) when any of its regions stages, then one pool holding
+    /// every pass's frame group and pass group sets once per in-flight frame, then the float preview's one pool
+    /// (<see cref="PreviewDescriptorPool"/>) when it has a preview. A package pass's sets are laid out by the plan as a
+    /// document pass's are, and its recorder allocates them from the same pool (<see cref="RenderGraphPackageSets"/>). The
+    /// region-copy pool reserves a copy set per frame slot for every staged region the graph reads: its package passes'
+    /// (<see cref="IRenderGraphPackageFactory.Regions"/>) in pass order, then its host buffer ports
+    /// (<see cref="ShaderPipelineInitialization.Host"/>) in declaration order, so a port a host binds at a later frame
+    /// (<see cref="BindRegion"/>) takes no descriptor range then. The node's own pool creation reads the same statement,
+    /// so an admission computed from it before anything is allocated is what the node requests.</summary>
     /// <param name="plan">The pipeline plan the node installs.</param>
     /// <param name="inFlight">The node's frames in flight.</param>
     /// <param name="preview">Whether the node presents a float preview.</param>
-    /// <param name="regionCopies">The staged regions of each package pass whose package states any
-    /// (<see cref="IRenderGraphPackageFactory.Regions"/>), in pass order, under the device's residency choice, or
-    /// <see langword="null"/> for none.</param>
+    /// <param name="stagedRegions">The graph's regions that stage under the device's residency choice, its package
+    /// regions' and its host buffer ports'; zero for none.</param>
     /// <returns>Each pool's sizes, in creation order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlight"/> is zero, or a count in
-    /// <paramref name="regionCopies"/> is not positive.</exception>
-    public static IReadOnlyList<GpuDescriptorPoolSizes> DescriptorPools(ShaderPipelinePlan plan, uint inFlight, bool preview, IReadOnlyList<int>? regionCopies = null) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlight"/> is zero, or
+    /// <paramref name="stagedRegions"/> is negative.</exception>
+    public static IReadOnlyList<GpuDescriptorPoolSizes> DescriptorPools(ShaderPipelinePlan plan, uint inFlight, bool preview, int stagedRegions = 0) {
         ArgumentNullException.ThrowIfNull(argument: plan);
         ArgumentOutOfRangeException.ThrowIfZero(value: inFlight);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: stagedRegions);
 
         var pools = new List<GpuDescriptorPoolSizes>(capacity: 2);
 
+        if (stagedRegions > 0) {
+            pools.Add(item: GpuRegionCopyPool.SizesOf(
+                regionCount: stagedRegions,
+                slotCount: ((int)inFlight)
+            ));
+        }
         if (GraphDescriptorPool(
             inFlight: inFlight,
             plan: plan
         ) is { } graph) {
             pools.Add(item: graph);
-        }
-        foreach (var staged in (regionCopies ?? [])) {
-            pools.Add(item: GpuRegionCopyPool.SizesOf(
-                regionCount: staged,
-                slotCount: ((int)inFlight)
-            ));
         }
         if (preview) {
             pools.Add(item: PreviewDescriptorPool(inFlight: inFlight));

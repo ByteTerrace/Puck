@@ -3,8 +3,9 @@
 Puck.DirectX.Presentation connects the Direct3D 12 backend to Puck's rendering
 contracts. It registers the DirectX surface presenter and compute services,
 records draw and command-list work, and composes rendered surfaces for a host.
-The project depends on `Puck.DirectX` and `Puck.Hosting`; it owns presentation
-integration, while device and COM bindings remain in the DirectX package.
+The project depends on `Puck.DirectX`, `Puck.Hosting` and `Puck.Shaders`,
+whose pass-pipeline cache holds its blit; it owns presentation integration,
+while device and COM bindings remain in the DirectX package.
 
 ## Usage
 

@@ -701,9 +701,23 @@ break, and nothing wider:
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`
   and `experimental/` choose nothing.
 
+The plan prints one line per choice, each naming what `--run` does with it:
+
+```text
+suite Puck.World.Tests
+test src/Puck.World/Assets/worlds/games/reversi.puck
+canary pipeline-ink
+catalog src/Puck.World/bin/Release/net10.0/Assets/worlds (puck compile --tree src/Puck.World/Assets/worlds --check)
+parity
+```
+
+A `test` line is a `.puck` source run with `puck test`. The `catalog` line
+names the game's Release catalog, the compiled worlds the build writes, which
+holds no test worlds: `--run` checks it with the compile the line names.
+
 `--run` builds and runs the chosen suites, then `puck test` on the chosen
-worlds, then the chosen canaries, then parity, and exits 1 when any of them
-fails.
+worlds, then the catalog check, then the chosen canaries, then parity, and
+exits 1 when any of them fails.
 
 `--record` refreshes the coverage index. It builds a `Puck.World` that records
 every method the runtime compiles (`-p:PuckRecordMethods=true`; no other build

@@ -716,7 +716,8 @@ layout; the `pipeline-echo` canary runs one on both backends with
 `pipeline.sentinels` on, and an echo expecting two members' sentinels swapped
 fails it. The `interface-echo` canary runs one echo per shipped interface
 family the same way: the ink simulation, visualize and finish passes (finish's
-blocks are also the Moth's), the package canary's tint, the film grain set
+blocks, the extent alone, are also the Moth's and the `source-*` conversion
+packages'), the package canary's tint, the film grain set
 (whose blocks are also the `post.sdf-film-grain` package's), and the `place`
 and `overlay` packages. Each echo document declares its target's blocks, and
 its perturbed twin expects its last member's first word to hold the next
@@ -880,13 +881,25 @@ package states the regions its recorder writes
 (`IRenderGraphPackageFactory.Regions`; the overlay's one storage buffer), and the
 instance creates them at install under the policy `GpuResidency.Select` picks
 with a reader in flight, hands them to the recorder in
-`RenderGraphPackageGroups.Regions`, and, when any stages, states and admits one
-reserved copy pool per such pass (`ShaderPipelineRenderNode.DescriptorPools`'
-`regionCopies`) and takes the device's copy pipeline in the candidate's build,
-off the frame thread (`GpuBuildLease.Wait` on its `GpuRegionCopyPass` entry). A host buffer port's
-region is created by `ShaderPipelineRenderNode.BindRegion` at the port's declared
-size under the same choice; a staged one leases the pipeline on its first bind,
-returns no region until the pipeline is built, and admits its own copy pool.
+`RenderGraphPackageGroups.Regions`. A graph declares its host buffer ports as
+resources whose `initialization` is `Host`: a buffer of a fixed `sizeBytes` that
+keeps no history (`SHADERPIPE_INITIALIZATION` refuses any other), which only an
+uploaded source's upload binds. When any package region or port stages, the
+instance states and admits one copy pool for the graph
+(`ShaderPipelineRenderNode.DescriptorPools`' `stagedRegions`), reserving a copy
+set per frame slot for each staged package region in pass order and then each
+staged port in declaration order, and takes the device's copy pipeline in the
+candidate's build, off the frame thread (`GpuBuildLease.Wait` on its
+`GpuRegionCopyPass` entry). The pool belongs to the graph's first pass and
+retires with the graph. A port's region is created by
+`ShaderPipelineRenderNode.BindRegion` at the port's declared size under the same
+choice; a staged one takes the installed graph's reserved share, so binding takes
+no descriptor range, and moves to each later graph's share
+(`GpuRegion.MoveCopySets`). A candidate that drops a bound port or changes its
+size is refused, and `BindBuffer` refuses a port. Every region counts in the
+instance's memory account at `GpuRegion.BytesOf` for its policy, a port's
+whether or not it is bound yet (`ShaderPipelineRenderNode.RegionBytes`), and
+`world.budget`'s live row for each graph instance prints its `regions` bytes.
 After a frame's passes have recorded, the instance flushes every region's share
 of the slot and records each owed copy in one command buffer submitted ahead of
 the frame's passes: a memory barrier ordering earlier submissions' reads before

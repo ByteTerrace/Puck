@@ -1,0 +1,244 @@
+using System.Diagnostics.CodeAnalysis;
+using Puck.Commands;
+using Puck.SdfVm.Views;
+
+namespace Puck.World.Client;
+
+/// <summary>What a screen shows at run time, as <see cref="WorldScreenMappingSet"/> reads it: whether the screen still
+/// shows its row's source, and the extent of an image only the running producer knows.</summary>
+public interface IWorldScreenImages {
+    /// <summary>Returns whether a screen shows the source its row names, rather than a live presentation source bound
+    /// over it, which no row names.</summary>
+    /// <param name="screen">The screen's index.</param>
+    /// <returns><see langword="true"/> when the screen shows its row's source.</returns>
+    bool ShowsRow(int screen);
+    /// <summary>Finds the extent of the image a producer, machine or probe source shows on a screen.</summary>
+    /// <param name="screen">The screen's index.</param>
+    /// <param name="width">The image's width, in pixels, when this returns <see langword="true"/>.</param>
+    /// <param name="height">The image's height, in pixels, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the image's extent is known and positive.</returns>
+    bool TryExtent(int screen, out int width, out int height);
+}
+/// <summary>
+/// The mapping every screen row publishes (<see cref="WorldScreenMappings.Of"/>, with the screen glass's bezel as its
+/// warp), named by the handle of the instance its source is: a producer, machine or probe source by its source
+/// instance (<see cref="WorldSourceInstances"/>, <c>source$&lt;producer&gt;$&lt;digest&gt;</c>), a view by its camera's
+/// registration (<see cref="WorldSeatAnchors.RegistrationName"/>) and a session by its screen's session view
+/// (<see cref="WorldViewNames.Session"/>). A view's and a session's extent is document data; a source instance's is the
+/// running image's (<see cref="IWorldScreenImages.TryExtent"/>). A screen showing nothing, text, a live presentation
+/// source, or an image of unknown extent publishes no mapping, and <see cref="Describe"/> says why.
+/// <para><see cref="Reconcile"/> runs when the rows or the cameras change and allocates; <see cref="Publish"/> runs
+/// every frame and, while every row's handle and extent hold, publishes the mappings it published before without
+/// allocating.</para>
+/// </summary>
+public sealed class WorldScreenMappingSet {
+    private const string LiveSource = "a live presentation source no row names";
+    private const string NoExtent = "the image's extent is not known yet";
+    private const string NoImage = "no image source";
+    private const string Unpublished = "not published";
+
+    private readonly List<SourceMapping> m_published = [];
+
+    private Row[] m_rows = [];
+
+    /// <summary>Gets the mapping of every screen that publishes one, in row order, as <see cref="Publish"/> last
+    /// published them. The set rewrites the list in place.</summary>
+    public IReadOnlyList<SourceMapping> Mappings => m_published;
+    /// <summary>Gets the screen rows the set last reconciled, in order.</summary>
+    public IReadOnlyList<WorldScreen> Screens { get; private set; } = [];
+
+    // The row a screen's source names: its handle and document extent, or why it names none.
+    private static Row RowOf(WorldScreen screen, int position, WorldSourceInstances sources, IReadOnlyList<WorldCamera> cameras) {
+        switch (screen.Source) {
+            case WorldScreenSource.View view:
+                foreach (var camera in cameras) {
+                    if (string.Equals(
+                        a: camera.Name,
+                        b: view.CameraName,
+                        comparisonType: StringComparison.Ordinal
+                    )) {
+                        return new Row(
+                            extent: (((int)camera.RenderWidth), ((int)camera.RenderHeight)),
+                            handle: SourceHandle.Instance(name: WorldSeatAnchors.RegistrationName(
+                                camera: camera,
+                                seat: 1
+                            )),
+                            refusal: null,
+                            screen: screen
+                        );
+                    }
+                }
+
+                return new Row(
+                    extent: null,
+                    handle: null,
+                    refusal: $"camera '{view.CameraName}' not declared",
+                    screen: screen
+                );
+            case WorldScreenSource.Session session:
+                return new Row(
+                    extent: ((session.Resolution is { } resolution)
+                        ? (resolution.Width, resolution.Height)
+                        : (((int)WorldSessionView.DefaultWidth), ((int)WorldSessionView.DefaultHeight))),
+                    handle: SourceHandle.Instance(name: WorldViewNames.Session(screen: screen.Index)),
+                    refusal: null,
+                    screen: screen
+                );
+            default:
+                var handle = sources.HandleOf(screen: position);
+
+                return new Row(
+                    extent: null,
+                    handle: handle,
+                    refusal: ((handle is null)
+                        ? NoImage
+                        : null),
+                    screen: screen
+                );
+        }
+    }
+
+    /// <summary>Describes a screen's mapping on one line: <see cref="SourceMapping.Describe"/> of the mapping it
+    /// publishes, or <c>none (&lt;reason&gt;)</c>.</summary>
+    /// <param name="screen">The screen's index.</param>
+    /// <returns>The description, or <see langword="null"/> when no reconciled row has that index.</returns>
+    public string? Describe(int screen) {
+        foreach (var row in m_rows) {
+            if (row.Screen.Index == screen) {
+                return ((row.Mapping is { } mapping)
+                    ? mapping.Describe()
+                    : $"none ({row.Refusal})");
+            }
+        }
+
+        return null;
+    }
+    /// <summary>Publishes every row's mapping for this frame, reading the running images' extents. A row whose handle
+    /// and extent hold keeps the mapping it published before.</summary>
+    /// <param name="images">What each screen shows at run time.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="images"/> is <see langword="null"/>.</exception>
+    public void Publish(IWorldScreenImages images) {
+        ArgumentNullException.ThrowIfNull(argument: images);
+
+        m_published.Clear();
+
+        foreach (var row in m_rows) {
+            row.Publish(images: images);
+
+            if (row.Mapping is { } mapping) {
+                m_published.Add(item: mapping);
+            }
+        }
+    }
+    /// <summary>Reconciles the set with the rows and cameras the screens now read: derives each row's source instance
+    /// and handle, and drops every mapping, which the next <see cref="Publish"/> rebuilds.</summary>
+    /// <param name="screens">The screen rows, in order.</param>
+    /// <param name="cameras">The cameras a view source names.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public void Reconcile(IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldCamera> cameras) {
+        ArgumentNullException.ThrowIfNull(argument: screens);
+        ArgumentNullException.ThrowIfNull(argument: cameras);
+
+        var sources = WorldSourceInstances.Of(shown: [.. screens.Select(selector: static screen => screen.Source)]);
+        var rows = new Row[screens.Count];
+
+        for (var position = 0; (position < screens.Count); position++) {
+            rows[position] = RowOf(
+                cameras: cameras,
+                position: position,
+                screen: screens[position],
+                sources: sources
+            );
+        }
+
+        m_rows = rows;
+        m_published.Clear();
+        Screens = screens;
+    }
+    /// <summary>Finds the mapping a screen last published.</summary>
+    /// <param name="screen">The screen's index.</param>
+    /// <param name="mapping">The mapping when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the screen published a mapping.</returns>
+    public bool TryGet(int screen, [NotNullWhen(returnValue: true)] out SourceMapping? mapping) {
+        foreach (var row in m_rows) {
+            if (
+                (row.Screen.Index == screen) &&
+                (row.Mapping is { } published)
+            ) {
+                mapping = published;
+
+                return true;
+            }
+        }
+
+        mapping = null;
+
+        return false;
+    }
+
+    // One screen row: the handle its source names, the extent the document gives it (a view or a session), and the
+    // mapping it last published.
+    private sealed class Row(WorldScreen screen, SourceHandle? handle, (int Width, int Height)? extent, string? refusal) {
+        private readonly (int Width, int Height)? m_extent = extent;
+        private readonly SourceHandle? m_handle = handle;
+        private readonly string? m_refusal = refusal;
+
+        public SourceMapping? Mapping { get; private set; }
+
+        public string? Refusal { get; private set; } = (refusal ?? Unpublished);
+        public WorldScreen Screen { get; } = screen;
+
+        public void Publish(IWorldScreenImages images) {
+            if (m_handle is not { } handle) {
+                Mapping = null;
+                Refusal = m_refusal;
+
+                return;
+            }
+            if (!images.ShowsRow(screen: Screen.Index)) {
+                Mapping = null;
+                Refusal = LiveSource;
+
+                return;
+            }
+
+            var width = 0;
+            var height = 0;
+
+            if (m_extent is { } known) {
+                (width, height) = known;
+            } else if (!images.TryExtent(
+                height: out height,
+                screen: Screen.Index,
+                width: out width
+            )) {
+                Mapping = null;
+                Refusal = NoExtent;
+
+                return;
+            }
+            if (
+                (Mapping is { } published) &&
+                (published.SourceWidth == width) &&
+                (published.SourceHeight == height)
+            ) {
+                return;
+            }
+
+            var mapping = WorldScreenMappings.Of(
+                screen: Screen,
+                source: handle,
+                sourceHeight: height,
+                sourceWidth: width
+            );
+
+            if (mapping.TryValidate(refusal: out var invalid)) {
+                Mapping = mapping;
+                Refusal = null;
+            } else {
+                Mapping = null;
+                Refusal = invalid;
+            }
+        }
+    }
+}

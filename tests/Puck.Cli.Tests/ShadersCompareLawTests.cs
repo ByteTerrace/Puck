@@ -8,7 +8,8 @@ namespace Puck.Cli.Tests;
 /// name with the first byte that differs, and a file one tree lacks fails by name; copies under <c>bin</c> and
 /// <c>obj</c> are not compared; a tree with no bytecode is refused rather than matched; <c>puck shaders collect</c>
 /// copies a checkout's bytecode, and nothing under <c>bin</c> or <c>artifacts</c>, into a tree that matches it; and on
-/// the real tree the projects whose build compiles shaders with DXC are the six outside <c>experimental/</c>.
+/// the real tree the projects whose build compiles shaders with DXC are those owning a tracked stage source outside
+/// <c>experimental/</c>.
 /// </summary>
 public sealed class ShadersCompareLawTests {
     // Two trees, each written from its own files, compared by the verb.
@@ -131,25 +132,44 @@ public sealed class ShadersCompareLawTests {
             root.Delete(recursive: true);
         }
     }
+
+    // The tracked files a pattern matches outside experimental/, repository-relative with forward slashes.
+    private static IReadOnlyList<string> Tracked(string repositoryRoot, string pattern) => [.. CliGit.Run(repositoryRoot, "ls-files", "--", pattern).Stdout
+        .Split(separator: '\n')
+        .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
+        .Where(predicate: static line => ((line.Length > 0) && !line.StartsWith(comparisonType: StringComparison.Ordinal, value: "experimental/")))];
+
+    // On the real tree the projects whose build compiles shaders with DXC are exactly the projects that own a tracked
+    // stage source, found from the files rather than from any project's items, so a project that gains or loses a
+    // shader moves both sides and this law never needs editing. Test projects are among them: CI's Windows build
+    // compiles the whole solution and collects every kernel it wrote, so the Linux compare compiles theirs too.
     [Fact]
-    public void OnTheTreeTheShaderProjectsAreTheSixOutsideExperimental() {
+    public void OnTheTreeTheShaderProjectsAreTheProjectsOwningATrackedStageSource() {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
 
-        var listed = CliGit.Run(repositoryRoot, "ls-files", "--", "*.csproj");
+        var projects = Tracked(pattern: "*.csproj", repositoryRoot: repositoryRoot);
+        var owners = new SortedSet<string>(comparer: StringComparer.Ordinal);
 
+        // A stage source belongs to the deepest tracked project whose directory holds it.
+        foreach (var source in ((string[])["*.comp.hlsl", "*.vert.hlsl", "*.frag.hlsl"]).SelectMany(selector: pattern => Tracked(pattern: pattern, repositoryRoot: repositoryRoot))) {
+            var owner = projects
+                .Where(predicate: project => source.StartsWith(comparisonType: StringComparison.Ordinal, value: (project[..(project.LastIndexOf(value: '/') + 1)])))
+                .MaxBy(keySelector: static project => project.Length);
+
+            Assert.True(
+                condition: (owner is not null),
+                userMessage: $"{source} lies in no tracked project."
+            );
+            _ = owners.Add(item: owner!);
+        }
+
+        Assert.NotEmpty(collection: owners);
         Assert.Equal(
             actual: CompareCommand.ShaderProjects(
-                projects: listed.Stdout.Split(separator: '\n').Select(selector: static line => line.TrimEnd(trimChar: '\r')).Where(predicate: static line => (line.Length > 0)),
+                projects: projects,
                 repositoryRoot: repositoryRoot
             ),
-            expected: [
-                "src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj",
-                "src/Puck.Overlays/Puck.Overlays.csproj",
-                "src/Puck.SdfVm/Puck.SdfVm.csproj",
-                "src/Puck.Shaders/Puck.Shaders.csproj",
-                "src/Puck.Vulkan.Presentation/Puck.Vulkan.Presentation.csproj",
-                "tests/Puck.Shaders.Tests/Puck.Shaders.Tests.csproj",
-            ]
+            expected: owners
         );
     }
 }
