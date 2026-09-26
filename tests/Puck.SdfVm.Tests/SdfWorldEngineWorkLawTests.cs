@@ -16,7 +16,8 @@ namespace Puck.SdfVm.Tests;
 /// whole CPU path runs without a device: the pass order and the passes a cadence skip marks, the exact per-pass counts
 /// of a rendered and of a cadence-skipped frame, that the descriptor pool it states is the one it creates and that a
 /// device heap that cannot hold that pool refuses the engine by name before it allocates, what moves the revision, that submission identity keeps increasing
-/// across an engine rebuild on the owner's ledger, and that a steady-state frame allocates nothing.
+/// across an engine rebuild on the owner's ledger, that the mesh pass's attachments exist only once a frame draws a mesh,
+/// and that a steady-state frame allocates nothing.
 /// </summary>
 public sealed class SdfWorldEngineWorkLawTests {
     private const uint Extent = 64;
@@ -162,10 +163,10 @@ public sealed class SdfWorldEngineWorkLawTests {
                 actualString: lines.Single(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: $"work {pass} executed:"))
             );
         }
-        // Outside every pass: the filler's first transition, and each view's output into the storage layout and back. The
-        // mesh visibility target's first transition rode the construction's ISA handshake.
+        // Outside every pass: each view's output into the storage layout and back. The filler's first transition rode the
+        // construction's ISA handshake, and the frame draws no mesh, so no mesh visibility target exists.
         Assert.Contains(
-            expectedSubstring: " barriers.image=5 ",
+            expectedSubstring: " barriers.image=4 ",
             actualString: lines.Single(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "work outside:"))
         );
         Assert.DoesNotContain(
@@ -290,6 +291,59 @@ public sealed class SdfWorldEngineWorkLawTests {
             );
         }
     }
+    // An engine whose frames draw no mesh holds no mesh attachment: the first frame that draws one creates the visibility
+    // target and its depth attachment at the engine extent, once, and later frames, drawing a mesh or not, create no image.
+    [Fact]
+    public void TheMeshAttachmentsAreCreatedOnceByTheFirstFrameThatDrawsAMesh() {
+        var ledger = new GpuWorkLedger(
+            framesInFlight: SdfWorldEngine.FrameRingSize,
+            name: "gpu.sdf-engine"
+        );
+
+        using var rig = new Rig(
+            cadence: false,
+            ledger: ledger
+        );
+
+        long ImagesCreated() {
+            Assert.True(condition: ledger.TryRead(
+                kind: GpuWork.ImagesCreated,
+                value: out var images
+            ));
+
+            return images;
+        }
+
+        _ = rig.Engine.RenderFrame(frame: rig.Frame);
+        _ = rig.Engine.RenderFrame(frame: rig.Frame);
+
+        var withoutMesh = ImagesCreated();
+
+        Assert.Equal(expected: 0UL, actual: rig.Engine.MeshAttachmentBytes);
+
+        var quad = new SdfMesh(
+            indices: new uint[] { 0, 1, 2, 0, 2, 3 },
+            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
+        );
+        var drawing = (rig.Frame with {
+            MeshDraws = [new SdfMeshDraw(Material: 0, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)],
+        });
+
+        _ = rig.Engine.RenderFrame(frame: drawing);
+        Assert.Equal(expected: (withoutMesh + 2L), actual: ImagesCreated());
+        Assert.Equal(
+            expected: SdfWorldEngine.MeshAttachmentBytesOf(
+                height: Extent,
+                width: Extent
+            ),
+            actual: rig.Engine.MeshAttachmentBytes
+        );
+
+        _ = rig.Engine.RenderFrame(frame: drawing);
+        _ = rig.Engine.RenderFrame(frame: rig.Frame);
+        _ = rig.Engine.RenderFrame(frame: drawing);
+        Assert.Equal(expected: (withoutMesh + 2L), actual: ImagesCreated());
+    }
     [Fact]
     public void AFencedFramePublishesOnTheNextFrameAndASteadyStateFrameAllocatesNothing() {
         foreach (var cadence in ((ReadOnlySpan<bool>)[false, true])) {
@@ -320,9 +374,9 @@ public sealed class SdfWorldEngineWorkLawTests {
     // before the copies write them, each binding the copy pipeline and its set with no push constants, then
     // transitions each copied buffer for its readers; the second frame repeats the first's inputs, so it owes no copy and
     // binds nothing. The barrier ending a pass lands in the next pass, as the timing marks bound them: mask carries the
-    // sky barrier. The frame draws no mesh, so the mesh pass records nothing. Outside every pass: the command buffer, the
-    // image transitions (on the first frame the filler's, and the view output's into the storage layout and back; the
-    // mesh visibility target's first transition rode the construction's ISA handshake; none on the skipped frame, whose output stands) and the
+    // sky barrier. The frame draws no mesh, so the mesh pass records nothing and no mesh visibility target exists. Outside
+    // every pass: the command buffer, the image transitions (the view output's into the storage layout and back; the
+    // filler's first transition rode the construction's ISA handshake; none on the skipped frame, whose output stands) and the
     // cross-frame barrier, the per-frame descriptor rebinds (the screen sources, the glyph atlas and the output), and on
     // the rendered frame its blocks: the frame block whole, one 256-byte constant-buffer view, and the 36 bytes of the
     // view's world block that differ from what the slot held. Every pass binds two sets, the frame set and the view's
@@ -330,7 +384,7 @@ public sealed class SdfWorldEngineWorkLawTests {
     // region's whole first copy (the 820 KB decal table among them), each with its header and one run-table entry; a staged
     // region's device-local buffer is shared by the ring slots, so the second frame writes nothing.
     private const string RenderedFrame =
-        "work submission=7 revision=1\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=9 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=835160 clears=0\nwork sky executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork mask executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork beam executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork cull-args executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork mesh executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork primary executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=2 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork surface executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork ambient executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork views executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=3 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=34 uploads.host-visible=292 clears=0\n";
+        "work submission=7 revision=1\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=9 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=835160 clears=0\nwork sky executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork mask executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork beam executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork cull-args executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork mesh executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork primary executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=2 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork surface executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork ambient executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork views executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=1 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=2 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=34 uploads.host-visible=292 clears=0\n";
     private const string SkippedFrame =
         "work submission=8 revision=1\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0\nwork sky skipped\nwork mask skipped\nwork beam skipped\nwork cull-args skipped\nwork mesh skipped\nwork primary skipped\nwork surface skipped\nwork ambient skipped\nwork views skipped\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=34 uploads.host-visible=0 clears=0\n";
 

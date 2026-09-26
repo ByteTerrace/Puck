@@ -1961,7 +1961,8 @@ draws. The compact record may move presentation pixels by at most one
 least-significant bit; the state hash and the record's identity stay exact. Mesh
 pixels shade with neutral shadows and ambient occlusion until P6. P4 carries
 zero jitter and previous transforms, which P15 builds on. `world.budget` reports
-the mesh attachments' memory, about 41 MB at 1920×1080. The unbounded reference
+the mesh attachments' memory, about 41 MB at 1920×1080, which an engine holds only
+once a frame draws a mesh. The unbounded reference
 is the fixed-point law and the canary oracle, a fixed-point raycast run to the
 far distance, never to a mesh, beside analytic triangles.
 
