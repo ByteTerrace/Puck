@@ -227,7 +227,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
-    private Func<IReadOnlyList<string>, WorldRootGraph>? m_compose;
+    private Func<IReadOnlyList<string>, int, WorldRootGraph>? m_compose;
     private bool m_disposed;
     private WorldViewDefaults? m_lastViews;
     // The last refusal Reconcile reported, so a section it keeps retrying reports each refusal once.
@@ -284,10 +284,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
             var synthesizedGraphs = synthesized.Graphs();
 
-            instances = [synthesized.Instances[0], .. rows, .. synthesized.Instances.Skip(count: 1)];
-            composed.Add(item: synthesizedGraphs[0]);
+            // The world producers first, so the runtime renders the one that renders every view before the ones that hand
+            // out later views' outputs.
+            var producers = synthesized.Producers.Count;
+
+            instances = [.. synthesized.Producers, .. rows, .. synthesized.Instances.Skip(count: producers)];
+            composed.AddRange(collection: synthesizedGraphs.Take(count: producers));
             composed.AddRange(collection: Enumerable.Repeat<RenderGraphRuntimeGraph?>(count: rows.Count, element: null));
-            composed.AddRange(collection: synthesizedGraphs.Skip(count: 1));
+            composed.AddRange(collection: synthesizedGraphs.Skip(count: producers));
             root = synthesized.Root;
         }
 
@@ -311,12 +315,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// onto it.</summary>
     /// <param name="runtime">The runtime, built from the set <see cref="TryCompose"/> composed for the booted
     /// document.</param>
-    /// <param name="compose">Synthesizes the default graph over the panes a document's layouts place.</param>
+    /// <param name="compose">Synthesizes the default graph over the panes a document's layouts place and the views they
+    /// compose (<see cref="WorldRootGraph.ViewsOf"/>).</param>
     /// <param name="synthesized">The default graph the runtime was built with, or <see langword="null"/> when the booted
     /// document names its own root.</param>
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/> or <paramref name="compose"/> is
     /// <see langword="null"/>.</exception>
-    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, WorldRootGraph> compose, WorldRootGraph? synthesized) {
+    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, WorldRootGraph> compose, WorldRootGraph? synthesized) {
         ArgumentNullException.ThrowIfNull(argument: runtime);
         ArgumentNullException.ThrowIfNull(argument: compose);
 
@@ -377,9 +382,52 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         return true;
     }
+    /// <summary>Places a view of the world this frame: the synthesized root reads the view's producer at its rect's
+    /// extent at its render scale, and, when the view is shown, reconstructs its output into the rect at the given
+    /// sharpness. The first view is also the base the root draws everything over, so it is read whether shown or not. A
+    /// view the synthesized root does not place (one past its <see cref="WorldRootGraph.Views"/>, or any view under a
+    /// graph that places none) is ignored.</summary>
+    /// <param name="view">The 0-based view.</param>
+    /// <param name="region">The view's normalized rect.</param>
+    /// <param name="renderScale">The view's render scale in (0, 1]; any other value renders native.</param>
+    /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+    /// <param name="shown">Whether the root draws the view's output into its rect this frame.</param>
+    /// <returns><see langword="true"/> when the root places the view this frame.</returns>
+    public bool PlaceView(int view, NormalizedRect region, float renderScale, float sharpness, bool shown) {
+        if (
+            (m_synthesized is not { Plan: not null } synthesized) ||
+            (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
+        ) {
+            return false;
+        }
+
+        var scale = (((renderScale > 0f) && (renderScale < 1f))
+            ? renderScale
+            : 1f);
+
+        m_placements[synthesized.ViewPasses[view]] = new RenderGraphPlacement(
+            Height: region.Height,
+            Left: region.X,
+            Sharpness: sharpness,
+            Shown: shown,
+            Top: region.Y,
+            Width: region.Width
+        );
+
+        if (shown || (view == 0)) {
+            m_footprints.Add(item: new RenderGraphFootprint(
+                Consumer: WorldViewGraphs.MainInstance,
+                Height: (region.Height * scale),
+                Producer: WorldRootGraph.ProducerOf(view: view),
+                Width: (region.Width * scale)
+            ));
+        }
+
+        return true;
+    }
     /// <inheritdoc/>
-    /// <remarks>A pane of the synthesized root the host did not place this frame is not shown, so its pass draws
-    /// nothing.</remarks>
+    /// <remarks>A pane or view of the synthesized root the host did not place this frame is not shown, so its pass
+    /// draws nothing.</remarks>
     public bool TryGet(string instance, string pass, out RenderGraphPlacement placement) {
         if (
             !string.Equals(
@@ -388,7 +436,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 comparisonType: StringComparison.Ordinal
             ) ||
             (m_synthesized is not { } synthesized) ||
-            !synthesized.Panes.Contains(value: pass)
+            (!synthesized.Panes.Contains(value: pass) && !synthesized.ViewPasses.Contains(value: pass))
         ) {
             placement = default;
 
@@ -667,13 +715,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         if (views.Root is null) {
             var panes = WorldRootGraph.PanesOf(views: views);
+            var composedViews = WorldRootGraph.ViewsOf(views: views);
 
             if (
                 (synthesized is null) ||
+                (synthesized.Views != composedViews) ||
                 !synthesized.Panes.SequenceEqual(second: panes, comparer: StringComparer.Ordinal)
             ) {
                 try {
-                    synthesized = m_compose!(arg: panes);
+                    synthesized = m_compose!(arg1: panes, arg2: composedViews);
                 } catch (WorldRootGraphRefusedException exception) {
                     ReportRefusal(reason: exception.Message);
 

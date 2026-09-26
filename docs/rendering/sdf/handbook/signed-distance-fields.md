@@ -165,10 +165,10 @@ Four layers, each one built from the layer below it:
                               │ per frame
  ┌───────────────────────────▼───────────────────────────────────┐
  │  PASSES                                                        │
- │  mask → beam → cull-args → views → composite                  │
+ │  mask → beam → cull-args → views, once per view                │
  │  (which tiles touch which objects → coarse cone march per      │
  │  tile → pack the fine-march workload → per-pixel sphere trace  │
- │  + shade → combine viewports into the final frame)             │
+ │  + shade into that view's own image)                           │
  └───────────────────────────┬───────────────────────────────────┘
                               │
                          ┌────▼────┐

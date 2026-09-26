@@ -208,9 +208,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint maskBase = worldInstanceMaskBase(tileIndex);
     ViewportData view = viewports[viewIndex];
     // The tile cone, built from the same inputs the beam uses — bitwise the same cone (a pure function of the
-    // viewport row + tile coords; the TRUNCATED-then-render-scaled regionSizePx matches the beam and Stage 1's
-    // renderDims exactly — the shared worldRenderDims integer derivation, see the beam).
-    float2 regionSizePx = float2(worldRenderDims((uint2)(view.region.zw * float2(params.imageExtent)), view.renderScale.x));
+    // viewport row + tile coords; regionSizePx is the view's render extent, worldViewDims, as in the beam and Stage 1).
+    float2 regionSizePx = float2(worldViewDims(view));
     float2 tileMinPx = (float2(id.xy) * float(WorldTileSize));
 
     // Tiles past the viewport's pixel extent hold no rays — the beam leaves them TileEmpty and Stage 1 never reads

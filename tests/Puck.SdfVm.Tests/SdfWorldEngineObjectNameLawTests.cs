@@ -79,9 +79,9 @@ public sealed class SdfWorldEngineObjectNameLawTests {
         );
         Assert.Contains(collection: names, expected: "Buffer sdf.world/tiles");
         Assert.Contains(collection: names, expected: "Buffer sdf.world/brick-pool");
-        Assert.Contains(collection: names, expected: "Image sdf.world/output");
+        Assert.Contains(collection: names, expected: "Image sdf.world/screen-source-filler");
         Assert.Contains(collection: names, expected: "DescriptorPool sdf.world/descriptors");
-        Assert.Contains(collection: names, expected: "DescriptorSet sdf.world/views[1]");
+        Assert.Contains(collection: names, expected: "DescriptorSet sdf.world/views/view0[1]");
         Assert.Contains(collection: names, expected: "CommandPool sdf.world/commands[1]");
         Assert.Contains(
             collection: names,

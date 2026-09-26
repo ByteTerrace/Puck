@@ -1,7 +1,7 @@
-// Sky pre-pass: fills every pixel of each SDF viewport's render-dims source texture with the authored sky BEFORE
-// sdf-beam.comp/sdf-world-views.comp run. Dispatched directly (never DispatchIndirect) over a plain
-// (renderDims.x, renderDims.y, viewportCount) grid with no cull-bounds offset — the beam cull hasn't run yet, so
-// there is no bbox to restrict to, and restricting to one would defeat the point: a beam-culled tile's source pixel
+// Sky pre-pass: fills every pixel of the set's view's output image with the authored sky BEFORE
+// sdf-beam.comp/sdf-world-views.comp run. Dispatched directly (never DispatchIndirect) over the engine's whole extent,
+// bounds-checked against the view's render extent, with no cull-bounds offset — the beam cull hasn't run yet, so
+// there is no bbox to restrict to, and restricting to one would defeat the point: a beam-culled tile's output pixel
 // is otherwise never touched by Stage 1 at all, so this pass is the only writer that reaches it. A frame whose beam
 // later proves every tile live still runs this pass — the redundant write on a live tile's pixel is thrown away the
 // moment Stage 1 overwrites it moments later; a conditional dispatch would save nothing worth the branch.
@@ -20,9 +20,9 @@
 #define SDF_SCREEN_SOURCES
 #include "sdf-world.hlsli"
 
-// The per-view source textures — the SAME binding/register as sdf-world-views.comp.hlsl's own declaration (binding
+// The set's view's output image — the SAME binding/register as sdf-world-views.comp.hlsl's own declaration (binding
 // 4, register u0), so the shared views layout resolves identically regardless of which of the two kernels is bound.
-[[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[5] : register(u0);
+[[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> output : register(u0);
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -33,7 +33,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     ViewportData view = viewports[viewIndex];
-    uint2 rectDims = worldRenderDims((uint2)(view.region.zw * float2(params.imageExtent)), view.renderScale.x);
+    uint2 rectDims = worldViewDims(view);
 
     if ((id.x >= rectDims.x) || (id.y >= rectDims.y)) {
         return;
@@ -60,5 +60,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // tile's ray that clears the field) are bit-identical, and a screenshot across the tile seam shows no step.
     color += ((sdfR2Dither(id.xy) - 0.5) * DitherQuantum);
 
-    sources[viewIndex][id.xy] = float4(color, 1.0);
+    output[id.xy] = float4(color, 1.0);
 }

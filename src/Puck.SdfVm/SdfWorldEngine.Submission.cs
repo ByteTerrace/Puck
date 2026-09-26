@@ -3,7 +3,7 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    /// <summary>Gets the layout the output image rests in between frames once the engine has produced one:
+    /// <summary>Gets the layout each view's output image rests in between frames once the engine has rendered it:
     /// <see cref="GpuImageLayout.ShaderReadOnly"/>, for a same-device consumer to sample, or
     /// <see cref="GpuImageLayout.External"/> in export mode. A consumer that samples the output declares this layout and
     /// hands the image back in it.</summary>
@@ -20,27 +20,32 @@ public sealed partial class SdfWorldEngine {
         }
     }
 
-    /// <summary>Reads the composited output back from the GPU (tightly packed RGBA8, row-major). The returned memory
-    /// is the readback's reusable staging view — copy it before the next frame if it must outlive one.</summary>
-    /// <returns>The composited output pixels.</returns>
+    /// <summary>Reads view 0's output back from the GPU (tightly packed RGBA8, row-major, at the view's render extent,
+    /// <see cref="OutputWidth"/> by <see cref="OutputHeight"/>). The returned memory is the readback's reusable staging
+    /// view — copy it before the next frame if it must outlive one.</summary>
+    /// <returns>View 0's output pixels.</returns>
+    /// <exception cref="InvalidOperationException">No frame has rendered view 0.</exception>
     public ReadOnlyMemory<byte> ReadPixels() {
+        var output = ((m_viewOutputs[0] is { Initialized: true } rendered)
+            ? rendered
+            : throw new InvalidOperationException(message: "No frame has rendered view 0."));
+
         m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback();
 
         return m_readback.Read(
             bytesPerPixel: 4,
             format: Format,
-            height: m_height,
-            sourceImageHandle: m_storageImage.ImageHandle,
+            height: output.Height,
+            sourceImageHandle: output.Image.ImageHandle,
             sourceLayout: OutputLayout,
-
-            width: m_width
+            width: output.Width
         );
     }
-    /// <summary>Renders one frame — beam → cull-args → views (indirect) → composite in a single submit — against the
-    /// uploaded program, waits for completion, and returns the composited RGBA readback. The deterministic harness
-    /// path (validation stages, headless renders).</summary>
+    /// <summary>Renders one frame — every view's set, sky through views, in a single submit — against the uploaded
+    /// program, waits for completion, and returns view 0's RGBA readback. The deterministic harness path (validation
+    /// stages, headless renders).</summary>
     /// <param name="frame">The per-frame data: views (cameras + regions), time, and the dynamic entity transforms.</param>
-    /// <returns>The composited output, tightly packed RGBA8, row-major.</returns>
+    /// <returns>View 0's output, tightly packed RGBA8, row-major, at its render extent.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The frame has zero views or more than the provisioned capacity.</exception>
     public byte[] RenderFrame(SdfFrame frame) {
@@ -94,11 +99,17 @@ public sealed partial class SdfWorldEngine {
 
     /// <summary>Gets the exported image's shared NT handle (zero-copy cross-backend present); 0 outside export mode.</summary>
     public nint ExportSharedHandle => (m_exportableImage?.SharedHandle ?? 0);
-    /// <summary>Gets the native image handle of the composited output image. After a frame, the image rests in the
-    /// <see cref="GpuImageLayout.ShaderReadOnly"/> layout (or the cross-backend <see cref="GpuImageLayout.External"/>
-    /// layout in export mode) — a downstream pass may transition it and read it in place, zero-copy.</summary>
-    public nint OutputImageHandle => m_storageImage.ImageHandle;
-    /// <summary>Gets the native image-view handle of the composited output image (for binding it as a source in a
-    /// downstream descriptor set).</summary>
-    public nint OutputImageViewHandle => m_storageImage.ImageViewHandle;
+    /// <summary>Gets the native image handle of view 0's output image, or zero before a frame has sized it. After a
+    /// frame, the image rests in the <see cref="GpuImageLayout.ShaderReadOnly"/> layout (or the cross-backend
+    /// <see cref="GpuImageLayout.External"/> layout in export mode) — a downstream pass may transition it and read it in
+    /// place, zero-copy.</summary>
+    public nint OutputImageHandle => (m_viewOutputs[0]?.Image.ImageHandle ?? 0);
+    /// <summary>Gets the native image-view handle of view 0's output image (for binding it as a source in a downstream
+    /// descriptor set), or zero before a frame has sized it.</summary>
+    public nint OutputImageViewHandle => (m_viewOutputs[0]?.Image.ImageViewHandle ?? 0);
+    /// <summary>Gets the width in pixels of view 0's output image, its render extent, or zero before a frame has sized
+    /// it.</summary>
+    public uint OutputWidth => (m_viewOutputs[0]?.Width ?? 0);
+    /// <summary>Gets the height in pixels of view 0's output image, or zero before a frame has sized it.</summary>
+    public uint OutputHeight => (m_viewOutputs[0]?.Height ?? 0);
 }

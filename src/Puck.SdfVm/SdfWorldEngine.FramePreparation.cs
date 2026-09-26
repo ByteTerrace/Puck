@@ -6,11 +6,9 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    // (Re)bind the MaxScreenSurfaces screen-source bindings (Stage 1 only) — a slot with no host-supplied source this
-    // frame duplicates the DEDICATED ShaderReadOnly filler (m_screenSourceFiller; NOT the sources[] filler BindSources
-    // uses, which lives in the General/UAV layout Stage 1/2 read/write it in — aliasing that here would violate the
-    // combined-image-sampler binding's required layout the instant any viewport-source dispatch ran). The shader
-    // never samples an unbound slot (params.screenMask gates it), so the filler's content never reaches a pixel. Each
+    // (Re)bind the MaxScreenSurfaces screen-source bindings (Stage 1 only) in every view's set this frame renders — a
+    // slot with no host-supplied source this frame duplicates the DEDICATED ShaderReadOnly filler (m_screenSourceFiller;
+    // a combined-image-sampler binding requires that layout). The shader never samples an unbound slot (params.screenMask gates it), so the filler's content never reaches a pixel. Each
     // is a SCALAR binding, not one array (see ScreenSourceBindingIndices), so each is written at arrayElement 0; the
     // change-detected rebind means an idle scene (no sources bound) only writes descriptors that actually changed.
     //
@@ -23,10 +21,17 @@ public sealed partial class SdfWorldEngine {
     // Skipping the write on a matching value therefore leaves this set's descriptor pointing at the RETIRED resource
     // for the rest of the run, and the next sample of it removes the device. So: rewrite host-owned bindings every
     // frame (a handful of descriptor writes per frame — the engine-owned filler and glyph atlas keep the skip).
-    private void BindScreenSources() {
+    private void BindScreenSources(uint viewportCount) {
+        for (var view = 0; (view < ((int)viewportCount)); view++) {
+            BindScreenSources(
+                boundViews: m_boundScreenSourceViews[m_currentSlot][view],
+                glyphIndex: ((m_currentSlot * m_viewOutputs.Length) + view),
+                viewsSet: m_viewsSets[m_currentSlot][view]
+            );
+        }
+    }
+    private void BindScreenSources(nint[] boundViews, int glyphIndex, nint viewsSet) {
         var fillerView = m_screenSourceFiller.ImageViewHandle;
-        var boundViews = m_boundScreenSourceViews[m_currentSlot];
-        var viewsSet = m_viewsSets[m_currentSlot];
 
         for (var element = 0u; (element < MaxScreenSurfaces); element++) {
             var hostView = m_screenSourceViews[element];
@@ -60,7 +65,7 @@ public sealed partial class SdfWorldEngine {
             : fillerView
         );
 
-        if (glyphView != m_boundGlyphAtlasViews[m_currentSlot]) {
+        if (glyphView != m_boundGlyphAtlasViews[glyphIndex]) {
             m_bindings.WriteCombinedImageSampler(
                 arrayElement: 0,
                 binding: GlyphAtlasBindingIndex,
@@ -68,87 +73,7 @@ public sealed partial class SdfWorldEngine {
                 imageViewHandle: glyphView,
                 samplerHandle: m_screenSampler
             );
-            m_boundGlyphAtlasViews[m_currentSlot] = glyphView;
-        }
-    }
-    // Bind (or rebind when an image-view changed) the source array in both the CURRENT ring slot's Stage 1 (views) and
-    // Stage 2 (composite) sets. Array elements past the live viewport count duplicate slot 0 (Vulkan requires every
-    // bound array element to be a valid descriptor); the kernels never read them. The change-detected cache is per ring
-    // slot (a slot's set is only rewritten after its fence proved the slot idle).
-    private void BindSources(uint viewportCount) {
-        const int FillerSlot = 0;
-
-        var fillerView = m_sourceTextures[FillerSlot]!.ImageViewHandle;
-        var boundViews = m_boundSourceViews[m_currentSlot];
-
-        for (var element = 0u; (element < MaxViewports); element++) {
-            var view = ((element < viewportCount)
-                ? m_sourceTextures[element]!.ImageViewHandle
-                : fillerView
-            );
-
-            if (view == boundViews[element]) {
-                continue;
-            }
-
-            m_bindings.WriteStorageImage(
-                arrayElement: element,
-                binding: ViewSourceBindingIndex,
-                descriptorSetHandle: m_viewsSets[m_currentSlot],
-                imageViewHandle: view
-            );
-            m_bindings.WriteStorageImage(
-                arrayElement: element,
-                binding: CompositeSourceBindingIndex,
-                descriptorSetHandle: m_compositeSets[m_currentSlot],
-                imageViewHandle: view
-            );
-            boundViews[element] = view;
-        }
-    }
-    // Stage 2's CompositeParams2 { uint2 imageExtent; uint viewportCount; uint padding; float4 rects[5]; uint2 scaleQPacked;
-    // uint2 sharpnessQPacked; }: the LIVE regions drive the layout every frame. word[3] is the padding that places the
-    // float4 rects array on Direct3D 12's 16-byte boundary (KEEP IN SYNC with sdf-world-composite.comp.hlsl's struct);
-    // the final four words carry the byte-packed per-view controls.
-    private void BuildCompositePush(SdfFrame frame) {
-        var words = MemoryMarshal.Cast<byte, uint>(span: m_compositePush.AsSpan());
-
-        words[0] = m_width; words[1] = m_height; words[2] = ((uint)frame.Views.Count); words[3] = 0u;
-
-        var floats = MemoryMarshal.Cast<byte, float>(span: m_compositePush.AsSpan());
-
-        for (var index = 0; (index < frame.Views.Count); index++) {
-            var region = frame.Views[index].Region;
-            var b = (4 + (index * 4));
-
-            floats[(b + 0)] = region.X; floats[(b + 1)] = region.Y; floats[(b + 2)] = region.Width; floats[(b + 3)] = region.Height;
-        }
-
-        // scaleQPacked (after rects): view v's quantized render-scale numerator in byte lane (v % 4) of word (v / 4) —
-        // the SAME RenderScaleQ the viewport row carries, so Stage 2's upsample derivation matches Stage 1's render.
-        // Unpacked slots stay q = 255 (native) so a stale lane can never scale a live view.
-        var qBase = (4 + (MaxViewports * 4));
-
-        words[(qBase + 0)] = 0xFFFFFFFFu; words[(qBase + 1)] = 0xFFFFFFFFu;
-
-        for (var index = 0; (index < frame.Views.Count); index++) {
-            var word = (qBase + (index / 4));
-            var shift = ((index % 4) * 8);
-
-            words[word] = (words[word] & ~(0xFFu << shift)) | (((uint)RenderScaleQ(view: frame.Views[index])) << shift);
-        }
-
-        // sharpnessQPacked follows scaleQPacked with the same five-view byte-lane layout. Zero is bilinear and retains
-        // the existing four-tap path; nonzero blends toward clamped Catmull-Rom. Unused lanes stay zero.
-        var sharpnessBase = (qBase + 2);
-
-        words[(sharpnessBase + 0)] = 0u; words[(sharpnessBase + 1)] = 0u;
-
-        for (var index = 0; (index < frame.Views.Count); index++) {
-            var word = (sharpnessBase + (index / 4));
-            var shift = ((index % 4) * 8);
-
-            words[word] |= (((uint)UpscaleSharpnessQ(view: frame.Views[index])) << shift);
+            m_boundGlyphAtlasViews[glyphIndex] = glyphView;
         }
     }
     // Packs the rows the frame's moved set owes into the dynamic-transform region — 3 float4 per slot: position.xyz
@@ -525,11 +450,10 @@ public sealed partial class SdfWorldEngine {
     // the sub-cell fraction.
     private const double CloudLatticePeriod = 4096d;
 
-    // Pack each frame's views (camera snapshot + region + render scale + the frame's far distance) into the 96-byte
+    // Pack each frame's views (camera snapshot + render extent + the frame's far distance) into the 96-byte
     // ViewportData rows the kernels read — member-for-member from SdfFrame, no camera math (the snapshot already holds
-    // the basis + tan(fov/2) + aspect). The render scale packs as its QUANTIZED numerator q (RenderScaleQ) so Stage 1,
-    // the tile passes, and Stage 2 all derive the identical integer render extent. The far distance rides the row's
-    // last lane because the viewport table is the one buffer every marching kernel (beam, views, instance cull, sky)
+    // the basis + tan(fov/2) + aspect). The render extent is the view's output image's size, in exact integers, so the
+    // sky, the tile passes and the hit passes all read the same one. The far distance rides the row's last lane because the viewport table is the one buffer every marching kernel (beam, views, instance cull, sky)
     // already binds — no descriptor grows. The rows are packed into m_viewportScratch, which the cadence signature reads,
     // and written into the viewport region, which owes only the words that changed; a row carries the frame's
     // presentation time, so its time word is owed whenever that time moves. KEEP IN SYNC with sdf-world.hlsli's
@@ -544,14 +468,14 @@ public sealed partial class SdfWorldEngine {
             );
             var view = frame.Views[index];
             var camera = view.Camera;
-            var region = view.Region;
+            var output = m_viewOutputs[index]!;
 
             floats[0] = camera.Position.X; floats[1] = camera.Position.Y; floats[2] = camera.Position.Z; floats[3] = frame.Time;          // position.xyz, time
             floats[4] = camera.Right.X; floats[5] = camera.Right.Y; floats[6] = camera.Right.Z; floats[7] = camera.TanHalfFieldOfView;     // right.xyz, tan(fov/2)
             floats[8] = camera.Up.X; floats[9] = camera.Up.Y; floats[10] = camera.Up.Z; floats[11] = camera.AspectRatio;                   // up.xyz, aspect
             floats[12] = camera.Forward.X; floats[13] = camera.Forward.Y; floats[14] = camera.Forward.Z; floats[15] = DebugMode;           // forward.xyz, debug view mode
-            floats[16] = region.X; floats[17] = region.Y; floats[18] = region.Width; floats[19] = region.Height;                           // region origin.xy, size.xy
-            floats[20] = RenderScaleQ(view: view); floats[21] = view.AsymmetricFrustumOffset.X; floats[22] = view.AsymmetricFrustumOffset.Y; floats[23] = frame.FarDistance; // renderScale q, off-axis offset xy, far distance
+            floats[16] = output.Width; floats[17] = output.Height; floats[18] = 0f; floats[19] = 0f;                                      // render extent xy
+            floats[20] = 0f; floats[21] = view.AsymmetricFrustumOffset.X; floats[22] = view.AsymmetricFrustumOffset.Y; floats[23] = frame.FarDistance; // lens: off-axis offset xy, far distance
         }
 
         _ = m_viewportRegion.Write(
@@ -562,9 +486,8 @@ public sealed partial class SdfWorldEngine {
             offset: 0
         );
     }
-    // The shared per-frame front half of both submission paths: validate, (re)bind sources, pack + upload the
-    // viewport/transform buffers, and rebuild both push-constant blocks from the LIVE regions (the camera director
-    // animates the split layout, so a frozen first-frame layout composited stale/blank rects mid-transition).
+    // The shared per-frame front half of both submission paths: validate, size and bind each view's output, (re)bind
+    // screen sources, pack + upload the viewport/transform buffers, and rebuild the push-constant block.
     private uint PrepareFrame(SdfFrame frame, Action<int>? onFrameSlotAvailable = null) {
         ArgumentNullException.ThrowIfNull(frame);
         ObjectDisposedException.ThrowIf(
@@ -578,7 +501,7 @@ public sealed partial class SdfWorldEngine {
             (0 == viewportCount) ||
             (viewportCount > m_viewportCapacity)
         ) {
-            throw new ArgumentException(message: $"This world engine composites 1 to {m_viewportCapacity} viewports; the frame has {viewportCount}.");
+            throw new ArgumentException(message: $"This world engine renders 1 to {m_viewportCapacity} viewports; the frame has {viewportCount}.");
         }
 
         if (frame.DynamicTransforms.Count < m_requiredDynamicTransformCapacity) {
@@ -612,8 +535,12 @@ public sealed partial class SdfWorldEngine {
         m_frameFences[slot].Wait();
         onFrameSlotAvailable?.Invoke(obj: slot);
 
-        BindSources(viewportCount: viewportCount);
-        BindScreenSources();
+        EnsureViewOutputs(
+            frame: frame,
+            viewportCount: viewportCount
+        );
+        BindViewOutputs(viewportCount: viewportCount);
+        BindScreenSources(viewportCount: viewportCount);
         PackViewports(
             frame: frame,
             viewportCount: viewportCount
@@ -654,7 +581,7 @@ public sealed partial class SdfWorldEngine {
         );
         StageMeshRegion(draws: frame.MeshDraws);
 
-        // CompositeParams { uint2 imageExtent; uint2 tileGrid; uint viewportCount; uint screenMask; uint instanceMaskWordCount; uint sampleIndex; } — Stage 0/1 push.
+        // WorldParams { uint2 imageExtent; uint2 tileGrid; uint viewportCount; uint screenMask; uint instanceMaskWordCount; uint sampleIndex; uint viewBase; }.
         var pushWords = MemoryMarshal.Cast<byte, uint>(span: m_pushConstant.AsSpan());
 
         pushWords[0] = m_width; pushWords[1] = m_height; pushWords[2] = m_tileGridX; pushWords[3] = m_tileGridY; pushWords[4] = viewportCount; pushWords[5] = m_screenSourceMask; pushWords[6] = ((uint)m_liveInstanceMaskWordCount);
@@ -674,52 +601,11 @@ public sealed partial class SdfWorldEngine {
             : 0u
         );
 
-        BuildCompositePush(frame: frame);
         DecideCadenceSkip(
             frame: frame,
             viewportCount: viewportCount
         );
         return viewportCount;
-    }
-    // The quantized render-scale numerator q (1..255; 255 = native): one quantization, shared by the viewport row and
-    // the composite push, so every kernel derives the same integer render extent.
-    private static byte RenderScaleQ(SdfViewSnapshot view) {
-        var scale = view.RenderScale;
-
-        if (
-            !(scale > 0f) ||
-            (scale >= 1f)
-        ) {
-            return 255;
-        }
-
-        return ((byte)Math.Clamp(
-            value: ((int)MathF.Round(x: (scale * 255f))),
-            min: 1,
-            max: 255
-        ));
-    }
-    // The per-view reconstruction blend quantized to one byte. Invalid/negative input degrades to the existing
-    // bilinear path; values above one saturate at full clamped Catmull-Rom.
-    private static byte UpscaleSharpnessQ(SdfViewSnapshot view) {
-        var sharpness = view.UpscaleSharpness;
-
-        if (
-            !float.IsFinite(f: sharpness) ||
-            (sharpness <= 0f)
-        ) {
-            return 0;
-        }
-
-        if (sharpness >= 1f) {
-            return 255;
-        }
-
-        return ((byte)Math.Clamp(
-            value: ((int)MathF.Round(x: (sharpness * 255f))),
-            min: 0,
-            max: 255
-        ));
     }
     private void ValidateInstanceGridCapacity(ReadOnlySpan<uint> words) {
         if (words.Length > m_instanceGridWordCapacity) {

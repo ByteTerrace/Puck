@@ -1,8 +1,8 @@
 // GPU-driven cull args: a single-WORKGROUP parallel reduction over the beam prepass's per-tile cull buffer. It computes
 // the bounding box of SURVIVING (non-empty) tiles of the one view its dispatch set renders and writes (a) the Stage-1 "views" INDIRECT
 // dispatch group counts and (b) the bbox group origin. The views dispatch then covers ONLY that bbox — the all-empty
-// margins (e.g. the sky above the scene) are never dispatched — and the source-agnostic compositor flattens every
-// remaining empty tile to a constant. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
+// margins (e.g. the sky above the scene) are never dispatched, and the sky pre-pass alone has written every
+// remaining empty tile. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
 // cull-buffer read); its args output feeds the indirect Stage-1 dispatch (a draw-indirect barrier) and its bounds
 // output the Stage-1 kernel (a shader-read barrier). Generic: it operates only on the cull buffer, not on any scene.
 //
@@ -15,7 +15,7 @@
 // register(t0) DELIBERATELY shadows sdf-vm.hlsli's sdfWords (and t1 shadows sdf-world.hlsli's viewports): this kernel
 // reads NEITHER, DXC dead-code-eliminates both declarations, and `tiles` ends up the only SRV — which the Direct3D 12
 // pipeline factory assigns t0 by binding order anyway. If you ever call map() or read viewports[] from here, the
-// overlap becomes real: split CompositeParams out of sdf-world.hlsli rather than renumbering this
+// overlap becomes real: split WorldParams out of sdf-world.hlsli rather than renumbering this
 // register, because the factory assigns registers POSITIONALLY and an annotation change alone desyncs the root signature.
 [[vk::binding(3, 0)]] StructuredBuffer<float> tiles : register(t0);       // read-only beam cull buffer
 [[vk::binding(5, 0)]] RWStructuredBuffer<uint> viewsArgs : register(u0);  // [groupCountX, groupCountY, groupCountZ]

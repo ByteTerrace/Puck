@@ -50,7 +50,7 @@ public sealed class GeneratedNameReversalLawTests {
         new(Calls: 1, File: Sessions, Mints: "a freshly started instance's name"),
         new(Calls: 1, File: Extensions, Mints: "an extension runtime's directory"),
         new(Calls: 1, File: Captures, Mints: "a capture's frame file"),
-        new(Calls: 3, File: Views, Mints: "a session screen's and a camera seat's view name, and the synthesized root graph's own versions and passes, which exist only at run time"),
+        new(Calls: 4, File: Views, Mints: "a session screen's and a camera seat's view name, a later view's world producer, and the synthesized root graph's own versions and passes, which exist only at run time"),
         new(Calls: 1, File: Probes, Mints: "a seat-relative probe's instance key, which exists only at run time"),
     ];
     private static readonly Regex MintingCall = new(

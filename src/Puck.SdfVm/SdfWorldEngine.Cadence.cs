@@ -83,19 +83,19 @@ public sealed partial class SdfWorldEngine {
 
         return hash.Value;
     }
-    // Cadence gate: latches whether Record may skip the sky/mask/beam/cull-args/views passes and re-composite from
-    // the retained (ring-shared) views output. A skip is permitted only when the gate is enabled, this
+    // Cadence gate: latches whether Record may skip every view's sky/mask/beam/cull-args/primary/surface/ambient/views
+    // passes, leaving each view's retained output standing. A skip is permitted only when the gate is enabled, this
     // frame's change signature exactly matches the last rendered frame's, the live program declares no ScreenSlab,
-    // and no carve bake is in progress.
+    // no carve bake is in progress, and no view's output was replaced this frame (a new image holds nothing).
     //
     // Signature coverage — the signature (ComputeFrameSignature) folds in everything the five skipped passes consume
     // (the sky pass reads only m_viewportScratch + m_screenLightScratch, both already covered below):
     //   - m_programRevision  : the uploaded program (words, live instance-mask width, kernel variant, reseeded
     //                          screen-surface table, invariant instance grid) — bumped by UploadProgram.
-    //   - m_pushConstant     : Stage 0/1 push — width/height/tileGrid (constant), viewportCount,
+    //   - m_pushConstant     : the pass push — width/height/tileGrid (constant), viewportCount,
     //                          screenSourceMask (bound-slot bitmask), liveInstanceMaskWordCount.
-    //   - m_viewportScratch  : per-view camera basis + fov/aspect, region, debug view mode, the quantized
-    //                          render-scale numerator, and the frame's far distance — excluding each row's presentation-time lane (PackViewports'
+    //   - m_viewportScratch  : per-view camera basis + fov/aspect, render extent, debug view mode, the off-axis
+    //                          offset, and the frame's far distance — excluding each row's presentation-time lane (PackViewports'
     //                          position.w; byte offset 12 of each 96-byte ViewportData row). Time free-runs every
     //                          frame (it feeds the animated test-card in screenContent, sdf-world.hlsli), so hashing
     //                          it would make the signature never repeat and the gate permanently inert. Any camera
@@ -109,10 +109,8 @@ public sealed partial class SdfWorldEngine {
     //                          rows + the engine-bench lever rows (soft-shadow/AO/shadow-distance/screen-lights) + the
     //                          shadow-proxy rows + the analytic-normal and shadow-cull toggles — every shading lever.
     //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
-    // Deliberately excluded (composite-only inputs — composite runs every frame, so a change to them is applied by
-    // this frame's composite and can never produce a stale pixel): the composite push's UpscaleSharpness lane. The
-    // region layout is covered (it rides m_viewportScratch, because Stage 1 renders into the region
-    // extent).
+    // The rect a view is placed in and its reconstruction sharpness are the render graph's (its place pass runs every
+    // frame), never this engine's input.
     // Not covered by any packed span — handled conservatively by forcing a render:
     //   - m_programDeclaresScreenSlab (computed once at UploadProgram — see there): covers both the declared-but-
     //     unbound case (the excluded time lane is the sole per-frame driver of screenContent's test-card —
@@ -142,6 +140,7 @@ public sealed partial class SdfWorldEngine {
             (signature == m_previousFrameSignature) &&
             !m_programDeclaresScreenSlab &&
             !AnyBrickBaking() &&
+            !m_viewOutputReplaced &&
             (frame.Volumes.Count == 0));
         m_previousFrameSignature = signature;
         m_hasPreviousFrameSignature = true;

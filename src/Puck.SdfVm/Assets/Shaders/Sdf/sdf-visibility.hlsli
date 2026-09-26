@@ -22,7 +22,7 @@
 // the static field. A mesh hit's source is its draw.
 //
 // The views layout binds the one buffer twice: primary, surface and ambient write it through the read-write binding
-// 49 (u5, after the five source images u0..u4); views only reads it, through the read-only binding 50 (t45, after
+// 49 (u1, after the view's output image u0); views only reads it, through the read-only binding 50 (t45, after
 // the cull buffer t44). Scalar uint storage matches the engine's four-byte descriptor stride on both backends.
 #ifndef SDF_VISIBILITY_HLSLI
 #define SDF_VISIBILITY_HLSLI
@@ -30,7 +30,7 @@
 #include "sdf-octahedral.hlsli"
 
 #if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS)
-[[vk::binding(49, 0)]] RWStructuredBuffer<uint> sdfVisibilityRecords : register(u5);
+[[vk::binding(49, 0)]] RWStructuredBuffer<uint> sdfVisibilityRecords : register(u1);
 #define SDF_VISIBILITY_WRITABLE
 #else
 [[vk::binding(50, 0)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t45);

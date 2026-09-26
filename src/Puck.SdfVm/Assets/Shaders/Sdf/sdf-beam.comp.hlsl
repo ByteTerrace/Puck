@@ -13,7 +13,7 @@
 // contract Stage 1's masked march already rides, so plane 0/the gap planes are unchanged for contract-honoring
 // scenes. The instance cull stays a SEPARATE pass (not fused here) because its cell walk's register footprint taxed
 // this kernel's cone-march occupancy by a measured +12% at 4096 instances, grid path or flat.
-// Dispatched as (tileGrid.x, tileGrid.y, viewportCount) SINGLE-THREAD workgroups — one warp per tile — after the
+// Dispatched once per view as (tileGrid.x, tileGrid.y, 1) SINGLE-THREAD workgroups — one warp per tile — after the
 // instance-cull pass and before cull-args/Stage 1, each hop separated by a compute-to-compute memory barrier.
 // Each (1,1,1) workgroup performs a long serial cone march whose step count and masked
 // segment walk differ tile to tile, so a 32-lane warp of 32 DIFFERENT tiles serializes on that divergence (the march
@@ -72,14 +72,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // step, so the decode must happen exactly once here, before the first call below.
     sdfProgramLayout = sdfLoadProgramLayout();
 
-    // TRUNCATED, matching Stage 1's `rectDims = (uint2)(view.region.zw * imageExtent)` exactly. Dividing by the float
-    // product instead puts the last tile's localUvMax BELOW the last pixel's uv whenever the product has a fractional
-    // part (an odd window width or height does it immediately): that pixel's ray then lies outside both the cone this
-    // kernel cleared and the cone the instance-cull pass culled against, silently breaking the "provably absent"
-    // exactness mapMasked's contract rests on. Then reduced by the view's render scale (worldRenderDims — the same
-    // integer derivation Stage 1 and the instance cull use), so tile coverage tracks the RENDER extent: tiles past it
-    // hold no rendered rays and stay TileEmpty.
-    float2 regionSizePx = float2(worldRenderDims((uint2)(view.region.zw * float2(params.imageExtent)), view.renderScale.x));
+    // The view's render extent (worldViewDims — the same integers Stage 1 and the instance cull read), so tile coverage
+    // tracks the pixels the view renders: tiles past it hold no rendered rays and stay TileEmpty. The last tile's
+    // localUvMax then reaches the last pixel's uv exactly, which the "provably absent" exactness mapMasked's contract
+    // rests on.
+    float2 regionSizePx = float2(worldViewDims(view));
     float2 tileMinPx = (float2(id.xy) * float(WorldTileSize));
 
     // Tiles past the viewport's pixel extent hold no rays — leave them empty. `bounds` carries the classic march-start
@@ -114,9 +111,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
         // FULL-FIELD SLICE OVERRIDE (debug view mode 7 — see the termination/slice split note in renderView): the
         // slice view must color EVERY pixel of the viewport with the ideal field, so no in-viewport tile may stay
-        // TileEmpty in that mode — an empty tile would be dropped by the cull-args bbox AND flattened by Stage 2's
-        // empty-tile test, truncating the isolines into 16-px tile staircases around the shape. Forcing a 0.0
-        // march-start keeps both downstream consumers on their normal "live tile" path; renderView skips the march
+        // TileEmpty in that mode — an empty tile would be dropped by the cull-args bbox, truncating the isolines into
+        // 16-px tile staircases around the shape. Forcing a 0.0 march-start keeps the downstream passes on their
+        // normal "live tile" path; renderView skips the march
         // for slice anyway, so the forced tiles never pay a wasted march. Every OTHER mode leaves this kernel
         // byte-identical (the override keys exactly on the viewport row's forward.w mode lane).
         if (((int)round(view.forward.w) == DebugViewModeSlice) && (bounds.entry == TileEmpty)) {

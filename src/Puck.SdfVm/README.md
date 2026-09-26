@@ -1,10 +1,10 @@
 # Puck.SdfVm
 
 Puck.SdfVm is the SDF GPU engine: the device-explicit render pipeline that
-walks a compiled signed-distance program on the GPU and composites the
-result—`SdfWorldEngine` (beam cull → per-view render → split-screen
-composite over a viewport table of cameras and regions) and `SdfEngineNode`
-(the host-model `IRenderNode` that wraps it for a generic render tree). The
+walks a compiled signed-distance program on the GPU—`SdfWorldEngine` (beam
+cull → per-view render over a viewport table of cameras and regions, each view
+into its own output image) and `SdfEngineNode` (the host-model `IRenderNode`
+that wraps it and publishes each view's output to the render graph). The
 single-source HLSL kernels (`Assets/Shaders/Sdf`) compile to both SPIR-V
 (Vulkan) and DXIL (Direct3D 12) from one shared source, and the C# side of the
 instruction-set contract they decode lives one project away.
@@ -20,7 +20,7 @@ never a Vulkan or DirectX type by name.
 ## Key features
 
 - *One HLSL source, two backends:* every kernel compiles to SPIR-V and DXIL
-  from the same file, so there is exactly one march/composite implementation
+  from the same file, so there is exactly one march implementation
   to reason about, not two that can silently diverge.
 - *Mask-first culling:* a host-built CSR uniform grid (`SdfInstanceGrid`, in
   `Puck.SignedDistance`) prepasses each tile's instance mask before the beam
@@ -63,15 +63,18 @@ never a Vulkan or DirectX type by name.
 
 ## The render pipeline
 
-Ten kernels run per frame: `region-copy.comp` (from `Puck.Shaders`: the words each
+Nine kernels run per frame: `region-copy.comp` (from `Puck.Shaders`: the words each
 staged region of frame data owes, copied into its device-local buffer; see
 [what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads)) → `sdf-sky.comp` (a direct, un-culled pass that
-fills every source pixel with the authored sky, before any tile is culled)
+fills every pixel of the view's output with the authored sky, before any tile is culled)
 → `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
 (cone march over the tile-masked field) → `sdf-cull-args.comp` →
 `sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
 (normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) → the views
-kernel (materials, lighting and diagnostics) → the composite pass (split-screen assembly).
+kernel (materials, lighting and diagnostics). Every kernel after the upload
+runs once per view, into that view's own output image at its render extent;
+the render graph's `place` pass, not this engine, places each output in its
+seat rect and reconstructs a reduced render scale.
 `SdfWorldEngine.PassLabels` names them for the per-pass work counts the engine
 publishes through `Work` once a submission completes; the node or view that
 owns an engine owns its ledger, so counts survive a rebuild. The views
@@ -181,7 +184,9 @@ and duplicated unrolled integrators; intersecting volumes still require repeated
 selection scans. The [authoring contract](../Puck.World.Authoring/README.md#bounded-volumes-volumes)
 describes density controls and lighting limits.
 What is drawn over that node's output belongs to the render graph: the node
-is the `sdf.world` producer a graph instance reads, and post-render passes are
+is the `sdf.world` producer a graph instance reads for the first view,
+`SdfEngineNode.ViewProducer` gives one for each later split-screen view, and
+post-render passes are
 `post.<id>` package passes (`Puck.Shaders.PostProcessPackage`) over
 `puck.shader.manifest.v1` manifests shipped in this project's
 `Assets/Shaders/Sdf/` tree (`sdf-film-grain.frag.hlsl` +
@@ -192,7 +197,7 @@ document's `render.extensions[].id`; this project carries no per-pass C#.
 
 Creating a compute pipeline is where the driver translates a kernel to native
 code. With its cache cold, after a kernel or driver change, that can take
-seconds per pipeline, and the engine has about fourteen of them. So the engine
+seconds per pipeline, and the engine has about a dozen of them. So the engine
 never creates one. `SdfWorldPipelines.Build` creates the whole set, and
 `SdfEngineNode`, `SdfCameraView`, and `WorldSessionView` lease it from
 `SdfWorldPipelineCache`, which the composition hands each of them; the engine

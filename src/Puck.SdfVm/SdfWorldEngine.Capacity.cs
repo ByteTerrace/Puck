@@ -43,7 +43,10 @@ public sealed partial class SdfWorldEngine {
 
         if (!device.Services.Bindings.CanAdmit(
             owner: "SDF world engine",
-            pools: DescriptorPools(brickPool: (options.BrickPoolVoxelCapacity > 0)),
+            pools: DescriptorPools(
+                brickPool: (options.BrickPoolVoxelCapacity > 0),
+                viewportCapacity: options.ViewportCapacity
+            ),
             refusal: out var refusal
         )) {
             throw new GpuDescriptorHeapRefusalException(message: refusal);
@@ -56,25 +59,33 @@ public sealed partial class SdfWorldEngine {
     /// both, so no later frame, the first to draw a mesh or a growing program included, takes a descriptor
     /// range.</summary>
     /// <param name="brickPool">Whether the engine keeps a brick pool.</param>
+    /// <param name="viewportCapacity">The views the engine is provisioned for, each with its own views set per frame ring
+    /// slot.</param>
     /// <returns>The pools' sizes, the engine's own first.</returns>
-    public static GpuDescriptorPoolSizes[] DescriptorPools(bool brickPool) => [
-        DescriptorPoolSizes(brickPool: brickPool),
+    public static GpuDescriptorPoolSizes[] DescriptorPools(bool brickPool, uint viewportCapacity) => [
+        DescriptorPoolSizes(
+            brickPool: brickPool,
+            viewportCapacity: viewportCapacity
+        ),
         RegionCopyPoolSizes(brickPool: brickPool),
     ];
     /// <summary>Returns the one descriptor pool an engine creates itself, the statement its construction creates the
-    /// pool from: one cull-args set (bound once to shared device-local buffers), then per frame ring slot the beam,
-    /// instance-cull, views and composite sets, which bind that slot's buffers; with a brick pool, one bake set per
-    /// brick slot. Array bindings count every element.</summary>
+    /// pool from: one cull-args set (bound once to shared device-local buffers), then per frame ring slot the beam and
+    /// instance-cull sets and one views set per view, which bind that slot's buffers and the view's output image; with a
+    /// brick pool, one bake set per brick slot.</summary>
     /// <param name="brickPool">Whether the engine keeps a brick pool.</param>
+    /// <param name="viewportCapacity">The views the engine is provisioned for.</param>
     /// <returns>The pool's sizes.</returns>
-    public static GpuDescriptorPoolSizes DescriptorPoolSizes(bool brickPool) {
+    public static GpuDescriptorPoolSizes DescriptorPoolSizes(bool brickPool, uint viewportCapacity) {
         var sets = new List<IReadOnlyList<GpuComputeBinding>> { PipelineLayouts.CullArgs };
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {
             sets.Add(item: PipelineLayouts.Beam);
             sets.Add(item: PipelineLayouts.InstanceCull);
-            sets.Add(item: PipelineLayouts.Views);
-            sets.Add(item: PipelineLayouts.Composite);
+
+            for (var view = 0u; (view < viewportCapacity); view++) {
+                sets.Add(item: PipelineLayouts.Views);
+            }
         }
         if (brickPool) {
             for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {
@@ -189,20 +200,22 @@ public sealed partial class SdfWorldEngine {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(required, ceiling);
         return ((required <= current) ? current : (int)Math.Max(val1: required, val2: Math.Min(val1: ceiling, val2: (((long)current) + Math.Max(val1: 1, val2: (current / 2))))));
     }
-    // The same descriptor contracts as construction: views/primary/surface/ambient share viewsSets.
+    // The same descriptor contracts as construction: views/primary/surface/ambient share each view's views set.
     private void BindProgramCapacity() {
         WriteStorageBufferReadOnly(binding: TileBindingIndex, buffer: m_tileBuffer, set: m_cullArgsSet);
         for (var slot = 0; (slot < FrameRingSize); slot++) {
             var beam = m_beamSets[slot];
             var cull = m_instanceCullSets[slot];
-            var views = m_viewsSets[slot];
 
             BindRegions(slot: slot);
             WriteStorageBufferReadWrite(binding: TileBindingIndex, buffer: m_tileBuffer, set: beam);
-            WriteStorageBufferReadOnly(binding: TileBindingIndex, buffer: m_tileBuffer, set: views);
             WriteStorageBufferReadOnly(binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer, set: beam);
             WriteStorageBufferReadWrite(binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer, set: cull);
-            WriteStorageBufferReadOnly(binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer, set: views);
+
+            foreach (var views in m_viewsSets[slot]) {
+                WriteStorageBufferReadOnly(binding: TileBindingIndex, buffer: m_tileBuffer, set: views);
+                WriteStorageBufferReadOnly(binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer, set: views);
+            }
         }
     }
 }

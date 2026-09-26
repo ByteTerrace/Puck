@@ -52,7 +52,7 @@ buffer-layout, or C# ISA changes need a rebuild.
 
 ## The frame
 
-Ten counted passes, labelled by `SdfWorldEngine.PassLabels` for
+Nine counted passes, labelled by `SdfWorldEngine.PassLabels` for
 `world.counters gpu`; the brick staging copy and bake dispatches are recorded in addition when
 work is pending, and count outside every pass. A cadence-skipped frame marks
 `sky` through `views` skipped (`SdfWorldEngine.CadenceSkippedPassLabels`):
@@ -60,15 +60,19 @@ work is pending, and count outside every pass. A cadence-skipped frame marks
 | Label | Kernel | Does |
 |---|---|---|
 | `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged region owes (program words, viewport rows, dynamic transforms, frame grid, screen surfaces, screen lights, volumes, decals, mesh draws) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldEngine.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A still frame copies only the viewport word its time moved. |
-| `sky` | `sdf-sky.comp` | Fills every viewport pixel with sky before any tile is culled. Shares the views bindings. |
+| `sky` | `sdf-sky.comp` | Fills every pixel of the view's output image with sky before any tile is culled. Shares the views bindings. |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |
 | `primary` | `sdf-world-primary.comp` | Camera traversal; writes every active hit record, misses included. |
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask. |
-| `views` | `sdf-world-views*.comp` | Shadows, materials, lighting, volumes, diagnostics. |
-| `composite` | `sdf-world-composite.comp` | Split-screen assembly and render-scale upsample. |
+| `views` | `sdf-world-views*.comp` | Shadows, materials, lighting, volumes, diagnostics, written into the view's output image. |
+
+`sky` through `views` record once per view, each set into that view's own
+output image (`SdfWorldEngine.ViewOutputs.cs`) at the view's render extent. No
+kernel assembles views or upsamples: the render graph's `place` pass puts each
+output into its seat rect and reconstructs a reduced render scale.
 
 Primary, surface, ambient, and views share `sdf-world-views.comp.hlsl`'s entry
 point through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`, and
@@ -78,8 +82,8 @@ primary, so the primary march in `renderView`'s `#else` branch compiles into the
 primary kernel, while the `#ifndef SDF_PRIMARY_READ` blocks inside the views
 branch (the in-line normal and AO) compile only when `SDF_MONOLITHIC_VIEWS` is
 defined by hand for an A/B comparison. No build defines it. A frame the
-cadence gate skips runs none of the march dispatches and re-composites the
-retained image; `world.cadence off` disables the gate for measurement.
+cadence gate skips records no view set, and each view's retained output
+stands; `world.cadence off` disables the gate for measurement.
 
 The visibility record is 60 bytes per full-extent pixel per viewport
 (`PrimaryHitByteLength`), allocated as width × height × viewport capacity;
@@ -122,7 +126,9 @@ declares `Read`: a read-write binding would keep the buffer in
 The beam alone writes the cull buffer (`SDF_TILES_READ_WRITE` compiles its
 writer); the views layout binds the visibility records twice, read-write for primary,
 surface and ambient and read-only for views. Global memory barriers remain only for
-images: the cross-frame gate, sky to views, and views to composite. A new
+images: the cross-frame gate and, in each view's set, sky to views. Each view's
+output is transitioned to `General` before its set and back to its resting
+layout after, outside every pass. A new
 dispatch, a new device-local buffer, or a binding-kind change edits the plan
 and the inventory in `SdfFrameBufferPlanLawTests` together; a use left out of
 the plan races on both backends. A rendered frame records seven buffer transitions,

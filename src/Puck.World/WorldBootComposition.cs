@@ -1114,7 +1114,8 @@ public static class WorldBootComposition {
             extensions: sp.GetRequiredService<WorldDefinition>().Render.Extensions,
             overlay: false,
             packages: RenderGraphPackageCatalog.Shipped,
-            panes: WorldRootGraph.PanesOf(views: sp.GetRequiredService<WorldDefinition>().Views)
+            panes: WorldRootGraph.PanesOf(views: sp.GetRequiredService<WorldDefinition>().Views),
+            views: WorldRootGraph.ViewsOf(views: sp.GetRequiredService<WorldDefinition>().Views)
         ));
 
         services.AddSingleton<IRenderNode>(implementationFactory: sp => {
@@ -1440,7 +1441,8 @@ public static class WorldBootComposition {
             extensions: sp.GetRequiredService<WorldDefinition>().Render.Extensions,
             overlay: (sp.GetRequiredService<WorldOverlayGlyphs>().Pack is not null),
             packages: RenderGraphPackageCatalog.Shipped,
-            panes: WorldRootGraph.PanesOf(views: sp.GetRequiredService<WorldDefinition>().Views)
+            panes: WorldRootGraph.PanesOf(views: sp.GetRequiredService<WorldDefinition>().Views),
+            views: WorldRootGraph.ViewsOf(views: sp.GetRequiredService<WorldDefinition>().Views)
         ));
 
         // The render root: the default render graph over the SDF world (WorldRenderRoot), with the engine node and the

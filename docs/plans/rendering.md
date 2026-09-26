@@ -16,9 +16,8 @@ none of them, but the mirror reads the state substrate and
 and P10 are scheduled against those.
 
 The programme ends with the frame graph at the centre of rendering. Today the
-SDF renderer is the host: it composites panes, nested cameras, and screens
-inside its own passes. It is a prototype, and the pipeline that replaces it has
-to be better at everything it does. P11 to P17 make the frame graph a document
+SDF renderer still hosts nested cameras and screens inside its own passes. It
+is a prototype, and the pipeline that replaces it has to be better at everything it does. P11 to P17 make the frame graph a document
 that every view is an instance of, and nest those instances efficiently. They
 feed the graph from image sources such as emulators, desktop capture, cameras,
 and other views. They map a hit on a displayed source back to that source's
@@ -511,10 +510,9 @@ presentation dimension (`WorldPresentationCost`) and in `world.budget` with its
 extent ceiling, rate and planned passes; the server plans each row's source
 for that price.
 
-P11b owes the rest of the package. The main view and every `views.graphs` pane
-run through the graph runtime (commits 6 and 9 below), but `ViewStack` still
-renders every screen, and split-screen seats still share one `sdf.world`
-output that the SDF composite assembles (commit 10 below). P11b moves those views onto graph instances fed by the scheduler,
+P11b owes the rest of the package. The main view, every `views.graphs` pane
+and every split-screen seat run through the graph runtime (commits 6, 9 and 10
+below), but `ViewStack` still renders every screen. P11b moves the screens onto graph instances fed by the scheduler,
 puts the live schedule's extents and prices in `world.budget`, runs the parity
 and counted-GPU checks, and makes the rest of the deletions P11 lists. These
 P11b items have landed: the first-class package pass kind in
@@ -599,9 +597,9 @@ sub-steps, in this order:
     renders, or an external producer named by `ExternalPackage`.
     `RenderGraphInstanceSet.TryCreate` refuses an external instance that
     declares reads (`ExternalReads`), and a previous-frame read of an external
-    producer (`ExternalPreviousFrame`), each by name. The engine writes one
-    output image (`SdfWorldEngine.OutputImageHandle`) that its next render
-    overwrites, so a previous-frame read would sample the current frame, and
+    producer (`ExternalPreviousFrame`), each by name. The engine writes each
+    view's output image (`SdfWorldEngine.OutputImageHandle` is view 0's) and
+    its next render overwrites it, so a previous-frame read would sample the current frame, and
     the output is not double-buffered to allow one; the refusal covers every
     external producer, and `sdf.world` is the only one until P14-6. The
     scheduler is unchanged: demand, divisor, quantized extent, and the price
@@ -861,8 +859,7 @@ reconfiguration, and 9b, panes as graph instances.
 - 9b: the SDF engine's child path is deleted: `SdfEngineNode`'s child map,
   `SdfWorldRenderSpec.Children`, `SdfViewSnapshot.Child`, `ViewBinding.Child`,
   `SdfWorldEngine.SetChildMask` and `SetChildSource`, and the kernels'
-  `childMask` and `isChildViewport`. `CompositeParams` is eight words, and the
-  composite composes SDF views only.
+  `childMask` and `isChildViewport`.
 - Checks: `WorldPipelineWaitLawTests` over a fake `IRenderGraphInstances`
   (reconciling keeps a surviving row's node; a removed row's wait fails as
   removed), `WorldRootGraphLawTests` with panes, `PipelineOverrideLawTests`,
@@ -878,33 +875,36 @@ world: each composed view renders through its own dispatch set into its own
 output, and the root places each output into its seat rect with `place` (the
 decision and its rejected alternatives are in
 [the rendering decisions](../decisions/rendering.md#the-frame-graph-and-nesting)).
-Commit 11, the composite's deletion, folds into it. It lands in two halves.
+It deletes the SDF engine's composite and has landed in two halves.
 
-- 10a has landed: each view renders through its own dispatch set. `Record`
-  records sky, mask, beam, cull-args, primary, surface, ambient and views once
-  per view, one deep in Z, and the set's push names its view
-  (`CompositeParams.viewBase`, word 8 of a 36-byte push). `viewportCount` stays
-  every view of the frame, so the per-view buffer strides do not move.
-  `sdf-cull-args` reduces its own view's tiles, so each view's hit and views
-  dispatches cover only that view's surviving tiles. The buffer hazards between
-  one set and the next are the frame buffer plan's, recorded by
-  `RecordBufferBarriers` as for any pass order. The composite still assembles
-  the views into the one output. `SdfWorldEngineWorkLawTests` pins the 36-byte
-  push and two views' doubled dispatch sets.
-- 10b is owed. The engine gains an output image per view slot, sized to that
-  view's render extent, and drops the composite: `sdf-world-composite.comp`,
-  `CompositePass`, `CompositeParams2`, `MaxViewports`' composite role, and the
-  `sources[5]` arrays in the sky and views kernels, which then write one bound
-  output per set. A cadence-skipped frame republishes each view's previous
-  output. `SdfEngineNode` exposes the producers `world` (view 0) and
-  `world$2..world$K`, each leasing its own view's output, where K is the most
-  views any layout composes. `WorldRootGraph` places each into its seat rect
-  with `place`, and `WorldFramePresenter.PrepareGraph` sets each view's
-  footprint to its rect at its render scale, so `place` also takes over the
-  render-scale upsample. A single full-window view at native scale places
-  nothing, so `world` stays the base and parity holds. The seat canaries and
-  `world-counters` are re-recorded through their verbs, with the moved counts
-  explained.
+- 10a: each view renders through its own dispatch set. `Record` records sky,
+  mask, beam, cull-args, primary, surface, ambient and views once per view, one
+  deep in Z, and the set's push names its view (`WorldParams.viewBase`, word 8
+  of a 36-byte push). `viewportCount` stays every view of the frame, so the
+  per-view buffer strides do not move. `sdf-cull-args` reduces its own view's
+  tiles, so each view's hit and views dispatches cover only that view's
+  surviving tiles. The buffer hazards between one set and the next are the
+  frame buffer plan's, recorded by `RecordBufferBarriers` as for any pass
+  order. `SdfWorldEngineWorkLawTests` pins the 36-byte push and two views'
+  doubled dispatch sets.
+- 10b: each view writes its own output image, and the composite is gone. The
+  sky and views kernels write one bound `output` (binding 4, u0), and a view's
+  viewport row carries its render extent, read through `worldViewDims`. A
+  view's output is sized to the extent the render graph schedules for it, or
+  before that to `SdfWorldEngine.DefaultViewExtent` (its rect at its render
+  scale, quantized by `RenderGraphExtent`), and is reallocated only when that
+  extent changes. A cadence-skipped frame records no view set, so each view's
+  previous output stands. `SdfEngineNode` is the producer `world` (view 0), and
+  `SdfEngineNode.ViewProducer` gives the producers `world$2..world$K`, each
+  leasing its own view's output. K is `WorldRootGraph.ViewsOf`: the most
+  non-instance slots of any `views.layouts` row or `PlayerRoster.MaxSlots`,
+  capped at `SdfWorldEngine.MaxViewports`. With K above one, the root `main` runs one
+  `place` pass per view ahead of the pane passes, and
+  `WorldFramePresenter.PrepareGraph` sets each view's footprint to its rect at
+  its render scale, so `place` also does the render-scale reconstruction. A
+  lone full-window view at native scale is not placed, so `main` stands for
+  `world` and parity holds. The `split-seats` canary shows two seats of the
+  split layout drawing different content.
 
 P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
@@ -954,18 +954,19 @@ Rendering today runs the default render graph `WorldRootGraph` composes,
 through `RenderGraphRuntime` behind `RenderGraphRuntimeNode`, the host's render
 root, in both presentation shapes (see P11b commit 6 above):
 
-1. `world`, the `sdf.world` external producer (`SdfEngineNode`), and each
+1. `world`, the `sdf.world` external producer (`SdfEngineNode`) for the first
+   view, `world$2` onward for each further split-screen view, and each
    `views.graphs` row as an instance of its own.
-2. When anything is drawn over the world, the root `main`: one `place` pass per
-   pane a layout slot names, then one `post.<id>` package pass per
-   `render.extensions` entry in document order, then `overlay`, which draws the
-   console, HUD, toasts and cursor in a windowed World. With nothing drawn over
-   it, `world` is the root.
+2. When anything is drawn over the world or the world can compose more than
+   one view, the root `main`: one `place` pass per view, then one per pane a layout
+   slot names, then one `post.<id>` package pass per `render.extensions` entry
+   in document order, then `overlay`, which draws the console, HUD, toasts and
+   cursor in a windowed World. Otherwise `world` is the root.
 3. The launcher, which hands the root's image to a surface compositor that
    blits it to the swapchain.
 
-The SDF engine's second stage composites its views, up to
-`SdfWorldEngine.MaxViewports` (5). Diegetic screens are 32 fixed sampler slots
+The SDF engine renders up to `SdfWorldEngine.MaxViewports` (5) views, each into
+its own output image. Diegetic screens are 32 fixed sampler slots
 with a nearest filter. Nested cameras are `ViewStack` entries refreshed
 round-robin under `OffscreenRenderBudget`: 4 per produced frame, 64 registered.
 A view that would see itself reads slot 0 and draws the procedural test card,
@@ -976,7 +977,7 @@ image, but `SurfaceFormat` has only two 8-bit RGBA formats, the SDF engine's
 internal targets are `R8G8B8A8Unorm`, and no HDR color space is selected
 anywhere. The tonemap is an ACES fit applied at the end of the SDF view pass.
 There is no jitter, motion vector, or history in the SDF kernels; render scale
-is a bilinear-to-Catmull-Rom upsample in the composite pass.
+is a bilinear-to-Catmull-Rom upsample in the graph's `place` pass.
 
 P12's source contract, producer registration and conversion passes have
 landed; the graph wiring, the uploads through P7's residency, and
@@ -2417,7 +2418,7 @@ whose mechanic rulepush keeps.
 ### P11 — The frame graph document and nested views
 
 **Starts from:** the `IRenderNode` tree and the fixed-capacity composition
-described in the implementation status: SDF composite slots, 32 screen slots,
+described in the implementation status: SDF view slots, 32 screen slots,
 the `ViewStack` round-robin budget, and the test card for self-reference.
 
 **Owns:** the `puck.render.graph.v1` schema, its validation, and its world
@@ -2455,9 +2456,8 @@ into `puck.render.graph.v1`, a pipeline being a graph a world names; the
 `views.pipelines` section, `WorldPipelineRuntime`, `WorldComposedSlot.Pipeline`,
 `SdfEngineNode`'s child map and `RegisterChild` are gone. The hand-composed `IRenderNode` tree
 and its `Children` wiring in `WorldBootComposition` give way to graph
-instances. The SDF composite kernel `sdf-world-composite.comp`, its
-`MaxViewports` limit and push block, `SdfEngineNode`'s child map and
-`RegisterChild`, and `ViewStack` itself are deleted, not only its budget. The
+instances. The SDF composite kernel and its push block are gone; the
+`MaxViewports` limit and `ViewStack` itself are deleted, not only its budget. The
 unified overlay becomes a package the graph names, so `UnifiedOverlayNode`'s
 fixed `OverlayFrameSlots` and its hand-built node wiring are deleted with the
 composition they served.
@@ -2791,8 +2791,8 @@ on P7b's groups.
 ### P14 — The SDF engine as a pass package
 
 **Starts from:** `SdfWorldEngine`'s own dispatch sequence (the
-`SdfWorldEngine.PassLabels` passes plus brick bake and upload), its Stage 2
-composition, the hand-written frame data, `SdfEnvironment`'s separate packing,
+`SdfWorldEngine.PassLabels` passes plus brick bake and upload), its per-view
+output images, the hand-written frame data, `SdfEnvironment`'s separate packing,
 the two large includes, and the prose sync pairs in the `rendering` skill's
 reference. The kernels nothing dispatched are already deleted.
 
@@ -2863,7 +2863,7 @@ bounds), primary (dispatched indirectly, writing visibility version 0), surface
 versions 0 to 2). Brick upload and brick bake form `sdf.bricks`, a world-scoped
 instance joined to the views by buffer edges. A display pass tonemaps and
 encodes until P16 inherits it. There is no upload pass, because uploads go
-through `GpuRegion`, and no composite, because P11b deletes it. Group 0 is the
+through `GpuRegion`, and no composite, because the engine has none. Group 0 is the
 frame (the generated block and per-world tables), group 1 the world (program
 words, screens, decals, the glyph atlas, the brick pool), group 2 the instance
 (empty and reserved), and group 3 the pass (masks, tiles, arguments, bounds,
@@ -2915,7 +2915,7 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
    it, so the planner refuses it on a shader pass. `SdfPassPlanLawTests` builds
    the SDF passes as package
    passes from `SdfFrameBufferPlan.Uses` and plans them in `PassLabels`' order
-   less the composite, with exactly `SdfFrameBufferPlan`'s edges between
+   less the upload, with exactly `SdfFrameBufferPlan`'s edges between
    passes, and at several viewport, tile and instance capacities sizes every
    SDF buffer exactly as `SdfWorldEngine.FrameBufferBytes`, the one statement
    of the engine's allocations. The engine records no graphics pass, so every
@@ -2949,19 +2949,19 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
 shading reads. P7b moves the SDF push blocks and binding constants onto groups.
 P11b keeps one resample pass in the graph's package library: the `place`
 package, whose build-compiled kernel `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`
-holds the SDF composite's placement and reconstruction: the base outside a destination rect, and
+holds placement and reconstruction: the base outside a destination rect, and
 inside it the source as an exact copy at equal extent, bilinear at sharpness
 0, clamped Catmull-Rom at sharpness 1 and a blend between, all through formatted
 loads with no sampler state. A rect of the whole output resamples the whole source. The `resample-reconstruction` canary holds it to the
 analytic bilinear and Catmull-Rom values of known steps on both backends,
 including a column where only the neighbourhood clamp and one where only the edge
-clamp decides the value. Render
-scale moving onto it, which deletes the `RenderScaleQ` lanes, is a later P11b
-commit; cropping a source is P13's mapping, not a resample config. The pixelate
+clamp decides the value. It also reconstructs each SDF view rendered at a
+reduced render scale into its seat rect; cropping a source is P13's mapping,
+not a resample config. The pixelate
 interface fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
 P11b's `sdf.world` adapter submits through `SdfWorldEngine`'s ring as an
-external producer whose output image the graph imports. Before P12, a screen's
-matrix row is green when host leases and instance reads serve it. Without the
+external producer whose output images the graph imports. Before P12, a screen's
+matrix row is green when host leases and instance reads serve it. With no
 composite, N split-screen seats render as N dispatch sets rather than one
 dispatch whose Z dimension is N; counters on the RTX 2060 measure that cost, and
 layered views return only if the counts call for them.
@@ -2978,11 +2978,10 @@ as a reduced extent and a resample pass; and buffer edges.
 ### P15 — Temporal reconstruction
 
 **Starts from:** no jitter, motion vectors, or history in the SDF kernels.
-Render scale is a spatial upsample: each view renders at a quantized fraction
-of its region (`SdfViewSnapshot.RenderScale`), and the SDF engine's kernel that
-assembles the views' regions scales it back up, blending from bilinear toward
-clamped Catmull-Rom by `SdfViewSnapshot.UpscaleSharpness`. P11b deletes that
-kernel, and the graph's one resample pass takes the upsample over.
+Render scale is a spatial upsample: each view renders into its own output at a
+quantized fraction of its region (`SdfViewSnapshot.RenderScale`), and the
+graph's `place` pass scales it back up into the view's rect, blending from
+bilinear toward clamped Catmull-Rom by `world.upscale-sharpness`.
 
 **Owns:** jitter, motion vectors, the temporal upscaler, history management,
 dynamic resolution, and temporal reuse inside the SDF march.

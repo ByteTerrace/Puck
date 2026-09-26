@@ -1,10 +1,10 @@
 // Shared dispatch for primary, surface, ambient and views. Each wrapper selects its pass macro; views reads the
-// resulting visibility records and shades each source texture. SDF_MONOLITHIC_VIEWS retains the combined reference walk.
-// Composite places each source into its region. All four hit passes use an 8x8 workgroup and identical
-// indirect tile bbox, camera, masks and active-pixel tests.
+// resulting visibility records and shades the set's view into its own output image. SDF_MONOLITHIC_VIEWS retains the
+// combined reference walk. The render graph's place pass puts each view's output into its rect. All four hit passes use
+// an 8x8 workgroup and identical indirect tile bbox, camera, masks and active-pixel tests.
 // The shared layout carries dynamic transforms, screen sources, and the read-only instance mask (binding 7 / t37,
 // after screen sources t5..t36). Instance-cull produces that mask; the beam reads it at its own t3 binding.
-// Primary, surface and ambient write the visibility records at binding 49 / u5; views reads them at binding 50 / t45
+// Primary, surface and ambient write the visibility records at binding 49 / u1; views reads them at binding 50 / t45
 // (sdf-visibility.hlsli). Unused shading resources compile out of primary traversal.
 #define SDF_DYNAMIC_TRANSFORMS
 #if !defined(SDF_PRIMARY_PASS) && !defined(SDF_MONOLITHIC_VIEWS)
@@ -44,17 +44,15 @@
 #include "sdf-world.hlsli"
 
 // The program is at binding 1 (sdf-vm.hlsli, register t0), the viewport table at binding 2 (sdf-world.hlsli,
-// register t1), the dynamic-transform buffer at binding 9 (sdf-vm.hlsli, register t2). The per-view source textures
-// (one per viewport, an array) at binding 4 are the layout's first UAVs (u0..u4); the Direct3D 12 heap slots are
-// packed per binding, so the array never overlaps a fixed binding. Stage 1 writes view N into sources[N] at its
-// view-local pixel.
-[[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[5] : register(u0);
+// register t1), the dynamic-transform buffer at binding 9 (sdf-vm.hlsli, register t2). The set's view's output image at
+// binding 4 is the layout's first UAV (u0); Stage 1 writes the view's pixels into it at their view-local coordinates.
+[[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> output : register(u0);
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     if (params.sampleIndex == SDF_ISA_REPORT_REQUEST) {
         if (all(id == uint3(0, 0, 0))) {
-            sources[0][uint2(0, 0)] = (float4(0x53u, 0x44u, asuint(tiles[0]), SDF_ISA_VERSION) / 255.0);
+            output[uint2(0, 0)] = (float4(0x53u, 0x44u, asuint(tiles[0]), SDF_ISA_VERSION) / 255.0);
         }
         return;
     }
@@ -78,10 +76,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     sdfProgramLayout = sdfLoadProgramLayout();
     sdfPartBoundsViewport = viewIndex;
 
-    // The RENDER extent: the output rect reduced by the view's render scale (worldRenderDims — the identical integer
-    // derivation the beam/instance-cull tile coverage and Stage 2's upsample use). The ray grid spans the SAME frustum
-    // over fewer pixels; Stage 2 upsamples the reduced source back into the full region. q = 255 renders native.
-    uint2 rectDims = worldRenderDims((uint2)(view.region.zw * float2(params.imageExtent)), view.renderScale.x);
+    // The RENDER extent: the view's output image's size (worldViewDims, the value the beam and instance-cull tile
+    // coverage read too).
+    uint2 rectDims = worldViewDims(view);
 
     // Pixels past this viewport's RENDER extent fall outside its rendered source area. NOT a return: the lane still
     // has to reach the group shadow gather's barriers inside renderView (uniform control flow), so it runs the
@@ -127,6 +124,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // +-0.5 LSB from the integer R2 dither, so BOTH backends add the identical pattern and cross-backend parity holds.
     color += ((sdfR2Dither(pixel) - 0.5) * DitherQuantum);
 
-    sources[viewIndex][pixel] = float4(color, 1.0);
+    output[pixel] = float4(color, 1.0);
 #endif
 }

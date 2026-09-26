@@ -89,7 +89,7 @@ public sealed partial class SdfWorldEngine {
         recorder.BindDescriptorSet(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            descriptorSetHandle: m_viewsSets[0],
+            descriptorSetHandle: m_viewsSets[0][0],
             group: 0,
             pipelineLayoutHandle: viewsPipeline.LayoutHandle
         );
@@ -149,16 +149,17 @@ public sealed partial class SdfWorldEngine {
             width: 1
         );
         using var readback = m_gpu.SurfaceTransferFactory.CreateReadback();
-        var viewsSet = m_viewsSets[0];
+        // The report borrows ring slot 0's view-0 set: its output binding takes the report image, rebound to the view's
+        // output by the next frame that renders it.
+        var viewsSet = m_viewsSets[0][0];
 
-        for (var element = 0u; (element < MaxViewports); element++) {
-            m_bindings.WriteStorageImage(
-                arrayElement: element,
-                binding: ViewSourceBindingIndex,
-                descriptorSetHandle: viewsSet,
-                imageViewHandle: reportImage.ImageViewHandle
-            );
-        }
+        m_bindings.WriteStorageImage(
+            arrayElement: 0,
+            binding: ViewOutputBindingIndex,
+            descriptorSetHandle: viewsSet,
+            imageViewHandle: reportImage.ImageViewHandle
+        );
+        m_boundOutputViews[0][0] = 0;
 
         for (var element = 0; (element < ScreenSourceBindingIndices.Length); element++) {
             m_bindings.WriteCombinedImageSampler(

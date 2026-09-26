@@ -243,7 +243,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         first.Release();
         Assert.Equal(
             actual: (cache.SharedSets, last.Progress.Describe()),
-            expected: (1, "building (0 of 11 pipelines created)")
+            expected: (1, "building (0 of 10 pipelines created)")
         );
 
         var release = new Thread(start: last.Release);

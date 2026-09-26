@@ -1,0 +1,11 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 60
+# A second seat joins and the split layout shows both seats, side by side.
+player.join 2
+view.override layout split
+world.wait 10
+# Seat 2's body moves out onto the field, so its view shows the green field while seat 1 still faces the dark wall.
+body.pose 20 - 40 90 - - 1
+world.wait 90
+world.screenshot {run}/split.png
+world.wait 30

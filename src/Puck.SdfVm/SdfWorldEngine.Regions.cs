@@ -77,22 +77,29 @@ public sealed partial class SdfWorldEngine {
     private void BindRegions(int slot) {
         var beam = m_beamSets[slot];
         var cull = m_instanceCullSets[slot];
-        var views = m_viewsSets[slot];
 
-        foreach (var set in ((ReadOnlySpan<nint>)[beam, cull, views])) {
-            WriteStorageBuffer(binding: ProgramBindingIndex, buffer: m_programRegion.Buffer(slot: slot), set: set);
-            WriteStorageBuffer(binding: ViewportBindingIndex, buffer: m_viewportRegion.Buffer(slot: slot), set: set);
-            WriteStorageBuffer(binding: DynamicTransformBindingIndex, buffer: m_dynamicTransformRegion.Buffer(slot: slot), set: set);
+        foreach (var set in ((ReadOnlySpan<nint>)[beam, cull])) {
+            WriteSharedRegions(set: set, slot: slot);
         }
 
         WriteStorageBufferReadOnly(binding: FrameInstanceGridBindingIndex, buffer: m_instanceGridRegion.Buffer(slot: slot), set: cull);
-        WriteStorageBufferReadOnly(binding: FrameInstanceGridBindingIndex, buffer: m_instanceGridRegion.Buffer(slot: slot), set: views);
-        // The views layout alone shades: screen surfaces (48-byte entries), screen lights and volumes (float4 rows) and
-        // decals (uint4 cells), each read at a 16-byte stride.
-        WriteStorageBuffer(binding: ScreenSurfaceBindingIndex, buffer: m_screenSurfaceRegion.Buffer(slot: slot), set: views);
-        WriteStorageBuffer(binding: ScreenLightBindingIndex, buffer: m_screenLightRegion.Buffer(slot: slot), set: views);
-        WriteStorageBuffer(binding: DecalCellsBindingIndex, buffer: m_decalRegion.Buffer(slot: slot), set: views);
-        WriteStorageBuffer(binding: VolumeBindingIndex, buffer: m_volumeRegion.Buffer(slot: slot), set: views);
+
+        foreach (var views in m_viewsSets[slot]) {
+            WriteSharedRegions(set: views, slot: slot);
+            WriteStorageBufferReadOnly(binding: FrameInstanceGridBindingIndex, buffer: m_instanceGridRegion.Buffer(slot: slot), set: views);
+            // The views layout alone shades: screen surfaces (48-byte entries), screen lights and volumes (float4 rows)
+            // and decals (uint4 cells), each read at a 16-byte stride.
+            WriteStorageBuffer(binding: ScreenSurfaceBindingIndex, buffer: m_screenSurfaceRegion.Buffer(slot: slot), set: views);
+            WriteStorageBuffer(binding: ScreenLightBindingIndex, buffer: m_screenLightRegion.Buffer(slot: slot), set: views);
+            WriteStorageBuffer(binding: DecalCellsBindingIndex, buffer: m_decalRegion.Buffer(slot: slot), set: views);
+            WriteStorageBuffer(binding: VolumeBindingIndex, buffer: m_volumeRegion.Buffer(slot: slot), set: views);
+        }
+    }
+    // The program, viewport and dynamic-transform tables every per-slot set binds.
+    private void WriteSharedRegions(nint set, int slot) {
+        WriteStorageBuffer(binding: ProgramBindingIndex, buffer: m_programRegion.Buffer(slot: slot), set: set);
+        WriteStorageBuffer(binding: ViewportBindingIndex, buffer: m_viewportRegion.Buffer(slot: slot), set: set);
+        WriteStorageBuffer(binding: DynamicTransformBindingIndex, buffer: m_dynamicTransformRegion.Buffer(slot: slot), set: set);
     }
     // Region index's region of byteCount bytes under the policy the device's profile selects, its ring in the memory the
     // profile selects, named by its table's role and writing the copy sets reserved for it.
