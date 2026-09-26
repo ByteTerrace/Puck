@@ -1782,14 +1782,14 @@ overlay's single host-written buffer all go through the selector. The service
 bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuComputeServices`, `IFullscreenPassServices` and
 `WorldPostRenderExtensionServices`, `OverlayServices`, and
-`SdfViewGpuServices` are deleted. The pipeline factories merge into the one
-`IGpuPipelineFactory`: Vulkan's `IVulkanGraphicsPipelineFactory`, which
-`VulkanGpuPipelineFactory` wraps and the Vulkan swapchain compositor calls
-directly, does not survive beside it. The closed set of binding kinds replaces
-`GpuComputeBindingKind`, `ShaderSetManifestBindingKind`, the positional
-`TextureSamplerCount` and `EnableStorageBuffer` fields of
-`GpuGraphicsPipelineDescription`, and every binding index set by hand, such as
-the SDF engine's binding constants.
+`SdfViewGpuServices` are deleted. The pipeline factories have merged into the
+one `IGpuPipelineFactory`: the Vulkan swapchain compositor creates its blit
+through it, for the swapchain's render pass (`VulkanGpuRenderPass.Borrow`).
+The closed set of binding kinds replaces `GpuComputeBindingKind`,
+`ShaderSetManifestBindingKind` and every binding index set by hand, such as the
+SDF engine's binding constants; a graphics description states its groups alone
+(`GpuGraphicsPipelineDescription.Layout`), with no positional samplers, storage
+buffer or push range.
 
 **Gate:** the spike over two passes, `sdf-film-grain.frag.hlsl` and a pixelate
 compute pass, each with two frequency groups, has passed its build-time half,
@@ -1876,9 +1876,8 @@ Phase 2, the services, follows the generated frame block, which has landed:
    viewport and scissor, and `SetScissor` narrows the scissor inside it. The
    depth clear value is P4-0's `GpuDepthAttachment.ClearDepth`, not a recorder
    argument. A neutral graphics pipeline takes no extent: Vulkan's has a
-   dynamic viewport and scissor, and only the presenter's compositor keeps a
-   fixed viewport. Each backend registers one recorder, bound to its device
-   context.
+   dynamic viewport and scissor, which the presenter's recorder also sets. Each
+   backend registers one recorder, bound to its device context.
 8. Done: `IGpuBindings` creates pools, sets and samplers and writes descriptors,
    with no device parameter; each backend registers one, bound to its device
    context. One `WriteBuffer` names the binding's `GpuBindingKind` and element
@@ -2151,10 +2150,8 @@ Phase 3, the groups, follows phase 2:
     - 14b-2, done: the Vulkan presenter. `blit.frag.hlsl` reads a separate
       image and sampler in the pass group, set 3 (the image at binding 0, the
       sampler at 1, each register equal to its binding). `SurfaceCompositor`
-      plans that one group through `VulkanGroupLayouts.Plan`, creates the
-      layouts with `VulkanPipelineLayouts.Create` and hands them to
-      `VulkanGraphicsPipelineFactory`'s swapchain overload, which now takes
-      groups like its other overload; its ring sets are allocated against the
+      creates its blit through `IGpuPipelineFactory` from that one group; its
+      ring sets are allocated against the
       pass group's set layout, each takes the sampler once, a blit writes only
       the image, and a `VulkanDrawCommand` binds its set at its
       `DescriptorSetGroup`. Canaries: the 14b-1 set without
@@ -2318,12 +2315,24 @@ Phase 3, the groups, follows phase 2:
 20. The SDF engine moves onto groups, its push blocks and hand-set binding
     constants included. It follows P4-1, which rewrites the same kernels.
 21. The owning guides and the `rendering` skill describe the result.
-22. In progress: the P7 deletions no earlier step owns. Vulkan's
-    `IVulkanGraphicsPipelineFactory` folds into the one `IGpuPipelineFactory`,
-    with the swapchain compositor's direct call;
-    `GpuGraphicsPipelineDescription`'s `TextureSamplerCount` and
-    `EnableStorageBuffer` are deleted; and the overlay's host-written buffer
-    uploads through a `GpuRegion` rather than by hand.
+22. In progress: the P7 deletions no earlier step owns. Done: Vulkan has one
+    pipeline factory, `VulkanGpuPipelineFactory`, which creates graphics
+    pipelines through `IVulkanGraphicsPipelineApi` itself, and the swapchain
+    compositor creates its blit through `IGpuPipelineFactory` for the
+    swapchain's render pass (`VulkanGpuRenderPass.Borrow`), opaque and with the
+    neutral dynamic viewport the presenter's recorder sets. A graphics
+    description states its groups alone: `GpuGraphicsPipelineDescription.Layout`
+    is required, and its `TextureSamplerCount`, `EnableStorageBuffer` and push
+    range are deleted with both backends' non-layout graphics paths. The
+    Direct3D 12 surface compositor has no second factory contract to fold; it
+    builds its root signature and pipeline state by hand. Remaining: the
+    overlay's host-written buffer uploads through a `GpuRegion` rather than by
+    hand, which under the staged policy needs the region-copy pipeline leased
+    at the package's build, a copy pool the node states and admits, the copy
+    and its two buffer transitions inside the package recording, and a
+    pixel-shader read state for a buffer on Direct3D 12; and
+    `VulkanGraphicsPipelineCreateRequest`'s fixed viewport, descriptor bindings
+    and push range, which no caller sets any more, leave the native API.
 
 **Decisions.** Root parameter indices are dense, and the push index sits at
 `b0` in space 4, outside every group's space. The spike's frame group is the

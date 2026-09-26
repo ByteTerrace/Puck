@@ -113,7 +113,7 @@ public sealed class PostProcessPackageLawTests {
     private static Recorded Pinned(string configHex) => new(
         Blocks: [.. Enumerable.Range(count: 4, start: 1).Select(selector: frame => $"{new string(c: '0', count: 48)}{frame:X2}000000E0C40000{new string(c: '0', count: 128)} 400000004000000018000000{configHex}00000000")],
         Commands: [.. Enumerable.Repeat(count: 4, element: new[] { "vertices 24 8", "draw 0 3" }).SelectMany(selector: static pair => pair)],
-        Pipeline: "sdf-film-grain 0 False    8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
+        Pipeline: "sdf-film-grain  8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
         RenderPass: "GpuColorAttachment { Format = R8G8B8A8Unorm, Load = Clear, Store = Store, FinalLayout = RenderTarget } ",
         RenderPasses: 4,
         Writes: [.. Enumerable.Repeat(count: 4, element: $"1 {Input.ImageViewHandle}")]
@@ -162,7 +162,7 @@ public sealed class PostProcessPackageLawTests {
         return new Recorded(
             Blocks: blocks,
             Commands: [.. gpu.GraphicsCommands.Select(selector: static command => $"{command.Command} {command.SizeBytes} {command.Count}")],
-            Pipeline: $"{description.Name} {description.TextureSamplerCount} {description.EnableStorageBuffer} {description.DepthCompare} {description.PushConstantBinding?.Size} {description.PushConstantBinding?.StageFlags} {description.VertexInput.StrideBytes} {string.Join(separator: ",", values: description.VertexInput.Attributes)}",
+            Pipeline: $"{description.Name} {description.DepthCompare} {description.VertexInput.StrideBytes} {string.Join(separator: ",", values: description.VertexInput.Attributes)}",
             RenderPass: $"{string.Join(separator: ",", values: pass.Colors)} {pass.Depth}",
             RenderPasses: gpu.RenderPasses.Count,
             Writes: [.. gpu.DescriptorWrites.Select(selector: static write => $"{write.Binding} {write.Handle}")]
