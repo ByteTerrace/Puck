@@ -500,6 +500,25 @@ Beyond the factory/API/interop triads in [Capabilities](#capabilities):
 `VulkanPipelineLayouts`, and the small value types `VulkanQueueFamilySelection`,
 `VulkanPushConstantBinding`, `VulkanVertexBufferBinding`, `VulkanShaderStageFlags`.
 
+## Debug names
+
+Every object the backend creates carries a debug name taken from its creator,
+a `GpuObjectName` passed to the creating member of `GpuDeviceServices`. The
+name joins the owner (an SDF engine, a graph instance, a package), the part of
+it the object is (a table, a pipeline, a pass), an optional detail within that
+part, and an index for one of several alike, usually a frame slot:
+`sdf.world/viewports[1]`, `overlay/pass`, or `sdf.world/region-copies` for a
+pool. A name holds no handle, counter or clock, so an object has the same name
+on every run.
+
+`VulkanGpuObjectNaming` applies names through `vkSetDebugUtilsObjectNameEXT`,
+and only when the device was created with validation (`--debug-layers`) and
+`VK_EXT_debug_utils`. Otherwise naming returns before it formats anything, so a
+normal run builds no strings. The validation layer prints the name in
+brackets after the handle, so a leak report reads
+`VkBuffer 0x30000000003[law/leaked]` inside the `[vulkan-debug] validation`
+line; `VulkanValidationLivenessTests` holds that.
+
 ## Verification
 
 `tests/Puck.Vulkan.Tests` checks the backend's device-free decisions: native
