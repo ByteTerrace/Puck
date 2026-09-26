@@ -2769,12 +2769,12 @@ follow it.
    the World set the pass binds). Open: one region a bound row and element
    type shared by every pass that reads the row the same way, instead of one
    World block a pass; a staged World block through the node's region copies.
-3. Done, pending its first device run: the forcing case. The rulepush rules
+3. Done: the forcing case. The rulepush rules
    keep a `tiles` lattice (`rules.puck`), each cell the look of the last token
    standing on it, written by the `classify` rule and retained for undo. The
    board pass (`worlds/rulepush/board.graph.json` and `board.hlsl`) reads it
-   through a world-group `tiles` array, and each level names the graph as an
-   `asset` and shows it in a pane beside the room (`level.puck`). The
+   through a world-group `tiles` array, and each level names the graph by a
+   path relative to `level.puck` and shows it in a pane beside the room. The
    `rulepush-board` GPU canary boots Hedges offscreen, presses once, and holds
    the captured cells to the move; its discriminating leg presses the other
    way, so the pushed row's pixels cannot match. An array cannot bind a
@@ -2782,8 +2782,12 @@ follow it.
    literal leg. `puck test worlds/rulepush --reproduce` holds the row's cells to
    the turns that write them. Open: every pass bound to the row still holds its
    own World block (step 2's shared region).
-4. The `parameter` statement: `parameter <pass>.<member> = <value>` inside a
-   `graph` block lowers to `parameters`, and the decompiler prints it back.
+4. Done: the `parameter` statement. `parameter <pass>.<member> = <value>`
+   inside a `graph` block lowers to that row's `parameters.<pass>.<member>`
+   (`GraphParameterNode`, `WorldDocumentEmitter.Graphs.cs`), the formatter and
+   the decompiler print it back, and it is the row's one spelling: a raw
+   `parameters` block, a statement outside a `graph` block, or a member bound
+   twice is PUCK120. `level.puck` binds the board pass with it.
 5. The deterministic tick and the tick verdict. A pass reading a requested tick
    rate gets the tick divided by the engine rate over that rate, refused unless
    the rate divides the engine rate exactly; a capture records the tick its

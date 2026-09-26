@@ -77,6 +77,13 @@ public interface IDocumentVocabulary {
     /// <param name="word">The bare word.</param>
     /// <returns><c>true</c> when the word is one of the member's choices.</returns>
     bool IsChoiceWord(object? context, string memberName, string word) => false;
+    /// <summary>Observes a string a literal or an interpolated string produced, as it is produced, in the scope
+    /// that evaluated it: a binding's value in the scope that binds it (a <c>let</c>'s own, a module argument's call
+    /// site), anything else where it is written. A vocabulary that must know which source wrote a value, whatever
+    /// expression later carries it, records the node here; the node is the one every borrowed read returns.</summary>
+    /// <param name="value">The produced string node.</param>
+    /// <param name="scope">The scope that evaluated the literal.</param>
+    void NoteWrittenString(JsonValue value, DocumentScope scope) { }
     /// <summary>Materializes a computed member value in its document representation after evaluation.</summary>
     /// <param name="value">The owned, lowered value, including results of interpolation or bindings.</param>
     /// <param name="form">The member's classified form.</param>
@@ -400,6 +407,34 @@ public sealed partial class DocumentScope {
             vocabulary: Vocabulary
         )
     );
+
+    // The scope a constant declared in another file evaluates in: this scope's constants, arguments and caches, with
+    // that file's directory as its base path. One a directory, shared by every constant the directory declares.
+    private DocumentScope ConstantScopeBeside(string directory, Dictionary<string, DocumentScope> scopes) {
+        if (!scopes.TryGetValue(key: directory, value: out var beside)) {
+            beside = new(
+                annotations: Annotations,
+                arguments: m_arguments,
+                basePath: directory,
+                budget: Budget,
+                constants: Constants,
+                currentPointer: CurrentPointer,
+                diagnostics: Diagnostics,
+                evaluating: m_evaluating,
+                locals: [],
+                schema: Schema,
+                sourceMap: SourceMap,
+                templates: Templates,
+                templateScopes: m_templateScopes,
+                values: m_values,
+                vocabulary: Vocabulary
+            );
+            scopes[directory] = beside;
+        }
+
+        return beside;
+    }
+
     /// <summary>Indexes document-level declarations before either vocabulary emits rows.</summary>
     /// <param name="statements">The statements in this lexical document scope.</param>
     public void IndexDeclarations(IReadOnlyList<StatementNode> statements) {
@@ -417,6 +452,10 @@ public sealed partial class DocumentScope {
         }
         IndexStructuralNames(gates: ((HashSet<string>)gatesValue!), pools: ((HashSet<string>)poolsValue!), rows: ((HashSet<string>)rowsValue!), statements: statements);
         IndexModuleInstances(statements: statements);
+        // A `let` an imported file declares evaluates beside that file, so what it writes resolves where it was
+        // written, as a module's body does.
+        Dictionary<string, DocumentScope>? besideDefinitions = null;
+
         foreach (var statement in statements) {
             if (statement is LetNode let) {
                 if (!Constants.TryAdd(
@@ -428,7 +467,12 @@ public sealed partial class DocumentScope {
                         message: $"Duplicate constant '{let.Name}'.",
                         span: let.Span
                     );
-                } else { m_arguments[let.Name] = ForConstant(); }
+                } else {
+                    m_arguments[let.Name] = ((Path.GetDirectoryName(path: let.DefinitionPath) is { Length: > 0 } directory)
+                        ? ConstantScopeBeside(directory: directory, scopes: (besideDefinitions ??= new(comparer: StringComparer.Ordinal)))
+                        : ForConstant()
+                    );
+                }
             } else if (statement is TemplateNode template) {
                 if (!Templates.TryAdd(
                     key: template.Name,

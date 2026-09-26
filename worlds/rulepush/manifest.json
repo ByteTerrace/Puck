@@ -17,7 +17,6 @@
     "level.puck",
     "hub.puck",
     "rulepush.puck",
-    "rulepush.assets.json",
     "board.graph.json",
     "board.hlsl"
   ]

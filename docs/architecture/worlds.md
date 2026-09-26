@@ -54,7 +54,11 @@ together: the build copies the `Assets` tree beside the executable with its
 layout intact, a staged composition or test world re-expresses its paths from
 its source directory to the staging directory, and `world.save` to another
 directory re-expresses them from the loaded document's directory to the
-target's.
+target's. `puck compile --output` to another directory re-expresses a compiled
+document's paths from its source's directory to where it lands. Inside a
+`.puck` source, a module's relative file path, written plainly or as
+`asset "…"`, resolves beside the module that writes it, whichever source uses
+the module, and the compiled document names the file from its own directory.
 
 A loaded definition carries its directory as `WorldDefinition.DocumentDirectory`:
 the file's directory for a document read from disk, the source's directory for

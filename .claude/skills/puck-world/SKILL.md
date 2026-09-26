@@ -261,7 +261,10 @@ the one it rebuilt (`with { DocumentDirectory = … }`); a directory-less
 document (stdin, in-memory, hosted, peer-delivered) refuses a relative asset row by name at validation, and a relative addon module
 by name at mount. Composition, staging and `world.save` re-express
 a merged fragment's file paths (not its document names) to the receiving
-document (`WorldDocumentPaths.RelocateDocumentFields`). A fixture outside
+document (`WorldDocumentPaths.RelocateDocumentFields`), and a `.puck` module's
+file path, plain or `asset`, is re-expressed from the module's own directory as
+it lowers (`WorldDocumentVocabulary.RelocateFileReference`, the members
+`WorldDocumentPaths.IsFileField` names). A fixture outside
 `src/Puck.World/Assets` names shipped assets with a `../` path or keeps
 fixture-only assets beside itself. Contract:
 [the worlds manual](../../../docs/architecture/worlds.md#paths-a-document-names).

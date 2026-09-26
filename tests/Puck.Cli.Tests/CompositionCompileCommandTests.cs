@@ -108,21 +108,26 @@ public sealed class CompositionCompileCommandTests {
         Assert.False(condition: File.Exists(path: directory.PathOf(name: "game.cartridge.json")));
     }
     [Fact]
-    public async Task AssetCompilationRefusesRelocatingOutputAwayFromSourceAsync() {
+    public async Task OutputAwayFromSourceNamesEveryFileFromWhereItLandsAsync() {
         using var directory = new TemporaryDirectory();
 
         _ = directory.WriteBytes(bytes: "game"u8, name: "game.gb");
-        var source = directory.WriteText(name: "cabinet.puck", text: MachineSource(model: "cgb"));
+        var source = directory.WriteText(name: "cabinet.puck", text: MachineSource(graph: "board.graph.json", model: "cgb"));
 
         Assert.Equal(expected: 0, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source, "--update-assets"]));
         var relocated = directory.PathOf(name: "elsewhere/cabinet.world.json");
 
-        Assert.Equal(expected: 1, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source, "--output", relocated]));
-        Assert.False(condition: File.Exists(path: relocated));
+        Assert.Equal(expected: 0, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source, "--output", relocated]));
+        using var written = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: relocated));
+        var root = written.RootElement;
+
+        Assert.Equal(expected: "../game.gb", actual: root.GetProperty(propertyName: "machines")[0].GetProperty(propertyName: "configuration").GetProperty(propertyName: "content").GetProperty(propertyName: "path").GetString());
+        Assert.Equal(expected: "../board.graph.json", actual: root.GetProperty(propertyName: "views").GetProperty(propertyName: "graphs")[0].GetProperty(propertyName: "source").GetString());
     }
 
-    private static string MachineSource(string model) => $$"""
+    private static string MachineSource(string model, string? graph = null) => $$"""
         schema: "puck.world.definition.v1"
+        {{((graph is null) ? "" : $"views {{ graph \"board\" {{ source: \"{graph}\" }} }}")}}
         machines [
           {
             name: "cabinet"
