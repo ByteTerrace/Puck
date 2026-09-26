@@ -258,95 +258,6 @@
           "default": null,
           "title": "WorldQualityPreset"
         },
-        "extensions": {
-          "description": "The post-render extension chain, composed over the world\u0027s rendered output in list order \u2014 e.g. [{ \u0022id\u0022: \u0022sdf-film-grain\u0022, \u0022config\u0022: { \u0022intensity\u0022: 0.08 } }]. Optional; an absent or empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader set \u2014 a puck.shader.manifest.v1 manifest\u0027s file stem (checked at document load); each entry\u0027s own config is validated against that manifest\u0027s declared config schema at boot and by puck schema.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "description": "One entry in Extensions \u2014 a shipped shader set\u0027s id plus the values for its manifest-declared config fields.",
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "id": {
-                "description": "The shader set id (its puck.shader.manifest.v1 manifest\u0027s file stem) \u2014 checked against the shipped vocabulary at document load (IsRegisteredPostRenderExtension), never interpreted here.",
-                "type": "string",
-                "enum": [
-                  "sdf-film-grain"
-                ]
-              },
-              "config": {
-                "description": "The set\u0027s config values, or null when the manifest declares none or every field has a default. Not validated at document load \u2014 the manifest\u0027s declared config schema validates it at boot (matching Machine\u0027s Options, the identical shallow-then-deep precedent), refusing boot with the set id and reason on a malformed value.",
-                "default": null,
-                "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
-              }
-            },
-            "required": [
-              "id"
-            ],
-            "additionalProperties": false,
-            "title": "WorldRenderExtensionEntry",
-            "allOf": [
-              {
-                "if": {
-                  "properties": {
-                    "id": {
-                      "const": "sdf-film-grain"
-                    }
-                  },
-                  "required": [
-                    "id"
-                  ]
-                },
-                "then": {
-                  "properties": {
-                    "config": {
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "description": "Film grain: a per-pixel integer-hashed offset added over the rendered output. The hash is a pure function of pixel cell, grain frame, and seed, so it renders identically on both backends.",
-                      "properties": {
-                        "intensity": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 1,
-                          "default": 0.05,
-                          "description": "The peak per-channel offset."
-                        },
-                        "size": {
-                          "type": "number",
-                          "minimum": 1,
-                          "default": 1,
-                          "description": "The grain cell size, in pixels."
-                        },
-                        "seed": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 4294967295,
-                          "default": 0,
-                          "description": "Folded into the per-pixel hash; two worlds with different seeds grain differently."
-                        },
-                        "flickerHz": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 4294967295,
-                          "default": 24,
-                          "description": "How many times per second the grain pattern advances. The pattern is keyed on the engine tick, so a frame carries the grain of the flicker period its tick falls in; a rate that does not divide the tick rate advances every whole number of ticks nearest below its period."
-                        }
-                      },
-                      "additionalProperties": false
-                    }
-                  }
-                }
-              }
-            ]
-          },
-          "default": null
-        },
         "lighting": {
           "description": "The scene\u0027s directional sun and ambient term. Optional, and every field within it is optional individually \u2014 an absent section, or an absent field within it, resolves to SdfFrame\u0027s pinned default for that field, so a world renders unchanged until it authors one.",
           "type": [
@@ -19677,6 +19588,100 @@
             "string",
             "null"
           ],
+          "default": null
+        },
+        "post": {
+          "description": "The post-process passes the synthesized root graph runs over the composed frame, in order, before the overlay, or null for none. A world that names Root authors its whole graph and names none.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One pass the render graph composition synthesizes runs over the composed frame: a post-process package pass of the root graph (WorldViewGraphs.MainInstance), written as a puck.render.graph.v1 document\u0027s packages row is, less its ports. The rows run in order after every view and pane is placed and before the overlay, each reading the frame the pass before it wrote and writing the frame the next reads, so a row names no input or output. Presentation only; nothing here reaches simulation state.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "The pass\u0027s name in the root graph (a SafeName, unique within the section and distinct from every views.graphs row, whose place pass the root names after the row), which a probe parameter\u0027s post target names.",
+                "type": "string"
+              },
+              "package": {
+                "description": "The post-process package the pass runs, a render graph package id such as sdf.film-grain, checked against the host\u0027s catalog at document load.",
+                "type": "string",
+                "enum": [
+                  "sdf.film-grain"
+                ]
+              },
+              "config": {
+                "description": "The package\u0027s config values, each absent field at its default, or null for every default. The graph compiler binds them against the package\u0027s schema when the root graph is composed, and a boot refuses a value that does not bind, naming the row.",
+                "default": null,
+                "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+              }
+            },
+            "required": [
+              "name",
+              "package"
+            ],
+            "additionalProperties": false,
+            "title": "WorldViewPostPass",
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "package": {
+                      "const": "sdf.film-grain"
+                    }
+                  },
+                  "required": [
+                    "package"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "Film grain: a per-pixel integer-hashed offset added over the input image, keyed on the engine tick.",
+                      "properties": {
+                        "intensity": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "default": 0.05,
+                          "description": "The peak per-channel offset."
+                        },
+                        "size": {
+                          "type": "number",
+                          "minimum": 1,
+                          "default": 1,
+                          "description": "The grain cell size, in pixels."
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 4294967295,
+                          "default": 0,
+                          "description": "Folded into the per-pixel hash; two worlds with different seeds grain differently."
+                        },
+                        "flickerHz": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295,
+                          "default": 24,
+                          "description": "How many times per second the grain pattern advances. The pattern is keyed on the engine tick, so a frame carries the grain of the flicker period its tick falls in; a rate that does not divide the tick rate advances every whole number of ticks nearest below its period."
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                }
+              }
+            ]
+          },
           "default": null
         },
         "layouts": {

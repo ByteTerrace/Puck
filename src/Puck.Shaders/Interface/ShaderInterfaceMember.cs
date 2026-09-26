@@ -3,7 +3,7 @@ using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
-/// <summary>One named member of a <see cref="ShaderInterface"/>: a value, an array, an image, a raw buffer or a sampler, in one
+/// <summary>One named member of a <see cref="ShaderInterface"/>: a value, an array, an image, a buffer or a sampler, in one
 /// frequency group.</summary>
 /// <param name="Name">The member's name, which is also its HLSL identifier: an ASCII letter followed by ASCII letters
 /// and digits.</param>
@@ -11,8 +11,8 @@ namespace Puck.Shaders;
 /// space.</param>
 /// <param name="Kind">What the member is.</param>
 /// <param name="Type">The value type of a <see cref="ShaderInterfaceMemberKind.Value"/>, the element type of an
-/// <see cref="ShaderInterfaceMemberKind.Array"/>, or the texel type an image reads as; <see langword="null"/> for a raw buffer or a
-/// <see cref="ShaderInterfaceMemberKind.Sampler"/>.</param>
+/// <see cref="ShaderInterfaceMemberKind.Array"/>, the texel type an image reads as, or the element type of a structured
+/// buffer; <see langword="null"/> for a raw buffer or a <see cref="ShaderInterfaceMemberKind.Sampler"/>.</param>
 /// <param name="Length">The element count of an <see cref="ShaderInterfaceMemberKind.Array"/>, at least one;
 /// <see langword="null"/> for every other kind.</param>
 /// <param name="Format">The texel format of a <see cref="ShaderInterfaceMemberKind.StorageImage"/>;
@@ -87,25 +87,33 @@ public sealed record ShaderInterfaceMember(
             Name: name,
             Type: type
         );
-    /// <summary>Creates a raw buffer member a pass reads by byte address.</summary>
+    /// <summary>Creates a buffer member a pass reads: a structured buffer of <paramref name="element"/>, or a raw buffer
+    /// read by byte address when there is no element.</summary>
     /// <param name="name">The member's name.</param>
     /// <param name="group">The member's frequency group.</param>
+    /// <param name="element">The element type, a scalar or a two- or four-component vector, or <see langword="null"/>
+    /// for a raw buffer.</param>
     /// <returns>The member.</returns>
-    public static ShaderInterfaceMember ReadOnlyBuffer(string name, ShaderInterfaceGroup group) =>
+    public static ShaderInterfaceMember ReadOnlyBuffer(string name, ShaderInterfaceGroup group, ShaderValueType? element = null) =>
         new(
             Group: group,
             Kind: ShaderInterfaceMemberKind.ReadOnlyBuffer,
-            Name: name
+            Name: name,
+            Type: element
         );
-    /// <summary>Creates a raw buffer member a pass reads and writes by byte address.</summary>
+    /// <summary>Creates a buffer member a pass reads and writes: a structured buffer of <paramref name="element"/>, or a
+    /// raw buffer read and written by byte address when there is no element.</summary>
     /// <param name="name">The member's name.</param>
     /// <param name="group">The member's frequency group.</param>
+    /// <param name="element">The element type, a scalar or a two- or four-component vector, or <see langword="null"/>
+    /// for a raw buffer.</param>
     /// <returns>The member.</returns>
-    public static ShaderInterfaceMember ReadWriteBuffer(string name, ShaderInterfaceGroup group) =>
+    public static ShaderInterfaceMember ReadWriteBuffer(string name, ShaderInterfaceGroup group, ShaderValueType? element = null) =>
         new(
             Group: group,
             Kind: ShaderInterfaceMemberKind.ReadWriteBuffer,
-            Name: name
+            Name: name,
+            Type: element
         );
 
     /// <summary>Gets a value indicating whether the member lives in its group's constant block.</summary>

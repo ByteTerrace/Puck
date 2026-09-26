@@ -241,9 +241,8 @@
              AudioSnapshot/mixer-facing reads), Puck.Input (WorldEditorBindings), Puck.Launcher
              (PresentPacingControl), Puck.Overlays (the editor gizmo/HUD write surface), Puck.Scripting
              (WorldAffordances' command vocabulary), Puck.SdfVm (Views), Puck.SignedDistance directly (Queries), and
-             Puck.Shaders (WorldPostRenderExtensions — the shipped shader-set catalog every composition root's
-             document validator checks a declared post-render extension key against, moved here from
-             Puck.World.Server since it is a render-time concern). No Puck.World.Server, no Backends row, no
+             Puck.Shaders (the render graph package catalog every composition root's
+             document validator checks a views.post row's package against). No Puck.World.Server, no Backends row, no
              Presentation row: this project reads the document and the wire, never the authoritative fold. -->
         <PuckArchitectureProfile Include="Puck.World.Client" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.Hosting;Puck.Input;Puck.Launcher;Puck.Maths;Puck.Networking;Puck.Overlays;Puck.Physics;Puck.Scripting;Puck.SdfVm;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
         <!-- The addon guest host, split out of Puck.World.Server so the authoritative server carries no

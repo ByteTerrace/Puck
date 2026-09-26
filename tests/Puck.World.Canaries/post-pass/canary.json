@@ -1,7 +1,7 @@
 {
   "id": "post-pass",
-  "title": "A render.extensions pass composes over the windowed world's output: film grain lifts the dark background's mean and breaks its flatness",
-  "binding": "The positive leg boots a windowed 256x144 world whose render.extensions chain is sdf-film-grain at intensity 1, and captures a frame. The grain adds a per-pixel offset spread across [-1, 1] to every channel and saturates, so over the dark background above the blocks about half the pixels clamp to black and the rest rise by up to a whole code range: the region's mean rises well above the background's own value, and the region stops being flat. The discriminating leg boots the same world with no render.extensions, so the background keeps its own dark, flat value: the mean observation turns red and the flatness observation holds.",
+  "title": "A views.post pass composes over the windowed world's output: film grain lifts the dark background's mean and breaks its flatness",
+  "binding": "The positive leg boots a windowed 256x144 world whose views.post row runs the sdf.film-grain package at intensity 1, and captures a frame. The grain adds a per-pixel offset spread across [-1, 1] to every channel and saturates, so over the dark background above the blocks about half the pixels clamp to black and the rest rise by up to a whole code range: the region's mean rises well above the background's own value, and the region stops being flat. The discriminating leg boots the same world with no views.post, so the background keeps its own dark, flat value: the mean observation turns red and the flatness observation holds.",
   "bootShape": "windowed",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],

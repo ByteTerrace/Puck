@@ -1,7 +1,6 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
-using System.Text.Json;
 
 namespace Puck.World;
 
@@ -83,11 +82,6 @@ public readonly record struct WorldQualityPreset(
 /// <param name="LowRaw">The <c>world.quality low</c> preset.</param>
 /// <param name="MediumRaw">The <c>world.quality medium</c> preset.</param>
 /// <param name="HighRaw">The <c>world.quality high</c> preset.</param>
-/// <param name="Extensions">The post-render extension chain, composed over the world's rendered output in list
-/// order — e.g. <c>[{ "id": "sdf-film-grain", "config": { "intensity": 0.08 } }]</c>. Optional; an absent or
-/// empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader
-/// set — a <c>puck.shader.manifest.v1</c> manifest's file stem (checked at document load); each entry's own
-/// <c>config</c> is validated against that manifest's declared config schema at boot and by <c>puck schema</c>.</param>
 /// <param name="Lighting">The scene's directional sun and ambient term. Optional, and every field within it is
 /// optional individually — an absent section, or an absent field within it, resolves to <c>SdfFrame</c>'s pinned
 /// default for that field, so a world renders unchanged until it authors one.</param>
@@ -117,7 +111,6 @@ public sealed record WorldRenderDefaults(
     [property: JsonPropertyName("low"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? LowRaw = null,
     [property: JsonPropertyName("medium"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? MediumRaw = null,
     [property: JsonPropertyName("high"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? HighRaw = null,
-    IReadOnlyList<WorldRenderExtensionEntry>? Extensions = null,
     WorldRenderLighting? Lighting = null,
     WorldRenderSky? Sky = null,
     WorldRenderCycle? Cycle = null,
@@ -155,16 +148,6 @@ public sealed record WorldRenderDefaults(
         });
     }
 }
-/// <summary>One entry in <see cref="WorldRenderDefaults.Extensions"/> — a shipped shader set's id plus the values
-/// for its manifest-declared config fields.</summary>
-/// <param name="Id">The shader set id (its <c>puck.shader.manifest.v1</c> manifest's file stem) — checked against the
-/// shipped vocabulary at document load (<see cref="WorldExtensionVocabularyHook.IsRegisteredPostRenderExtension"/>),
-/// never interpreted here.</param>
-/// <param name="Config">The set's config values, or <see langword="null"/> when the manifest declares none or every
-/// field has a default. Not validated at document load — the manifest's declared config schema validates it at
-/// boot (matching <see cref="WorldScreenSource.Machine"/>'s <c>Options</c>, the identical shallow-then-deep
-/// precedent), refusing boot with the set id and reason on a malformed value.</param>
-public sealed record WorldRenderExtensionEntry(string Id, JsonElement? Config = null);
 /// <summary>The lit path's lights and stylization as world data. Absent renders the pinned sun and hemisphere an
 /// unauthored world always had; present, the list IS the lights — an authored list without a hemisphere has no
 /// ambient. Every field of every light is optional individually and resolves to the engine's pinned default for its

@@ -202,15 +202,19 @@ public sealed class ShaderFrameBlockLawTests {
         }
     }
     [Fact]
-    public void The_film_grain_set_includes_the_declarations_its_frame_layout_generates() {
+    public void The_film_grain_package_includes_the_declarations_its_frame_layout_generates() {
         var directory = RepositoryPaths.Resolve(relativePath: "src/Puck.SdfVm/Assets/Shaders/Sdf");
-        var manifest = ShaderSetManifest.Load(manifestPath: Path.Combine(
-            path1: AppContext.BaseDirectory,
-            path2: "Assets",
-            path3: "Shaders",
-            path4: "Sdf/sdf-film-grain.puck.shader.json"
+
+        Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(
+            id: RenderGraphPackageCatalog.SdfFilmGrain,
+            package: out var package
         ));
-        var shaderInterface = manifest.FrameLayout.Interface;
+        var layout = ShaderPipelineParameterLayout.ForPackage(
+            config: package.Config,
+            members: package.Members,
+            package: package.Id
+        );
+        var shaderInterface = layout.Interface;
 
         Assert.Equal(
             actual: File.ReadAllText(path: Path.Combine(
@@ -219,8 +223,12 @@ public sealed class ShaderFrameBlockLawTests {
             )),
             expected: ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface)
         );
-        // The compiled set reads every block and binding where its interface places them, its manifest's image and sampler
-        // among them.
-        Assert.Null(@object: manifest.FrameLayout.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: manifest.Bytecode["sdf-film-grain.frag.spv"].Span)));
+        // The compiled fragment stage reads every block and binding where its interface places them, the package's image
+        // and sampler among them.
+        Assert.Null(@object: layout.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: File.ReadAllBytes(path: Path.Combine(
+            path1: AppContext.BaseDirectory,
+            path2: package.Stages!.Directory,
+            path3: (package.Stages.Fragment + ".spv")
+        )))));
     }
 }

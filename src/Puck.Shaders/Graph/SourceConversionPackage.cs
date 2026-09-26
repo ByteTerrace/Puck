@@ -91,10 +91,7 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
                 bytecode: bytecode,
                 description: new GpuComputePipelineDescription(
                     Bindings: [],
-                    Layout: context.Parameters.Layout.PipelineLayout(
-                        pushesIndex: false,
-                        stages: GpuShaderStage.Compute
-                    ),
+                    Layout: context.Parameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute),
                     Name: m_package,
                     PushConstantBinding: null
                 )

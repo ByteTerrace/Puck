@@ -11,7 +11,7 @@ namespace Puck.World.Schema.Tests;
 /// schema the emitter cannot map refuses by name rather than widening to <c>unknown</c>.
 /// </summary>
 public sealed partial class WorldSchemaTypeScriptLawTests {
-    private static readonly Lazy<string> Shipped = new(valueFactory: static () => WorldSchema.ToTypeScript(bundle: WorldSchema.Bundle(split: WorldSchema.Export(postRenderExtensions: []))));
+    private static readonly Lazy<string> Shipped = new(valueFactory: static () => WorldSchema.ToTypeScript(bundle: WorldSchema.Bundle(split: WorldSchema.Export(postProcessPackages: []))));
 
     [GeneratedRegex(pattern: "^export type (\\w+) = ", options: RegexOptions.Multiline)]
     private static partial Regex ExportName();
@@ -47,7 +47,7 @@ public sealed partial class WorldSchemaTypeScriptLawTests {
 
     [Fact]
     public void EveryBundleDefinitionAndTheRootGetOneNamedExport() {
-        var bundle = WorldSchema.Bundle(split: WorldSchema.Export(postRenderExtensions: []));
+        var bundle = WorldSchema.Bundle(split: WorldSchema.Export(postProcessPackages: []));
         var exports = ExportName().Matches(input: Shipped.Value).Select(selector: static match => match.Groups[1].Value).ToList();
         var expected = ((JsonObject)bundle["$defs"]!).Select(selector: static pair => pair.Key).Append(element: WorldSchema.TypeScriptRootName).Order(comparer: StringComparer.Ordinal).ToList();
 
@@ -157,7 +157,7 @@ public sealed partial class WorldSchemaTypeScriptLawTests {
     }
     [Fact]
     public void TheSameBundleEmitsTheSameText() {
-        var bundle = WorldSchema.Bundle(split: WorldSchema.Export(postRenderExtensions: []));
+        var bundle = WorldSchema.Bundle(split: WorldSchema.Export(postProcessPackages: []));
 
         Assert.Equal(
             actual: WorldSchema.ToTypeScript(bundle: bundle),

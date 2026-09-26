@@ -119,6 +119,39 @@ public class DecompilerSugarTests {
             expectedSubstring: "worldPoint(x: 1, y: 2, z: 3)"
         );
     }
+    // A views.post row prints as its named `post` block, its config as a nested block, and recompiles to the same rows
+    // in the same order.
+    [Fact]
+    public void PostPassesPrintAsNamedBlocksAndRoundTrip() {
+        var root = Assert.IsType<JsonObject>(@object: JsonNode.Parse(json: """
+            {
+              "schema": "puck.world.definition.v1",
+              "views": {
+                "post": [
+                  { "name": "grain", "package": "sdf.film-grain", "config": { "intensity": 0.5, "size": 2 } },
+                  { "name": "plain", "package": "sdf.film-grain" }
+                ]
+              }
+            }
+            """));
+
+        var puck = WorldDecompiler.Decompile(root: root);
+
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "post \"grain\" {"
+        );
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "post \"plain\" {"
+        );
+        Assert.True(
+            condition: JsonNode.DeepEquals(node1: root["views"]?["post"], node2: Recompile(source: puck)["views"]?["post"]),
+            userMessage: puck
+        );
+    }
     [Fact]
     public void RootWorldRulesCarryNoLiteralTypeDiscriminators() {
         var puck = DecompileWorld(relativePath: "puck.world.json");

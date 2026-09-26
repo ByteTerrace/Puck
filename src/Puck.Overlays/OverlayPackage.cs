@@ -60,7 +60,6 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             key: GpuPassPipelineKey.OfGraphics(
                 description: new GpuGraphicsPipelineDescription(
                     Layout: context.Parameters.Layout.PipelineLayout(
-                        pushesIndex: false,
                         stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
                     ),
                     Name: "overlay-unified",

@@ -134,7 +134,7 @@ public readonly record struct WorldNeighbourResolution {
 /// how it is reached. <c>Puck.World.Schema</c> carries no storage or filesystem dependency (see the project layering
 /// rules), so this interface names only the fact a cross-document check needs — resolve a
 /// <see cref="WorldReference.Document"/> string to a document, or say why not — and never a storage type. Mirrors
-/// <see cref="WorldExtensionVocabularyHook"/>'s layering: declared where the document model needs it, wired by
+/// <see cref="WorldPostProcessVocabularyHook"/>'s layering: declared where the document model needs it, wired by
 /// whoever owns the transport (a cloud blob fetch, a local file read, or an in-process lookup are all equally valid
 /// implementations).
 /// </summary>

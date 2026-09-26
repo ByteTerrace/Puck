@@ -70,30 +70,33 @@ public sealed partial class SdfWorldEngine {
         RegionCopyPoolSizes(brickPool: brickPool),
     ];
     /// <summary>Returns the one descriptor pool an engine creates itself, the statement its construction creates the
-    /// pool from: one cull-args set (bound once to shared device-local buffers), then per frame ring slot the beam and
-    /// instance-cull sets and one views set per view, which bind that slot's buffers and the view's output image; with a
-    /// brick pool, one bake set per brick slot.</summary>
+    /// pool from: per frame ring slot the frame set and one views set per view, each holding its group of
+    /// <see cref="SdfWorldInterfaces.World"/>; with a brick pool, one bake set per brick slot holding the pass group of
+    /// <see cref="SdfWorldInterfaces.BrickBake"/>.</summary>
     /// <param name="brickPool">Whether the engine keeps a brick pool.</param>
     /// <param name="viewportCapacity">The views the engine is provisioned for.</param>
     /// <returns>The pool's sizes.</returns>
     public static GpuDescriptorPoolSizes DescriptorPoolSizes(bool brickPool, uint viewportCapacity) {
-        var sets = new List<IReadOnlyList<GpuComputeBinding>> { PipelineLayouts.CullArgs };
+        var world = PipelineLayouts.World.Groups;
+        var frame = GpuDescriptorPoolSizes.ForGroups(groups: world.Where(predicate: static group => (group.Ordinal == FrameGroup)).ToArray());
+        var views = GpuDescriptorPoolSizes.ForGroups(groups: world.Where(predicate: static group => (group.Ordinal == PassGroup)).ToArray());
+        var bake = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.BrickBake.Groups);
+        var sizes = default(GpuDescriptorPoolSizes);
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {
-            sets.Add(item: PipelineLayouts.Beam);
-            sets.Add(item: PipelineLayouts.InstanceCull);
+            sizes += frame;
 
             for (var view = 0u; (view < viewportCapacity); view++) {
-                sets.Add(item: PipelineLayouts.Views);
+                sizes += views;
             }
         }
         if (brickPool) {
             for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {
-                sets.Add(item: PipelineLayouts.BrickBake);
+                sizes += bake;
             }
         }
 
-        return GpuDescriptorPoolSizes.ForSets([.. sets]);
+        return sizes;
     }
     /// <summary>Returns the bytes the engine allocates for one of its device-local frame buffers at a capacity, the one
     /// statement of each buffer's size that construction and program growth allocate by. The host-written tables are
@@ -200,22 +203,11 @@ public sealed partial class SdfWorldEngine {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(required, ceiling);
         return ((required <= current) ? current : (int)Math.Max(val1: required, val2: Math.Min(val1: ceiling, val2: (((long)current) + Math.Max(val1: 1, val2: (current / 2))))));
     }
-    // The same descriptor contracts as construction: views/primary/surface/ambient share each view's views set.
+    // The same descriptor contracts as construction: every views set rebinds the replaced regions and buffers.
     private void BindProgramCapacity() {
-        WriteStorageBufferReadOnly(binding: TileBindingIndex, buffer: m_tileBuffer, set: m_cullArgsSet);
         for (var slot = 0; (slot < FrameRingSize); slot++) {
-            var beam = m_beamSets[slot];
-            var cull = m_instanceCullSets[slot];
-
             BindRegions(slot: slot);
-            WriteStorageBufferReadWrite(binding: TileBindingIndex, buffer: m_tileBuffer, set: beam);
-            WriteStorageBufferReadOnly(binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer, set: beam);
-            WriteStorageBufferReadWrite(binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer, set: cull);
-
-            foreach (var views in m_viewsSets[slot]) {
-                WriteStorageBufferReadOnly(binding: TileBindingIndex, buffer: m_tileBuffer, set: views);
-                WriteStorageBufferReadOnly(binding: InstanceMaskBindingIndex, buffer: m_instanceMaskBuffer, set: views);
-            }
+            BindProgramBuffers(slot: slot);
         }
     }
 }

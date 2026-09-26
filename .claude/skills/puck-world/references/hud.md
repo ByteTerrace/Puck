@@ -119,11 +119,17 @@ distinct "cannot verify existence" scope in this codebase today;
 `HudRowValidation`'s `stateRows: null` parameter default exists for a caller
 with no such document to check against, but nothing currently calls it that
 way. Render-side, `WorldHudBindingResolver` parses each token once and looks
-a `state.*` token's slot up among those the document's presentation manifest
-registered with the client's state mirror (`WorldClient.StateMirror`,
-`WorldStateMirror.SlotOf`), the one path every
-presentation binding reads through: a cell carrying a `dynamics` trait
-presents its eased follower, interpolated at the frame's fraction, unless the
+a `state.*` token's slot up (`WorldStateMirror.SlotOf`), the one path every
+presentation binding reads through. A world-scope panel's token reads the
+client's state mirror (`WorldClient.StateMirror`), where the document's
+presentation manifest registered it. A seat's player-scope panel's token reads
+the mirror of the world that seat is routed to
+(`WorldSeatBindings.GetRoutedState`), where the seat registered its panel's
+bindings with the rest of its reads (`WorldPresentationManifest.SeatBindings`),
+so a crossed seat's panel shows the world it is in, like its bar, pages,
+wheels and contexts; `HudWriter` passes the panel's seat to
+`IHudBindingResolver.TryResolve`, -1 for a world-scope panel. A cell carrying a
+`dynamics` trait presents its eased follower, interpolated at the frame's fraction, unless the
 token carries the `.$target` facet above, in which case it presents stored truth
 exactly like a cell with no trait always does. The text shows the value read at
 the delivered tick. A

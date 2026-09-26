@@ -11,8 +11,8 @@ namespace Puck.Cli.Affected;
 /// composed and parsed document (<see cref="WorldDefinitionFileSource.TryParseDocument"/>, unvalidated), the neighbour
 /// worlds its adjacencies name and the graph documents its <c>views.graphs</c> rows name, each resolved as the host
 /// resolves it (<see cref="WorldDocumentPaths.TryResolve"/>), its basis and imports through the tree's own document
-/// source (<see cref="IAffectedTree.Documents"/>), and the files of each shader set its <c>render.extensions</c> entries
-/// name by id (<see cref="AffectedShaders.FilesOf"/>); a graph document reaches every shader pass source it declares
+/// source (<see cref="IAffectedTree.Documents"/>), and the files of each post-process package its <c>views.post</c> rows
+/// name (<see cref="AffectedShaders.FilesOf"/>); a graph document reaches every shader pass source it declares
 /// (<see cref="ShaderPipelineLoader.ParseDefinition"/>, resolved beside the document as the loader resolves it) and every
 /// include each of those sources reaches (<see cref="ShaderSourceClosure.Collect"/>). A document a reader refuses reaches
 /// nothing beyond itself, and a file the tree does not hold is not reached. Paths are repository-relative with forward
@@ -71,10 +71,10 @@ internal static class AffectedDocuments {
     /// <summary>Every file a document reaches in a tree, itself included.</summary>
     /// <param name="tree">The tree every document and source is read from.</param>
     /// <param name="path">A world or graph document, repository-relative.</param>
-    /// <param name="setFiles">The files of the shader sets an id names (<see cref="AffectedShaders.FilesOf"/>), which a world
-    /// reaches through each <c>render.extensions</c> entry, or <see langword="null"/> to reach no set.</param>
+    /// <param name="packageFiles">The files of the post-process package an id names (<see cref="AffectedShaders.FilesOf"/>),
+    /// which a world reaches through each <c>views.post</c> row, or <see langword="null"/> to reach no package.</param>
     /// <returns>The reached files the tree holds, repository-relative.</returns>
-    internal static IReadOnlySet<string> Reach(IAffectedTree tree, string path, Func<string, IReadOnlyList<string>>? setFiles = null) {
+    internal static IReadOnlySet<string> Reach(IAffectedTree tree, string path, Func<string, IReadOnlyList<string>>? packageFiles = null) {
         var reached = new HashSet<string>(comparer: StringComparer.Ordinal);
         var pending = new Queue<string>();
 
@@ -141,9 +141,9 @@ internal static class AffectedDocuments {
                     EnqueueFull(full: resolved);
                 }
             }
-            foreach (var extension in (definition.Render.Extensions ?? [])) {
-                foreach (var set in (setFiles?.Invoke(arg: extension.Id) ?? [])) {
-                    Enqueue(file: set);
+            foreach (var pass in (definition.Views.Post ?? [])) {
+                foreach (var packageFile in (packageFiles?.Invoke(arg: pass.Package) ?? [])) {
+                    Enqueue(file: packageFile);
                 }
             }
             foreach (var adjacency in (definition.Adjacencies ?? [])) {
@@ -167,18 +167,18 @@ internal static class AffectedDocuments {
     /// recorded, which places a file deleted since then through the documents that named it there.</param>
     /// <param name="canaries">Every canary. Only a canary that exists now can run, so the canaries are the working tree's
     /// even when their documents are read from the base's tree.</param>
-    /// <param name="setFiles">The files of the shader sets an id names in the same tree, which a world reaches through
-    /// its <c>render.extensions</c>, or <see langword="null"/> to reach no set.</param>
+    /// <param name="packageFiles">The files of the post-process package an id names in the same tree, which a world
+    /// reaches through its <c>views.post</c> rows, or <see langword="null"/> to reach no package.</param>
     /// <returns>Each reached file, repository-relative with forward slashes, with the ids of the canaries reaching
     /// it.</returns>
-    internal static IReadOnlyDictionary<string, IReadOnlySet<string>> ReachedBy(IAffectedTree tree, IReadOnlyList<AffectedCanary> canaries, Func<string, IReadOnlyList<string>>? setFiles = null) {
+    internal static IReadOnlyDictionary<string, IReadOnlySet<string>> ReachedBy(IAffectedTree tree, IReadOnlyList<AffectedCanary> canaries, Func<string, IReadOnlyList<string>>? packageFiles = null) {
         var reachedBy = new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal);
         var memo = new Dictionary<string, IReadOnlySet<string>>(comparer: StringComparer.Ordinal);
 
         foreach (var canary in canaries) {
             foreach (var root in canary.Files.Where(predicate: static file => (file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: WorldSuffix) || file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: GraphSuffix)))) {
                 if (!memo.TryGetValue(key: root, value: out var reached)) {
-                    reached = Reach(path: root, setFiles: setFiles, tree: tree);
+                    reached = Reach(packageFiles: packageFiles, path: root, tree: tree);
                     memo[root] = reached;
                 }
 

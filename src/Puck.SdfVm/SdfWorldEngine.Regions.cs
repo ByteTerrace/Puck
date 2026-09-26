@@ -41,9 +41,8 @@ public sealed partial class SdfWorldEngine {
     private readonly GpuRegion m_decalRegion;
     // Every region's copy sets, by its index: RegionAt's, then the brick staging's with a brick pool.
     private readonly GpuRegionCopyPool m_regionCopyPool;
-
-    // The buffers the upload pass copied into, which it transitions for reading once every copy is recorded.
-    private readonly IGpuBuffer?[] m_copiedRegions = new IGpuBuffer?[RegionCount];
+    // The upload pass's owed copies, recorded through the engine's counted recorder into the frame's command buffer.
+    private readonly GpuRegionCopyRecording m_regionCopies;
 
     // Replaced, with every binding of them, when UploadProgram grows the program or instance capacity.
     private GpuRegion m_programRegion;
@@ -73,33 +72,28 @@ public sealed partial class SdfWorldEngine {
             regionCount: CopyRegionCount(brickPool: brickPool),
             slotCount: FrameRingSize
         );
-    // Binds each region's buffer for this ring slot into the slot's beam, instance-cull and views sets.
+    // Binds each region's buffer for this ring slot into every views set of the slot.
     private void BindRegions(int slot) {
-        var beam = m_beamSets[slot];
-        var cull = m_instanceCullSets[slot];
-
-        foreach (var set in ((ReadOnlySpan<nint>)[beam, cull])) {
-            WriteSharedRegions(set: set, slot: slot);
-        }
-
-        WriteStorageBufferReadOnly(binding: FrameInstanceGridBindingIndex, buffer: m_instanceGridRegion.Buffer(slot: slot), set: cull);
-
         foreach (var views in m_viewsSets[slot]) {
-            WriteSharedRegions(set: views, slot: slot);
-            WriteStorageBufferReadOnly(binding: FrameInstanceGridBindingIndex, buffer: m_instanceGridRegion.Buffer(slot: slot), set: views);
-            // The views layout alone shades: screen surfaces (48-byte entries), screen lights and volumes (float4 rows)
-            // and decals (uint4 cells), each read at a 16-byte stride.
-            WriteStorageBuffer(binding: ScreenSurfaceBindingIndex, buffer: m_screenSurfaceRegion.Buffer(slot: slot), set: views);
-            WriteStorageBuffer(binding: ScreenLightBindingIndex, buffer: m_screenLightRegion.Buffer(slot: slot), set: views);
-            WriteStorageBuffer(binding: DecalCellsBindingIndex, buffer: m_decalRegion.Buffer(slot: slot), set: views);
-            WriteStorageBuffer(binding: VolumeBindingIndex, buffer: m_volumeRegion.Buffer(slot: slot), set: views);
+            WriteWorldBuffer(buffer: m_programRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ProgramWords, set: views);
+            WriteWorldBuffer(buffer: m_viewportRegion.Buffer(slot: slot), member: SdfWorldInterfaces.Viewports, set: views);
+            WriteWorldBuffer(buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldInterfaces.DynamicTransforms, set: views);
+            WriteWorldBuffer(buffer: m_instanceGridRegion.Buffer(slot: slot), member: SdfWorldInterfaces.FrameInstanceGrid, set: views);
+            WriteWorldBuffer(buffer: m_screenSurfaceRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ScreenSurfaces, set: views);
+            WriteWorldBuffer(buffer: m_screenLightRegion.Buffer(slot: slot), member: SdfWorldInterfaces.ScreenLights, set: views);
+            WriteWorldBuffer(buffer: m_decalRegion.Buffer(slot: slot), member: SdfWorldInterfaces.DecalCells, set: views);
+            WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldInterfaces.Volumes, set: views);
         }
     }
-    // The program, viewport and dynamic-transform tables every per-slot set binds.
-    private void WriteSharedRegions(nint set, int slot) {
-        WriteStorageBuffer(binding: ProgramBindingIndex, buffer: m_programRegion.Buffer(slot: slot), set: set);
-        WriteStorageBuffer(binding: ViewportBindingIndex, buffer: m_viewportRegion.Buffer(slot: slot), set: set);
-        WriteStorageBuffer(binding: DynamicTransformBindingIndex, buffer: m_dynamicTransformRegion.Buffer(slot: slot), set: set);
+    // Binds the device-local buffers program growth replaces into every views set of the slot: the cull buffer and the
+    // instance masks, each read-write for its writer and read-only for its readers.
+    private void BindProgramBuffers(int slot) {
+        foreach (var views in m_viewsSets[slot]) {
+            WriteWorldBuffer(buffer: m_tileBuffer, member: SdfWorldInterfaces.TilesWritten, set: views);
+            WriteWorldBuffer(buffer: m_tileBuffer, member: SdfWorldInterfaces.Tiles, set: views);
+            WriteWorldBuffer(buffer: m_instanceMaskBuffer, member: SdfWorldInterfaces.InstanceMasksWritten, set: views);
+            WriteWorldBuffer(buffer: m_instanceMaskBuffer, member: SdfWorldInterfaces.InstanceMasks, set: views);
+        }
     }
     // Region index's region of byteCount bytes under the policy the device's profile selects, its ring in the memory the
     // profile selects, named by its table's role and writing the copy sets reserved for it.
@@ -133,53 +127,38 @@ public sealed partial class SdfWorldEngine {
 
         m_regionCopyPool.Dispose();
     }
-    // The upload pass: sends this ring slot, whose fence has retired, what it owes of every region, records every staged
-    // region's copy, then makes each copied buffer readable by the passes after it. Every host write and copy of the
-    // regions is counted in this pass. A frame owing nothing writes and records nothing.
-    private void RecordRegionCopies(nint commandBuffer) {
-        var recorder = m_gpu.Recorder;
-        var copied = 0;
-
+    // The upload pass: sends this ring slot, whose fence has retired, what it owes of every region, and records every
+    // staged region's copy through the one owed-copy recording the render node shares: at the first copy the barrier
+    // ordering the earlier frames' reads of every staged destination before the copies write it, then the copies, then
+    // one transition per copied buffer so the passes after it read what it wrote. Every host write and copy of the regions
+    // is counted in this pass. A frame owing nothing writes and records nothing.
+    private void RecordRegionCopies() {
         for (var index = 0; (index < RegionCount); index++) {
-            RegionAt(index: index)?.Flush(slot: m_currentSlot);
-        }
-
-        for (var index = 0; (index < RegionCount); index++) {
-            if (RegionAt(index: index) is not { OwesCopy: true } region) {
-                continue;
-            }
-
-            if (copied == 0) {
-                recorder.BeginDebugGroup(
-                    commandBufferHandle: commandBuffer,
-                    label: "upload"
+            if (RegionAt(index: index) is { } region) {
+                m_regionCopies.Record(
+                    handsToReaders: true,
+                    region: region,
+                    slot: m_currentSlot
                 );
             }
-
-            region.RecordCopy(
-                commandBuffer: commandBuffer,
-                slot: m_currentSlot
-            );
-            m_copiedRegions[copied++] = region.Buffer(slot: m_currentSlot);
         }
 
-        for (var index = 0; (index < copied); index++) {
-            recorder.TransitionBuffer(
-                bufferHandle: m_copiedRegions[index]!.BufferHandle,
-                commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuAccess.ShaderRead,
-                destinationStageMask: GpuStage.ComputeShader,
-                sourceAccessMask: GpuAccess.ShaderWrite,
-                sourceStageMask: GpuStage.ComputeShader
-            );
-            m_copiedRegions[index] = null;
-        }
+        var commandBuffer = m_regionCopies.Finish();
 
-        if (copied > 0) {
-            recorder.EndDebugGroup(
-                commandBufferHandle: commandBuffer
-            );
+        if (commandBuffer != 0) {
+            m_gpu.Recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
         }
+    }
+    // Opens the upload pass's debug group in the frame's command buffer, at the frame's first owed copy.
+    private nint BeginUpload() {
+        var commandBuffer = m_commandPools[m_currentSlot].CommandBufferHandle;
+
+        m_gpu.Recorder.BeginDebugGroup(
+            commandBufferHandle: commandBuffer,
+            label: "upload"
+        );
+
+        return commandBuffer;
     }
     private GpuRegion? RegionAt(int index) => index switch {
         ProgramRegionIndex => m_programRegion,

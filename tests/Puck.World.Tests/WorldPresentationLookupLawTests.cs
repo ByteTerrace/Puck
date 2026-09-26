@@ -235,7 +235,8 @@ public sealed class WorldPresentationLookupLawTests {
             bar: SeatBar(),
             bindings: SeatDocument(),
             bodyIndex: 3,
-            definition: SeatWorld()
+            definition: SeatWorld(),
+            hud: null
         );
 
         Assert.Equal(
@@ -258,7 +259,8 @@ public sealed class WorldPresentationLookupLawTests {
             bar: SeatBar(),
             bindings: SeatDocument(),
             bodyIndex: -1,
-            definition: SeatWorld()
+            definition: SeatWorld(),
+            hud: null
         );
 
         Assert.DoesNotContain(
@@ -338,7 +340,8 @@ public sealed class WorldPresentationLookupLawTests {
             bar: SeatBar(),
             bindings: SeatDocument(),
             bodyIndex: 0,
-            definition: definition
+            definition: definition,
+            hud: null
         );
 
         mirror.Register(

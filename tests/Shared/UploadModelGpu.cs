@@ -43,6 +43,9 @@ internal sealed class UploadModelGpu :
 
     private readonly ConcurrentDictionary<nint, byte> m_uploadModules = new();
     private readonly ConcurrentDictionary<nint, byte> m_uploadPipelines = new();
+    // The command buffers recorded since a barrier whose first scope holds the compute stage, which orders every earlier
+    // compute read of a staged destination before a copy writes it; a copy recorded in any other is refused.
+    private readonly HashSet<nint> m_readsOrdered = [];
 
     private nint m_boundPipeline;
     private nint m_boundSet;
@@ -124,14 +127,17 @@ internal sealed class UploadModelGpu :
     /// <returns>The buffer's current contents.</returns>
     public byte[] Memory(nint bufferHandle) => m_buffers[bufferHandle].Memory;
     /// <summary>Gets the host-visible bytes written since the last <see cref="ResetTallies"/>, per buffer size, for
-    /// every buffer that received any.</summary>
+    /// every storage buffer that received any; uniform blocks are <see cref="BlockBytes"/>'s.</summary>
     /// <returns>Each written buffer's size and the bytes written to it.</returns>
     public (ulong SizeBytes, long Written)[] HostWrites() => [.. m_buffers.Values
-        .Where(predicate: buffer => (buffer.Written > 0L))
+        .Where(predicate: buffer => (!buffer.Uniform && (buffer.Written > 0L)))
         .Select(selector: buffer => (buffer.SizeBytes, buffer.Written))];
-    /// <summary>Gets the host-visible bytes written since the last <see cref="ResetTallies"/>.</summary>
+    /// <summary>Gets the host-visible bytes written to storage buffers since the last <see cref="ResetTallies"/>.</summary>
     /// <returns>The byte count.</returns>
-    public long HostBytes() => m_buffers.Values.Sum(selector: buffer => buffer.Written);
+    public long HostBytes() => m_buffers.Values.Where(predicate: static buffer => !buffer.Uniform).Sum(selector: buffer => buffer.Written);
+    /// <summary>Gets the bytes written to uniform blocks since the last <see cref="ResetTallies"/>.</summary>
+    /// <returns>The byte count.</returns>
+    public long BlockBytes() => m_buffers.Values.Where(predicate: static buffer => buffer.Uniform).Sum(selector: buffer => buffer.Written);
     /// <summary>Zeroes the host-write and upload-copy tallies.</summary>
     public void ResetTallies() {
         foreach (var buffer in m_buffers.Values) {
@@ -178,8 +184,8 @@ internal sealed class UploadModelGpu :
 
         return module;
     }
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes);
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
     IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) => throw new NotSupportedException();
@@ -199,6 +205,8 @@ internal sealed class UploadModelGpu :
     void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) {
+        _ = m_readsOrdered.Remove(item: commandBufferHandle);
+
         if (m_transitions.TryGetValue(
             key: commandBufferHandle,
             value: out var transitions
@@ -220,7 +228,6 @@ internal sealed class UploadModelGpu :
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
-    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         if (!m_transitions.TryGetValue(
             key: commandBufferHandle,
@@ -239,11 +246,19 @@ internal sealed class UploadModelGpu :
             Declared: StateOf(access: sourceAccessMask, stages: sourceStageMask)
         ));
     }
+    void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
+        if (sourceStageMask.HasFlag(flag: GpuStage.ComputeShader)) {
+            _ = m_readsOrdered.Add(item: commandBufferHandle);
+        }
+    }
     void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) => m_boundSet = descriptorSetHandle;
     void IGpuRecorder.BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => m_boundPipeline = pipelineHandle;
     void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
         if (!m_uploadPipelines.ContainsKey(key: m_boundPipeline)) {
             return;
+        }
+        if (!m_readsOrdered.Contains(item: commandBufferHandle)) {
+            throw new InvalidOperationException(message: "A region copy was recorded with no barrier ordering the earlier compute reads of its destination before it.");
         }
 
         var source = MemoryMarshal.Cast<byte, uint>(span: m_buffers[m_bindings[(m_boundSet, 0u)]].Memory.AsSpan());
@@ -282,13 +297,14 @@ internal sealed class UploadModelGpu :
         }
     }
 
-    private MemoryBuffer Buffer(bool hostVisible, ulong sizeBytes, bool aperture = false) {
+    private MemoryBuffer Buffer(bool hostVisible, ulong sizeBytes, bool aperture = false, bool uniform = false) {
         var buffer = new MemoryBuffer(
             aperture: aperture,
             handle: NextHandle(),
             hostVisible: hostVisible,
             owner: m_buffers,
-            sizeBytes: sizeBytes
+            sizeBytes: sizeBytes,
+            uniform: uniform
         );
 
         m_buffers[buffer.BufferHandle] = buffer;
@@ -371,7 +387,8 @@ internal sealed class UploadModelGpu :
     }
     private nint NextHandle() => ((nint)Interlocked.Increment(location: ref m_nextHandle));
     private MemoryBuffer Single(bool hostVisible, ulong sizeBytes) => m_buffers.Values.Single(predicate: buffer =>
-        ((buffer.HostVisible == hostVisible) &&
+        (!buffer.Uniform &&
+        (buffer.HostVisible == hostVisible) &&
         (buffer.SizeBytes == sizeBytes))
     );
 
@@ -427,12 +444,13 @@ internal sealed class UploadModelGpu :
 
         public void Dispose() { }
     }
-    private sealed class MemoryBuffer(nint handle, bool hostVisible, bool aperture, Dictionary<nint, MemoryBuffer> owner, ulong sizeBytes) : IGpuStorageBuffer {
+    private sealed class MemoryBuffer(nint handle, bool hostVisible, bool aperture, Dictionary<nint, MemoryBuffer> owner, ulong sizeBytes, bool uniform) : IGpuStorageBuffer {
         public bool Aperture => aperture;
         public nint BufferHandle => handle;
         public bool HostVisible => hostVisible;
         public byte[] Memory { get; } = new byte[checked((int)sizeBytes)];
         public ulong SizeBytes => sizeBytes;
+        public bool Uniform => uniform;
         public long Written { get; set; }
 
         public void Dispose() => _ = owner.Remove(key: handle);

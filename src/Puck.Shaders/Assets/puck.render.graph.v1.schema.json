@@ -283,7 +283,7 @@
               "null"
             ],
             "additionalProperties": {
-              "description": "One field of a ShaderSetManifest\u0027s config schema \u2014 what a document may author for this shader set, validated by TryBindConfig and emitted as JSON Schema by ConfigJsonSchema.",
+              "description": "One field of a pass\u0027s or a package\u0027s config schema (Config) \u2014 what a document may author for it, validated by TryBind and emitted as JSON Schema by JsonSchema.",
               "type": [
                 "object",
                 "null"

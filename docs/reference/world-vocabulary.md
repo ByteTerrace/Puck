@@ -79,6 +79,7 @@ kind.
 | `onFailure` | `transaction` | block | `rules[].effects[][transaction].onFailure` | What fires after a transaction rewinds; more than one on a transaction is refused. |
 | `graph` | `views` | row | `views.graphs[]` | One named instance of a frame graph. |
 | `layout` | `views` | row | `views.layouts[]` | One viewport arrangement. |
+| `post` | `views` | row | `views.post[]` | One post-process pass the root graph runs over the composed frame, in order. |
 | `seatControl` | `views` | section | `views.seatControl` | How a participant's input moves the seat rig. |
 | `seatRig` | `views` | section | `views.seatRig` | The camera program a seated participant sees through. |
 | `step` | `workflow` | block | `rules[]` | One stage of a workflow; its body is a rule body, so a nested `rule` block is refused. |
@@ -436,7 +437,7 @@ Read back as `test` from the rows it generated when a generated test world is de
 ### `views`
 
 ```puck
-views { layout … graph … seatRig … seatControl { … } }
+views { layout … graph … post … seatRig … seatControl { … } }
 ```
 
 Printed back as `views`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
@@ -833,6 +834,20 @@ layout "name" { … }
 | `name` (required) | header | name | — | `name` | — | The layout's name, which a session selects it by. |
 
 Printed back as `layout` when the node carries `name`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
+
+### `post`
+
+```puck
+post "name" { package: … config { … } }
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `name` (required) | header | name | — | `name` | — | The pass's name in the root graph, which a probe's post target names. |
+| `package:` (required) | property | text | — | `package` | — | The post-process package the pass runs, such as sdf.film-grain. |
+| `config:` | property | value | — | `config` | — | The package's config values; an absent field keeps its default. |
+
+Printed back as `post` when the node carries `name`, `package`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
 ### `seatControl`
 

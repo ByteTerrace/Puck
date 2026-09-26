@@ -92,7 +92,8 @@ public sealed class WorldWheelRingsLawTests {
             bar: WorldBindingBarAuthoring.Absent,
             bindings: WheelDocument(),
             bodyIndex: 0,
-            definition: definition
+            definition: definition,
+            hud: null
         ),
         owner: mirror
     );

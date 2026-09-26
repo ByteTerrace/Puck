@@ -49,9 +49,9 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
             host: m_host
         );
         m_viewPasses = WorldRootGraph.Compose(
-            extensions: null,
             overlay: false,
-            packages: RenderGraphPackageCatalog.Shipped,
+            packages: RenderGraphPackageCatalog.Engine,
+            post: null,
             views: WorldRootGraph.ViewsOf(views: Views)
         ).ViewPasses;
         m_host.BeginFrame(views: Views);

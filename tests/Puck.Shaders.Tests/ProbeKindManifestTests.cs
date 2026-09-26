@@ -558,7 +558,7 @@ public sealed class ProbeKindManifestTests {
     }
     [Fact]
     public void Wrong_schema_tag_refuses() {
-        var scratch = WriteScratchManifest(mutate: node => node["$schema"] = "puck.shader.manifest.v1");
+        var scratch = WriteScratchManifest(mutate: node => node["$schema"] = "puck.render.graph.v1");
 
         try {
             var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
