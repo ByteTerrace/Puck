@@ -361,12 +361,13 @@ public sealed class OverlayFrameComposer {
         m_theme.Publish(theme: in theme);
         m_builder.UpdateTokenBlock(theme: in theme);
     }
-    /// <summary>Uploads only what this frame wrote, per region, never the capacity-sized region behind it: the
-    /// shader's loops are bounded by the same counts, so a region's untouched tail holds nothing it reads.</summary>
-    /// <param name="buffer">The storage buffer the fragment shader reads, which holds the regions at the builder's own
+    /// <summary>Writes only what this frame wrote, per region, never the capacity-sized region behind it: the shader's
+    /// loops are bounded by the same counts, so a region's untouched tail holds nothing it reads. The region owes only the
+    /// words that differ from what it holds, so a frame that repeats the last one uploads nothing.</summary>
+    /// <param name="buffer">The region the fragment shader reads, which holds the packed words at the builder's own
     /// bases.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <see langword="null"/>.</exception>
-    public void UploadFrameRegions(IGpuStorageBuffer buffer) {
+    public void UploadFrameRegions(GpuRegion buffer) {
         ArgumentNullException.ThrowIfNull(argument: buffer);
 
         Upload(
@@ -413,17 +414,17 @@ public sealed class OverlayFrameComposer {
         floats[11] = m_builder.Glyphs.GlyphCount;
     }
 
-    private void Upload(IGpuStorageBuffer buffer, int baseWords, int length) {
+    private void Upload(GpuRegion buffer, int baseWords, int length) {
         if (length <= 0) {
             return;
         }
 
-        buffer.Write<uint>(
-            data: m_builder.Scratch.Slice(
+        _ = buffer.Write(
+            bytes: MemoryMarshal.AsBytes(span: m_builder.Scratch.Slice(
                 length: length,
                 start: baseWords
-            ),
-            destinationOffsetBytes: ((ulong)(baseWords * sizeof(uint)))
+            )),
+            offset: (baseWords * sizeof(uint))
         );
     }
 }

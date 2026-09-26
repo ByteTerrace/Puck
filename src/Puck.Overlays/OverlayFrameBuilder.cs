@@ -18,7 +18,7 @@ public enum OverlayPanelStyle : uint {
 /// </summary>
 /// <remarks>
 /// Buffer geography (32-bit words): <c>[0, TokenWords)</c> the <see cref="OverlayTokenBlock"/> slab and
-/// <c>[TokenWords, PanelBaseWords)</c> the glyph SDF pack — both static, uploaded once by the node —
+/// <c>[TokenWords, PanelBaseWords)</c> the glyph SDF pack — both static, written into the region once —
 /// then the per-frame region this builder owns: panel records, element records, glyph-code words, and the clip
 /// table. <para><b>Channel contract.</b> Every write belongs to a declared <see cref="OverlayChannel"/>, opened with
 /// <see cref="BeginChannel"/> and closed with <see cref="EndChannel"/>; a write outside a channel scope is a
@@ -122,12 +122,7 @@ public sealed class OverlayFrameBuilder {
         ElementBaseWords = (PanelBaseWords + (MaxPanels * PanelWords));
         TextBaseWords = (ElementBaseWords + (MaxElements * ElementWords));
         ClipBaseWords = (TextBaseWords + TextWordCapacity);
-
-        // Pad the total to a uint4 boundary — the storage buffer is bound as a StructuredBuffer<uint4> (the D3D12
-        // allocator's stride-16 SRV), so its element count must divide exactly.
-        var total = (ClipBaseWords + (MaxClips * ClipWords));
-
-        WordCount = (total + 3) & ~3;
+        WordCount = WordCountOf(glyphs: glyphs);
         m_scratch = new uint[WordCount];
 
         OverlayTokenBlock.Write(
@@ -839,4 +834,19 @@ public sealed class OverlayFrameBuilder {
     public uint Width { get; }
     /// <summary>Gets the buffer's total word count (a multiple of 4).</summary>
     public int WordCount { get; }
+
+    /// <summary>Returns the words a builder over <paramref name="glyphs"/> holds: the token slab, the glyph pack, then
+    /// the panel, element, text and clip regions at their ceilings, padded to a multiple of 4, since the storage buffer
+    /// is read as <c>uint4</c> rows. It depends on no render extent, so a region can be sized before a builder
+    /// exists.</summary>
+    /// <param name="glyphs">The shared SDF glyph pack.</param>
+    /// <returns>The word count.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="glyphs"/> is <see langword="null"/>.</exception>
+    public static int WordCountOf(OverlayGlyphSdfPack glyphs) {
+        ArgumentNullException.ThrowIfNull(argument: glyphs);
+
+        var total = (((((OverlayTokenBlock.WordCount + glyphs.PackedSdf.Count) + (MaxPanels * PanelWords)) + (MaxElements * ElementWords)) + TextWordCapacity) + (MaxClips * ClipWords));
+
+        return (total + 3) & ~3;
+    }
 }

@@ -245,6 +245,32 @@ public sealed class GpuRegionCopyPipelineCache {
             return built;
         }
     }
+    internal GpuRegionCopyPipeline Take(GpuRegionCopyPipelineLease.Entry entry, CancellationToken cancellationToken) {
+        while (true) {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (Poll(entry: entry) is { } ready) {
+                return ready;
+            }
+
+            Task? pending;
+
+            lock (m_gate) {
+                pending = entry.Build.Completion;
+            }
+
+            // Another owner took the finished build between the poll and the read: the next poll returns it.
+            if (pending is null) {
+                continue;
+            }
+
+            try {
+                pending.Wait(cancellationToken: cancellationToken);
+            } catch (AggregateException) {
+                // The failure is the build's result, which the next poll rethrows.
+            }
+        }
+    }
     internal void Release(GpuRegionCopyPipelineLease.Entry entry) {
         CanceledBuild<GpuRegionCopyPipeline> build;
 
@@ -320,6 +346,26 @@ public sealed class GpuRegionCopyPipelineLease {
         );
 
         return cache!.Poll(entry: m_entry);
+    }
+    /// <summary>Returns the ready pipeline, blocking until its build completes: the take a build on the thread pool makes,
+    /// so the frame thread that installs its result never polls a pending pipeline. A failed build rethrows its
+    /// exception, and a later take starts a fresh build.</summary>
+    /// <param name="cancellationToken">Cancels the wait, never the pipeline's build, which other owners may share.</param>
+    /// <returns>The ready pipeline.</returns>
+    /// <exception cref="ObjectDisposedException">The lease has been released.</exception>
+    /// <exception cref="OperationCanceledException">The wait was canceled.</exception>
+    public GpuRegionCopyPipeline Take(CancellationToken cancellationToken) {
+        var cache = m_cache;
+
+        ObjectDisposedException.ThrowIf(
+            condition: (cache is null),
+            instance: this
+        );
+
+        return cache!.Take(
+            cancellationToken: cancellationToken,
+            entry: m_entry
+        );
     }
     /// <summary>Gives up the lease. The last lease on a device waits out a build still in flight, discarding its result,
     /// and disposes the pipeline; call it once nothing recorded with the pipeline is in flight and before the device goes

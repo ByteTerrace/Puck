@@ -24,6 +24,15 @@ public sealed partial class OverlayPackageLawTests {
     private const uint InFlight = 3;
     private const nint WorldImage = 0x5100;
 
+    // A discrete adapter with a 256 MiB device-local aperture, whose regions of the overlay's size are rings.
+    private static GpuMemoryProfile Aperture => new(
+        CoherentUnifiedMemory: false,
+        DeviceLocalBytes: (8UL << 30),
+        HostVisibleDeviceLocalBytes: (256UL << 20),
+        LargestDeviceLocalHeapBytes: (8UL << 30),
+        UnifiedMemory: false
+    );
+
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
     private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
     private static RenderGraphDefinition Graph() => new(
@@ -239,12 +248,18 @@ public sealed partial class OverlayPackageLawTests {
 
         // hud, when given, is the overlay's HUD, drawn with room for one panel of one element, and frameSources the host
         // seam its Frame elements acquire leases through.
-        public Rig(GpuCreationFaults? faults = null, bool trackObjects = false, HudStore? hud = null, IOverlayFrameSources? frameSources = null) {
+        // staged, when set, gives the device the default profile, which stages the overlay's region; otherwise it reports
+        // a discrete aperture the region is written into through a ring.
+        public Rig(GpuCreationFaults? faults = null, bool trackObjects = false, HudStore? hud = null, IOverlayFrameSources? frameSources = null, bool staged = false) {
             var gpu = new FakeGpuDevice(
                 countCalls: true,
                 reportVersion: 0,
                 trackObjects: trackObjects
-            );
+            ) {
+                MemoryProfile = (staged
+                    ? default
+                    : Aperture),
+            };
 
             Gpu = gpu;
             var package = new OverlayPackage(
@@ -288,7 +303,7 @@ public sealed partial class OverlayPackageLawTests {
                 },
                 vertexBytecode: new byte[] { 1 }
             );
-            var packages = new RenderGraphPackageRecorders();
+            var packages = new RenderGraphPackageRecorders(regionCopy: new GpuRegionCopyPipelineCache(kernel: new byte[] { 1 }));
 
             Observed = new ObservedPackageFactory(
                 barriers: () => ((gpu.Count(key: "IGpuRecorder.TransitionImageLayout") + gpu.Count(key: "IGpuRecorder.MemoryBarrier")) + gpu.Count(key: "IGpuRecorder.TransitionBuffer")),

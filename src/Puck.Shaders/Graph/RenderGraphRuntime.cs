@@ -985,8 +985,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             if (
                 (source is not null) &&
                 !source.TryWrite(
-                    device: m_device,
-                    inFlightFrames: m_inFlightFrames,
                     node: node,
                     tick: frame.Tick
                 )
