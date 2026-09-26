@@ -7,6 +7,14 @@ public interface IInputSlotResolver {
     /// Implementations must raise the event on the snapshot-consumer thread.</summary>
     event Action<InputDeviceId>? DeviceSlotChanging;
 
+    /// <summary>Raised after a logical slot stops holding an occupant. The router ends every value sustained on the
+    /// slot (<see cref="InputRouter.Sustain"/>), so no host producer's value outlives the occupancy it was set for.
+    /// The default implementation never raises it, for a resolver whose slots are never vacated.</summary>
+    event Action<int>? SlotVacated {
+        add { }
+        remove { }
+    }
+
     /// <summary>Probes the logical slot for <paramref name="device"/> without changing resolver state. A negative
     /// result drops the signal when no lane is admissible.</summary>
     int ResolveSlot(InputDeviceId device);

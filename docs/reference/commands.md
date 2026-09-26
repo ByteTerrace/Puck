@@ -404,8 +404,10 @@ Two public paths reach a handler:
    command activation produced by an authored interface for a non-negative slot.
    `InputRouter.Sustain` holds a host-produced value on a slot's lane: every
    snapshot carries it, phase `Active`, whatever the slot's active maps, until
-   `EndSustain` ends it or a later call replaces the value, so a catch-up burst
-   of several ticks carries it on each. `SnapshotForTick` groups all three by
+   `EndSustain` ends it, a later call replaces the value, or the slot resolver
+   reports the slot vacated (`IInputSlotResolver.SlotVacated`), so a catch-up
+   burst of several ticks carries it on each and a slot's next occupant starts
+   with none. `SnapshotForTick` groups all three by
    logical slot. For each slot,
    `IPrincipalResolver.PrincipalOf(slot)` supplies the actor that the
    host currently recognizes there; the router does not guess that a slot

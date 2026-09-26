@@ -236,6 +236,11 @@ public sealed class SeatController {
         m_move = default;
         m_look = default;
         m_motionAngularVelocity = Vector3.Zero;
+        ClearPointer();
+    }
+    /// <summary>Drops both halves of this tick's pointer ray, so <see cref="PointerRay"/> is <see langword="null"/>
+    /// until routed input refills them.</summary>
+    public void ClearPointer() {
         m_pointerOrigin = null;
         m_pointerDirection = null;
     }

@@ -223,7 +223,13 @@ quantized once at the seat verbs `PlayerCommandModule` registers.
 every intent path carries behind one flag byte; on a windowed host
 `WorldPointerRayCapture` produces them from the OS pointer over its seat's
 camera (`SourceRay.Through`) and holds them with `InputRouter.Sustain`, so
-every tick carries the ray. A rule reads the hit as
+every tick carries the ray. A typed `source.pointer.origin`/`direction` line
+holds its half through the same `Sustain` until it is typed again,
+`source.pointer.clear` ends both halves, or the seat is vacated
+(`PlayerRoster.SlotVacated`, which the router answers by ending every value the
+slot sustained). The typed aim and the capture share one sustained value per
+half: the later write rides, and the capture ending its ray ends that value
+whichever wrote it. A rule reads the hit as
 `$pointer:<seat>:<screenIndex>:x|y|on`, mapped in the tick through
 `WorldScreenMappings.Normalized` (source-normalized `x`/`y` in `[0, 1)`, `on`
 1 on the source, all 0 otherwise); a screen whose `input` is not `Simulation`
@@ -240,10 +246,10 @@ an application onto the screen (mirrored is enough), and its trigger is a kit
 `pad` button. The Humble brick puts the aimed pixel's brightness on its infrared
 receive line (`LightGunComponent`); the advanced brick ignores the pointer. An
 authored cartridge reads it through the `$light` operand (`rom-forge`), and the
-headless `light-gun` canary is the stdin recipe: `body.engage` the screen, then
-type `source.pointer.origin`/`direction` again every tick — a typed ray carries
-one tick — and read the cartridge's published byte through a memory binding
-after each tick's `world.wait 1`. The `rendering` skill owns the mapping itself.
+headless `light-gun` canary is the stdin recipe: `body.engage` the screen,
+type `source.pointer.origin`/`direction` once per aim, `world.wait` the ticks
+the aim should hold, read the cartridge's published byte through a memory
+binding, and end with `source.pointer.clear`. The `rendering` skill owns the mapping itself.
 
 ## `Dissolve` — three outcomes, no repair
 
