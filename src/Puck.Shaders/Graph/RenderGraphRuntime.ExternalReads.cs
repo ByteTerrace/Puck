@@ -38,11 +38,13 @@ public sealed partial class RenderGraphRuntime {
 
             if (m_producers[producer] is { } external) {
                 if (external.TryAcquireOutput(output: out var output)) {
+                    m_producerTainted[producer] = output.Tainted;
                     reads.Bind(
                         image: output.Image,
                         index: position,
                         layout: output.Layout,
-                        lease: output.Lease
+                        lease: output.Lease,
+                        tainted: output.Tainted
                     );
                 }
 
@@ -68,7 +70,8 @@ public sealed partial class RenderGraphRuntime {
                     image: completed.Image,
                     index: position,
                     layout: completed.Layout,
-                    lease: completed.Image.ImageViewHandle
+                    lease: completed.Image.ImageViewHandle,
+                    tainted: completed.Tainted
                 );
             }
         }

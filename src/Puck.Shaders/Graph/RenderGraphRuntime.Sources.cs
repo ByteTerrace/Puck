@@ -230,7 +230,8 @@ public sealed partial class RenderGraphRuntime {
             Buffer: null,
             Frame: frame,
             Image: surface,
-            Layout: node.PublishedLayout
+            Layout: node.PublishedLayout,
+            Tainted: false
         );
     }
     private static void DisposeSources(SourceGraph?[] sources) {
