@@ -173,6 +173,10 @@ public sealed partial class WorldStampPool {
             bodyIndex: (live.BodyIndex ?? -1),
             mirror: client.StateMirror
         );
+        live.Reads.Arrive(
+            first: live.Creation,
+            second: live.Look
+        );
 
         return m_owners.Wake(
             castsSoftShadow: false,

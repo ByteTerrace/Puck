@@ -143,7 +143,7 @@ public sealed class CreationDomainParentLawTests {
                     BodyIndex: 0,
                     Creation: creation,
                     Scale: scale,
-                    Motion: WorldLookMotion.Default
+                    Look: WorldLook.Implicit
                 )],
             creations: [creation],
             dynamics: [],

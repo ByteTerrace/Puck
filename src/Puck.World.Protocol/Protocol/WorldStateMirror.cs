@@ -106,6 +106,9 @@ public sealed class WorldStateMirror : IWorkCounterSource {
     public ulong PreviousEngineTick => m_previousEngineTick;
     /// <inheritdoc/>
     public ReadOnlySpan<WorkKind> WorkKinds => Kinds;
+    /// <summary>Gets the presentation manifest of the document the mirror reads, whose bindings it registers at every
+    /// <see cref="Install"/> and whose templates a body's lease acquires when the body arrives.</summary>
+    public WorldPresentationManifest Manifest => m_view.Manifest;
 
     /// <summary>Returns the slot a binding reads through with a conversion for as long as the mirror lives,
     /// registering it and reading it at the mirror's current tick on first sight. A slot some holder acquired becomes

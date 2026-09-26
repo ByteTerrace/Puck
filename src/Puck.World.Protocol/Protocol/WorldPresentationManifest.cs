@@ -24,6 +24,11 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// driver's state signal and gate tokens, and an effector's gate tokens and state target. A template keeps its
 /// <see cref="StateBinding.BodyKey"/> key as authored; a body's lease resolves that key to the body's index when it
 /// acquires the template, so every body reads its own slot of one table, and the slot is released when the body leaves.
+/// Each template is also recorded under the document object that carries it (<see cref="TemplatesOf"/>): the
+/// document itself for the population's scale row, which every body reads, a <see cref="WorldLook"/> for its motion's
+/// reads, and a
+/// <see cref="WorldPrototype"/> for its creation's drivers and effectors, so a body's lease acquires exactly the
+/// templates of what it wears when it arrives.
 /// <para>
 /// A surface is found by the type that carries it, wherever the document places that type, so a section that gains a
 /// bindable member is covered without a new walker. The walk follows the world document model's generated shape
@@ -35,7 +40,8 @@ public sealed class WorldPresentationManifest {
     /// <summary>The manifest of a document that binds nothing.</summary>
     public static readonly WorldPresentationManifest Empty = new(
         bindings: [],
-        bodyBindings: []
+        bodyBindings: [],
+        templates: []
     );
 
     private static readonly ConditionalWeakTable<WorldDefinition, WorldPresentationManifest> Compiled = new();
@@ -57,10 +63,12 @@ public sealed class WorldPresentationManifest {
 
     private readonly WorldPresentationBinding[] m_bindings;
     private readonly WorldPresentationBinding[] m_bodyBindings;
+    private readonly Dictionary<object, WorldPresentationBinding[]> m_templates;
 
-    private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings) {
+    private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings, Dictionary<object, WorldPresentationBinding[]> templates) {
         m_bindings = bindings;
         m_bodyBindings = bodyBindings;
+        m_templates = templates;
     }
 
     /// <summary>Gets the reads that last as long as the document, each once, in document order.</summary>
@@ -69,6 +77,24 @@ public sealed class WorldPresentationManifest {
     /// be <see cref="StateBinding.BodyKey"/>.</summary>
     public ReadOnlySpan<WorldPresentationBinding> BodyBindings => m_bodyBindings;
 
+    /// <summary>Returns the templates one document object carries, each once, in document order: the document's own
+    /// (<see cref="WorldDefinition"/>, the population's scale row every body reads), a <see cref="WorldLook"/>'s pose
+    /// references and lane operands, or a <see cref="WorldPrototype"/>'s driver and effector reads. The object is found by reference, so
+    /// it must be the instance the compiled document holds.</summary>
+    /// <param name="owner">The document object.</param>
+    /// <returns>The templates; empty for an object that carries none or that the document does not hold.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="owner"/> is <see langword="null"/>.</exception>
+    public ReadOnlySpan<WorldPresentationBinding> TemplatesOf(object owner) {
+        ArgumentNullException.ThrowIfNull(argument: owner);
+
+        return (m_templates.TryGetValue(
+            key: owner,
+            value: out var templates
+        )
+            ? templates
+            : []
+        );
+    }
     /// <summary>Returns a document's manifest, compiling it on the first request for that document instance and
     /// answering later requests for the same instance from a table that does not keep the document alive.</summary>
     /// <param name="definition">The document.</param>
@@ -93,11 +119,13 @@ public sealed class WorldPresentationManifest {
         var builder = new Builder();
 
         if (definition.Population.ScaleRow is { } scaleRow) {
+            builder.Owner = definition;
             builder.AddBody(binding: new StateBinding(
                 Key: StateBinding.BodyKey,
                 Row: scaleRow,
                 Target: false
             ));
+            builder.Owner = null;
         }
 
         builder.Visit(value: definition);
@@ -106,7 +134,12 @@ public sealed class WorldPresentationManifest {
             ? Empty
             : new WorldPresentationManifest(
                 bindings: [.. builder.Bindings],
-                bodyBindings: [.. builder.BodyBindings]
+                bodyBindings: [.. builder.BodyBindings],
+                templates: builder.Templates.ToDictionary(
+                    comparer: ReferenceEqualityComparer.Instance,
+                    elementSelector: static pair => pair.Value.ToArray(),
+                    keySelector: static pair => pair.Key
+                )
             )
         );
     }
@@ -196,6 +229,11 @@ public sealed class WorldPresentationManifest {
         public List<WorldPresentationBinding> Bindings { get; } = [];
         public List<WorldPresentationBinding> BodyBindings { get; } = [];
 
+        // The look or creation whose members the walk is inside, which each template is recorded under.
+        public object? Owner { get; set; }
+
+        public Dictionary<object, List<WorldPresentationBinding>> Templates { get; } = new(comparer: ReferenceEqualityComparer.Instance);
+
         public void Add(StateBinding? binding, WorldStateConversion conversion) {
             if (
                 (binding is { } bound) &&
@@ -219,6 +257,19 @@ public sealed class WorldPresentationManifest {
 
             if (m_bodySeen.Add(item: entry)) {
                 BodyBindings.Add(item: entry);
+            }
+            if (Owner is not { } owner) {
+                return;
+            }
+            if (!Templates.TryGetValue(
+                key: owner,
+                value: out var templates
+            )) {
+                templates = [];
+                Templates[owner] = templates;
+            }
+            if (!templates.Contains(item: entry)) {
+                templates.Add(item: entry);
             }
         }
         // A lease reads a token with the truth when its reader asks for it, and whenever the token spells .$target.
@@ -266,6 +317,20 @@ public sealed class WorldPresentationManifest {
                 return;
             }
 
+            var owner = Owner;
+
+            if (value is WorldLook or WorldPrototype) {
+                Owner = value;
+            }
+
+            VisitMembers(
+                shape: shape,
+                value: value
+            );
+            Owner = owner;
+        }
+
+        private void VisitMembers(object value, WorldModelType shape) {
             switch (shape.Kind) {
                 case JsonTypeInfoKind.Enumerable:
                 case JsonTypeInfoKind.Dictionary:
@@ -297,7 +362,6 @@ public sealed class WorldPresentationManifest {
                     break;
             }
         }
-
         private static object? PairValue(object? item) {
             if (item is null) {
                 return null;

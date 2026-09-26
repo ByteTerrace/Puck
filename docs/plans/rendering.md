@@ -388,7 +388,14 @@ a bindable member needs no new walker; re-installing a document whose manifest
 the mirror already holds registers nothing and allocates nothing. Its per-body
 half is a list of templates — the population scale row, a look's pose
 references and lane operands, a creation driver's state signal and gate tokens,
-an effector's gate tokens and state target — each keeping its `$body` key as authored. The
+an effector's gate tokens and state target — each keeping its `$body` key as
+authored, and each also recorded under the document object that carries it
+(`WorldPresentationManifest.TemplatesOf`): the document for the scale row, a
+`WorldLook` for its motion's reads, a `WorldPrototype` for its creation's. A
+body's lease acquires those templates when the body arrives
+(`WorldStateLease.Arrive`, from the stamp registration and the scene emitter's
+body-scale read), so the body's first frame reads slots the mirror already holds
+and read at the tick boundary, and arriving again allocates nothing. The
 consumers still register their own slots on first read and find the manifest's
 slot already there: the HUD resolver, camera rigs, markers, render colors, the
 theme, the binding bar, overlay predicates, the radial wheel and the binding
@@ -2394,10 +2401,10 @@ the shipped-world state baselines unmoved and the `rim-drop` and
 `traveller-kit` canaries green; the parity contract re-recorded in the same
 change when the eased default moves a station's pixels.
 
-**Open:** the consumers reading the
-manifest's pre-registered slots rather than registering on first read, with a
-body's lease acquiring its templates when the body arrives, which P10's tier law
-needs; the reads the manifest does not yet record — a seat's binding contexts,
+**Open:** the consumers reading the manifest's pre-registered slots through a
+lookup that registers nothing, rather than registering on first read, which P10's
+tier law needs and which waits on the manifest recording every read; the reads
+the manifest does not yet record — a seat's binding contexts,
 whose row comes from a family resolved at run time, the radial wheel's and the
 icon row's keyed cells, whose keys are action names, and a binding bar a player
 profile authors rather than the world; retiring a manifest slot a later document
