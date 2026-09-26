@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
 using Puck.SdfVm.Views;
@@ -111,7 +110,7 @@ internal sealed partial class WorldScreenBinder {
 
         _ = surface.Publish(
             deviceContext: deviceContext,
-            format: SurfaceFormat.R8G8B8A8Unorm,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 1U,
             pixels: new[] { ((byte)rgba), ((byte)(rgba >> 8)), ((byte)(rgba >> 16)), ((byte)(rgba >> 24)) },
             width: 1U

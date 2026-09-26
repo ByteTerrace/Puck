@@ -351,7 +351,7 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
         height: stream.Height,
         nativeFormat: stream.CaptureFormat,
         sensor: sensor,
-        targetFormat: SurfaceFormat.R8G8B8A8Unorm,
+        targetFormat: GpuPixelFormat.R8G8B8A8Unorm,
         width: stream.Width
     );
     protected override void Deliver(VideoMediaFrame video, CameraSensor sensor) {

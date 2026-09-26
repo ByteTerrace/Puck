@@ -1136,7 +1136,7 @@ A view that would see itself reads slot 0 and draws the procedural test card,
 and a chain of different views lags one frame per hop.
 
 `Surface` already distinguishes CPU pixels, a shared handle, and a same-device
-image, but `SurfaceFormat` has only two 8-bit RGBA formats, the SDF engine's
+image, but a surface carries only the two 8-bit RGBA formats, the SDF engine's
 internal targets are `R8G8B8A8Unorm`, and no HDR color space is selected
 anywhere. The tonemap is an ACES fit applied at the end of the SDF view pass.
 There is no jitter, motion vector, or history in the SDF kernels; render scale
@@ -1235,6 +1235,14 @@ WARP, holding each to the CPU decoder under the fixture's tolerance;
 `BakeSamplingFixtureLawTests` holds the fixture's GPU-free half. BC7 albedo is
 uploaded without sRGB decode: the drawing path chooses its sRGB view.
 
+The pixel-format fold is done: `GpuPixelFormat` is the one vocabulary a GPU
+image, a presented or captured `Surface`, a swapchain and a baked texture's
+levels are all stored in, and `GpuPixelFormats` states each format's texel or
+block size once, which the block codecs, the upload chain check and the shader
+pipeline budget all read. `ImagePixelFormat` stays apart: it is the code an
+uploaded source's region header carries for its conversion kernel, including
+the palette-indexed and NV12 host layouts no GPU image is created in.
+
 P17 still owes:
 
 - drawing a bake, which needs P4's shared visibility, and choosing per
@@ -1242,13 +1250,7 @@ P17 still owes:
   decides how an sRGB bake is read (a `Bc7UnormSrgb` view or a decode in the
   shader);
 - the parity world shipping its bakes, and the check that a missing bake draws
-  through its field and then switches;
-- the pixel-format fold. The block-compressed `GpuPixelFormat` members carry the
-  baker's `TextureFormat` names, and the fold makes them one vocabulary: it
-  replaces `GpuPixelFormats.UnitBytes` and `LevelByteLength` with the codecs'
-  own block sizes, the name-for-name parse in `BakeSamplingDeviceLawTests`, the
-  per-format switches in `ShaderPipelineRenderNode.Budget` and
-  `ShaderInterface.StorageFormatSpelling`, and `GpuPixelFormats.FromSurfaceFormat`.
+  through its field and then switches.
 
 The SDF engine's frame data is written by hand in three places: an `SdfFrame`
 field, a numbered row in the packed buffer, and an HLSL accessor.
@@ -3533,11 +3535,9 @@ its chunk in compiled worlds, and background baking on the device.
 
 The texture pipeline that stores these generates mips and compresses with BC7
 for color, BC5 for normals, and BC6H for HDR data, and each texture declares
-whether it is sRGB or linear. The Steam Deck supports all three formats. Once
-P17's first step puts a baked texture on the GPU, one pixel-format vocabulary
-remains: `GpuPixelFormat`, `SurfaceFormat`, `ImagePixelFormat` and the baker's
-`TextureFormat` fold into it rather than being bridged by conversions such as
-`GpuPixelFormats.FromSurfaceFormat`.
+whether it is sRGB or linear. The Steam Deck supports all three formats. One
+pixel-format vocabulary, `GpuPixelFormat`, names the baker's stored formats, the
+GPU's images and the presented surfaces, with no conversion between them.
 
 Each bake is keyed by the prototype's content hash, the baker version, and the
 quality tier, and one cache is filled in two ways. A build ships each bake once

@@ -317,11 +317,15 @@ and `Puck.Recording`'s capture stills (`CaptureSink`).
 
 ## Block-compressed textures
 
-`Textures/` compresses texture levels for GPU sampling. `TextureFormat` names
-the uncompressed layouts (R8, RG8, RGBA8, RGBA16F) and the block formats, and
-`TextureFormats` gives a level's extent and byte size. `TextureCompression`
-encodes and decodes a whole level block by block, repeating edge texels into a
-partial block; the codecs work one block at a time:
+`Textures/` compresses texture levels for GPU sampling. A level is stored in a
+`GpuPixelFormat` from `Puck.Abstractions`, the one pixel-format vocabulary a GPU
+upload also takes: the uncompressed `R8Unorm`, `R8G8Unorm`, `R8G8B8A8Unorm` and
+`R16G16B16A16Float`, and the block formats. `GpuPixelFormats` gives a level's
+extent and byte size, and each block format's block size, which the codecs read.
+`TextureCompression` encodes and decodes a whole level block by block, repeating
+edge texels into a partial block, and names the uncompressed format each block
+format encodes (`TextureCompression.SourceOf`); the codecs work one block at a
+time:
 
 | Codec | Encodes | Decoder reads | Stored exactly |
 |---|---|---|---|
@@ -433,7 +437,7 @@ surface.
 | `ContentPetname` | Produces a deterministic three-word label from a hexadecimal content hash. |
 | `PngEncoder` / `PngDecoder` | Write and read 8-bit RGBA PNG stills and full-frame APNG animations. |
 | `PngImage` / `PngAnimation` / `PngAnimationFrame` | The decoded still and animation shapes `PngDecoder` returns. |
-| `TextureFormat` / `TextureColorSpace` / `TextureFormats` | Texture level layouts, color spaces, and a level's extent and size. |
+| `TextureColorSpace` | Whether a texture's values are linear or sRGB-encoded. |
 | `Bc4Codec` / `Bc5Codec` / `Bc6hCodec` / `Bc7Codec` / `TextureCompression` | Encode and decode block-compressed blocks and whole levels. |
 | `TextureMipChain` / `TextureMipFilter` / `OctahedralNormal` | Build tile-aware mip chains and store unit directions in two channels. |
 | `QrEncoder` | Builds an ISO/IEC 18004 byte-mode `QrMatrix` from a payload string and error-correction level. |

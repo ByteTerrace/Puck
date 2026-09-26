@@ -28,4 +28,8 @@ public static class VulkanFormat {
     public const uint R8G8B8A8Srgb = 43;
     /// <summary>The <c>VK_FORMAT_R8G8B8A8_UNORM</c> format.</summary>
     public const uint R8G8B8A8Unorm = 37;
+    /// <summary>The <c>VK_FORMAT_R8G8_UNORM</c> value.</summary>
+    public const uint R8G8Unorm = 16;
+    /// <summary>The <c>VK_FORMAT_R8_UNORM</c> value.</summary>
+    public const uint R8Unorm = 9;
 }

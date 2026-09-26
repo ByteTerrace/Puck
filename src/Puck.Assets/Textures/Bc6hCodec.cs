@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+
 namespace Puck.Assets.Textures;
 
 /// <summary>
@@ -24,11 +26,10 @@ namespace Puck.Assets.Textures;
 /// keeps a tie. A block of one value takes mode 14 and round-trips exactly.</para>
 /// </summary>
 public static partial class Bc6hCodec {
-    /// <summary>The bytes of one block.</summary>
-    public const int BlockBytes = 16;
     /// <summary>The largest half the unsigned format holds, 65504, as bits.</summary>
     public const ushort MaximumHalf = 0x7BFF;
 
+    private static readonly int BlockBytes = ((int)GpuPixelFormats.UnitBytes(format: GpuPixelFormat.Bc6hUfloat));
     private static readonly byte[] Weights = [0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64];
     // The one-region modes: 5-bit code, endpoint bits, delta bits (0 for untransformed).
     private static readonly (int Code, int Bits, int Delta)[] Modes = [(0x03, 10, 0), (0x07, 11, 9), (0x0B, 12, 8), (0x0F, 16, 4)];

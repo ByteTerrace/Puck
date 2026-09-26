@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Assets.Textures;
 
 namespace Puck.SignedDistance.Baking;
@@ -28,7 +29,7 @@ public enum SdfBakeTextureUsage : byte {
 /// for data that must not change.</param>
 /// <param name="ColorSpace">How the values map to light.</param>
 /// <param name="Filter">How each mip level is filtered from the one above it.</param>
-public readonly record struct SdfBakeTexturePlan(TextureFormat Source, TextureFormat Stored, TextureColorSpace ColorSpace, TextureMipFilter Filter);
+public readonly record struct SdfBakeTexturePlan(GpuPixelFormat Source, GpuPixelFormat Stored, TextureColorSpace ColorSpace, TextureMipFilter Filter);
 /// <summary>
 /// One baked texture: a tile-aware mip chain (<see cref="TextureMipChain"/>) whose first level is
 /// <see cref="Width"/> by <see cref="Height"/> texels, each level stored in <see cref="Format"/>. The atlas is square
@@ -43,7 +44,7 @@ public readonly record struct SdfBakeTexturePlan(TextureFormat Source, TextureFo
 /// <param name="Height">The first level's height, in texels.</param>
 /// <param name="TileTexels">The side of one tile, in texels of the first level.</param>
 /// <param name="Levels">The levels' bytes, the first level first.</param>
-public sealed record SdfBakedTexture(SdfBakeTextureUsage Usage, TextureFormat Format, TextureColorSpace ColorSpace, int Width, int Height, int TileTexels, IReadOnlyList<byte[]> Levels) {
+public sealed record SdfBakedTexture(SdfBakeTextureUsage Usage, GpuPixelFormat Format, TextureColorSpace ColorSpace, int Width, int Height, int TileTexels, IReadOnlyList<byte[]> Levels) {
     /// <summary>Returns how textures of <paramref name="usage"/> are baked and stored. Color is BC7 in sRGB, normals are
     /// BC5 octahedral pairs, occlusion and depth are BC4, emission is BC6H, and material identity stays uncompressed
     /// with majority mips, since a lossy or blended identity names a material nothing authored.</summary>
@@ -51,12 +52,12 @@ public sealed record SdfBakedTexture(SdfBakeTextureUsage Usage, TextureFormat Fo
     /// <returns>The plan.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="usage"/> is not a declared usage.</exception>
     public static SdfBakeTexturePlan PlanFor(SdfBakeTextureUsage usage) => usage switch {
-        SdfBakeTextureUsage.Albedo => new(ColorSpace: TextureColorSpace.Srgb, Filter: TextureMipFilter.Srgb, Source: TextureFormat.Rgba8Unorm, Stored: TextureFormat.Bc7Unorm),
-        SdfBakeTextureUsage.Normal => new(ColorSpace: TextureColorSpace.Linear, Filter: TextureMipFilter.OctahedralNormal, Source: TextureFormat.Rg8Unorm, Stored: TextureFormat.Bc5Unorm),
-        SdfBakeTextureUsage.Occlusion => new(ColorSpace: TextureColorSpace.Linear, Filter: TextureMipFilter.Average, Source: TextureFormat.R8Unorm, Stored: TextureFormat.Bc4Unorm),
-        SdfBakeTextureUsage.Material => new(ColorSpace: TextureColorSpace.Linear, Filter: TextureMipFilter.Majority, Source: TextureFormat.R8Unorm, Stored: TextureFormat.R8Unorm),
-        SdfBakeTextureUsage.Emission => new(ColorSpace: TextureColorSpace.Linear, Filter: TextureMipFilter.Half, Source: TextureFormat.Rgba16Float, Stored: TextureFormat.Bc6hUfloat),
-        SdfBakeTextureUsage.Depth => new(ColorSpace: TextureColorSpace.Linear, Filter: TextureMipFilter.Average, Source: TextureFormat.R8Unorm, Stored: TextureFormat.Bc4Unorm),
+        SdfBakeTextureUsage.Albedo => new(ColorSpace: TextureColorSpace.Srgb, Filter: TextureMipFilter.Srgb, Source: GpuPixelFormat.R8G8B8A8Unorm, Stored: GpuPixelFormat.Bc7Unorm),
+        SdfBakeTextureUsage.Normal => new(ColorSpace: TextureColorSpace.Linear, Filter: TextureMipFilter.OctahedralNormal, Source: GpuPixelFormat.R8G8Unorm, Stored: GpuPixelFormat.Bc5Unorm),
+        SdfBakeTextureUsage.Occlusion => new(ColorSpace: TextureColorSpace.Linear, Filter: TextureMipFilter.Average, Source: GpuPixelFormat.R8Unorm, Stored: GpuPixelFormat.Bc4Unorm),
+        SdfBakeTextureUsage.Material => new(ColorSpace: TextureColorSpace.Linear, Filter: TextureMipFilter.Majority, Source: GpuPixelFormat.R8Unorm, Stored: GpuPixelFormat.R8Unorm),
+        SdfBakeTextureUsage.Emission => new(ColorSpace: TextureColorSpace.Linear, Filter: TextureMipFilter.Half, Source: GpuPixelFormat.R16G16B16A16Float, Stored: GpuPixelFormat.Bc6hUfloat),
+        SdfBakeTextureUsage.Depth => new(ColorSpace: TextureColorSpace.Linear, Filter: TextureMipFilter.Average, Source: GpuPixelFormat.R8Unorm, Stored: GpuPixelFormat.Bc4Unorm),
         _ => throw new ArgumentOutOfRangeException(
             actualValue: usage,
             message: "The texture usage is not a declared usage.",
@@ -114,9 +115,9 @@ public sealed record SdfBakedTexture(SdfBakeTextureUsage Usage, TextureFormat Fo
         var levels = new byte[chain.Count][];
 
         for (var level = 0; (level < levels.Length); level++) {
-            var (levelWidth, levelHeight) = TextureFormats.LevelExtent(height: height, level: level, width: width);
+            var (levelWidth, levelHeight) = LevelExtentOf(height: height, level: level, width: width);
 
-            levels[level] = (TextureFormats.IsBlockCompressed(format: plan.Stored)
+            levels[level] = (GpuPixelFormats.IsBlockCompressed(format: plan.Stored)
                 ? TextureCompression.Encode(format: plan.Stored, height: levelHeight, texels: chain[level], width: levelWidth)
                 : chain[level]);
         }
@@ -135,7 +136,7 @@ public sealed record SdfBakedTexture(SdfBakeTextureUsage Usage, TextureFormat Fo
     /// <param name="level">The level, zero for the first.</param>
     /// <returns>The level's width and height, in texels.</returns>
     public (int Width, int Height) LevelExtent(int level) =>
-        TextureFormats.LevelExtent(height: Height, level: level, width: Width);
+        LevelExtentOf(height: Height, level: level, width: Width);
     /// <summary>Decodes level <paramref name="level"/> to the usage's uncompressed source format.</summary>
     /// <param name="level">The level, zero for the first.</param>
     /// <returns>The level's texels, rows top to bottom.</returns>
@@ -146,8 +147,14 @@ public sealed record SdfBakedTexture(SdfBakeTextureUsage Usage, TextureFormat Fo
 
         var (width, height) = LevelExtent(level: level);
 
-        return (TextureFormats.IsBlockCompressed(format: Format)
+        return (GpuPixelFormats.IsBlockCompressed(format: Format)
             ? TextureCompression.Decode(blocks: Levels[level], format: Format, height: height, width: width)
             : Levels[level].ToArray());
+    }
+
+    private static (int Width, int Height) LevelExtentOf(int width, int height, int level) {
+        var (levelWidth, levelHeight) = GpuPixelFormats.LevelExtent(height: ((uint)height), level: ((uint)level), width: ((uint)width));
+
+        return (((int)levelWidth), ((int)levelHeight));
     }
 }

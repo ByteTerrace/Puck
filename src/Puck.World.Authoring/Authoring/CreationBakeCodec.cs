@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 using Puck.Assets;
 using Puck.Assets.Textures;
 using Puck.SignedDistance.Baking;
@@ -272,7 +273,7 @@ public static class CreationBakeCodec {
     }
     private static SdfBakedTexture ReadTexture(ref CanonicalBinaryReader reader) {
         var usage = ((SdfBakeTextureUsage)reader.ReadByte());
-        var format = ((TextureFormat)reader.ReadByte());
+        var format = ((GpuPixelFormat)reader.ReadByte());
         var colorSpace = ((TextureColorSpace)reader.ReadByte());
 
         if (!Enum.IsDefined(value: usage)) {
@@ -302,10 +303,10 @@ public static class CreationBakeCodec {
         var levels = new byte[count][];
 
         for (var level = 0; (level < count); level++) {
-            var (levelWidth, levelHeight) = TextureFormats.LevelExtent(height: height, level: level, width: width);
-            var length = TextureFormats.LevelBytes(format: format, height: levelHeight, width: levelWidth);
+            var (levelWidth, levelHeight) = GpuPixelFormats.LevelExtent(height: ((uint)height), level: ((uint)level), width: ((uint)width));
+            var length = GpuPixelFormats.LevelByteLength(format: format, height: levelHeight, width: levelWidth);
 
-            if (length > reader.Remaining) {
+            if (length > ((ulong)reader.Remaining)) {
                 throw new InvalidDataException(message: "a baked texture is truncated");
             }
 
