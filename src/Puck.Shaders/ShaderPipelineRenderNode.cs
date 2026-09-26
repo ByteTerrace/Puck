@@ -25,6 +25,7 @@ public readonly record struct ShaderPipelineExternalImage(
 public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarget {
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuDeviceContext m_device;
+    private readonly GpuPassPipelineCache m_pipelines;
     private readonly bool m_directX;
     private readonly GpuDeviceServices m_gpu;
     private readonly uint m_inFlight;
@@ -80,12 +81,15 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
     private readonly List<nint> m_commands = [];
 
     /// <summary>Creates an initially empty node that records through <paramref name="deviceContext"/>'s services. The
-    /// first valid <see cref="Swap"/> installs a graph. A graph's package passes are recorded by
-    /// <paramref name="packages"/>' recorders, one per pass, created when the graph installs and disposed with it; a
-    /// node without recorders refuses a graph that has any.</summary>
-    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General, RenderGraphPackageRecorders? packages = null) {
+    /// first valid <see cref="Swap"/> installs a graph. Every pass pipeline the node installs, its package passes' and
+    /// float preview's included, is leased from <paramref name="pipelines"/>, which counts what it creates; the node's
+    /// own ledger counts none of it. A graph's package passes are recorded by <paramref name="packages"/>' recorders, one
+    /// per pass, created when the graph installs and disposed with it; a node without recorders refuses a graph that has
+    /// any.</summary>
+    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General, RenderGraphPackageRecorders? packages = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(deviceContext);
+        ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
         ArgumentOutOfRangeException.ThrowIfZero(inFlightFrames);
@@ -102,6 +106,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             services: deviceContext.Services
         );
         m_device = deviceContext;
+        m_pipelines = pipelines;
         m_directX = hostsOnDirectX;
         m_inFlight = inFlightFrames;
         if (outputLayout is not GpuImageLayout.General and not GpuImageLayout.ShaderReadOnly) {
@@ -122,10 +127,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         m_requestedHeight = height;
     }
     /// <summary>Creates a node with an already compiled candidate.</summary>
-    public ShaderPipelineRenderNode(CompiledShaderPipeline pipeline, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General)
+    public ShaderPipelineRenderNode(CompiledShaderPipeline pipeline, IGpuDeviceContext deviceContext, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General)
         : this(
         pipeline.Plan.Definition.Name,
         deviceContext,
+        pipelines,
         hostsOnDirectX,
         width,
         height,
@@ -241,11 +247,11 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
         var objects = built.TakePass(index: planned.Index);
 
-        runtime.Compute = objects.Compute;
-        runtime.Graphics = objects.Graphics;
-        runtime.Primary = objects.Primary;
-        runtime.RenderPass = objects.RenderPass;
-        runtime.Secondary = objects.Secondary;
+        runtime.Pipeline = objects.Pipeline;
+        objects.Pipeline = null;
+        runtime.Compute = runtime.Pipeline?.Current!.Compute;
+        runtime.Graphics = runtime.Pipeline?.Current!.Graphics;
+        runtime.RenderPass = runtime.Pipeline?.Current!.RenderPass;
 
         if (declaration is null or { Kind: ShaderPipelineDocumentPassKind.Compute }) {
             runtime.Pools = new IGpuCommandPool[m_inFlight];

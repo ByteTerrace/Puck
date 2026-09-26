@@ -109,6 +109,7 @@ public sealed partial class RenderGraphRuntime {
                         sources[index] = m_sources[kept[index]];
                     } else {
                         (createdSources[index], createdSourceNodes[index]) = CreateSource(
+                            pipelines: m_pipelines,
                             deviceContext: m_device,
                             hostsOnDirectX: m_hostsOnDirectX,
                             inFlightFrames: m_inFlightFrames,
@@ -185,7 +186,8 @@ public sealed partial class RenderGraphRuntime {
                         hostsOnDirectX: m_hostsOnDirectX,
                         inFlightFrames: m_inFlightFrames,
                         name: set.Instances[index].Name,
-                        packages: m_packages
+                        packages: m_packages,
+                        pipelines: m_pipelines
                     ));
 
                 if (SwappedIn(

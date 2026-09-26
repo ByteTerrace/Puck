@@ -52,6 +52,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         // An instance nothing resizes, so a wait for another extent can only end at its deadline.
         using var instances = FakeGraphInstances.Attach(
             create: name => new ShaderPipelineRenderNode(
+                pipelines: new GpuPassPipelineCache(),
                 deviceContext: gpu,
                 height: 4,
                 hostsOnDirectX: false,

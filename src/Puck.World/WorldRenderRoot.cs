@@ -134,6 +134,7 @@ internal static class WorldRenderRoot {
             graphs: graphs,
             hostsOnDirectX: hostSettings.HostsOnDirectX,
             packages: packages,
+            pipelines: sp.GetRequiredService<GpuPassPipelineCache>(),
             refusal: out var refusal,
             root: rootName,
             runtime: out var runtime,

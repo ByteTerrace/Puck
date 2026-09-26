@@ -299,6 +299,7 @@ public sealed partial class OverlayPackageLawTests {
                 package: RenderGraphPackageCatalog.Overlay
             );
             Node = new ShaderPipelineRenderNode(
+                pipelines: new GpuPassPipelineCache(),
                 deviceContext: ((faults is null)
                     ? gpu
                     : new FaultingDevice(

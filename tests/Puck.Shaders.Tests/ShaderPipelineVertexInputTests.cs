@@ -69,6 +69,7 @@ public sealed class ShaderPipelineVertexInputTests {
         var gpu = new FakePipelineGpu();
 
         using (var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
             height: 8,
             hostsOnDirectX: false,

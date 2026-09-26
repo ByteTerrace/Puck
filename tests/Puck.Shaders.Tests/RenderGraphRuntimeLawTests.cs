@@ -206,6 +206,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private static RenderGraphRuntime Runtime(FakePipelineGpu gpu, Recorders recorders, RenderGraphInstanceSet set, string root, params RenderGraphRuntimeGraph[] graphs) {
         Assert.True(
             condition: RenderGraphRuntime.TryCreate(
+                pipelines: new GpuPassPipelineCache(),
                 deviceContext: gpu,
                 graphs: graphs,
                 hostsOnDirectX: false,

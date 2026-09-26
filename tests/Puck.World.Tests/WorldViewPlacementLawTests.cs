@@ -39,6 +39,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         );
         m_instances = FakeGraphInstances.Attach(
             create: static name => new ShaderPipelineRenderNode(
+                pipelines: new GpuPassPipelineCache(),
                 deviceContext: new RefusingGpuDevice(),
                 height: 4,
                 hostsOnDirectX: false,

@@ -51,6 +51,7 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
         };
         m_instances = FakeGraphInstances.Attach(
             create: static name => new ShaderPipelineRenderNode(
+                pipelines: new GpuPassPipelineCache(),
                 deviceContext: new RefusingGpuDevice(),
                 height: 4,
                 hostsOnDirectX: false,

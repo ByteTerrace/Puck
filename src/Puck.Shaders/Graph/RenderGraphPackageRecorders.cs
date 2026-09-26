@@ -118,6 +118,9 @@ public interface IRenderGraphPackageFactory {
 /// <param name="Package">The package id the pass names.</param>
 /// <param name="Device">The device the instance records on.</param>
 /// <param name="Services">The instance's services, which count what they create under the instance.</param>
+/// <param name="Pipelines">The composition's pass pipelines, which a package leases every pipeline it records with from,
+/// so the same pass in two instances or two installs is one pipeline, counted under the cache rather than the
+/// instance.</param>
 /// <param name="HostsOnDirectX">Whether the device is Direct3D 12.</param>
 /// <param name="InFlightFrames">The instance's frames in flight, the range of <see cref="RenderGraphPackageRecording.Slot"/>.</param>
 /// <param name="Width">The pass's extent width, in pixels, at which its graph installs.</param>
@@ -128,7 +131,7 @@ public interface IRenderGraphPackageFactory {
 /// set 3, whose block holds the extent, the package's config and the values it declares, followed by its declared
 /// resources. A recorder creates its pipeline through its <see cref="ShaderInterfaceLayout.PipelineLayout"/> and reads
 /// its values' offsets and its resources' bindings from it.</param>
-public sealed record RenderGraphPackageRecorderContext(string Instance, string Pass, string Package, IGpuDeviceContext Device, GpuDeviceServices Services, bool HostsOnDirectX, int InFlightFrames, uint Width, uint Height, IReadOnlyList<ShaderPipelineResource> Inputs, IReadOnlyList<ShaderPipelineResource> Outputs, ShaderPipelineParameterLayout Parameters);
+public sealed record RenderGraphPackageRecorderContext(string Instance, string Pass, string Package, IGpuDeviceContext Device, GpuDeviceServices Services, GpuPassPipelineCache Pipelines, bool HostsOnDirectX, int InFlightFrames, uint Width, uint Height, IReadOnlyList<ShaderPipelineResource> Inputs, IReadOnlyList<ShaderPipelineResource> Outputs, ShaderPipelineParameterLayout Parameters);
 /// <summary>What an external producer is created for: one external instance, on one device.</summary>
 /// <param name="Instance">The instance's name.</param>
 /// <param name="Package">The package id the instance names.</param>
