@@ -1499,25 +1499,33 @@ instance's own seat, the same convention a `screens` row and a HUD `Frame`
 element follow; every camera socket in one probe must resolve to the same seat,
 because one kernel run has one host graph; `profile` is honored while source
 `controls` are refused in favor of probe control bindings or camera-screen
-authoring), `view` (a named `cameras[]` row's offscreen render, exported as a
-kernel-readable lease that holds the last complete image while a kernel reads),
+authoring), `view` (a named `cameras[]` row's offscreen render on the Direct3D
+12 host, exported as a kernel-readable image that holds the last complete frame
+while a kernel reads, each frame published with the value the exporting engine
+signals on the image's shared fence, which the kernel waits for),
 `probe` (another declared probe's
 own texture output, read back as a ring). Any other producer is part of the
 shared frame-source vocabulary but is refused on a probe socket until a kernel
 input host exists for it. The kind's `trigger`
-socket must bind a `camera` producer source: kernels run on that sensor's own camera
-graph, so it decides which `ICameraKernelHost` a run attaches to. A kind that
+socket decides which host a run attaches to: bound to a `camera` producer
+source, the kernel runs on that sensor's own camera graph; bound to a `view` or
+a `probe` source in a row that binds no camera, it runs on the render adapter's
+own kernel host, which the binder opens and wakes once a frame and which cycles
+the kernel whenever its trigger publishes a frame (the shipped `average` kind
+measuring a view is the smallest such probe). A kind that
 declares an `output` writes a texture each cycle, at the extent its own
-`output.of` socket's source renders at; a screen shows it as a `probe` source
-(`screen.source <index> probe <id>`), and another probe's `probe` socket may
-read it back as an input in turn.
+`output.of` socket's source renders at, into a ring the binder provisions with
+a shared fence the kernel signals; a screen shows it as a `probe` source
+(`screen.source <index> probe <id>`), an imported source instance handed out
+through the capture gate like a camera's, whose order `world.screens` reports,
+and another probe's `probe` socket may read it back as an input in turn.
 
 `WorldProbes` services every declared row from the host loop's per-frame
 capture in both boot shapes (headless, every camera/view/probe socket faults
 by name for want of a live feed and a parameter binding finds no composed
 pass; a track-input probe and every axis binding run in full), resolving each
-socket against the binder's live state and (re)attaching the kernel to the
-trigger sensor's open graph whenever any socket's generation—or the output
+socket against the binder's live state and (re)attaching the kernel to its
+host (the trigger sensor's open graph, or the render adapter's own host) whenever any socket's generation—or the output
 ring's—changes; a socket whose source is not ready yet (an unpublished ring,
 an unopened camera) idles the whole probe with that fault and retries every
 frame until it resolves. A camera socket retains its own (seat, sensor,

@@ -607,8 +607,9 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
     private sealed class CameraRegistration {
         public Func<int>? AnchorIdSource { get; set; }
         public ISdfAnchorSource? AnchorSource { get; set; }
-        // Ends a reservation TryBeginExportWrite made, with whether the frame completed and the engine it rendered on.
-        public Action<bool, object?>? EndExportWrite { get; set; }
+        // Ends a reservation TryBeginExportWrite made, with whether the frame completed, the engine it rendered on, and the
+        // shared fence value the engine's write of the exported image signals.
+        public Action<bool, object?, ulong>? EndExportWrite { get; set; }
         public Func<IGpuDeviceContext, IGpuImage>? ExportFactory { get; set; }
         public ISdfCameraRig? Rig { get; set; }
         public required WorldCamera Row { get; set; }
@@ -688,7 +689,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewCameras {
                     width: (exported ? registration.Row.RenderWidth : width)
                 );
             } finally {
-                registration.EndExportWrite?.Invoke(arg1: produced, arg2: m_node.ExportGeneration);
+                registration.EndExportWrite?.Invoke(arg1: produced, arg2: m_node.ExportGeneration, arg3: m_node.ExportWrittenValue);
             }
 
             return produced;

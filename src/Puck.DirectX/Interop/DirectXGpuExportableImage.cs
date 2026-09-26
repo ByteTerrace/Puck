@@ -27,15 +27,17 @@ public enum DirectXExportableImageAccess {
 /// <summary>
 /// A Direct3D 12 image in <em>shared</em> GPU memory implementing <see cref="IGpuExportableImage"/>: a default-heap
 /// texture created by <see cref="DirectXTextures"/> with the shared heap flag, an NT handle to it (from
-/// <c>CreateSharedHandle</c>), and a fence to drain the producer's queue. Another backend on the same adapter (a Vulkan
-/// host) imports <see cref="SharedHandle"/> and samples the texture without a CPU round-trip.
+/// <c>CreateSharedHandle</c>), and a fence: shared, with an NT handle of its own (<see cref="SharedFenceHandle"/>), when
+/// this device writes the texture. Another backend on the same adapter (a Vulkan host, or a Direct3D 11 device) opens
+/// <see cref="SharedHandle"/> and samples the texture without a CPU round-trip.
 /// <para>
 /// A <see cref="DirectXExportableImageAccess.ComputeWrite"/> texture has the resource flags, initial state and
 /// optimized clear value its declared usages need, as a <see cref="DirectXGpuImage"/> does. Both simultaneous-access
 /// shapes have fixed flags, and start and rest in <c>COMMON</c>, the cross-device handoff state their foreign device
 /// expects; a legacy first UAV use promotes from <c>COMMON</c>. The producer's final recorded barrier returns a written
-/// texture to <c>COMMON</c> via <see cref="GpuImageLayout.External"/>, and <see cref="FinalizeForExport"/> only blocks
-/// on a fence until that submitted work completes. Single-thread affine.
+/// texture to <c>COMMON</c> via <see cref="GpuImageLayout.External"/>, and <see cref="CompleteWrite"/> queues the
+/// shared fence's next value behind that submitted work, which the reading device waits for on the GPU. Single-thread
+/// affine.
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -46,6 +48,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     private bool m_disposed;
     private nint m_fence;
     private HANDLE m_fenceEvent;
+    private HANDLE m_fenceSharedHandle;
     private ulong m_fenceValue;
     private nint m_resource;
     private HANDLE m_sharedHandle;
@@ -145,14 +148,33 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
                 ResourceHandle = m_resource,
             });
 
+            // A texture this device writes signals its fence for the consumer on another device to wait on, so the fence
+            // is shared; a foreign-written texture's fence only drains this device's queue.
+            var writtenHere = (access != DirectXExportableImageAccess.ForeignWrite);
+
             device->CreateFence(
-                Flags: default,
+                Flags: (writtenHere
+                    ? D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_SHARED
+                    : default),
                 InitialValue: 0,
                 ppFence: out var fence,
                 riid: ID3D12Fence.IID_Guid
             );
             m_fence = ((nint)fence);
             m_fenceValue = 1;
+
+            if (writtenHere) {
+                var fenceHandle = default(HANDLE);
+
+                device->CreateSharedHandle(
+                    Access: GenericAll,
+                    Name: default(PCWSTR),
+                    pAttributes: ((SECURITY_ATTRIBUTES*)null),
+                    pHandle: &fenceHandle,
+                    pObject: ((ID3D12DeviceChild*)fence)
+                );
+                m_fenceSharedHandle = fenceHandle;
+            }
             m_fenceEvent = PInvoke.CreateEvent(
                 bInitialState: false,
                 bManualReset: false,
@@ -180,6 +202,10 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     public nint ImageHandle => m_resource;
     /// <inheritdoc/>
     public nint ImageViewHandle => GCHandle.ToIntPtr(value: m_imageViewToken);
+    /// <inheritdoc/>
+    /// <remarks>A texture this device writes has one, which a Direct3D 11 device opens through
+    /// <c>ID3D11Device5::OpenSharedFence</c>; a foreign-written texture has none.</remarks>
+    public nint SharedFenceHandle => ((nint)m_fenceSharedHandle.Value);
     /// <inheritdoc/>
     public nint SharedHandle => m_sharedHandle;
     /// <inheritdoc/>
@@ -221,6 +247,11 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
             m_sharedHandle = HANDLE.Null;
         }
 
+        if (!m_fenceSharedHandle.IsNull) {
+            _ = PInvoke.CloseHandle(hObject: m_fenceSharedHandle);
+            m_fenceSharedHandle = HANDLE.Null;
+        }
+
         if (!m_fenceEvent.IsNull) {
             _ = PInvoke.CloseHandle(hObject: m_fenceEvent);
             m_fenceEvent = HANDLE.Null;
@@ -236,15 +267,31 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
         );
 
     /// <inheritdoc/>
-    public void FinalizeForExport() {
+    /// <remarks>Queues <c>ID3D12CommandQueue::Signal</c> on the shared fence; a foreign-written texture, which has no
+    /// shared fence, drains the queue.</remarks>
+    public ulong CompleteWrite() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
 
-        // The producer already recorded the COMMON handoff transition and submitted; block on the queue so the
-        // importing backend opens the shared handle on completed pixels in the resting state.
-        WaitForGpu();
+        if (m_fenceSharedHandle.IsNull) {
+            WaitForGpu();
+
+            return 0UL;
+        }
+
+        var value = m_fenceValue;
+
+        DirectXCommandCalls.Signal(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+            fence: ((ID3D12Fence*)m_fence),
+            queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle),
+            value: value
+        );
+        m_fenceValue++;
+
+        return value;
     }
     /// <summary>Waits for the producer queue, then releases the texture, its shared handle and its fence. Safe to call
     /// more than once.</summary>

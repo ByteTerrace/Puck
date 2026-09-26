@@ -1,0 +1,22 @@
+{
+  "$schema": "puck.probe.manifest.v1",
+  "name": "average",
+  "class": "kernel",
+  "description": "Measures a frame's mean color and writes the frame, tinted, to its output. Bound to a view, it reads what a camera in the world sees; its output shows on a screen like any source.",
+  "inputs": [
+    { "name": "frame", "class": "frame" }
+  ],
+  "trigger": "frame",
+  "output": { "of": "frame" },
+  "kernel": { "source": "average.hlsl", "accumulate": "accumulate", "finalize": "finalize" },
+  "channels": [
+    { "name": "red", "min": 0, "max": 1, "neutral": 0, "description": "The frame's mean red, 0 to 1." },
+    { "name": "green", "min": 0, "max": 1, "neutral": 0, "description": "The frame's mean green, 0 to 1." },
+    { "name": "blue", "min": 0, "max": 1, "neutral": 0, "description": "The frame's mean blue, 0 to 1." }
+  ],
+  "config": {
+    "tintR": { "type": "float", "default": 1.0, "min": 0, "max": 1, "description": "The output's red multiplier." },
+    "tintG": { "type": "float", "default": 1.0, "min": 0, "max": 1, "description": "The output's green multiplier." },
+    "tintB": { "type": "float", "default": 1.0, "min": 0, "max": 1, "description": "The output's blue multiplier." }
+  }
+}

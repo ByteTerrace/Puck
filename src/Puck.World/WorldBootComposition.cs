@@ -18,6 +18,7 @@ using Puck.Overlays;
 using Puck.Platform;
 using Puck.Platform.Audio;
 using Puck.Platform.Linux;
+using Puck.Platform.Probes;
 using Puck.Platform.Windows;
 using Puck.SdfVm;
 using Puck.Shaders;
@@ -409,6 +410,7 @@ public static class WorldBootComposition {
                 machines: sp.GetRequiredService<WorldMachineHost>(),
                 cameraCapture: sp.GetRequiredService<ICameraCaptureService>(),
                 windowCapture: sp.GetRequiredService<INativeImageCaptureService>(),
+                probeKernels: sp.GetRequiredService<IProbeKernelHostService>(),
                 cameras: definition.Cameras,
                 anchors: sp.GetRequiredService<WorldClient>(),
                 stamps: sp.GetRequiredService<WorldStampPool>(),

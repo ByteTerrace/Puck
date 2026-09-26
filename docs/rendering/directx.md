@@ -364,6 +364,14 @@ another device created opens through `IGpuSurfaceTransferFactory.TryImportFence`
 `DirectXSharedFence`. A Vulkan host allocates the targets and the fence on a headless Direct3D 12
 device on the render adapter and imports both (see [Vulkan](vulkan.md#waiting-on-another-device)).
 
+The other direction, an image this device writes and a Direct3D 11 device reads (a camera view
+exported to a probe), is ordered by the image's own fence: a `DirectXGpuExportableImage` this
+device writes creates its fence with `D3D12_FENCE_FLAG_SHARED` and an NT handle
+(`SharedFenceHandle`), and `CompleteWrite` queues the fence's next value with
+`ID3D12CommandQueue::Signal` behind the submission that wrote it and returns it. The reader opens
+the fence through `ID3D11Device5::OpenSharedFence` and queues `ID3D11DeviceContext4::Wait` for that
+value ahead of its reads, so neither device blocks.
+
 ## Constraints and invariants
 
 - **Windows-only by construction.** Every type that touches Win32 is

@@ -264,8 +264,9 @@ public sealed class SdfCapabilityMatrixLawTests {
             Green: false,
             Members: [
                 "SdfWorldEngine.OutputImageHandle", "SdfWorldEngine.OutputImageViewHandle", "SdfWorldEngine.OutputLayout", "SdfWorldEngine.ExportSharedHandle",
-                "SdfWorldEngine.OutputWidth", "SdfWorldEngine.OutputHeight",
+                "SdfWorldEngine.ExportFenceHandle", "SdfWorldEngine.ExportWrittenValue", "SdfWorldEngine.OutputWidth", "SdfWorldEngine.OutputHeight",
                 "SdfWorldEngineOptions.CreateOutputImage", "SdfEngineNode.CreateOutputImage", "SdfEngineNode.ExportSharedHandle",
+                "SdfEngineNode.ExportFenceHandle", "SdfEngineNode.ExportWrittenValue",
                 "SdfEngineNode.ExportGeneration", "SdfEngineNode.OutputWidth", "SdfEngineNode.OutputHeight",
             ]
         ),

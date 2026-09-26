@@ -53,8 +53,9 @@ public sealed class DirectXGpuSurfaceExportFactory(DirectXDeviceContext deviceCo
             width: width
         );
     /// <summary>Creates an exportable image this device's compute work writes and a Direct3D 11 device can open and
-    /// sample — <c>ALLOW_UNORDERED_ACCESS</c> plus <c>ALLOW_SIMULTANEOUS_ACCESS</c>. The reader sees whichever frame last
-    /// landed; nothing fences the two devices.</summary>
+    /// sample — <c>ALLOW_UNORDERED_ACCESS</c> plus <c>ALLOW_SIMULTANEOUS_ACCESS</c>. Each write signals the image's shared
+    /// fence (<see cref="IGpuExportableImage.CompleteWrite"/>), whose value the reader waits for on its own device before
+    /// it reads.</summary>
     /// <param name="format">The neutral <see cref="GpuPixelFormat"/>.</param>
     /// <param name="width">The image width in pixels.</param>
     /// <param name="height">The image height in pixels.</param>

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
 using Puck.Platform.Probes;
@@ -6,7 +7,7 @@ using Windows.Win32.Graphics.Direct3D11;
 
 namespace Puck.Platform.Windows;
 
-/// <summary>The Direct3D 11 device a camera graph runs its kernels on, with the critical section a multi-call
+/// <summary>The Direct3D 11 device a kernel host runs its kernels on, with the critical section a multi-call
 /// sequence on its immediate context must hold.</summary>
 internal unsafe interface IProbeKernelDevice {
     ID3D11DeviceContext* Context { get; }
@@ -25,11 +26,13 @@ internal interface IProbeInputResolver {
     /// <summary>Gets the converted extent of a sensor's stream.</summary>
     (int Width, int Height) Extent(CameraSensor sensor);
 }
-/// <summary>The kernels attached to one camera graph. Attachment is thread-safe; everything else runs on the graph's
-/// worker after a frame converts: a pending kernel opens its <see cref="ProbeKernelInput.Ring"/> sockets and compiles
-/// once every <see cref="ProbeKernelInput.Sensor"/>/<see cref="ProbeKernelInput.StrobePair"/> socket resolves,
-/// kernels triggered by that frame's sensor run — a ring socket with no published slot yet runs unbound that cycle —
-/// and detached kernels release their native objects on this thread.</summary>
+/// <summary>The kernels attached to one host. Attachment is thread-safe; everything else runs on the host's worker: a
+/// camera graph's after a frame converts (<see cref="OnFrame"/>), the render adapter's host after a ring publishes
+/// (<see cref="OnPublications"/>). A pending kernel opens its <see cref="ProbeKernelInput.Ring"/> sockets, with the
+/// shared fence each ring's producer signals, and compiles once every
+/// <see cref="ProbeKernelInput.Sensor"/>/<see cref="ProbeKernelInput.StrobePair"/> socket resolves; a triggered kernel
+/// queues a wait for each bound ring slot's fence value ahead of its dispatch — a ring socket with no published slot
+/// yet runs unbound that cycle — and detached kernels release their native objects on this thread.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed unsafe class Win32ProbeKernelBench {
     private readonly List<Attachment> m_attached = [];
@@ -44,20 +47,40 @@ internal sealed unsafe class Win32ProbeKernelBench {
         );
 
         if (Volatile.Read(location: ref m_closed)) {
-            attachment.End(fault: "the camera graph has ended");
+            attachment.End(fault: "the kernel host has ended");
         } else {
             m_pending.Enqueue(item: attachment);
         }
 
         return attachment;
     }
-    public void OnFrame(CameraSensor sensor, long captureTimestamp, IProbeKernelDevice device, IProbeInputResolver resolver) {
+    /// <summary>Runs every kernel whose trigger socket reads a camera sensor's frame, after that sensor's frame
+    /// converts.</summary>
+    public void OnFrame(CameraSensor sensor, long captureTimestamp, IProbeKernelDevice device, IProbeInputResolver resolver) => Run(
+        captureTimestamp: captureTimestamp,
+        device: device,
+        resolver: resolver,
+        sensor: sensor
+    );
+    /// <summary>Runs every kernel whose trigger socket reads a ring that has published since the kernel last ran.</summary>
+    public void OnPublications(IProbeKernelDevice device) => Run(
+        captureTimestamp: Stopwatch.GetTimestamp(),
+        device: device,
+        resolver: null,
+        sensor: null
+    );
+
+    // One pass over the attached kernels: a camera graph's (a sensor, whose kernels it runs) or the render adapter's
+    // host's (no sensor: the kernels whose trigger ring moved). The rendered host's kernels bind no sensor socket, so it
+    // has no resolver.
+    private void Run(CameraSensor? sensor, long captureTimestamp, IProbeKernelDevice device, IProbeInputResolver? resolver) {
         while (m_pending.TryDequeue(result: out var pending)) {
             m_attached.Add(item: pending);
         }
 
         var views = stackalloc nint[ProbeKernelInputLimits.MaxRegisters];
         var ringSlots = stackalloc int[ProbeKernelInputLimits.MaxInputs];
+        var ringFences = stackalloc ulong[ProbeKernelInputLimits.MaxInputs];
 
         for (var index = (m_attached.Count - 1); (index >= 0); index--) {
             var attachment = m_attached[index];
@@ -72,7 +95,10 @@ internal sealed unsafe class Win32ProbeKernelBench {
             }
             if (
                 attachment.Ended ||
-                (attachment.Request.Trigger != sensor)
+                !attachment.IsTriggered(
+                    sensor: sensor,
+                    version: out var triggerVersion
+                )
             ) {
                 continue;
             }
@@ -97,6 +123,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
 
             for (var input = 0; (input < inputs.Count); input++) {
                 ringSlots[input] = -1;
+                ringFences[input] = 0UL;
             }
 
             try {
@@ -107,10 +134,10 @@ internal sealed unsafe class Win32ProbeKernelBench {
                 for (var input = 0; (input < inputs.Count); input++) {
                     switch (inputs[input]) {
                         case ProbeKernelInput.Sensor sensorInput: {
-                                var view = resolver.Resolve(
+                                var view = (resolver?.Resolve(
                                     sensor: sensorInput.Kind,
                                     previous: false
-                                );
+                                ) ?? 0);
 
                                 views[cursor] = view;
                                 cursor += 1;
@@ -124,14 +151,14 @@ internal sealed unsafe class Win32ProbeKernelBench {
                                 break;
                             }
                         case ProbeKernelInput.StrobePair strobeInput: {
-                                var lit = resolver.Resolve(
+                                var lit = (resolver?.Resolve(
                                     sensor: strobeInput.Kind,
                                     previous: false
-                                );
-                                var unlit = resolver.Resolve(
+                                ) ?? 0);
+                                var unlit = (resolver?.Resolve(
                                     sensor: strobeInput.Kind,
                                     previous: true
-                                );
+                                ) ?? 0);
 
                                 views[cursor] = lit;
                                 views[(cursor + 1)] = unlit;
@@ -153,9 +180,10 @@ internal sealed unsafe class Win32ProbeKernelBench {
 
                                 if (
                                     (ringViews is not null) &&
-                                    ringInput.Slots.TryAcquireLatest(fenceValue: out _, slot: out var slot)
+                                    ringInput.Slots.TryAcquireLatest(fenceValue: out var fenceValue, slot: out var slot)
                                 ) {
                                     ringSlots[input] = slot;
+                                    ringFences[input] = fenceValue;
                                     views[cursor] = ringViews[slot];
                                     boundMask |= (1u << input);
                                 } else {
@@ -181,7 +209,9 @@ internal sealed unsafe class Win32ProbeKernelBench {
 
                 try {
                     if (attachment.Kernel is null) {
-                        var (width, height) = resolver.Extent(sensor: attachment.Request.Trigger);
+                        var (width, height) = ((attachment.Request.TriggerRing is { } triggerRing)
+                            ? (triggerRing.Width, triggerRing.Height)
+                            : resolver!.Extent(sensor: attachment.Request.TriggerSensor!.Value));
 
                         attachment.Kernel = new Win32D3D11ProbeKernel(
                             context: ((nint)device.Context),
@@ -198,6 +228,15 @@ internal sealed unsafe class Win32ProbeKernelBench {
                     device.Enter();
 
                     try {
+                        for (var input = 0; (input < inputs.Count); input++) {
+                            if (ringSlots[input] >= 0) {
+                                attachment.WaitForRing(
+                                    index: input,
+                                    value: ringFences[input]
+                                );
+                            }
+                        }
+
                         _ = attachment.Kernel.TryRun(
                             views: new ReadOnlySpan<nint>(
                                 length: cursor,
@@ -209,6 +248,8 @@ internal sealed unsafe class Win32ProbeKernelBench {
                     } finally {
                         device.Leave();
                     }
+
+                    attachment.TriggerVersion = triggerVersion;
                 } catch (Exception exception) {
                     attachment.Kernel?.Dispose();
                     attachment.Kernel = null;
@@ -226,11 +267,10 @@ internal sealed unsafe class Win32ProbeKernelBench {
             }
         }
     }
-
     // The fault a probe reports: the message plus the first frame inside this assembly, so a refused native call names
     // the kernel step it came from rather than only the HRESULT text.
     private static string DescribeFault(Exception exception) {
-        foreach (var frame in new System.Diagnostics.StackTrace(e: exception).GetFrames()) {
+        foreach (var frame in new StackTrace(e: exception).GetFrames()) {
             if (
                 (frame.GetMethod() is { DeclaringType: { } type } method) &&
                 (type.Assembly == typeof(Win32ProbeKernelBench).Assembly) &&
@@ -246,7 +286,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
         return exception.Message;
     }
 
-    /// <summary>Ends every attachment and releases its kernel; called on the worker as the graph closes.</summary>
+    /// <summary>Ends every attachment and releases its kernel; called on the worker as the host closes.</summary>
     public void Close() {
         Volatile.Write(
             location: ref m_closed,
@@ -261,7 +301,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
             attachment.Kernel?.Dispose();
             attachment.Kernel = null;
             attachment.CloseRingResources();
-            attachment.End(fault: "the camera graph ended");
+            attachment.End(fault: "the kernel host ended");
         }
 
         m_attached.Clear();
@@ -315,6 +355,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
 
         private nint[]?[] m_ringTextures = [];
         private nint[]?[] m_ringViews = [];
+        private Win32D3D11FenceWait?[] m_ringWaits = [];
 
         public readonly ProbeKernelRequest Request = request;
         public readonly ProbeReadingRing Ring = ring;
@@ -325,7 +366,10 @@ internal sealed unsafe class Win32ProbeKernelBench {
         public bool Ended => m_ended;
         public string? Fault => Volatile.Read(location: ref m_fault);
         public bool IsEnded => m_ended;
+        public SharedFenceOrder Order => (Kernel?.Order ?? SharedFenceOrder.Pending);
         public bool RingResourcesOpened => m_ringResourcesOpened;
+        /// <summary>Gets or sets the trigger ring's publication count at the kernel's last cycle.</summary>
+        public long TriggerVersion { get; set; }
 
         public void ApplyPendingConstants() {
             if (
@@ -338,14 +382,20 @@ internal sealed unsafe class Win32ProbeKernelBench {
                 kernel.SetConstants(constants: pending);
             }
         }
-        /// <summary>Releases every opened ring socket's shared resources.</summary>
+        /// <summary>Releases every opened ring socket's shared resources and fence waits.</summary>
         public void CloseRingResources() {
             ReleaseRingResources(
                 textures: m_ringTextures,
                 views: m_ringViews
             );
+
+            foreach (var wait in m_ringWaits) {
+                wait?.Dispose();
+            }
+
             m_ringTextures = [];
             m_ringViews = [];
+            m_ringWaits = [];
             m_ringResourcesOpened = false;
         }
         public void Dispose() => m_detached = true;
@@ -357,18 +407,42 @@ internal sealed unsafe class Win32ProbeKernelBench {
             );
             m_ended = true;
         }
-        /// <summary>Opens every declared <see cref="ProbeKernelInput.Ring"/> socket's shared targets and their
-        /// shader-resource views on the graph's device — once per attachment, regardless of readiness.</summary>
+        /// <summary>Returns whether this pass triggers the kernel: a camera graph's pass when the trigger socket reads
+        /// its sensor, the rendered host's pass (no sensor) when the trigger ring has published since the kernel last
+        /// ran.</summary>
+        public bool IsTriggered(CameraSensor? sensor, out long version) {
+            if (sensor is { } frameSensor) {
+                version = 0L;
+
+                return (Request.TriggerSensor == frameSensor);
+            }
+            if (Request.TriggerRing is not { } triggerRing) {
+                version = 0L;
+
+                return false;
+            }
+
+            version = triggerRing.Slots.Version;
+
+            return (version != TriggerVersion);
+        }
+        /// <summary>Opens every declared <see cref="ProbeKernelInput.Ring"/> socket's shared targets, their
+        /// shader-resource views and the shared fence its producer signals on the host's device — once per attachment,
+        /// regardless of readiness.</summary>
+        /// <exception cref="InvalidOperationException">A target does not open, or the device cannot open a ring's shared
+        /// fence, so it could not order its reads after the producer's writes.</exception>
         public void OpenRingResources(IProbeKernelDevice device) {
             var inputs = Request.Inputs;
             var textures = new nint[]?[inputs.Count];
             var views = new nint[]?[inputs.Count];
+            var waits = new Win32D3D11FenceWait?[inputs.Count];
 
             // Published before the first native call (not only on success): RingViews/RingTextures then observe a
             // partial acquisition's arrays too, zeroed in place by ReleaseRingResources's catch below when the open
             // fails partway through.
             m_ringTextures = textures;
             m_ringViews = views;
+            m_ringWaits = waits;
 
             try {
                 for (var index = 0; (index < inputs.Count); index++) {
@@ -405,7 +479,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
                             );
                         } catch (Exception exception) {
                             throw new InvalidOperationException(
-                                message: $"opening ring socket {index} slot {slot} on the graph's device failed: {exception.Message}",
+                                message: $"opening ring socket {index} slot {slot} on the host's device failed: {exception.Message}",
                                 innerException: exception
                             );
                         } finally {
@@ -442,12 +516,31 @@ internal sealed unsafe class Win32ProbeKernelBench {
                             openedViews[slot] = ((nint)view);
                         }
                     }
+
+                    if (0 != ringInput.SharedFenceHandle) {
+                        var wait = new Win32D3D11FenceWait(
+                            context: ((nint)device.Context),
+                            device: ((nint)device.Device),
+                            sharedFenceHandle: ringInput.SharedFenceHandle
+                        );
+
+                        waits[index] = wait;
+
+                        if (!wait.Order.SharedFence) {
+                            throw new InvalidOperationException(message: $"ring socket {index} cannot wait on its producer's shared fence: {wait.Order}");
+                        }
+                    }
                 }
             } catch {
                 ReleaseRingResources(
                     textures: textures,
                     views: views
                 );
+
+                for (var index = 0; (index < waits.Length); index++) {
+                    waits[index]?.Dispose();
+                    waits[index] = null;
+                }
 
                 throw;
             }
@@ -471,6 +564,15 @@ internal sealed unsafe class Win32ProbeKernelBench {
                     value: constants.ToArray()
                 );
             }
+        }
+        /// <summary>Queues the wait for the fence value a ring socket's acquired slot was published with, ahead of the
+        /// cycle's dispatch; a slot written before publication (zero) waits for nothing.</summary>
+        public void WaitForRing(int index, ulong value) {
+            if (0UL == value) {
+                return;
+            }
+
+            (m_ringWaits[index] ?? throw new InvalidOperationException(message: $"ring socket {index} published a fence value but offered no shared fence")).Wait(value: value);
         }
     }
 }

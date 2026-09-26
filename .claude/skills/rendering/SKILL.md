@@ -262,9 +262,19 @@ These are one-line cautions; the owning pages hold the derivations.
   submit: `ShaderPipelineRenderNode.SubmitCounted`, and the SDF engine's
   frame submission through `SubmitFrameWithExternalResources`), never to
   whichever submission the device makes next. A published value of zero means
-  the write finished on the CPU (a device that cannot share the fence, the
-  probe kernel); never add a wait for it. A new path that samples a shared
-  slot carries its wait on the lease, never through the submitter directly.
+  the write finished on the CPU (a device that cannot share the fence); never
+  add a wait for it. A new path that samples a shared slot carries its wait on
+  the lease, never through the submitter directly. A view export orders the
+  other direction with the exported image's own shared fence: the engine's
+  `SubmitFrame` calls `IGpuExportableImage.CompleteWrite`, which queues the
+  fence's next value behind the submission (`SdfWorldEngine.ExportWrittenValue`,
+  never a queue drain), `ViewExportRing` publishes it, and a Direct3D 11 reader
+  queues `Win32D3D11FenceWait.Wait` before it reads; the consumer-to-producer
+  order stays the CPU slot lease. A probe kernel runs on a host's own Direct3D
+  11 device: a camera graph's, or, when its trigger socket reads a view or a
+  probe and no socket binds a camera, the render adapter's
+  (`IRenderedProbeKernelHost`, opened by the binder, woken once a frame, cycling
+  a kernel when its trigger ring's `ISharedSlotRing.Version` moves).
 - **Image sources.** An image from outside a pass is described once, by
   `ImageSourceDescriptor`, and a world names its producer by id
   (`WorldScreenSource.Producer`). A new producer registers a
@@ -292,7 +302,8 @@ These are one-line cautions; the owning pages hold the derivations.
   (`WorldScreenBinder.Adapt`), whose `TryAcquireOutput` is the one place its
   image is acquired, through `WorldCaptureGate.Resolve`, so a filled source hands
   out its fill and never acquires the feed; the probe id registers the binder's
-  `ProbeSource`. The machine id registers an upload, the binder's
+  `ProbeSource`, which adapts a `ProbeSourceFeed` over the probe's output ring
+  the same way. The machine id registers an upload, the binder's
   `MachineSource`, a `MachineVideoSourceUpload` (`Puck.Hosting`) that writes the
   output's latest frame (`IMachineVideoOutput.WriteFrame`, RGBA8 or `Indexed8`)
   into the instance's region once per completed tick; a machine never uploads

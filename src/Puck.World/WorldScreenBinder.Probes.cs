@@ -2,11 +2,13 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Sources;
 using Puck.DirectX;
 using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Hosting;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -21,9 +23,18 @@ internal sealed partial class WorldScreenBinder {
     private readonly Dictionary<string, ViewExportFeed> m_viewExports = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, int> m_viewExportReferences = new(comparer: StringComparer.Ordinal);
 
+    // The render adapter's own kernel host, opened the first time a probe whose trigger reads a rendered source starts,
+    // on the adapter the render device reported; woken once per publish.
+    private IRenderedProbeKernelHost? m_renderedKernels;
+
     /// <summary>Declares that a probe writes a texture, so a screen may show it. Idempotent.</summary>
     /// <param name="id">The <c>probes[].id</c>.</param>
     public void DeclareProbeOutput(string id) => GetOrAddProbeFeed(id: id).Declared = true;
+    /// <summary>Records the kernel run that writes a probe's output ring, whose order <c>world.screens</c> reports for a
+    /// screen showing the probe.</summary>
+    /// <param name="id">The <c>probes[].id</c> the output ring is keyed by.</param>
+    /// <param name="run">The run the probes host attached.</param>
+    public void BindProbeRun(string id, IProbeKernelRun run) => GetOrAddProbeFeed(id: id).Run = run;
     /// <summary>Reads a probe's provisioned output ring at the requested extent, recording the request so the next
     /// publish provisions (or re-provisions) it when it does not match.</summary>
     /// <param name="id">The <c>probes[].id</c>.</param>
@@ -58,6 +69,45 @@ internal sealed partial class WorldScreenBinder {
 
         return false;
     }
+    /// <summary>Returns the render adapter's own kernel host, which runs a probe whose trigger socket reads a rendered
+    /// source, opening it on the adapter the render device reported the first time one asks.</summary>
+    /// <param name="host">The host, set only when this returns <see langword="true"/>; owned by this binder.</param>
+    /// <param name="fault">Why no host is available, set only when this returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the host is open.</returns>
+    public bool TryGetRenderedKernelHost([NotNullWhen(true)] out IProbeKernelHost? host, out string fault) {
+        if (m_renderedKernels is { } open) {
+            host = open;
+            fault = "";
+
+            return true;
+        }
+        if (m_disposed) {
+            host = null;
+            fault = "binder disposed";
+
+            return false;
+        }
+        if (m_renderAdapterLuid is not { } adapterLuid) {
+            host = null;
+            fault = "the render adapter reports no LUID yet";
+
+            return false;
+        }
+        if (!m_probeKernelHosts.TryOpen(
+            adapterLuid: adapterLuid,
+            fault: out fault,
+            host: out var opened
+        )) {
+            host = null;
+
+            return false;
+        }
+
+        m_renderedKernels = opened;
+        host = opened;
+
+        return true;
+    }
     /// <summary>Retires a probe's output ring and drops its pending request; the feed goes dark until the next
     /// <see cref="TryGetProbeOutput"/>.</summary>
     /// <param name="id">The <c>probes[].id</c>.</param>
@@ -67,6 +117,7 @@ internal sealed partial class WorldScreenBinder {
             value: out var feed
         )) {
             feed.Request = null;
+            feed.Run = null;
             feed.Release();
         }
     }
@@ -98,9 +149,10 @@ internal sealed partial class WorldScreenBinder {
     }
     /// <summary>Reads a named camera's offscreen view as a kernel input ring, registering the view for export on first
     /// request; the ring arrives at a later publish. Export needs the Direct3D 12 host: the offscreen engine's
-    /// exportable image is opened by the probe kernel bench's Direct3D 11 <c>OpenSharedResource1</c>, and a Vulkan
-    /// host's exported handle is Vulkan-to-Vulkan only (see <see cref="Puck.Vulkan.VulkanGpuExportableImage"/>'s
-    /// own remarks) — refused loudly here rather than silently producing a ring nothing can read.</summary>
+    /// exportable image is opened by a probe kernel host's Direct3D 11 <c>OpenSharedResource1</c>, which waits for each
+    /// frame on the image's shared fence, and a Vulkan host's exported handle is Vulkan-to-Vulkan only (see
+    /// <see cref="Puck.Vulkan.VulkanGpuExportableImage"/>'s own remarks) — refused loudly here rather than silently
+    /// producing a ring nothing can read.</summary>
     /// <param name="cameraName">The <c>cameras[]</c> row name.</param>
     /// <param name="ring">The exported ring, set only when this returns <see langword="true"/>.</param>
     /// <param name="generation">The export's identity — fresh on every (re)creation, for example after device loss —
@@ -168,6 +220,7 @@ internal sealed partial class WorldScreenBinder {
             feed.Input = new ProbeKernelInput.Ring(
                 Format: GpuPixelFormat.R8G8B8A8Unorm,
                 Height: ((int)camera.RenderHeight),
+                SharedFenceHandle: node!.ExportFenceHandle,
                 SharedTargetHandles: [handle],
                 Slots: feed.Slots,
                 Width: ((int)camera.RenderWidth)
@@ -303,7 +356,8 @@ internal sealed partial class WorldScreenBinder {
         return feed;
     }
     // Provisions every requested ring whose extent the current one does not match, then reads each feed's liveness
-    // from its ring. Runs once per publish, after the camera device is serviced, on the render thread.
+    // from its ring, and wakes the render adapter's kernel host so every kernel whose trigger published runs. Runs once
+    // per publish, after the camera device is serviced, on the render thread.
     private void ServiceProbeFeeds(IGpuDeviceContext deviceContext) {
         foreach (var feed in m_probeFeeds.Values) {
             if (feed.Request is { Width: > 0, Height: > 0 } request) {
@@ -327,6 +381,8 @@ internal sealed partial class WorldScreenBinder {
                 : (feed.Fault ?? "probe awaiting a first frame")
             );
         }
+
+        m_renderedKernels?.Signal();
     }
     private void ProvisionProbeOutput(IGpuDeviceContext deviceContext, ProbeFeed feed, int width, int height) {
         feed.Release();
@@ -355,7 +411,7 @@ internal sealed partial class WorldScreenBinder {
             images: out var images,
             importedViews: out var views,
             imports: out var imports,
-            sharedFence: false,
+            sharedFence: true,
             width: width
         )) {
             feed.Fault = fault;
@@ -382,13 +438,18 @@ internal sealed partial class WorldScreenBinder {
             Height: height,
             TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
             SharedTargetHandles: targets.SharedHandles,
-            Slots: slots
+            Slots: slots,
+            SharedFenceHandle: targets.ProducerFenceHandle
         );
         feed.Fault = null;
     }
     // Retires every probe's ring on the current device and keeps each feed's request, so after a device loss the next
-    // publish provisions a fresh ring (a new generation) on the replacement.
+    // publish provisions a fresh ring (a new generation) on the replacement. The render adapter's kernel host goes first,
+    // ending every run on it, since the replacement device may sit on another adapter.
     private void ReleaseProbeFeeds() {
+        m_renderedKernels?.Dispose();
+        m_renderedKernels = null;
+
         foreach (var feed in m_probeFeeds.Values) {
             feed.Release();
         }
@@ -404,16 +465,24 @@ internal sealed partial class WorldScreenBinder {
         m_viewExportReferences.Clear();
     }
 
-    // One probe output's feed: the ring its kernel publishes into and the render resources behind it, plus the
-    // pending extent request and live/fault state. A probe emits no room light.
+    // One probe output's feed: the ring its kernel publishes into and the render resources behind it, the run that
+    // writes it, plus the pending extent request and live/fault state.
     private sealed class ProbeFeed(string id) {
         public bool Declared { get; set; }
         public string? Fault { get; set; }
         public string Id { get; } = id;
-        public Vector3 Light => Vector3.Zero;
         public bool Live { get; set; }
+        // How the kernel's writes reach the render device: the ring's shared fence unless the render device refused it,
+        // then as the kernel opened it.
+        public SharedFenceOrder Order => ((Targets is { FenceRefusal.Length: > 0 } targets)
+            ? new SharedFenceOrder(
+                Reason: targets.FenceRefusal,
+                SharedFence: false
+            )
+            : (Run?.Order ?? SharedFenceOrder.Pending));
         public ProbeKernelOutput? Output { get; set; }
         public (int Width, int Height)? Request { get; set; }
+        public IProbeKernelRun? Run { get; set; }
         public SharedTargetRing? Targets { get; set; }
 
         public GpuImageLease AcquireFrame() {
@@ -449,9 +518,59 @@ internal sealed partial class WorldScreenBinder {
             targets?.Retire();
         }
     }
+    // A probe output as a source instance's feed: an imported source whose image the probe's kernel writes on its host's
+    // device, published with the value it signals on the ring's shared fence, which the adapter hands out through the
+    // capture gate as external content. The binder provisions and services the ring each publish, and retires it on
+    // device loss, so the feed publishes, recovers and releases nothing of its own. A probe lights nothing.
+    private sealed class ProbeSourceFeed(ProbeFeed feed) : IWorldImportFeed {
+        private ImageSourceDescriptor m_descriptor = new(
+            Cadence: ImageSourceCadence.Tick,
+            Color: ImageColorEncoding.Srgb,
+            Content: ImageContentClass.External,
+            Format: ImagePixelFormat.R8G8B8A8Unorm,
+            Height: 0,
+            Producer: WorldImageProducerSettings.ProbeId,
+            Transport: ImageSourceTransport.Imported,
+            Width: 0
+        );
+
+        // The extent is the provisioned ring's, zero on both axes while none is; the descriptor is a new record only when
+        // it moves.
+        public ImageSourceDescriptor Descriptor {
+            get {
+                var (width, height) = ((feed.Output is { } output)
+                    ? (((uint)output.Width), ((uint)output.Height))
+                    : (0U, 0U));
+
+                if (
+                    (width != m_descriptor.Width) ||
+                    (height != m_descriptor.Height)
+                ) {
+                    m_descriptor = (m_descriptor with {
+                        Height = height,
+                        Width = width,
+                    });
+                }
+
+                return m_descriptor;
+            }
+        }
+        public string? Fault => (feed.Live
+            ? null
+            : (feed.Fault ?? "probe awaiting a first frame")
+        );
+        public ProbeFeed Feed => feed;
+        public Vector3 Light => Vector3.Zero;
+
+        public GpuImageLease AcquireFrame() => feed.AcquireFrame();
+        public void Dispose() { }
+        public nint Handle() => feed.Handle();
+        public void NotifyDeviceLost() { }
+        public void Publish(in FrameContext context) { }
+    }
     // One camera's export state, keyed by camera name: the registration it exports and the one-image ring its readers
-    // share. It carries no GPU handle of its own — the view's engine's exported handle and identity are read fresh each
-    // call.
+    // share. It carries no GPU handle of its own — the view's engine's exported handle, fence and identity are read fresh
+    // each call.
     private sealed class ViewExportFeed(string name) {
         public object? CompletedGeneration { get; private set; }
         public ProbeKernelInput.Ring? Input { get; set; }
@@ -463,38 +582,58 @@ internal sealed partial class WorldScreenBinder {
         // Publishes the identity of the engine a completed frame rendered on before the ring's ready state. A failed first
         // submission after device loss may preserve an older readable image, but it must never bless the replacement
         // engine's new handle as completed.
-        public void EndWrite(bool completed, object? generation) {
+        public void EndWrite(bool completed, object? generation, ulong fenceValue) {
             if (completed) {
                 CompletedGeneration = generation;
             }
 
-            Slots.EndWrite(completed: completed);
+            Slots.EndWrite(
+                completed: completed,
+                fenceValue: fenceValue
+            );
         }
     }
     // The single-image counterpart of the multi-buffer camera/probe rings above: a view export has exactly one
     // physical texture, so producer and consumers coordinate through one atomic state instead of rotating slots.
-    // Positive states count concurrent D3D11 readers; the camera view's producer reserves the writer state before
-    // submitting the next D3D12 render and keeps the previous complete image when that reservation is unavailable. Export-mode
-    // SubmitFrame drains the producer queue before EndWrite publishes state 1, so the cross-device reader never
-    // overlaps a writer over the same texels.
+    // Positive states count concurrent Direct3D 11 readers; the camera view's producer reserves the writer state before
+    // submitting the next Direct3D 12 render and keeps the previous complete image when that reservation is unavailable.
+    // The render's write is ordered before a reader's by the image's shared fence: EndWrite publishes the value the
+    // engine signalled behind the submission, and a reader waits for it on its own device before it samples. A reader
+    // releases only after its reads have finished on the CPU, so the writer never overlaps a reader over the same
+    // texels.
     private sealed class ViewExportRing : ISharedSlotRing {
         // 0 = no completed frame, 1 = readable with no readers, 2+ = readable with (state - 1) readers,
         // -1 = retired, -2 = producer writing.
+        private ulong m_fenceValue;
         private bool m_hadCompletedBeforeWrite;
         private int m_state;
+        private long m_version;
 
         public bool HasCompletedFrame => (Volatile.Read(location: ref m_state) >= 1);
         public int LatestSlot => (HasCompletedFrame
             ? 0
             : -1
         );
+        public long Version => Interlocked.Read(location: ref m_version);
 
-        public void EndWrite(bool completed) => Volatile.Write(
-            location: ref m_state,
-            value: ((completed || m_hadCompletedBeforeWrite)
-            ? 1
-            : 0)
-        );
+        // A completed write's fence value is stored before the readable state is published, so a reader that acquires
+        // the image reads the value of the write it samples; a failed write keeps the previous image and its value.
+        public void EndWrite(bool completed, ulong fenceValue) {
+            if (completed) {
+                Volatile.Write(
+                    location: ref m_fenceValue,
+                    value: fenceValue
+                );
+                _ = Interlocked.Increment(location: ref m_version);
+            }
+
+            Volatile.Write(
+                location: ref m_state,
+                value: ((completed || m_hadCompletedBeforeWrite)
+                ? 1
+                : 0)
+            );
+        }
         public void Release(int slot) {
             if (slot != 0) {
                 return;
@@ -538,10 +677,7 @@ internal sealed partial class WorldScreenBinder {
                 spinner.SpinOnce();
             }
         }
-        // The producer drains its queue before it publishes, so a slot never carries a fence value.
         public bool TryAcquireLatest(out int slot, out ulong fenceValue) {
-            fenceValue = 0UL;
-
             while (true) {
                 var state = Volatile.Read(location: ref m_state);
 
@@ -550,6 +686,7 @@ internal sealed partial class WorldScreenBinder {
                     (state == int.MaxValue)
                 ) {
                     slot = -1;
+                    fenceValue = 0UL;
 
                     return false;
                 }
@@ -559,6 +696,7 @@ internal sealed partial class WorldScreenBinder {
                     value: (state + 1)
                 ) == state) {
                     slot = 0;
+                    fenceValue = Volatile.Read(location: ref m_fenceValue);
 
                     return true;
                 }

@@ -12,8 +12,8 @@ namespace Puck.Vulkan;
 /// shared texture, an opaque-Vulkan handle is not importable by Direct3D 12, so this is a Vulkan-to-Vulkan capability.)
 /// <para>
 /// The producer transitions the image to <see cref="GpuImageLayout.External"/> (Vulkan GENERAL) as its final recorded
-/// barrier and submits through the neutral queue; <see cref="FinalizeForExport"/> only drains the device so the
-/// importing instance samples completed writes.
+/// barrier and submits through the neutral queue; the image has no shared fence, so <see cref="CompleteWrite"/> drains
+/// the device and the importing instance samples completed writes.
 /// </para>
 /// </summary>
 public sealed partial class VulkanGpuExportableImage : IGpuExportableImage {
@@ -160,18 +160,22 @@ public sealed partial class VulkanGpuExportableImage : IGpuExportableImage {
             width: width
         );
     }
+
     /// <inheritdoc/>
-    public void FinalizeForExport() {
+    /// <remarks>Always zero: the image exports no fence.</remarks>
+    public nint SharedFenceHandle => 0;
+
+    /// <inheritdoc/>
+    /// <remarks>Drains the device on every call, since the image exports no fence.</remarks>
+    public ulong CompleteWrite() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
 
-        // The producer already recorded the GENERAL handoff transition and submitted; drain the device so the
-        // importing instance samples completed writes. Drains on every call: a per-frame producer re-submits and
-        // re-finalizes this image each frame, and the neutral submit path carries no fence — matching the
-        // unconditional per-frame fence on the Direct3D 12 exportable image.
         m_logicalDevice.WaitIdle();
+
+        return 0UL;
     }
     /// <summary>Releases the image view, the exportable image and its memory, and closes the exported shared
     /// handle. Safe to call more than once.</summary>

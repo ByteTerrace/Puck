@@ -105,11 +105,11 @@ internal sealed class Win32PixelStream(CameraSensor sensor, int width, int heigh
 
     public LatestFrameBuffer Frames { get; } = new();
 
-    public long FrameVersion => Frames.Version;
     public int Height => height;
     public long LastFrameTimestamp => Frames.LastTimestamp;
     public CameraCaptureFormat NativeFormat => nativeFormat;
     public CameraSensor Sensor => sensor;
+    public long Version => Frames.Version;
     public int Width => width;
 
     public bool TryCapture(out Surface surface) {
@@ -155,12 +155,12 @@ internal sealed class Win32SharedStream(CameraSensor sensor, int width, int heig
             }
         }
     }
-    public long FrameVersion => Slots.Version;
     public int Height => height;
     public long LastFrameTimestamp => Slots.Timestamp;
     public int LatestSlot => Slots.LatestSlot;
     public CameraCaptureFormat NativeFormat => nativeFormat;
     public CameraSensor Sensor => sensor;
+    public long Version => Slots.Version;
     /// <summary>Gets the consumer's shared fence handle, or zero; read by the worker once <see cref="Targets"/>
     /// completes.</summary>
     public nint SharedFenceHandle { get; private set; }

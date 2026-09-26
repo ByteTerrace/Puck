@@ -157,7 +157,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
         attachment = new WorldCameraAttachment(
             Controls: device!.Graph?.Controls,
-            Kernels: (device.Shared as ICameraKernelHost),
+            Kernels: (device.Shared as IProbeKernelHost),
             Shared: shared,
             TargetSet: feed.GpuTargets
         );
@@ -395,6 +395,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
         return true;
     }
+
     GpuImageLease IWorldSeatCameras.Acquire(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
@@ -417,6 +418,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             ? feed!.Handle()
             : 0
         );
+
     // A camera on its GPU tier orders its copies by the ring's shared fence, unless the render device refused it (the
     // producer then keeps its CPU wait); the CPU tier crosses no devices.
     private SharedFenceOrder? CameraFenceOrderFor(int seat, WorldCameraSensor sensor) {
@@ -441,6 +443,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 SharedFence: false
             ));
     }
+
     (uint Width, uint Height)? IWorldSeatCameras.Extent(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
@@ -479,6 +482,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             : feed.Fault
         );
     }
+
     private void ServiceCameraDeviceGraph(CameraDevice device, IGpuDeviceContext deviceContext) {
         // A retired last HUD camera source can leave a physical device with no sensor feeds. Do not reopen an empty
         // graph; if an old profile open was already in flight, dispose its result when it lands instead of adopting it.
@@ -929,7 +933,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             return;
         }
 
-        var version = stream.FrameVersion;
+        var version = stream.Version;
 
         if (version == feed.LastFrameVersion) {
             NoteCameraStarvation(
@@ -1354,7 +1358,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
     }
     private static bool HasUnpublishedStream(ICameraGraph<ICameraStream> graph) {
         foreach (var stream in graph.Streams) {
-            if (0 == stream.FrameVersion) {
+            if (0 == stream.Version) {
                 return true;
             }
         }
