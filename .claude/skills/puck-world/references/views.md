@@ -289,9 +289,18 @@ and the host (`WorldViewGraphHost`).
 motion only for camera steering and asks the active preference whether the
 pointer is armed. `WorldCursorFeed` asks that same adapter whether steering is
 active, so pointer consumption and cursor visibility cannot disagree. This is
-the presentation projection only: the same relative motion, wheel, and button
-events independently enter `Puck.Commands` through `InputSources.Mouse` while
-absolute cursor position remains observer-only.
+the presentation projection: the same relative motion, wheel, and button
+events independently enter `Puck.Commands` through `InputSources.Mouse`. The
+absolute cursor position has no command source of its own; it reaches the
+simulation only as the pointer ray `WorldPointerRayCapture` casts from it
+through the seat's camera, sustained as the `source.pointer.*` commands on the
+lane of the seat that holds the mouse which moved it. The window attributes
+each position to the last physical mouse that raw input saw move (the aggregate
+cursor's default id when raw input names none), `WorldPointer` records that
+seat and device, and a seat that does not hold that mouse, a device moving
+seats (`PlayerRoster.DeviceSlotChanging`) and the pointer leaving the window
+(`WindowInputKind.PointerLeft`) all end the ray and hide the cursor until the
+next reported position.
 
 A held `player.orbit`/`player.steer` therefore turns the camera from the
 pointer store, never from a routed `mouse.motion` command — no shipped page
@@ -328,8 +337,10 @@ Free Cam do not alter the logical movement basis.
 - `world.view.state` — reads active layout, selection reason, transition, and
   slot occupants; an instance slot prints as `instance:<name>`, or
   `instance:<name>:missing` when the runtime has no such instance.
-- `world.view.pointer` — reads the seat the pointer rides (the seat whose mouse
-  last reported a position, `WorldPointer.PositionedSlot`), pointer position,
+- `world.view.pointer` — reads the seat the pointer rides (the seat of the
+  device the latest position is attributed to, `WorldPointer.PositionedSlot`,
+  seat 1 with `reason=no-position` after the pointer left the window or a
+  device changed seats), pointer position,
   viewport mapping (`WorldSeatViewports.Locate`, which the pointer-ray capture
   shares), visibility, arming reason, buttons, hover, and system-release
   generation.

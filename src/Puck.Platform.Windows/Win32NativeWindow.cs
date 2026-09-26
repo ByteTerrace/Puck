@@ -85,6 +85,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const uint WmLButtonUp = 0x0202;
     private const uint WmMButtonDown = 0x0207;
     private const uint WmMButtonUp = 0x0208;
+    private const uint WmMouseLeave = 0x02A3;
     private const uint WmMouseMove = 0x0200;
     private const uint WmMouseWheel = 0x020A;
     private const uint WmMouseHWheel = 0x020E;
@@ -116,6 +117,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const ushort HidUsagePageGeneric = 0x01;
     private const ushort RiMouseMoveAbsolute = 0x01;
     private const ushort RiMouseVirtualDesktop = 0x02;
+    // TRACKMOUSEEVENT.dwFlags: post WM_MOUSELEAVE once the cursor leaves the client area.
+    private const uint TmeLeave = 0x00000002;
     // RAWKEYBOARD.Flags: RI_KEY_BREAK (a release, vs. a make/press) and RI_KEY_E0 (the same left/right-disambiguating
     // extended-key bit WM_KEYDOWN's lParam bit 24 carries).
     private const ushort RiKeyBreak = 0x0001;
@@ -176,6 +179,11 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private Vector2 m_frameMouseDelta;
     private int m_pointerButtons;
     private bool m_pointerPositionDirty;
+    // Whether a WM_MOUSELEAVE request is armed; Windows disarms it when it posts the message.
+    private bool m_pointerLeaveTracked;
+    // The physical mouse whose raw report moved last, which the aggregate cursor position is attributed to; default
+    // while raw input names no mouse, when the position stays the aggregate's.
+    private InputDeviceId m_lastRawMouseDevice;
     private bool m_rawKeyboardRegistered;
     private bool m_rawMouseRegistered;
     private int? m_lastMouseX;
@@ -290,7 +298,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     }
     private void FlushPointerPosition() {
         if (m_pointerPositionDirty && (m_lastMouseX is { } x) && (m_lastMouseY is { } y)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(new Vector2(x: x, y: y)));
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(
+                deviceId: m_lastRawMouseDevice,
+                position: new Vector2(x: x, y: y)
+            ));
             m_pointerPositionDirty = false;
         }
     }
@@ -597,6 +608,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 return 0;
             case WmCaptureChanged:
                 CancelPointerButtons();
+                // Every capture end lands here, including this window's own ReleaseCapture. A leave that arrived
+                // mid-drag was held back, so re-arm unconditionally: a cursor now outside the client posts it again.
+                ArmPointerLeave(windowHandle: windowHandle);
                 return 0;
             case WmShowWindow:
                 m_isVisible = (wParam != 0);
@@ -663,7 +677,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                     windowHandle: windowHandle
                 );
             case WmMouseMove:
-                return HandleMouseMove(lParam: lParam);
+                return HandleMouseMove(
+                    lParam: lParam,
+                    windowHandle: windowHandle
+                );
+            case WmMouseLeave:
+                return HandleMouseLeave();
             case WmMouseWheel:
                 return HandleMouseWheel(wParam: wParam);
             case WmMouseHWheel:
@@ -1084,6 +1103,14 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private void HandleRawMouse(nint deviceHandle, in RawMouse mouse) {
         var state = GetOrCreateRawMouseState(deviceHandle: deviceHandle);
 
+        if (
+            ((mouse.Flags & RiMouseMoveAbsolute) != 0) ||
+            (mouse.LastX != 0) ||
+            (mouse.LastY != 0)
+        ) {
+            m_lastRawMouseDevice = state.DeviceId;
+        }
+
         // Absolute mode (RDP / VMs / tablets / touch-as-mouse): LastX/LastY are absolute normalized coordinates
         // across the declared desktop. Difference in that coordinate space before scaling to pixels: moving
         // the window must not manufacture device motion, and subpixel differences must not be truncated.
@@ -1276,7 +1303,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             Marshal.FreeHGlobal(hglobal: buffer);
         }
     }
-    private nint HandleMouseMove(nint lParam) {
+    private nint HandleMouseMove(nint lParam, nint windowHandle) {
         var mouseX = GetSignedLowWord(value: lParam);
         var mouseY = GetSignedHighWord(value: lParam);
 
@@ -1297,6 +1324,44 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         m_lastMouseX = mouseX;
         m_lastMouseY = mouseY;
         m_pointerPositionDirty = true;
+
+        if (!m_pointerLeaveTracked) {
+            ArmPointerLeave(windowHandle: windowHandle);
+        }
+
+        return 0;
+    }
+    // Requests one WM_MOUSELEAVE. Windows posts it at once when the cursor is already outside the client, which is
+    // how a capture that ends outside the window still reports its leave.
+    private void ArmPointerLeave(nint windowHandle) {
+        var request = new TrackMouseEventInfo {
+            Flags = TmeLeave,
+            Size = ((uint)Marshal.SizeOf<TrackMouseEventInfo>()),
+            WindowHandle = windowHandle,
+        };
+
+        m_pointerLeaveTracked = User32.TrackMouseEvent(eventTrack: ref request);
+    }
+    // The cursor left the client area: the window reports no position until it returns, so a consumer's position
+    // ends here, after any position still pending this frame. A drag holding capture keeps receiving WM_MOUSEMOVE
+    // outside the client, so it keeps its position; WM_CAPTURECHANGED re-arms the leave once the capture ends.
+    private nint HandleMouseLeave() {
+        m_pointerLeaveTracked = false;
+
+        if (m_pointerButtons != 0) {
+            return 0;
+        }
+
+        FlushPointerPosition();
+        if (m_lastMouseX is null) {
+            return 0;
+        }
+
+        m_lastMouseX = null;
+        m_lastMouseY = null;
+        m_pointerPositionDirty = false;
+        m_pendingInput.Enqueue(item: WindowInputEvent.PointerLeft());
+
         return 0;
     }
     // The wheel is NOT summed per frame the way relative motion is: a wheel report is already a discrete act at

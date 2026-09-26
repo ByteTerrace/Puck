@@ -413,9 +413,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             continue;
                         }
 
-                        if (windowInput.Kind == WindowInputKind.PointerPosition) {
-                            // Absolute cursor coordinates remain presentation-only. The other mouse shapes below
-                            // have a command projection in addition to the raw observer projection above.
+                        if (windowInput.Kind is WindowInputKind.PointerPosition or WindowInputKind.PointerLeft) {
+                            // The absolute cursor position, and its leaving the window, reach only the observer
+                            // above. The other mouse shapes below have a command projection in addition.
                             continue;
                         }
 

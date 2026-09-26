@@ -293,14 +293,28 @@ internal sealed partial class PlayerCommandModule {
         if (!(float.IsFinite(f: value.X) && float.IsFinite(f: value.Y) && float.IsFinite(f: value.Z))) {
             return CommandResult.Error(output: $"[{verb}: expected three finite values — <x> <y> <z>]");
         }
-        if (m_roster.Seat(slot: context.Slot) is { } seat) {
-            set(
-                arg1: seat,
-                arg2: CommandValueQuantization.QuantizeAxis3D(value: value)
+        var quantized = CommandValueQuantization.QuantizeAxis3D(value: value);
+
+        if (m_roster.Seat(slot: context.Slot) is not { } seat) {
+            return ((args.Count == 0)
+                ? CommandResult.None
+                : CommandResult.Error(output: $"[{verb}: p{PlayerRoster.DisplayNumber(slot: context.Slot)} has no seat to point from]")
             );
         }
 
-        return CommandResult.None;
+        set(
+            arg1: seat,
+            arg2: quantized
+        );
+
+        // A bound value re-dispatches every tick and stays quiet; a typed one answers with the value the seat keeps.
+        return ((args.Count == 0)
+            ? CommandResult.None
+            : Echoed(
+                args: in args,
+                handler: $"[{verb}: p{PlayerRoster.DisplayNumber(slot: context.Slot)} ({quantized.X}, {quantized.Y}, {quantized.Z}) for this tick]"
+            )
+        );
     }
     // The picker step direction while pending: only the Turn-role channel steers the picker (positive scale = next
     // candidate, negative = previous), every other channel is inert — the channel-role generalization of the old
@@ -646,7 +660,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SourcePointerCommands.Origin,
-            description: "The seat's pointer-ray origin (Axis3D, world units), quantized once here and folded with source.pointer.direction into the seat's intent for this tick; the server maps the ray through each Simulation screen's row in fixed point for the $pointer: rule read. A typed source.pointer.origin <x> <y> <z> injects one exact tick.",
+            description: "The seat's pointer-ray origin (Axis3D, world units), quantized once here and folded with source.pointer.direction into the seat's intent for this tick; the server maps the ray through each Simulation screen's row in fixed point for the $pointer: rule read. A typed source.pointer.origin <x> <y> <z> injects one exact tick and echoes the quantized value.",
             valueKind: CommandValueKind.Axis3D,
             handler: (context, args) => PointerRouter(
                 args: args,
@@ -658,7 +672,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SourcePointerCommands.Direction,
-            description: "The seat's pointer-ray direction (Axis3D, need not be unit length), quantized once here and folded with source.pointer.origin into the seat's intent for this tick. A typed source.pointer.direction <x> <y> <z> injects one exact tick.",
+            description: "The seat's pointer-ray direction (Axis3D, need not be unit length), quantized once here and folded with source.pointer.origin into the seat's intent for this tick. A typed source.pointer.direction <x> <y> <z> injects one exact tick and echoes the quantized value.",
             valueKind: CommandValueKind.Axis3D,
             handler: (context, args) => PointerRouter(
                 args: args,

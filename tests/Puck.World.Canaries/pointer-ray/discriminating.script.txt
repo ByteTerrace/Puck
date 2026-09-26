@@ -1,0 +1,6 @@
+# The same ray pointed away from the screen: its plane lies behind the origin, so nothing maps and the rule reads off.
+world.wait 5
+source.pointer.origin -0.5 1.5 5
+source.pointer.direction 0 0 1
+body.channels 0
+world.state
