@@ -300,7 +300,7 @@ public static class PuckDiagnosticCodes {
     public const string ModuleAliasShadowsName = "PUCK117";
     /// <summary>PUCK118: an information notice that the engine's validation of a world deferred a check to the host
     /// that runs it, because the host diagnosing the source carries no catalog for it (a machine engine, a
-    /// post-render extension, a probe kind). A deferral is no finding against the author: it never fails a
+    /// post-process package, a probe kind). A deferral is no finding against the author: it never fails a
     /// compile or a composition.</summary>
     public const string SemanticValidationDeferred = "PUCK118";
     /// <summary>PUCK119: a state row names an enum its composed world's state section does not declare — a

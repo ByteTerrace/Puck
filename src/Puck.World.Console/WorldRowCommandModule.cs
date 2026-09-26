@@ -39,7 +39,7 @@ namespace Puck.World;
 /// wraps the built <see cref="WorldRowAssignment"/> and what additive offset the r1 sequence takes.</para>
 /// <para><c>world.kits</c> is a plain census read-back, not a row verb — the kits section's only listing.</para>
 /// </remarks>
-public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard? stepGuard = null) : ICommandModule {
+public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard? stepGuard = null) : ICommandModule {
     private const string PropertiesNamesPath = "properties.names";
 
     // The section table — the one thing that legitimately stays as data (CLAUDE.md: a table over these rows is
@@ -111,7 +111,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return CommandResult.Error(output: $"[{verb}: unknown sequence '{args[1].ToString()}' — r1 | cycle]");
     }
-    private static IReadOnlyDictionary<string, RowSection> BuildSections() => new Dictionary<string, RowSection>(comparer: StringComparer.Ordinal) {
+    private static IReadOnlyDictionary<string, RowSection> BuildSections() => WithViewSections(sections: new Dictionary<string, RowSection>(comparer: StringComparer.Ordinal) {
         // Keyed sections: set + remove + read (world.row.step's row lookup).
         ["kits"] = new RowSection(
         RowType: typeof(WorldKit),
@@ -441,44 +441,6 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             select: static definition => definition.Hud.Panels
         )
     ),
-        ["views.layouts"] = new RowSection(
-        RowType: typeof(WorldViewLayout),
-        Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldViewLayout,
-            toMutation: static (principal, layout) => new WorldMutation.UpsertViewLayout(
-                Layout: layout,
-                Principal: principal
-            )
-        ),
-        Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveViewLayout(
-            Name: name,
-            Principal: principal
-        )),
-        Read: ReadRowByKey(
-            info: WorldJsonContext.Default.WorldViewLayout,
-            keyOf: static row => row.Name,
-            select: static definition => definition.Views.Layouts
-        )
-    ),
-        ["views.graphs"] = new RowSection(
-        RowType: typeof(WorldViewGraph),
-        Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldViewGraph,
-            toMutation: static (principal, graph) => new WorldMutation.UpsertViewGraph(
-                Graph: graph,
-                Principal: principal
-            )
-        ),
-        Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveViewGraph(
-            Name: name,
-            Principal: principal
-        )),
-        Read: ReadRowByKey(
-            info: WorldJsonContext.Default.WorldViewGraph,
-            keyOf: static row => row.Name,
-            select: static definition => (definition.Views.Graphs ?? [])
-        )
-    ),
         ["groups.kinds"] = new RowSection(
         RowType: typeof(WorldGroupKind),
         Upsert: Upsert(
@@ -662,36 +624,6 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         // A sub-row of a whole-section row submits its own field-scoped mutation, composed against the section as it
         // stands when the mutation applies — never a whole-section replacement built here from the live document,
         // which a sibling sub-row's edit queued in the same tick would revert.
-        ["views.seatRig"] = new RowSection(
-        RowType: typeof(WorldCameraProgram),
-        Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldCameraProgram,
-            toMutation: static (principal, rig) => new WorldMutation.SetViewSeatRig(
-                Principal: principal,
-                SeatRig: rig
-            )
-        ),
-        Remove: null,
-        Read: ReadRow(
-            info: WorldJsonContext.Default.WorldCameraProgram,
-            select: static definition => definition.Views.SeatRig
-        )
-    ),
-        ["views.seatControl"] = new RowSection(
-        RowType: typeof(WorldSeatViewControl),
-        Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldSeatViewControl,
-            toMutation: static (principal, control) => new WorldMutation.SetViewSeatControl(
-                Principal: principal,
-                SeatControl: control
-            )
-        ),
-        Remove: null,
-        Read: ReadRow(
-            info: WorldJsonContext.Default.WorldSeatViewControl,
-            select: static definition => definition.Views.SeatControl
-        )
-    ),
         ["playerDefaults.seatLook"] = new RowSection(
         RowType: typeof(WorldSeatCameraFeel),
         Upsert: Upsert(
@@ -707,7 +639,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             select: static definition => definition.PlayerDefaults.SeatLook
         )
     ),
-    };
+    });
     // The list field's own name — the last dotted component of listPath, bracket stripped — the same discriminator
     // TryResolveArrayElement's refusal quotes ("no element of 'shapes' has …").
     private static string ContainerName(string listPath) {
@@ -2107,7 +2039,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.row.set",
-            description: "Upserts ANY document row or section by its dotted MEMBER PATH — the document's own camelCase JSON names (see puck schema for payload shapes): world.row.set <path> <json>. Keyed sections (kits, cameras, screens, speakers, placements, creations, tunes, patches, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, views.graphs, groups.kinds, interactions.interactions) upsert one row addressed by its own key; keyless sections (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views.seatRig, views.seatControl, playerDefaults.seatLook) replace the whole row. ONE grammar exception: properties.names takes a BARE NAME token, not JSON — world.row.set properties.names <name> declares it idempotently. A SECOND, LITERAL form sets ONE field inside a row instead of the whole thing: world.row.set <path> <key> <fieldPath> <json> for a keyed section, world.row.set <path> <fieldPath> <json> for a keyless one — discriminated from the whole-row form by the second token's own shape (a bare key/field path never starts with '{' or '['). <fieldPath> is the same dotted/bracketed grammar world.row.step and world.row read — a numeric index (shapes[3]) or a name/id-addressed selector (shapes[name=forearmL], palette[1].specular), refused by name when a selector matches none or more than one element, listing the candidates. Composes the modified row and submits it through the SAME Upsert the whole-row form uses, so a field's own declared type (a DocumentVector3's [x,y,z]-or-'state.row.key' binding-string arm, a nullable field's JSON null to clear) is validated at reparse exactly as it always is. Two edits to the SAME row in one tick window collide — the second composes from the same pre-drain base and would revert the first — and are refused by name; fence with world.wait, or compose one JSON row with the whole-row form. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary like every WorldMutation; a full-document revalidation rejects loudly. This verb performs NO schema validation of its own — a JSON parse failure echoes inline and submits nothing; every semantic check still runs at apply.",
+            description: "Upserts ANY document row or section by its dotted MEMBER PATH — the document's own camelCase JSON names (see puck schema for payload shapes): world.row.set <path> <json>. Keyed sections (kits, cameras, screens, speakers, placements, creations, tunes, patches, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, views.graphs, groups.kinds, interactions.interactions) upsert one row addressed by its own key; keyless sections (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views.seatRig, views.seatControl, views.post, playerDefaults.seatLook) replace the whole row (views.post takes its whole ordered JSON array, so a post pass is added, reordered or removed by writing the list). ONE grammar exception: properties.names takes a BARE NAME token, not JSON — world.row.set properties.names <name> declares it idempotently. A SECOND, LITERAL form sets ONE field inside a row instead of the whole thing: world.row.set <path> <key> <fieldPath> <json> for a keyed section, world.row.set <path> <fieldPath> <json> for a keyless one — discriminated from the whole-row form by the second token's own shape (a bare key/field path never starts with '{' or '['). <fieldPath> is the same dotted/bracketed grammar world.row.step and world.row read — a numeric index (shapes[3]) or a name/id-addressed selector (shapes[name=forearmL], palette[1].specular), refused by name when a selector matches none or more than one element, listing the candidates. Composes the modified row and submits it through the SAME Upsert the whole-row form uses, so a field's own declared type (a DocumentVector3's [x,y,z]-or-'state.row.key' binding-string arm, a nullable field's JSON null to clear) is validated at reparse exactly as it always is. Two edits to the SAME row in one tick window collide — the second composes from the same pre-drain base and would revert the first — and are refused by name; fence with world.wait, or compose one JSON row with the whole-row form. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary like every WorldMutation; a full-document revalidation rejects loudly. This verb performs NO schema validation of its own — a JSON parse failure echoes inline and submits nothing; every semantic check still runs at apply.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -2129,7 +2061,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.row.remove",
-            description: "Removes ONE row from a KEYED document section by its dotted MEMBER PATH and key: world.row.remove <path> <key>. Keyed sections are the same set world.row.set upserts into (kits, cameras, screens [key is the integer index], speakers, placements, creations, tunes, patches, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, views.graphs, groups.kinds, interactions.interactions), plus properties.names (BARE NAME token — world.row.remove properties.names <name>). A KEYLESS path (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views.seatRig, playerDefaults.seatLook) has no remove — it is refused by name. A SECOND form removes ONE ELEMENT of a list field instead of a whole row: world.row.remove <path> <key> <listPath> <selector> for a keyed section, world.row.remove <path> <listPath> <selector> for a keyless one (discriminated by argument count — 4 vs 3 — never by JSON shape, since neither token carries a payload). <listPath> is the dotted/bracketed path TO the list field (document.shapes, document.shapes[name=forearmL].swings); <selector> is a bare 0-based index or field=value, refused by name when it names none or more than one element, listing the candidates. Composes and submits a whole-row upsert through the SAME section table the row-level form uses; two edits to the same row in one tick window collide and are refused by name — fence with world.wait. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary; rejected loudly if no row carries that key.",
+            description: "Removes ONE row from a KEYED document section by its dotted MEMBER PATH and key: world.row.remove <path> <key>. Keyed sections are the same set world.row.set upserts into (kits, cameras, screens [key is the integer index], speakers, placements, creations, tunes, patches, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, views.graphs, groups.kinds, interactions.interactions), plus properties.names (BARE NAME token — world.row.remove properties.names <name>). A KEYLESS path (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views.seatRig, views.seatControl, views.post, playerDefaults.seatLook) has no remove — it is refused by name. A SECOND form removes ONE ELEMENT of a list field instead of a whole row: world.row.remove <path> <key> <listPath> <selector> for a keyed section, world.row.remove <path> <listPath> <selector> for a keyless one (discriminated by argument count — 4 vs 3 — never by JSON shape, since neither token carries a payload). <listPath> is the dotted/bracketed path TO the list field (document.shapes, document.shapes[name=forearmL].swings); <selector> is a bare 0-based index or field=value, refused by name when it names none or more than one element, listing the candidates. Composes and submits a whole-row upsert through the SAME section table the row-level form uses; two edits to the same row in one tick window collide and are refused by name — fence with world.wait. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary; rejected loudly if no row carries that key.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
