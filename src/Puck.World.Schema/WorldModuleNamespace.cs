@@ -1142,6 +1142,8 @@ public static class WorldModuleNamespace {
             read.Word(index: 0);
             read.Names(from: 1, kind: null);
         }),
+        // A seat, a screen index and the facet it reads: nothing a module renames.
+        (ChannelName(spelling: WorldRuleFacts.PointerPrefix), static read => read.Words(from: 0)),
         // An influence label every module shares, then the placement it reads.
         (ChannelName(spelling: WorldRuleFacts.InfluencePrefix), static read => {
             read.Word(index: 0);

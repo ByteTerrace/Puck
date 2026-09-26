@@ -3,7 +3,7 @@
     "ceiling": 2000,
     "recorded": {
         "src/Puck.AdvancedGamingBrick.Post/Stages/FirmwareLegacySoundStage.cs": 2196,
-        "src/Puck.Commands/InputRouter.cs": 2342,
+        "src/Puck.Commands/InputRouter.cs": 2304,
         "src/Puck.GamingBricks.Forge/CartridgeValidation.cs": 2212,
         "src/Puck.HumbleGamingBrick/ApuComponent.cs": 2096,
         "src/Puck.HumbleGamingBrick/Ppu.cs": 2184,

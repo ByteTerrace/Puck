@@ -218,10 +218,18 @@ screen maps a pointer ray from the row alone: `WorldScreenMappings.Of(screen,
 source, width, height)` publishes the row's `SourceMapping` (the face frame, the
 whole source, the glass bezel as an exact-inverse warp), and the ray arrives as
 the `source.pointer.origin`/`source.pointer.direction` Axis3D commands
-(`SourcePointerCommands.TryReadRay`), quantized once. `world.screens` echoes
-`input:<destination>` per screen. No module registers the pointer commands and
-no machine reads a mapped pixel yet; that wiring is P13b in
-`docs/plans/rendering.md`, and the `rendering` skill owns the mapping itself.
+quantized once at the seat verbs `PlayerCommandModule` registers.
+`SeatController.HeldIntent` folds them into `PlayerIntent.SourceRay`, which
+every intent path carries behind one flag byte; on a windowed host
+`WorldPointerRayCapture` produces them from the OS pointer over its seat's
+camera (`SourceRay.Through`) and holds them with `InputRouter.Sustain`, so
+every tick carries the ray. A rule reads the hit as
+`$pointer:<seat>:<screenIndex>:x|y|on`, mapped in the tick through
+`WorldScreenMappings.Normalized` (source-normalized `x`/`y` in `[0, 1)`, `on`
+1 on the source, all 0 otherwise); a screen whose `input` is not `Simulation`
+is refused for it at compile time. `world.screens` echoes `input:<destination>`
+per screen and `body.channels` echoes the seat's ray and hits. No machine reads
+a mapped pixel yet; the `rendering` skill owns the mapping itself.
 
 ## `Dissolve` — three outcomes, no repair
 

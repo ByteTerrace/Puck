@@ -328,8 +328,11 @@ Free Cam do not alter the logical movement basis.
 - `world.view.state` — reads active layout, selection reason, transition, and
   slot occupants; an instance slot prints as `instance:<name>`, or
   `instance:<name>:missing` when the runtime has no such instance.
-- `world.view.pointer` — reads pointer position, viewport mapping, visibility,
-  arming reason, buttons, hover, and system-release generation.
+- `world.view.pointer` — reads the seat the pointer rides (the seat whose mouse
+  last reported a position, `WorldPointer.PositionedSlot`), pointer position,
+  viewport mapping (`WorldSeatViewports.Locate`, which the pointer-ray capture
+  shares), visibility, arming reason, buttons, hover, and system-release
+  generation.
 - `view.override camera|layout <name|auto>` — live composition override. It is
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the
   LAYOUT override by its constant Axis1D value — 0 or less clears to auto, n

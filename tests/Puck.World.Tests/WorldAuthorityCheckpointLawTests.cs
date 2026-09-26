@@ -299,11 +299,11 @@ public sealed class WorldAuthorityCheckpointLawTests {
         );
         Assert.Equal(
             actual: WorldProtocol.WireProtocolKey,
-            expected: 0x314C52574B435550UL
+            expected: 0x324C52574B435550UL
         );
         Assert.Equal(
             actual: WorldFederationCodec.WireKey,
-            expected: 0x324445464B435550UL
+            expected: 0x334445464B435550UL
         );
         Assert.True(
             condition: WorldAuthorityCheckpointCodec.TryDecode(

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Commands;
 using Puck.Physics.Motion;
 using IRuleOperand = Puck.State.Rules.IRuleOperand;
 using OperandFamily = Puck.State.Rules.OperandFamily;
@@ -29,6 +30,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.ParkedPrefix}<bodyRef>",
             $"{WorldRuleFacts.LinkPrefix}<adjacencyName>",
             $"{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>",
+            $"{WorldRuleFacts.PointerPrefix}<seat>:<screenIndex>:x|y|on",
             $"{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseError",
             $"{BoardCellOfPrefix}<row>:<bodyRef>",
@@ -127,6 +129,97 @@ public static partial class WorldFactsVocabulary {
                 ),
                 reduce: reduce,
                 rowOrdinal: rowOrdinal
+            );
+        }
+        // $pointer:<seat>:<screenIndex>:x|y|on — the seat bounded like $channel's, the screen a declared Simulation row
+        // whose source-normalized mapping validates, so the tick maps a ray without a refusal left to raise.
+        private static WorldBodyFactOperand Pointer(string name, string ruleName, WorldFactsCompileContext world) {
+            var seats = world.Definition.Population.LocalSeats;
+            var parts = name[WorldRuleFacts.PointerPrefix.Length..].Split(separator: ':');
+            var pointerFacet = ((parts.Length == 3)
+                ? parts[2] switch {
+                    "x" => PointerFacet.X,
+                    "y" => PointerFacet.Y,
+                    "on" => PointerFacet.On,
+                    _ => ((PointerFacet?)null),
+                }
+                : null
+            );
+
+            if (
+                (pointerFacet is null) ||
+                !int.TryParse(
+                s: parts[0],
+                style: NumberStyles.None,
+                provider: CultureInfo.InvariantCulture,
+                result: out var seat
+            ) ||
+                (seat < 1) ||
+                (seat > seats) ||
+                !int.TryParse(
+                s: parts[1],
+                style: NumberStyles.None,
+                provider: CultureInfo.InvariantCulture,
+                result: out var screenIndex
+            )
+            ) {
+                throw new RuleException(
+                    detail: $"'{name}' does not spell '{WorldRuleFacts.PointerPrefix}<seat>:<screenIndex>:x|y|on' with seat in 1..{seats}",
+                    refusal: WorldRuleRefusal.PointerMalformed,
+                    ruleName: ruleName
+                );
+            }
+
+            WorldScreen? screen = null;
+
+            foreach (var candidate in world.Definition.Screens) {
+                if (candidate.Index == screenIndex) {
+                    screen = candidate;
+
+                    break;
+                }
+            }
+
+            if (screen is null) {
+                throw new RuleException(
+                    detail: $"'{name}' names screen {screenIndex}, which the document does not declare",
+                    refusal: WorldRuleRefusal.ScreenUnknown,
+                    ruleName: ruleName
+                );
+            }
+            if (screen.Route.Input != SourceDestination.Simulation) {
+                throw new RuleException(
+                    detail: $"'{name}' names screen {screenIndex}, whose route input is not Simulation, so no pointer ray maps through it",
+                    refusal: WorldRuleRefusal.PointerMalformed,
+                    ruleName: ruleName
+                );
+            }
+
+            var mapping = WorldScreenMappings.Normalized(screen: screen);
+
+            if (!mapping.TryValidate(refusal: out var refusal)) {
+                throw new RuleException(
+                    detail: $"'{name}' names screen {screenIndex}, whose row maps no ray: {refusal}",
+                    refusal: WorldRuleRefusal.PointerMalformed,
+                    ruleName: ruleName
+                );
+            }
+
+            var operand = new PointerOperand(
+                facet: pointerFacet.Value,
+                mapping: mapping,
+                seat: (seat - 1)
+            );
+
+            return BodyFact(
+                bodyA: default,
+                bodyB: default,
+                cost: 1L,
+                describe: name,
+                read: facet => facet.Read(operand: operand),
+                rowOrdinal: -1,
+                valueKind: operand.ValueKind,
+                world: world
             );
         }
         private static WorldBodyFactOperand BodyFact(CellKind valueKind, WorldFactsCompileContext world, CompiledBodyRef bodyA, CompiledBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, RuleFact> read, string describe) => new(
@@ -660,6 +753,21 @@ public static partial class WorldFactsVocabulary {
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
                     valueKind: CellKind.Fixed,
+                    world: world
+                );
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.PointerPrefix
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+                fact = Pointer(
+                    name: name,
+                    ruleName: ruleName,
                     world: world
                 );
             } else if (name.StartsWith(

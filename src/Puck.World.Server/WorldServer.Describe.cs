@@ -286,12 +286,49 @@ public sealed partial class WorldServer {
                 : "no")}");
         }
 
-        return $"[body.channels: body:{bodyIndex} {routeText} {string.Join(
+        return $"[body.channels: body:{bodyIndex} {routeText} pointer={DescribePointer(ray: composed.SourceRay)} {string.Join(
             separator: " | ",
             values: segments
         )}]";
     }
 
+    // body.channels' pointer read-back: the ray the body integrated this tick and where it maps on every Simulation
+    // screen, through the same source-normalized mapping the $pointer: rule read runs.
+    private string DescribePointer(SourceRay? ray) {
+        if (ray is not { } pointer) {
+            return "none";
+        }
+
+        static string Vector(FixedVector3 value) => $"({value.X}, {value.Y}, {value.Z})";
+
+        var hits = new List<string>();
+
+        foreach (var screen in Definition.Screens) {
+            if (screen.Route.Input != SourceDestination.Simulation) {
+                continue;
+            }
+
+            var mapping = WorldScreenMappings.Normalized(screen: screen);
+
+            if (!mapping.TryValidate(refusal: out var refusal)) {
+                hits.Add(item: $"screen:{screen.Index}=unmappable({refusal})");
+
+                continue;
+            }
+
+            var hit = mapping.MapRay(ray: pointer);
+
+            hits.Add(item: (hit.IsOnSource
+                ? $"screen:{screen.Index}=on({hit.Coordinate.X}, {hit.Coordinate.Y})"
+                : $"screen:{screen.Index}={hit.Outcome}"
+            ));
+        }
+
+        return $"{Vector(value: pointer.Origin)}->{Vector(value: pointer.Direction)}[{string.Join(
+            separator: ",",
+            values: hits
+        )}]";
+    }
     // Shared by DescribeRules/DescribeInteractions: an `all` gate prints ITS PREDICATES, never a List type name — the
     // whole reason a compiled conjunct carries its authored spelling beside its resolved form.
     //

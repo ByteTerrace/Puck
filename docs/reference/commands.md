@@ -402,7 +402,11 @@ Two public paths reach a handler:
 1. **Fixed-step input.** `InputRouter.Capture` accepts device-style signals,
    refusing one that names no source, while `InputRouter.Activate` accepts a
    command activation produced by an authored interface for a non-negative slot.
-   `SnapshotForTick` groups both by logical slot. For each slot,
+   `InputRouter.Sustain` holds a host-produced value on a slot's lane: every
+   snapshot carries it, phase `Active`, whatever the slot's active maps, until
+   `EndSustain` ends it or a later call replaces the value, so a catch-up burst
+   of several ticks carries it on each. `SnapshotForTick` groups all three by
+   logical slot. For each slot,
    `IPrincipalResolver.PrincipalOf(slot)` supplies the actor that the
    host currently recognizes there; the router does not guess that a slot
    belongs to a local seat.
@@ -613,7 +617,7 @@ A mapped point goes to one `SourceDestination`:
 | Destination | What reaches it |
 |---|---|
 | `Presentation` | Hover and highlight. `ISourcePicker` is the seam, and a host may answer it by GPU picking because nothing reaches state. `SourcePanePicker` answers it on the CPU from published pane mappings: the topmost pane under the point, by `SourcePanes.Topmost`, the last in drawing order whose face holds it. |
-| `Simulation` | A pointer ray, named by the `source.pointer.origin` and `source.pointer.direction` Axis3D commands (`SourcePointerCommands`), quantized by `CommandValueQuantization.QuantizeAxis3D` and mapped from document data. A World server integrates seat intents, not command snapshots, so the ray reaches its tick in the seat's intent, which is open work (P13b-2 in the rendering programme). `TryValidate` refuses a pane here, because a pane's aspect ratio depends on the host's display. |
+| `Simulation` | A pointer ray, named by the `source.pointer.origin` and `source.pointer.direction` Axis3D commands (`SourcePointerCommands`), quantized by `CommandValueQuantization.QuantizeAxis3D` and mapped from document data. A World server integrates seat intents, not command snapshots, so a seat folds the two commands into its `PlayerIntent.SourceRay`, the intent carries the ray through the wire and the replay tape, and the server maps it through the screen row in the tick for the `$pointer:` rule read. On a windowed World host, `WorldPointerRayCapture` casts the OS pointer through its seat's camera with `SourceRay.Through` each host frame and holds both commands on that seat's lane with `InputRouter.Sustain`, so every tick of the frame carries the ray. `TryValidate` refuses a pane here, because a pane's aspect ratio depends on the host's display. |
 | `Passthrough` | An external window on the host. `SourcePassthrough.ToClient` scales a source pixel into the window's client area in physical and logical pixels. Only a source whose `SourceOpener` is the local user may take this destination, and `TryValidate` refuses it by name for a source a document opened. |
 
 `SourceHandle` names the source shown by its render-graph instance: a source
@@ -714,7 +718,7 @@ member-by-member surface.
   pump-thread-only, called after the producers have stopped. A router owned for
   the process lifetime needs no explicit call, since the container that resolved
   it disposes it with the host. Afterward every door refuses with
-  `ObjectDisposedException`—`Capture`, `CaptureFocusExempt`, `Activate`, the
+  `ObjectDisposedException`—`Capture`, `CaptureFocusExempt`, `Activate`, `Sustain`, `EndSustain`, the
   `ConsoleTextSink`'s injection path, and `SnapshotForTick`—so a producer
   still holding a replaced router learns it is stale instead of quietly
   re-populating tables nothing will read.

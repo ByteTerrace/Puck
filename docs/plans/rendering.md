@@ -920,7 +920,7 @@ surface only; `Passthrough` needs a source the local user opened, and
 `SourcePassthrough.ToClient` states the client-coordinate and DPI contract;
 `Presentation` is the `ISourcePicker` seam. A world screen's `route.input`
 names its destination, `WorldScreenMappings.Of` builds the row's mapping with
-the glass bezel as its warp, though only its laws call it yet,
+the glass bezel as its warp, which the `$pointer:` rule read runs against a one-by-one source,
 `world.screens` echoes the destination, and the
 validator refuses `Passthrough` by name. `SourceFocus` in `Puck.Input` routes
 keys and text to a focused passthrough source, sends each release where its
@@ -940,14 +940,30 @@ off the source picks nothing. The pipeline pane's pointer
 `SourceFocusLawTests`, `WorldScreenInputLawTests` and the Maths
 `vector.ray-plane-*` laws.
 
+P13b-2 has landed: the simulation destination runs end to end. A seat folds the
+`source.pointer.origin` and `source.pointer.direction` verbs into its intent's
+optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
+flag byte on every intent path, so an absent ray costs one byte; the tape's
+`ShapeToken` is 4, the checkpoint's `SupportedVersion` 14 and the handshake's
+`WorldProtocol.WireProtocolKey` `PUCKWRL2` and the federation's `WorldFederationCodec.WireKey` `PUCKFED3`, each strict. The server keeps each
+body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
+the row's mapping against a one-by-one source, for the rule operand
+`$pointer:<seat>:<screenIndex>:x|y|on`; `body.channels` echoes the ray and its
+hit on every `Simulation` screen. On a windowed host `WorldPointerRayCapture`
+casts the OS pointer through its seat's published camera with
+`SourceRay.Through` and holds the two commands on the seat's lane with
+`InputRouter.Sustain`, so every tick of a frame carries the ray. The laws are
+`IntentRayWireLawTests`, `PointerWorldRuleFactLawTests`,
+`WorldSeatViewportsLocateLawTests` and `SourcePointerCommandLawTests`.
+
 P13b owes the rest. Nothing publishes a mapping from the live renderer, so the
 screen shading still reads its own bezel constant, which `WorldScreenMappings`
 mirrors, and the GPU does not yet draw from the mapping. A `SourceHandle` names
 a source by its render-graph instance (`RenderGraphInstance.Handle`), but no
 live screen publishes one until P13b-1. No host feeds
-`SourceFocus` or delivers a focused source's input to its window, no module
-registers the pointer commands or reads them into a machine, and no host
-publishes its panes to `SourcePanePicker` yet. The recorded Windows run, a click reaching a
+`SourceFocus` or delivers a focused source's input to its window, no machine
+reads a mapped pointer, and no host publishes its panes to `SourcePanePicker`
+yet. The recorded Windows run, a click reaching a
 captured editor window at the mapped point and the chord returning input to the
 game, belongs to P13b.
 
@@ -2748,42 +2764,45 @@ on P7b's groups.
    place of the stand-in, and each pane's through its graph instance, and
    `world.screens` reports the mapping it publishes. Laws:
    `WorldScreenInputLawTests` over the live binder's rows.
-2. The simulation destination. GPU-free, after P11b-9 moves the views. A
-   tick's command snapshot never reaches the server: the server integrates each
-   seat's `PlayerIntent`, sixteen channels clamped to their shapes, and the
-   replay tape records those intents. A world-space ray fits no channel, so the
-   intent carries it:
-   - `PlayerIntent` gains an optional `SourceRay`, quantized once at the host
+2. The simulation destination, landed. A tick's command snapshot never reaches
+   the server, which integrates each seat's `PlayerIntent`, so the intent
+   carries the ray:
+   - `PlayerIntent.SourceRay` is optional and quantized once, at the seat verb,
      through `CommandValueQuantization.QuantizeAxis3D`. `WorldWireCodec`'s
-     `WriteIntent` and `ReadIntent`, which every intent path shares (submission,
-     held channels, authority checkpoints, federation), keep the sixteen lanes
-     unchanged and add one flag byte, followed by the ray's six fixed-point
-     values only when the flag is set, so an absent ray costs one byte.
-   - The format moves with it: the tape's `ShapeToken` from 3 to 4, the
-     checkpoint's `SupportedVersion` from 13 to 14, and the peer handshake's
-     `WorldProtocol.WireProtocolKey` from `PUCKWRL1` to `PUCKWRL2`, each
-     strict, with no reader for the old shape. No tape is checked in.
-   - The seat verbs: a module registers `source.pointer.origin` and
-     `source.pointer.direction` as Axis3D verbs, the seat keeps them, and
-     `SeatController` folds them into the intent.
-   - The server keeps each body's tick ray from its intent and maps it in the
-     tick, in fixed point, from document data only: `WorldScreenMappings.Of` for
-     the screen row, then `SourceMapping.MapRay`. A host-computed hit is never
+     `WriteIntent` and `ReadIntent`, which every intent path shares
+     (submission, held channels, authority checkpoints, federation, the tape),
+     keep the sixteen lanes and add one flag byte, followed by the ray's six
+     fixed-point values only when it is present.
+   - The format moved with it, strictly and with no reader for the old shape:
+     the tape's `ShapeToken` is 4, the checkpoint's `SupportedVersion` 14,
+     `WorldProtocol.WireProtocolKey` `PUCKWRL2`, and the federation's
+     `WorldFederationCodec.WireKey` `PUCKFED3`. No tape is checked in.
+   - `PlayerCommandModule` registers `source.pointer.origin` and
+     `source.pointer.direction` as Axis3D seat verbs, the seat keeps them for
+     the tick, and `SeatController.HeldIntent` folds them into the intent.
+   - The server keeps each body's tick ray on its composed intent and maps it in
+     the tick, in fixed point, from document data only: a `$pointer:` read
+     compiles the screen row's `WorldScreenMappings.Normalized` mapping and runs
+     `SourceMapping.MapRay` on the seat's ray. A host-computed hit is never
      trusted.
-   - A rule reads it through one operand, `$pointer:<seat>:<screenIndex>:x|y|on`,
-     compiled beside `$channel`. Its `x` and `y` are source-normalized fixed-point
-     fractions in `[0, 1)`: the row holds no source extent, so the mapping runs
-     against a one-by-one source, and a rule that wants pixels multiplies by a
-     resolution it knows. `on` is 1 when the ray lands on the source and 0
-     otherwise. An unknown seat or screen index is refused by name at compile
-     time.
+   - The operand is `$pointer:<seat>:<screenIndex>:x|y|on`, compiled beside
+     `$channel`. `x` and `y` are source-normalized fractions in `[0, 1)`, and
+     `on` is 1 while the ray lands on the source and 0 otherwise, when all three
+     read 0. An unknown seat or screen index, or a screen whose `route.input` is
+     not `Simulation`, is refused by name at compile time. `body.channels`
+     echoes the ray and its hit on every `Simulation` screen.
+   - The host produces the ray: `WorldPointerRayCapture`, an
+     `ISnapshotInputCapture`, locates the OS pointer in its seat's view with
+     `WorldSeatViewports.Locate`, the mapping the drawn cursor shares, casts it
+     with `SourceRay.Through` over the camera published for the frame on
+     screen, and holds both commands on the seat's lane with
+     `InputRouter.Sustain` until the pointer leaves the view.
    - Laws: a recorded tape with pointer intents replays to the same mapped hit
-     and state hash; a ray that misses reads `on` 0; the quantization is exact
-     and lossless across the wire and the tape.
-   Producing the ray on the host, through `SourceRay.Through` over the seat's
-   camera, needs the seat's view and waits on the views the graph root owns. A
-   machine that reads a pointer, a light gun, is still owed.
-3. The presentation destination. The CPU picker has landed
+     and state hash; a miss, the bezel and no ray read `on` 0; the ray crosses
+     the wire and the tape bit for bit and an absent one costs one byte; a
+     three-tick burst gives three snapshots, each carrying the ray; and
+     `Locate` answers what the cursor's own mapping answered.
+   A machine that reads a pointer, a light gun, is still owed.3. The presentation destination. The CPU picker has landed
    (`SourcePanePicker`); a host publishing its panes to it moves with the views
    the graph root now owns, and GPU picking follows P4's visibility record.
 4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds

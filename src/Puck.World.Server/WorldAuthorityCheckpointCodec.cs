@@ -32,8 +32,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader.</summary>
-    // Version 13 keys every grant row by its grantee and carries no group projection derived from the document.
-    public const ushort SupportedVersion = 13;
+    // Version 14 carries every intent's optional pointer ray.
+    public const ushort SupportedVersion = 14;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>

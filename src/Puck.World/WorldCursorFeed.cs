@@ -140,61 +140,24 @@ internal sealed class WorldCursorFeed {
             return "no-position";
         }
 
-        if (!view.Present) {
-            return "no-view";
-        }
-
-        // CLIENT→FRAME — the one place the two pixel spaces meet. Pointer positions arrive in CLIENT pixels
-        // (WM_MOUSEMOVE's lParam), but everything downstream — the seat viewport rects, the drawn overlay, the
-        // pick-ray unproject — lives in the FIXED frame extent the engine was constructed with (view.Width/Height).
-        // The two diverge the moment the OS window is resized: the launcher passes the live client area to
-        // presenter.BeginFrame every frame (the swapchain chases it) and both presenters STRETCH the produced frame
-        // over the whole back buffer (the fullscreen-triangle blit in DirectXSurfaceCompositor / the Vulkan
-        // SurfaceCompositor twin), so the inverse of that presentation scale — per-axis frame/client — is the one
-        // honest mapping, and it puts the drawn cursor under the physical pointer at any window size. Before the
-        // first RenderViews publishes a client extent (or if it ever publishes zero), the spaces are taken as
-        // coincident — the boot configuration, where the swapchain extent equals the constructed frame extent.
-        var clientWidth = m_viewports.ClientWidth;
-        var clientHeight = m_viewports.ClientHeight;
-
-        if (
-            (clientWidth > 0) &&
-            (clientHeight > 0)
-        ) {
-            framePosition = new Vector2(
-                x: (position.X * (view.Width / ((float)clientWidth))),
-                y: (position.Y * (view.Height / ((float)clientHeight)))
-            );
-        }
-
-        var regionWidthPx = (view.Region.Width * view.Width);
-        var regionHeightPx = (view.Region.Height * view.Height);
-
-        if (
-            (regionWidthPx < 1f) ||
-            (regionHeightPx < 1f)
-        ) {
-            return "no-view";
-        }
-
-        localX = ((framePosition.X - (view.Region.X * view.Width)) / regionWidthPx);
-        localY = ((framePosition.Y - (view.Region.Y * view.Height)) / regionHeightPx);
-
-        if (
-            (localX < 0f) ||
-            (localX > 1f) ||
-            (localY < 0f) ||
-            (localY > 1f)
-        ) {
-            return "outside-viewport";
-        }
-
-        var steering = m_viewInput.IsSteering(slot: slot);
-
-        return (steering
-            ? "orbit-drag"
-            : null
+        var place = m_viewports.Locate(
+            framePosition: out framePosition,
+            local: out var local,
+            position: position,
+            view: in view
         );
+
+        localX = local.X;
+        localY = local.Y;
+
+        return place switch {
+            WorldSeatPointerPlace.NoView => "no-view",
+            WorldSeatPointerPlace.OutsideViewport => "outside-viewport",
+            _ => (m_viewInput.IsSteering(slot: slot)
+                ? "orbit-drag"
+                : null
+            ),
+        };
     }
     // The overlay-side hover test: the world-scope HUD panels' screen-space rects, then the seat's OWN player-scope
     // panel (its rect is local to the seat viewport). Panels are tested in reverse document order so the topmost-drawn
@@ -286,8 +249,9 @@ internal sealed class WorldCursorFeed {
 
     /// <summary>Recomposes and publishes this frame's cursor frame (the overlay's <c>FeedTick</c>).</summary>
     public void Tick() {
-        // The process has one pointer, so at most one cursor entry publishes per frame.
-        var slot = WorldPointerSlot.Resolve(roster: m_roster);
+        // The process has one pointer, riding the seat whose mouse moved it last, so at most one cursor entry
+        // publishes per frame.
+        var slot = (m_pointer.PositionedSlot ?? WorldPointerSlot.Resolve(roster: m_roster));
         var count = 0;
         var position = m_pointer.Position(slot: slot);
         var view = m_viewports.Seat(slot: slot);

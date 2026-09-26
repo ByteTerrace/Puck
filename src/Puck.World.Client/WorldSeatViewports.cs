@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 
@@ -17,14 +18,24 @@ public readonly record struct WorldSeatView(
     uint Width,
     uint Height
 );
+/// <summary>Where a client-pixel pointer position lies relative to one seat's view.</summary>
+public enum WorldSeatPointerPlace : byte {
+    /// <summary>Inside the seat's viewport rect.</summary>
+    Inside,
+    /// <summary>The seat resolved no view this frame, or its viewport covers less than a pixel.</summary>
+    NoView,
+    /// <summary>Outside the seat's viewport rect.</summary>
+    OutsideViewport,
+}
 /// <summary>
 /// Every local seat's resolved viewport + camera, published by <c>WorldFramePresenter</c> once per dressed frame
 /// — the read seam a pointer consumer needs to turn a cursor pixel into a world ray without re-deriving the layout
 /// or the camera (which would fork the frame source's own resolution). Session-only presentation state.
 /// </summary>
 /// <remarks>Single-threaded by the same contract the overlay stores document: the frame source writes during frame
-/// produce and the cursor feed reads during the overlay's <c>FeedTick</c>, which the unified overlay invokes AFTER
-/// the inner producer's frame (so a read always sees THIS frame's cameras), all on the launcher's window-pump
+/// produce, the cursor feed reads during the overlay's <c>FeedTick</c>, which the unified overlay invokes AFTER
+/// the inner producer's frame (so it sees THIS frame's cameras), and the pointer-ray capture reads before the next
+/// frame's ticks (so it sees the cameras of the frame on screen under the pointer), all on the launcher's window-pump
 /// thread.</remarks>
 public sealed class WorldSeatViewports {
     private readonly WorldSeatView[] m_seats = new WorldSeatView[PlayerRoster.MaxSlots];
@@ -63,6 +74,56 @@ public sealed class WorldSeatViewports {
     public void PublishClientExtent(uint width, uint height) {
         ClientWidth = width;
         ClientHeight = height;
+    }
+    /// <summary>Locates a pointer position against one seat's view: the one mapping from CLIENT pixels, where pointer
+    /// positions arrive, to FRAME pixels, where the viewports and the drawn overlay live, and on to the seat-local
+    /// point. The presenter stretches the fixed frame over the whole client area, so the inverse of that scale, per
+    /// axis frame over client, is the mapping; before a client extent is published, or while it is zero, the two
+    /// spaces are taken as coincident, the boot configuration.</summary>
+    /// <param name="view">The seat's view for the frame just dressed.</param>
+    /// <param name="position">The pointer position, in client pixels.</param>
+    /// <param name="framePosition">The position in frame pixels; the client position unchanged when the seat has no
+    /// view.</param>
+    /// <param name="local">The position within the seat's viewport rect, <c>x</c> right and <c>y</c> down, each in
+    /// <c>[0, 1]</c> across the rect while <see cref="WorldSeatPointerPlace.Inside"/>; zero when the seat has no
+    /// view.</param>
+    /// <returns>Where the position lies.</returns>
+    public WorldSeatPointerPlace Locate(in WorldSeatView view, Vector2 position, out Vector2 framePosition, out Vector2 local) {
+        framePosition = position;
+        local = Vector2.Zero;
+
+        if (!view.Present) {
+            return WorldSeatPointerPlace.NoView;
+        }
+        if (
+            (ClientWidth > 0) &&
+            (ClientHeight > 0)
+        ) {
+            framePosition = new Vector2(
+                x: (position.X * (view.Width / ((float)ClientWidth))),
+                y: (position.Y * (view.Height / ((float)ClientHeight)))
+            );
+        }
+
+        var regionWidthPx = (view.Region.Width * view.Width);
+        var regionHeightPx = (view.Region.Height * view.Height);
+
+        if (
+            (regionWidthPx < 1f) ||
+            (regionHeightPx < 1f)
+        ) {
+            return WorldSeatPointerPlace.NoView;
+        }
+
+        local = new Vector2(
+            x: ((framePosition.X - (view.Region.X * view.Width)) / regionWidthPx),
+            y: ((framePosition.Y - (view.Region.Y * view.Height)) / regionHeightPx)
+        );
+
+        return (((local.X < 0f) || (local.X > 1f) || (local.Y < 0f) || (local.Y > 1f))
+            ? WorldSeatPointerPlace.OutsideViewport
+            : WorldSeatPointerPlace.Inside
+        );
     }
     /// <summary>The seat's view for the frame just dressed (absent = <c>Present: false</c>).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
