@@ -95,6 +95,79 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Throws<ArgumentException>(testCode: () => runtime.Node(instance: runtime.Instances.IndexOf(name: "world")));
         }
     }
+    // A kept root presents its installed graph while its replacement builds, and that graph still reads an external
+    // producer the reconfiguration removed, whose lease served one frame: the producer is held, not disposed, and the
+    // root samples its last output on every frame until the replacement installs; then every acquisition is released
+    // and the producer is disposed once.
+    [Fact]
+    public void ARemovedExternalProducerAKeptRootStillReadsIsHeldUntilTheRootsReplacementInstalls() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, frames, producers) = WorldScene(gpu: gpu);
+
+        using (runtime) {
+            var world = producers.Only;
+            var main = runtime.NodeOf(instance: "main")!;
+
+            frames.Settle();
+
+            var view = world.ImageView;
+
+            Assert.True(
+                condition: runtime.TryReconfigure(
+                    graphs: [Graph(pipeline: ScreensGraph(pool: false))],
+                    refusal: out var refusal,
+                    root: "main",
+                    set: Set(Instance(name: "main"))
+                ),
+                userMessage: refusal?.Message
+            );
+
+            var alone = new Frames(
+                footprints: [],
+                roots: [new RenderGraphRoot(Height: 1.0, Instance: "main", Width: 1.0)],
+                runtime: runtime
+            );
+
+            using (var opener = new PipelineGateOpener()) {
+                gpu.PipelineGate = opener.Gate;
+                gpu.DescriptorWrites.Clear();
+                gpu.Recording = true;
+
+                try {
+                    // The replacement, which reads no screen, waits in the driver, so each of these frames records the
+                    // installed graph over the removed producer's last output, bound once for all of them.
+                    for (var frame = 0; (frame < 3); frame++) {
+                        _ = alone.Next();
+                        Assert.True(condition: main.HasPendingCandidate);
+                        Assert.Equal(
+                            actual: (world.Disposals, runtime.RetiredProducers),
+                            expected: (0, 1)
+                        );
+                    }
+                } finally {
+                    gpu.Recording = false;
+                    gpu.PipelineGate = null;
+                }
+            }
+
+            Assert.All(
+                action: write => Assert.Equal(
+                    actual: write.Handle,
+                    expected: view
+                ),
+                collection: gpu.DescriptorWrites.Where(predicate: static write => (write.Binding == 1))
+            );
+
+            main.WaitForBuild();
+            _ = alone.Next();
+            Assert.False(condition: main.HasPendingCandidate);
+            Assert.Equal(
+                actual: (world.Disposals, runtime.RetiredProducers, (world.Acquired - world.Released)),
+                expected: (1, 0, 0)
+            );
+        }
+    }
     [Fact]
     public void ALeaseRetiresOnlyAfterTheSamplingSlotsFence() {
         var gpu = new FakePipelineGpu();

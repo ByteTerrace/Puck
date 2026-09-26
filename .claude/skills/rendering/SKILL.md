@@ -887,7 +887,11 @@ and the node publishes the input in the output's place, never a copy
 (`RenderGraphPackageRecording.MayStandIn`): never for a previous frame's input, whose instance rests in the layout its own role left, never for an input a later pass overwrites, and never over a host's image bound in
 another layout than the node publishes in, since the node publishes in its
 output layout, the one its consumer's descriptor is written with, and hands a
-host's image back in the host's own. A lease declares the layout its producer's
+host's image back in the host's own. The output may be read only by later
+package passes, which `ShaderPipelineRenderNode.StandingOf` hands the input it
+stands for, so a chain of stand-ins resolves to its first input
+(`RenderGraphRuntimeLawTests.Chain`); any other reader refuses the stand-in. A
+lease declares the layout its producer's
 own submissions leave the image in (`SdfWorldEngine.OutputLayout`,
 shader-readable), which `SdfEngineNodeLeaseLawTests` holds against the
 engine's recorded transitions; a declared layout the producer does not leave
@@ -959,7 +963,13 @@ passes.
 `RenderGraphRuntime`): each frame, before the runtime schedules, it reconciles
 the accepted `views` section into the runtime's instance set with
 `TryReconfigure` (a surviving instance keeps its node, graph and history; a
-removed one retires), compiles each source row in the background through
+removed one retires, except that a removed instance a kept consumer's installed
+graph still binds is held through `ShaderPipelineRenderNode.HoldBinding` until
+that consumer installs a graph that no longer reads it, rebinds the name or is
+released: a graph instance as the consumer bound it, an external producer
+through one more acquisition of its latest output, bound for every frame, and
+`RenderGraphRuntime.RetiredProducers` counts what is held),
+compiles each source row in the background through
 `ShaderPackager.LoadSource`, and installs it with `TryInstall`, inputs taken
 from the row's `inputs`. A row naming an engine `package` (such as `sdf.world`)
 compiles nothing. Panes are placed by the `place` package (`PlacePackage`,
@@ -973,17 +983,21 @@ time. A pane the active layout does not show draws nothing in its place pass
 and is not scheduled. The composer runs inside the world producer's frame, so a
 layout change places panes one frame later, and a layout transition's
 render-scale dip does not reach panes. A pane slot adds no SDF view. Each SDF
-view of the last composed frame is placed through `WorldViewGraphHost.PlaceView`
+view of the last composed frame is placed through
+`WorldViewGraphHost.PlaceViews`, which `PrepareGraph` calls, and `PlaceView`
 (footprint: rect at render scale; placement: rect with
 `world.upscale-sharpness`), so `place` does the render-scale reconstruction.
-The first view's footprint is always added, since it is the base. A view is
-shown only once the engine has rendered it
-(`WorldFramePresenter.ViewRendered`, `SdfEngineNode.HasViewOutput`), and a
-lone full-display view at native scale is not shown, so `main` stands for
-`world` and parity holds. Views, like panes, are placed one frame after a
-layout change. Pixels between views show the base's clamped pixels; there is
-no letterbox color. Screens still render through `ViewStack` until later P11b
-work moves them.
+The first view's footprint is always added, since it is the base, and before
+the world's first frame the first view is placed hidden over the whole display
+so the world is still scheduled. A view is shown only once the engine has
+rendered it (`WorldFramePresenter.ViewRendered`, `SdfEngineNode.HasViewOutput`),
+and a lone full-display view at native scale is not shown, so `main` stands for
+`world` and parity holds (`WorldViewPlacementLawTests`). Views, like panes, are
+placed one frame after a layout change. The first view's place pass carries
+the `place` config's `letterbox`, so pixels no view or pane covers show the
+letterbox color `place.comp.hlsl` states, and a layout covering the whole
+display pays nothing for it. Screens still render through `ViewStack` until
+later P11b work moves them.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):

@@ -1,7 +1,7 @@
 {
   "id": "split-seats",
-  "title": "Two seats in the split layout each render through their own view output, placed side by side, so each half shows its own seat's view",
-  "binding": "The positive leg boots the shipped world windowed, joins a second seat, which composes the world's two-seat split layout, and moves seat 2's body out onto the field, then captures the composed display at the render graph's root. The engine renders each seat's view through its own dispatch set into its own output, and the root's place passes put each output into its seat's half: the left half, seat 1 at spawn facing the dark wall, reads dark on average, and the right half, seat 2 on the field, reads green. The discriminating leg leaves seat 2 at spawn beside seat 1, so both halves show the wall and the right half's green observation turns red: the capture shows two different views, not one view twice, as a view that rendered into another view's output or a view placed from the wrong output would show.",
+  "title": "Two seats in the split layout each render through their own view output, placed side by side, so each half shows its own seat's view, and a letterboxed layout shows the letterbox color between its views",
+  "binding": "The positive leg boots the shipped world windowed, joins a second seat, which composes the world's two-seat split layout, and moves seat 2's body out onto the field, then captures the composed display at the render graph's root. The engine renders each seat's view through its own dispatch set into its own output, and the root's place passes put each output into its seat's half: the left half, seat 1 at spawn facing the dark wall, reads dark on average, and the right half, seat 2 on the field, reads green. It then authors a layout whose two views leave a strip between them (x 0.4 to 0.6), selects it with view.override, which echoes the layout it submitted, and captures again: the strip reads the letterbox color (0.015, 0.016, 0.02), codes (4, 4, 5), which the first view's place pass writes outside its rect, never a view's clamped edge; a view.override naming a layout the document does not author is refused by name. The discriminating leg leaves seat 2 at spawn beside seat 1, so both halves show the wall and the right half's green observation turns red: the capture shows two different views, not one view twice, as a view that rendered into another view's output or a view placed from the wrong output would show. It authors the same letterboxed layout but selects the split layout, which covers the whole display, so the strip shows the views and the letterbox observation turns red.",
   "bootShape": "windowed",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -17,11 +17,21 @@
       { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "view.override", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 6, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 7, "outcome": "accepted" },
+      { "verb": "view.override", "occurrence": 2, "outcome": "refused" }
     ],
     "expect": [
       { "type": "imageRegion", "name": "the-left-half-is-seat-1-at-the-wall", "capture": "split.png", "extent": [1280, 800], "region": [0.05, 0.1, 0.45, 0.6], "reduce": "mean", "minimum": [0, 0, 0, 1], "maximum": [0.3, 0.3, 0.3, 1], "toleranceCodes": 2, "holds": true },
-      { "type": "imageRegion", "name": "the-right-half-is-seat-2-on-the-field", "capture": "split.png", "extent": [1280, 800], "region": [0.55, 0.5, 0.95, 0.95], "reduce": "mean", "minimum": [0, 0.4, 0, 1], "maximum": [0.5, 1, 0.45, 1], "toleranceCodes": 2, "holds": true }
+      { "type": "imageRegion", "name": "the-right-half-is-seat-2-on-the-field", "capture": "split.png", "extent": [1280, 800], "region": [0.55, 0.5, 0.95, 0.95], "reduce": "mean", "minimum": [0, 0.4, 0, 1], "maximum": [0.5, 1, 0.45, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "line", "name": "the-override-echoes-the-layout-it-submitted", "stream": "stdout", "match": "contains", "text": "[view.override: layout letterbox]", "present": true },
+      { "type": "imageRegion", "name": "the-strip-between-the-views-is-the-letterbox-color", "capture": "letterbox.png", "extent": [1280, 800], "region": [0.42, 0.1, 0.58, 0.9], "reduce": "mean", "minimum": [0.015686, 0.015686, 0.019608, 1], "maximum": [0.015686, 0.015686, 0.019608, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "line", "name": "an-unauthored-layout-is-refused-by-name", "stream": "stderr", "match": "contains", "text": "[view.override: no views.layouts row named 'nowhere'", "present": true }
     ]
   },
   "discriminating": {
@@ -33,11 +43,21 @@
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "view.override", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 6, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 7, "outcome": "accepted" },
+      { "verb": "view.override", "occurrence": 2, "outcome": "refused" }
     ],
     "expect": [
       { "type": "imageRegion", "name": "the-left-half-is-seat-1-at-the-wall", "capture": "split.png", "extent": [1280, 800], "region": [0.05, 0.1, 0.45, 0.6], "reduce": "mean", "minimum": [0, 0, 0, 1], "maximum": [0.3, 0.3, 0.3, 1], "toleranceCodes": 2, "holds": true },
-      { "type": "imageRegion", "name": "the-right-half-is-seat-2-on-the-field", "capture": "split.png", "extent": [1280, 800], "region": [0.55, 0.5, 0.95, 0.95], "reduce": "mean", "minimum": [0, 0.4, 0, 1], "maximum": [0.5, 1, 0.45, 1], "toleranceCodes": 2, "holds": false }
+      { "type": "imageRegion", "name": "the-right-half-is-seat-2-on-the-field", "capture": "split.png", "extent": [1280, 800], "region": [0.55, 0.5, 0.95, 0.95], "reduce": "mean", "minimum": [0, 0.4, 0, 1], "maximum": [0.5, 1, 0.45, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "line", "name": "the-override-echoes-the-layout-it-submitted", "stream": "stdout", "match": "contains", "text": "[view.override: layout split]", "present": true },
+      { "type": "imageRegion", "name": "the-strip-between-the-views-is-the-letterbox-color", "capture": "letterbox.png", "extent": [1280, 800], "region": [0.42, 0.1, 0.58, 0.9], "reduce": "mean", "minimum": [0.015686, 0.015686, 0.019608, 1], "maximum": [0.015686, 0.015686, 0.019608, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "line", "name": "an-unauthored-layout-is-refused-by-name", "stream": "stderr", "match": "contains", "text": "[view.override: no views.layouts row named 'nowhere'", "present": true }
     ]
   }
 }

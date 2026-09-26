@@ -7,3 +7,13 @@ world.wait 10
 world.wait 90
 world.screenshot {run}/split.png
 world.wait 30
+# The same letterboxed layout is authored, but the override selects the split layout, which covers the whole display,
+# so the strip between the letterboxed rects shows the views, not the letterbox color.
+world.row.set views.layouts {"name":"letterbox","seatCount":5,"slots":[{"camera":null,"height":1,"instance":null,"width":0.4,"x":0,"y":0},{"camera":null,"height":1,"instance":null,"width":0.4,"x":0.6,"y":0}],"transitionRenderScale":1,"transitionSeconds":0}
+world.wait 5
+view.override layout split
+world.wait 30
+world.screenshot {run}/letterbox.png
+world.wait 30
+# A layout the document does not author is refused by name, and nothing is submitted.
+view.override layout nowhere

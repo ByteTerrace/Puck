@@ -8,3 +8,13 @@ body.pose 20 - 40 90 - - 1
 world.wait 90
 world.screenshot {run}/split.png
 world.wait 30
+# A layout with a gap between its two views, selectable only by override (no seat count reaches five): every pixel no
+# view covers shows the letterbox color, which the first view's place pass writes outside its rect.
+world.row.set views.layouts {"name":"letterbox","seatCount":5,"slots":[{"camera":null,"height":1,"instance":null,"width":0.4,"x":0,"y":0},{"camera":null,"height":1,"instance":null,"width":0.4,"x":0.6,"y":0}],"transitionRenderScale":1,"transitionSeconds":0}
+world.wait 5
+view.override layout letterbox
+world.wait 30
+world.screenshot {run}/letterbox.png
+world.wait 30
+# A layout the document does not author is refused by name, and nothing is submitted.
+view.override layout nowhere

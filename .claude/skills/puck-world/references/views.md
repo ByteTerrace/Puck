@@ -344,10 +344,16 @@ Free Cam do not alter the logical movement basis.
   viewport mapping (`WorldSeatViewports.Locate`, which the pointer-ray capture
   shares), visibility, arming reason, buttons, hover, and system-release
   generation.
-- `view.override camera|layout <name|auto>` — live composition override. It is
+- `view.override camera|layout <name|auto>` — live composition override;
+  `layout toggle` and `layout next` cycle the authored layouts. It is
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the
-  LAYOUT override by its constant Axis1D value — 0 or less clears to auto, n
-  selects the nth authored `views.layouts` row (document order, 1-based).
+  LAYOUT override by its constant Axis1D value — -1 toggles, -2 selects the
+  next, n selects the nth authored `views.layouts` row (document order,
+  1-based), and any other value clears to auto. It echoes what it submitted on
+  stdout (`[view.override: layout <name|auto>]`, `[view.override: camera
+  <name|auto>]`) and refuses by name, submitting nothing, a layout or camera
+  the live document does not author, an ordinal past its layouts, and a cycle
+  with no authored layout; a composition-grant denial prints on stderr.
 - `player.camera [seat]` — toggles Free Cam (bindable, no tokens).
 - `world.row.set views.seatRig <json>` — replace seat framing (a whole camera
   program).

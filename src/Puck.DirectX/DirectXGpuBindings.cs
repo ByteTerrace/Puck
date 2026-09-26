@@ -158,6 +158,18 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
 
         return set;
     }
+    // The image view a descriptor write names, refused by name when the handle is zero or the view it named has been
+    // destroyed: a destroyed image frees its token, which then names no view.
+    private static DirectXImageView ImageViewOf(nint imageViewHandle) {
+        if (imageViewHandle == 0) {
+            throw new InvalidOperationException(message: "An image descriptor write names no image view (handle 0).");
+        }
+
+        return ((GCHandle.FromIntPtr(value: imageViewHandle).Target as DirectXImageView) ?? throw new ObjectDisposedException(
+            objectName: nameof(DirectXImageView),
+            message: $"An image descriptor write names image view 0x{imageViewHandle:X}, which has been destroyed."
+        ));
+    }
     private static D3D12_CPU_DESCRIPTOR_HANDLE ViewSlot(DirectXDescriptorSet set, uint binding, uint arrayElement) => new() {
         ptr = (set.CpuBase + ((nuint)((set.SlotByBinding[binding] + arrayElement) * set.DescriptorSize))),
     };
@@ -165,7 +177,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     // read.
     private void CreateTextureView(D3D12_CPU_DESCRIPTOR_HANDLE destination, nint imageViewHandle) {
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
-        var imageView = ((DirectXImageView)GCHandle.FromIntPtr(value: imageViewHandle).Target!);
+        var imageView = ImageViewOf(imageViewHandle: imageViewHandle);
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
             Format = imageView.Format,
             Shader4ComponentMapping = DefaultShader4ComponentMapping,
@@ -417,7 +429,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     ) {
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
-        var imageView = ((DirectXImageView)GCHandle.FromIntPtr(value: imageViewHandle).Target!);
+        var imageView = ImageViewOf(imageViewHandle: imageViewHandle);
         var slotIndex = (set.SlotByBinding[binding] + arrayElement);
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
             ptr = (set.CpuBase + ((nuint)(slotIndex * set.DescriptorSize))),

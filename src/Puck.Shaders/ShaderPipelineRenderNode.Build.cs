@@ -37,7 +37,6 @@ public sealed partial class ShaderPipelineRenderNode {
     private long m_refusedHeapRevision;
     private CompiledShaderPipeline? m_refusedPending;
     private bool m_refusedResize;
-
     private BuildKey m_buildKey;
 
     /// <summary>Gets whether a candidate's pipelines and shader modules are being built on the thread pool. Frames
@@ -191,8 +190,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
         m_lastSwapError = error;
     }
+
     // The operator's GPU faults' revision, or zero on a device that passes its creations through none.
     private long FaultsRevision => (m_device.Services.Faults?.Revision ?? 0L);
+
     // Forgets the refused candidate, which a new request replaces.
     private void ForgetRefusal() {
         m_hasRefusal = false;

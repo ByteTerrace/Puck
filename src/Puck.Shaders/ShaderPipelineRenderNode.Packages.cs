@@ -65,7 +65,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 resource.Spec.IsExternal ||
                 (resource.Spec.Kind == ShaderPipelineResourceKind.Buffer)
             ) {
-                return (IReadOnlyList<IGpuImage>)[];
+                return ((IReadOnlyList<IGpuImage>)[]);
             }
 
             return ((carried.TryGetValue(
@@ -117,11 +117,15 @@ public sealed partial class ShaderPipelineRenderNode {
         );
     }
     // Why a pass that draws nothing cannot leave its outputs standing for its inputs, or null when it can: output i
-    // stands for input i, so each output must be an owned RGBA8 image no other pass of the graph touches, bound beside
-    // an input image of its format, so publishing the input in its place changes nothing any pass reads. The input must
-    // be this frame's: a previous frame's instance rests in the layout its own role left it in, which this frame's plan
-    // does not state, so presenting it would start from a layout it is not in. And no later pass may write the input's
-    // storage, as a version forwarding it does, or the published input would hold that pass's contents.
+    // stands for input i, so each output must be an owned RGBA8 image, bound beside an input image of its format, that
+    // no pass of the graph touches except later package passes reading this frame's instance, since a package pass
+    // resolves each input through what it stands for (RecordPackage): publishing the input in its place changes nothing
+    // any pass reads, and a chain of passes that draw nothing resolves to the first input it stands for. Every read of
+    // an image is shader-readable and made visible to every shader stage, so a later reader finds the input as the pass
+    // left it. The input must be this frame's: a previous frame's instance rests in the layout its own role left it in,
+    // which this frame's plan does not state, so presenting it would start from a layout it is not in. And no later pass
+    // may write the input's storage, as a version forwarding it does, or the published input, and every later read of
+    // the output, would hold that pass's contents.
     private string? AliasRefusalOf(RuntimePass pass, ShaderPipelinePlannedPass planned) {
         for (var index = 0; (index < pass.Outputs.Length); index++) {
             var output = m_resourceLookup[pass.Outputs[index].Name];
@@ -140,7 +144,14 @@ public sealed partial class ShaderPipelineRenderNode {
                     ? "is not an RGBA8 image bound beside an input image of its format"
                     : ((output.History || m_pipeline!.Plan.Passes.Any(predicate: other => (
                         (other.Index != planned.Index) &&
-                        other.Accesses.Any(predicate: access => (access.Storage == output.Storage.Index))
+                        other.Accesses.Any(predicate: access => (
+                            (access.Storage == output.Storage.Index) &&
+                            !ResolvesThroughStandIn(
+                                access: access,
+                                reader: other,
+                                standIn: planned
+                            )
+                        ))
                     )))
                         ? "is read by another pass or as history"
                         : ((LaterWriterOf(planned: planned, storage: m_resourceLookup[pass.Inputs[index].Name].Storage.Index) is { } writer)
@@ -154,6 +165,14 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return null;
     }
+    // Whether an access to a stand-in's output reads whatever the output stands for: a later package pass reading this
+    // frame's instance, which it resolves through the stand-in when it records.
+    private static bool ResolvesThroughStandIn(ShaderPipelineAccess access, ShaderPipelinePlannedPass reader, ShaderPipelinePlannedPass standIn) => (
+        (reader.Kind == ShaderPipelinePassKind.Package) &&
+        (reader.Index > standIn.Index) &&
+        !access.PreviousFrame &&
+        !access.Use.Writes
+    );
     // Names the pass that writes this frame's instance of a storage at a later position in execution order than the
     // planned pass, or returns null.
     private string? LaterWriterOf(ShaderPipelinePlannedPass planned, int storage) => m_pipeline!.Plan.Passes.FirstOrDefault(predicate: other => (
@@ -164,21 +183,26 @@ public sealed partial class ShaderPipelineRenderNode {
             access.Use.Writes
         ))
     ))?.Name;
-    // The position of the first input an output of the pass would stand for that is a host's image bound in another
-    // layout than the node publishes in, or -1 when there is none. The node publishes every image in its output layout,
-    // which is the layout its consumer's descriptor is written with, and hands a host's image back in the host's own
-    // layout, so an output cannot stand for such an input: the recording must draw.
-    private int HostInputInAnotherLayout(RuntimePass pass) {
+    // The position of the first input an output of the pass would stand for that is, or itself stands for, a host's
+    // image bound in another layout than the node publishes in, or -1 when there is none. The node publishes every image
+    // in its output layout, which is the layout its consumer's descriptor is written with, and hands a host's image back
+    // in the host's own layout, so an output cannot stand for such an input: the recording must draw.
+    private int HostInputInAnotherLayout(RuntimePass pass, int slot) {
         var count = Math.Min(
             val1: pass.Inputs.Length,
             val2: pass.Outputs.Length
         );
 
         for (var index = 0; (index < count); index++) {
+            var (resource, name, _) = StandingOf(
+                input: pass.Inputs[index],
+                slot: slot
+            );
+
             if (
-                m_resourceLookup[pass.Inputs[index].Name].Spec.IsExternal &&
+                resource.Spec.IsExternal &&
                 m_externalImages.TryGetValue(
-                    key: pass.Inputs[index].Name,
+                    key: name,
                     value: out var image
                 ) &&
                 (image.Layout != m_outputLayout)
@@ -189,6 +213,20 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return -1;
     }
+    // What a package pass's input reads this frame: the version bound to it, or, when that version is the output of an
+    // earlier pass that drew nothing, the input that output stands for, which is never itself a stand-in, since each
+    // stand-in resolved through the one before it.
+    private (RuntimeResource Resource, string Name, int Instance) StandingOf(ResourceReference input, int slot) {
+        var resource = m_resourceLookup[input.Name];
+
+        return ((!input.PreviousFrame && (resource.Alias.Target is { } target))
+            ? (target, resource.Alias.Name!, resource.Alias.Instance)
+            : (resource, input.Name, InstanceIndex(
+                previous: input.PreviousFrame,
+                resource: resource,
+                slot: slot
+            )));
+    }
     // Records what a package's recording did with its outputs: each output of a recording that drew nothing stands for
     // the input at its position until the pass records again, and a recording that drew clears that.
     private void ApplyOutcome(RuntimePass pass, int slot, RenderGraphPackageOutcome outcome) {
@@ -196,13 +234,12 @@ public sealed partial class ShaderPipelineRenderNode {
             if (pass.PackageAliasRefusal is { } refusal) {
                 throw new InvalidOperationException(message: refusal);
             }
-            if (HostInputInAnotherLayout(pass: pass) is var host and >= 0) {
-                var name = pass.Inputs[host].Name;
+            if (HostInputInAnotherLayout(pass: pass, slot: slot) is var host and >= 0) {
+                var name = StandingOf(input: pass.Inputs[host], slot: slot).Name;
 
                 throw new InvalidOperationException(message: $"Package pass '{pass.Name}' drew nothing, but its input '{name}' is a host's image in {m_externalImages[name].Layout} layout and the instance publishes in {m_outputLayout}, so its output cannot stand for it.");
             }
         }
-
 
         for (var index = 0; (index < pass.Outputs.Length); index++) {
             var output = m_resourceLookup[pass.Outputs[index].Name];
@@ -213,16 +250,14 @@ public sealed partial class ShaderPipelineRenderNode {
                 continue;
             }
 
-            var input = pass.Inputs[index];
-            var target = m_resourceLookup[input.Name];
+            var (target, name, instance) = StandingOf(
+                input: pass.Inputs[index],
+                slot: slot
+            );
 
             output.Alias = new PackageAlias(
-                Instance: InstanceIndex(
-                    previous: input.PreviousFrame,
-                    resource: target,
-                    slot: slot
-                ),
-                Name: input.Name,
+                Instance: instance,
+                Name: name,
                 Target: target
             );
         }
@@ -244,18 +279,18 @@ public sealed partial class ShaderPipelineRenderNode {
         var region = pass.PassRegion!;
         Span<byte> passBlock = stackalloc byte[region.ByteCount];
 
+        // An input standing for another is handed over as the one it stands for, which the planned read of that one
+        // left in the shader-readable layout every image read leaves.
         for (var index = 0; (index < inputs.Length); index++) {
-            var input = pass.Inputs[index];
-            var resource = m_resourceLookup[input.Name];
+            var (resource, name, instance) = StandingOf(
+                input: pass.Inputs[index],
+                slot: slot
+            );
 
             inputs[index] = Resolve(
-                index: HistoryIndex(
-                    previous: input.PreviousFrame,
-                    resource: resource,
-                    slot: slot
-                ),
+                index: instance,
                 layout: pass.PackageInputLayouts![index],
-                name: input.Name,
+                name: name,
                 resource: resource
             );
         }
@@ -292,7 +327,7 @@ public sealed partial class ShaderPipelineRenderNode {
             Height: pass.Height,
             Inputs: inputs,
             Leases: m_frameLeases,
-            MayStandIn: ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass) < 0)),
+            MayStandIn: ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass, slot: slot) < 0)),
             Outputs: outputs,
             PassBlock: passBlock,
             Recorder: recorder,

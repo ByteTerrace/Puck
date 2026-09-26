@@ -67,6 +67,13 @@
         }
       ],
       "config": {
+        "letterbox": {
+          "default": 0,
+          "max": 1,
+          "description": "1 fills the destination outside the rect with the letterbox color rather than the base.",
+          "min": 0,
+          "type": "uint"
+        },
         "rect": {
           "default": [
             0,

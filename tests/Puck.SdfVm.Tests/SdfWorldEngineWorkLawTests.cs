@@ -166,6 +166,32 @@ public sealed class SdfWorldEngineWorkLawTests {
             filter: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "work composite")
         );
     }
+    // Every view renders into its own output, so a frame of no views would render nothing and publish nothing: it is
+    // refused by name before it takes a ring slot, and the next frame renders as the first would have.
+    [Fact]
+    public void AFrameWithNoViewsIsRefusedByNameAndTheEngineRendersOn() {
+        using var rig = new Rig(cadence: false);
+
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => rig.Engine.RenderFrame(frame: rig.Frame with {
+            Views = [],
+        }));
+
+        Assert.StartsWith(
+            actualString: refusal.Message,
+            expectedStartString: "This world engine renders 1 to "
+        );
+        Assert.EndsWith(
+            actualString: refusal.Message,
+            expectedEndString: " viewports; the frame has 0."
+        );
+
+        _ = rig.Engine.RenderFrame(frame: rig.Frame);
+
+        Assert.Equal(
+            expected: RenderedFrame,
+            actual: rig.Report()
+        );
+    }
     [Fact]
     public void ACadenceSkippedFrameMarksItsSkippedPassesAndCountsTheRest() {
         using var rig = new Rig(cadence: true);

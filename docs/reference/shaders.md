@@ -292,7 +292,7 @@ offers:
 | `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it. The screens it shows are the instance's reads, not ports. |
 | `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
-| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source) and `sharpness`; a host that places panes per frame (`IRenderGraphPlacements`) overrides both, and a source it shows nowhere draws nothing, so the base stands for the output. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
+| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source) and `sharpness`; a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `post.<set id>` | one fragment-sampled image input, one color-attachment image output | A shipped post-process shader set (`ShaderSetCatalog.Shipped`) over the input. |
 | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
 
@@ -413,11 +413,16 @@ next planned barrier to move on.
 A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
 and each output then stands for the input at its position: the instance
 publishes that input's image with no copy, in its own layout
-(`ShaderPipelineRenderNode.PublishedLayout`), and a root capture reads it. An
-output another pass reads, that is history, that would stand for a previous
-frame's input or for an input a later pass overwrites, or that is not an RGBA8 image beside an input image of its
-format is refused by name when its pass draws nothing: a previous frame's
-instance rests in the layout its own role left it in. So is an output standing for a host's image bound in another layout
+(`ShaderPipelineRenderNode.PublishedLayout`), and a root capture reads it. A
+later package pass that reads such an output is handed the input it stands for,
+so a chain of passes that draw nothing resolves to the first input it stands
+for: a root whose place passes all show nothing publishes the world's image
+itself. An output another kind of pass reads, that is history, that would stand
+for a previous frame's input or for an input a later pass overwrites, or that
+is not an RGBA8 image beside an input image of its format is refused by name
+when its pass draws nothing: a previous frame's instance rests in the layout
+its own role left it in. So is an output standing, directly or through such a
+chain, for a host's image bound in another layout
 than the instance publishes in: the instance publishes every image in its output
 layout, the one its consumer's descriptor is written with (the display samples
 the root shader-readable), and hands a host's image back in the host's own. The
@@ -492,7 +497,10 @@ rows on the runtime through `IRenderGraphInstances`, which `RenderGraphRuntime`
 implements. Each frame, before the runtime schedules, the host reconciles the
 accepted `views` section into the runtime's instance set with `TryReconfigure`:
 an instance that survives keeps its node, its graph and its history, and a
-removed one retires. The host compiles each source row in the background
+removed one retires. A surviving instance whose replacement graph is still
+building keeps presenting its installed graph, so a removed instance that graph
+reads stays alive until the replacement installs, the name is bound again, or
+the survivor is released. The host compiles each source row in the background
 through `ShaderPackager.LoadSource` and installs the result with `TryInstall`,
 its inputs taken from the row's `inputs`. The `pipeline.*` console verbs
 address these rows by name.
@@ -524,8 +532,12 @@ reduced extent and `place` reconstructs it with the same sharpness. A view is
 shown only once the engine has rendered it, and a single view covering the
 whole display at native scale is not placed, so `main` passes `world` through
 unchanged. A layout change places its views one frame later, like its panes.
-Where no view covers the display, the base's clamped pixels show; there is no
-letterbox color.
+The first view's place pass sets the `place` config's `letterbox`, so outside
+its rect it writes the letterbox color, `(0.015, 0.016, 0.02)`, which the
+kernel states, rather than its base; every later place pass keeps its base
+there. Pixels no view or pane covers show that color, and a layout that covers
+the whole display pays no pass for it. When the first view is not shown and its
+pass must still draw, it copies its base everywhere.
 
 Screens still render through `ViewStack`; moving them onto graph instances is
 the rest of P11b in

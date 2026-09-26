@@ -204,12 +204,17 @@ internal static class AffectedCommand {
         // base's map, over the tree the base recorded, only for a deleted file one can reach.
         var workingTree = new AffectedWorkingTree(root: repositoryRoot);
         var baseTree = new AffectedRevisionTree(revision: since, root: repositoryRoot);
+        // Each tree's kernels and shader sets are read once, for both its documents' reach and its stand-ins.
+        var workingShaders = new AffectedShaders(projects: projects, tree: workingTree);
+        var baseShaders = new AffectedShaders(projects: projects, tree: baseTree);
         var reachedBy = new Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>>(valueFactory: () => AffectedDocuments.ReachedBy(
             canaries: canaries,
+            setFiles: workingShaders.FilesOf,
             tree: workingTree
         ));
         var recordedReachedBy = new Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>>(valueFactory: () => AffectedDocuments.ReachedBy(
             canaries: canaries,
+            setFiles: baseShaders.FilesOf,
             tree: baseTree
         ));
         IReadOnlySet<string> none = new HashSet<string>();
@@ -231,8 +236,10 @@ internal static class AffectedCommand {
                 ? reaching
                 : none),
             standInsFor: AffectedStandIns.Create(
+                documented: manifest => reachedBy.Value.ContainsKey(key: manifest),
                 indexed: [.. coverage.Keys],
                 projects: projects,
+                shaders: workingShaders,
                 tree: workingTree
             ),
             worldClosure: closure,
@@ -243,8 +250,10 @@ internal static class AffectedCommand {
             recordedStandInsFor: ((recorded is null)
                 ? null
                 : AffectedStandIns.Create(
+                    documented: manifest => recordedReachedBy.Value.ContainsKey(key: manifest),
                     indexed: [.. recorded.Keys],
                     projects: projects,
+                    shaders: baseShaders,
                     tree: baseTree
                 )),
             // A deleted file is reached through the documents the base's tree held.
@@ -433,8 +442,9 @@ internal static class AffectedCommand {
               restore lock or NativeMethods list through its project's sources, a shader source or
               include through the C# that names each kernel whose include closure reaches it, in the
               kernel's project or one its build references, a shader-set manifest, its stage sources and
-              its frame interface through the C# declaring the manifest's model, and a file puck schema
-              writes through the sources declaring the types it is generated from. A changed
+              its frame interface through the canaries whose worlds name the set in render.extensions, or
+              the C# declaring the manifest's model when none does, and a file puck schema writes through
+              the sources declaring the types it is generated from. A changed
               World source neither the index nor a stand-in places is listed as unmapped rather than
               widening the run. A file deleted since --since is placed by the index the base recorded,
               directly or through the stand-ins the base's tree gave it, or by the canaries whose

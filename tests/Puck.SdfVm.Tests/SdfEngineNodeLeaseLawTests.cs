@@ -14,7 +14,8 @@ namespace Puck.SdfVm.Tests;
 /// Laws for <see cref="SdfEngineNode"/> as the external producer behind <c>sdf.world</c>, over
 /// <see cref="FakeGpuDevice"/>: it hands out its engine's latest completed output as a lease on every frame, produced or
 /// not; it counts every acquisition; a view output its engine replaces at a new extent, and an engine it replaces at a
-/// larger one, are disposed only once every acquisition of them is released.
+/// larger one, are disposed only once every acquisition of them is released, the view output also only once the frame
+/// ring has passed every submission that wrote it.
 /// </summary>
 public sealed class SdfEngineNodeLeaseLawTests {
     private const uint Extent = 64;
@@ -101,6 +102,61 @@ public sealed class SdfEngineNodeLeaseLawTests {
         Assert.Equal(
             actual: rig.Node.OutputLeases,
             expected: 0
+        );
+    }
+    /// <summary>A view output replaced at a new extent is released by the first frame after both its acquisitions are
+    /// released and the ring has retired every submission that wrote it: never while a consumer holds it, however many
+    /// frames pass, and once released, at the next frame.</summary>
+    [Fact]
+    public void AReplacedViewOutputIsReleasedOnlyOnceItsHoldsReachZeroAndTheRingHasPassedIt() {
+        using var rig = new Rig(trackObjects: true);
+
+        rig.ProduceFirst();
+        Assert.True(condition: rig.Node.TryAcquireOutput(output: out var held));
+
+        var before = rig.LiveImages();
+
+        rig.Produce(extent: (Extent / 2));
+
+        for (var frame = 0; (frame <= SdfWorldEngine.FrameRingSize); frame++) {
+            rig.Produce(extent: (Extent / 2));
+        }
+
+        Assert.All(
+            action: static creation => Assert.Equal(actual: creation.DisposeCount, expected: 0),
+            collection: before
+        );
+
+        held.Lease.Retire();
+        rig.Produce(extent: (Extent / 2));
+        Assert.Equal(
+            actual: Assert.Single(collection: before, predicate: static creation => (creation.DisposeCount != 0)).DisposeCount,
+            expected: 1
+        );
+    }
+    /// <summary>A replaced view output nothing holds is still written by the frame before its replacement, whose ring
+    /// slot's fence the engine waits only when the ring comes round to it, so the output outlives the replacing frame
+    /// and the one after, and the frame after those releases it.</summary>
+    [Fact]
+    public void AnUnheldReplacedViewOutputOutlivesTheFramesThatMayStillBeWritingIt() {
+        using var rig = new Rig(trackObjects: true);
+
+        rig.ProduceFirst();
+
+        var before = rig.LiveImages();
+
+        for (var frame = 0; (frame < SdfWorldEngine.FrameRingSize); frame++) {
+            rig.Produce(extent: (Extent / 2));
+            Assert.All(
+                action: static creation => Assert.Equal(actual: creation.DisposeCount, expected: 0),
+                collection: before
+            );
+        }
+
+        rig.Produce(extent: (Extent / 2));
+        Assert.Equal(
+            actual: Assert.Single(collection: before, predicate: static creation => (creation.DisposeCount != 0)).DisposeCount,
+            expected: 1
         );
     }
     [Fact]
@@ -217,8 +273,11 @@ public sealed class SdfEngineNodeLeaseLawTests {
             frame;
     }
     private sealed class Rig : IDisposable {
-        public Rig() {
-            var gpu = new FakeGpuDevice(reportVersion: SdfIsa.Version);
+        public Rig(bool trackObjects = false) {
+            var gpu = new FakeGpuDevice(
+                reportVersion: SdfIsa.Version,
+                trackObjects: trackObjects
+            );
 
             Gpu = gpu;
             var builder = new SdfProgramBuilder();
@@ -276,6 +335,16 @@ public sealed class SdfEngineNodeLeaseLawTests {
         public SdfEngineNode Node { get; }
 
         public void Dispose() => Node.Dispose();
+        // The images the device holds now, which a law watches for the one a later frame releases.
+        public FakeGpuDevice.Creation[] LiveImages() => [.. Gpu.Created.Where(predicate: static creation => (
+            (creation.Kind == "image") &&
+            (creation.DisposeCount == 0)
+        ))];
+        public void Produce(uint extent) => Assert.True(condition: Node.Produce(
+            context: Context,
+            height: extent,
+            width: extent
+        ));
         public void ProduceFirst() => _ = Node.ProduceFirstFrame(context: Context);
     }
 }

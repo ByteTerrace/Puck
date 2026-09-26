@@ -149,9 +149,13 @@ public sealed class RenderGraphPackageCatalog {
     /// <summary>The id of the one placement pass: its base image, with its source reconstructed into a destination rect
     /// over it, an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to
     /// clamped Catmull-Rom at sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
-    /// <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at build; its config is the rect (<see cref="PlaceRect"/>)
-    /// and the sharpness (<see cref="PlaceSharpness"/>).</summary>
+    /// <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at build; its config is the rect (<see cref="PlaceRect"/>),
+    /// the sharpness (<see cref="PlaceSharpness"/>) and whether the destination outside the rect is the letterbox color
+    /// rather than the base (<see cref="PlaceLetterbox"/>).</summary>
     public const string Place = "place";
+    /// <summary>The <see cref="Place"/> config field that, at 1, fills the destination outside the rect with the
+    /// letterbox color the kernel states rather than the base; 0, the default, keeps the base there.</summary>
+    public const string PlaceLetterbox = "letterbox";
     /// <summary>The <see cref="Place"/> config field holding the destination rect as fractions of the output's extent:
     /// left, top, width, height.</summary>
     public const string PlaceRect = "rect";
@@ -220,9 +224,16 @@ public sealed class RenderGraphPackageCatalog {
         count: [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.BrickPoolVoxels])],
         strideBytes: sizeof(float)
     );
-    /// <summary>Gets the config schema of <see cref="Place"/>: the rect, whole by default, and the sharpness, 0 by
-    /// default.</summary>
+    /// <summary>Gets the config schema of <see cref="Place"/>: the letterbox switch, off by default, the rect, whole by
+    /// default, and the sharpness, 0 by default.</summary>
     public static IReadOnlyDictionary<string, ShaderConfigField> PlaceConfig { get; } = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
+        [PlaceLetterbox] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
+            Description: "1 fills the destination outside the rect with the letterbox color rather than the base.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Uint
+        ),
         [PlaceRect] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "[0, 0, 1, 1]").RootElement.Clone(),
             Description: "The destination rect as fractions of the destination extent: left, top, width, height.",

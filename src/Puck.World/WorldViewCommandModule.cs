@@ -32,7 +32,7 @@ namespace Puck.World;
 /// <see cref="IServerLink"/> and <see cref="WorldViewComposer"/> are core, so <c>view.override</c> and
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
 /// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent.</para></remarks>
-internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
+internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -48,6 +48,31 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             ? null
             : token
         );
+    // A layout cycle ('toggle' or 'next') over the authored layouts the last composition saw, refused by name when there
+    // are none rather than clearing the override.
+    private CommandResult Cycle(CommandContext context, string? name, string token) => ((name is null)
+        ? CommandResult.Error(output: $"[view.override: layout {token} has no authored views.layouts row to select]")
+        : Submit(
+            composition: new WorldComposition.SetActiveLayout(Name: name),
+            context: context
+        ));
+    private static string NamesOf(IEnumerable<string> names) => ((string.Join(separator: ", ", values: names) is { Length: > 0 } joined)
+        ? joined
+        : "(none)");
+    // Submits an override and echoes what it asked for; the server's composition gate prints a denial by name on stderr
+    // and changes nothing.
+    private CommandResult Submit(CommandContext context, WorldComposition composition) {
+        link.SubmitComposition(
+            composition: composition,
+            principal: context.Principal
+        );
+
+        return new CommandResult(Output: composition switch {
+            WorldComposition.SetActiveLayout layout => $"[view.override: layout {(layout.Name ?? "auto")}]",
+            WorldComposition.SelectCamera camera => $"[view.override: camera {(camera.Name ?? "auto")}]",
+            _ => throw new ArgumentOutOfRangeException(paramName: nameof(composition)),
+        });
+    }
     private CommandResult DescribePointer() {
         if (cursorFeed is not { } feed) {
             return CommandResult.Error(output: "[world.view.pointer: requires a windowed boot — headless registers this verb for vocabulary parity only]");
@@ -122,7 +147,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "view.override",
-            description: "LIVE composition override, keyed by which slot kind it forces: view.override camera|layout <name|auto>. 'layout' forces the active window layout for every seat; 'camera' resolves every camera-bearing slot to one camera for every seat (the twin of a layout slot's own camera). 'auto' (or '-') clears the override back to the composer's own selection. A BOUND dispatch (a wheel sector or chord row, which carries no tokens) selects the LAYOUT override by its constant Axis1D value: 0 or less clears to auto, n selects the nth authored views.layouts row (document order, 1-based). Gated Control over composition; a denial prints loudly and changes nothing.",
+            description: "LIVE composition override, keyed by which slot kind it forces: view.override camera|layout <name|auto>. 'layout' forces the active window layout for every seat; 'camera' resolves every camera-bearing slot to one camera for every seat (the twin of a layout slot's own camera). 'auto' (or '-') clears the override back to the composer's own selection; 'layout toggle' and 'layout next' cycle the authored layouts. A BOUND dispatch (a wheel sector or chord row, which carries no tokens) selects the LAYOUT override by its constant Axis1D value: -1 toggles, -2 selects the next, n selects the nth authored views.layouts row (document order, 1-based), and any other value clears to auto. Echoes what it submitted ([view.override: layout <name|auto>] or [view.override: camera <name|auto>]) and refuses by name, submitting nothing, a layout or camera the live document does not author, an ordinal past its layouts, and a cycle with no authored layout. Gated Control over composition; a denial prints loudly on stderr and changes nothing.",
             routing: CommandRouting.Simulation,
             valueKind: CommandValueKind.Axis1D,
             handler: (context, args) => {
@@ -131,35 +156,22 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
                     (args.Count == 0)
                 ) {
                     var ordinal = ((int)MathF.Round(x: context.Value.AsAxis1D));
-                    string? layoutName = null;
 
-                    if (ordinal == -1) {
-                        layoutName = composer.ToggleViewportIsolation();
-                    } else if (ordinal == -2) {
-                        layoutName = composer.NextAuthoredLayoutName();
-                    } else if (ordinal >= 1) {
-                        layoutName = composer.AuthoredLayoutName(ordinal: ordinal);
-                        if (layoutName is null) {
-                            return CommandResult.Error(output: $"[view.override: no authored layout at ordinal {ordinal}]");
-                        }
-                    }
-
-                    link.SubmitComposition(
-                        composition: new WorldComposition.SetActiveLayout(Name: layoutName),
-                        principal: context.Principal
-                    );
-
-                    return CommandResult.None;
+                    return (ordinal switch {
+                        -1 => Cycle(context: context, name: composer.ToggleViewportIsolation(), token: "toggle"),
+                        -2 => Cycle(context: context, name: composer.NextAuthoredLayoutName(), token: "next"),
+                        >= 1 => ((composer.AuthoredLayoutName(ordinal: ordinal) is { } layoutName)
+                            ? Submit(context: context, composition: new WorldComposition.SetActiveLayout(Name: layoutName))
+                            : CommandResult.Error(output: $"[view.override: no authored layout at ordinal {ordinal}]")),
+                        _ => Submit(context: context, composition: new WorldComposition.SetActiveLayout(Name: null)),
+                    });
                 }
                 if ((args.Count == 1) && string.Equals(a: args[0].ToString(), b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    var toggleName = composer.ToggleViewportIsolation();
-
-                    link.SubmitComposition(
-                        composition: new WorldComposition.SetActiveLayout(Name: toggleName),
-                        principal: context.Principal
+                    return Cycle(
+                        context: context,
+                        name: composer.ToggleViewportIsolation(),
+                        token: "toggle"
                     );
-
-                    return CommandResult.None;
                 }
                 if (args.Count != 2) {
                     return CommandResult.Usage(
@@ -170,34 +182,30 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
 
                 var target = args[0].ToString();
                 var token = args[1].ToString();
-                string? name;
 
-                if (string.Equals(a: target, b: "layout", comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(a: token, b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    name = composer.ToggleViewportIsolation();
-                } else if (string.Equals(a: target, b: "layout", comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(a: token, b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    name = composer.NextAuthoredLayoutName();
-                } else {
-                    name = ClearOrName(token: token);
+                if (string.Equals(a: target, b: "layout", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    if (string.Equals(a: token, b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                        return Cycle(context: context, name: composer.ToggleViewportIsolation(), token: "toggle");
+                    }
+                    if (string.Equals(a: token, b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                        return Cycle(context: context, name: composer.NextAuthoredLayoutName(), token: "next");
+                    }
+
+                    var layouts = client.Definition.Views.Layouts;
+
+                    return (((ClearOrName(token: token) is { } layout) && !layouts.Any(predicate: candidate => string.Equals(a: candidate.Name, b: layout, comparisonType: StringComparison.Ordinal)))
+                        ? CommandResult.Error(output: $"[view.override: no views.layouts row named '{layout}' — layouts: {NamesOf(names: layouts.Select(selector: static candidate => candidate.Name))}]")
+                        : Submit(context: context, composition: new WorldComposition.SetActiveLayout(Name: ClearOrName(token: token))));
+                }
+                if (string.Equals(a: target, b: "camera", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    var cameras = client.Definition.Cameras;
+
+                    return (((ClearOrName(token: token) is { } camera) && !cameras.Any(predicate: candidate => string.Equals(a: candidate.Name, b: camera, comparisonType: StringComparison.Ordinal)))
+                        ? CommandResult.Error(output: $"[view.override: no camera named '{camera}' — cameras: {NamesOf(names: cameras.Select(selector: static candidate => candidate.Name))}]")
+                        : Submit(context: context, composition: new WorldComposition.SelectCamera(Name: ClearOrName(token: token))));
                 }
 
-                WorldComposition? composition = target switch {
-                    "layout" => new WorldComposition.SetActiveLayout(Name: name),
-                    "camera" => new WorldComposition.SelectCamera(Name: name),
-                    _ => null,
-                };
-
-                if (composition is null) {
-                    return CommandResult.Error(output: $"[view.override: unknown target '{target}' — camera|layout]");
-                }
-
-                link.SubmitComposition(
-                    composition: composition,
-                    principal: context.Principal
-                );
-
-                return CommandResult.None;
+                return CommandResult.Error(output: $"[view.override: unknown target '{target}' — camera|layout]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

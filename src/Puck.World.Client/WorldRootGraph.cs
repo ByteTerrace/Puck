@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SdfVm;
@@ -9,7 +10,8 @@ namespace Puck.World.Client;
 /// <c>sdf.world</c> producers — <see cref="WorldViewGraphs.WorldInstance"/> for the first view and one more per later view
 /// the world can compose (<see cref="WorldViewNames.World"/>) — and, when there is anything to draw over the world, the
 /// root graph (<see cref="WorldViewGraphs.MainInstance"/>) that reads them. The root places each view's output into its
-/// rect with one <c>place</c> pass per view (<c>main$view$&lt;n&gt;</c>), each pane over them with one <c>place</c> pass
+/// rect with one <c>place</c> pass per view (<c>main$view$&lt;n&gt;</c>), the first writing the letterbox color outside
+/// its rect (<see cref="RenderGraphPackageCatalog.PlaceLetterbox"/>) so pixels no view covers show it, each pane over them with one <c>place</c> pass
 /// per <c>views.graphs</c> instance a layout slot names, then runs each <c>render.extensions</c> pass as its
 /// <c>post.&lt;id&gt;</c> package in document order, then the <c>overlay</c> package. With one view and nothing to draw
 /// over it, the producer is the root. The graph is a document value planned by <see cref="RenderGraphCompiler"/>, the one path every
@@ -20,6 +22,7 @@ public sealed class WorldRootGraph {
     private static readonly string FrameVersion = WorldViewNames.Root("frame");
     private static readonly string OverlayPass = WorldViewNames.Root(RenderGraphPackageCatalog.Overlay);
     private static readonly string WorldVersion = WorldViewNames.Root(WorldViewGraphs.WorldInstance);
+    private static readonly JsonElement FirstViewConfig = JsonDocument.Parse(json: $$"""{ "{{RenderGraphPackageCatalog.PlaceLetterbox}}": 1 }""").RootElement.Clone();
 
     private const string PostPart = "post";
     private const string ViewPart = "view";
@@ -178,6 +181,11 @@ public sealed class WorldRootGraph {
                     name: view
                 ));
                 passes.Add(item: new RenderGraphPackagePass(
+                    // The first view is placed over nothing the display shows, so outside its rect it writes the
+                    // letterbox color, which every later view's place pass keeps as its base.
+                    Config: ((index == 0)
+                        ? FirstViewConfig
+                        : null),
                     Inputs: [
                         new ResourceReference(Name: input),
                         new ResourceReference(Name: view),

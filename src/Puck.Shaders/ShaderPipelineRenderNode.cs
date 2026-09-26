@@ -803,6 +803,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 m_pending = null;
                 m_resizePending = false;
                 ConfigureWork();
+                ReleaseUndeclaredBindingHolds();
             }
         } catch (Exception error) {
             m_work.Discard();
@@ -1205,6 +1206,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         ReleaseRetired();
         RetireAllLeases();
+        RetireBindingHolds();
         ReleaseRegions();
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
@@ -1364,6 +1366,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             kind: ShaderPipelineResourceKind.Buffer,
             name: name
         );
+        ReleaseBindingHold(name: name);
         m_externalBuffers[name] = buffer;
     }
     /// <summary>Binds a host-owned image for a named external resource. The node never disposes it. The image must have
@@ -1381,6 +1384,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
             name: name
         );
         ClearLease(name: name);
+        ReleaseBindingHold(name: name);
         m_externalImages[name] = image;
     }
     /// <inheritdoc/>
