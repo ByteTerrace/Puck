@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Machines;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
@@ -12,10 +11,10 @@ using Puck.World.Client;
 namespace Puck.World;
 
 // The screens as the engine node binds them, and the source instances their rows read. A row's producer, machine or probe
-// source is a render-graph source instance: the runtime opens it through the registered producers (and the machine and
-// probe producers below, of the reserved ids), publishes it at its cadence, and hands the world producer its latest
-// image, which the node binds to every screen whose row reads it. Every other image a screen shows the binder renders
-// or holds itself.
+// source is a render-graph source instance: the runtime opens it through the registered producers (and the machine
+// upload and probe producer below, of the reserved ids), renders it at its cadence, and hands the world producer its
+// latest image, which the node binds to every screen whose row reads it. Every other image a screen shows the binder
+// renders or holds itself.
 internal sealed partial class WorldScreenBinder : ISdfScreenSources {
     /// <summary>Gets or sets the render-graph runtime the world renders through, whose source instances this binder reads
     /// a screen's feed, fault and light from; <see langword="null"/> in a presentation with no render graph, which runs no
@@ -63,15 +62,25 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
                 : Vector3.Zero),
         };
     }
-    /// <summary>Creates the producer of a machine source instance (<see cref="WorldImageProducerSettings.MachineId"/>):
-    /// it publishes the named machine output's latest framebuffer once per completed tick and hands out its image.</summary>
+    /// <summary>Creates the upload of a machine source instance (<see cref="WorldImageProducerSettings.MachineId"/>): once per
+    /// completed tick it writes the named machine output's latest complete frame into the instance's region, which the
+    /// runtime converts once however many screens show it.</summary>
     /// <param name="context">The source instance and its settings.</param>
-    /// <returns>The producer, which owns nothing: the machine belongs to <see cref="Server.WorldMachineHost"/>.</returns>
-    public IRenderGraphExternalProducer MachineSource(RenderGraphExternalProducerContext context) => new MachineSourceProducer(
-        binder: this,
-        instance: context.Instance,
-        source: (SourceOf(context: context) as WorldScreenSource.Machine)
-    );
+    /// <returns>The upload, which owns nothing: the machine belongs to <see cref="Server.WorldMachineHost"/>.</returns>
+    public IRenderGraphSourceUpload MachineSource(RenderGraphExternalProducerContext context) {
+        var source = (SourceOf(context: context) as WorldScreenSource.Machine);
+
+        return new MachineVideoSourceUpload(
+            name: context.Instance,
+            output: () => ((source is null)
+                ? null
+                : m_machines.VideoOutput(
+                    instance: source.Instance,
+                    output: source.Output
+                )),
+            producer: WorldImageProducerSettings.MachineId
+        );
+    }
     /// <summary>Creates the producer of a probe source instance (<see cref="WorldImageProducerSettings.ProbeId"/>): it hands
     /// out the probe output's latest published slot, or its capture fill while the gate fills.</summary>
     /// <param name="context">The source instance and its settings.</param>
@@ -150,94 +159,6 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
         });
     }
 
-    // A machine output as a source: published once per completed tick at the output's extent. Its image is written on
-    // this device by the machine's own upload, so its lease needs no retirement.
-    private sealed class MachineSourceProducer(WorldScreenBinder binder, WorldScreenSource.Machine? source, string instance) : IRenderGraphSourceProducer, IGpuWorkSource {
-        private ImageSourceDescriptor? m_descriptor;
-        private IMachineVideoOutput? m_described;
-
-        public ImageSourceDescriptor? Descriptor {
-            get {
-                var output = Output();
-
-                if (!ReferenceEquals(
-                    objA: output,
-                    objB: m_described
-                )) {
-                    m_described = output;
-                    m_descriptor = ((output is null)
-                        ? null
-                        : new ImageSourceDescriptor(
-                            Cadence: ImageSourceCadence.Tick,
-                            Color: ImageColorEncoding.Srgb,
-                            Content: ImageContentClass.Deterministic,
-                            Format: ImagePixelFormat.R8G8B8A8Unorm,
-                            Height: ((uint)output.Height),
-                            Producer: WorldImageProducerSettings.MachineId,
-                            Transport: ImageSourceTransport.Uploaded,
-                            Width: ((uint)output.Width)
-                        ));
-                }
-
-                return m_descriptor;
-            }
-        }
-        public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
-        public string? NotReadyReason => ((Output() is { NativeImageViewHandle: not 0 })
-            ? null
-            : $"machine source '{instance}' has no published frame");
-        public string? PendingCapturePath => null;
-        public IGpuWorkSource Work => this;
-
-        private IMachineVideoOutput? Output() => ((source is null)
-            ? null
-            : binder.m_machines.VideoOutput(
-                instance: source.Instance,
-                output: source.Output
-            ));
-
-        public void Dispose() { }
-        // The binder retires every output it published when the device is lost.
-        public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
-            if (
-                (source is null) ||
-                (Output() is not { } output) ||
-                !context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device)
-            ) {
-                return false;
-            }
-
-            binder.m_presentedMachineOutputs.Publish(
-                deviceContext: device,
-                instance: source.Instance,
-                machine: output,
-                output: source.Output
-            );
-
-            return (output.NativeImageViewHandle != 0);
-        }
-        public void RequestCapture(FrameCaptureRequest request) {
-            ArgumentNullException.ThrowIfNull(argument: request);
-
-            _ = request.TryFail(error: new NotSupportedException(message: $"Source '{instance}' is captured through the instance that shows it."));
-        }
-        public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
-            var handle = (Output()?.NativeImageViewHandle ?? 0);
-
-            output = ((handle == 0)
-                ? default
-                : new RenderGraphExternalOutput(
-                    Image: default,
-                    Layout: GpuImageLayout.ShaderReadOnly,
-                    Lease: handle
-                ));
-
-            return (handle != 0);
-        }
-
-        bool IGpuWorkSource.TryReadCompleted(GpuWorkSample sample) => false;
-    }
     // A probe output as a source: the kernel publishes its slots on its own thread and the binder services the ring each
     // frame, so the source is due once per completed tick only to report whether it is live. The image is external
     // content, handed out through the capture gate.

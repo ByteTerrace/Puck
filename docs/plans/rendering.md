@@ -1200,10 +1200,11 @@ their tier is chosen per device at run time and the HUD reads them outside the
 set, and hand out counted leases. A fill converts as soon as a screen shows or
 a HUD frame names an external source, because a converter's graph builds off
 the frame thread; a camera source's descriptor states the extent its seat's
-sensor delivers, requested until the device negotiates one. The emulators still publish through
-`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, from the machine source
-instance's producer, and hand the screen a bare handle; P12b-6 moves them onto
-a region. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
+sensor delivers, requested until the device negotiates one. A machine's video
+output is an uploaded source too (`MachineVideoSourceUpload`): once per completed
+tick it writes the output's latest frame into the instance's region, RGBA8 or an
+indexed image and its palette, and the instance converts it once however many
+screens show it. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
 through Media Foundation (`Win32MediaFoundationCameraService`). Linux registers
 null capture services, and there is no POSIX file-descriptor import or
 external semaphore.
@@ -3219,15 +3220,30 @@ except step 8.
    camera renders again in the capture frame and reads the fill; a capture
    never reads a tainted output. `puck parity` is unchanged, since an
    offscreen host always fills.
-6. Machine outputs are sources, with the exact verdict. Can land now after
-   step 3; it edits `Puck.GamingBricks`. `QueuedMachineWorker.PublishFrame`'s
-   own upload gives way to a region the machine source writes (RGBA or palette
-   indexed, deterministic, tick cadence); the machine arm stays typed because
-   it names a document row. The P12b canary captures a machine source and the
-   test pattern at their instances, before composition, and holds each exactly
-   to its `IImageSourceReference` through `ImageSourceVerdict` on both
-   backends. Canaries: `instrument-clock-source`, the new canary and the
-   emulator batteries.
+6. Machine outputs are sources, with the exact verdict. Landed. A machine
+   source instance is an uploaded source: `IMachineVideoOutput` declares its
+   `Format` (`R8G8B8A8Unorm`, or `Indexed8` with its palette) and writes its
+   latest complete frame into a region's planes (`WriteFrame`), and
+   `MachineVideoSourceUpload` (`Puck.Hosting`), registered under
+   `source.machine`, writes it once per completed tick, deterministic content,
+   and states the image it last wrote through the CPU reference of the
+   conversion its format names. The machine arm stays typed because it names a
+   document row. `QueuedMachineWorker.PublishFrame`, the output's image-view
+   handle and device-loss retirement, `PublishedMachineOutputs` and the binder's
+   machine producer are gone. A `captures` row may name a `screen`, capturing
+   the source instance that screen reads, and a landed capture of a source
+   instance whose source states its image records the exact verdict against it
+   (`WorldCaptureManifestEntry.SourceVerdict`, narrated on stderr), which
+   `puck parity compare` reads as `SOURCE-OK` or `SOURCE-FAILED`. The
+   `uploaded-sources` canary captures the test pattern at its instance and a
+   tune instrument's machine source through its screen, and holds each to its
+   reference on both backends. Laws: `RenderGraphRuntimeLawTests.AMachineSource*`
+   (one region write and one conversion per completed tick however many screens
+   read it, in both formats; the reference is the output's frame through its
+   palette, and the verdict fails on one changed pixel),
+   `WorldCaptureSchedulerLawTests.ACaptureOfASourceThatStatesItsImageRecordsTheExactVerdictAndOneDifferingPixelFailsIt`,
+   and the emulator batteries' `queued-host-frame-publication` stage (whole
+   frames, header untouched, monotonic sequences while the worker runs).
 7. Probe outputs and view exports are sources. Can land now, after step 4. A
    probe kernel's output ring is an imported external source, and a view
    export (a Direct3D 12 image a Direct3D 11 probe reads) signals the same

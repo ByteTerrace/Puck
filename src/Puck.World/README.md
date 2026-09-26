@@ -1262,17 +1262,16 @@ authority; `screen.insert` and `forge.play` use that executor for named producer
 while `screen.eject` detaches the display. Legacy screen operations remain in the
 protocol. Generic provider operations are refused during recording until the tape
 can capture their execution. A screen showing a machine output reads it as a
-render-graph source instance (package `source.machine`), whose producer in
-`WorldScreenBinder.Sources.cs` calls `IMachineVideoOutput.PublishFrame` once
-per completed tick—the one GPU call this project still makes on a machine's
-behalf—and hands the output's image to the SDF world producer, which binds it
-to every screen showing it. The machines outlive the render
-device, so the binder that published an output's upload also retires it: on
-device loss and when the render chain is torn down, it calls
-`IMachineVideoOutput.NotifyDeviceLost` for every output it has published on
-that device (`PublishedMachineOutputs`, which records an output before it
-publishes, so a publish that loses the device still retires its upload).
-Device loss also retires every probe's shared ring, keeping its request so the
+render-graph source instance (package `source.machine`), an uploaded source:
+once per completed tick its upload (`MachineVideoSourceUpload`, made by the
+binder's `MachineSource`) copies the output's latest complete frame into the
+instance's region (`IMachineVideoOutput.WriteFrame`, in the `Format` the output
+declares: RGBA8, or an indexed image and its palette), the instance converts it
+once however many screens show it, and the SDF world producer binds the
+converted image to every screen showing it. A machine touches no GPU object,
+so nothing of a machine's is retired on device loss. The source is
+deterministic and states the image it last wrote, so a `captures` row naming
+the screen (`screen`) is held to it exactly (`sourceVerdict`). Device loss retires every probe's shared ring, keeping its request so the
 next publish provisions a fresh one, and the Vulkan host's headless camera
 device is disposed only after the last image made on it is released
 (`DisposeAfterDependents`), however late a submitted frame's lease releases

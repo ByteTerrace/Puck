@@ -1297,12 +1297,17 @@ Per capture, these independent verdicts, in order:
    its bound regions at, equals the armed tick. A frame composed after the
    simulation moved on, such as a capture requested in the middle of a
    catch-up burst, fails here rather than as a pixel difference.
-4. **Reference verdict**—only for a station whose contract entry names a
+4. **Source verdict**—only for a capture of a source instance whose source
+   states its image (a `captures` row naming a screen or an uploaded source's
+   instance): each side's `sourceVerdict` must hold, the frame equal to that
+   image of the captured tick, pixel for pixel. `SOURCE-FAILED` prints both
+   sides' verdicts.
+5. **Reference verdict**—only for a station whose contract entry names a
    `reference`: each side must equal the frame computed on the CPU from the
    station's own documents, byte for byte, so a mistake both backends share
    still fails. `REFERENCE-FAILED` names the side, the differing byte count and
    the first differing pixel.
-5. **Pixel verdict**—per-tile mean/max deltas against the station's contract
+6. **Pixel verdict**—per-tile mean/max deltas against the station's contract
    thresholds. A localized defect cannot dilute itself across a whole-frame
    mean.
 

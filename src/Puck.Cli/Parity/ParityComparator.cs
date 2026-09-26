@@ -163,6 +163,25 @@ internal static class ParityComparator {
                 Detail: $"armed at tick {tick}; the left frame refreshed its regions at tick {leftCapture.RegionTick}, the right at tick {rightCapture.RegionTick}"
             )));
 
+        // A capture of a source instance whose source states its image carries its exact verdict against that image; a
+        // station whose captures carry one on either side holds only when both hold.
+        if (
+            (leftCapture.SourceVerdict is not null) ||
+            (rightCapture.SourceVerdict is not null)
+        ) {
+            verdicts.Add(item: (((leftCapture.SourceVerdict is { Holds: true }) && (rightCapture.SourceVerdict is { Holds: true }))
+                ? new ParityCaptureVerdict(
+                    Detail: $"both frames show exactly their source's image ({leftCapture.SourceVerdict.Detail})",
+                    Name: "SOURCE-OK",
+                    Passed: true
+                )
+                : new ParityCaptureVerdict(
+                    Detail: $"left {(leftCapture.SourceVerdict?.Detail ?? "no source verdict")}; right {(rightCapture.SourceVerdict?.Detail ?? "no source verdict")}",
+                    Name: "SOURCE-FAILED",
+                    Passed: false
+                )));
+        }
+
         if (stationContract.Reference is { } reference) {
             verdicts.Add(item: CompareReference(
                 left: leftImage,

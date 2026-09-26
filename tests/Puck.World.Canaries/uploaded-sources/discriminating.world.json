@@ -13,6 +13,19 @@
         "ticks": [
           448
         ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#FFFFFF",
+            "material": 0
+          }
+        ],
+        "screen": 0,
+        "station": "machine",
+        "ticks": [
+          90
+        ]
       }
     ]
   },
@@ -98,5 +111,46 @@
         }
       }
     ]
-  }
+  },
+  "machines": [
+    {
+      "name": "instrument",
+      "engine": "tune-instrument",
+      "configuration": {
+        "schema": "puck.tune-instrument.configuration.v1",
+        "content": {
+          "path": "instrument.audio.json"
+        }
+      }
+    }
+  ],
+  "screens": [
+    {
+      "index": 0,
+      "origin": [
+        0,
+        1,
+        2
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "halfWidth": 1,
+      "halfHeight": 1,
+      "halfDepth": 0.1,
+      "round": 0,
+      "source": {
+        "$type": "machine",
+        "instance": "instrument",
+        "output": "video"
+      }
+    }
+  ]
 }

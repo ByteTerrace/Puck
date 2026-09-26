@@ -4257,6 +4257,10 @@ export type WorldCaptureRow = {
    * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it.
    */
   instance?: string | null;
+  /**
+   * The index of the screen whose source the station captures, before any screen shows it: the source instance the screen reads, which a machine output, a producer or a probe source is. Mutually exclusive with Instance; null (the default) captures by instance.
+   */
+  screen?: number | null;
 };
 
 export type WorldCapturesSection = {

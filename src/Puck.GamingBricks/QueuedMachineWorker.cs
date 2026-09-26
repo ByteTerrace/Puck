@@ -1,8 +1,8 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Sources;
 
 namespace Puck.GamingBricks;
 
@@ -15,8 +15,8 @@ namespace Puck.GamingBricks;
 /// The generic <see cref="Step"/> remains synchronous (submit-and-drain); hosts that recognize the queued capability use
 /// <see cref="Submit"/> to keep commercial-ROM CPU work off their simulation/render pump while the pending-segment window
 /// has capacity. A full window blocks the producer until one exact segment completes rather than dropping or coalescing
-/// authoritative history. A blocked GPU upload leases an immutable complete frame without holding the worker's frame lock,
-/// so it never stalls emulation. The save-flush debounce keys on native-frame transitions, so the interval means native
+/// authoritative history. A consumer copies the latest complete frame under the frame lock (<see cref="WriteFrame"/>), which
+/// the worker holds only to swap its buffers. The save-flush debounce keys on native-frame transitions, so the interval means native
 /// ~59.73 Hz frames regardless of submission cadence.
 /// </para>
 /// <para>
@@ -33,6 +33,8 @@ public sealed class QueuedMachineWorker : IDisposable {
 
     private readonly int m_audioSampleRate;
     private readonly int m_frameByteLength;
+    // The region layout WriteFrame writes: one plane of tightly packed RGBA8 rows.
+    private readonly ImageSourceUploadHeader m_header;
     private readonly int m_height;
     private readonly QueuedWorkerLifecycle<WorkItem> m_lifecycle;
     private readonly int m_maximumPendingSteps;
@@ -42,7 +44,6 @@ public sealed class QueuedMachineWorker : IDisposable {
     // One emulated second of stereo frames, empty while detached. Guarded by m_audioLock: the worker thread pushes and a
     // consumer reads from any thread.
     private StereoSampleRing m_audioRing;
-    private nint m_boundSourceView;
     private long m_checkpointCompletedSteps;
     private IQueuedMachineCore? m_core;
     // The host tick-to-cycle phase: the remainder each engine-tick budget carries into the next conversion.
@@ -60,10 +61,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     private float m_motorLevel;
     private byte[] m_rgbaBack;
     private byte[] m_rgbaFront;
-    private byte[] m_rgbaSpare;
     private MachineTimeTravel<MachinePadState>? m_timeTravel;
-    private IGpuSurfaceUpload? m_upload;
-    private byte[]? m_uploadingFrame;
 
     private static readonly Vector128<byte> RepackShuffle = Vector128.Create(
         e0: ((byte)2),
@@ -86,9 +84,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     private static readonly Vector128<byte> RepackAlpha = Vector128.Create(value: 0xFF000000u).AsByte();
     private readonly Lock m_frameLock = new();
     private readonly Lock m_lifecycleLock = new();
-    private readonly Lock m_uploadLock = new();
     private readonly Lock m_audioLock = new();
-    private long m_publishedFrameVersion = -1L;
 
     /// <summary>Creates a worker sized for a fixed native framebuffer, staging an opaque black frame until a core is
     /// attached.</summary>
@@ -120,6 +116,12 @@ public sealed class QueuedMachineWorker : IDisposable {
         m_width = width;
         m_height = height;
         m_frameByteLength = ((width * height) * 4);
+        m_header = ImageSourceUploadLayout.HeaderOf(
+            color: ImageColorEncoding.Srgb,
+            format: ImagePixelFormat.R8G8B8A8Unorm,
+            height: ((uint)height),
+            width: ((uint)width)
+        );
         m_maximumPendingSteps = maximumPendingSteps;
         m_audioSampleRate = audioSampleRate;
         m_audioRing.Configure(capacityFrames: audioSampleRate);
@@ -131,7 +133,6 @@ public sealed class QueuedMachineWorker : IDisposable {
         );
         m_rgbaFront = new byte[m_frameByteLength];
         m_rgbaBack = new byte[m_frameByteLength];
-        m_rgbaSpare = new byte[m_frameByteLength];
 
         StageBlackFrame();
     }
@@ -174,9 +175,6 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
         }
     }
-    /// <summary>Gets the native image-view handle of the published framebuffer, or 0 before the first publish (or after a
-    /// device loss).</summary>
-    public nint NativeImageViewHandle => m_boundSourceView;
     /// <summary>Gets the framebuffer's height, in pixels.</summary>
     public int Height => m_height;
     /// <summary>Gets the framebuffer's width, in pixels.</summary>
@@ -408,23 +406,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     }
     private void PublishBackBuffer(Vector3 light) {
         lock (m_frameLock) {
-            var previousFront = m_rgbaFront;
-
-            m_rgbaFront = m_rgbaBack;
-
-            // Upload consumes its leased source synchronously by contract, but the worker may publish several newer frames
-            // before that call returns. Keep the leased array out of the worker's write rotation until release; the fixed
-            // spare makes this bounded and allocation-free without holding the frame lock during GPU work.
-            if (ReferenceEquals(
-                objA: previousFront,
-                objB: m_uploadingFrame
-            )) {
-                m_rgbaBack = m_rgbaSpare;
-                m_rgbaSpare = previousFront;
-            } else {
-                m_rgbaBack = previousFront;
-            }
-
+            (m_rgbaFront, m_rgbaBack) = (m_rgbaBack, m_rgbaFront);
             m_emittedLight = light;
             ++m_frameVersion;
         }
@@ -799,12 +781,6 @@ public sealed class QueuedMachineWorker : IDisposable {
         lock (m_lifecycleLock) {
             DetachCore();
         }
-
-        lock (m_uploadLock) {
-            m_upload?.Dispose();
-            m_upload = null;
-            m_boundSourceView = 0;
-        }
     }
     /// <summary>Detaches the core (draining accepted history and disposing it) and returns the framebuffer to black.</summary>
     public void Eject() {
@@ -916,16 +892,6 @@ public sealed class QueuedMachineWorker : IDisposable {
             StartWorker(core: core);
         }
     }
-    /// <summary>Drops the GPU upload after a device loss: the next <see cref="PublishFrame"/> rebuilds it on the fresh
-    /// device. The core's CPU state survives untouched.</summary>
-    public void NotifyDeviceLost() {
-        lock (m_uploadLock) {
-            m_upload?.Dispose();
-            m_upload = null;
-            m_boundSourceView = 0;
-            m_publishedFrameVersion = -1L;
-        }
-    }
     /// <summary>Reads one byte from the attached core's bus address space through the worker (marshaled between steps),
     /// so a host's <see cref="IMachineMemoryPeek.PeekByte"/> never races the running core. Returns 0 when no core is
     /// attached.</summary>
@@ -960,54 +926,6 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <param name="value">The byte to store.</param>
     public void PokeByte(int address, byte value) =>
         RunMemoryAccess(request: new MemoryRequest { Address = address, IsWrite = true, Value = value });
-    /// <summary>Uploads the staged framebuffer to a shader-readable GPU image and (re)binds
-    /// <see cref="NativeImageViewHandle"/>. A blocked upload leases an immutable complete frame without holding the frame
-    /// lock, so the worker keeps publishing newer frames while it runs; concurrent publishes serialize.</summary>
-    /// <param name="deviceContext">The GPU device context to upload on, through its services.</param>
-    public void PublishFrame(IGpuDeviceContext deviceContext) {
-        ArgumentNullException.ThrowIfNull(argument: deviceContext);
-
-        if (0 != Volatile.Read(location: ref m_disposed)) {
-            return;
-        }
-
-        lock (m_uploadLock) {
-            if (0 != Volatile.Read(location: ref m_disposed)) {
-                return;
-            }
-
-            byte[] pixels;
-            long frameVersion;
-
-            lock (m_frameLock) {
-                if (
-                    (0 != m_boundSourceView) &&
-                    (m_publishedFrameVersion == m_frameVersion)
-                ) {
-                    return;
-                }
-
-                pixels = m_rgbaFront;
-                frameVersion = m_frameVersion;
-                m_uploadingFrame = pixels;
-            }
-
-            try {
-                m_upload ??= deviceContext.Services.SurfaceTransferFactory.CreateUpload();
-                m_boundSourceView = m_upload.Upload(
-                    format: GpuPixelFormat.R8G8B8A8Unorm,
-                    height: ((uint)m_height),
-                    pixels: pixels,
-                    width: ((uint)m_width)
-                );
-                m_publishedFrameVersion = frameVersion;
-            } finally {
-                lock (m_frameLock) {
-                    m_uploadingFrame = null;
-                }
-            }
-        }
-    }
     /// <summary>Publishes one link-driven step's results through this worker's own surfaces — the framebuffer stage,
     /// the audio ring drain, the feedback sample, the completed-step count, and the native-frame-keyed save-flush
     /// debounce — so a linked member looks exactly like an independently stepped one to every consumer. Call on the
@@ -1226,6 +1144,28 @@ public sealed class QueuedMachineWorker : IDisposable {
             forceStage: false,
             input: in input
         );
+    /// <summary>Writes the latest complete frame into an uploaded source's region: its one plane of tightly packed RGBA8
+    /// rows, at <see cref="ImageSourceUploadLayout.HeaderOf"/>'s offset for this worker's extent, leaving the header as it
+    /// is. The copy runs under the frame lock, which the worker holds only to swap its buffers, so the frame is written
+    /// whole however the worker runs meanwhile.</summary>
+    /// <param name="region">The region; at least <see cref="ImageSourceUploadLayout.ByteCount"/> bytes of the RGBA8
+    /// layout of <see cref="Width"/> by <see cref="Height"/>.</param>
+    /// <returns>The written frame's sequence number: positive, and rising once per staged frame, the opaque black frame a
+    /// worker stages with no core attached included.</returns>
+    /// <exception cref="ArgumentException"><paramref name="region"/> is shorter than the layout.</exception>
+    public long WriteFrame(Span<byte> region) {
+        var plane = ImageSourceUploadLayout.PlaneOf(
+            header: in m_header,
+            plane: 0,
+            region: region
+        );
+
+        lock (m_frameLock) {
+            m_rgbaFront.CopyTo(destination: plane);
+
+            return m_frameVersion;
+        }
+    }
 
     private enum WorkKind {
         Step,

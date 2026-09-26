@@ -12,7 +12,9 @@ internal sealed record ParityManifest(
 /// <c>cameraInside</c>, <c>busy</c>, <c>stale</c>, <c>failed</c>, <c>unserved</c> or <c>deviceLost</c>, with <see cref="Detail"/>
 /// naming the ticks involved — so <see cref="Frame"/>, <see cref="Census"/> and <see cref="RegionTick"/> are
 /// <see langword="null"/>, and only <see cref="StateHash"/>, the sim-state summary at the armed tick, is meaningful. A
-/// landed frame carries <see cref="RegionTick"/>, the tick the frame refreshed its bound regions at.</summary>
+/// landed frame carries <see cref="RegionTick"/>, the tick the frame refreshed its bound regions at, and a landed capture
+/// of a source instance whose source states its image carries <see cref="SourceVerdict"/>, its exact verdict against that
+/// image.</summary>
 internal sealed record ParityManifestCapture(
     string Station,
     ulong Tick,
@@ -21,5 +23,10 @@ internal sealed record ParityManifestCapture(
     string? Refusal,
     string? Detail,
     string? Frame,
-    IReadOnlyDictionary<string, long>? Census
+    IReadOnlyDictionary<string, long>? Census,
+    ParityManifestSourceVerdict? SourceVerdict = null
 );
+/// <summary>A landed capture's exact verdict against the image its source states it shows.</summary>
+/// <param name="Holds">Whether every pixel matched the source's reference of the captured tick.</param>
+/// <param name="Detail">The verdict's prose.</param>
+internal sealed record ParityManifestSourceVerdict(bool Holds, string Detail);

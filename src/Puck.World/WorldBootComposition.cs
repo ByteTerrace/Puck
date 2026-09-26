@@ -586,6 +586,13 @@ public static class WorldBootComposition {
                     : () => renderProbe.RegionTick
                 ),
                 server: server,
+                sources: (((renderProbe is not null) && (sp.GetService<WorldScreenBinder>() is { } binder))
+                    ? new WorldCaptureSources(
+                        binder: binder,
+                        probe: renderProbe
+                    )
+                    : null
+                ),
                 worldFile: Path.GetFileName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath)
             );
         });

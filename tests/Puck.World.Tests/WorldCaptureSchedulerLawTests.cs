@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Sources;
 using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Commands;
@@ -150,7 +151,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         private readonly HostRow m_row;
         private readonly ulong m_stepTicks;
 
-        public Run(string directory, bool honoursFrames, bool serves, bool losesDevice = false, string? secondInstance = null, bool rendersWorld = true) {
+        public Run(string directory, bool honoursFrames, bool serves, bool losesDevice = false, string? secondInstance = null, bool rendersWorld = true, int? secondScreen = null, IWorldCaptureSources? sources = null) {
             m_row = HostRow.Build(
                 definition: (Fixtures.BuildDocument() with {
                     Captures = new WorldCapturesSection(
@@ -165,6 +166,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                                 tick: SecondTick
                             ) with {
                                 Instance = secondInstance,
+                                Screen = secondScreen,
                             }),
                         ]
                     ),
@@ -191,6 +193,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                 directory: directory,
                 regionTick: () => (m_row.Server.NextInputTick - 1UL),
                 server: m_row.Server,
+                sources: sources,
                 worldFile: "fixture.world.json"
             );
             Simulation = new CaptureStepSimulation(
@@ -251,6 +254,42 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         public void Dispose() {
             m_router.Dispose();
             m_row.Dispose();
+        }
+    }
+    // The sources a row naming screen 0 captures: screen 0 reads the world instance, whose reference is the frame the
+    // capture landed, one pixel of it changed when asked, stating the tick it is asked to.
+    private sealed class CaptureSources(int? differingPixel, string framePath, ulong statedTick) : IWorldCaptureSources, IImageSourceReference {
+        public ImageSourceDescriptor Descriptor { get; } = new(
+            Cadence: ImageSourceCadence.Tick,
+            Color: ImageColorEncoding.Srgb,
+            Content: ImageContentClass.Deterministic,
+            Format: ImagePixelFormat.R8G8B8A8Unorm,
+            Height: 2U,
+            Producer: "law",
+            Transport: ImageSourceTransport.Uploaded,
+            Width: 8U
+        );
+        public bool Reads { get; init; } = true;
+
+        public string? InstanceOf(int screen) => ((Reads && (screen == 0))
+            ? WorldViewGraphs.WorldInstance
+            : null);
+        public IImageSourceReference? ReferenceOf(string instance) => ((instance == WorldViewGraphs.WorldInstance)
+            ? this
+            : null);
+        public bool TryWriteReference(Span<byte> rgba, out ImageSourceStamp stamp) {
+            PngDecoder.Decode(pngBytes: File.ReadAllBytes(path: framePath)).RgbaPixels.CopyTo(destination: rgba);
+
+            if (differingPixel is { } pixel) {
+                rgba[(pixel * 4)] ^= 0xFE;
+            }
+
+            stamp = new ImageSourceStamp(
+                Sequence: 1UL,
+                Tick: statedTick
+            );
+
+            return true;
         }
     }
 
@@ -370,6 +409,65 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             actual: ReadManifest(directory: m_directory.RootPath).Select(selector: static entry => $"{entry.GetProperty(propertyName: "station").GetString()}:{entry.GetProperty(propertyName: "tick").GetUInt64()}:{(entry.TryGetProperty(propertyName: "refusal", value: out var refusal) ? refusal.GetString() : string.Empty)}:{(entry.TryGetProperty(propertyName: "detail", value: out var detail) ? detail.GetString() : string.Empty)}")
         );
         Assert.Empty(collection: unknown.WorldTarget.Served);
+    }
+    [Fact]
+    public void ACaptureOfASourceThatStatesItsImageRecordsTheExactVerdictAndOneDifferingPixelFailsIt() {
+        // The second row captures screen 0's source, which reads the world instance here; its reference is the landed
+        // frame, or the landed frame with one pixel changed.
+        string[] Verdicts(int? differingPixel, ulong statedTick = SecondTick) {
+            var sources = new CaptureSources(
+                differingPixel: differingPixel,
+                framePath: Path.Combine(path1: m_directory.RootPath, path2: "second~30.png"),
+                statedTick: statedTick
+            );
+
+            using (var run = new Run(
+                directory: m_directory.RootPath,
+                honoursFrames: true,
+                secondScreen: 0,
+                serves: true,
+                sources: sources
+            )) {
+                run.BurstThenDrain();
+                Assert.Single(collection: run.WorldTarget.Served);
+            }
+
+            return [.. ReadManifest(directory: m_directory.RootPath).Select(selector: static entry => (entry.TryGetProperty(propertyName: "sourceVerdict", value: out var verdict)
+                ? $"{verdict.GetProperty(propertyName: "holds").GetBoolean()}:{verdict.GetProperty(propertyName: "detail").GetString()}"
+                : "none"))];
+        }
+
+        Assert.Equal(expected: ["none", "True:law 8x2 exact"], actual: Verdicts(differingPixel: null));
+        var differing = Verdicts(differingPixel: 11);
+
+        Assert.Equal(expected: "none", actual: differing[0]);
+        Assert.StartsWith(expectedStartString: "False:law 8x2 1 pixel(s) differ; first at (3, 1) expected #FF0000", actualString: differing[1]);
+        Assert.Equal(expected: ["none", "False:source 'world' states the image of tick 29, and the capture shows tick 30"], actual: Verdicts(differingPixel: null, statedTick: (SecondTick - 1UL)));
+    }
+    [Fact]
+    public void ARowNamingAScreenThatReadsNoSourceInstanceIsRefusedByName() {
+        using var run = new Run(
+            directory: m_directory.RootPath,
+            honoursFrames: true,
+            secondScreen: 0,
+            serves: true,
+            sources: new CaptureSources(
+                differingPixel: null,
+                framePath: string.Empty,
+                statedTick: SecondTick
+            ) {
+                Reads = false,
+            }
+        );
+
+        run.BurstThenDrain();
+        Assert.Equal(
+            expected: "failed:the render graph cannot capture screen 0's source (screen 0 reads no source instance)",
+            actual: ((ReadManifest(directory: m_directory.RootPath)[1] is var entry)
+                ? $"{entry.GetProperty(propertyName: "refusal").GetString()}:{entry.GetProperty(propertyName: "detail").GetString()}"
+                : null)
+        );
+        Assert.Empty(collection: run.WorldTarget.Served);
     }
     [Fact]
     public void ControlWithoutTheFrameStopTheBurstRefusesBothCapturesByName() {

@@ -6,8 +6,8 @@ namespace Puck.World.Server;
 /// <summary>One declared screen's machine-side live state for the <c>screen.state</c> verb — whether a machine is
 /// assigned, the engine that hosts it, the stepped-frame count, and the boot fault (a declared machine whose content
 /// file was missing, an unresolved engine, rejected options), if any. Carries no GPU-facing fields (no image-view
-/// handle, no light) — those are presentation reads over <see cref="IWorldMachineHost.Handle"/>/
-/// <see cref="IWorldMachineHost.Light"/>, which <c>Puck.World.WorldScreenBinder</c> (a pure reader) composes into the
+/// handle, no light) — those are presentation reads (the image the engine binds for the screen's source instance, and
+/// <see cref="IWorldMachineHost.Light"/>), which <c>Puck.World.WorldScreenBinder</c> (a pure reader) composes into the
 /// same console line.</summary>
 /// <param name="Assigned">Whether a machine is booted on the screen.</param>
 /// <param name="Engine">The screen-machine engine id hosting the machine (meaningful only when <paramref name="Assigned"/>).</param>
@@ -123,10 +123,6 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     IAudioMachine? AudioMachine(int index);
     /// <summary>Describes every live cable link in one line (the <c>screen.links</c> query), or <c>none</c>.</summary>
     string DescribeLinks();
-    /// <summary>Returns the current same-device framebuffer image-view handle bound to a screen index, or 0 when unbound, not
-    /// declared, or the machine has not published a frame yet — the presentation read.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    nint Handle(int index);
     /// <summary>Determines whether a screen-machine engine is registered under <paramref name="engineId"/>.</summary>
     /// <param name="engineId">The candidate engine id.</param>
     bool HasEngine(string engineId);

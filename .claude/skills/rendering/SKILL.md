@@ -289,8 +289,12 @@ These are one-line cautions; the owning pages hold the derivations.
   `IWorldUploadFeed` or an `IWorldImportFeed`, never both. A producer that is not uploaded is adapted to `WorldImageFeedProducer`
   (`WorldScreenBinder.Adapt`), whose `TryAcquireOutput` is the one place its
   image is acquired, through `WorldCaptureGate.Resolve`, so a filled source hands
-  out its fill and never acquires the feed; the machine and probe ids register
-  the binder's `MachineSource` and `ProbeSource`. Such a source hands out an
+  out its fill and never acquires the feed; the probe id registers the binder's
+  `ProbeSource`. The machine id registers an upload, the binder's
+  `MachineSource`, a `MachineVideoSourceUpload` (`Puck.Hosting`) that writes the
+  output's latest frame (`IMachineVideoOutput.WriteFrame`, RGBA8 or `Indexed8`)
+  into the instance's region once per completed tick; a machine never uploads
+  an image of its own. Such an imported source hands out an
   image view alone (an empty `RenderGraphExternalOutput.Image`, the view on the
   lease), so only an external producer samples it, and a graph instance
   reading it draws a stand-in (`RenderGraphRuntime.Bind`).
@@ -1114,7 +1118,11 @@ builds the engine node, the packages and the runtime for both GPU shapes, and
 `RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
 what captures, `world.screenshot` and readiness read. A `captures` row may name
 `world` (`WorldCaptureRow.Instance`) to capture the world beneath the root's
-passes.
+passes, or a screen (`WorldCaptureRow.Screen`) to capture the source instance it
+reads; a capture of a source that states its image (`IImageSourceReference`)
+records `ImageSourceVerdict`'s exact verdict (`WorldCaptureManifestEntry.SourceVerdict`,
+resolved through `IWorldCaptureSources`), which `puck parity compare` reads as
+`SOURCE-OK`/`SOURCE-FAILED`.
 
 `views.graphs` rows run on the same runtime. `WorldViewGraphHost`
 (`src/Puck.World.Client/WorldViewGraphHost*.cs`) drives it through

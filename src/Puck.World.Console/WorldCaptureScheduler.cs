@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Sources;
 using Puck.Assets;
 using Puck.Hosting;
 using Puck.Maths;
@@ -44,6 +45,8 @@ public enum WorldCaptureRefusal : byte {
 /// <param name="Refusal">Why no frame was written, or <see langword="null"/> when the frame landed.</param>
 /// <param name="Detail">The refusal's prose, naming the ticks involved, or <see langword="null"/> when the frame
 /// landed.</param>
+/// <param name="SourceVerdict">The exact verdict of a landed capture of a source instance whose source states the image
+/// it shows, or <see langword="null"/> for any other capture.</param>
 public sealed record WorldCaptureManifestEntry(
     string Station,
     ulong Tick,
@@ -52,8 +55,17 @@ public sealed record WorldCaptureManifestEntry(
     [property: JsonPropertyName("stateHash")] string StateHash,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, long>? Census,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCaptureRefusal? Refusal,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Detail
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Detail,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCaptureSourceVerdict? SourceVerdict = null
 );
+/// <summary>The exact verdict a landed capture of a source instance gets against the image its source states it shows
+/// (<see cref="ImageSourceVerdict"/>): whether every pixel matched, and the verdict or the reason none could be
+/// reached.</summary>
+/// <param name="Holds">Whether the capture shows exactly the source's reference, of the tick the capture was rendered
+/// at.</param>
+/// <param name="Detail">The verdict's prose: the producer, the extent and <c>exact</c>, the count and first of the
+/// differing pixels, or why the source's reference could not be compared.</param>
+public sealed record WorldCaptureSourceVerdict(bool Holds, string Detail);
 /// <summary>The <c>manifest.json</c> document a capture run writes into its output directory.</summary>
 /// <param name="Schema">The manifest schema identifier, <see cref="SchemaId"/>.</param>
 /// <param name="Backend">The graphics backend that rendered the frames: <c>vulkan</c> or <c>directx</c>.</param>
@@ -84,6 +96,13 @@ public sealed record WorldCaptureManifest(string Schema, string Backend, string 
 /// earlier tick was still unserved, which a holding host keeps at zero, and <see cref="HeldTicks"/>, the host time
 /// withheld.
 /// </para>
+/// <para>
+/// A capture of a source instance (a row naming a screen, or an instance that is an uploaded source) whose source states
+/// the image it shows (<see cref="IImageSourceReference"/>) gets the exact verdict too (<see cref="ImageSourceVerdict"/>):
+/// the landed frame against the source's reference, which must state the tick the frame was rendered at. The entry
+/// records it (<see cref="WorldCaptureManifestEntry.SourceVerdict"/>), and stderr narrates it as
+/// <c>[captures] &lt;station&gt; tick &lt;tick&gt;: verdict &lt;detail&gt;</c>.
+/// </para>
 /// </summary>
 /// <remarks>
 /// The camera-inside check reads <see cref="WorldServer.SolidField"/> — the same field <c>world.collision.probe</c>
@@ -93,7 +112,7 @@ public sealed record WorldCaptureManifest(string Schema, string Backend, string 
 /// Every member runs on the host pump.
 /// </remarks>
 public sealed class WorldCaptureScheduler {
-    private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, FrameCaptureRequest Request, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette);
+    private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, FrameCaptureRequest Request, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette, string? Instance);
 
     private static readonly JsonSerializerOptions ManifestSerializerOptions = new() {
         Converters = { new JsonStringEnumConverter(namingPolicy: JsonNamingPolicy.CamelCase) },
@@ -114,6 +133,7 @@ public sealed class WorldCaptureScheduler {
     private readonly WorldServer m_server;
     private readonly IWorldEngineReadiness? m_readiness;
     private readonly Func<ulong?>? m_regionTick;
+    private readonly IWorldCaptureSources? m_sources;
     private readonly string m_worldFile;
 
     private readonly WorkCounterSet m_work = new(
@@ -144,9 +164,12 @@ public sealed class WorldCaptureScheduler {
     /// <param name="regionTick">Reads the simulation tick the frame being composed refreshed its bound regions at, which
     /// each capture records from the frame that serves it (<see cref="WorldCaptureManifestEntry.RegionTick"/>);
     /// <see langword="null"/> for a boot that composes no renderer.</param>
+    /// <param name="sources">The source instance each screen reads, which a row naming a screen captures, and the images
+    /// deterministic sources state they show, which a capture of one is held to; <see langword="null"/> for a boot that
+    /// composes no renderer, where a row naming a screen captures nothing.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/>, <paramref name="directory"/>,
     /// <paramref name="backend"/>, or <paramref name="worldFile"/> is <see langword="null"/>.</exception>
-    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null, Func<ulong?>? regionTick = null) {
+    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null, Func<ulong?>? regionTick = null, IWorldCaptureSources? sources = null) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: backend);
@@ -159,6 +182,7 @@ public sealed class WorldCaptureScheduler {
         m_captureTarget = captureTarget;
         m_readiness = readiness;
         m_regionTick = regionTick;
+        m_sources = sources;
         m_state = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => server.Definition));
 
         if (server.Definition.Captures is not { Rows: { } rows }) {
@@ -314,12 +338,20 @@ public sealed class WorldCaptureScheduler {
         }
 
         ICaptureRequestTarget? target;
+        var instance = row.Instance;
 
         try {
-            target = m_captureTarget?.Invoke(arg: row.Instance);
+            if (
+                (m_captureTarget is not null) &&
+                (row.Screen is { } screen)
+            ) {
+                instance = (m_sources?.InstanceOf(screen: screen) ?? throw new ArgumentException(message: $"screen {screen} reads no source instance"));
+            }
+
+            target = m_captureTarget?.Invoke(arg: instance);
         } catch (ArgumentException exception) {
             Refuse(
-                detail: $"the render graph cannot capture instance '{row.Instance}' ({exception.Message})",
+                detail: $"the render graph cannot capture {((row.Screen is { } named) ? $"screen {named}'s source" : $"instance '{row.Instance}'")} ({exception.Message})",
                 refusal: WorldCaptureRefusal.Failed,
                 stateHash: stateHash,
                 station: row.Station,
@@ -399,6 +431,7 @@ public sealed class WorldCaptureScheduler {
 
         m_pending = new Pending(
             FrameName: frameName,
+            Instance: instance,
             Palette: row.Palette,
             Path: path,
             Request: request,
@@ -737,6 +770,12 @@ public sealed class WorldCaptureScheduler {
             return;
         }
 
+        var verdict = Judge(
+            image: image,
+            pending: pending,
+            regionTick: result.Tick
+        );
+
         Record(entry: new WorldCaptureManifestEntry(
             Census: ComputeCensus(
                 image: image,
@@ -746,10 +785,63 @@ public sealed class WorldCaptureScheduler {
             Frame: pending.FrameName,
             RegionTick: result.Tick,
             Refusal: null,
+            SourceVerdict: verdict,
             StateHash: ToHex(hash: pending.StateHash),
             Station: pending.Station.Value,
             Tick: pending.Tick
         ));
+    }
+    // Holds a landed capture of a source instance to the image its source states it shows, when the source states one:
+    // the reference must state the tick the frame was rendered at, and every pixel must match it exactly.
+    private WorldCaptureSourceVerdict? Judge(Pending pending, PngImage image, ulong? regionTick) {
+        if (
+            (pending.Instance is not { } instance) ||
+            (m_sources?.ReferenceOf(instance: instance) is not { } reference)
+        ) {
+            return null;
+        }
+
+        var descriptor = reference.Descriptor;
+        var expected = new byte[checked((int)((((ulong)descriptor.Width) * descriptor.Height) * 4UL))];
+        WorldCaptureSourceVerdict verdict;
+
+        if (!reference.TryWriteReference(
+            rgba: expected,
+            stamp: out var stamp
+        )) {
+            verdict = new(
+                Detail: $"source '{instance}' states no image",
+                Holds: false
+            );
+        } else if (stamp.Tick != regionTick) {
+            verdict = new(
+                Detail: $"source '{instance}' states the image of tick {stamp.Tick}, and the capture shows tick {(regionTick?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}",
+                Holds: false
+            );
+        } else if (
+            (image.Width != descriptor.Width) ||
+            (image.Height != descriptor.Height)
+        ) {
+            verdict = new(
+                Detail: $"the capture is {image.Width}x{image.Height}, and source '{instance}' is {descriptor.Width}x{descriptor.Height}",
+                Holds: false
+            );
+        } else {
+            var result = ImageSourceVerdict.Compare(
+                actual: image.RgbaPixels,
+                descriptor: descriptor,
+                expected: expected
+            );
+
+            verdict = new(
+                Detail: result.ToString(),
+                Holds: result.Holds
+            );
+        }
+
+        Console.Error.WriteLine(value: $"[captures] {pending.Station} tick {pending.Tick}: verdict {verdict.Detail}.");
+
+        return verdict;
     }
     private void Record(WorldCaptureManifestEntry entry) {
         m_landed.Add(item: entry);

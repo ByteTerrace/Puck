@@ -126,6 +126,53 @@ public sealed class WorldPresentationNameLawTests {
             );
         }
     }
+    // A row names a screen whose source is a source instance (a machine output, a producer, a probe); a screen showing
+    // anything else, an undeclared screen, and a row naming both a screen and an instance are refused naming the row.
+    [Fact]
+    public void ACaptureRowNamesAScreenWhoseSourceIsASourceInstanceAndNoOther() {
+        var captured = WithCaptureStation(station: "lattice");
+        var screen = captured.Screens[0];
+
+        string RefusalOf(WorldScreenSource source, int index, string? instance = null) => Refusal(definition: captured with {
+            Captures = captured.Captures! with {
+                Rows = [captured.Captures.Rows[0] with { Instance = instance, Screen = index }],
+            },
+            ScreensRaw = [screen with { Source = source }],
+        });
+        var machine = new WorldScreenSource.Machine(
+            Instance: "cabinet",
+            Output: "video"
+        );
+        var pattern = WorldImageProducerSettings.SourceOf(
+            id: WorldImageProducerSettings.TestPatternId,
+            settings: new WorldTestPatternSettings(
+                Height: 4,
+                Width: 4
+            )
+        );
+
+        Assert.DoesNotContain(
+            actualString: RefusalOf(index: screen.Index, source: machine),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "captures.rows[0]"
+        );
+        Assert.Equal(expected: string.Empty, actual: RefusalOf(index: screen.Index, source: pattern));
+        Assert.Contains(
+            actualString: RefusalOf(index: screen.Index, source: new WorldScreenSource.None()),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"captures.rows[0].screen {screen.Index} shows no machine, producer or probe source"
+        );
+        Assert.Contains(
+            actualString: RefusalOf(index: (screen.Index + 7), source: pattern),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"captures.rows[0].screen {(screen.Index + 7)} names no declared screen"
+        );
+        Assert.Contains(
+            actualString: RefusalOf(index: screen.Index, instance: WorldViewGraphs.WorldInstance, source: pattern),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"captures.rows[0] names both instance 'world' and screen {screen.Index}"
+        );
+    }
     // The control: stations that differ in more than case are admitted together.
     [Fact]
     public void CaptureStationsThatDifferInMoreThanCaseAreAdmitted() {

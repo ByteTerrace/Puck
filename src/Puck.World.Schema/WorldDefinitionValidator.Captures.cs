@@ -75,6 +75,18 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.instance '{instance}' names no render-graph instance a capture can read: name a views.graphs row, '{WorldViewGraphs.WorldInstance}' for the SDF world before its post passes and overlay in a world that names no root, or omit it for the root.");
             }
 
+            // A screen's capture reads the source instance its row's source is, which only a machine, producer or probe
+            // source has.
+            if (row.Screen is { } screen) {
+                if (row.Instance is not null) {
+                    errors.Add(item: $"{path} names both instance '{row.Instance}' and screen {screen}; a station captures one of them.");
+                } else if (definition.Screens.FirstOrDefault(predicate: candidate => (candidate.Index == screen)) is not { } shown) {
+                    errors.Add(item: $"{path}.screen {screen} names no declared screen.");
+                } else if (shown.Source is not (WorldScreenSource.Machine or WorldScreenSource.Producer or WorldScreenSource.Probe)) {
+                    errors.Add(item: $"{path}.screen {screen} shows no machine, producer or probe source, so it reads no source instance a capture can read.");
+                }
+            }
+
             ValidateCaptureTicks(
                 errors: errors,
                 path: path,

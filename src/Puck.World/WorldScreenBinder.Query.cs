@@ -103,7 +103,7 @@ internal sealed partial class WorldScreenBinder {
             return new WorldScreenState(
                 Assigned: true,
                 Engine: machineState.Engine,
-                Handle: m_machines.Handle(index: index),
+                Handle: CurrentHandle(index: index),
                 FramesStepped: machineState.FramesStepped,
                 PendingSteps: machineState.PendingSteps,
                 MaximumPendingSteps: machineState.MaximumPendingSteps,

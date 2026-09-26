@@ -29,8 +29,12 @@ public sealed record WorldCapturePaletteEntry(int Material, string Color);
 /// <param name="Instance">The render-graph instance whose output the station captures, or <see langword="null"/> (the
 /// default) for the root, the frame the display shows. <see cref="WorldViewGraphs.WorldInstance"/> captures the SDF
 /// world before any <c>views.post</c> pass or the overlay is drawn over it.</param>
+/// <param name="Screen">The index of the screen whose source the station captures, before any screen shows it: the
+/// source instance the screen reads, which a machine output, a producer or a probe source is. Mutually exclusive with
+/// <paramref name="Instance"/>; <see langword="null"/> (the default) captures by instance.</param>
 public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Ticks, IReadOnlyList<WorldCapturePaletteEntry> Palette,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instance = null) {
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instance = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? Screen = null) {
     /// <summary>The generated name of one capture: the station and the tick joined as a file name
     /// (<see cref="GeneratedName.JoinFile"/>), <c>lattice~860</c>. The capture's frame is this name with <c>.png</c>,
     /// and a parity comparison's evidence directory for it is this name. The tick is decimal digits and the station

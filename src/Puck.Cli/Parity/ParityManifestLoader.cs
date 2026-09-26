@@ -58,7 +58,8 @@ internal static class ParityManifestLoader {
             "stateHash",
             "census",
             "refusal",
-            "detail"
+            "detail",
+            "sourceVerdict"
         );
 
         var station = CliStrictJson.ReadRequiredString(
@@ -103,14 +104,19 @@ internal static class ParityManifestLoader {
             propertyName: "regionTick",
             value: out _
         );
+        var hasSourceVerdict = row.TryGetProperty(
+            propertyName: "sourceVerdict",
+            value: out _
+        );
 
         if (hasRefusal) {
             if (
                 hasFrame ||
                 hasCensus ||
-                hasRegionTick
+                hasRegionTick ||
+                hasSourceVerdict
             ) {
-                throw new ParityDocumentRefusal(message: $"{context} carries a refusal, so frame, census and regionTick must be absent.");
+                throw new ParityDocumentRefusal(message: $"{context} carries a refusal, so frame, census, regionTick and sourceVerdict must be absent.");
             }
 
             var refusal = CliStrictJson.ReadRequiredString(
@@ -135,6 +141,7 @@ internal static class ParityManifestLoader {
                 Frame: null,
                 Refusal: refusal,
                 RegionTick: null,
+                SourceVerdict: null,
                 StateHash: stateHash,
                 Station: station,
                 Tick: tick
@@ -176,9 +183,50 @@ internal static class ParityManifestLoader {
                 element: row,
                 member: "regionTick"
             ),
+            SourceVerdict: (hasSourceVerdict
+                ? ReadSourceVerdict(
+                    context: $"{context}.sourceVerdict",
+                    element: CliStrictJson.ReadRequiredObject(
+                        context: context,
+                        element: row,
+                        member: "sourceVerdict",
+                        refusal: Refusal
+                    )
+                )
+                : null),
             StateHash: stateHash,
             Station: station,
             Tick: tick
+        );
+    }
+    private static ParityManifestSourceVerdict ReadSourceVerdict(JsonElement element, string context) {
+        CliStrictJson.RequireOnlyMembers(
+            element: element,
+            context: context,
+            unknownMemberDetail: "strict documents refuse fields the comparator does not read.",
+            refusal: Refusal,
+            "holds",
+            "detail"
+        );
+
+        if (
+            !element.TryGetProperty(
+                propertyName: "holds",
+                value: out var holds
+            ) ||
+            (holds.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        ) {
+            throw new ParityDocumentRefusal(message: $"{context}.holds must be true or false.");
+        }
+
+        return new ParityManifestSourceVerdict(
+            Detail: CliStrictJson.ReadRequiredString(
+                context: context,
+                element: element,
+                member: "detail",
+                refusal: Refusal
+            ),
+            Holds: holds.GetBoolean()
         );
     }
     private static IReadOnlyDictionary<string, long> ReadCensus(JsonElement element, string context) {
