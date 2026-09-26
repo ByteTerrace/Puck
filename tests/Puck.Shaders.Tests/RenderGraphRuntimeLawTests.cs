@@ -14,6 +14,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private const int Display = 64;
     private const string Camera = "test.camera";
     private const string Over = "test.over";
+    private const string Place = "test.place";
     private const string Pool = "test.pool";
     private const ulong PoolBytes = 256;
 
@@ -31,6 +32,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.FragmentSampled)],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ColorAttachmentWrite)],
             Summary: "A pass drawn over its input, which may draw nothing."
+        ),
+        new RenderGraphPackage(
+            Members: [],
+            Id: Place,
+            Inputs: [
+                RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead),
+                RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead),
+            ],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
+            Summary: "A source placed over a base, which may draw nothing and stand for its base."
         ),
         new RenderGraphPackage(
             Members: [],
@@ -255,7 +266,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             counter.Created++;
 
-            return new FakeRecorder(counter: counter);
+            return new FakeRecorder(
+                counter: counter,
+                pass: context.Pass
+            );
         }
     }
     /// <summary>What one instance's package recorders recorded: creations, disposals, records, and the last record's
@@ -274,10 +288,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public nint OutputImage;
         public GpuImageLayout OutputLayout;
         public RenderGraphPackageOutcome Outcome;
+
+        // A pass's own outcome, in place of Outcome, and each pass's last record: its first input's and its output's
+        // images and whether it was told it may stand in.
+        public readonly Dictionary<string, RenderGraphPackageOutcome> PassOutcomes = new(comparer: StringComparer.Ordinal);
+        public readonly Dictionary<string, (nint Input, nint Output, bool MayStandIn)> PassRecords = new(comparer: StringComparer.Ordinal);
+
         public long Records;
         public uint Width;
     }
-    private sealed class FakeRecorder(Counter counter) : IRenderGraphPackageRecorder {
+    private sealed class FakeRecorder(Counter counter, string pass) : IRenderGraphPackageRecorder {
         public void Dispose() => counter.Disposed++;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             counter.Records++;
@@ -294,8 +314,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 ? GpuImageLayout.Undefined
                 : recording.Inputs[0].Image.Layout);
             counter.OutputImage = recording.Outputs[0].Image.ImageHandle;
+            counter.PassRecords[pass] = (counter.InputImage, counter.OutputImage, recording.MayStandIn);
 
-            return counter.Outcome;
+            return (counter.PassOutcomes.TryGetValue(
+                key: pass,
+                value: out var outcome
+            )
+                ? outcome
+                : counter.Outcome);
         }
     }
     /// <summary>Describes each frame to a runtime over the same roots and footprints, counting frame indices.</summary>
