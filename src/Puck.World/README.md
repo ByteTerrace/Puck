@@ -1164,8 +1164,12 @@ command values is mapped in fixed point from the row alone
 validator refuses `Passthrough` by name, because only a source the local user
 opened may send input to a host window. `world.screens` echoes each screen's
 destination as `input:<destination>`. The mapping and its laws are described in
-[the rendering plan's P13](../../docs/plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations);
-nothing reads the ray from a live pointer yet.
+[the rendering plan's P13](../../docs/plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
+On a windowed host, `WorldPointerRayCapture` casts the OS pointer through its
+seat's camera each frame and holds the two commands on that seat's lane, the
+seat folds them into its intent's `SourceRay`, and a rule reads the mapped hit
+as `$pointer:<seat>:<screenIndex>:x|y|on`. `body.channels` echoes the ray and
+its hit on every `Simulation` screen.
 
 **A physical camera is an input device, seated like a gamepad, never named by
 hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`

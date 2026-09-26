@@ -1290,6 +1290,15 @@ public static class WorldBootComposition {
             store: sp.GetRequiredService<CursorStore>(),
             facts: sp.GetRequiredService<WorldOverlayFacts>()
         ));
+        // The one pointer consumer that does ride a CommandSnapshot: the ray a Simulation screen reads, cast each host
+        // frame through the pointer seat's published camera and sustained on that seat's lane ahead of the frame's
+        // snapshots, so the seat verbs quantize it into the seat's intent on every tick.
+        services.AddSingleton<ISnapshotInputCapture>(implementationFactory: static sp => new WorldPointerRayCapture(
+            client: sp.GetRequiredService<WorldClient>(),
+            pointer: sp.GetRequiredService<WorldPointer>(),
+            router: sp.GetRequiredService<InputRouter>(),
+            viewports: sp.GetRequiredService<WorldSeatViewports>()
+        ));
 
         // The radial action menu — held binding pages presenting themselves: the store the overlay's wheel writer
         // reads, the feed that keeps the radial's presentation state (hub anchor, active ring, hovered sector) and
@@ -1303,7 +1312,6 @@ public static class WorldBootComposition {
             clock: sp.GetRequiredService<IInputClock>(),
             icons: sp.GetRequiredService<WorldIconTable>(),
             pointer: sp.GetRequiredService<WorldPointer>(),
-            roster: sp.GetRequiredService<PlayerRoster>(),
             bindings: sp.GetRequiredService<WorldSeatBindings>(),
             cursor: sp.GetRequiredService<WorldCursorFeed>(),
             viewports: sp.GetRequiredService<WorldSeatViewports>(),

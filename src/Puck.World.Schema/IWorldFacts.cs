@@ -62,6 +62,10 @@ public interface IWorldFacts : IFacet {
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
     RuleFact Read(ChannelOperand operand);
+    /// <summary>Returns a seat's pointer ray mapped through a screen.</summary>
+    /// <param name="operand">The operand.</param>
+    /// <returns>The fact.</returns>
+    RuleFact Read(PointerOperand operand);
     /// <summary>Returns the nearest body carrying a tag-row cell.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>

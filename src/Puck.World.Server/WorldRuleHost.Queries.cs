@@ -252,6 +252,18 @@ public sealed partial class WorldRuleHost {
 
         return (Host.Body(index: seat)?.ChannelReadComposed[ordinal] ?? FixedQ4816.Zero);
     }
+    // $pointer: — the local seat's pointer ray as its body integrated it that tick, under the occupancy convention
+    // ReadChannelValue sets: an out-of-range or unoccupied seat carries no ray.
+    private SourceRay? ReadPointerRay(int seat) {
+        if (
+            (((uint)seat) >= ((uint)Host.Population.LocalSeatCount)) ||
+            !Host.Population.IsHumanOccupied(bodyIndex: seat)
+        ) {
+            return null;
+        }
+
+        return Host.Body(index: seat)?.ChannelReadComposed.SourceRay;
+    }
     // Reads a declared cell as fixed point off the LIVE definition (Install swaps it on every apply, so this is
     // always this tick's settled document), through the ONE shared (row, key) resolver — which computes an advancing
     // row's LIVE value rather than its stored base, so a rule composes with the trait instead of duplicating it. A

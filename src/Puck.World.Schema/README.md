@@ -2229,11 +2229,18 @@ this is a federation seam—unrelated to machine cable linking, which is the
 exact per-tick value settled from that seat's drained `CommandSnapshot`,
 riding the channel's own native fixed-point domain unchanged, so `1` already
 means "fully pressed/1.0" with no rescale; 0 for a seat outside
-`bodies.localSeats` or one no local seat currently occupies)—
+`bodies.localSeats` or one no local seat currently occupies), and
+`$pointer:<seat>:<screenIndex>:x|y|on` (the 1-based local seat's pointer ray,
+carried in its intent, mapped in fixed point through a `Simulation` screen's
+row against a one-by-one source by `WorldScreenMappings.Normalized`: `x` and
+`y` are the source-normalized fractions in `[0, 1)`, `on` is 1 while the ray
+lands on the source, and all three read 0 otherwise; an unknown seat or
+screen, or a screen whose `route.input` is not `Simulation`, is refused at
+compile time)—
 folding time, population, occupancy, machine memory, aggregates,
 reconnect-park state, federation liveness, and a local seat's own channel
-value into the string channel `State` already carries rather than a fact enum
-or a scheduler. `Mode` is `Level`
+value and pointer into the string channel `State` already carries rather than
+a fact enum or a scheduler. `Mode` is `Level`
 (fires every tick the gate holds) or `Edge` (fires once per crossing, re-arming
 when the gate closes); a rule that writes a row almost always wants `Edge`.
 

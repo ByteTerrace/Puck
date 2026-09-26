@@ -37,6 +37,9 @@ internal sealed class WorldPointer {
     private readonly ulong[] m_motionSequence = new ulong[PlayerRoster.MaxSlots];
     private readonly float[] m_positionX = new float[PlayerRoster.MaxSlots];
     private readonly float[] m_positionY = new float[PlayerRoster.MaxSlots];
+    // The seat of the latest SetPosition, or -1 before any: the process has one OS pointer, and it rides whichever
+    // seat's mouse moved it last.
+    private int m_positionedSlot = -1;
     // Monotonic per-slot: see SystemReleaseCount's remarks for the consumer contract this exists for.
     private readonly int[] m_systemReleaseCount = new int[PlayerRoster.MaxSlots];
     private readonly float[] m_wheel = new float[PlayerRoster.MaxSlots];
@@ -228,6 +231,12 @@ internal sealed class WorldPointer {
             comparand: held
         ) != held);
     }
+    /// <summary>Gets the seat the process's one OS pointer rides: the seat of the latest reported position, or
+    /// <see langword="null"/> before any position was reported. Non-destructive, like <see cref="Position"/>.</summary>
+    public int? PositionedSlot => ((Volatile.Read(location: ref m_positionedSlot) is var slot and >= 0)
+        ? slot
+        : null
+    );
     /// <summary>Records a seat's new absolute cursor position.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="position">The absolute position in client pixels.</param>
@@ -247,6 +256,10 @@ internal sealed class WorldPointer {
         Volatile.Write(
             location: ref m_hasPosition[slot],
             value: 1
+        );
+        Volatile.Write(
+            location: ref m_positionedSlot,
+            value: slot
         );
     }
     /// <summary>Gets a seat's system-release generation — a monotonic count of how many times this store has

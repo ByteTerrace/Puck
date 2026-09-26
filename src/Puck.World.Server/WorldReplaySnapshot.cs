@@ -234,7 +234,7 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// mid-session capture also matches) is the identified next lever.</para>
 /// <para>Determinism. The hashed state is fixed-point or an exact integer tick — no wall-clock, no float in the hashed
 /// pose. The recorded intent currency is likewise fixed-point: a
-/// <see cref="PlayerIntent"/> crosses as six raw <see cref="FixedQ4816"/> lanes, so the replay currency is the
+/// <see cref="PlayerIntent"/> crosses as sixteen raw <see cref="FixedQ4816"/> lanes and an optional pointer ray of six more, so the replay currency is the
 /// simulation's own numeric type rather than a conversion of it. (The serialized command stream carries the authored
 /// float fields of the recorded <see cref="WorldCommand"/>s verbatim; those are authored values — the numbers an
 /// operator typed — which round-trip bit-exactly through the shared command leaf and quantize deterministically at
@@ -270,9 +270,9 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // The retained-name fingerprint and compiler-symbol budget separation changed authoritative hashes. Refuse
-    // earlier tapes at intake instead of reporting their old hash contract as a simulation divergence.
-    private const uint ShapeToken = 3u;
+    // Shape 4 carries each recorded intent's optional pointer ray. Refuse earlier tapes at intake instead of reporting
+    // their old shape as a simulation divergence.
+    private const uint ShapeToken = 4u;
 
     /// <summary>Gets the record-start world definition as its canonical UTF-8 JSON — the rehydrated starting state.</summary>
     public required byte[] DefinitionJson { get; init; }

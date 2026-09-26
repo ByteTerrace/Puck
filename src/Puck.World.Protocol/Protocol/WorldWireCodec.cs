@@ -46,10 +46,12 @@ public static class WorldWireCodec {
         fromWire: WorldWireTags.TryFromWire,
         reader: ref reader
     );
-    /// <summary>Reads the whole channel vector: <see cref="ChannelLimits.MaxChannels"/> raw <see cref="FixedQ4816"/>
-    /// lanes, one per ordinal, unconditionally.</summary>
+    /// <summary>Reads an intent in <see cref="WriteIntent"/>'s layout: <see cref="ChannelLimits.MaxChannels"/> raw
+    /// <see cref="FixedQ4816"/> lanes, one per ordinal, then the pointer-ray flag byte (<c>0</c> absent, <c>1</c>
+    /// present) and, when present, the ray's origin and direction as six raw <see cref="FixedQ4816"/> values.</summary>
     /// <param name="reader">The reader.</param>
-    /// <returns>The decoded intent; every lane reads zero once a refusal has latched.</returns>
+    /// <returns>The decoded intent; every lane reads zero, and the ray absent, once a refusal has latched. An undeclared
+    /// flag byte latches <see cref="WireRefusal.EnumValueUnknown"/>.</returns>
     public static PlayerIntent ReadIntent(ref WireReader reader) {
         var channels = default(ChannelValues);
 
@@ -57,7 +59,40 @@ public static class WorldWireCodec {
             channels[ordinal] = reader.ReadFixed();
         }
 
-        return new PlayerIntent(Channels: channels);
+        var flag = reader.ReadByte();
+        SourceRay? ray = null;
+
+        switch (flag) {
+            case 0:
+                break;
+            case 1: {
+                    var origin = reader.ReadFixedVector();
+                    var direction = reader.ReadFixedVector();
+
+                    ray = new SourceRay(
+                        Direction: direction,
+                        Origin: origin
+                    );
+
+                    break;
+                }
+            default:
+                Undeclared(
+                    reader: ref reader,
+                    type: nameof(SourceRay),
+                    wire: flag
+                );
+
+                break;
+        }
+
+        return new PlayerIntent(
+            Channels: channels,
+            SourceRay: (reader.Failed
+                ? null
+                : ray
+            )
+        );
     }
     /// <summary>Reads the intent-source union: one discriminant byte (<c>0</c> live, <c>1</c> idle, <c>2</c>
     /// producer), followed by the producer name for <c>2</c>. A producer name that reads back blank latches the
@@ -382,9 +417,12 @@ public static class WorldWireCodec {
 
         return true;
     }
-    /// <summary>Writes the whole channel vector: <see cref="ChannelLimits.MaxChannels"/> raw
-    /// <see cref="FixedQ4816"/> lanes, one per ordinal, unconditionally. The vector's capacity is what is wire-shaped,
-    /// not a document's declared channel count, so no codec needs the world's channel table to decode.</summary>
+    /// <summary>Writes an intent: the whole channel vector as <see cref="ChannelLimits.MaxChannels"/> raw
+    /// <see cref="FixedQ4816"/> lanes, one per ordinal, unconditionally, then one flag byte for the pointer ray and,
+    /// only when the ray is present, its origin and direction as six raw <see cref="FixedQ4816"/> values, so an absent
+    /// ray costs one byte. The vector's capacity is what is wire-shaped, not a document's declared channel count, so no
+    /// codec needs the world's channel table to decode. Every intent path shares this layout: submission, held
+    /// channels, authority checkpoints, federation, and the replay tape.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="intent">The intent to write.</param>
     /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
@@ -394,6 +432,16 @@ public static class WorldWireCodec {
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
             writer.WriteFixed(value: intent[ordinal]);
         }
+
+        if (intent.SourceRay is not { } ray) {
+            writer.WriteByte(value: 0);
+
+            return;
+        }
+
+        writer.WriteByte(value: 1);
+        writer.WriteFixedVector(value: ray.Origin);
+        writer.WriteFixedVector(value: ray.Direction);
     }
 
     private delegate bool TryFromWire<T>(byte wire, out T value);
