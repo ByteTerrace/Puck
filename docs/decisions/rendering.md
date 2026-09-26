@@ -300,12 +300,11 @@ offscreen capture pins the fraction to one, so a capture shows exactly one named
 tick. Presentation time is a float and never re-enters state. On the GPU a
 bound scalar is copied into its pass's parameter block at the offset the
 interface fixes, and a bound row fills an array member in that pass's own World
-group block; each is written only when its value moves. The rest of the GPU
-side is the contract P10's remaining work delivers: arrays move into shared
+group block; each is written only when its value moves. Arrays live in shared
 regions keyed by row and element format, so two passes reading one row the same
 way read one copy; a row bound once is indexed per instance, so a board of
-sixty-four pieces is one binding; and the field lattice becomes a region kind,
-so a field has one truth on the GPU. The mirror reads
+sixty-four pieces is one binding; and the field lattice is a row the mirror
+reads like any other, so a field has one truth on the GPU. The mirror reads
 [the presentation view's](runtime-and-delivery.md#the-presentation-view) state
 interface, not a document.
 
@@ -366,17 +365,17 @@ steps no tick past the armed one until the capture is served or refused, and
 refuses it by name after a bounded hold. It also
 reports: `WorldCaptureScheduler` refuses a capture served by a frame showing
 another tick as `stale`, naming both ticks, rather than leaving it out of the
-manifest. The pricing and the second tick are the contract P10's remaining
-work delivers, and neither exists yet. A world's bindings are to appear in the
-cost report as bytes per tick and bytes per frame, beside and separate from the
-simulation's cycle bound, with a document over its ceiling refused at
-validation naming the pipeline and the binding. A state-bound parameter adds a
-second tick, the one its regions were refreshed at, which the fence does not
-pin. That tick is to be reported: a capture carries it, and `puck parity` gains
-a verdict that the frame shows the tick it was armed for, ordered before the
-pixel verdict, so a skewed capture fails as a skew. `puck parity` is then to pin
-one reference tier, with one station in the parity world whose pixels depend on
-a bound row, and a second leg at the floor tier follows once tiers exist.
+manifest. P10 adds the pricing and the second tick. A world's bindings appear
+in the cost report as bytes per tick and bytes per frame, beside and separate
+from the simulation's cycle bound, and a document over its ceiling is refused
+at validation naming the pipeline and the binding. A state-bound parameter adds
+a second tick, the one its regions were refreshed at, which the fence does not
+pin. That tick is reported: a capture carries it, and `puck parity` has a
+verdict that the frame shows the tick it was armed for, ordered before the
+pixel verdict, so a skewed capture fails as a skew. `puck parity` is meant to
+pin one reference tier, with one station in the parity world whose pixels
+depend on a bound row, and a second leg at the floor tier; neither the station
+nor the leg exists yet.
 
 ## The frame graph and nesting
 

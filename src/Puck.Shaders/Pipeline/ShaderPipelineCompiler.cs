@@ -785,16 +785,20 @@ public sealed partial class ShaderPipelineCompiler {
 
     // A frame graph's package passes join its shader passes after them, each in a compute shape beside its port
     // accesses, so one planner orders, versions and barriers both. This is the only way package work enters planning: the graph
-    // compiler checks a document's package passes against its host's packages and hands them here, so a definition
-    // reaching the planner with its own is refused. The names they bring are the passes whose planned kind is Package.
-    // Planning works on a copy whose passes are both, and the plan keeps the graph's shader passes: a package's planned
+    // compiler checks a document's package passes against its host's packages and hands them here beside the document,
+    // so a definition naming package passes with none handed in (the public entry's) is refused. The names they bring
+    // are the passes whose planned kind is Package. Planning works on a copy whose passes are both and which names no
+    // package rows, and the plan keeps the graph's shader passes and its package rows as written: a package's planned
     // pass carries its step, never its compute shape.
     internal ShaderPipelinePlan Compile(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePackagePass> packages) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: packages);
         var diagnostics = new List<ShaderPipelineDiagnostic>();
 
-        if (definition.PackagePasses.Count != 0) {
+        if (
+            (definition.PackagePasses.Count != 0) &&
+            (packages.Count == 0)
+        ) {
             Add(
                 diagnostics,
                 "SHADERPIPE_PACKAGE_PASS",
@@ -826,7 +830,10 @@ public sealed partial class ShaderPipelineCompiler {
             );
         }
         if (packages.Count != 0) {
-            definition = definition with { Passes = [.. definition.ShaderPasses, .. packages.Select(selector: static package => package.Shape())] };
+            definition = definition with {
+                Packages = null,
+                Passes = [.. definition.ShaderPasses, .. packages.Select(selector: static package => package.Shape())],
+            };
         }
 
         ValidateDefinition(

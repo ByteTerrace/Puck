@@ -102,19 +102,19 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] P2 per-pass work counters and the collector.
 - [ ] P1b foundation qualification against the candidate that ships the forcing world (`puck qualify` and the release profile are in; the first runs on the reference GPUs are not).
 - [x] P3 attachments and indexed geometry.
-- [ ] P4 shared opaque visibility.
+- [ ] P4 shared opaque visibility (through P4-2d, the mesh raster and its canaries, landed; P4-2e and the visibility record's names remain).
 - [x] P5 reproducible authoring and packaged dependencies.
 - [ ] P6 representation experiments.
-- [ ] P7 the binding contract and the adapter memory profile, with the one-day spike as its gate.
-- [ ] P8 the shader package, the pass interface and its generated declarations, the echo pass, and HLSL as the one source language.
+- [x] P7 the binding contract and the adapter memory profile, with the one-day spike as its gate (every P7b step landed; the gate's Linux bytecode leg is deferred to the end).
+- [ ] P8 the shader package, the pass interface and its generated declarations, the echo pass, and HLSL as the one source language (the echo of the SDF engine's two interfaces, which P14-5 adds, and the `interface-echo` canary's GPU run remain).
 - [x] P9 the state mirror and presentation time, against [the presentation view's](runtime-and-delivery.md#the-presentation-view) state interface.
 - [x] P10 bound rows reaching a pass: the `parameter` and array statements, the deterministic tick, the capture's tick verdict, pricing, and tiers.
-- [ ] P11 the frame graph document (`puck.render.graph.v1`), views as graph instances scheduled by demand, and self-reference through the previous frame.
-- [ ] P12 image sources: uploaded, imported, and rendered transports, content classes, producer registration, shared conversion passes, and every `WorldScreenSource` kind migrated.
-- [ ] P13 hit-to-source mapping published as data, with simulation, host passthrough, and presentation destinations, and passthrough only for local-user sources.
-- [ ] P14 the SDF engine as a pass package: the capability matrix, the generated frame block, the HLSL module tree, staged shading, float working targets, and the retirements.
+- [ ] P11 the frame graph document (`puck.render.graph.v1`), views as graph instances scheduled by demand, and self-reference through the previous frame (P11b commits 13 and 14, the screens and the final sweep, remain).
+- [ ] P12 image sources: uploaded, imported, and rendered transports, content classes, producer registration, shared conversion passes, and every `WorldScreenSource` kind migrated (P12b steps 1 to 4 and 6 landed; steps 5, 7, 8 and 9 remain).
+- [ ] P13 hit-to-source mapping published as data, with simulation, host passthrough, and presentation destinations, and passthrough only for local-user sources (P13b steps 1, 2, 4 and 6 and step 3's CPU half landed; the GPU drawing from the mapping, a machine reading a mapped pointer and GPU picking remain).
+- [ ] P14 the SDF engine as a pass package: the capability matrix, the generated frame block, the HLSL module tree, staged shading, float working targets, and the retirements (steps 1, 3, 4 and 12 landed; the HLSL module split is in progress, and steps 5 to 11 and 13 remain).
 - [ ] P15 temporal reconstruction: jitter, motion vectors, the temporal upscaler, per-instance history, dynamic resolution, and march seeding.
 - [ ] P16 minimal HDR display output: the display-transform node, an HDR swapchain on Windows, paper white for UI, and one HDR source.
-- [ ] P17 assets derived from SDFs: the baker, the texture pipeline, and the content-addressed cache shipped in compiled worlds and filled on the device on a miss.
+- [ ] P17 assets derived from SDFs: the baker, the texture pipeline, and the content-addressed cache shipped in compiled worlds and filled on the device on a miss (the baker, its codecs, the block-compressed upload and the one pixel-format vocabulary landed; drawing a bake and the parity world's shipped bakes remain).
 - [ ] Later display work, unscheduled: HDR calibration, per-display metadata, and HDR on the Steam Deck OLED under Linux.
 - [ ] Later source work, unscheduled: Linux producers for PipeWire DMA-BUF capture and V4L2 cameras.
