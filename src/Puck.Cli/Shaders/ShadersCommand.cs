@@ -11,6 +11,8 @@ internal static class ShadersCommand {
             name: "shaders"
         );
 
+        command.Subcommands.Add(item: CompareCommand.CreateCollect());
+        command.Subcommands.Add(item: CompareCommand.Create());
         command.Subcommands.Add(item: CompileShaderCommand.Create());
         command.Subcommands.Add(item: GenerateCommand.Create());
         command.Subcommands.Add(item: InterfaceCommand.Create());

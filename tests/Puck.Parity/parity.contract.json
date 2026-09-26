@@ -3,7 +3,12 @@
   "tileSize": 16,
   "stations": {
     "default": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": {} },
-    "binding": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "0": 2500, "1": 2000 } },
+    "binding": {
+      "tileMeanDelta": 0,
+      "tileMaxDelta": 0,
+      "censusFloor": { "0": 2500, "1": 2000 },
+      "reference": { "kind": "binding", "graph": "binding.graph.json", "world": "parity.world.json" }
+    },
     "materials": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "1": 600 } },
     "lattice": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "1": 100000 } },
     "noise": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "0": 7000 } },

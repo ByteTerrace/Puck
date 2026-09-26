@@ -123,7 +123,7 @@ internal static class ParityCompareCommand {
             return CliExit.Failed;
         }
 
-        Console.WriteLine(value: $"PASS: {outcomes.Count} capture(s) held every verdict (content gate, stateHash, per-tile pixel).");
+        Console.WriteLine(value: $"PASS: {outcomes.Count} capture(s) held every verdict (content gate, stateHash, reference where the station names one, per-tile pixel).");
 
         return CliExit.Success;
     }

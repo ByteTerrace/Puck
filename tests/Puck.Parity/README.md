@@ -24,7 +24,7 @@ instance's own output.
 | `lattice` | A `state.lattices` height-field—the fields-to-pixels path. |
 | `noise` | `noiseDisplace` + `cellJitter`—`sdfPcg3d` agreement on SPIR-V and DXIL. |
 | `vocabulary` | The `vocabRig` creation (`prototypes`/`placements`): a chamfered Box, a Prism with a `ChamferedRectangle` profile and a recessed panel, a Cylinder with a chamfer and a raised panel, a `symmetry`-folded pair riding a `parent`'s swing, and a `repeat` (with an `origin`) plate—placed twice, at placement scale 1 and 2. The swing reads `state.station` with immediate weight, so both backends render the same nonzero pose at the scheduled ticks. A wall-time driver would integrate different phases as the backends render at different rates. Separate static prototypes add a recessed `GrooveUnion` seam, a `PipeUnion` joint, and `cells` relief in both `F1` and `F2MinusF1` modes at their supported randomness limits. |
-| `binding` | The binding groups on both backends: every pass reads a frame group at set 0 and a pass group at set 3 through its generated interface. A compute pass seeds an integer pattern, a compute pass pixelates it (the pass group's config `cellSize` and a `uint3` of `levels`, a formatted load, a storage image), and a fullscreen pass samples it through the pass group's image and sampler and adds grain hashed from the frame group's tick. The 96x96 output is compared directly. |
+| `binding` | The binding groups on both backends: every pass reads a frame group at set 0 and a pass group at set 3 through its generated interface. A compute pass seeds an integer pattern, a compute pass pixelates it (the pass group's config `cellSize` and a `uint3` of `levels`, a formatted load, a storage image), and a fullscreen pass samples it through the pass group's image and sampler and adds an integer grain of up to `amplitude` 255ths, hashed from the pixel, the seed and the frame group's tick. Every step works in whole 255ths, so no half-way unorm value is left to a backend to round, and the 96x96 output must equal a CPU reference exactly. |
 
 `parity.contract.json` is the per-station comparison contract (tile size,
 per-tile mean/max delta ceilings, census floors). It is versioned beside the
@@ -32,6 +32,19 @@ world on purpose: thresholds are content facts, re-calibrated in the same
 change that changes a station, echoable in review. Census floors come from
 observed coverage at roughly half its value—a frame whose declared content
 collapses fails the gate before any pixel is compared.
+
+A station whose frames are exact names a `reference`: the comparator computes
+the frame each capture must be and fails a side that differs by one byte
+(`REFERENCE-FAILED`, naming the side, the count and the first pixel), so a pass
+that reads a wrong config value or a wrong binding fails even when both
+backends make the same mistake. The census stays as the floor under it. The one
+reference kind, `binding`, is `ParityBindingReference`: it reads the config
+defaults from `binding.graph.json` and the step rate from `parity.world.json`,
+and repeats the three passes' integer steps at the capture tick. Its captures sit
+mid-way through a grain frame (ticks 1205 and 1225 show grain frames 120 and
+122 of the 24 Hz flicker), so a capture a few steps early or late still shows
+the same grain. An edit to those passes changes `ParityBindingReference` in
+the same change.
 
 Every armed capture is exactly one manifest entry. Either it carries the
 `frame` and `census` of the frame that showed its armed tick, or it carries a

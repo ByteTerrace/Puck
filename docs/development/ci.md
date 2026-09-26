@@ -103,6 +103,12 @@ known failing or inconclusive HGB cases separately from release gates.
 The nightly frontier builds its own battery for that scheduled run. Test reports
 are retained as artifacts and job summaries on every event, including
 fork pull requests. Verification needs only a read-only repository token.
+Its `shader-bytecode` job installs the pinned DXC on Linux, compiles every shader
+through the build's own `CompileShaders` target, and holds each SPIR-V and DXIL
+output byte for byte to the Windows build of the same commit
+(`puck shaders compare --build`); the artifacts job collects the Windows
+build's shaders with `puck shaders collect` into the `shader-bytecode-windows`
+artifact rather than a second build.
 HGB and AGB share a job matrix while retaining their separate lanes, timeouts,
 corpus caches, and `hgb` and `agb` report artifacts.
 Linux world verification invokes each compiled assembly's portable xUnit

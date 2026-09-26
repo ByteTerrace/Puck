@@ -14,6 +14,9 @@ run-name: Runtime verification — ${{ github.event_name == 'schedule' && 'front
 # schema), or the name registry, an SDF instruction-set change without regenerating the kernels' sdf-isa.hlsli, or a
 # project declaration changed without regenerating the layering block in docs/project-map.md, fails the build here
 # rather than only in a manual verb run. The branding check also catches drift in distributed assets and their source wiring.
+# `shader-bytecode` is the binding contract's cross-host gate leg: it compiles every shader with the pinned Linux DXC
+# through the build's own CompileShaders target and holds each SPIR-V and DXIL output byte for byte to the Windows
+# build's, which the artifacts job collected (`puck shaders compare --build`).
 
 on:
   schedule:
@@ -222,3 +225,27 @@ jobs:
       - name: puck branding --check
         run: puck branding --check
     timeout-minutes: 15
+  shader-bytecode:
+    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
+    name: Compare Linux DXC output with the Windows build
+    needs: artifacts
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
+      - name: Install pinned DXC
+        uses: ./.github/actions/setup-dxc
+      - name: Download the Windows build's shader bytecode
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: shader-bytecode-windows
+          path: ${{ runner.temp }}/shader-bytecode-windows
+      - name: Install Puck CLI
+        uses: ./.github/actions/setup-puck
+        with:
+          artifact: nuget-packages
+      - name: Compile the shaders with Linux DXC and compare every output byte for byte
+        run: puck shaders compare --build "$RUNNER_TEMP/shader-bytecode-windows"
+    timeout-minutes: 30
