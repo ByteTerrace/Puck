@@ -556,8 +556,19 @@ These are one-line cautions; the owning pages hold the derivations.
   are `GpuUploadRuns`. The copy takes no push constants: the staging buffer
   leads with a header and a run table. The SDF engine records every region copy
   with that pipeline (its holder leases it beside the set, and the engine takes
-  it at construction). The overlay's buffer still uploads by hand, so a new host
-  upload goes through a region rather than a second hand-built path. A ring's
+  it at construction). A `ShaderPipelineRenderNode` owns every host-written
+  region its graph reads: a package states the regions its recorder writes
+  (`IRenderGraphPackageFactory.Regions`, the overlay's buffer) and a host buffer
+  port takes one from `BindRegion` (an uploaded source's); the node creates each
+  under `GpuResidency.Select` with a reader in flight, takes the copy pipeline in
+  the candidate's build (`GpuRegionCopyPipelineLease.Take`), states and admits a
+  reserved copy pool per staged package pass in `DescriptorPools`
+  (`regionCopies`), and records every owed copy in one command buffer ahead of the
+  frame's passes, behind a memory barrier and followed by a buffer barrier per
+  copied buffer to the compute and fragment stages. A new host upload is a
+  region, never a hand-written buffer. On Direct3D 12 a buffer the fragment stage
+  reads is in `ALL_SHADER_RESOURCE` (`DirectXBufferStates.RequiredState` reads the
+  barrier's stages). A ring's
   buffers live where `GpuResidency.RingMemory(profile)` says: in the
   device-local aperture on a discrete adapter that exposes one
   (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, a Vulkan
@@ -897,7 +908,8 @@ node's one pool (`RenderGraphPackageSets`; the pool's statement,
 `ShaderPipelineRenderNode.DescriptorPools`, counts both for every pass), and
 creates its framebuffers there, and a recorder records
 into the command buffer it is handed and never submits, waits, creates a
-pipeline or records a barrier: the node records the pass's planned barriers
+pipeline, records a barrier or copies a region (it writes the regions it states;
+the node flushes and copies them): the node records the pass's planned barriers
 first, so a drawing package's target arrives in `RenderTarget` and its sampled
 inputs in `ShaderReadOnly`, and its render pass leaves the target in
 `RenderTarget` (`ObservedPackageFactory` in `tests/Shared` counts a package's

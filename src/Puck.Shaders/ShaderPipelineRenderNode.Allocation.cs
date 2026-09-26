@@ -21,6 +21,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
             return (
                 (m_preview is not null) ||
+                (m_copyPools is not null) ||
                 (m_readback is not null) ||
                 (m_resources.Length != 0) ||
                 (m_retired.Count != 0) ||
@@ -30,18 +31,23 @@ public sealed partial class ShaderPipelineRenderNode {
     }
 
     /// <summary>States the descriptor pools a node creates for an installed <paramref name="plan"/>: one pool holding
-    /// every pass's frame group and pass group sets once per in-flight frame, then the float preview's one pool
-    /// (<see cref="PreviewDescriptorPool"/>) when it has a preview. A package pass's sets are laid out by the plan as a
-    /// document pass's are, and its recorder allocates them from the same pool (<see cref="RenderGraphPackageSets"/>).
+    /// every pass's frame group and pass group sets once per in-flight frame, then one region-copy pool
+    /// (<see cref="GpuRegionCopyPool.SizesOf"/>) for each package pass whose regions stage, then the float preview's one
+    /// pool (<see cref="PreviewDescriptorPool"/>) when it has a preview. A package pass's sets are laid out by the plan as
+    /// a document pass's are, and its recorder allocates them from the same pool (<see cref="RenderGraphPackageSets"/>).
     /// The node's own pool creation reads the same statement, so an admission computed from it before anything is
     /// allocated is what the node requests.</summary>
     /// <param name="plan">The pipeline plan the node installs.</param>
     /// <param name="inFlight">The node's frames in flight.</param>
     /// <param name="preview">Whether the node presents a float preview.</param>
+    /// <param name="regionCopies">The staged regions of each package pass whose package states any
+    /// (<see cref="IRenderGraphPackageFactory.Regions"/>), in pass order, under the device's residency choice, or
+    /// <see langword="null"/> for none.</param>
     /// <returns>Each pool's sizes, in creation order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlight"/> is zero.</exception>
-    public static IReadOnlyList<GpuDescriptorPoolSizes> DescriptorPools(ShaderPipelinePlan plan, uint inFlight, bool preview) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlight"/> is zero, or a count in
+    /// <paramref name="regionCopies"/> is not positive.</exception>
+    public static IReadOnlyList<GpuDescriptorPoolSizes> DescriptorPools(ShaderPipelinePlan plan, uint inFlight, bool preview, IReadOnlyList<int>? regionCopies = null) {
         ArgumentNullException.ThrowIfNull(argument: plan);
         ArgumentOutOfRangeException.ThrowIfZero(value: inFlight);
 
@@ -52,6 +58,12 @@ public sealed partial class ShaderPipelineRenderNode {
             plan: plan
         ) is { } graph) {
             pools.Add(item: graph);
+        }
+        foreach (var staged in (regionCopies ?? [])) {
+            pools.Add(item: GpuRegionCopyPool.SizesOf(
+                regionCount: staged,
+                slotCount: ((int)inFlight)
+            ));
         }
         if (preview) {
             pools.Add(item: PreviewDescriptorPool(inFlight: inFlight));

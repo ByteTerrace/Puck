@@ -14,7 +14,10 @@ namespace Puck.Shaders;
 /// <param name="OutputImages">Each output's image instances the pass can draw into, one list per output and empty for
 /// an external or buffer output: a graphics package creates its framebuffers over them here, so a recording creates
 /// nothing.</param>
-public sealed record RenderGraphPackageGroups(nint DescriptorPool, IReadOnlyList<IGpuBuffer> FrameBlocks, IReadOnlyList<IGpuBuffer> PassBlocks, IReadOnlyList<IReadOnlyList<IGpuImage>> OutputImages);
+/// <param name="Regions">The regions the pass's package states (<see cref="IRenderGraphPackageFactory.Regions"/>), in its
+/// order. The instance owns, flushes and copies them; the recorder writes their contents and binds each slot's
+/// <see cref="GpuRegion.Buffer"/>, which stays the same buffer for the region's life.</param>
+public sealed record RenderGraphPackageGroups(nint DescriptorPool, IReadOnlyList<IGpuBuffer> FrameBlocks, IReadOnlyList<IGpuBuffer> PassBlocks, IReadOnlyList<IReadOnlyList<IGpuImage>> OutputImages, IReadOnlyList<GpuRegion> Regions);
 /// <summary>A package pass's frame group and pass group sets, one of each per frame slot, allocated from the instance's
 /// pool against its pipeline's group layouts, with each set's block already bound to its constant buffer. A recorder
 /// writes its resources into the slot's pass set by member name and binds both sets by group, as a document pass's

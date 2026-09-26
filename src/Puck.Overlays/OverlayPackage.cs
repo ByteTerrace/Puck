@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Shaders;
@@ -13,11 +14,14 @@ namespace Puck.Overlays;
 /// (<see cref="RenderGraphPackageCatalog.OverlayMembers"/>).
 /// <para>
 /// Its build creates the two shader modules, the render pass and the graphics pipeline, through the pass's pipeline
-/// layout, on the thread pool. Its recorder takes them when the graph installs and, since it never waits a fence of its
-/// own, keeps what a frame rewrites per frame slot: its frame and pass group sets from the instance's pool
-/// (<see cref="RenderGraphPackageSets"/>), and a region of the storage buffer per slot after the static prefix (the
-/// token slab and the glyph pack), whose bases it writes into the pass block. The <c>Frame</c> elements' leases go to the
-/// frame's lease list, which retires them after the slot's fence. A frame with nothing visible records nothing and
+/// layout, on the thread pool. It states one region (<see cref="Regions"/>), the storage buffer the shader reads: the
+/// static prefix (the token slab and the glyph pack), then the frame's packed records at the builder's own bases, which
+/// it writes into the pass block. The instance creates the region under the policy the device's memory selects and
+/// flushes and copies it. The recorder takes the built objects when the graph installs and, since it never waits a fence
+/// of its own, keeps its frame and pass group sets per frame slot from the instance's pool
+/// (<see cref="RenderGraphPackageSets"/>); it writes the static prefix into the region once, the token slab again on a
+/// theme change, and each frame's records, so the region owes only the words a frame changes. The <c>Frame</c>
+/// elements' leases go to the frame's lease list, which retires them after the slot's fence. A frame with nothing visible records nothing and
 /// reports <see cref="RenderGraphPackageOutcome.DrewNothing"/>, so the instance publishes the input in the output's
 /// place and a capture follows it, when the recording may stand in
 /// (<see cref="RenderGraphPackageRecording.MayStandIn"/>); otherwise it draws the empty frame, which reproduces the
@@ -111,7 +115,8 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="built"/> is not this package's build, or
-    /// <paramref name="groups"/> holds no pool or no block buffer per frame slot.</exception>
+    /// <paramref name="groups"/> holds no pool, no block buffer per frame slot or not the one region
+    /// <see cref="Regions"/> states.</exception>
     public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: groups);
@@ -151,6 +156,13 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             package: this
         );
     }
+    /// <inheritdoc/>
+    /// <remarks>The overlay's one region is the storage buffer its shader reads, <c>data</c>, of
+    /// <see cref="OverlayFrameBuilder.WordCountOf"/> words, which depends on the glyph pack alone.</remarks>
+    public IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) => [new RenderGraphPackageRegion(
+        ByteCount: (OverlayFrameBuilder.WordCountOf(glyphs: glyphs) * sizeof(uint)),
+        Name: "data"
+    )];
     /// <summary>Republishes the theme every recorder's writers read; each recorder refills its token slab on its next
     /// frame.</summary>
     /// <param name="theme">The newly resolved theme.</param>
@@ -182,11 +194,9 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
     private sealed class Recorder : IRenderGraphPackageRecorder {
         private readonly Built m_built;
         private readonly OverlayFrameComposer m_composer;
-        // Each frame slot's storage buffer: the static prefix (the token slab and the glyph pack), then the frame's
-        // regions at the builder's own bases, so the pass block's region bases are the same in every slot.
-        private readonly IGpuStorageBuffer[] m_data;
-        // The theme revision each slot's token slab holds.
-        private readonly int[] m_dataThemes;
+        // The storage buffer the shader reads, the instance's region: the static prefix (the token slab and the glyph
+        // pack), then the frame's records at the builder's own bases, so the pass block's bases are the same every frame.
+        private readonly GpuRegion m_data;
         private readonly uint[] m_frameSlots = new uint[RenderGraphPackageCatalog.OverlayFrameSlotCount];
         // A framebuffer over each image the output can be, created at install, so a recording creates nothing.
         private readonly Dictionary<nint, IGpuFramebuffer> m_framebuffers;
@@ -204,13 +214,23 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
         public Recorder(RenderGraphPackageRecorderContext context, Built built, OverlayFrameComposer composer, RenderGraphPackageGroups groups, OverlayPackage package) {
             var inFlight = context.InFlightFrames;
             var builder = composer.Builder;
-            var totalWords = builder.WordCount;
             var parameters = context.Parameters;
 
             m_built = built;
             m_composer = composer;
-            m_data = new IGpuStorageBuffer[inFlight];
-            m_dataThemes = new int[inFlight];
+            if (
+                (groups.Regions is not [var data]) ||
+                (data.ByteCount != (builder.WordCount * sizeof(uint)))
+            ) {
+                built.Dispose();
+
+                throw new ArgumentException(
+                    message: "The overlay records into the one region it states.",
+                    paramName: nameof(groups)
+                );
+            }
+
+            m_data = data;
             m_framebuffers = new Dictionary<nint, IGpuFramebuffer>(capacity: inFlight);
             m_package = package;
             m_services = context.Services;
@@ -219,12 +239,12 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             m_values = ((int)parameters.BlockOffsetOf(member: "counts"));
 
             if (
-                (parameters.BlockOffsetOf(member: "sdf") != (m_values + 16)) ||
-                (parameters.BlockOffsetOf(member: "misc") != (m_values + 32))
+                (parameters.BlockOffsetOf(member: "misc") != (m_values + 16)) ||
+                (parameters.BlockOffsetOf(member: "sdf") != (m_values + 32))
             ) {
                 built.Dispose();
 
-                throw new InvalidDataException(message: "The overlay's pass block does not hold counts, sdf and misc as three consecutive float4 rows.");
+                throw new InvalidDataException(message: "The overlay's pass block does not hold counts, misc and sdf as three consecutive float4 rows.");
             }
 
             try {
@@ -259,26 +279,24 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                 }
 
                 m_sampler = m_services.Bindings.CreateSampler();
+                // The token slab and the glyph pack are static, so the region takes them once.
+                _ = m_data.Write(
+                    bytes: MemoryMarshal.AsBytes(span: builder.Scratch[..builder.PanelBaseWords]),
+                    offset: 0
+                );
 
                 for (var slot = 0; (slot < inFlight); slot++) {
-                    m_data[slot] = m_services.BufferFactory.CreateHostVisible(
-                        name: new GpuObjectName(owner: context.Instance, part: context.Pass, detail: "data", index: slot),
-                        sizeBytes: (((ulong)totalWords) * sizeof(uint)),
-                        usage: GpuBufferUsage.Storage
-                    );
-                    // The token slab and the glyph pack are static, so each slot's buffer takes them once.
-                    m_data[slot].Write<uint>(data: builder.Scratch[..builder.PanelBaseWords]);
-                    m_dataThemes[slot] = m_themeRevision;
                     m_services.Bindings.WriteSampler(
                         arrayElement: 0,
                         binding: m_sets.BindingOf(member: RenderGraphPackageCatalog.OverlaySampler),
                         descriptorSetHandle: m_sets.PassSet(slot: slot),
                         samplerHandle: m_sampler
                     );
+                    // A slot's buffer is the same for the region's life: its own under a ring, the one destination staged.
                     m_services.Bindings.WriteBuffer(
                         binding: m_sets.BindingOf(member: RenderGraphPackageCatalog.OverlayData),
-                        bufferHandle: m_data[slot].BufferHandle,
-                        bufferSize: (((ulong)totalWords) * sizeof(uint)),
+                        bufferHandle: m_data.Buffer(slot: slot).BufferHandle,
+                        bufferSize: ((ulong)m_data.ByteCount),
                         descriptorSetHandle: m_sets.PassSet(slot: slot),
                         elementStride: 0,
                         kind: GpuBindingKind.ReadOnlyBuffer
@@ -312,9 +330,6 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                 m_services.Bindings.DestroySampler(samplerHandle: m_sampler);
             }
 
-            foreach (var data in m_data) {
-                data?.Dispose();
-            }
             m_geometry?.Dispose();
             m_built.Dispose();
         }
@@ -322,14 +337,10 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             if (m_themeRevision != m_package.m_themeRevision) {
                 m_themeRevision = m_package.m_themeRevision;
                 m_composer.UpdateTheme(theme: in m_package.m_theme);
-            }
-
-            // A slot takes a new token slab when it next records, once the submission that last read its buffer retired.
-            var data = m_data[recording.Slot];
-
-            if (m_dataThemes[recording.Slot] != m_themeRevision) {
-                m_dataThemes[recording.Slot] = m_themeRevision;
-                data.Write<uint>(data: m_composer.Builder.Scratch[..OverlayTokenBlock.WordCount]);
+                _ = m_data.Write(
+                    bytes: MemoryMarshal.AsBytes(span: m_composer.Builder.Scratch[..OverlayTokenBlock.WordCount]),
+                    offset: 0
+                );
             }
 
             var visible = m_composer.Compose(renderTicks: recording.Context.RenderTicks);
@@ -361,7 +372,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                 length: OverlayFrameComposer.PassValueBytes,
                 start: m_values
             ));
-            m_composer.UploadFrameRegions(buffer: data);
+            m_composer.UploadFrameRegions(buffer: m_data);
             recorder.BeginRenderPass(
                 commandBufferHandle: command,
                 framebuffer: framebuffer

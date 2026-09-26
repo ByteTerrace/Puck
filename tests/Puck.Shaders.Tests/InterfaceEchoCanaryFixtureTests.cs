@@ -11,10 +11,6 @@ public sealed class InterfaceEchoCanaryFixtureTests {
     // The echo documents, one per row of the canary's world, in its row order.
     private static readonly string[] Echoes = ["ink-simulation", "ink-visualize", "ink-finish", "tint", "sdf-film-grain", "place", "overlay"];
 
-    // The overlay's recorder declares its block values counts, sdf, misc; a document's config lays its fields out in
-    // ordinal name order, so the overlay echo holds the same types at the same offsets under a permutation of its names.
-    private const string NamesAsASet = "overlay";
-
     private static string FixturePath(string fileName) => RepositoryPaths.Resolve(relativePath: $"tests/Puck.World.Canaries/interface-echo/{fileName}");
     private static ShaderPipelinePlannedPass[] PassesOf(string path) =>
         [.. new ShaderPipelineCompiler().Compile(definition: ShaderPipelineLoader.ReadDefinition(
@@ -103,7 +99,7 @@ public sealed class InterfaceEchoCanaryFixtureTests {
     }
 
     /// <summary>Each echo's frame and pass blocks are its targets' blocks: the same groups in the same sets and sizes,
-    /// and the same members at the same offsets, types and lengths under the same names in order (the overlay's as a set).</summary>
+    /// and the same members at the same offsets, types and lengths under the same names in order.</summary>
     [MemberData(memberName: nameof(TargetNames))]
     [Theory]
     public void Each_echo_reads_the_blocks_of_the_shipped_interfaces_it_stands_for(string echo, string target) {
@@ -121,20 +117,10 @@ public sealed class InterfaceEchoCanaryFixtureTests {
                 expected: expected[index].BlockMembers.Select(selector: static member => (member.Offset, member.Type, member.Length))
             );
 
-            var actualNames = actual[index].BlockMembers.Select(selector: static member => member.Name);
-            var expectedNames = expected[index].BlockMembers.Select(selector: static member => member.Name);
-
-            if (echo == NamesAsASet) {
-                Assert.Equal(
-                    actual: actualNames.Order(comparer: StringComparer.Ordinal),
-                    expected: expectedNames.Order(comparer: StringComparer.Ordinal)
-                );
-            } else {
-                Assert.Equal(
-                    actual: actualNames,
-                    expected: expectedNames
-                );
-            }
+            Assert.Equal(
+                actual: actual[index].BlockMembers.Select(selector: static member => member.Name),
+                expected: expected[index].BlockMembers.Select(selector: static member => member.Name)
+            );
         }
     }
     /// <summary>Every shipped package with frame data of its own, a config or declared members, and every shipped shader
