@@ -11,34 +11,31 @@ namespace Puck.Shaders;
 /// under <see cref="GpuPassPipelineCache.WorkSourceName"/>, and disposes it when the last lease is released.
 /// <para>
 /// Every device a composition serves runs one backend, so every lease is on one kernel: the one given, or its backend's
-/// deployed kernel, read from <see cref="DefaultDirectory"/> on the first acquire and kept for the pass's whole life.
-/// Acquiring is safe on any thread, and the first acquire over a deployed kernel reads it, so an owner on the frame thread
-/// acquires from its own background work. Every owner releases its lease on device loss, so a pipeline is never handed
-/// to a lease on the recreated device.
+/// deployed kernel, read from <see cref="DefaultDirectory"/> when the pass is constructed, at composition, and kept for the
+/// pass's whole life as its <see cref="Key"/>. Acquiring reads no file and is safe on any thread, the frame thread
+/// included. Every owner releases its lease on device loss, so a pipeline is never handed to a lease on the recreated
+/// device.
 /// </para>
 /// </summary>
 public sealed class GpuRegionCopyPass {
     /// <summary>The file name stem of the deployed kernel: <c>region-copy.comp</c> and the backend's extension.</summary>
     public const string KernelStem = "region-copy";
 
-    private readonly string? m_bytecodeExtension;
-    private readonly Lock m_keyGate = new();
-
-    private GpuPassPipelineKey? m_key;
-
     /// <summary>Initializes a new instance of the <see cref="GpuRegionCopyPass"/> class over its backend's deployed
-    /// kernel, which the first acquire reads.</summary>
+    /// kernel, which it reads here.</summary>
     /// <param name="pipelines">The composition's pass pipelines, which the copy pipeline is an entry of.</param>
     /// <param name="bytecodeExtension">The backend's compiled-kernel extension (<c>".spv"</c> for Vulkan,
     /// <c>".dxil"</c> for Direct3D 12).</param>
     /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="bytecodeExtension"/> is empty.</exception>
-    public GpuRegionCopyPass(GpuPassPipelineCache pipelines, string bytecodeExtension) {
-        ArgumentNullException.ThrowIfNull(argument: pipelines);
-        ArgumentException.ThrowIfNullOrEmpty(argument: bytecodeExtension);
-
-        Pipelines = pipelines;
-        m_bytecodeExtension = bytecodeExtension;
+    /// <exception cref="IOException">The deployed kernel is missing or cannot be read.</exception>
+    public GpuRegionCopyPass(GpuPassPipelineCache pipelines, string bytecodeExtension) : this(
+        kernel: Load(
+            bytecodeExtension: bytecodeExtension,
+            directory: DefaultDirectory
+        ),
+        pipelines: pipelines
+    ) {
     }
     /// <summary>Initializes a new instance of the <see cref="GpuRegionCopyPass"/> class that creates every device's
     /// pipeline from one compiled kernel, for a host with its own kernel.</summary>
@@ -50,7 +47,7 @@ public sealed class GpuRegionCopyPass {
         ArgumentNullException.ThrowIfNull(argument: pipelines);
 
         Pipelines = pipelines;
-        m_key = KeyOf(kernel: kernel);
+        Key = KeyOf(kernel: kernel);
     }
 
     /// <summary>Gets the standard deploy location of the compiled kernel: <c>Assets/Shaders/Residency</c> next to the
@@ -61,6 +58,8 @@ public sealed class GpuRegionCopyPass {
         path3: "Shaders",
         path4: "Residency"
     );
+    /// <summary>Gets the copy pipeline's key, over the kernel the pass was constructed with: every lease is on it.</summary>
+    public GpuPassPipelineKey Key { get; }
     /// <summary>Gets the pass pipelines the copy pipeline is an entry of.</summary>
     public GpuPassPipelineCache Pipelines { get; }
 
@@ -91,30 +90,17 @@ public sealed class GpuRegionCopyPass {
         ));
     }
     /// <summary>Takes a lease on <paramref name="device"/>'s copy pipeline, joining the entry another owner already
-    /// leases or starting its build on the thread pool. Safe on any thread; the first acquire over a deployed kernel
-    /// reads it.</summary>
+    /// leases or starting its build on the thread pool. Safe on any thread, and reads no file.</summary>
     /// <param name="device">The device the pipeline is created on, through its services.</param>
     /// <returns>The lease, whose <see cref="GpuPassPipeline.Compute"/> is the copy pipeline once built, and which the
     /// caller releases once nothing it recorded with the pipeline is in flight.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
-    /// <exception cref="IOException">The deployed kernel is missing or cannot be read.</exception>
     public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Acquire(IGpuDeviceContext device) {
         ArgumentNullException.ThrowIfNull(argument: device);
 
         return Pipelines.Acquire(
             device: device,
-            key: Key()
+            key: Key
         );
-    }
-
-    // The key over the kernel, read on the first acquire when the pass was given none; a lease racing that read waits
-    // for it rather than reading the file twice.
-    private GpuPassPipelineKey Key() {
-        lock (m_keyGate) {
-            return (m_key ??= KeyOf(kernel: Load(
-                bytecodeExtension: m_bytecodeExtension!,
-                directory: DefaultDirectory
-            )));
-        }
     }
 }

@@ -10,8 +10,9 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// Laws for <see cref="GpuRegionCopyPass"/> over <see cref="UploadModelGpu"/>, which runs the region-copy kernel's
 /// copies: leases on one device share one pass pipeline, created once and counted once in the pass-pipeline cache's
-/// ledger, and another device has its own; the last release disposes it and a later lease builds anew; and two regions
-/// copying through the one leased pipeline read their contents byte-exact under every residency policy.
+/// ledger, and another device has its own; the last release disposes it and a later lease builds anew; the deployed
+/// kernel is read when the pass is constructed and never by an acquire; and two regions copying through the one leased
+/// pipeline read their contents byte-exact under every residency policy.
 /// </summary>
 public sealed class GpuRegionCopyPassLawTests {
     [Fact]
@@ -45,6 +46,32 @@ public sealed class GpuRegionCopyPassLawTests {
         Assert.NotSame(expected: pipeline, actual: Ready(lease: later));
         Assert.Equal(expected: 3L, actual: Read(kind: GpuWork.PipelinesCreated, source: cache.Work));
         later.Release();
+    }
+    // The deployed kernel is read when the pass is constructed, at composition, and never by an acquire: a pass over a
+    // backend with no deployed kernel fails to construct, and every lease a constructed pass hands out is on the one key
+    // it read, so a frame-thread acquire has no file to read.
+    [Fact]
+    public void ThePassReadsItsDeployedKernelWhenConstructedAndAnAcquireReadsNothing() {
+        var cache = new GpuPassPipelineCache();
+
+        _ = Assert.Throws<FileNotFoundException>(testCode: () => new GpuRegionCopyPass(bytecodeExtension: ".absent", pipelines: cache));
+
+        var pass = new GpuRegionCopyPass(bytecodeExtension: ".spv", pipelines: cache);
+        var gpu = new UploadModelGpu(reportVersion: 0);
+
+        Assert.Equal(
+            actual: pass.Key,
+            expected: GpuRegionCopyPass.KeyOf(kernel: GpuRegionCopyPass.Load(bytecodeExtension: ".spv", directory: GpuRegionCopyPass.DefaultDirectory))
+        );
+
+        var first = pass.Acquire(device: gpu);
+        var second = pass.Acquire(device: gpu);
+
+        Assert.Same(expected: pass.Key, actual: first.Key);
+        Assert.Same(expected: pass.Key, actual: second.Key);
+        first.Release();
+        second.Release();
+        Assert.Equal(expected: 0, actual: cache.SharedPipelines);
     }
     [InlineData(GpuResidencyPolicy.InPlace)]
     [InlineData(GpuResidencyPolicy.Ring)]

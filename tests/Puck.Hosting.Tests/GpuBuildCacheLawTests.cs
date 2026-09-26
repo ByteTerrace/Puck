@@ -7,9 +7,9 @@ namespace Puck.Hosting.Tests;
 /// SDF engine's pipeline sets: leases on one device and key share one value built once, and another device or key has
 /// its own; the last release disposes the value and a later lease builds anew, which is how a device loss empties the
 /// device's entries; a holder's own pool build waits for an entry; the last release cancels a build still running and
-/// waits only for the creation in the driver; a failed build rethrows once and the next poll builds afresh; and a lone
-/// holder can take its entry out of sharing. Counted, not timed: the build delegate counts its builds, and a gate holds
-/// one in the driver.
+/// waits only for the creation in the driver, and a wait racing its own lease's release throws without building again; a
+/// failed build rethrows once and the next poll builds afresh; and a lone holder can take its entry out of sharing.
+/// Counted, not timed: the build delegate counts its builds, and a gate holds one in the driver.
 /// </summary>
 public sealed class GpuBuildCacheLawTests {
     [Fact]
@@ -119,6 +119,52 @@ public sealed class GpuBuildCacheLawTests {
         release.Join();
 
         // The creation in the driver finished and was discarded; the build saw its cancel and created nothing more.
+        Assert.Equal(expected: (1, 1), actual: (builds.Count, builds.Disposed));
+    }
+    // A holder's pool build blocked in Wait while the frame thread gives up the same lease: the wait wakes to a released
+    // entry and throws, and nothing builds again for it, so no value outlives the release.
+    [Fact]
+    public void AWaitRacingItsOwnLeasesLastReleaseThrowsAndStartsNoBuild() {
+        using var gate = new ManualResetEventSlim();
+        var builds = new Builds(gate: gate);
+        var cache = builds.Cache();
+        var lease = cache.Acquire(device: new StubDevice(), key: "a");
+        Exception? waited = null;
+
+        Assert.True(condition: builds.Entered.Wait(
+            cancellationToken: TestContext.Current.CancellationToken,
+            timeout: TimeSpan.FromSeconds(value: 30)
+        ));
+
+        var waiter = new Thread(start: () => {
+            try {
+                _ = lease.Wait(cancellationToken: CancellationToken.None);
+            } catch (Exception error) {
+                waited = error;
+            }
+        });
+
+        waiter.Start();
+
+        // The wait has passed the lease's own check and blocks on the build in the driver before the release begins.
+        Assert.True(condition: SpinWait.SpinUntil(
+            condition: () => waiter.ThreadState.HasFlag(flag: ThreadState.WaitSleepJoin),
+            timeout: TimeSpan.FromSeconds(value: 30)
+        ));
+
+        var release = new Thread(start: lease.Release);
+
+        release.Start();
+        Assert.True(condition: SpinWait.SpinUntil(
+            condition: () => (cache.SharedEntries == 0),
+            timeout: TimeSpan.FromSeconds(value: 30)
+        ));
+        gate.Set();
+        release.Join();
+        waiter.Join();
+
+        _ = Assert.IsType<ObjectDisposedException>(@object: waited);
+        // The one build ran, its value was discarded by the release, and none started after it.
         Assert.Equal(expected: (1, 1), actual: (builds.Count, builds.Disposed));
     }
     [Fact]

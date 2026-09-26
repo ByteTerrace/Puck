@@ -121,6 +121,7 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
                 return;
             }
 
+            entry.IsReleased = true;
             build = entry.Build.Detach();
             _ = m_entries.Remove(item: entry);
         }
@@ -178,6 +179,12 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
     // The ready value, or null while its build runs; starts a build when none is pending. A failed build leaves nothing
     // pending, so the next poll by any holder starts a fresh one.
     private T? TakeLocked(GpuBuildLease<TKey, T>.Entry entry) {
+        // A wait racing its own lease's last release finds the entry released and never starts a build nobody owns.
+        ObjectDisposedException.ThrowIf(
+            condition: entry.IsReleased,
+            type: typeof(GpuBuildLease<TKey, T>)
+        );
+
         if (entry.Value is { } ready) {
             return ready;
         }
@@ -298,6 +305,10 @@ public sealed class GpuBuildLease<TKey, T> where TKey : IEquatable<TKey> where T
         public BackgroundBuild<T> Build { get; } = new();
         public IGpuDeviceContext Device { get; } = device;
         public int Holders { get; set; } = 1;
+
+        // Set when the last lease releases, before the build detaches; the entry never builds again.
+        public bool IsReleased { get; set; }
+
         public TKey Key { get; } = key;
 
         public T? Value { get; set; }
