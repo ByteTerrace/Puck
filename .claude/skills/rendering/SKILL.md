@@ -1186,7 +1186,8 @@ counts it covered only when one shown view or pane covers it whole).
 
 Camera views and sessions are instances too (`WorldViewInstances`,
 `src/Puck.World.Client/Sources`): each camera a screen, a HUD frame or a probe
-export shows (named by its registration, `WorldSeatAnchors.RegistrationName`)
+export shows (named by its registration, `WorldSeatAnchors.RegistrationName`,
+which is why the validator refuses a `views.graphs` row named like a camera)
 and each session screen (`session$<screen>`) is an external `sdf.world`
 instance whose producer the binder creates (`WorldScreenBinder.TryViewProducer`,
 tried before the world node in the render root's `sdf.world` factory): an
