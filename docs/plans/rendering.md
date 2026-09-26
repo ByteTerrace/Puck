@@ -944,11 +944,41 @@ It deletes the SDF engine's composite, and it has landed.
   `split-seats` canary also captures a letterboxed layout it selects through
   `view.override`.
 
-P11b's last four commits are these; 12 has landed:
+P11b's last four commits are these; 11 and 12 have landed:
 
-11. The per-device pass-pipeline cache: the graph's pass pipelines built once a
-    device, off the frame thread, and shared by every node that installs the
-    same pass.
+11. The per-device pass-pipeline cache, landed. `GpuPassPipelineCache`
+    (`src/Puck.Shaders/Pipeline`) is one composition singleton whose entries
+    are keyed by device and `GpuPassPipelineKey`: the content key
+    `GpuPipelineCacheStore.ContentKeyOf` hashes from the stages' bytecode and a
+    canonical encoding of the pipeline description (its name, bindings or
+    groups, vertex input and depth test) and, for a graphics pass, the render
+    pass it is created for (each attachment's format, load, store and final
+    layout). Every pass pipeline a `ShaderPipelineRenderNode` installs comes
+    from it: each document pass's compute or graphics pipeline with its shader
+    modules and render pass, the float preview's, and each package pass's
+    (`place`, `post.<id>`, `overlay` and the source conversions of
+    `SourceConversionPackage`) through
+    `RenderGraphPackageRecorderContext.Pipelines`. Each device's region-copy
+    pipeline is an entry too (`GpuRegionCopyPass`). A candidate's build leases
+    its passes on the thread pool and waits for them there
+    (`GpuBuildLease.Wait`), so a pass another node or an earlier install
+    already leases is a hit that creates nothing: the root's place passes share
+    one pipeline, and a second instance of a graph or a reinstall of the same
+    graph creates none. The runtime pass holds its lease and releases it last
+    when its graph retires, so a reload of a changed shader makes a new entry
+    while the replaced graph keeps the old one until its submissions complete.
+    Every holder releases on device loss, which empties the device's entries,
+    so the rebuild creates afresh. The cache counts what it creates under
+    `gpu.pass-pipelines`, and a node's `work lifetime` line counts no pipeline
+    or shader module. The one mechanism under it is
+    `Puck.Hosting.GpuBuildCache<TKey, T>`: a lease per holder, the entry's
+    build through `BackgroundBuild`, and a last release that waits out only the
+    creation in the driver. `SdfWorldPipelineCache` is an instance of it keyed
+    by `SdfWorldPipelineKey`; P14-8 makes each SDF pipeline an entry of the
+    pass-pipeline cache itself. `GpuBuildCacheLawTests`,
+    `GpuPassPipelineCacheLawTests`, `GpuRegionCopyPassLawTests` and the build
+    laws of `ShaderPipelineRenderNodeLawTests` pin the hits, the sharing, the
+    device loss and the retirement of a reloaded pass.
 12. The live budget, landed: `world.budget` ends with what the runtime's latest
     schedule decided for every instance (`RenderGraphLiveBudget`, reading
     `RenderGraphRuntime.Latest`): rendered, waiting, deferred or unread; its
@@ -1445,7 +1475,8 @@ pipeline, no wait times out, and every leg captures all three images.
 
 A `ShaderPipelineRenderNode` candidate's shader modules and pipelines, with the
 render passes its graphics pipelines are created for and the float preview's,
-build on the thread pool through `BackgroundBuild`, starting at the
+are leased from the pass-pipeline cache on the thread pool through
+`BackgroundBuild`, starting at the
 node's next produced frame. Meanwhile the frame thread keeps presenting the
 installed graph, and when it takes the build it allocates the candidate's
 resources and installs it without draining the device; the replaced graph is
@@ -2263,9 +2294,9 @@ Phase 3, the groups, follows phase 2:
     binding number, so `ShaderRegisterBindingLawTests` no longer names it.
     `GpuRegion.CopyPipeline` is its one description; step 19 moves its push
     words into the staging buffer.
-    `GpuRegionCopyPipelineCache` creates one pipeline a device on the thread
-    pool (`BackgroundBuild`), counted under `gpu.region-copy`, and owners lease
-    it: `SdfWorldPipelineSource` takes a lease beside its set's, and an SDF
+    The composition's pass-pipeline cache holds one copy pipeline a device
+    (`GpuRegionCopyPass`), built on the thread pool and counted under
+    `gpu.pass-pipelines`, and owners lease it: `SdfWorldPipelineSource` takes a lease beside its set's, and an SDF
     engine takes the pipeline at construction, records its table upload with it
     exactly as before, and never owns it. The engine's pipeline set loses its
     frame-upload pipeline. The engine also creates the mesh region: a
@@ -2281,7 +2312,7 @@ Phase 3, the groups, follows phase 2:
     sets the region and every replacement of it write, so no frame takes a
     descriptor range. `world.budget`'s mesh
     line reads the region's allocated bytes. Laws:
-    `GpuRegionCopyPipelineCacheLawTests` (one pipeline a device, created and
+    `GpuRegionCopyPassLawTests` (one pipeline a device, created and
     counted once, shared by two leases and a new one after the last release;
     two regions copying through it byte-exact under every policy),
     `SdfWorldPipelineCacheLawTests` (two engine nodes record with the device's
@@ -3166,7 +3197,10 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
    silent on the RTX 2060, with Vulkan validation repeated on the RTX 4070.
 7. `SdfFrame` and `SdfEnvironment` join the generated frame block as members of
    the block pipeline passes already read.
-8. The SDF pipelines build through the graph's pipeline cache.
+8. The SDF pipelines build through the graph's pipeline cache
+   (`GpuPassPipelineCache`): each kernel variant an entry keyed like any pass,
+   so `SdfWorldPipelineCache`, today its own `GpuBuildCache` instance, and its
+   `gpu.sdf-pipelines` ledger are deleted.
 9. The engine's cadence becomes the scheduler's.
 10. Float working targets and the display pass, with parity re-recorded.
 11. Staged shading.
@@ -3366,7 +3400,7 @@ read simulation state, so they do not wait on the state rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
 P11b items its implementation status lists, the main view through the graph
-runtime among them. The rest of P11b, commits 11, 13 and 14, waits on nothing from
+runtime among them. The rest of P11b, commits 13 and 14, waits on nothing from
 P7b, whose groups have landed for everything but the SDF engine; commit 13, the
 screens, follows P12b-2. P12's
 source contract, producers and conversion passes have landed; P12b, the graph
