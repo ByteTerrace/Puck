@@ -11,17 +11,41 @@ internal static partial class CanaryCommand {
 
     private static readonly string WorldUnsupportedPrefix = Puck.Launcher.LauncherHostRun.UnsupportedLinePrefix(label: "world");
 
-    // One proof as the runner executes it: a manifest that declares backends runs once per backend, every other one once
-    // with no backend named.
+    // One proof as the runner executes it: a manifest that declares backends runs once per selected backend, every other
+    // one once with no backend named.
     internal sealed record CanaryProof(CanaryManifest Manifest, string? Backend) {
         public string Label => ((Backend is null)
             ? Manifest.Id
             : $"{Manifest.Id} on {Backend}");
     }
 
-    internal static IReadOnlyList<CanaryProof> ExpandProofs(IReadOnlyList<CanaryManifest> manifests) =>
-        manifests.SelectMany(selector: static manifest => ((manifest.Backends.Count != 0)
-            ? manifest.Backends.Select(selector: backend => new CanaryProof(
+    /// <summary>The backends a run boots its backend-declaring proofs on: every backend a leg boots
+    /// (<see cref="WorldOffscreenLeg.Backends"/>), or only the one <c>--backend</c> names.</summary>
+    /// <param name="backend">The <c>--backend</c> value, or <see langword="null"/> for every backend.</param>
+    /// <returns>The selected backends, in the order a run boots them.</returns>
+    /// <exception cref="ArgumentException"><paramref name="backend"/> names no backend a leg boots.</exception>
+    internal static IReadOnlyList<string> SelectBackends(string? backend) => ((backend is null)
+        ? WorldOffscreenLeg.Backends
+        : (WorldOffscreenLeg.Backends.Contains(
+            comparer: StringComparer.Ordinal,
+            value: backend
+        )
+            ? [backend]
+            : throw new ArgumentException(
+                message: $"'{backend}' is not a backend a leg boots; use {string.Join(separator: " or ", values: WorldOffscreenLeg.Backends)}.",
+                paramName: nameof(backend)
+            )));
+    /// <summary>Expands each manifest into the proofs a run executes: one per selected backend for a manifest that
+    /// declares backends, in its authored order, and one naming no backend for every other manifest.</summary>
+    /// <param name="manifests">The selected manifests, in authored order.</param>
+    /// <param name="backends">The backends the run boots (<see cref="SelectBackends"/>).</param>
+    /// <returns>The proofs, in authored order.</returns>
+    internal static IReadOnlyList<CanaryProof> ExpandProofs(IReadOnlyList<CanaryManifest> manifests, IReadOnlyList<string> backends) =>
+        manifests.SelectMany(selector: manifest => ((manifest.Backends.Count != 0)
+            ? manifest.Backends.Where(predicate: backend => backends.Contains(
+                comparer: StringComparer.Ordinal,
+                value: backend
+            )).Select(selector: backend => new CanaryProof(
                 Backend: backend,
                 Manifest: manifest
             ))
@@ -29,6 +53,31 @@ internal static partial class CanaryCommand {
                 Backend: null,
                 Manifest: manifest
             )])).ToArray();
+    /// <summary>Names the backends <paramref name="proofs"/> boot on, so a run on one backend never reads as a run on
+    /// both: <c>on vulkan and directx</c>, or <c>on vulkan only (--backend vulkan), not on directx</c>.</summary>
+    /// <param name="proofs">The run's proofs.</param>
+    /// <returns>The scope, or <see langword="null"/> when no proof names a backend.</returns>
+    internal static string? BackendScope(IReadOnlyList<CanaryProof> proofs) {
+        var ran = WorldOffscreenLeg.Backends.Where(predicate: backend => proofs.Any(predicate: proof => string.Equals(
+            a: proof.Backend,
+            b: backend,
+            comparisonType: StringComparison.Ordinal
+        ))).ToArray();
+
+        if (ran.Length == 0) {
+            return null;
+        }
+
+        var skipped = WorldOffscreenLeg.Backends.Except(second: ran).ToArray();
+        var named = string.Join(
+            separator: " and ",
+            values: ran
+        );
+
+        return ((skipped.Length == 0)
+            ? $"on {named}"
+            : $"on {named} only (--backend {named}), not on {string.Join(separator: " and ", values: skipped)}");
+    }
 
     // The boot-shape arguments of one leg process. An offscreen leg lets its world's host.presentation decide the shape
     // (a --headless value would force windowed or none over it), names the backend explicitly, and carries the run's

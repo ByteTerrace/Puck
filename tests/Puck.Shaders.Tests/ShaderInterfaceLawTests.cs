@@ -285,6 +285,29 @@ public sealed class ShaderInterfaceLawTests {
         Assert.Null(@object: layout.Mismatch(reflected: layout.DxilBindings));
     }
     [Fact]
+    public void An_echo_interface_keeps_the_pushed_index_it_is_given() {
+        var pushing = new ShaderInterface(
+            members: ShaderFrameInterface.FrameGroupMembers,
+            name: "pushing",
+            pushesIndex: true
+        );
+        var echo = ShaderInterfaceEcho.InterfaceOf(shaderInterface: pushing);
+
+        Assert.True(condition: echo.PushesIndex);
+        Assert.Contains(
+            collection: echo.Members,
+            filter: static member => string.Equals(
+                a: member.Name,
+                b: ShaderInterfaceEcho.OutputName,
+                comparisonType: StringComparison.Ordinal
+            )
+        );
+        Assert.False(condition: ShaderInterfaceEcho.InterfaceOf(shaderInterface: new ShaderInterface(
+            members: ShaderFrameInterface.FrameGroupMembers,
+            name: "bound"
+        )).PushesIndex);
+    }
+    [Fact]
     public void A_bound_frame_block_and_a_pushed_index_are_told_apart() {
         // SPIR-V reflects both at set 0, binding 0: the frame group's block bound, the index pushed.
         var layout = ShaderInterfaceSpike.TypedBuffers.Layout();

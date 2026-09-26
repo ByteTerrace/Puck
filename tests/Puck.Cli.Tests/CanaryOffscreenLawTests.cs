@@ -190,7 +190,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
         );
         Assert.Equal(
             expected: ["pipeline-feedback on vulkan", "pipeline-feedback on directx"],
-            actual: CanaryCommand.ExpandProofs(manifests: [.. offscreen.Where(predicate: static manifest => (manifest.Id == "pipeline-feedback"))]).Select(selector: static proof => proof.Label)
+            actual: CanaryCommand.ExpandProofs(backends: WorldOffscreenLeg.Backends, manifests: [.. offscreen.Where(predicate: static manifest => (manifest.Id == "pipeline-feedback"))]).Select(selector: static proof => proof.Label)
         );
     }
     [InlineData("pipeline-feedback/fixture.world.json", "feedback", 1f)]
@@ -285,7 +285,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
         );
         Assert.Equal(
             expected: ["synthetic on directx", "synthetic on vulkan"],
-            actual: CanaryCommand.ExpandProofs(manifests: manifests).Select(selector: static proof => proof.Label)
+            actual: CanaryCommand.ExpandProofs(backends: WorldOffscreenLeg.Backends, manifests: manifests).Select(selector: static proof => proof.Label)
         );
     }
     /// <summary>A windowed manifest without backends keeps its one boot per leg, naming no backend.</summary>
@@ -314,7 +314,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
         );
         Assert.Equal(
             expected: ["synthetic"],
-            actual: CanaryCommand.ExpandProofs(manifests: manifests).Select(selector: static proof => proof.Label)
+            actual: CanaryCommand.ExpandProofs(backends: WorldOffscreenLeg.Backends, manifests: manifests).Select(selector: static proof => proof.Label)
         );
     }
     [Fact]

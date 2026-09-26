@@ -176,8 +176,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Assert.Empty(collection: Outline());
     }
     // A steady frame with the pointer resting on a pane allocates nothing in the host publishing its panes, the picker
-    // hovering the pane, or the cursor writer outlining it. The cursor store's publish between them is not measured: a
-    // PublishBuffer holder per published frame is the store's existing cost, which the hover adds nothing to.
+    // hovering the pane, the cursor store publishing the frame, or the cursor writer outlining it.
     [Fact]
     public void ASteadyHoveredFrameAllocatesNothing() {
         m_views.Add(item: new SdfViewSnapshot(Camera: Camera(x: 0f), Region: Left));
@@ -198,15 +197,19 @@ public sealed partial class WorldViewPaneMappingLawTests {
         ));
         var hovering = (GC.GetAllocatedBytesForCurrentThread() - before);
 
+        before = GC.GetAllocatedBytesForCurrentThread();
         Publish(pane: pane);
+
+        var publishing = (GC.GetAllocatedBytesForCurrentThread() - before);
+
         before = GC.GetAllocatedBytesForCurrentThread();
         Emit();
 
         var outlining = (GC.GetAllocatedBytesForCurrentThread() - before);
 
         Assert.Equal(
-            actual: (hovering, outlining),
-            expected: (0L, 0L)
+            actual: (hovering, publishing, outlining),
+            expected: (0L, 0L, 0L)
         );
         Assert.Equal(
             actual: m_host.HoveredPane?.Source.Name,

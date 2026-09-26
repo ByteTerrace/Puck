@@ -1261,6 +1261,7 @@ puck canary source-conversion uploaded-sources              # the four shipped c
 puck counters                                               # counters workload on both backends; deterministic counts must agree
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
 puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo interface-echo no-device-compile    # shader pipelines offscreen on both backends
+puck canary --capability gpu --backend vulkan               # a per-change GPU check on one backend (vulkan or directx); the verdict names the backend, so it is never the both-backend pass
 dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
 ```
 
@@ -1291,7 +1292,12 @@ hidden from its path, the shipped ink pipeline rendering from its stored
 package and a relocated package from its binaries while an unpackaged source
 row is refused by `SHADERPKG_ABSENT`.
 Each proof runs once per backend, and an absent GPU or compiler is reported as
-unsupported rather than passed, except in a leg that hides the compiler. Under
+unsupported rather than passed, except in a leg that hides the compiler.
+`puck canary --backend vulkan` (or `directx`) runs each proof on that backend
+alone for a per-change check; the plan and verdict lines name the backend
+that ran, and `--merge` refuses the option because the gate holds both. A
+claim that holds on both backends still needs a run without it. `puck parity`
+has no such option: its state and pixel verdicts compare the two backends. Under
 `puck canary --debug-layers` the runner fails every leg on any
 `[vulkan-debug] validation` or `[d3d12-debug]` line, and on
 `[d3d12] debug layer requested but not loaded` (`DebugLayerOutput` in
