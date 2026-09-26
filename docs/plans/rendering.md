@@ -2726,11 +2726,13 @@ follow it.
    under `GpuResidency.Select` (a staged selection held in a host ring, as a
    pass block is), writes the row slot's elements into it only when the slot
    changed (`TryWriteArray`), and an unbound array reads zeros. Laws:
-   `WorldStateMirrorRowLawTests` and `ShaderArrayFieldLawTests`. Open: one
-   region a bound row and element type shared by every pass that reads the row
-   the same way, instead of one World block a pass; a staged World block
-   through the node's region copies; a law holding one row's region bytes under
-   the three residency policies, and a load-gate law per array refusal.
+   `WorldStateMirrorRowLawTests` (one row's World block reads the same bytes
+   under all three residency policies), `ShaderArrayFieldLawTests`,
+   `PipelineOverrideLawTests.Parameters` (a load-gate law per array refusal)
+   and `ShaderPipelineRenderNodeLawTests.Parameters` (an array write reaches
+   the World set the pass binds). Open: one region a bound row and element
+   type shared by every pass that reads the row the same way, instead of one
+   World block a pass; a staged World block through the node's region copies.
 3. The forcing case. The rulepush rules keep a `tiles` lattice, each cell the
    top token's look, and a board pass package draws it; each level shows the
    board in a pane. A `rulepush-board` GPU canary boots an offscreen level,

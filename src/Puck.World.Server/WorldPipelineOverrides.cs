@@ -208,7 +208,7 @@ public sealed partial class WorldDocument {
         });
 
         if (!fits) {
-            reason = $"row '{binding.Row}' holds {row.Kind} values{((row.Kind == CellKind.Int) ? $" bounded [{(row.Min?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "-")}, {(row.Max?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "-")}]" : string.Empty)}, which a {array.Type} element cannot hold exactly; declare the row's bounds within the element's range.";
+            reason = $"row '{binding.Row}' holds {row.Kind} values{((row.Kind == CellKind.Int) ? $" bounded [{(row.Min?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "-")}, {(row.Max?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "-")}]" : string.Empty)}, which {array.Type} elements cannot hold exactly; declare the row's bounds within the element's range.";
 
             return false;
         }

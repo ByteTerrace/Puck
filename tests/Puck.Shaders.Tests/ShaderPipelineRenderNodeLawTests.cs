@@ -61,8 +61,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     /// replaces the history's fixed 32x32 extent, for a history whose extent follows the frame or differs.
     /// <paramref name="convertConfig"/> gives the convert pass a config, for a law that sets it live.
     /// <paramref name="revision"/> changes every pass's bytecode, for a candidate whose pass pipelines the pass-pipeline
-    /// cache must create rather than share with the graph it replaces.</summary>
-    private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null, IReadOnlyDictionary<string, ShaderConfigField>? convertConfig = null, byte revision = 0) {
+    /// cache must create rather than share with the graph it replaces. <paramref name="convertArrays"/> gives the convert
+    /// pass arrays, a World group block, for a law that writes them.</summary>
+    private static CompiledShaderPipeline Feedback(string historyFormat = "R16G16B16A16Float", ShaderPipelineDimensions? historyDimensions = null, IReadOnlyDictionary<string, ShaderConfigField>? convertConfig = null, byte revision = 0, IReadOnlyDictionary<string, ShaderArrayField>? convertArrays = null) {
         var definition = new RenderGraphDefinition(
             name: "feedback",
             outputs: ["image"],
@@ -88,6 +89,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                         Name: "gray"
                     )]
                 ) with {
+                    Arrays = convertArrays,
                     Config = convertConfig,
                 },
                 Pass(
