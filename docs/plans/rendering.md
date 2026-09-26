@@ -1111,8 +1111,11 @@ through each screen.
 P13b owes the rest. The screen shading still reads its own bezel constant,
 which `WorldScreenMappings` mirrors, and the GPU does not yet draw from the
 mapping. No host feeds
-`SourceFocus` or delivers a focused source's input to its window, no machine
-reads a mapped pointer, and nothing reads the picker for hover yet. The
+`SourceFocus` or delivers a focused source's input to its window, and no machine
+reads a mapped pointer. The pointer's pane hover reads the picker on the CPU
+(P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`, outlined by the
+overlay's `CursorWriter` and echoed as `world.view.panes`' `hovered=`); GPU
+picking follows P4. The
 recorded Windows run, a click reaching a captured editor window at the mapped
 point and the chord returning input to the game, belongs to P13b-4 and is
 [deferred to the end](#deferred-to-the-end).
@@ -3226,10 +3229,23 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      three-tick burst gives three snapshots, each carrying the ray; and
      `Locate` answers what the cursor's own mapping answered.
    A machine that reads a pointer, a light gun, is still owed.
-3. The presentation destination. The CPU picker and its host half have landed:
-   the World host publishes its panes to its `SourcePanePicker` every frame,
-   from the placements `place` draws. Nothing reads the picker for hover or
-   highlight yet, and GPU picking follows P4's visibility record.
+3. The presentation destination. The CPU half has landed: the World host
+   publishes its panes to its `SourcePanePicker` every frame, from the
+   placements `place` draws, and the drawn cursor's feed (`WorldCursorFeed`)
+   asks it which pane the pointer hovers each frame
+   (`WorldViewGraphHost.Hover`, over the pointer's display point) whenever the
+   pointer rests on the window, is not steering, and the cursor policy shows
+   it, inside its seat's viewport or beside it. The overlay's `CursorWriter`
+   outlines the hovered pane's rect with four accent hairline edges
+   (`OverlayCursorFrame.HoveredPane`, records the overlay already draws), the
+   cursor's hover label names the pane when no HUD panel is under it, and
+   `world.view.panes` ends with `hovered=`. A pane the layout does not show is
+   never published, so it is never hovered. Laws:
+   `WorldViewPaneMappingLawTests` (`.Hover`: the picker's pane drives the
+   outline, off every pane and an unshown pane hover none, and a steady hovered
+   frame allocates nothing in the host, the picker or the writer). The
+   outline is checked on the CPU only; no capture has inspected it on either
+   backend. GPU picking follows P4's visibility record.
 4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
    `SourceFocus`, a focused capture source's window receives pointer and key
    events at `SourcePassthrough.ToClient`'s client coordinates, and the chord
