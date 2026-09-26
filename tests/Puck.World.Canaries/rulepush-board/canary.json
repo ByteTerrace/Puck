@@ -1,0 +1,58 @@
+{
+  "id": "rulepush-board",
+  "title": "A rulepush press moves the imp on the board the pass draws from the tiles row",
+  "binding": "Both legs boot the Hedges level of the rulepush package offscreen at 1280x960 through its own level module, whose seated layout shows the room on the left and the board pane on the right, so the board renders at 640x960 with square cells 640/9 pixels wide, centred vertically. The board pass reads the level's tiles row whole through a world-group array bound by a views.graphs parameter, and draws each cell's look: the imp an ember body, a boulder grey stone, an empty cell the dark floor, each flat at its cell's centre. Both legs capture the board, press once, and capture again. The positive leg presses east: the imp pushes both boulders one cell, the classify rule rewrites the tiles row, and the second capture shows the floor at (1, 4), the imp at (2, 4) and a boulder at (4, 4). The discriminating leg presses west: the imp steps into the open and the boulders stay, so (1, 4) is floor again but (2, 4) is still stone and (4, 4) still floor, and the positive leg's observations of the pushed row turn red.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/rulepush-board/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "body.press", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 6, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "the-imp-starts-at-one-four", "capture": "before.png", "extent": [640, 960], "region": [0.1611111, 0.5703704, 0.1722222, 0.5777778], "reduce": "every", "minimum": [0.95, 0.48, 0.18, 1], "maximum": [0.95, 0.48, 0.18, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "a-boulder-starts-at-two-four", "capture": "before.png", "extent": [640, 960], "region": [0.2722222, 0.5703704, 0.2833333, 0.5777778], "reduce": "every", "minimum": [0.5, 0.46, 0.42, 1], "maximum": [0.5, 0.46, 0.42, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "four-four-starts-empty", "capture": "before.png", "extent": [640, 960], "region": [0.4944444, 0.5703704, 0.5055556, 0.5777778], "reduce": "every", "minimum": [0.105, 0.115, 0.145, 1], "maximum": [0.105, 0.115, 0.145, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "the-imp-leaves-one-four-empty", "capture": "after.png", "extent": [640, 960], "region": [0.1611111, 0.5703704, 0.1722222, 0.5777778], "reduce": "every", "minimum": [0.105, 0.115, 0.145, 1], "maximum": [0.105, 0.115, 0.145, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "the-imp-stands-at-two-four", "capture": "after.png", "extent": [640, 960], "region": [0.2722222, 0.5703704, 0.2833333, 0.5777778], "reduce": "every", "minimum": [0.95, 0.48, 0.18, 1], "maximum": [0.95, 0.48, 0.18, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "a-boulder-is-pushed-to-four-four", "capture": "after.png", "extent": [640, 960], "region": [0.4944444, 0.5703704, 0.5055556, 0.5777778], "reduce": "every", "minimum": [0.5, 0.46, 0.42, 1], "maximum": [0.5, 0.46, 0.42, 1], "toleranceCodes": 2, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/rulepush-board/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "body.press", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 6, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "the-imp-starts-at-one-four", "capture": "before.png", "extent": [640, 960], "region": [0.1611111, 0.5703704, 0.1722222, 0.5777778], "reduce": "every", "minimum": [0.95, 0.48, 0.18, 1], "maximum": [0.95, 0.48, 0.18, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "the-imp-leaves-one-four-empty", "capture": "after.png", "extent": [640, 960], "region": [0.1611111, 0.5703704, 0.1722222, 0.5777778], "reduce": "every", "minimum": [0.105, 0.115, 0.145, 1], "maximum": [0.105, 0.115, 0.145, 1], "toleranceCodes": 2, "holds": true },
+      { "type": "imageRegion", "name": "the-imp-stands-at-two-four", "capture": "after.png", "extent": [640, 960], "region": [0.2722222, 0.5703704, 0.2833333, 0.5777778], "reduce": "every", "minimum": [0.95, 0.48, 0.18, 1], "maximum": [0.95, 0.48, 0.18, 1], "toleranceCodes": 2, "holds": false },
+      { "type": "imageRegion", "name": "a-boulder-is-pushed-to-four-four", "capture": "after.png", "extent": [640, 960], "region": [0.4944444, 0.5703704, 0.5055556, 0.5777778], "reduce": "every", "minimum": [0.5, 0.46, 0.42, 1], "maximum": [0.5, 0.46, 0.42, 1], "toleranceCodes": 2, "holds": false }
+    ]
+  }
+}

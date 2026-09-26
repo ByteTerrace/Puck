@@ -2733,11 +2733,19 @@ follow it.
    the World set the pass binds). Open: one region a bound row and element
    type shared by every pass that reads the row the same way, instead of one
    World block a pass; a staged World block through the node's region copies.
-3. The forcing case. The rulepush rules keep a `tiles` lattice, each cell the
-   top token's look, and a board pass package draws it; each level shows the
-   board in a pane. A `rulepush-board` GPU canary boots an offscreen level,
-   moves the row with `world.row.set`, and holds the captured pixels to the
-   change, with a discriminating leg binding the same member to a literal.
+3. Done, pending its first device run: the forcing case. The rulepush rules
+   keep a `tiles` lattice (`rules.puck`), each cell the look of the last token
+   standing on it, written by the `classify` rule and retained for undo. The
+   board pass (`worlds/rulepush/board.graph.json` and `board.hlsl`) reads it
+   through a world-group `tiles` array, and each level names the graph as an
+   `asset` and shows it in a pane beside the room (`level.puck`). The
+   `rulepush-board` GPU canary boots Hedges offscreen, presses once, and holds
+   the captured cells to the move; its discriminating leg presses the other
+   way, so the pushed row's pixels cannot match. An array cannot bind a
+   literal, which the load gate refuses, so a board state stands in for the
+   literal leg. `puck test worlds/rulepush --reproduce` holds the row's cells to
+   the turns that write them. Open: every pass bound to the row still holds its
+   own World block (step 2's shared region).
 4. The `parameter` statement: `parameter <pass>.<member> = <value>` inside a
    `graph` block lowers to `parameters`, and the decompiler prints it back.
 5. The deterministic tick and the tick verdict. A pass reading a requested tick

@@ -111,6 +111,9 @@ test "a push chain into the hedge moves whole or not at all" with level(centre: 
     things[13].cell == 38
     things[14].cell == 39
     things[15].cell == 40
+    tiles[37] == 0
+    tiles[38] == 1
+    tiles[40] == 3
     won == 0
   }
 }
@@ -191,6 +194,8 @@ test "eight turns taken back return every token to where it began" with level(ce
     things[4].cell == 11
     things[7].cell == 20
     things[13].cell == 37
+    tiles[37] == 1
+    tiles[20] == 26
     won == 0
   }
 }
