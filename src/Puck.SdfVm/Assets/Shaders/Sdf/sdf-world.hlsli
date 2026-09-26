@@ -5,58 +5,16 @@
 #define SDF_WORLD_HLSLI
 #include "sdf-tile.hlsli"
 #include "sdf-vm.hlsli"
-
-// The viewport table — cameras + regions — as DATA: six float4 rows per view in the viewports buffer, read through
-// worldViewport.
-struct ViewportData {
-    float4 position;    // xyz = world position, w = time (seconds)
-    float4 right;       // xyz = right basis,   w = tan(fov / 2)
-    float4 up;          // xyz = up basis,      w = aspect ratio
-    float4 forward;     // xyz = forward basis, w = debug view mode (0 = final)
-    // xy = the view's RENDER extent in pixels, which is the size of the output image its dispatch set writes: the host
-    // sizes each view's image at the extent the render graph schedules for it, and the graph's place pass reconstructs
-    // it into the view's rect. zw are zero.
-    float4 extent;
-    // x is zero. yz = the off-axis (asymmetric) frustum's tangent-space center offset (SdfAsymmetricFrustum) — (0,0)
-    // for an ordinary symmetric camera, consumed by cameraRayDirection below. w = the frame's FAR DISTANCE
-    // (SdfFrame.FarDistance, read through worldFarDistance below).
-    // KEEP IN SYNC with SdfWorldEngine.PackViewports (the 96-byte row).
-    float4 lens;
-};
-static const uint WorldViewportRows = 6u;
-ViewportData worldViewport(uint view) {
-    uint row = (view * WorldViewportRows);
-    ViewportData data;
-    data.position = viewports[row];
-    data.right = viewports[(row + 1u)];
-    data.up = viewports[(row + 2u)];
-    data.forward = viewports[(row + 3u)];
-    data.extent = viewports[(row + 4u)];
-    data.lens = viewports[(row + 5u)];
-    return data;
-}
-
-// The frame's FAR DISTANCE — the depth at which every camera march ends: the fine march's far exit (renderView), the
-// beam's cone proofs (entry, the gap search, the F1 far bound) and the "nothing proven" sentinel every tile plane
-// carries, and the depth/overshoot debug ramps. It is WORLD DATA (render.farDistance → SdfFrame.FarDistance, packed
-// per view row by SdfWorldEngine.PackViewports — the one buffer every kernel that marches already binds), never a
-// shader constant: the host refuses a non-finite or non-positive value before packing, so no kernel guards it.
-float worldFarDistance(ViewportData view) {
-    return view.lens.w;
-}
-
-// A view's render extent in pixels: its output image's size, packed by the host as exact integers. Every consumer (the
-// sky, the tile passes' coverage, the hit passes and views) reads this one value, so none can disagree on it.
-uint2 worldViewDims(ViewportData view) {
-    return max((uint2)view.extent.xy, uint2(1u, 1u));
-}
+#include "sdf-viewport.hlsli"
+#include "sdf-mesh.hlsli"
 
 // The world values (imageExtent, tileGrid, viewportCount, screenMask, instanceMaskWordCount, sampleIndex and the view
 // the set renders, viewBase) are the views set's block, passGroup, written per view by SdfWorldEngine.WriteViewBlocks:
 // imageExtent is the engine extent, the largest a view renders and the per-view visibility record stride; tileGrid the
 // tiles per viewport, the cull buffer's per-viewport stride; viewportCount every view the frame renders; screenMask the
 // bound screen sources (the views passes only); instanceMaskWordCount the live program's per-tile mask width;
-// sampleIndex the deterministic tick clock star twinkle reads. Each view renders through its own set of dispatches, one
+// sampleIndex the deterministic tick clock star twinkle reads; meshDraws the frame's mesh draws, zero when no mesh draws
+// and the mesh visibility target holds nothing this frame. Each view renders through its own set of dispatches, one
 // deep in Z, so a kernel's view is worldViewOf(id.z).
 
 // The view a dispatch-set invocation renders.
@@ -69,6 +27,34 @@ uint worldViewOf(uint z) {
 #include "sdf-visibility.hlsli"
 uint worldVisibilityRecord(uint2 pixel, uint viewIndex) {
     return sdfVisibilityRecord(pixel, viewIndex, passGroup.imageExtent);
+}
+
+// What the mesh pass wrote for a pixel of the view the set renders: nothing when no mesh covers it.
+struct SdfMeshSample {
+    bool covered;
+    float t;
+    uint draw;
+    float3 normal;
+};
+
+// Reads the mesh visibility target at a pixel of the view the set renders, whose mesh pass ran just before its hit
+// passes. A texel whose second channel is zero is one no mesh covers, and a frame with no mesh draws reads nothing, since
+// its target holds an earlier frame's draws.
+SdfMeshSample sdfMeshSampleAt(uint2 pixel) {
+    SdfMeshSample hit = (SdfMeshSample)0;
+
+    if (passGroup.meshDraws != 0u) {
+        float4 texel = meshVisibility.Load(int3(int2(pixel), 0));
+
+        if (texel.y >= 1.0) {
+            hit.covered = true;
+            hit.t = texel.x;
+            hit.draw = ((uint)texel.y - 1u);
+            hit.normal = sdfOctDecode(texel.zw);
+        }
+    }
+
+    return hit;
 }
 #endif
 #ifdef SDF_PRIMARY_READ
@@ -634,7 +620,6 @@ static const float SurfaceEpsilon = 0.001;
 static const float SphereTraceOmega = 1.2; // Keinert over-relaxation factor (1 = plain sphere tracing; [1, 2))
 static const int ConeMarchSteps = 56;
 static const int IndependentConeMarchSteps = 8;
-static const float ConeNear = 0.02; // KEEP IN SYNC with SdfWorldEngine.ConeNear, the near plane ViewProjection shares
 static const float ConeEpsilon = 0.002;
 // Four-bound teleport (Larsson "The Gunk"): after the beam cone finds the tile's ENTRY (the classic marchStart), it
 // keeps marching a bounded budget to detect ONE proven-empty gap between two occupied bands — [firstExit,
@@ -1948,6 +1933,9 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
 #include "sdf-primary.hlsli"
 #include "sdf-surface.hlsli"
 
+// The hit passes' per-pixel body: primary records the pixel's visibility, surface and ambient resolve its N and S rows, and
+// views shades it from the completed record. Only the hit-pass kernels compile it.
+#if defined(SDF_PRIMARY_PASS) || defined(SDF_PRIMARY_READ)
 // `lane` is the caller's index within its 8x8 workgroup and `active` whether this lane owns a rendered pixel: an
 // inactive lane (past the render extent) still runs the march-free prologue and the group shadow gather's barriers
 // (UNIFORM control flow — see sdfShadowGatherGroup) and then returns black, which the caller never stores.
@@ -1991,6 +1979,9 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     // MASK (reads the tile mask buffer directly) and OVERSHOOT (runs its OWN two marches in its case) skip the primary
     // march too — for MASK it is unused work, for OVERSHOOT running it AS WELL would be a third march. Every non-debug
     // and every OTHER debug mode still marches exactly as before (the added compares are false for them).
+    // A mesh surface covering the pixel. The passes after primary read it as the record's kind; primary reads the mesh
+    // pass's target, bounds its march by the mesh's ray parameter and keeps the SDF hit only when it is strictly nearer.
+    bool meshPixel = false;
 #ifdef SDF_PRIMARY_READ
     if (active) {
         uint record = worldVisibilityRecord(pixel, viewIndex);
@@ -2007,11 +1998,22 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         marchStep = (int)sdfVisibilitySteps(visibility);
         sdfEvalCount = (float)sdfVisibilityQueries(visibility);
         hitSurface = sdfVisibilityHit(visibility);
+        meshPixel = (sdfVisibilityKind(visibility.identity) == SdfVisibilityKindMesh);
     }
 #else
-    if ((marchStart >= 0.0) && (viewMode != DebugViewModeSlice) && (viewMode != DebugViewModeMask) && (viewMode != DebugViewModeOvershoot)) {
+    SdfMeshSample meshHit = (SdfMeshSample)0;
+
+    if (active) {
+        meshHit = sdfMeshSampleAt(pixel);
+    }
+
+    // The march ends at the nearer of the tile's far bound and the mesh, and does not start past it: nothing it could
+    // accept there would win.
+    float marchBound = (meshHit.covered ? min(farBound, meshHit.t) : farBound);
+
+    if ((marchStart >= 0.0) && !(meshHit.covered && (marchStart >= marchBound)) && (viewMode != DebugViewModeSlice) && (viewMode != DebugViewModeMask) && (viewMode != DebugViewModeOvershoot)) {
         SdfPrimaryHit primary = sdfTracePrimary(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
-            farBound, farDistance, instanceMaskBase, pixelFootprint);
+            marchBound, farDistance, instanceMaskBase, pixelFootprint);
         traveled = primary.traveled;
         terminalRadius = primary.radius;
         terminalHitThreshold = primary.threshold;
@@ -2024,11 +2026,29 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         hitSurface = primary.found;
     }
 
+    // At equal depth the mesh wins: the SDF surface is kept only when it is strictly nearer. A mesh pixel carries no SDF
+    // frame, lanes or seam blend, and its coverage threshold is one so the silhouette blend reads it as solid.
+    if (meshHit.covered && !(hitSurface && (traveled < meshHit.t))) {
+        meshPixel = true;
+        hitSurface = true;
+        traveled = meshHit.t;
+        material = sdfMeshMaterial(meshHit.draw);
+        hitLanes = float4(0.0, 0.0, 0.0, 0.0);
+        hitFrameSlot = -1;
+        materialBlendWeight = 0.0;
+        materialBlendOther = 0;
+        terminalRadius = 0.0;
+        terminalHitThreshold = 1.0;
+    }
 #endif // SDF_PRIMARY_READ
 
 #if defined(SDF_SURFACE_PASS)
-    if (active) sdfResolveSurface(rayOrigin + rayDirection * traveled, rayDirection, hitSurface, material,
-        viewMode, instanceMaskBase, terminalRadius, pixelFootprint * traveled, worldVisibilityRecord(pixel, viewIndex));
+    if (active && meshPixel) {
+        sdfResolveMeshSurface(sdfMeshSampleAt(pixel).normal, worldVisibilityRecord(pixel, viewIndex));
+    } else if (active) {
+        sdfResolveSurface(rayOrigin + rayDirection * traveled, rayDirection, hitSurface, material,
+            viewMode, instanceMaskBase, terminalRadius, pixelFootprint * traveled, worldVisibilityRecord(pixel, viewIndex));
+    }
     return 0.0;
 #elif defined(SDF_AMBIENT_PASS)
     sdfResolveAmbient(rayOrigin + rayDirection * traveled, instanceMaskBase, pixel, viewIndex, lane, active);
@@ -2038,7 +2058,9 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         uint record = worldVisibilityRecord(pixel, viewIndex);
         SdfVisibility visibility;
         visibility.t = traveled;
-        visibility.identity = sdfVisibilitySdfIdentity(hitSurface, hitFrameSlot);
+        visibility.identity = (meshPixel
+            ? sdfVisibilityIdentity(SdfVisibilityKindMesh, meshHit.draw)
+            : sdfVisibilitySdfIdentity(hitSurface, hitFrameSlot));
         visibility.material = material;
         visibility.flags = sdfVisibilityFlags(marchStep, sdfEvalCount);
         SdfVisibilityCoverage coverage;
@@ -2060,58 +2082,15 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 #ifdef SDF_SCREEN_SOURCES
     bool cullOn = worldShadowCullEnabled();
     uint groupGather = (cullOn ? 1u : 0u); // without the group gather: the camera-tile mask (1) or the flat field (0)
-    uint groupAmbientGather = 0u;
 #ifdef SDF_GROUP_SHADOW_GATHER
     {
         bool finalShadingMode = ((viewMode <= 0) || (viewMode >= DebugViewModeCount) || (viewMode == DebugViewModeEvals));
-        bool ambientGatherWanted = (finalShadingMode && !worldAoDisabled() && !worldUseFastAmbientOcclusion());
         bool groupGatherWanted = (finalShadingMode && cullOn && !worldUseCameraTileShadowMask() && !worldSoftShadowsDisabled());
-
-#ifndef SDF_PRIMARY_READ
-        if (ambientGatherWanted) {
-#ifdef SDF_PRIMARY_READ
-            bool contactCull = sdfCanTracePartsIndependently();
-            sdfShadowGatherPoints[lane] = float4(rayOrigin + rayDirection * traveled, hitSurface ? 1.0 : 0.0);
-            GroupMemoryBarrierWithGroupSync();
-            if (lane == 0u) {
-                float3 low = 1e20, high = -1e20;
-                [loop] for (uint pointIndex = 0u; pointIndex < SDF_GROUP_SHADOW_LANES; pointIndex++) {
-                    float4 hit = sdfShadowGatherPoints[pointIndex];
-                    if (hit.w > 0.5) { low = min(low, hit.xyz); high = max(high, hit.xyz); }
-                }
-                sdfAmbientGatherLow = low - AmbientOcclusionReach;
-                sdfAmbientGatherHigh = high + AmbientOcclusionReach;
-            }
-            GroupMemoryBarrierWithGroupSync();
-#endif
-            // AO measures the field, including its positive clearances, rather than binary ray visibility.
-            // A camera cone or a finite contact sphere cannot preserve every ladder contribution. Build the
-            // full live-instance mask once per group, excluding only the parked slots that contribute nothing.
-            uint ambientInstanceCount = min(sdfInstanceCount(), SDF_MAX_INSTANCES);
-            uint ambientInstanceOffset = sdfInstanceDirectoryOffset();
-            for (uint word = lane; word < SDF_SHADOW_MASK_WORDS; word += SDF_GROUP_SHADOW_LANES) {
-                uint bits = 0u;
-                uint end = min(((word + 1u) * 32u), ambientInstanceCount);
-                for (uint index = word * 32u; index < end; index++) {
-                    if (sdfInstanceBoundAt(ambientInstanceOffset, index).w >= 0.0
-#ifdef SDF_PRIMARY_READ
-                        && (!contactCull || !sdfInstanceOutsideContactBox(index, sdfAmbientGatherLow, sdfAmbientGatherHigh))
-#endif
-                    ) {
-                        bits |= (1u << (index & 31u));
-                    }
-                }
-                sdfAmbientMaskWords[word] = bits;
-            }
-            GroupMemoryBarrierWithGroupSync();
-            groupAmbientGather = 2u;
-        }
-#endif
 
         if (groupGatherWanted) {
             float groupShadowReach = (ShadowMaxDistance * worldShadowDistanceScale());
 
-            groupGather = sdfShadowGatherGroup(hitSurface, (rayOrigin + (rayDirection * traveled)), worldSunDirection(), groupShadowReach, lane);
+            groupGather = sdfShadowGatherGroup((hitSurface && !meshPixel), (rayOrigin + (rayDirection * traveled)), worldSunDirection(), groupShadowReach, lane);
         }
     }
 #endif
@@ -2151,7 +2130,6 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         // branches below, which are gated on needsLitColor and therefore always imply needsNormal ran.
         float gradientMagnitude = 1.0;
 
-#ifdef SDF_PRIMARY_READ
         SdfVisibilitySurface surfaceInfo = sdfLoadVisibilitySurface(worldVisibilityRecord(pixel, viewIndex));
         sdfEvalCount += surfaceInfo.queries;
         if (needsNormal) {
@@ -2160,29 +2138,6 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             gradientMagnitude = surfaceNormal.gradientMagnitude;
             curvature = surfaceInfo.curvature;
         }
-#else
-        if (needsNormal) {
-            // Detail shapes (SDF_SHAPE_DETAIL_FLAG) perturb the normal ONLY here — the one hit-only re-evaluation,
-            // never a per-step march. Every normal path shares the toggle so switching the normal path or curvature
-            // never silently drops a detail shape's dent.
-            sdfDetailShadingActive = true;
-
-            // Authored curvature uses four taps and a center distance, reused from primary when admitted.
-            // Otherwise the runtime toggle selects between the ANALYTIC forward-mode dual normal (the default — one dual
-            // eval, exact through the op chain) and the 4-tap finite-difference probe (worldUseTapNormals, for the
-            // A/B lever). The 4-tap path stays compiled; the toggle picks at runtime. Every path also reports the
-            // hit's local gradient magnitude (see GradientMagnitudeFloor) for the shadow/AO de-scale below.
-            if (curvatureShading) {
-                normal = calculateNormalCurvature(surfacePoint, instanceMaskBase, terminalRadius, curvature, gradientMagnitude);
-            } else if (worldUseTapNormals()) {
-                normal = calculateNormal(surfacePoint, instanceMaskBase, gradientMagnitude);
-            } else {
-                normal = calculateNormalAnalytic(surfacePoint, instanceMaskBase, gradientMagnitude);
-            }
-
-            sdfDetailShadingActive = false;
-        }
-#endif
 
         if (needsLitColor) {
             // The shadow light's Lambert term under its soft-shadow visibility (the ambient lights still fill shadowed
@@ -2211,7 +2166,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             sunScale = environment.y;
 #endif
 
-            if ((sunDiffuse > 0.0) && (worldShadowLightIndex() >= 0) && !worldSoftShadowsDisabled()) {
+            if ((sunDiffuse > 0.0) && (worldShadowLightIndex() >= 0) && !worldSoftShadowsDisabled() && !meshPixel) {
                 // ONE shared scaled reach for BOTH the gather cull cone and the march ceiling (world.shadows's
                 // reach, worldShadowDistanceScale) — they MUST use the same length or the gathered occluder set is
                 // unsound for the shadow ray.
@@ -2306,28 +2261,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 
                 // 3-tap normal-ladder AO, into the AMBIENT fill ONLY (the sun stays governed by softShadowVisibility above).
                 // The ambient pass skips emissive screen cards and initializes neutral AO when world.ao is off.
-                // The monolithic comparison kernel retains its local ladder here.
-#ifdef SDF_PRIMARY_READ
                 float ambientOcclusion = surfaceInfo.ambient;
-#else
-                uint ambientMaskBase = instanceMaskBase;
-#ifdef SDF_SCREEN_SOURCES
-                if (!worldUseFastAmbientOcclusion()) {
-                    sdfAmbientMaskActive = (groupAmbientGather == 2u);
-                    ambientMaskBase = SDF_INSTANCE_MASK_ALL; // exact no-grid fallback; an active shared mask overrides it
-                }
-#endif
-                sdfSecondaryMarchActive = true;
-                float ambientOcclusion = (worldAoDisabled()
-                    ? 1.0
-                    : (worldUseFastAmbientOcclusion()
-                        ? calcFastAO(surfacePoint, normal, ambientMaskBase, shadingStepScale)
-                        : calcAO(surfacePoint, normal, ambientMaskBase, shadingStepScale)));
-                sdfSecondaryMarchActive = false;
-#ifdef SDF_SCREEN_SOURCES
-                sdfAmbientMaskActive = false;
-#endif
-#endif
                 // A wrapped (skin-like) material relaxes its ambient fill toward 1 — mix(ao, 1, wrap*.35), the
                 // study's boolean skin flag generalized to the continuous wrap lane. wrap = 0 is a no-op.
                 ambientOcclusion = lerp(ambientOcclusion, 1.0, saturate(shadeMaterial.wrap * 0.35));
@@ -2485,13 +2419,12 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             float fog = (1.0 - exp(-worldSkyFogDensity() * traveled));
             color = lerp(color, skyGradient(rayDirection), fog);
 
-#ifdef SDF_PRIMARY_READ
             // Approximate sky-silhouette coverage, using visibility from this frame's completed primary pass.
             // A local field rise behind a hit cannot distinguish sky from farther geometry: that old probe
             // painted white halos around grass against the ground and cost another whole-field query.
             // Keep the residual ratio in the same clamped units as hit acceptance; the normal gates grazing hits.
-            // Geometry-to-geometry edges receive no sky blend. The monolithic reference has no completed neighbor
-            // records and omits this filter. Ordered dither and bounded-volume composition still happen afterward.
+            // Geometry-to-geometry edges receive no sky blend, and a mesh pixel's coverage is zero. Ordered dither and
+            // bounded-volume composition still happen afterward.
             float coverage = saturate(terminalRadius / terminalHitThreshold);
             float grazing = (1.0 - saturate(-dot(normal, rayDirection)));
             float edgeWeight = (coverage * grazing);
@@ -2517,7 +2450,6 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             if (adjacentSky) {
                 color = lerp(color, skyGradient(rayDirection), edgeWeight);
             }
-#endif
         }
     }
 
@@ -2713,8 +2645,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             break;
         }
         case 11: { // VISIBILITY — the kind of the pixel's current visibility record: background dark blue, SDF green,
-                   // mesh orange. The monolithic reference keeps no records, so it reads its own march's outcome.
-#ifdef SDF_PRIMARY_READ
+                   // mesh orange.
             uint kind = SdfVisibilityKindBackground;
 
             if (worldVisibilityCurrent(pixel)) {
@@ -2724,9 +2655,6 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             viewColor = ((kind == SdfVisibilityKindSdf)
                 ? float3(0.15, 0.90, 0.25)
                 : ((kind == SdfVisibilityKindMesh) ? float3(0.95, 0.55, 0.10) : float3(0.02, 0.05, 0.28)));
-#else
-            viewColor = (hitSurface ? float3(0.15, 0.90, 0.25) : float3(0.02, 0.05, 0.28));
-#endif
             break;
         }
     }
@@ -2734,5 +2662,6 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     return viewColor;
 #endif // SDF_PRIMARY_PASS
 }
+#endif
 
 #endif

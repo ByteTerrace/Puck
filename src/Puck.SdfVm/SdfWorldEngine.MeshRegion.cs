@@ -6,15 +6,19 @@ namespace Puck.SdfVm;
 // The mesh region: the frame's mesh draws (SdfFrame.MeshDraws) laid out by SdfMeshRegion in one GpuRegion, created like
 // every other engine region (SdfWorldEngine.Regions.cs) and copied with them in the upload pass. A frame whose draw list
 // is the one last packed repacks nothing; a new list is packed into the host copy and owes only the words that changed.
-// The region is created by the first frame that draws a mesh, and grows, after every frame-ring fence retires, like
-// program capacity; a frame without draws keeps it. No kernel reads it yet.
+// The region is created with the engine, one draw record long so every set that binds it binds a buffer, and grows,
+// after every frame-ring fence retires, like program capacity, rebinding its new buffers; a frame without draws keeps
+// it. The mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
 public sealed partial class SdfWorldEngine {
     private readonly Dictionary<SdfMesh, SdfMeshRegionMesh> m_meshPlacements = new(comparer: ReferenceEqualityComparer.Instance);
 
     // The draw list last packed, the words it packed into and their layout.
     private IReadOnlyList<SdfMeshDraw>? m_meshDraws;
     private SdfMeshRegionLayout m_meshLayout;
-    private GpuRegion? m_meshRegion;
+    private GpuRegion m_meshRegion;
+    // One more for every new draw list the region packs: the cadence signature folds it, so a frame whose draws moved
+    // renders.
+    private long m_meshRevision;
     private ulong m_meshRegionBytes;
 
     private uint[] m_meshWords = [];
@@ -22,13 +26,15 @@ public sealed partial class SdfWorldEngine {
     /// <summary>Gets the mesh region's layout for the draws the latest frame staged; empty before a frame draws a
     /// mesh.</summary>
     public SdfMeshRegionLayout MeshRegionLayout => m_meshLayout;
-    /// <summary>Gets the bytes the mesh region holds, which its buffers are allocated for, or zero before a frame draws a
-    /// mesh. Safe to read from any thread.</summary>
+    /// <summary>Gets the bytes the mesh region holds, which its buffers are allocated for: one draw record's until a frame
+    /// needs more. Safe to read from any thread.</summary>
     public ulong MeshRegionBytes => Volatile.Read(location: ref m_meshRegionBytes);
 
     // Packs a new draw list into the region, growing it first when the list needs more bytes; the upload pass sends the
     // slot what it owes. Called with the slot's fence retired.
     private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws) {
+        m_meshDrawCount = ((uint)draws.Count);
+
         if (!ReferenceEquals(
             objA: draws,
             objB: m_meshDraws
@@ -55,7 +61,7 @@ public sealed partial class SdfWorldEngine {
                     meshes: m_meshPlacements
                 );
                 EnsureMeshRegionCapacity(bytes: layout.Bytes);
-                _ = m_meshRegion!.Write(
+                _ = m_meshRegion.Write(
                     bytes: MemoryMarshal.AsBytes(span: words),
                     offset: 0
                 );
@@ -63,14 +69,15 @@ public sealed partial class SdfWorldEngine {
 
             m_meshDraws = draws;
             m_meshLayout = layout;
+            m_meshRevision++;
         }
     }
-    // Creates the region at the size the draws need, or replaces it with one grown by half again (or to the need, if
-    // larger), after every frame-ring fence retires. The replacement starts owing every word, so the next write sends
-    // the whole packed list, and writes its buffers into the reserved copy sets the old one wrote, so growing takes no
-    // descriptor range.
+    // Replaces the region with one grown by half again (or to the need, if larger), after every frame-ring fence retires,
+    // and binds the replacement's buffers into every set. The replacement starts owing every word, so the next write
+    // sends the whole packed list, and writes its buffers into the reserved copy sets the old one wrote, so growing takes
+    // no descriptor range.
     private void EnsureMeshRegionCapacity(ulong bytes) {
-        var current = ((ulong)(m_meshRegion?.ByteCount ?? 0));
+        var current = ((ulong)m_meshRegion.ByteCount);
 
         if (bytes <= current) {
             return;
@@ -83,20 +90,17 @@ public sealed partial class SdfWorldEngine {
 
         grown = (((grown + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint));
 
-        if (m_meshRegion is { } previous) {
-            WaitForFrameRing();
-            previous.Dispose();
-            m_meshRegion = null;
-            Volatile.Write(
-                location: ref m_meshRegionBytes,
-                value: 0UL
-            );
-        }
-
+        WaitForFrameRing();
+        m_meshRegion.Dispose();
         m_meshRegion = CreateRegion(
             byteCount: checked((int)grown),
             region: MeshRegionIndex
         );
+
+        for (var slot = 0; (slot < FrameRingSize); slot++) {
+            BindMeshRegion(slot: slot);
+        }
+
         Volatile.Write(
             location: ref m_meshRegionBytes,
             value: grown

@@ -31,20 +31,29 @@ public static class GpuImageUsages {
     /// <summary>The usages an image may declare.</summary>
     public const GpuImageUsage All = GpuImageUsage.Sampled | GpuImageUsage.Storage | GpuImageUsage.ColorAttachment | GpuImageUsage.DepthAttachment;
 
-    /// <summary>Refuses an image request whose extent is empty, whose usage is empty or undefined, or whose usage does not
-    /// fit its format.</summary>
+    /// <summary>Refuses an image request whose extent is empty, whose usage is empty or undefined, whose usage does not fit
+    /// its format, or whose clear depth lies outside [0, 1].</summary>
     /// <param name="format">The image format.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
     /// <param name="usage">The declared usages.</param>
-    /// <exception cref="ArgumentOutOfRangeException">The extent is zero, the usage is empty or undefined, or the format is
-    /// undefined.</exception>
+    /// <param name="clearDepth">The depth a depth attachment is cleared to (<see cref="IGpuImageFactory.Create"/>).</param>
+    /// <exception cref="ArgumentOutOfRangeException">The extent is zero, the usage is empty or undefined, the format is undefined,
+    /// or the clear depth lies outside [0, 1].</exception>
     /// <exception cref="ArgumentException">A depth format declares a usage other than
     /// <see cref="GpuImageUsage.DepthAttachment"/>, a color format declares it, or a block-compressed format declares a
     /// usage other than <see cref="GpuImageUsage.Sampled"/>.</exception>
-    public static void Validate(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
+    public static void Validate(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, float clearDepth = 1f) {
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
+
+        if (!(clearDepth is >= 0f and <= 1f)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: clearDepth,
+                message: "A depth attachment clears to a depth in [0, 1].",
+                paramName: nameof(clearDepth)
+            );
+        }
 
         if (!Enum.IsDefined(value: format)) {
             throw new ArgumentOutOfRangeException(

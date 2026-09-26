@@ -1,0 +1,6 @@
+# Every frame renders every pass, and the visibility view colors each pixel by the kind of its visibility record.
+world.cadence off
+world.debug-view visibility
+world.wait 30
+world.screenshot {run}/meshes.png
+world.wait 10

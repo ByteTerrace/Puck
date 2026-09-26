@@ -2,7 +2,8 @@
 // the bounding box of SURVIVING (non-empty) tiles of the one view its dispatch set renders and writes (a) the Stage-1 "views" INDIRECT
 // dispatch group counts and (b) the bbox group origin. The views dispatch then covers ONLY that bbox — the all-empty
 // margins (e.g. the sky above the scene) are never dispatched, and the sky pre-pass alone has written every
-// remaining empty tile. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
+// remaining empty tile. A frame with mesh draws covers the whole grid instead: a mesh pixel needs its record whatever
+// the beam proved about its tile. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
 // cull-buffer read); its args output feeds the indirect Stage-1 dispatch (a draw-indirect barrier) and its bounds
 // output the Stage-1 kernel (a shader-read barrier). Generic: it operates only on the cull buffer, not on any scene.
 //
@@ -65,7 +66,14 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
     uint boxMaxX = maxTileX;
     uint boxMaxY = maxTileY;
 
-    if (0xFFFFFFFFu == boxMinX) {
+    if (passGroup.meshDraws != 0u) {
+        // A mesh draws this frame: a mesh pixel reaches the hit passes whatever the beam proved about its tile, so the box
+        // is the whole tile grid and every record of the view is current.
+        boxMinX = 0u;
+        boxMinY = 0u;
+        boxMaxX = (passGroup.tileGrid.x - 1u);
+        boxMaxY = (passGroup.tileGrid.y - 1u);
+    } else if (0xFFFFFFFFu == boxMinX) {
         // No surviving tiles (every ray clears the field): dispatch one degenerate tile; the compositor flattens all.
         boxMinX = 0u;
         boxMinY = 0u;

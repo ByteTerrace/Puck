@@ -431,10 +431,11 @@ file sealed class FaultingCommandPoolFactory(IGpuCommandPoolFactory inner, GpuCr
     }
 }
 file sealed class FaultingImageFactory(IGpuImageFactory inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuImageFactory {
-    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name, float clearDepth = 1f) {
         Enter(kind: GpuCreationKind.Image);
 
         return inner.Create(
+            clearDepth: clearDepth,
             format: format,
             height: height,
             name: name,

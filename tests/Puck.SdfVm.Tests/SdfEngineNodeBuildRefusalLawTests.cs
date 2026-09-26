@@ -391,8 +391,8 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
         public FakeGpuDevice Gpu { get; }
         public SdfEngineNode Node { get; }
 
-        // Every object the engines created was released exactly once, the pipeline set the node still leases (pipelines
-        // and their shader modules nothing released) is held, a set a device loss released was released once, and no
+        // Every object the engines created was released exactly once, what the node still leases (the pipelines, the mesh
+        // pass's render pass and their shader modules, nothing released) is held, a set a device loss released was released once, and no
         // device-local memory is held.
         public void AssertOnlyThePipelineSetIsHeld() {
             Assert.All(
@@ -419,7 +419,7 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
                 expected: 0L
             );
         }
-        // Nothing but the pipeline set's pipelines and shader modules was ever created, and no device-local memory is held.
+        // Nothing but what the node leases was ever created, and no device-local memory is held.
         public void AssertNothingButThePipelineSetWasCreated() {
             Assert.All(
                 action: static created => Assert.True(condition: IsPipelineSetObject(created: created)),
@@ -475,7 +475,9 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
             return surface;
         }
 
+        // What the node's leases hold: the set's and the region copy's compute pipelines, the mesh pass's graphics pipeline
+        // and render pass, and their shader modules.
         private static bool IsPipelineSetObject(FakeGpuDevice.Creation created) =>
-            (created.Kind is "compute pipeline" or "shader module");
+            (created.Kind is "compute pipeline" or "graphics pipeline" or "render pass" or "shader module");
     }
 }

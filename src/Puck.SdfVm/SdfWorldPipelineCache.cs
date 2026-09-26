@@ -45,16 +45,24 @@ public sealed class SdfWorldPipelineCache {
     /// <summary>Initializes a new instance of the <see cref="SdfWorldPipelineCache"/> class.</summary>
     /// <param name="regionCopy">The composition's region copy, whose pipeline every holder of a set also leases for its
     /// device.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="regionCopy"/> is <see langword="null"/>.</exception>
-    public SdfWorldPipelineCache(GpuRegionCopyPass regionCopy) {
+    /// <param name="meshRaster">The composition's mesh pass, whose pipeline every holder of a set also leases for its
+    /// device.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="regionCopy"/> or <paramref name="meshRaster"/> is
+    /// <see langword="null"/>.</exception>
+    public SdfWorldPipelineCache(GpuRegionCopyPass regionCopy, SdfMeshRasterPass meshRaster) {
         ArgumentNullException.ThrowIfNull(argument: regionCopy);
+        ArgumentNullException.ThrowIfNull(argument: meshRaster);
 
+        MeshRaster = meshRaster;
         RegionCopy = regionCopy;
     }
 
     /// <summary>Gets the composition's region copy, one pipeline a device in its pass pipelines, which an engine's table
     /// upload and mesh region record with.</summary>
     public GpuRegionCopyPass RegionCopy { get; }
+    /// <summary>Gets the composition's mesh pass, one graphics pipeline a device in its pass pipelines, which an engine's
+    /// mesh pass draws with.</summary>
+    public SdfMeshRasterPass MeshRaster { get; }
     /// <summary>Gets the number of sets a new lease can join: every set with a lease, less any a reload made private
     /// to its node.</summary>
     public int SharedSets => m_sets.SharedEntries;

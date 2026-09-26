@@ -99,13 +99,14 @@ public sealed class SdfWorldPipelineCacheLawTests {
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.PipelinesCreated, source: first.WorkLifetime));
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.PipelinesCreated, source: second.WorkLifetime));
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.ShaderModulesCreated, source: first.WorkLifetime));
-        // Both engines record their table uploads with the device's one region-copy pipeline.
-        Assert.Equal(expected: 1, actual: pipelines.RegionCopy.Pipelines.SharedPipelines);
-        Assert.Equal(expected: 1L, actual: Read(kind: GpuWork.PipelinesCreated, source: pipelines.RegionCopy.Pipelines.Work));
+        // Both engines record their table uploads with the device's one region-copy pipeline and draw their meshes with
+        // its one mesh pass pipeline, the two pass pipelines of the device.
+        Assert.Equal(expected: 2, actual: pipelines.RegionCopy.Pipelines.SharedPipelines);
+        Assert.Equal(expected: 2L, actual: Read(kind: GpuWork.PipelinesCreated, source: pipelines.RegionCopy.Pipelines.Work));
 
         first.Dispose();
         Assert.Equal(expected: 1, actual: pipelines.SharedSets);
-        Assert.Equal(expected: 1, actual: pipelines.RegionCopy.Pipelines.SharedPipelines);
+        Assert.Equal(expected: 2, actual: pipelines.RegionCopy.Pipelines.SharedPipelines);
         Assert.False(condition: second.ProduceFrame(context: in context).IsEmpty);
 
         second.Dispose();

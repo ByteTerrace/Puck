@@ -10,10 +10,11 @@ public sealed partial class SdfWorldEngine {
     private const int MaskPass = 2;
     private const int BeamPass = 3;
     private const int CullArgsPass = 4;
-    private const int PrimaryPass = 5;
-    private const int SurfacePass = 6;
-    private const int AmbientPass = 7;
-    private const int ViewsPass = 8;
+    private const int MeshPass = 5;
+    private const int PrimaryPass = 6;
+    private const int SurfacePass = 7;
+    private const int AmbientPass = 8;
+    private const int ViewsPass = 9;
 
     private static readonly WorkClass[] PassClassTable = BuildPassClasses();
 

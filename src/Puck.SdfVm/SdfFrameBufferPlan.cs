@@ -36,6 +36,9 @@ public enum SdfFramePass {
     Beam,
     /// <summary>The reduction to the indirect dispatch bounds.</summary>
     CullArgs,
+    /// <summary>The mesh pass, which draws the frame's mesh draws into the mesh visibility target from host-written tables
+    /// and touches no frame buffer.</summary>
+    Mesh,
     /// <summary>Primary traversal.</summary>
     Primary,
     /// <summary>Surface evaluation.</summary>
@@ -110,11 +113,11 @@ public static class SdfFrameBufferPlan {
 
     /// <summary>The buffers <paramref name="pass"/> touches and how, in the order its transitions are recorded.</summary>
     /// <param name="pass">The dispatch.</param>
-    /// <returns>The pass's buffer uses; host-written tables and images are not listed, so the upload and the sky have
-    /// none.</returns>
+    /// <returns>The pass's buffer uses; host-written tables and images are not listed, so the upload, the sky and the
+    /// mesh pass have none.</returns>
     public static ReadOnlySpan<SdfBufferUse> Uses(SdfFramePass pass) => pass switch {
         SdfFramePass.BrickUpload or SdfFramePass.BrickBake => BrickWrites,
-        SdfFramePass.Upload or SdfFramePass.Sky => [],
+        SdfFramePass.Upload or SdfFramePass.Sky or SdfFramePass.Mesh => [],
         SdfFramePass.Mask => MaskUses,
         SdfFramePass.Beam => BeamUses,
         SdfFramePass.CullArgs => CullArgsUses,

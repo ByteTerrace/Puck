@@ -79,11 +79,11 @@ public sealed class SdfWorldEngineUploadLawTests {
             UnifiedMemory: true
         );
 
-        // Eight per-frame tables and two blocks, the frame block and the one view's world block, each a ring of one buffer
-        // per slot, and nothing staged or copied.
+        // Nine per-frame tables, the mesh region among them, and two blocks, the frame block and the one view's world
+        // block, each a ring of one buffer per slot, and nothing staged or copied.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (10 * SdfWorldEngine.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (11 * SdfWorldEngine.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
@@ -376,8 +376,10 @@ public sealed class SdfWorldEngineUploadLawTests {
         );
         var expected = new List<uint>();
 
-        // A draw's record: its matrix row by row, its material, then its mesh's first index, index count and base vertex.
-        void Record(Matrix4x4 matrix, uint material, uint firstIndex, uint indexCount, uint baseVertex) {
+        // A draw's record: its matrix row by row, its material, then the word its mesh's first index sits at, its index count
+        // and the word its first position sits at. The positions start past the three records (word 60), the indices past
+        // the seven positions (word 81).
+        void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint positionWord) {
             float[] rows = [
                 matrix.M11, matrix.M12, matrix.M13, matrix.M14,
                 matrix.M21, matrix.M22, matrix.M23, matrix.M24,
@@ -386,12 +388,12 @@ public sealed class SdfWorldEngineUploadLawTests {
             ];
 
             expected.AddRange(collection: rows.Select(selector: BitConverter.SingleToUInt32Bits));
-            expected.AddRange(collection: [material, firstIndex, indexCount, baseVertex]);
+            expected.AddRange(collection: [material, indexWord, indexCount, positionWord]);
         }
 
-        Record(baseVertex: 0, firstIndex: 0, indexCount: 6, material: 4, matrix: moved);
-        Record(matrix: Matrix4x4.CreateScale(scale: 2f), material: 5, firstIndex: 6, indexCount: 3, baseVertex: 4);
-        Record(matrix: Matrix4x4.Identity, material: 6, firstIndex: 0, indexCount: 6, baseVertex: 0);
+        Record(indexCount: 6, indexWord: 81, material: 4, matrix: moved, positionWord: 60);
+        Record(indexCount: 3, indexWord: 87, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), positionWord: 72);
+        Record(indexCount: 6, indexWord: 81, material: 6, matrix: Matrix4x4.Identity, positionWord: 60);
 
         foreach (var position in quad.Positions.ToArray().Concat(second: triangle.Positions.ToArray())) {
             expected.AddRange(collection: [
@@ -641,6 +643,7 @@ public sealed class SdfWorldEngineUploadLawTests {
         private readonly DynamicTransform[] m_transforms;
 
         private SdfWorldPipelines m_pipelines = null!;
+        private GpuPassPipeline m_meshRaster = null!;
         private GpuPassPipeline m_regionCopy = null!;
 
         public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null) {
@@ -666,6 +669,7 @@ public sealed class SdfWorldEngineUploadLawTests {
             Engine.Dispose();
             m_pipelines.Dispose();
             m_regionCopy.Dispose();
+            m_meshRaster.Dispose();
         }
         // Moves one slot to a pose no earlier frame gave it.
         public void Move(int slot) {
@@ -681,6 +685,7 @@ public sealed class SdfWorldEngineUploadLawTests {
             Engine.Dispose();
             m_pipelines.Dispose();
             m_regionCopy.Dispose();
+            m_meshRaster.Dispose();
             Engine = Build();
         }
         // Renders one frame at the given time, by default resetting the tallies first so they read that frame's writes.
@@ -729,6 +734,10 @@ public sealed class SdfWorldEngineUploadLawTests {
                 kernel: UploadModelGpu.RegionCopyBytecode,
                 ledger: ledger
             );
+            m_meshRaster = SdfTestPipelines.MeshRaster(
+                device: Gpu,
+                ledger: ledger
+            );
             m_pipelines = SdfTestPipelines.Build(
                 device: Gpu,
                 kernels: SdfTestPipelines.Kernels(),
@@ -747,6 +756,7 @@ public sealed class SdfWorldEngineUploadLawTests {
                     WorkLedger: ledger
                 ),
                 pipelines: m_pipelines,
+                meshRaster: m_meshRaster,
                 regionCopy: m_regionCopy.Compute!,
                 width: Extent
             );

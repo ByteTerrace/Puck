@@ -57,11 +57,14 @@ public sealed class VulkanGpuImage : IGpuImage {
     /// <param name="height">The height in pixels.</param>
     /// <param name="usage">The declared usages; <see cref="GpuImageUsages.Validate"/> refuses a request that breaks a
     /// rule before anything is created.</param>
+    /// <param name="clearDepth">The depth a depth attachment is cleared to; Vulkan records the clear with the render pass,
+    /// so it is only validated here.</param>
     /// <returns>The image, owned by the caller.</returns>
-    public static VulkanGpuImage Create(IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi, VulkanDeviceCommands device, VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
+    public static VulkanGpuImage Create(IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi, VulkanDeviceCommands device, VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, float clearDepth = 1f) {
         ArgumentNullException.ThrowIfNull(offscreenImageApi);
         ArgumentNullException.ThrowIfNull(framebufferSetApi);
         GpuImageUsages.Validate(
+            clearDepth: clearDepth,
             format: format,
             height: height,
             usage: usage,
@@ -141,10 +144,11 @@ public sealed class VulkanGpuImage : IGpuImage {
 /// <param name="naming">The naming every created object is handed to.</param>
 public sealed class VulkanGpuImageFactory(IVulkanDeviceContext deviceContext, IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi, GpuObjectNaming naming) : IGpuImageFactory {
     /// <inheritdoc/>
-    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name, float clearDepth = 1f) {
         var vkContext = deviceContext;
         var logicalDevice = vkContext.LogicalDevice;
         var image = VulkanGpuImage.Create(
+            clearDepth: clearDepth,
             device: logicalDevice.Commands,
             format: format,
             framebufferSetApi: framebufferSetApi,

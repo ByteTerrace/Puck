@@ -230,7 +230,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // public PassLabels exposes this list). Adding a pass is naming it here and adding its EnterPass/LeavePass bracket
     // where it submits (SdfWorldEngine.Record.cs); every reader (PassLabels, CadenceSkippedPassLabels, the ledger's
     // per-pass counts) then picks it up automatically.
-    private static readonly string[] PassLabelTable = ["upload", "sky", "mask", "beam", "cull-args", "primary", "surface", "ambient", "views"];
+    private static readonly string[] PassLabelTable = ["upload", "sky", "mask", "beam", "cull-args", "mesh", "primary", "surface", "ambient", "views"];
 
     // The change-detected descriptor caches are PER RING SLOT: each slot's sets are only rewritten once that slot's
     // fence proves its previous frame retired, so a descriptor update can never race an in-flight command buffer.
@@ -286,6 +286,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <param name="regionCopy">The device's region-copy pipeline, created from
     /// <see cref="GpuRegion.CopyPipeline"/> on <paramref name="device"/>, which the table upload and the mesh region
     /// record with. The caller keeps ownership and disposes it after the engine.</param>
+    /// <param name="meshRaster">The device's mesh pass pipeline (<see cref="SdfMeshRasterPass"/>), built on
+    /// <paramref name="device"/> with the render pass it draws in. The caller keeps ownership and disposes it after the
+    /// engine.</param>
     /// <param name="width">The engine's extent width in pixels: the widest any view renders.</param>
     /// <param name="height">The engine's extent height in pixels: the tallest any view renders.</param>
     /// <param name="options">The construction options (scene program, capacities, child mask, export seam).</param>
@@ -296,10 +299,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the engine's pool
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated), or the loaded shader bytecode does not report
     /// the host's <see cref="Puck.SignedDistance.SdfIsa.Version"/>.</exception>
-    public SdfWorldEngine(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, uint width, uint height, SdfWorldEngineOptions options) {
+    public SdfWorldEngine(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, uint width, uint height, SdfWorldEngineOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(regionCopy);
+        ArgumentNullException.ThrowIfNull(meshRaster);
         ObjectDisposedException.ThrowIf(
             condition: pipelines.IsDisposed,
             instance: pipelines
@@ -389,10 +393,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_viewsCorePipeline = pipelines.Pipeline(index: ViewsCorePipelineIndex);
         m_viewsFoldsPipeline = pipelines.Pipeline(index: ViewsFoldsPipelineIndex);
         m_skyPipeline = pipelines.Pipeline(index: SkyPipelineIndex);
+        m_meshPipeline = (meshRaster.Graphics ?? throw new ArgumentException(message: "The mesh pass pipeline is not a graphics pipeline.", paramName: nameof(meshRaster)));
+        m_meshRenderPass = (meshRaster.RenderPass ?? throw new ArgumentException(message: "The mesh pass pipeline names no render pass.", paramName: nameof(meshRaster)));
         m_regionCopyPipeline = regionCopy;
         m_regionCopies = new GpuRegionCopyRecording(
             begin: BeginUpload,
-            readers: GpuStage.ComputeShader,
+            readers: GpuStage.ComputeShader | GpuStage.VertexShader,
             recorder: gpu.Recorder
         );
 
@@ -475,6 +481,15 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             byteCount: ((DecalBufferCells * DecalWordsPerCell) * sizeof(uint)),
             region: DecalRegionIndex
         ));
+        m_meshRegion = scope.Own(created: CreateRegion(
+            byteCount: SdfMeshRegion.DrawBytes,
+            region: MeshRegionIndex
+        ));
+        m_meshRegionBytes = SdfMeshRegion.DrawBytes;
+        (m_meshTarget, m_meshDepth, m_meshFramebuffer) = CreateMeshAttachments(
+            renderPass: m_meshRenderPass,
+            scope: scope
+        );
         // The cull buffer is GPU-written by the beam prepass (a UAV), so it is device-local (a Direct3D 12 default heap).
         // Four tile planes followed by two world-space bound corners per instance per viewport. The beam refits
         // those bounds from this frame's poses and camera; primary reads them after the existing compute barrier.
@@ -659,7 +674,15 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 WriteWorldBuffer(buffer: m_brickPoolBuffer, member: SdfWorldInterfaces.BrickPool, set: viewsSet);
                 WriteWorldBuffer(buffer: m_primaryHitBuffer, member: SdfWorldInterfaces.VisibilityRecordsWritten, set: viewsSet);
                 WriteWorldBuffer(buffer: m_primaryHitBuffer, member: SdfWorldInterfaces.VisibilityRecords, set: viewsSet);
+                m_bindings.WriteSampledImage(
+                    arrayElement: 0,
+                    binding: MeshVisibilityBinding,
+                    descriptorSetHandle: viewsSet,
+                    imageViewHandle: m_meshTarget.ImageViewHandle
+                );
             }
+
+            m_meshSets[slot] = AllocateMeshSet(slot: slot);
 
             BindProgramBuffers(slot: slot);
             BindRegions(slot: slot);
@@ -817,6 +840,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         DisposeViewOutputs();
         m_screenSourceFiller.Dispose();
+        m_meshFramebuffer.Dispose();
+        m_meshDepth.Dispose();
+        m_meshTarget.Dispose();
         m_glyphAtlasUpload?.Dispose();
     }
 }

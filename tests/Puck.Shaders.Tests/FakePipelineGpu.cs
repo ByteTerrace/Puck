@@ -274,7 +274,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         sizeBytes: sizeBytes,
         usage: usage
     );
-    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) => new FakeImage(
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name, float clearDepth = 1f) => new FakeImage(
         created: Create(
             bytes: ((((ulong)width) * height) * TexelBytes(format: format)),
             kind: $"{format} image"

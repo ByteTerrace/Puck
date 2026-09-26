@@ -583,9 +583,10 @@ file sealed class CountingBufferFactory(IGpuBufferFactory inner, GpuWorkLedger l
         );
 }
 file sealed class CountingImageFactory(IGpuImageFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuImageFactory {
-    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) =>
+    public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name, float clearDepth = 1f) =>
         Created(
             created: inner.Create(
+                clearDepth: clearDepth,
                 format: format,
                 height: height,
                 name: name,

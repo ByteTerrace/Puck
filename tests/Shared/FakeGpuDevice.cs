@@ -484,7 +484,7 @@ internal sealed class FakeGpuDevice :
             )
         );
     }
-    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) {
+    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name, float clearDepth) {
         Hit(key: "IGpuImageFactory.Create");
 
         return Named(

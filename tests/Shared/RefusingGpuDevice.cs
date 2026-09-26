@@ -112,7 +112,7 @@ internal sealed class RefusingGpuDevice :
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => throw Reach(member: "IGpuBufferFactory.CreateHostVisibleDeviceLocal");
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw Reach(member: "IGpuBufferFactory.CreateHostVisible(data)");
     IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => throw Reach(member: "IGpuBufferFactory.CreateDeviceLocal");
-    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) => throw Reach(member: "IGpuImageFactory.Create");
+    IGpuImage IGpuImageFactory.Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name, float clearDepth) => throw Reach(member: "IGpuImageFactory.Create");
     IGpuSurfaceImport IGpuSurfaceTransferFactory.CreateImport() => throw Reach(member: "IGpuSurfaceTransferFactory.CreateImport");
     IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => throw Reach(member: "IGpuSurfaceTransferFactory.CreateReadback");
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => throw Reach(member: "IGpuSurfaceTransferFactory.CreateUpload");

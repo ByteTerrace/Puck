@@ -148,9 +148,9 @@ internal sealed class UploadModelGpu :
     }
     public void WaitIdle() { }
 
-    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) {
-        // A pipeline created from groups carries a set layout per group ordinal, as a backend's does.
-        var groups = new nint[((description.Layout is { Groups.Count: > 0 } layout)
+    // A pipeline created from groups carries a set layout per group ordinal, as a backend's does.
+    private Handles PipelineOf(GpuPipelineLayoutDescription? layout) {
+        var groups = new nint[((layout is { Groups.Count: > 0 })
             ? (layout.Groups.Max(selector: static group => ((int)group.Ordinal)) + 1)
             : 0)];
 
@@ -158,7 +158,11 @@ internal sealed class UploadModelGpu :
             groups[index] = NextHandle();
         }
 
-        var pipeline = new Handles(handle: NextHandle(), layout: NextHandle(), setLayout: NextHandle(), groups: groups);
+        return new Handles(handle: NextHandle(), layout: NextHandle(), setLayout: NextHandle(), groups: groups);
+    }
+
+    IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) {
+        var pipeline = PipelineOf(layout: description.Layout);
 
         if (m_uploadModules.ContainsKey(key: computeShaderModule.Handle)) {
             _ = m_uploadPipelines.TryAdd(
@@ -188,7 +192,8 @@ internal sealed class UploadModelGpu :
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
     IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
-    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) => throw new NotSupportedException();
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
+        PipelineOf(layout: description.Layout);
 
     long IGpuBindings.HeapReleaseRevision => m_inner.Services.Bindings.HeapReleaseRevision;
 
@@ -434,8 +439,8 @@ internal sealed class UploadModelGpu :
 
         public void Dispose() => inner.Dispose();
     }
-    // A shader module or pipeline: its own handle, plus the layout handles a pipeline carries.
-    private sealed class Handles(nint handle, nint layout, nint setLayout, nint[]? groups = null) : IGpuComputePipeline, IGpuShaderModule {
+    // A shader module or a compute or graphics pipeline: its own handle, plus the layout handles a pipeline carries.
+    private sealed class Handles(nint handle, nint layout, nint setLayout, nint[]? groups = null) : IGpuComputePipeline, IGpuPipeline, IGpuShaderModule {
         public nint DescriptorSetLayoutHandle => setLayout;
         public IReadOnlyList<nint> GroupLayoutHandles => (groups ?? []);
         public nint Handle => handle;

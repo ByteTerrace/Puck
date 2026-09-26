@@ -1,0 +1,11 @@
+# Every frame renders every pass, and the visibility view colors each pixel by the kind of its visibility record.
+world.cadence off
+world.debug-view visibility
+world.wait 30
+world.screenshot {run}/before.png
+world.wait 10
+# The slab crosses several of the beam's tiles to the right.
+world.row.set placements slab position [1.5,0,0]
+world.wait 30
+world.screenshot {run}/after.png
+world.wait 10

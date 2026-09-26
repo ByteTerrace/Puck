@@ -69,9 +69,10 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// names them.
 /// <para>
 /// A draw's record is its row-vector object-to-world matrix, row by row (words 0 to 15, <c>M11</c> first), then its
-/// material, then its mesh: the mesh's first index within the index section, its index count, and its base vertex
-/// within the position section (words 16 to 19), so a draw's index <c>k</c> names the position
-/// <c>baseVertex + indices[firstIndex + k]</c>. The record is twenty whole words, so it has no padding a
+/// material, then its mesh: the word its first index sits at, its index count, and the word its first position sits at
+/// (words 16 to 19), all counted from the region's start, so a reader needs nothing but the record to find a draw's
+/// triangles: its index <c>k</c> is the word at <c>indexWord + k</c>, and names the position whose three words start at
+/// <c>positionWord + (3 * index)</c>. The record is twenty whole words, so it has no padding a
 /// structured-buffer reader could disagree on.
 /// </para>
 /// </summary>
@@ -80,6 +81,9 @@ public static class SdfMeshRegion {
     public const int DrawWords = 20;
     /// <summary>The bytes of one draw's record.</summary>
     public const int DrawBytes = (DrawWords * sizeof(uint));
+    /// <summary>The most draws one region holds: the mesh pass pushes a draw's index in the bits below
+    /// <see cref="SdfWorldInterfaces.MeshViewShift"/>.</summary>
+    public const int MaxDraws = (1 << SdfWorldInterfaces.MeshViewShift);
     /// <summary>The bytes of one index.</summary>
     public const int IndexBytes = sizeof(uint);
     /// <summary>The bytes of one vertex position.</summary>
@@ -100,10 +104,19 @@ public static class SdfMeshRegion {
     /// <returns>The region's layout.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="meshes"/> is
     /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The list holds more than <see cref="MaxDraws"/> draws.</exception>
     /// <exception cref="OverflowException">The region holds more words than an <see cref="int"/> counts.</exception>
     public static SdfMeshRegionLayout Plan(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes) {
         ArgumentNullException.ThrowIfNull(draws);
         ArgumentNullException.ThrowIfNull(meshes);
+
+        if (draws.Count > MaxDraws) {
+            throw new ArgumentException(
+                message: $"A mesh region holds at most {MaxDraws} draws; the list holds {draws.Count}.",
+                paramName: nameof(draws)
+            );
+        }
+
 
         meshes.Clear();
 
@@ -179,9 +192,9 @@ public static class SdfMeshRegion {
             record[14] = BitConverter.SingleToUInt32Bits(value: matrix.M43);
             record[15] = BitConverter.SingleToUInt32Bits(value: matrix.M44);
             record[16] = unchecked((uint)material);
-            record[17] = ((uint)placement.FirstIndex);
+            record[17] = ((uint)(layout.IndexWordOffset + placement.FirstIndex));
             record[18] = ((uint)placement.IndexCount);
-            record[19] = ((uint)placement.BaseVertex);
+            record[19] = ((uint)(layout.PositionWordOffset + (placement.BaseVertex * 3)));
         }
 
         foreach (var (mesh, placement) in meshes) {
