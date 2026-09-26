@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and ViewStack, how world render data reaches SdfFrame, Puck.Shaders manifests and pipelines, and render.extensions. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
+description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and ViewStack, how world render data reaches SdfFrame, Puck.Shaders packages and pipelines, and the views.post post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
 ---
 
 # Rendering
@@ -683,9 +683,8 @@ These are one-line cautions; the owning pages hold the derivations.
   reads) rather than a hand-written `IWorkCounterSource`. `ShaderCompiler.Work`
   (`shaders.compiler`) counts requests, cache hits (`Pacing`) and each tool's
   runs in `RunStepAsync`, the one place `StepsOf`'s steps run; a new tool
-  needs its kind in `RunsOf`. The static loaders count into process sets:
-  `SdfWorldKernels.LoadWork` and `ShaderSetManifest.LoadWork` (loads and
-  bytecode bytes). Each loader has an
+  needs its kind in `RunsOf`. The static kernel loader counts into a process set,
+  `SdfWorldKernels.LoadWork` (loads and bytecode bytes), and has an
   overload or constructor parameter taking a fresh set, which is what a law
   counts into, since sibling tests load shaders in parallel. `VulkanProcResolver`
   is an instance the command tables take through their constructors; its `Work`
@@ -777,12 +776,15 @@ shader consumer in the same change. What a document field means belongs to
 
 ## Shader manifests and pipelines
 
-`docs/reference/shaders.md` owns the `puck.shader.manifest.v1` and
-`puck.render.graph.v1` contracts and pipeline live development; the
+`docs/reference/shaders.md` owns the `puck.render.graph.v1` contract, post
+passes and pipeline live development; the
 `pipeline.*` console verbs are defined in `WorldPipelineCommandModule` and their
-document semantics belong to `puck-world`. Post-render passes are
-`render.extensions` rows naming shader sets shipped beside the SDF kernels; the
-engine carries no per-pass C#. Pipeline barriers are planned, not searched: a
+document semantics belong to `puck-world`. Post passes are `views.post` rows
+naming post-process packages: a `RenderGraphPackage` with `Stages` in
+`RenderGraphPackageCatalog.Engine`, the one declaration of its members, config,
+stages and interface, whose bytecode ships beside the SDF kernels.
+`PostProcessPackage` serves every one; there is no per-pass C#. The catalog
+refuses a post-process package that does not sample one image and draw one. Pipeline barriers are planned, not searched: a
 resource entry is a version, `from` forwards a predecessor into the same
 storage, and `ShaderPipelineCompiler.Accesses.cs` gives every pass access its
 prior state and barrier (`ShaderPipelinePlannedPass.Accesses`), including the
@@ -810,7 +812,7 @@ public member needs a row, and nothing a row claims is deleted before the row
 is green.
 The grouped binding contract is the pass interface in `src/Puck.Shaders/Interface`
 ([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)); every
-pipeline pass and shader set reads its frame block through one, and no shipped
+pipeline pass and post-process package reads its frame block through one, and no shipped
 pass binds a group as a descriptor set yet. Its placement rules are its own: a
 group's ordinal is its set and register space, a register number equals the
 Vulkan binding, and block offsets are explicit `vk::offset`s with named `uint`
@@ -952,8 +954,9 @@ engine's recorded transitions; a declared layout the producer does not leave
 it in shows only as Vulkan validation errors, since the Direct3D 12 recorder
 corrects a stated old layout from its tracked resource state. A Direct3D 12
 device created with the debug layer says so on stderr (`[d3d12] debug layer
-live`). `PostProcessPackage` serves every `post.<id>` and
-`OverlayPackage` serves `overlay`; each binds the frame and pass groups its catalog
+live`). `PostProcessPackage` serves every post-process package (its pipeline named by
+the package id, its stages' deployed bytecode read and validated off the frame
+thread) and `OverlayPackage` serves `overlay`; each binds the frame and pass groups its catalog
 entry declares (`RenderGraphPackage.Members`), allocating its sets from the node's
 pool through `RenderGraphPackageSets` and writing its values into the pass block
 the node seeds (`RenderGraphPackageRecording.PassBlock`). A package pass's `config` binds against its package's
@@ -998,13 +1001,15 @@ the root `main`, which reads `world` and every pane and runs, when K > 1, one
 `place` pass per view (`main$view$<n>`, n from 1; view 1's reads `world`
 through a second version beside `main$world`), then one `place` package pass
 per `views.graphs` instance a layout slot names (the pass named after the
-instance), then one `post.<id>` pass per `render.extensions` entry in order,
-then `overlay` in a windowed World. `main` is the root whenever anything is
+instance), then one pass per `views.post` row in order (named by the row, running
+its package, each reading the frame the pass before it wrote), then `overlay` in
+a windowed World. `main` is the root whenever anything is
 drawn over the world, panes included, and always when K > 1; otherwise `world`
 is the root. With `views.root` set the runtime
-runs the rows alone. A config that does not bind is the compiler's
-`RENDERGRAPH_PACKAGE_CONFIG`, which the boot's pre-flight
-(`WorldPostBuildWiring`) reports as a refused definition. `WorldRenderRoot`
+runs the rows alone, and the document may author no `views.post`. A config that
+does not bind is the compiler's `RENDERGRAPH_PACKAGE_CONFIG`, which the boot's
+pre-flight (`WorldPostBuildWiring`) reports as a refused definition naming the
+row (`views.post[<i>] '<name>'`). `WorldRenderRoot`
 builds the engine node, the packages and the runtime for both GPU shapes, and
 `RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
 what captures, `world.screenshot` and readiness read. A `captures` row may name
@@ -1097,8 +1102,8 @@ the frame group at set 0 (`frameGroup`), then its pass group at set 3
 (`passGroup`: extent, config in ordinal name order) followed by its ports, each
 reading as its resource's name in camel case or its `"as"`. The declarations are
 generated into `<interface>.interface.hlsli`, which the loader supplies in memory
-(`ShaderPipelineLoader.GeneratedIncludeOf`) and a shader set checks in
-(`puck shaders interface --write`). Never hand-declare a frame struct or a port
+(`ShaderPipelineLoader.GeneratedIncludeOf`) and a post-process package checks in
+(`puck shaders generate`, or `puck shaders interface <directory> --package <id> --write`). Never hand-declare a frame struct or a port
 binding: a load refuses a module whose reflected bindings differ from its layout
 (`SHADERPIPE_INTERFACE`). The host writes the frame group through
 `ShaderPipelineParameterLayout.WriteFrame` and the extent through `WriteExtent`

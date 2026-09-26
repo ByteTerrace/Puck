@@ -186,7 +186,7 @@ engine's validation, the reference lint) and returns those findings with the sou
 `ok` means the graph composed and nothing reported an error, and `composed` is present
 whenever composition itself succeeded, valid or not, so a caller can inspect what failed. A
 check this engine cannot answer, because it carries no catalog for it (a machine engine, a
-post-render extension, a probe kind), is a `PUCK118` diagnostic of severity `information`:
+post-process package, a probe kind), is a `PUCK118` diagnostic of severity `information`:
 a deferral, never a finding, so the shipped island composes `ok`. It
 is the standalone document a preview hands to `Compile`. A composition source composes its
 entry world. A finding the composed world raises about an element an imported document
@@ -301,8 +301,7 @@ both runtimes already cross-check.
 ## Verified scope boundary: no emulator core, no shader catalog, no probe kinds
 
 `WorldDefinitionValidator` reads two injection seams before any document
-parses—`WorldExtensionVocabularyHook.PostRenderExtensionCheck`,
-and
+parses—`WorldPostProcessVocabularyHook.PostProcessPackageCheck` and
 `WorldProbeVocabularyHook.ProbeKindCheck`—normally wired by a composition
 root's module initializer (`Puck.World.Client.WorldSchemaVocabularyHooks` for
 the desktop client) to a real catalog answering `true`/`false`. Each is REQUIRED
@@ -311,7 +310,7 @@ the desktop client) to a real catalog answering `true`/`false`. Each is REQUIRED
 carries no catalog for that vocabulary AT ALL, which the validator routes to
 its `deferred` collection rather than a refusal. `Engine/BrowserExtensionVocabulary.cs`
 installs its own module initializer answering every one of those `null`: this
-build carries no emulator core, shipped shader catalog, or probe-kind catalog
+build carries no emulator core, render graph package catalog, or probe-kind catalog
 of its own (Architecture.props' exact-closure profile denies
 `Puck.World.Protocol` and every extension-owning assembly), so "this host has
 no catalog to check against" is the honest answer—distinct from a real

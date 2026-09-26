@@ -251,8 +251,8 @@ work (dispatches, barriers, uploads, created objects), its `allocation` section
 says whether reading every count allocates, and every other section is a
 registered engine counter, including the server's `state.arena`, `state.rules`
 and `state.search`, and in a rendering World the shader compiler's
-`shaders.compiler`, the shader loads under `shaders.sdf-kernels` and
-`shaders.set-manifest`, and, on Vulkan,
+`shaders.compiler`, the SDF kernel loads under `shaders.sdf-kernels`, and, on
+Vulkan,
 `procedures.vulkan`. An owner whose counts need nothing more than a named set
 of kinds holds a `WorkCounterSet` rather than writing its own source.
 `world.budget` distinguishes live program size from

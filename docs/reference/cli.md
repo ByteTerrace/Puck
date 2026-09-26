@@ -102,7 +102,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck shaders`](#puck-shadersshader-compilation) | `shaders collect` and `shaders compare` hand one host's compiled shaders to another and compare them byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or shader set reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
+| [`puck shaders`](#puck-shadersshader-compilation) | `shaders collect` and `shaders compare` hand one host's compiled shaders to another and compare them byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
@@ -599,19 +599,21 @@ leg.
 `src/Puck.SdfVm/Assets/Shaders/Sdf/sdf-isa.hlsli`, the SDF instruction set's
 version, enums and packed-layout constants, generated from
 `Puck.SignedDistance` by `Puck.SdfVm.SdfIsaHlsl`; and every generated shader
-interface (`<name>.interface.hlsli`). A shader-set manifest owns the interface
-beside it, and an engine package that declares pass-group members, such as
-`overlay` and `place`, owns the one include named by its interface. A checked-in
-interface include that no manifest or package owns, and a package whose include
-is missing, fail by name. `--check` writes nothing, regenerates each include in
+interface (`<name>.interface.hlsli`). An engine package that declares
+pass-group members, such as `overlay`, `place` and `sdf.film-grain`, owns the
+one include named by its interface, found by that file name. A checked-in
+interface include that no package owns, and a package whose include is missing
+or named twice, fail by name. `--check` writes nothing, regenerates each include in
 memory and exits 1 naming each file that differs from the model and its first
 differing line; CI runs it beside `puck schema --check`.
 
 `interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
-each pass of a graph document or one-off shader reads, or those a shader-set
-manifest's stages read; `--write` writes each as `<interface>.interface.hlsli`
-beside its source instead, which a shader set, compiled at build, checks in, and
-`--echo` also generates each interface's echo pass as `<interface>.echo.hlsl`.
+each pass of a graph document or one-off shader reads, or, with
+`--package <id>` (such as `sdf.film-grain`), those an engine package declares,
+its source argument then naming the directory its shaders live in; `--write`
+writes each as `<interface>.interface.hlsli` beside its source instead, which an
+engine package, compiled at build, checks in, and `--echo` also generates each
+interface's echo pass as `<interface>.echo.hlsl`.
 
 `package` compiles a graph document or one-off shader and writes its
 `puck.shader.package.v1` package to `--output`: the source closure, each pass's
@@ -658,11 +660,12 @@ break, and nothing wider:
   A canary is also chosen for any file its manifest's documents reach, read
   with the documents' own readers: a world reaches the layers it composes,
   the neighbour worlds its adjacencies name, the `.graph.json` documents its
-  `views.graphs` rows name, and the files of each shader set its
-  `render.extensions` entries name by id; a graph document reaches the pass
+  `views.graphs` rows name, and the files of each post-process package its
+  `views.post` rows name; a graph document reaches the pass
   shaders it declares and every file they include, each resolved as the host
   resolves it. A world is read composed and parsed but not validated, so a world whose
-  adjacencies or extensions need the host's resolvers still reaches them.
+  adjacencies or post-process packages need the host's resolvers still reaches
+  them.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
 - A file no canary can execute is placed through the indexed C# sources it
   stands for. A project file, restore lock or `NativeMethods.txt` stands for
@@ -671,16 +674,17 @@ break, and nothing wider:
   kernels are the stage sources the projects' shader items declare, the
   Direct3D 11 kernels (`Direct3D11KernelSource`) among them, and the naming C#
   may sit in the kernel's project or any project its build references, as a
-  conversion pass's name is a constant in `ImageSourceConversion`. A shader-set
-  manifest (`*.puck.shader.json`), the stage sources it names beside it with
-  their includes, and the frame interface generated for it are placed through
-  the canaries whose worlds name the set by id in `render.extensions`, read as
-  the rest of a canary's documents are. A set no canary's world names falls
-  back to the manifest's owner: the C# declaring `ShaderSetManifest`, the model
-  a manifest is read into, since no C# names a set by id. A file
+  conversion pass's name is a constant in `ImageSourceConversion`. A
+  post-process package's stage sources (the kernels at
+  `<Directory>/<stem>.hlsl` for the stages its catalog entry declares) with
+  their includes, and the frame interface generated for it, are placed through
+  the canaries whose worlds name the package in `views.post`, read as the rest
+  of a canary's documents are. A package no canary's world names falls back to
+  the C# declaring `PostProcessPackage`, which draws with every post-process
+  package's stages. A file
   `puck schema` writes stands for the sources declaring the types it is
-  generated from. A shader that no kernel's loader, shader set or canary's
-  documents reach has no stand-in.
+  generated from. A shader that no kernel's loader, post-process package or
+  canary's documents reach has no stand-in.
 - A changed `Puck.World` source that neither the coverage index nor a stand-in
   places is listed as `unmapped`. It chooses no canary; the list says coverage
   is due for a fresh recording.
@@ -1970,17 +1974,19 @@ positional record's XML doc lives on the record declaration, not the
 property), then a type `<summary>` for a node with no containing property
 (an array's item schema, a `$type` arm).
 
-`render.extensions[]` takes its `id` vocabulary and per-id `config` schema
-from the shipped `puck.shader.manifest.v1` manifests under `src/*/Assets/Shaders`
-(`Puck.Shaders.ShaderSetManifest.ConfigJsonSchema`)—one `if`/`then` arm per
-id—so an entry's config validates by id in an editor, and adding a shader
-set changes the schema (`--check` catches a manifest edit not regenerated).
+`views.post[].package` takes its enum and per-package `config` schema from
+the engine render graph package catalog's post-process packages
+(`Puck.Shaders.RenderGraphPackageCatalog.Engine`, each package's config schema
+from `Puck.Shaders.ShaderConfigBinding.JsonSchema`)—one `if`/`then` arm per
+package—so a row's config validates by package in an editor, and adding a
+post-process package changes the schema (`--check` catches a package config
+edit not regenerated).
 
 Every array and dictionary carries `items`/`additionalProperties`, including
 a converter-hidden shape the exporter cannot introspect on its own (a
 `StateRowJsonConverter<TRow>`-owned row, a fixed-arity vector array, a
 document-identifier list); a raw `JsonElement` slot decided by an id named
-elsewhere in the document (`render.extensions[].config`, `probes[].config`,
+elsewhere in the document (`views.post[].config`, `probes[].config`,
 `metadata.custom`) stays open but carries a `$comment` saying so. The root
 carries `x-puck: {schemaVersion, generator, commit}` (the silo root carries
 its own) and `properties.schema.const` pins the exact tag a well-formed

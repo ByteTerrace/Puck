@@ -186,12 +186,12 @@ describes density controls and lighting limits.
 What is drawn over that node's output belongs to the render graph: the node
 is the `sdf.world` producer a graph instance reads for the first view,
 `SdfEngineNode.ViewProducer` gives one for each later split-screen view, and
-post-render passes are
-`post.<id>` package passes (`Puck.Shaders.PostProcessPackage`) over
-`puck.shader.manifest.v1` manifests shipped in this project's
-`Assets/Shaders/Sdf/` tree (`sdf-film-grain.frag.hlsl` +
-`sdf-film-grain.puck.shader.json` is the one today), selected by a world
-document's `render.extensions[].id`; this project carries no per-pass C#.
+post passes are post-process packages (`Puck.Shaders.PostProcessPackage`)
+that a world document's `views.post` rows name. Each package is declared in
+`Puck.Shaders.RenderGraphPackageCatalog`, and its stages ship in this project's
+`Assets/Shaders/Sdf/` tree: `sdf.film-grain`, whose fragment stage is
+`sdf-film-grain.frag.hlsl`, is the one post-process package. This project
+carries no per-pass C#.
 
 ## Pipelines build off the frame thread
 
