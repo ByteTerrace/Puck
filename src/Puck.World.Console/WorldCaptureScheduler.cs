@@ -99,7 +99,10 @@ public sealed record WorldCaptureManifest(string Schema, string Backend, string 
 /// <para>
 /// A capture of a source instance (a row naming a screen, or an instance that is an uploaded source) whose source states
 /// the image it shows (<see cref="IImageSourceReference"/>) gets the exact verdict too (<see cref="ImageSourceVerdict"/>):
-/// the landed frame against the source's reference, which must state the tick the frame was rendered at. The entry
+/// the landed frame against the source's reference, which must state the tick the frame was rendered at. The capture
+/// holds the reference its source had when it was armed, which states its last write whatever the source declares or
+/// whichever source replaces it afterwards, and is judged against the one source now running only when the held one
+/// states another tick (a source rebuilt between arming and serving). The entry
 /// records it (<see cref="WorldCaptureManifestEntry.SourceVerdict"/>), and stderr narrates it as
 /// <c>[captures] &lt;station&gt; tick &lt;tick&gt;: verdict &lt;detail&gt;</c>.
 /// </para>
@@ -112,7 +115,7 @@ public sealed record WorldCaptureManifest(string Schema, string Backend, string 
 /// Every member runs on the host pump.
 /// </remarks>
 public sealed class WorldCaptureScheduler {
-    private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, FrameCaptureRequest Request, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette, string? Instance);
+    private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, FrameCaptureRequest Request, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette, string? Instance, IImageSourceReference? Reference);
 
     private static readonly JsonSerializerOptions ManifestSerializerOptions = new() {
         Converters = { new JsonStringEnumConverter(namingPolicy: JsonNamingPolicy.CamelCase) },
@@ -433,6 +436,9 @@ public sealed class WorldCaptureScheduler {
             FrameName: frameName,
             Instance: instance,
             Palette: row.Palette,
+            Reference: ((instance is null)
+                ? null
+                : m_sources?.ReferenceOf(instance: instance)),
             Path: path,
             Request: request,
             StateHash: stateHash,
@@ -794,21 +800,45 @@ public sealed class WorldCaptureScheduler {
     // Holds a landed capture of a source instance to the image its source states it shows, when the source states one:
     // the reference must state the tick the frame was rendered at, and every pixel must match it exactly.
     private WorldCaptureSourceVerdict? Judge(Pending pending, PngImage image, ulong? regionTick) {
-        if (
-            (pending.Instance is not { } instance) ||
-            (m_sources?.ReferenceOf(instance: instance) is not { } reference)
-        ) {
+        if (pending.Instance is not { } instance) {
+            return null;
+        }
+
+        var current = m_sources?.ReferenceOf(instance: instance);
+        var reference = (pending.Reference ?? current);
+
+        if (reference is null) {
             return null;
         }
 
         var descriptor = reference.Descriptor;
         var expected = new byte[checked((int)((((ulong)descriptor.Width) * descriptor.Height) * 4UL))];
-        WorldCaptureSourceVerdict verdict;
-
-        if (!reference.TryWriteReference(
+        var stated = reference.TryWriteReference(
             rgba: expected,
             stamp: out var stamp
-        )) {
+        );
+
+        // The source running now, when the one held at arming states another tick: a source rebuilt before it served.
+        if (
+            (stamp.Tick != regionTick) &&
+            (current is not null) &&
+            !ReferenceEquals(
+                objA: current,
+                objB: reference
+            )
+        ) {
+            reference = current;
+            descriptor = reference.Descriptor;
+            expected = new byte[checked((int)((((ulong)descriptor.Width) * descriptor.Height) * 4UL))];
+            stated = reference.TryWriteReference(
+                rgba: expected,
+                stamp: out stamp
+            );
+        }
+
+        WorldCaptureSourceVerdict verdict;
+
+        if (!stated) {
             verdict = new(
                 Detail: $"source '{instance}' states no image",
                 Holds: false

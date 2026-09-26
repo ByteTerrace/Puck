@@ -9,9 +9,10 @@ namespace Puck.Hosting;
 /// source's region, in the format the output declares (RGBA8, or an indexed image and its palette), and the runtime
 /// converts it through the conversion that format names, once however many screens show it. The source is deterministic
 /// and due once per completed tick, and it states the image it last wrote (<see cref="IImageSourceReference"/>): the
-/// CPU reference of that conversion over the bytes it wrote, which the exact verdict holds a capture of the converted
-/// image to. Its descriptor follows the output the resolver names now, so a machine replaced by one with another extent
-/// or format is declared anew and the runtime rebuilds the source's conversion for it. The output belongs to its machine;
+/// CPU reference of that conversion over the bytes it wrote, with the descriptor and stamp of that write, which the exact
+/// verdict holds a capture of the converted image to. Its <see cref="Descriptor"/> follows the output the resolver names
+/// now, so a machine replaced by one with another extent or format is declared anew and the runtime rebuilds the
+/// source's conversion for it; only a write replaces the image the source states. The output belongs to its machine;
 /// the source only reads it.
 /// </summary>
 public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageSourceReference {
@@ -20,14 +21,16 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
     private readonly string m_producer;
 
     private ImageSourceDescriptor? m_descriptor;
-    // Whether the descriptor, the fault and the region describe m_shape yet.
+    // Whether the descriptor, the fault and the scratch region describe m_shape yet.
     private bool m_described;
     private string? m_fault;
-    // The whole region the source writes, header first, for the declared shape: the bytes the conversion reads and the
-    // reference is computed from.
+    // The region the next write fills, header first, for the declared shape.
     private byte[] m_region = [];
-    // The output shape the descriptor, the fault and the region were made for.
+    // The output shape the descriptor, the fault and the scratch region were made for.
     private (ImagePixelFormat Format, int Width, int Height)? m_shape;
+    // The last write: its region, header first, its descriptor and its stamp, which only the next write replaces.
+    private ImageSourceDescriptor? m_written;
+    private byte[] m_writtenRegion = [];
     private ImageSourceStamp m_stamp;
 
     /// <summary>Initializes a new instance of the <see cref="MachineVideoSourceUpload"/> class over the output its
@@ -66,9 +69,13 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
         }
     }
 
-    ImageSourceDescriptor IImageSourceReference.Descriptor => (Descriptor ?? throw new InvalidOperationException(message: m_fault));
+    /// <summary>Gets the descriptor of the image the source last wrote, which its reference states; before the first write,
+    /// the descriptor it declares now.</summary>
+    /// <exception cref="InvalidOperationException">The source has written nothing and declares no image.</exception>
+    ImageSourceDescriptor IImageSourceReference.Descriptor => (m_written ?? (Descriptor ?? throw new InvalidOperationException(message: m_fault)));
 
-    // Brings the descriptor, the fault and the region to the output's shape, remaking them only when it moves.
+    // Brings the descriptor, the fault and the scratch region to the output's shape, remaking them only when it moves. The
+    // last write is left as it is.
     private void Describe(IMachineVideoOutput? output) {
         (ImagePixelFormat, int, int)? shape = ((output is null)
             ? null
@@ -85,7 +92,6 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
         m_shape = shape;
         m_descriptor = null;
         m_region = [];
-        m_stamp = default;
 
         if (output is null) {
             m_fault = $"machine output '{m_name}' is not running";
@@ -136,7 +142,8 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
     public void Dispose() { }
     /// <inheritdoc/>
     /// <remarks>Writes the output's latest complete frame, and returns <see langword="false"/> while the output has no
-    /// frame, or while its shape no longer matches the region, which the runtime rebuilds before the next frame.</remarks>
+    /// frame, or while its shape no longer matches the region, which the runtime rebuilds before the next frame. A write
+    /// becomes the image the source states.</remarks>
     public bool TryWrite(long tick, GpuRegion region) {
         ArgumentNullException.ThrowIfNull(argument: region);
 
@@ -157,6 +164,24 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
             bytes: m_region.AsSpan(start: ImageSourceUploadLayout.HeaderBytes),
             offset: ImageSourceUploadLayout.HeaderBytes
         );
+
+        // The written region becomes the stated image, and the previous one of the same shape the next write's scratch,
+        // so a steady tick allocates nothing.
+        var spare = m_writtenRegion;
+
+        m_writtenRegion = m_region;
+        m_written = m_descriptor;
+
+        if (spare.Length == m_region.Length) {
+            m_region = spare;
+        } else {
+            m_region = new byte[m_writtenRegion.Length];
+            m_writtenRegion.AsSpan(
+                length: ImageSourceUploadLayout.HeaderBytes,
+                start: 0
+            ).CopyTo(destination: m_region);
+        }
+
         m_stamp = new ImageSourceStamp(
             Sequence: (m_stamp.Sequence + 1UL),
             Tick: ((ulong)Math.Max(
@@ -168,6 +193,7 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
         return true;
     }
     /// <inheritdoc/>
+    /// <remarks>States the last write, whatever the source declares since.</remarks>
     public bool TryWriteReference(Span<byte> rgba, out ImageSourceStamp stamp) {
         stamp = m_stamp;
 
@@ -176,7 +202,7 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
         }
 
         ImageSourceConversion.ToRgba8(
-            region: m_region,
+            region: m_writtenRegion,
             rgba: rgba
         );
 

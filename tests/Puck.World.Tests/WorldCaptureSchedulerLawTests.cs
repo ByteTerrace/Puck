@@ -1,7 +1,10 @@
 using System.Buffers.Binary;
 using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Machines;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Assets;
@@ -38,7 +41,11 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         private FrameCaptureRequest? m_request;
 
         public int Frames { get; private set; }
+        // Runs once a capture is served, before the scheduler judges it.
+        public Action? OnServed { get; set; }
         public string? PendingCapturePath => m_request?.Path;
+        // Writes a served capture's PNG in place of the tick and hash stamp.
+        public Action<string>? Writer { get; set; }
         // The paths of the captures this target served.
         public List<string> Served { get; } = [];
 
@@ -70,6 +77,14 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
 
             m_request = null;
             Served.Add(item: request.Path);
+
+            if (Writer is { } writer) {
+                _ = request.Write(writer: writer);
+                OnServed?.Invoke();
+
+                return;
+            }
+
             _ = request.Write(writer: path => {
                 var tick = (server.NextInputTick - 1UL);
                 var rgba = new byte[((8 * 2) * 4)];
@@ -254,6 +269,39 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         public void Dispose() {
             m_router.Dispose();
             m_row.Dispose();
+        }
+    }
+    // Screen 0 reads the world instance, whose source is whichever machine upload runs now.
+    private sealed class MachineSources : IWorldCaptureSources {
+        public MachineVideoSourceUpload? Upload { get; set; }
+
+        public string? InstanceOf(int screen) => ((screen == 0)
+            ? WorldViewGraphs.WorldInstance
+            : null);
+        public IImageSourceReference? ReferenceOf(string instance) => ((instance == WorldViewGraphs.WorldInstance)
+            ? Upload
+            : null);
+    }
+    // An RGBA8 machine output whose pixels carry their coordinates and extent.
+    private sealed class ResizableOutput(int width, int height) : IMachineVideoOutput {
+        private long m_sequence;
+
+        public Vector3 EmittedLight => Vector3.Zero;
+        public ImagePixelFormat Format => ImagePixelFormat.R8G8B8A8Unorm;
+        public int Height => height;
+        public int Width => width;
+
+        public long WriteFrame(Span<byte> region) {
+            var plane = region[ImageSourceUploadLayout.HeaderBytes..];
+
+            for (var pixel = 0; (pixel < (width * height)); pixel++) {
+                plane[(pixel * 4)] = ((byte)(pixel % width));
+                plane[((pixel * 4) + 1)] = ((byte)(pixel / width));
+                plane[((pixel * 4) + 2)] = ((byte)width);
+                plane[((pixel * 4) + 3)] = 0xFF;
+            }
+
+            return ++m_sequence;
         }
     }
     // The sources a row naming screen 0 captures: screen 0 reads the world instance, whose reference is the frame the
@@ -443,6 +491,82 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         Assert.Equal(expected: "none", actual: differing[0]);
         Assert.StartsWith(expectedStartString: "False:law 8x2 1 pixel(s) differ; first at (3, 1) expected #FF0000", actualString: differing[1]);
         Assert.Equal(expected: ["none", "False:source 'world' states the image of tick 29, and the capture shows tick 30"], actual: Verdicts(differingPixel: null, statedTick: (SecondTick - 1UL)));
+    }
+    [Fact]
+    public void ACaptureOfAMachineSourceIsJudgedAgainstTheFrameItServedAfterTheMachineIsReplaced() {
+        var gpu = new FakeGpuDevice(reportVersion: 0);
+        var output = new ResizableOutput(height: 2, width: 8);
+        var served = new MachineVideoSourceUpload(
+            name: WorldViewGraphs.WorldInstance,
+            output: () => output,
+            producer: "machine"
+        );
+        var replacement = new ResizableOutput(height: 4, width: 16);
+        var sources = new MachineSources {
+            Upload = served,
+        };
+
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: ImageSourceUploadLayout.ByteCount(header: ImageSourceUploadLayout.HeaderOf(
+                color: ImageColorEncoding.Srgb,
+                format: ImagePixelFormat.R8G8B8A8Unorm,
+                height: 2U,
+                width: 8U
+            )),
+            copyPipeline: null,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.InPlace,
+            recorder: gpu.Services.Recorder,
+            slotCount: 1
+        );
+
+        using (var run = new Run(
+            directory: m_directory.RootPath,
+            honoursFrames: true,
+            secondScreen: 0,
+            serves: true,
+            sources: sources
+        )) {
+            // The frame that serves the capture is the source's conversion of the tick it presents; once it is served, the
+            // machine is replaced by one of another extent, the old source reads the new output's shape, and a rebuilt
+            // source runs in its place, before the scheduler judges the capture.
+            run.WorldTarget.Writer = path => {
+                Assert.True(condition: served.TryWrite(region: region, tick: ((long)SecondTick)));
+
+                var rgba = new byte[((8 * 2) * 4)];
+
+                Assert.True(condition: ((IImageSourceReference)served).TryWriteReference(rgba: rgba, stamp: out _));
+                PngEncoder.Write(
+                    height: 2,
+                    path: path,
+                    rgba: rgba,
+                    width: 8
+                );
+            };
+            run.WorldTarget.OnServed = () => {
+                output = replacement;
+
+                Assert.Equal(expected: (16U, 4U), actual: (served.Descriptor!.Width, served.Descriptor.Height));
+
+                sources.Upload = new MachineVideoSourceUpload(
+                    name: WorldViewGraphs.WorldInstance,
+                    output: () => replacement,
+                    producer: "machine"
+                );
+            };
+            run.BurstThenDrain();
+            Assert.Single(collection: run.WorldTarget.Served);
+        }
+
+        var verdict = ReadManifest(directory: m_directory.RootPath)[1].GetProperty(propertyName: "sourceVerdict");
+
+        Assert.Equal(
+            expected: "True:machine 8x2 exact",
+            actual: $"{verdict.GetProperty(propertyName: "holds").GetBoolean()}:{verdict.GetProperty(propertyName: "detail").GetString()}"
+        );
     }
     [Fact]
     public void ARowNamingAScreenThatReadsNoSourceInstanceIsRefusedByName() {
