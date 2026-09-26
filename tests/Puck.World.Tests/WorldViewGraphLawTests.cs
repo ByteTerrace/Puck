@@ -69,6 +69,28 @@ public sealed class WorldViewGraphLawTests {
         ),
         expected: "east -> west -> east"
     );
+    // A camera a screen, a HUD frame or a probe export shows renders as a view instance named by the camera, so a row may
+    // not take a camera's name.
+    [Fact]
+    public void ARowNamedLikeACameraIsRefused() {
+        var camera = new WorldCamera(
+            Anchor: null,
+            Name: "lobby",
+            RenderHeight: 72U,
+            RenderWidth: 128U,
+            Rig: new WorldCameraProgram(
+                Name: "lobby-rig",
+                Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9f))],
+                Version: WorldCameraProgram.CurrentVersion
+            )
+        );
+
+        Refuses(
+            control: (Document(Row(name: "lobby-feed")) with { CamerasRaw = [camera] }),
+            denied: (Document(Row(name: "lobby")) with { CamerasRaw = [camera] }),
+            expected: "views.graphs[0].name 'lobby' is a camera's name"
+        );
+    }
     [Fact]
     public void AnInputNamingNoRowIsRefused() => Refuses(
         control: Document(

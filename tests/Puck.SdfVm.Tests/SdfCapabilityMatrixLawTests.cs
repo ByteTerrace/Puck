@@ -89,7 +89,8 @@ public sealed class SdfCapabilityMatrixLawTests {
             Green: false,
             Members: [
                 "SdfWorldEngine.SubmitFrame", "SdfWorldEngine.RenderFrame", "SdfWorldEngine.ReadPixels", "SdfWorldEngine.FrameRingSize",
-                "SdfEngineNode.ProduceFrame", "SdfEngineNode.Descriptor", "SdfFrame.Time", "SdfWorldEngine.FrameValues",
+                "SdfFrame.Time", "SdfWorldEngine.FrameValues",
+                "SdfEngineNode.HostFrame", "SdfEngineNode.BeginFrame",
             ]
         ),
         new(
@@ -102,7 +103,7 @@ public sealed class SdfCapabilityMatrixLawTests {
                 "SdfWorldEngine.RequestViewExtent", "SdfWorldEngine.HasViewOutput", "SdfWorldEngine.TryAcquireViewOutput",
                 "SdfWorldEngine.ReleaseViewOutput", "SdfWorldEngine.ViewOutputHolds", "SdfEngineNode.ViewProducer",
                 "SdfEngineNode.HasViewOutput",
-                "SdfWorldEngine.MaxViewports", "SdfWorldEngine.ConeNear", "SdfWorldEngine.PrimaryMarchSteps",
+                "SdfWorldEngine.ConeNear", "SdfWorldEngine.PrimaryMarchSteps",
                 "SdfWorldEngineOptions.ViewportCapacity", "SdfWorldRenderSpec.ViewportCapacity", "SdfWorldRenderSpec.Width",
                 "SdfWorldRenderSpec.Height",
             ]
@@ -122,6 +123,7 @@ public sealed class SdfCapabilityMatrixLawTests {
             Members: [
                 "SdfWorldEngine.SetScreenSource", "SdfWorldEngine.SetScreenSurface", "SdfWorldEngine.SetScreenLight",
                 "SdfWorldEngine.MaxScreenSurfaces", "SdfWorldRenderSpec.ScreenSources", "SdfEngineNode.BoundScreenSource",
+                "SdfWorldEngine.ScreenSourcesTainted",
             ]
         ),
         new(
@@ -263,7 +265,8 @@ public sealed class SdfCapabilityMatrixLawTests {
             Members: [
                 "SdfWorldEngine.OutputImageHandle", "SdfWorldEngine.OutputImageViewHandle", "SdfWorldEngine.OutputLayout", "SdfWorldEngine.ExportSharedHandle",
                 "SdfWorldEngine.OutputWidth", "SdfWorldEngine.OutputHeight",
-                "SdfWorldEngineOptions.CreateOutputImage",
+                "SdfWorldEngineOptions.CreateOutputImage", "SdfEngineNode.CreateOutputImage", "SdfEngineNode.ExportSharedHandle",
+                "SdfEngineNode.ExportGeneration", "SdfEngineNode.OutputWidth", "SdfEngineNode.OutputHeight",
             ]
         ),
         new(

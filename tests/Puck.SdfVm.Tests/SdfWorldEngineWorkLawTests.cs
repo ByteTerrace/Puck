@@ -173,6 +173,30 @@ public sealed class SdfWorldEngineWorkLawTests {
             filter: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "work composite")
         );
     }
+    // An engine provisions any viewport capacity: seven views, past the five a fixed ceiling once held, each render through
+    // their own dispatch set into their own output.
+    [Fact]
+    public void MoreThanFiveViewsEachRenderIntoTheirOwnOutput() {
+        const int Views = 7;
+
+        using var rig = new Rig(
+            cadence: false,
+            views: Views
+        );
+
+        _ = rig.Engine.RenderFrame(frame: rig.Frame);
+
+        var lines = rig.Report().Split(separator: '\n');
+
+        Assert.StartsWith(
+            actualString: lines.Single(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "work sky executed:")),
+            expectedStartString: $"work sky executed: dispatches={Views} "
+        );
+        Assert.All(
+            action: view => Assert.True(condition: rig.Engine.HasViewOutput(view: view)),
+            collection: Enumerable.Range(count: Views, start: 0)
+        );
+    }
     // Every view renders into its own output, so a frame of no views would render nothing and publish nothing: it is
     // refused by name before it takes a ring slot, and the next frame renders as the first would have.
     [Fact]
@@ -394,8 +418,8 @@ public sealed class SdfWorldEngineWorkLawTests {
         public SdfWorldEngine Engine { get; }
         public SdfFrame Frame { get; }
         public FakeGpuDevice Gpu { get; }
-        public SdfWorldPipelines Pipelines { get; }
         public GpuPassPipeline MeshRaster { get; }
+        public SdfWorldPipelines Pipelines { get; }
         public GpuPassPipeline RegionCopy { get; }
 
         public void Dispose() {

@@ -6,9 +6,9 @@
     <!--
         The SDF GPU engine: the single-source HLSL shaders (the SDF VM interpreter sdf-vm.hlsli plus the
         world-compositor and fullscreen stages), and the GPU host that runs the VM — SdfWorldEngine (the
-        device-explicit pipeline core: beam cull → per-view render → split-screen composite over a viewport
-        table of cameras + regions) and SdfEngineNode (the host-model IRenderNode that renders the world into
-        its own offscreen surface for a host to composite). Consumes Puck.SignedDistance for the instruction
+        device-explicit pipeline core: beam cull → per-view render, each view into its own output, over a viewport
+        table of cameras + regions) and SdfEngineNode (the render graph's sdf.world external producer that renders
+        the world into an output image per view). Consumes Puck.SignedDistance for the instruction
         ISA, the program representation, and the fluent authoring builder. Fully backend-neutral: only the
         IGpuCompute* seams from Puck.Abstractions, never Vulkan or DirectX types. The C# and the shaders are
         halves of one engine and must stay in sync.

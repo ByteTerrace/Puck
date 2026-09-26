@@ -2,14 +2,18 @@ using Puck.Abstractions.Presentation;
 
 namespace Puck.SdfVm.Views;
 
+/// <summary>The identity of the view a layout slot shows, which its owner's table names: a seat, a camera or a graph
+/// instance.</summary>
+/// <param name="Value">The raw id, unique within its owner's table.</param>
+public readonly record struct ViewId(int Value);
 /// <summary>One view occupying one region — a single row of a <see cref="ViewLayout"/>. Pure data: which view sits
-/// where, normalized to the frame; what a view id names (a <see cref="ViewStack"/> registration, a seat, a camera or a
-/// graph instance) is its owner's table.</summary>
+/// where, normalized to the frame; what a view id names (a seat, a camera or a graph instance) is its owner's
+/// table.</summary>
 /// <param name="View">The view's id.</param>
 /// <param name="Region">Its normalized screen region.</param>
 public readonly record struct ViewBinding(ViewId View, NormalizedRect Region);
-/// <summary>A full frame's slot assignment at one moment — the view-stack analogue of a layout director's per-slot
-/// rect array, generalized to name any registered view (not only a room/pane camera).
+/// <summary>A full frame's slot assignment at one moment — a layout director's per-slot rect array, generalized to name
+/// any view (not only a room/pane camera).
 /// <see cref="ViewTransition"/> eases between two of these.</summary>
 /// <param name="Bindings">The layout's bindings, in slot order (index N of one layout corresponds to index N of the
 /// other layout a <see cref="ViewTransition"/> eases between/toward — see its remarks for what happens when the two
@@ -20,7 +24,7 @@ public readonly record struct ViewLayout(IReadOnlyList<ViewBinding> Bindings) {
     public static ViewLayout Empty { get; } = new(Bindings: []);
 }
 /// <summary>
-/// Eases a <see cref="ViewStack"/> composition from one <see cref="ViewLayout"/> to another. Each slot can change
+/// Eases a composition of views from one <see cref="ViewLayout"/> to another. Each slot can change
 /// both its normalized region and the identity of the view occupying it.
 /// </summary>
 /// <remarks>

@@ -21,6 +21,16 @@ public sealed partial class RenderGraphRuntime {
     // The instances the walk up from the captured instance has reached, sized to the set.
     private bool[] m_visited = [];
 
+    // Whether a read binds nothing this frame: on a capture frame, a previous-frame read of a tainted output. The capture
+    // frame renders that producer again only after its reader, if at all, so binding it would carry the taint around a
+    // loop of previous-frame reads (a camera view reading itself, two views reading each other) from frame to frame and
+    // hold every capture it reaches. The one rule for both kinds of reader: a graph instance binds a stand-in in its place,
+    // unnoted, and an external producer's read stays unbound.
+    private bool Withholds(bool previousFrame, bool tainted) => (
+        m_capturing &&
+        previousFrame &&
+        tainted
+    );
     // Records that an instance's render bound a producer's tainted output.
     private void NoteTaint(int index, string producer, bool tainted) {
         if (tainted) {

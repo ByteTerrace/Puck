@@ -27,8 +27,7 @@ public abstract record WorldScreenSource {
     private protected WorldScreenSource() {
     }
 
-    /// <summary>No provider is bound — the engine lights the slot with its procedural no-signal fallback (an animated
-    /// test-card / striped no-signal look, never black).</summary>
+    /// <summary>No provider is bound — the engine shades the slot as dark glass, lit faintly by the sun.</summary>
     public sealed record None() : WorldScreenSource;
     /// <summary>A named machine output. The source is a consumer reference only: the named machine is prepared,
     /// advanced, and retired by the world's machine host independently of every display that samples it.</summary>
@@ -127,8 +126,8 @@ public abstract record WorldScreenSource {
     /// a top-level <c>screens</c> row or magazine entry carries no face to pair with, so <c>window</c> is refused there
     /// unconditionally.</param>
     /// <param name="Resolution">The offscreen target's <c>[width, height]</c> in pixels, or <see langword="null"/> for
-    /// the engine default (<c>Puck.SdfVm.Views.WorldSessionView.DefaultWidth</c> x <c>DefaultHeight</c> — today's
-    /// 160x144 panel, unchanged for an unauthored facet). Each axis is validated within
+    /// the default 160x144 panel (<c>Puck.World.Client.WorldViewInstances.DefaultSessionWidth</c> x
+    /// <c>DefaultSessionHeight</c>). Each axis is validated within
     /// <c>1..WorldDefinitionValidator.MaxSurfaceDimension</c>. Omitted from the wire when null.</param>
     public sealed record Session(
         string Destination,
@@ -362,7 +361,7 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 }
 /// <summary>One diegetic screen in the world — a screen slab emitted by
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder"/> whose lit face
-/// samples a bound source (or the procedural fallback when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
+/// samples a bound source (or shades as dark glass when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
 /// <see cref="Up"/> + <see cref="HalfWidth"/>/<see cref="HalfHeight"/>) is the sampled surface frame and must match the
 /// slab's placement; the frame source bakes the geometry translate from it.</summary>
 /// <param name="Index">The engine screen-surface index (0..<see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>−1)

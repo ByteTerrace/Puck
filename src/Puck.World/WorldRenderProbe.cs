@@ -9,10 +9,10 @@ namespace Puck.World;
 
 /// <summary>
 /// A mutable singleton holder for the live render nodes, so console verbs can read them without depending on the
-/// render composition. The <see cref="Puck.Hosting.IRenderNode"/> factory stores the engine node and the render graph's
+/// render composition. The render root's factory stores the engine node and the render graph's
 /// root here; each is <see langword="null"/> until the renderer is built on the first frame. It is also the
 /// <see cref="IGpuWorkRegistry"/> whose nodes the <c>gpu</c> section of <c>world.counters</c> reports: the engine node,
-/// its hosted children that count their work, each graph instance the render graph renders, and the offscreen views
+/// each graph instance the render graph renders, and the camera and session views
 /// <see cref="WorldScreenBinder"/> registers. It is the host's <see cref="IWorldEngineReadiness"/> too: ready once the
 /// engine node is and the graph's root has a completed output rendered over it, not before the render factory has
 /// composed either.

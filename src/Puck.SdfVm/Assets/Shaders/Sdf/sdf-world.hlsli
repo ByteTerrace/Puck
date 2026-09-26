@@ -242,7 +242,7 @@ static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.188790204
 // and SdfProgram. LAYOUT (sdfDecalCells, one uint4 per entry): the first SdfDecalDescriptorCount (== SdfWorldEngine.MaxScreenSurfaces)
 // entries are the PER-SCREEN descriptors, then the shared CELL region.
 //   descriptor[screenIndex] = (gridCols, gridRows, cellBase, asuint(distanceRange)); gridCols == 0 => that screen has
-//                             NO decal this frame (the image/procedural path applies) — an all-zero buffer is inert, so
+//                             NO decal this frame (the image or unbound-glass path applies) — an all-zero buffer is inert, so
 //                             a program that declares no decal renders byte-identically.
 //   cell[i]                 = (packedUvTopLeft, packedUvBottomRight [unorm2x16, sdfGlyphUnpackUv], fgRgba8, bgRgba8);
 //                             a BLANK cell packs uvTopLeft == uvBottomRight (a real glyph never has zero UV extent).
@@ -351,8 +351,8 @@ float4 sampleScreenSource(uint screenIndex, float2 uv) {
 // overload), resolves the surface UV at the hit and shades it. Two tiers, decal-first: a screen slot carrying a GLYPH
 // DECAL (a per-screen cell grid — see sdfSampleGlyphDecal) samples TEXT at the hit (no screenMask bit needed — a decal
 // terminal has no bound image); otherwise, when a source is bound THIS FRAME, samples it (NEAREST) through the CRT
-// glass. outColor is valid only when this returns true; the caller falls back to today's flat/procedural screen
-// shading otherwise (the plain sentinel, or a declared surface with neither a decal nor a bound source this frame).
+// glass. outColor is valid only when this returns true; the caller falls back to the unbound glass
+// otherwise (the plain sentinel, or a declared surface with neither a decal nor a bound source this frame).
 // footprintDiameter = the hit pixel's world diameter (pixelFootprint * traveled) — the decal's analytic AA source.
 bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, float footprintDiameter, out float3 outColor) {
     outColor = float3(0.0, 0.0, 0.0);
@@ -674,9 +674,10 @@ static const int PrimaryRefineSteps = 8;
 // gradient, the sun weight and the fog density are environment lanes (SdfEnvironment) so a world can author them;
 // their pinned values live on as SdfEnvironment.Default. The fog density's pinned value lives on as
 // SdfEnvironment.DefaultFogDensity.
-// The procedural test-card face (an unbound screen): its own emitter, tinted faintly by the sun.
-static const float ScreenCardBase = 0.85;
-static const float ScreenCardSunTint = 0.15;
+// An unbound screen's face: dark glass with nothing behind it, tinted faintly by the sun.
+static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
+static const float ScreenGlassBase = 0.85;
+static const float ScreenGlassSunTint = 0.15;
 // Keeps a screen light's inverse-square attenuation finite for a surface point on the emitter's own face.
 static const float ScreenLightMinDistanceSquared = 1.0e-4;
 // The 8-bit dither quantum: +-0.5 LSB of R2 noise before the store (see sdfR2Dither).
@@ -818,14 +819,7 @@ float3 calculateNormalAnalytic(float3 p, uint instanceMaskBase, out float gradie
 
     return sdfSafeNormalize(gradient);
 }
-// Procedural placeholder for a SCREEN_SLAB face: an animated test-card.
-float3 screenContent(float3 p, float time) {
-    float bars = (0.5 + (0.5 * sin((p.y * 26.0) - (time * 5.0))));
-    float3 baseColor = lerp(float3(0.02, 0.04, 0.09), float3(0.10, 0.80, 1.00), bars);
-    float sweep = smoothstep(0.49, 0.5, frac((p.x * 1.3) + (time * 0.4)));
 
-    return (baseColor + (0.35 * float3(0.95, 0.45, 0.12) * sweep));
-}
 // The star field's cell-grid domain is the octahedral sky projection (sdf-octahedral.hlsli).
 #include "sdf-octahedral.hlsli"
 // The procedural star field: a per-cell PCG3D hash (seed folded in) over the octahedral sky projection picks
@@ -1943,7 +1937,6 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     float3 rayOrigin = view.position.xyz;
     float3 rayDirection = cameraRayDirection(view, localUv);
     int viewMode = (int)round(view.forward.w);
-    float time = view.position.w;
     float farDistance = worldFarDistance(view);
 
     // Cone entry is a conservative ray distance; rasterization clips at forward distance ConeNear.
@@ -2117,7 +2110,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         bool sampledScreen = false;
 #ifdef SDF_SCREEN_SOURCES
         if (useFinalShading) {
-            // A bound screen source wins over BOTH the flat sentinel and the procedural test-card: emissive/unlit
+            // A bound screen source wins over BOTH the flat sentinel and the unbound glass: emissive/unlit
             // (the diegetic screen is its own light source, like a real display — no scene lighting dims or tints it),
             // but shaped by the CRT glass face (curvature/bezel/scanlines/vignette/glint/bloom in sampleScreenSurface)
             // before the shared distance fog. The screen ALSO lights the room — see the screen-light loop below.
@@ -2148,7 +2141,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             // The shadow light's Lambert term under its soft-shadow visibility (the ambient lights still fill shadowed
             // regions, so shadows read soft, not black). The march is skipped where the surface faces away from the
             // light, where no light shadows, or when soft shadows are disabled (world.shadows off; the light then
-            // goes unshadowed). The procedural screen branch below consumes sunDiffuse too, so this march is
+            // goes unshadowed). The unbound-glass branch below consumes sunDiffuse too, so this march is
             // not dead there.
             float3 keyDirection = worldSunDirection();
             float sunDiffuse = max(dot(normal, keyDirection), 0.0);
@@ -2204,11 +2197,11 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             }
 
             if (material >= SDF_SCREEN_MATERIAL) {
-                // The procedural test-card face: a declared screen with no source bound this frame (or the plain
-                // sentinel). Unlit apart from a faint sun tint — it is its own emitter, so the radiance accumulation
-                // below would be discarded. Test the whole sentinel RANGE, never `==`: a screen-instance id is
+                // The unbound glass: a declared screen with no source bound this frame (or the plain
+                // sentinel). Unlit apart from a faint sun tint, so it takes no radiance accumulation below. Test the
+                // whole sentinel RANGE, never `==`: a screen-instance id is
                 // SDF_SCREEN_MATERIAL + 1 + screenIndex and must never index the material table.
-                color = (screenContent(surfacePoint, time) * (ScreenCardBase + (ScreenCardSunTint * sunDiffuse)));
+                color = (ScreenGlassColor * (ScreenGlassBase + (ScreenGlassSunTint * sunDiffuse)));
             } else {
                 // DETAIL RE-RESOLVE, moved ahead of AO/lighting (Puck.SignedDistance.SdfMaterial's wrap/soften/eye
                 // lanes need the resolved material before either): one extra hit-only field evaluation, WITH Detail

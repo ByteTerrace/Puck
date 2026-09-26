@@ -325,6 +325,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     ? ShaderPipelineRenderNode.ParseFormat(format: storage.Declaration.Format)
                     : default),
                 Kind: storage.Declaration.Kind,
+                PreviousFrame: set.Reads[index][edge].PreviousFrame,
                 Producer: producer,
                 ProducerName: set.Instances[producer].Name,
                 Version: input.Version!
@@ -735,6 +736,19 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
                 if (acquired) {
                     m_producerTainted[binding.Producer] = external.Tainted;
+
+                    if (Withholds(
+                        previousFrame: binding.PreviousFrame,
+                        tainted: external.Tainted
+                    )) {
+                        external.Lease.Retire();
+                        node.BindImage(
+                            image: StandInFor(format: binding.Format),
+                            name: binding.Version
+                        );
+
+                        continue;
+                    }
                 }
 
                 // A source whose image arrives from another thread or device as an image view alone hands out no image a
@@ -794,7 +808,18 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 producer: binding.Producer
             );
 
-            if (output.Image.IsSameDeviceImage) {
+            if (
+                output.Image.IsSameDeviceImage &&
+                Withholds(
+                    previousFrame: binding.PreviousFrame,
+                    tainted: output.Tainted
+                )
+            ) {
+                node.BindImage(
+                    image: StandInFor(format: binding.Format),
+                    name: binding.Version
+                );
+            } else if (output.Image.IsSameDeviceImage) {
                 NoteTaint(
                     index: index,
                     producer: binding.ProducerName,
@@ -1267,8 +1292,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     }
     // What a producer instance publishes: an image's format, or a buffer's size in bytes.
     private readonly record struct Published(GpuPixelFormat Format, ulong SizeBytes);
-    // One input resolved at install: the version it binds and the producer whose output it reads.
-    private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format);
+    // One input resolved at install: the version it binds, the producer whose output it reads, and whether it reads that
+    // output's previous frame.
+    private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame);
     // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, its
     // buffer when it is one, and whether it was rendered from a tainted input.
     private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, bool Tainted) {

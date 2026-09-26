@@ -585,9 +585,10 @@ presentation dimension (`WorldPresentationCost`) and in `world.budget` with its
 extent ceiling, rate and planned passes; the server plans each row's source
 for that price.
 
-P11b owes the rest of the package. The main view, every `views.graphs` pane
-and every split-screen seat run through the graph runtime (commits 6, 9 and 10
-below), but `ViewStack` still renders every screen. Commits 11 and 12, the
+P11b owes the rest of the package. The main view, every `views.graphs` pane,
+every split-screen seat (commits 6, 9 and 10 below) and every camera and
+session a screen shows (commit 13) run through the graph runtime. Commits 11
+and 12, the
 per-device pass-pipeline cache and the live schedule's extents and prices in
 `world.budget`, have landed. Only commits 13 and 14 remain: P11b moves the
 screens onto graph instances fed by the scheduler, runs the parity and
@@ -673,13 +674,10 @@ all four live. The notes below record how each landed.
   commit 6.
   - `RenderGraphInstance` has a kind (`RenderGraphInstanceKind`): a graph it
     renders, or an external producer named by `ExternalPackage`.
-    `RenderGraphInstanceSet.TryCreate` refuses an external instance that
-    declares reads (`ExternalReads`), and a previous-frame read of an external
-    producer (`ExternalPreviousFrame`), each by name. The engine writes each
-    view's output image (`SdfWorldEngine.OutputImageHandle` is view 0's) and
-    its next render overwrites it, so a previous-frame read would sample the current frame, and
-    the output is not double-buffered to allow one; the refusal covers every
-    external producer, and `sdf.world` is the only one until P14-6. The
+    `RenderGraphInstanceSet.TryCreate` refuses an external instance's buffer
+    reads (`ExternalReads`) by name. Each view writes its own output image
+    (`SdfWorldEngine.OutputImageHandle` is view 0's), and a view whose output
+    one of its own screens samples renders into another (commit 13). The
     scheduler is unchanged: demand, divisor, quantized extent, and the price
     the instance declares, `SdfWorldEngine.PassLabels.Length` passes for
     `sdf.world`.
@@ -960,7 +958,7 @@ It deletes the SDF engine's composite, and it has landed.
   `SdfEngineNode.ViewProducer` gives the producers `world$2..world$K`, each
   leasing its own view's output. K is `WorldRootGraph.ViewsOf`: the most
   non-instance slots of any `views.layouts` row or `PlayerRoster.MaxSlots`,
-  capped at `SdfWorldEngine.MaxViewports`. With K above one, the root `main` runs one
+  uncapped since commit 13. With K above one, the root `main` runs one
   `place` pass per view ahead of the pane passes, and
   `WorldFramePresenter.PrepareGraph` sets each view's footprint to its rect at
   its render scale, so `place` also does the render-scale reconstruction. A
@@ -1024,7 +1022,55 @@ P11b's last four commits are these; 11 and 12 have landed:
 13. Screens onto graph instances, after P12b-2: each screen reads a graph
     instance the scheduler feeds, and `ViewStack`, `OffscreenRenderBudget`, the
     procedural test card, `SdfWorldEngine.MaxViewports` and the hand-composed
-    `IRenderNode` tree are deleted.
+    `IRenderNode` tree are deleted. It lands as these commits, in order, each
+    green:
+    1. External producers read previous frames. `RenderGraphInstanceSet`
+       refuses only an external producer's buffer reads: it may read its own
+       output and any instance's previous frame, and any instance may read an
+       external producer's previous frame, so a mirror is a self-read rather
+       than a refusal. The runtime binds such a read to the producer's latest
+       completed output as the reader renders, which for a self-read is the
+       reader's own previous frame. A view whose current output is bound as
+       one of its own screens renders into another output
+       (`SdfWorldEngine.ViewOutputs`), reusing a replaced output of its extent
+       once nothing holds it, so a mirror samples its previous image and never
+       the one it writes. Laws: a mirror facing itself shows the previous
+       frame; a self-reading view never writes the image it samples. Landed.
+    2. Camera views and sessions are `sdf.world` instances. Each camera a
+       screen, a HUD frame or a probe export shows is an external instance of
+       `sdf.world` named by its registration, rendered by an `SdfEngineNode` of
+       its own at the extent its footprint asks (its declared render size over
+       the display) and the refresh `world.view-refresh` sets; it reads every
+       source instance within the frame and every view instance, itself
+       included, at its previous frame. A session screen's view is an
+       `sdf.world` instance too, rendered through the destination's own frame
+       source. The world producer reads every view within the frame, the world
+       node captures its frame before any view renders
+       (`SdfEngineNode.HostFrame`), and a view films that frame. Every screen
+       reads an instance (`ISdfScreenSources.Rendered` goes), and
+       `ViewStack`, `SdfCameraView`, `WorldSessionView`,
+       `SdfFilmingViewEngine`, `ScreenSlotPriority`, `OffscreenRenderBudget`
+       and `ISdfFrameSource.RenderViews` are deleted. A camera-view screen's
+       hit walk continues into the view. Laws: a camera on two screens renders
+       once a frame; an off-view camera renders zero times; a view on a
+       quarter-size screen renders at a quarter extent; a camera-view screen's
+       walk continues into the view. Landed: `WorldViewInstances` states the
+       views, `WorldScreenBinder.TryViewProducer` creates their producers, and
+       the offscreen presentation configures views as the windowed one does,
+       so a camera screen renders in an offscreen capture too. Laws in
+       `WorldViewPaneMappingLawTests.Views` over the host and the scheduler, and
+       `SdfEngineNodeLeaseLawTests.AViewTakesTheFrameTheNodeRendersNext`.
+    3. The view limit goes: `SdfWorldEngine.MaxViewports` is deleted, an
+       engine provisions any viewport capacity, and `WorldRootGraph.ViewsOf`
+       is uncapped. Law: more than five views render. Landed:
+       `SdfWorldEngineWorkLawTests.MoreThanFiveViewsEachRenderIntoTheirOwnOutput`.
+    4. The procedural test card goes: a screen with nothing bound shades as
+       dark glass. Landed: `sdf-world.hlsli`'s unbound branch shades a constant
+       glass color under the faint sun tint, and `screenContent` is deleted.
+    5. The engine node is an external producer only: `SdfEngineNode` is no
+       `IRenderNode`, and harnesses produce it through `Produce`. Landed: its
+       frame render and `Descriptor` are gone from its surface, and the
+       SdfVm and World harnesses produce it at their extent.
 14. The final sweep: the rest of the deletions P11 lists, and the owning guides
     and the `rendering` skill describe the result.
 
@@ -1140,10 +1186,11 @@ each screen's mapping in `SourceMapping.Describe`'s line or why it has none.
 Every view's world producer reports the published screens as the placements
 standing in its world (`WorldViewGraphHost.Screens`), so a walk from a view's
 pane continues through a screen into its source: it ends `Producer` at a
-producer source's pixel, and `Unread` on a screen showing a camera view, which
-renders through `ViewStack` and is no instance of the live set. The laws are
-`WorldScreenMappingLawTests` and
-`WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`,
+producer source's pixel, and continues into a camera view a screen shows, an
+instance of the live set, through the camera it films from. The laws are
+`WorldScreenMappingLawTests`,
+`WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`
+and `WorldViewPaneMappingLawTests.AHitOnAScreenShowingACameraContinuesIntoTheView`,
 and the `view-screens` canary prints and holds each screen's mapping and a walk
 through each screen.
 
@@ -1191,13 +1238,13 @@ root, in both presentation shapes (see P11b commit 6 above):
 3. The launcher, which hands the root's image to a surface compositor that
    blits it to the swapchain.
 
-The SDF engine renders up to `SdfWorldEngine.MaxViewports` (5) views, each into
-its own output image; P11b commit 13 deletes the limit. Diegetic screens are 32
+The SDF engine renders as many views as its viewport capacity provisions, each into
+its own output image. Diegetic screens are 32
 fixed sampler slots
-with a nearest filter. Nested cameras are `ViewStack` entries refreshed
-round-robin under `OffscreenRenderBudget`: 4 per produced frame, 64 registered.
-A view that would see itself reads slot 0 and draws the procedural test card,
-and a chain of different views lags one frame per hop.
+with a nearest filter. Nested cameras and sessions are external `sdf.world`
+instances the scheduler renders by demand at their footprint's extent and the
+`world.view-refresh` divisor. A view that would see itself reads its own
+previous frame, and a chain of different views lags one frame per hop.
 
 `Surface` already distinguishes CPU pixels, a shared handle, and a same-device
 image, but a surface carries only the two 8-bit RGBA formats, the SDF engine's
@@ -3212,7 +3259,7 @@ except step 8.
    external reads narrows to buffer and previous-frame reads. The capture GPU
    route acquires its slot through `LatestSlotPublication` as the
    camera does, and the offscreen views bind acquired leases rather than
-   `ScreenSlot.Handle()` until P11b deletes `ViewStack`. This deletes
+   `ScreenSlot.Handle()`. This deletes
    `ScreenSourceCell`, the binder's per-slot callbacks,
    `SdfEngineNode.SetScreenSourceFrames` and the legacy
    `SdfWorldRenderSpec.ScreenSources`. An uploaded source (step 3) is already a
@@ -3300,15 +3347,9 @@ except step 8.
       `INativeImageCaptureFeed.LatestGpuSlot` and `GpuSlotFenceValue` go. Law:
       `LatestSlotPublicationTests.A_lapping_producer_never_writes_a_slot_a_lease_holds`.
    6. The offscreen views bind acquired leases rather than
-      `ScreenSlot.Handle()` until P11b-13 deletes `ViewStack`. Landed: the
-      node binds every screen reading a source instance before `ISdfFrameSource.RenderViews`,
-      and a view resolves such a screen to the image the node bound for it
-      (`WorldScreenBinder.CurrentHandle` over `SdfEngineNode.BoundScreenSource`),
-      under the lease the node holds past its own submission, which the
-      views' submissions precede on the queue. `ScreenSlot.Handle()` serves only
-      a view's or a session's own offscreen output, which no other thread or
-      device writes. Law:
-      `SdfEngineNodeLeaseLawTests.AnOffscreenViewSamplesTheLeaseTheNodeHoldsForAScreensSource`.
+      `ScreenSlot.Handle()`. Landed, and eclipsed by P11b-13: every view is an
+      instance whose own engine node binds each screen's read under its own
+      lease.
    7. The capture and camera CPU tiers go through `source-rgba`, each capture
       fill is a static source, and `CpuSurfaceSource`'s screen role goes with
       its last caller. Landed: the conversion an uploaded source instance
@@ -3455,7 +3496,7 @@ except step 8.
    `text` and `probe`) is listed with the producer or instance that reproduces
    it and the check that holds it, and then `ScreenSlot.AcquireFrame`'s
    per-kind resolution is deleted. The `view` and `session` arms are rendered
-   instances, which P11b's `ViewStack` deletion owns. A law registers a third,
+   view instances (P11b-13). A law registers a third,
    fake producer with no schema or planner change. Linux producers and POSIX
    file-descriptor import stay open.
 
@@ -3526,8 +3567,8 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
    the binder's rows (a screen at an arbitrary pose maps known points to known
    pixels, identically on every run) and
    `WorldViewPaneMappingLawTests.TheHitWalkContinuesThroughAScreenIntoItsSource`;
-   the `view-screens` canary. A screen showing a camera view ends its walk
-   `Unread` until camera views render as live instances (P11b). A live
+   the `view-screens` canary. A walk through a screen showing a camera view
+   continues into the view, a live instance since P11b-13. A live
    `screen.source` bind publishes the bound source's mapping (P12b-2).
 2. The simulation destination, landed. A tick's command snapshot never reaches
    the server, which integrates each seat's `PlayerIntent`, so the intent
@@ -3692,8 +3733,8 @@ Then:
   commit 9 deleted the engine's child path.
 
 A post-process pass is a pass of the synthesized root graph, which a world
-names in `views.post` (step 12). P14 also retires `ViewStack`'s fixed budget
-and the shaders README lines that name consumers which no longer exist. Every internal caller and world
+names in `views.post` (step 12). P14 also retires the shaders README lines that
+name consumers which no longer exist. Every internal caller and world
 document is updated in the same change.
 
 The engine's own pass and hazard model is deleted once its passes are graph
@@ -3776,9 +3817,10 @@ instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
    in `Puck.World`, which the SDF tests do not reach. The members nothing
    called are gone: the pipelined preview path, the node's cadence diagnostics
    and the engine's diagnostics hashing behind them, `SdfFrame.WarpAmount`, and
-   the world node's output-image factory with its shared-handle branch. An
-   offscreen camera view still selects export mode through
-   `SdfCameraView.ExportFactory`, so the engine's export path stays.
+   the world node's output-image factory with its shared-handle branch. A
+   camera view still selects export mode through
+   `SdfEngineNode.CreateOutputImage` for a probe export, so the engine's export
+   path stays.
 2. The HLSL module split and the upward-include refusal, with every compiled
    kernel's hash unchanged.
 3. Landed, the generated instruction-set declarations: `puck shaders generate`

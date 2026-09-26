@@ -648,7 +648,7 @@ public sealed partial class SdfProgram {
             }
 
             if (instruction.Material >= ((uint)SdfProgramBuilder.ScreenMaterialId)) {
-                // The sentinel band: SdfProgramBuilder.ScreenMaterialId is the plain procedural screen material (it
+                // The sentinel band: SdfProgramBuilder.ScreenMaterialId is the plain screen material, unbound glass (it
                 // reads no side table), and every id above it decodes to a direct screen-surface index.
                 if (instruction.Material == ((uint)SdfProgramBuilder.ScreenMaterialId)) {
                     continue;

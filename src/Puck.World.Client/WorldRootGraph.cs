@@ -115,8 +115,7 @@ public sealed class WorldRootGraph {
     /// each.</param>
     /// <returns>The graph.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="packages"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="views"/> is below one or above
-    /// <see cref="SdfWorldEngine.MaxViewports"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="views"/> is below one.</exception>
     /// <exception cref="WorldRootGraphRefusedException">The graph compiler refused the synthesized graph, such as an
     /// row's config that does not bind against its package's schema; the message names the row and the compiler's
     /// code.</exception>
@@ -124,10 +123,6 @@ public sealed class WorldRootGraph {
         ArgumentNullException.ThrowIfNull(argument: packages);
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1,
-            value: views
-        );
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            other: SdfWorldEngine.MaxViewports,
             value: views
         );
 
@@ -285,8 +280,7 @@ public sealed class WorldRootGraph {
         return (((IReadOnlyList<string>?)panes) ?? []);
     }
     /// <summary>Returns the views a world's layouts compose at most: the most slots of any <c>views.layouts</c> row that
-    /// name no instance, or <see cref="PlayerRoster.MaxSlots"/> for the built-in seat ladder, whichever is larger, and at
-    /// most <see cref="SdfWorldEngine.MaxViewports"/>.</summary>
+    /// name no instance, or <see cref="PlayerRoster.MaxSlots"/> for the built-in seat ladder, whichever is larger.</summary>
     /// <param name="views">The document's <c>views</c> section.</param>
     /// <returns>The view count.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
@@ -302,10 +296,7 @@ public sealed class WorldRootGraph {
             );
         }
 
-        return Math.Min(
-            val1: most,
-            val2: SdfWorldEngine.MaxViewports
-        );
+        return most;
     }
     /// <summary>Returns the name of the world producer that renders a view.</summary>
     /// <param name="view">The 0-based view.</param>

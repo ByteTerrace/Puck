@@ -779,6 +779,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         private readonly Action<string> m_write;
 
         private IGpuImage? m_image;
+        private bool m_tainted;
 
         public FakeProducer(FakePipelineGpu gpu) {
             m_gpu = gpu;
@@ -810,8 +811,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
             name: "test.world"
         );
 
+        // Whether the output carries the taint of the reads its latest frame bound, as the SDF engine's does.
+        public bool CarriesTaint { get; set; }
         // Called as the producer is disposed, before its image is.
         public Action? Disposing { get; set; }
+
+        // For each frame produced, whether its read of the instance named "world" bound an image.
+        public List<bool> WorldReadBound { get; } = [];
+
         // Whether an acquisition throws, as a failing producer would.
         public bool ThrowsOnAcquire { get; set; }
 
@@ -840,6 +847,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
             Extent = (width, height);
             Produced++;
+            m_tainted = (reads?.Tainted ?? false);
+
+            if (reads?.IndexOf(producer: "world") is >= 0 and var self) {
+                WorldReadBound.Add(item: (reads[self].Lease.ImageViewHandle != 0));
+            }
+
             m_capture.Serve(
                 failureLabel: "[test] capture failed",
                 writer: m_write
@@ -879,7 +892,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                     Release: m_release,
                     ReleaseToken: Acquired
                 ),
-                Tainted: false
+                Tainted: (CarriesTaint && m_tainted)
             );
 
             return true;

@@ -21,6 +21,8 @@ public readonly record struct RenderGraphExternalInput(string Producer, Surface 
 /// leaves once <c>Produce</c> returns. The runtime reuses one list per instance, so a steady frame allocates nothing.
 /// Every member runs on the thread that produces frames.</summary>
 public sealed class RenderGraphExternalReads {
+    // Each read's position by the name of the instance it reads.
+    private readonly Dictionary<string, int> m_indexByProducer;
     private readonly RenderGraphExternalInput[] m_inputs;
     private readonly bool[] m_taken;
 
@@ -30,10 +32,18 @@ public sealed class RenderGraphExternalReads {
     public RenderGraphExternalReads(IReadOnlyList<string> producers) {
         ArgumentNullException.ThrowIfNull(argument: producers);
 
+        m_indexByProducer = new Dictionary<string, int>(
+            capacity: producers.Count,
+            comparer: StringComparer.Ordinal
+        );
         m_inputs = new RenderGraphExternalInput[producers.Count];
         m_taken = new bool[producers.Count];
 
         for (var index = 0; (index < producers.Count); index++) {
+            _ = m_indexByProducer.TryAdd(
+                key: producers[index],
+                value: index
+            );
             m_inputs[index] = new RenderGraphExternalInput(
                 Image: default,
                 Layout: default,
@@ -83,19 +93,13 @@ public sealed class RenderGraphExternalReads {
     /// <summary>Returns the position of the read of an instance.</summary>
     /// <param name="producer">The instance's name.</param>
     /// <returns>The position, or -1 when no read names it.</returns>
-    public int IndexOf(string producer) {
-        for (var index = 0; (index < m_inputs.Length); index++) {
-            if (string.Equals(
-                a: m_inputs[index].Producer,
-                b: producer,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return index;
-            }
-        }
-
-        return -1;
-    }
+    public int IndexOf(string producer) => (m_indexByProducer.TryGetValue(
+        key: producer,
+        value: out var index
+    )
+        ? index
+        : -1
+    );
     /// <summary>Returns whether one read's lease was taken this frame, so a producer that samples one image in several
     /// places takes it once.</summary>
     /// <param name="index">The read's position.</param>

@@ -164,8 +164,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             avatarAccentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (bodyColor * m_noseFactor)));
         }
 
-        // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or the engine's
-        // procedural no-signal fallback when unbound). STATIC data — emitted every build (probe and live), so the
+        // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or shades as dark
+        // glass when unbound). STATIC data — emitted every build (probe and live), so the
         // capacity floors cover them by construction (no probe-only branch). The sampled overload takes the explicit
         // world frame (Origin/Right/Up) baked into the surface table for UV mapping; the geometry rounded box is
         // placed by translating to its CENTER, which sits one HalfDepth behind the face along the face normal
