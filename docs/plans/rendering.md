@@ -2798,8 +2798,7 @@ follow it.
    the decompiler print it back, and it is the row's one spelling: a raw
    `parameters` block, a statement outside a `graph` block, or a member bound
    twice is PUCK120. `level.puck` binds the board pass with it.
-5. Done, pending its first device run: the deterministic tick and the tick
-   verdict. A graph requests the rate its passes read the tick at with a
+5. Done: the deterministic tick and the tick verdict. A graph requests the rate its passes read the tick at with a
    top-level `tickRate` (`RenderGraphDefinition.TickRate`,
    `ShaderPipelinePlan.TickRate`), and the frame group's `tick` is the
    delivered engine tick divided, in whole numbers, by the engine rate over
@@ -2819,7 +2818,9 @@ follow it.
    non-dividing rate refuses by name), `ParityComparatorTests` (a mid-burst
    capture fails the tick verdict rather than the pixel verdict),
    `WorldCaptureSchedulerLawTests` (a landed entry records its region tick) and
-   `OffscreenFrameCadenceLawTests`.
+   `OffscreenFrameCadenceLawTests`; every `puck parity` station holds its tick
+   verdict on both backends, and `rulepush-board` reads its tiles through the
+   shared row region on both.
 6. The presentation dimension. The cost report prices every binding in bytes
    per tick and per frame, with a per-document ceiling refusing by pipeline and
    binding; `world.budget` prints it, and the browser report carries it.
