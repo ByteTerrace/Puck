@@ -257,7 +257,7 @@ public sealed class WorldThemeValidationLawTests {
         );
 
         // Another consumer binds the gauge.
-        var gauge = mirror.RegisterToken(
+        var gauge = mirror.Bind(
             conversion: WorldStateConversion.Number,
             token: "state.gauge"
         );

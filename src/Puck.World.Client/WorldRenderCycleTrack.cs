@@ -21,8 +21,8 @@ public sealed class WorldRenderCycleTrack {
 
     private int m_outputIndex;
     private string? m_stateRow;
-
-    private int m_stateSlot = -1;
+    // The cycle's position binding, whose manifest slot is found afresh each frame.
+    private StateBinding? m_state;
 
     // A point light's anchor rides the resolver's live dynamic-transform slot every call (never cached with the
     // statics/keys above, which move only once per revision) — an anchored placement's pool slot can differ from
@@ -447,7 +447,7 @@ public sealed class WorldRenderCycleTrack {
             (mirror.ColorRevision != m_mirrorRevision)
         ) {
             m_revision = revision;
-            m_stateSlot = -1;
+            m_state = null;
             Write(
                 carry: false,
                 into: m_statics,
@@ -467,14 +467,11 @@ public sealed class WorldRenderCycleTrack {
                     cycle: cycle,
                     mirror: mirror
                 );
-                // The cycle's position is the row's stored truth; the slot is registered once per rebuild.
-                m_stateSlot = mirror.Register(
-                    binding: new StateBinding(
+                // The cycle's position is the row's stored truth, which the document's manifest registers.
+                m_state = new StateBinding(
                     Key: null,
                     Row: m_stateRow!,
                     Target: true
-                ),
-                    conversion: WorldStateConversion.Number
                 );
             }
 
@@ -497,9 +494,12 @@ public sealed class WorldRenderCycleTrack {
         }
 
         if (
-            (m_stateSlot < 0) ||
+            (m_state is not { } state) ||
             !mirror.TryValue(
-            slot: m_stateSlot,
+            slot: mirror.SlotOf(
+                binding: in state,
+                conversion: WorldStateConversion.Number
+            ),
             value: out var value
         )
         ) {

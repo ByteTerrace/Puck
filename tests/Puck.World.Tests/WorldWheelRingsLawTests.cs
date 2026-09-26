@@ -27,7 +27,7 @@ public sealed class WorldWheelRingsLawTests {
                 Value: CellValue.Text(value: north)
             ),
             new StateCell(
-                Key: CellName.Parse(candidate: WorldWheelRings.HubLabelKey),
+                Key: CellName.Parse(candidate: BindingWheelDefinition.HubLabelKey),
                 Value: CellValue.Text(value: "Back")
             ),
         ]
@@ -53,8 +53,7 @@ public sealed class WorldWheelRingsLawTests {
         Tick: tick
     );
     // One ring of two sectors: the first keyed into the label row, the second with no id, which draws its command.
-    private static BindingWheelView Wheel() {
-        var profile = BindingProfile.Compile(document: new BindingProfileDocument(
+    private static BindingProfileDocument WheelDocument() => new(
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [],
             Chords: [new BindingChordDefinition(
@@ -85,10 +84,18 @@ public sealed class WorldWheelRingsLawTests {
                         )],
                     LabelRow: $"state.{LabelRow}"
                 )]
-        ));
-
-        return new PagedInputBindings(profile: profile).WheelFor(slot: 0)!;
-    }
+        );
+    private static BindingWheelView Wheel() => new PagedInputBindings(profile: BindingProfile.Compile(document: WheelDocument())).WheelFor(slot: 0)!;
+    // The seat registers its wheel's cells with the mirror it reads through, as WorldSeatBindings does on each route.
+    private static void RegisterSeat(WorldStateMirror mirror, WorldDefinition definition) => mirror.Register(
+        bindings: WorldPresentationManifest.SeatBindings(
+            bar: WorldBindingBarAuthoring.Absent,
+            bindings: WheelDocument(),
+            bodyIndex: 0,
+            definition: definition
+        ),
+        owner: mirror
+    );
 
     [Fact]
     public void RingsRebuildOnlyWhenACellTheyReadMoves() {
@@ -103,6 +110,10 @@ public sealed class WorldWheelRingsLawTests {
         mirror.Install(
             engineTick: 0UL,
             tick: 0UL
+        );
+        RegisterSeat(
+            definition: definition,
+            mirror: mirror
         );
 
         var drawn = rings.Resolve(
@@ -210,6 +221,11 @@ public sealed class WorldWheelRingsLawTests {
         var rings = new WorldWheelRings(resolveIcon: static _ => OverlayResolvedGlyph.None);
         var wheel = Wheel();
         var sink = 0;
+
+        RegisterSeat(
+            definition: definition,
+            mirror: mirror
+        );
 
         void Frames() {
             for (var repetition = 0; (repetition < Repetitions); repetition++) {
