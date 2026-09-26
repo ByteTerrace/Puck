@@ -49,7 +49,7 @@ public sealed class DirectXBufferStatesLawTests {
     }
     [Fact]
     public void EachPlacementReachesIndirectArgumentFromTheStateItIsCreatedIn() {
-        var indirect = DirectXBufferStates.RequiredState(access: GpuAccess.IndirectCommandRead);
+        var indirect = DirectXBufferStates.RequiredState(access: GpuAccess.IndirectCommandRead, stages: GpuStage.ComputeShader);
 
         Assert.Equal(
             actual: indirect,
@@ -66,7 +66,7 @@ public sealed class DirectXBufferStatesLawTests {
         var written = new DirectXBufferStates().Plan(
             after: indirect,
             bufferHandle: ArgsBuffer,
-            firstState: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderWrite)
+            firstState: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderWrite, stages: GpuStage.ComputeShader)
         );
         // A device-local buffer nothing wrote in this recording starts from the state it is created in.
         var created = new DirectXBufferStates().Plan(
@@ -145,25 +145,60 @@ public sealed class DirectXBufferStatesLawTests {
     [Fact]
     public void EachNeutralAccessNeedsTheStateItsBindingHolds() {
         Assert.Equal(
-            actual: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead),
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead, stages: GpuStage.ComputeShader),
             expected: NonPixelShaderResource
         );
         // A read through a read-write binding is declared with the write the binding permits.
         Assert.Equal(
-            actual: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, stages: GpuStage.ComputeShader),
             expected: UnorderedAccess
         );
         Assert.Equal(
-            actual: DirectXBufferStates.RequiredState(access: GpuAccess.IndirectCommandRead),
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.IndirectCommandRead, stages: GpuStage.ComputeShader),
             expected: IndirectArgument
         );
         Assert.Equal(
-            actual: DirectXBufferStates.RequiredState(access: GpuAccess.TransferWrite),
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.TransferWrite, stages: GpuStage.ComputeShader),
             expected: UnorderedAccess
         );
         Assert.Equal(
-            actual: DirectXBufferStates.RequiredState(access: GpuAccess.None),
+            actual: DirectXBufferStates.RequiredState(access: GpuAccess.None, stages: GpuStage.ComputeShader),
             expected: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON
+        );
+    }
+    /// <summary>A read by the fragment stage needs the pixel shader resource state, and the state a graphics reader gets
+    /// covers every shader stage: a region the node's copy writes as a UAV and both a fragment and a compute stage read
+    /// moves into <c>ALL_SHADER_RESOURCE</c>, which a later compute read already holds, while a compute-only read keeps
+    /// <c>NON_PIXEL_SHADER_RESOURCE</c>.</summary>
+    [Fact]
+    public void AFragmentReadNeedsTheStateEveryShaderStageReadsAndCoversAComputeRead() {
+        var states = new DirectXBufferStates();
+        var allShaders = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+
+        Assert.Equal(
+            actual: (
+                DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead, stages: GpuStage.FragmentShader),
+                DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead, stages: GpuStage.ComputeShader | GpuStage.FragmentShader),
+                DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead, stages: GpuStage.ComputeShader),
+                DirectXBufferStates.RequiredState(access: GpuAccess.ShaderWrite, stages: GpuStage.FragmentShader)
+            ),
+            expected: (allShaders, allShaders, NonPixelShaderResource, UnorderedAccess)
+        );
+
+        var copied = states.Plan(
+            after: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead, stages: GpuStage.ComputeShader | GpuStage.FragmentShader),
+            bufferHandle: ArgsBuffer,
+            firstState: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderWrite, stages: GpuStage.ComputeShader)
+        );
+        var computeRead = states.Plan(
+            after: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead, stages: GpuStage.ComputeShader),
+            bufferHandle: ArgsBuffer,
+            firstState: UnorderedAccess
+        );
+
+        Assert.Equal(
+            actual: (copied.Kind, copied.Before, copied.After, computeRead.Kind),
+            expected: (DirectXBufferBarrierKind.Transition, UnorderedAccess, allShaders, DirectXBufferBarrierKind.None)
         );
     }
     [Fact]
@@ -184,9 +219,9 @@ public sealed class DirectXBufferStatesLawTests {
 
         for (var index = 0; (index < edges.Length); index++) {
             var barrier = states.Plan(
-                after: DirectXBufferStates.RequiredState(access: edges[index].After),
+                after: DirectXBufferStates.RequiredState(access: edges[index].After, stages: GpuStage.ComputeShader),
                 bufferHandle: ArgsBuffer,
-                firstState: DirectXBufferStates.RequiredState(access: edges[index].Before)
+                firstState: DirectXBufferStates.RequiredState(access: edges[index].Before, stages: GpuStage.ComputeShader)
             );
 
             Assert.Equal(
