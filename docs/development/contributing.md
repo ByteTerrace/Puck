@@ -151,7 +151,10 @@ backends. A bare `puck canary` runs only the automatic set, so it never runs a
 GPU proof. Run the merge gate with no competing build or GPU work on the
 machine, from a copy of the candidate's own CLI. `puck canary --merge --plan`
 prints what the gate would run without a GPU, and a gate that outgrows its
-declared ceiling is refused before it builds.
+declared ceiling is refused before it builds. For a per-change GPU check on one
+backend, `puck canary --capability gpu --backend vulkan` (or `directx`) runs
+those proofs on that backend alone and names it in the verdict; it is not the
+merge gate, which refuses `--backend` and holds both.
 
 `puck canary`, `puck parity`, `puck test`, and `puck docs citations` share one
 Release build of `Puck.World` per source state. The build lives in

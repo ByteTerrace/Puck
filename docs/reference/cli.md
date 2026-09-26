@@ -837,6 +837,17 @@ automatic. It reports one proof per backend, as `<id> on <backend>`, and the
 manifest holds only when both did. A `bootShape: "windowed"` manifest may list
 the same `backends`, under the same rules: it then boots each leg windowed once per
 backend with `--backend`. No other shape reads `backends`.
+
+`puck canary --backend vulkan` or `--backend directx` runs every proof that
+lists `backends` on the named backend alone, for a per-change GPU check on one
+backend. Omitted, both run. Every other proof is unaffected: a headless or stub
+leg, and a windowed leg whose manifest lists no `backends`, boot once naming no
+backend, as they always do. The plan (`canary plan: backend-declaring proofs
+run on vulkan only (--backend vulkan), not on directx.`), the selection line
+and the final `PASS` or `FAIL` line name the backends that ran, so a run on one
+backend never reads as a run on both. The option refuses any other value by
+name. It is refused with `--merge`, because the merge gate holds both
+backends, and with `--list`, which runs nothing.
 The `pipeline-feedback`, `pipeline-ink`, `pipeline-edit`, `pipeline-supersede`,
 `pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault` and `pipeline-geometry` canaries use this shape to test shader
 pipelines, and `source-conversion` uses it to run the shipped image-source
@@ -850,8 +861,8 @@ usable device on this host or the operating system does not offer it. The
 second is a `[pipeline: <name> unsupported: …]` or
 `[pipeline: <name> wait <phase> unsupported: …]` line, printed when a shader
 tool such as DXC is missing. The proof then reports `UNSUPPORTED` instead of a
-verdict. Because an offscreen proof needs every declared backend, the selection
-is not green: the run exits 2.
+verdict. Because an offscreen proof needs every selected backend, the
+selection is not green: the run exits 2.
 
 A manifest declaring the `audio-output` requirement gets a third check: its
 own `[audio.state: device=… fault=…]` echo. `device=unsupported` (the platform
@@ -888,6 +899,7 @@ puck canary --all                   explicitly run every proof; does not change 
 puck canary --list                  strictly load and list manifests without building or running
 puck canary --capability <class>    filter automatic/headless/windowed/offscreen or an environmental requirement
 puck canary --merge                 run the merge gate: the automatic set plus every proof requiring gpu
+puck canary --backend <name> ...    run every backend-declaring proof on vulkan or directx only
 puck canary --jobs <n>              run at most n World processes at once (n ≥ 1)
 puck canary --plan                  print a selection's counts and ceiling without building or running
 ```
@@ -912,7 +924,7 @@ A change that deliberately grows a gate raises the ceiling in the same change
 and states the new `--plan` counts.
 
 The selection forms are mutually exclusive and every execution selection must
-be nonempty. `--jobs` combines with any of them, and `--plan` with any but `--list`. Manifest tokens are case-sensitive. Every non-comment script
+be nonempty. `--jobs` combines with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
 command declares `accepted` or intentionally expected `refused`, bound to its
 verb and occurrence; an accepted claim may add `"stream": "stderr"` to expect
 its confirmation there instead of stdout—the shape server narration
@@ -1320,6 +1332,14 @@ scripted command accepted
 GPU devices but takes over no display. Exit codes: 0 every capture held every
 verdict, 1 a verdict failed, 2 a leg/build refusal or a malformed
 manifest or contract.
+
+`puck parity` has no `--backend`. Past the content gate, every verdict it
+gives compares the two backends' runs: the state verdict holds one side's
+`stateHash` to the other's, and the pixel verdict measures one side's tiles
+against the other's. Nothing pins a historical hash or frame, so one backend
+alone would leave only the content gate and the reference station, which is
+not parity. A per-change check on one backend is
+`puck canary --capability gpu --backend <name>`.
 
 ---
 

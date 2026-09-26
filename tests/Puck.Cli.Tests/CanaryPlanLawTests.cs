@@ -74,7 +74,8 @@ public sealed class CanaryPlanLawTests {
                 Manifest(id: "stub", shape: CanaryBootShape.Stub),
                 Manifest(id: "offscreen", shape: CanaryBootShape.Offscreen, positive: (Leg(name: "positive") with { Package = package }), discriminating: (Leg(name: "discriminating") with { Package = (package with { Alter = "tint.hlsl" }) }), requirements: "gpu"),
             ],
-            namedWorldArtifact: false
+            namedWorldArtifact: false,
+            backends: WorldOffscreenLeg.Backends
         );
 
         Assert.Equal(
@@ -126,7 +127,8 @@ public sealed class CanaryPlanLawTests {
                     Manifest(id: "first", shape: CanaryBootShape.Offscreen, positive: (Leg(name: "positive") with { Package = package }), requirements: "gpu"),
                     Manifest(id: "second", shape: CanaryBootShape.Offscreen, positive: (Leg(name: "positive") with { Package = (package with { SourcePath = "other/tint.graph.json" }) }), requirements: "gpu"),
                 ],
-                namedWorldArtifact: false
+                namedWorldArtifact: false,
+                backends: WorldOffscreenLeg.Backends
             ).PackageSpawns
         );
         Assert.Equal(
@@ -139,7 +141,7 @@ public sealed class CanaryPlanLawTests {
         );
         Assert.Equal(
             expected: 0,
-            actual: CanaryCommand.Plan(manifests: [Manifest(id: "lone", shape: CanaryBootShape.Headless)], namedWorldArtifact: true).WorldBuilds
+            actual: CanaryCommand.Plan(manifests: [Manifest(id: "lone", shape: CanaryBootShape.Headless)], namedWorldArtifact: true, backends: WorldOffscreenLeg.Backends).WorldBuilds
         );
     }
     [Fact]
@@ -174,7 +176,8 @@ public sealed class CanaryPlanLawTests {
     public void ACeilingRefusesOnlyAPlanThatExceedsItAndNamesWhereToRaiseIt() {
         var plan = CanaryCommand.Plan(
             manifests: [Manifest(id: "lone", shape: CanaryBootShape.Headless, timeoutSeconds: 30)],
-            namedWorldArtifact: false
+            namedWorldArtifact: false,
+            backends: WorldOffscreenLeg.Backends
         );
 
         Assert.Null(@object: CanaryCommand.CeilingRefusal(
@@ -208,11 +211,13 @@ public sealed class CanaryPlanLawTests {
         var manifests = Shipped();
         var automatic = CanaryCommand.Plan(
             manifests: [.. manifests.Where(predicate: static manifest => manifest.IsAutomatic)],
-            namedWorldArtifact: false
+            namedWorldArtifact: false,
+            backends: WorldOffscreenLeg.Backends
         );
         var merge = CanaryCommand.Plan(
             manifests: CanaryCommand.SelectMerge(manifests: manifests),
-            namedWorldArtifact: false
+            namedWorldArtifact: false,
+            backends: WorldOffscreenLeg.Backends
         );
 
         Assert.Null(@object: CanaryCommand.CeilingRefusal(
@@ -232,7 +237,8 @@ public sealed class CanaryPlanLawTests {
         var second = ConsoleCapture.RunSplit(run: static () => PuckRootCommand.Invoke(args: ["canary", "--merge", "--plan"]));
         var merge = CanaryCommand.Plan(
             manifests: CanaryCommand.SelectMerge(manifests: Shipped()),
-            namedWorldArtifact: false
+            namedWorldArtifact: false,
+            backends: WorldOffscreenLeg.Backends
         );
 
         Assert.Equal(

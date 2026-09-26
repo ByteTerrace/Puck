@@ -1202,9 +1202,10 @@ emulator joins as a machine engine in `WorldMachineCatalog`, again with no
 schema change. Text is a decal, not an image.
 
 A route's `input` names where a pointer hit on the screen's source goes:
-`Presentation` (the default, hover and highlight) or `Simulation`, where a
-pointer ray arriving as `source.pointer.origin`/`source.pointer.direction`
-command values is mapped in fixed point from the row alone
+`Presentation` (the default: hover and highlight, which only a displayed pane
+receives until GPU picking reaches a screen's surface; see P4) or `Simulation`,
+where a pointer ray arriving as
+`source.pointer.origin`/`source.pointer.direction` command values is mapped in fixed point from the row alone
 (`WorldScreenMappings.Of`, the whole source inset by the glass bezel). The
 validator refuses `Passthrough` by name, because only a source the local user
 opened may send input to a host window. `world.screens` echoes each screen's

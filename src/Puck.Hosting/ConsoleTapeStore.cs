@@ -31,8 +31,8 @@ public interface IConsoleTapeSource {
 /// <summary>
 /// The console-tape state store: the <see cref="ConsoleTape"/> publishes an immutable frame on every console edit,
 /// the render thread snapshots it. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/> (a
-/// whole-reference swap per publish — no locks on the read path, no torn frames) so DI registration and constructor
-/// parameters still name a console-specific type.
+/// sequence-guarded slot: no locks on the read path, no torn frames, nothing allocated per publish) so DI registration
+/// and constructor parameters still name a console-specific type.
 /// </summary>
 public sealed class ConsoleTapeStore : IConsoleTapeSource {
     private readonly PublishBuffer<ConsoleTapeFrame> m_buffer = new();
