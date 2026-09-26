@@ -1,0 +1,51 @@
+# Each row compiles its generated echo pass in the background.
+pipeline.wait ink-simulation compiled 40
+pipeline.wait ink-simulation installed 10
+pipeline.wait ink-visualize compiled 40
+pipeline.wait ink-visualize installed 10
+pipeline.wait ink-finish compiled 40
+pipeline.wait ink-finish installed 10
+pipeline.wait tint compiled 40
+pipeline.wait tint installed 10
+pipeline.wait sdf-film-grain compiled 40
+pipeline.wait sdf-film-grain installed 10
+pipeline.wait place compiled 40
+pipeline.wait place installed 10
+pipeline.wait overlay compiled 40
+pipeline.wait overlay installed 10
+# Every frame-block and pass-block word carries its sentinel; each row's one initialization frame after a reset reads them back.
+pipeline.sentinels ink-simulation on
+pipeline.reset ink-simulation
+pipeline.wait ink-simulation submitted 1 10
+pipeline.capture ink-simulation {run}/ink-simulation.png
+pipeline.wait ink-simulation captured 10
+pipeline.sentinels ink-visualize on
+pipeline.reset ink-visualize
+pipeline.wait ink-visualize submitted 1 10
+pipeline.capture ink-visualize {run}/ink-visualize.png
+pipeline.wait ink-visualize captured 10
+pipeline.sentinels ink-finish on
+pipeline.reset ink-finish
+pipeline.wait ink-finish submitted 1 10
+pipeline.capture ink-finish {run}/ink-finish.png
+pipeline.wait ink-finish captured 10
+pipeline.sentinels tint on
+pipeline.reset tint
+pipeline.wait tint submitted 1 10
+pipeline.capture tint {run}/tint.png
+pipeline.wait tint captured 10
+pipeline.sentinels sdf-film-grain on
+pipeline.reset sdf-film-grain
+pipeline.wait sdf-film-grain submitted 1 10
+pipeline.capture sdf-film-grain {run}/sdf-film-grain.png
+pipeline.wait sdf-film-grain captured 10
+pipeline.sentinels place on
+pipeline.reset place
+pipeline.wait place submitted 1 10
+pipeline.capture place {run}/place.png
+pipeline.wait place captured 10
+pipeline.sentinels overlay on
+pipeline.reset overlay
+pipeline.wait overlay submitted 1 10
+pipeline.capture overlay {run}/overlay.png
+pipeline.wait overlay captured 10

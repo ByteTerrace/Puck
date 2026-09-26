@@ -529,7 +529,14 @@ the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
 `main`, producer the pane, at the slot's width and height) so the scheduler
 renders the pane at that extent, advances the pane's clock, and feeds its
 camera, pointer and time. A pane the active layout does not show is not shown:
-its place pass draws nothing and its instance is not scheduled.
+its place pass draws nothing and its instance is not scheduled. Once every
+slot is placed, the host publishes the mapping of each view and pane the
+`place` passes draw (`WorldViewGraphHost.PublishPanes`): the instance's whole
+image over its rect, at the extent the runtime's latest schedule
+(`IRenderGraphInstances.Latest`) renders it at. A pane's pointer maps through
+that mapping, which a steady frame publishes without allocating;
+[pointing at a displayed source](commands.md#pointing-at-a-displayed-source)
+covers what reads it.
 
 The layout composer runs inside the world producer's frame, so a layout change
 places panes one frame later. A
@@ -687,7 +694,13 @@ pixel *i* of a one-row image green when member *i* reads back exactly. A
 package build compiles each interface's echo and holds its reflection to the
 layout; the `pipeline-echo` canary runs one on both backends with
 `pipeline.sentinels` on, and an echo expecting two members' sentinels swapped
-fails it.
+fails it. The `interface-echo` canary runs one echo per shipped interface
+family the same way: the ink simulation, visualize and finish passes (finish's
+blocks are also the Moth's), the package canary's tint, the film grain set
+(whose blocks are also the `post.sdf-film-grain` package's), and the `place`
+and `overlay` packages. Each echo document declares its target's blocks, and
+its perturbed twin expects its last member's first word to hold the next
+word's sentinel.
 
 ## API
 
@@ -783,6 +796,25 @@ block's word 0 lands at) and a run table.
 a device from it, on the thread pool, and every owner leases that pipeline
 rather than creating its own: the SDF engine records every region's copy with
 it, its brick staging into the brick pool included. The cache counts what it creates under `gpu.region-copy`.
+
+A shader pipeline instance owns every host-written region its graph reads. A
+package states the regions its recorder writes
+(`IRenderGraphPackageFactory.Regions`; the overlay's one storage buffer), and the
+instance creates them at install under the policy `GpuResidency.Select` picks
+with a reader in flight, hands them to the recorder in
+`RenderGraphPackageGroups.Regions`, and, when any stages, states and admits one
+reserved copy pool per such pass (`ShaderPipelineRenderNode.DescriptorPools`'
+`regionCopies`) and takes the device's copy pipeline in the candidate's build,
+off the frame thread (`GpuRegionCopyPipelineLease.Take`). A host buffer port's
+region is created by `ShaderPipelineRenderNode.BindRegion` at the port's declared
+size under the same choice; a staged one leases the pipeline on its first bind,
+returns no region until the pipeline is built, and admits its own copy pool.
+After a frame's passes have recorded, the instance flushes every region's share
+of the slot and records each owed copy in one command buffer submitted ahead of
+the frame's passes: a memory barrier ordering earlier submissions' reads before
+the copies' writes, the copies, then a buffer barrier per copied buffer to the
+compute and fragment stages. A recorder only writes a region's contents and binds
+its slot's `GpuRegion.Buffer`; it records no copy and no barrier.
 
 ## Probe kinds (`puck.probe.manifest.v1`)
 
@@ -1680,7 +1712,7 @@ match its render pass and a pipeline whose depth test disagrees with it.
 `vertex` member. `puck canary pipeline-feedback pipeline-ink pipeline-edit
 pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override
 pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
-no-device-compile` runs the real World
+interface-echo no-device-compile` runs the real World
 offscreen on Vulkan and on Direct3D 12. It checks a float
 history against an arithmetic oracle across pause, reset, step and paused
 capture, and checks the shipped ink pipeline's exposure parameter in the

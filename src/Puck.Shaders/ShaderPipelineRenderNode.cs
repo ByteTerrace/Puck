@@ -311,6 +311,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 pass: runtime
             );
             InstallPackage(
+                copyPipeline: built.CopyPipeline,
                 descriptorPool: descriptorPool,
                 objects: objects,
                 outputImages: PackageOutputImages(
@@ -581,6 +582,9 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                     part: "final"
                 ));
             }
+            if (built.RegionCopies.Length > 0) {
+                EnsureCopyPools();
+            }
             m_preview = preview;
             m_initializationPending = true;
             m_ready = true;
@@ -732,7 +736,8 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 pools: DescriptorPools(
                     inFlight: m_inFlight,
                     plan: next.Plan,
-                    preview: key.Preview.HasValue
+                    preview: key.Preview.HasValue,
+                    regionCopies: built.RegionCopies
                 ),
                 refusal: out var refusal
             )
@@ -839,6 +844,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
             return;
         }
+        AdoptRegionCopy(built: built);
         // The graph installed with the desired selection's preview, so no separate preview is wanted; a preview build
         // still running for it is disposed when it is taken.
         m_previewRequest = null;
@@ -1209,6 +1215,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         RetireAllLeases();
         RetireBindingHolds();
         ReleaseRegions();
+        ReleaseRegionCopy();
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
         m_previousSurface = default;
@@ -1269,11 +1276,13 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         }
         throw new InvalidDataException(message: $"External image '{name}' is not bound.");
     }
-    private void ValidateExternalBinding(string name, ShaderPipelineResourceKind kind) {
+    // The candidate graph's declaration of a named external resource of the kind, or null when no graph is queued or
+    // installed.
+    private ShaderPipelineResource? ValidateExternalBinding(string name, ShaderPipelineResourceKind kind) {
         var plan = (m_pending?.Plan ?? m_pipeline?.Plan);
 
         if (plan is null) {
-            return;
+            return null;
         }
         // An indexed loop, not a predicate or an interface enumerator: a graph instance binds its inputs on every frame,
         // and either would allocate.
@@ -1291,7 +1300,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
                 resource.Declaration.IsExternal &&
                 (resource.Declaration.Kind == kind)
             ) {
-                return;
+                return resource.Declaration;
             }
         }
 
@@ -1363,7 +1372,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         );
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(buffer);
-        ValidateExternalBinding(
+        _ = ValidateExternalBinding(
             kind: ShaderPipelineResourceKind.Buffer,
             name: name
         );
@@ -1380,7 +1389,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentOutOfRangeException.ThrowIfZero(image.ImageHandle);
         ArgumentOutOfRangeException.ThrowIfZero(image.ImageViewHandle);
-        ValidateExternalBinding(
+        _ = ValidateExternalBinding(
             kind: ShaderPipelineResourceKind.Image,
             name: name
         );
@@ -1492,7 +1501,7 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
 
         slot.Fence!.Wait();
         slot.Leases.RetireAll();
-        FlushRegions(slot: slotIndex);
+        BindRegionBuffers(slot: slotIndex);
         HoldLeases();
         var commands = m_commands;
 
@@ -1500,6 +1509,10 @@ public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequ
         RecordPasses(
             commands: commands,
             context: context,
+            slot: slotIndex
+        );
+        RecordRegionCopies(
+            commands: commands,
             slot: slotIndex
         );
         if (NeedsPreview(spec: selectedResource.Spec)) {

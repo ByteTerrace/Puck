@@ -34,6 +34,8 @@ internal sealed class ObservedPackageFactory(IRenderGraphPackageFactory inner, F
         ),
         owner: this
     );
+    /// <inheritdoc/>
+    public IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) => inner.Regions(context: context);
 
     private sealed class Recorder(IRenderGraphPackageRecorder inner, ObservedPackageFactory owner) : IRenderGraphPackageRecorder {
         public void Dispose() => inner.Dispose();

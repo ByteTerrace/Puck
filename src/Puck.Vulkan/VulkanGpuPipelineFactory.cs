@@ -276,9 +276,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
             device: logicalDevice.Commands
         );
         var result = graphicsPipelineApi.CreateGraphicsPipeline(
-            descriptorSetLayoutHandle: out _,
             pipelineHandle: out var pipelineHandle,
-            pipelineLayoutHandle: out _,
             request: new VulkanGraphicsPipelineCreateRequest(
                 ColorBlendAttachments: blendAttachments,
                 DepthStencil: ((description.DepthCompare is { } compare)
@@ -289,7 +287,6 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
                         SType = StructureTypePipelineDepthStencilStateCreateInfo,
                     }
                     : null),
-                DescriptorBindings: [],
                 Device: logicalDevice.Commands,
                 DynamicStates: [DynamicStateViewport, DynamicStateScissor],
                 FragmentShaderModuleHandle: fragmentShader.Handle,
@@ -300,8 +297,6 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
                 },
                 PipelineCache: logicalDevice.PipelineCache,
                 PipelineLayoutHandle: groups.PipelineLayoutHandle,
-                PushConstantSize: 0,
-                PushConstantStageFlags: 0,
                 Rasterization: new VkPipelineRasterizationStateCreateInfo {
                     CullMode = CullModeNone,
                     DepthBiasEnable = False,

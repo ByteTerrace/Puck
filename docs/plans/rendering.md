@@ -312,9 +312,9 @@ One leg stays open, and is not yet proven: one build on Linux compared byte for
 byte with the Windows build of the same commit. CI runs it as `verify.yml`'s
 `shader-bytecode` job (see P7's gate).
 
-P8 is complete but for one item of its check: the generated echo runs on both
-backends for one interface, the `pipeline-echo` canary's own, rather than for
-every shipped package's (see P8's check). The frame group is a descriptor set,
+P8 is complete but for one item of its check: the `interface-echo` canary
+echoes every shipped interface family, and has not yet run on a GPU (see P8's
+check). The frame group is a descriptor set,
 set 0, since P7b step 15 put pipelines on groups. HLSL is the one source
 language. `ShaderCompiler` runs DXC alone, a pass document names no
 language, and the Shadertoy adapter, the GLSL front end, the translation back
@@ -370,8 +370,21 @@ binaries, while an unpackaged source is refused. Both canaries pass on both
 backends under the debug layers, and `pipeline-echo`'s discriminating leg,
 which expects two members to hold each other's sentinel, turns red.
 
-Open: the generated echo reaches the GPU for the canary's own interface only,
-where P8's check asks for every shipped package's. The worlds under the
+The `interface-echo` canary runs one echo per shipped interface family in one
+world: the ink simulation, visualize and finish passes, the package canary's
+tint, the film grain set, and the `place` and `overlay` packages. The Moth's
+blocks are ink finish's, and the `post.sdf-film-grain` package's are the film
+grain set's. Its discriminating leg reloads every row onto an echo whose last
+member's first word expects the next word's sentinel.
+`InterfaceEchoCanaryFixtureTests` hold each echo's blocks to its targets' and
+fail when a shipped package or shader set with frame data has no echo. The
+SDF engine's `sdf-world` and `sdf-brick-bake` interfaces join the canary in
+the change that lands them (S16). The overlay
+echo holds the overlay's types at their offsets, but a document orders config
+fields by name, so its `misc` and `sdf` names trade places.
+
+Open: the `interface-echo` canary has not yet run on a GPU, which is what P8's
+check asks for. The worlds under the
 repository's `worlds/` tree, the genesis card among them, are not part of the
 game's build, so their source rows compile where DXC is present. Only the
 `default` variant is built, which is all P8 closes with.
@@ -497,8 +510,10 @@ words. `pipeline.inspect` ends with the profile and the policy chosen for the
 instance's parameter bytes. Every host upload of the SDF engine is a region
 (P7b-19): its program words, per-frame tables and mesh draws each under the
 policy the selector chooses with the frame ring's reader in flight, and its
-brick staging a staged region whose destination is the brick pool. The
-overlay's host-written buffer still uploads by hand until P7b step 22. A ring's
+brick staging a staged region whose destination is the brick pool. A shader
+pipeline instance owns every host-written region its graph reads, a package's
+(the overlay's buffer) and a host buffer port's (an uploaded source's), and
+records their staged copies ahead of its frame's passes (P7b-22). A ring's
 buffers live
 where `GpuResidency.RingMemory` says: in the device-local aperture
 (`IGpuBufferFactory.CreateHostVisibleDeviceLocal`, counted under
@@ -1024,16 +1039,31 @@ casts the OS pointer through its seat's published camera with
 `IntentRayWireLawTests`, `PointerWorldRuleFactLawTests`,
 `WorldSeatViewportsLocateLawTests` and `SourcePointerCommandLawTests`.
 
-P13b owes the rest. Nothing publishes a mapping from the live renderer, so the
-screen shading still reads its own bezel constant, which `WorldScreenMappings`
-mirrors, and the GPU does not yet draw from the mapping. A `SourceHandle` names
-a source by its render-graph instance (`RenderGraphInstance.Handle`), but no
-live screen publishes one until P13b-1. No host feeds
+Panes publish their mappings from the live renderer (P13b-1's pane half, P13b-3's
+host half and P13b-6). `WorldFramePresenter.PrepareGraph` ends with
+`WorldViewGraphHost.PublishPanes`, which writes one mapping per placement the
+root's `place` passes draw, each shown view and then each `views.graphs` pane,
+in drawing order: the instance's whole image, named by its
+`RenderGraphInstance.Handle`, over the placement's rect, at the extent the
+runtime's latest schedule renders it at. It hands them to the host's
+`SourcePanePicker`, and a steady frame publishes the mappings it published
+before without allocating. The pipeline pane's pointer maps through its
+instance's published mapping (`TryGetPane`), and `WorldViewGraphHost.Walk` runs
+`RenderGraphHitWalk.WalkDisplay` over the runtime's live instance set, with
+each view's seat camera and each pane's paired camera. `world.view.panes`
+echoes the published mappings, a pick and a walk; the laws are
+`WorldViewPaneMappingLawTests`, and the `pane-display` canary maps a display
+point to the pane's pixel and moves it with the slot.
+
+P13b owes the rest. No screen publishes a mapping, so the screen shading still
+reads its own bezel constant, which `WorldScreenMappings` mirrors, and the GPU
+does not yet draw from the mapping. No instance reports the surfaces standing
+in its world (`IRenderGraphHitScene.Placements` is empty on the live host), so
+a walk that continues into an instance ends on its world. No host feeds
 `SourceFocus` or delivers a focused source's input to its window, no machine
-reads a mapped pointer, and no host publishes its panes to `SourcePanePicker`
-yet. The recorded Windows run, a click reaching a
-captured editor window at the mapped point and the chord returning input to the
-game, belongs to P13b.
+reads a mapped pointer, and nothing reads the picker for hover yet. The
+recorded Windows run, a click reaching a captured editor window at the mapped
+point and the chord returning input to the game, belongs to P13b.
 
 Rendering today runs the default render graph `WorldRootGraph` composes,
 through `RenderGraphRuntime` behind `RenderGraphRuntimeNode`, the host's render
@@ -2359,16 +2389,28 @@ Phase 3, the groups, follows phase 2:
     neutral dynamic viewport the presenter's recorder sets. A graphics
     description states its groups alone: `GpuGraphicsPipelineDescription.Layout`
     is required, and its `TextureSamplerCount`, `EnableStorageBuffer` and push
-    range are deleted with both backends' non-layout graphics paths. The
-    Direct3D 12 surface compositor has no second factory contract to fold; it
-    builds its root signature and pipeline state by hand. Remaining: the
-    overlay's host-written buffer uploads through a `GpuRegion` rather than by
-    hand, which under the staged policy needs the region-copy pipeline leased
-    at the package's build, a copy pool the node states and admits, the copy
-    and its two buffer transitions inside the package recording, and a
-    pixel-shader read state for a buffer on Direct3D 12; and
-    `VulkanGraphicsPipelineCreateRequest`'s fixed viewport, descriptor bindings
-    and push range, which no caller sets any more, leave the native API.
+    range are deleted with both backends' non-layout graphics paths, and
+    `VulkanGraphicsPipelineCreateRequest` takes its caller's layout and a
+    dynamic viewport alone (its fixed viewport, descriptor bindings, push range
+    and the native API's owned-layout branch are deleted). The overlay's
+    host-written buffer is a `GpuRegion` through one node mechanism: a package
+    states its regions (`IRenderGraphPackageFactory.Regions`), and
+    `ShaderPipelineRenderNode` creates them under `GpuResidency.Select`, takes
+    the region-copy pipeline in the candidate's build, states and admits a
+    reserved copy pool per staged pass in `DescriptorPools`, and records every
+    owed copy with its barriers in one command buffer ahead of the frame's
+    passes; recorders record no barrier. `BindRegion`'s host buffer ports go
+    through the same mechanism, so a staged uploaded source is no longer
+    refused. On Direct3D 12 a buffer the fragment stage reads is in
+    `ALL_SHADER_RESOURCE`. Laws: `OverlayPackageLawTests` (a steady drawn frame
+    uploads nothing under a ring or staged; the staged copy pool stated and
+    copies recorded), `RenderGraphRuntimeLawTests.AStagedSourceRegionReachesItsConversionByteExact`
+    and `DirectXBufferStatesLawTests`. Remaining: the Direct3D 12 surface
+    compositor's hand-built root signature and pipeline state move onto
+    `IGpuPipelineFactory`, as Vulkan's blit did, with its surface-blit shader on
+    the group registers; its shader-visible heaps stay until P16.
+    `VulkanGpuRenderPass.Borrow` keeps its stated format until P17's pixel-format
+    fold gives it the swapchain's.
 
 **Decisions.** Root parameter indices are dense, and the push index sits at
 `b0` in space 4, outside every group's space. The spike's frame group is the
@@ -2933,20 +2975,24 @@ pick through a portal reaches the nested world's surface.
 
 **Depends on:** P11 and P12.
 
-**P13b, the rest of the package.** P13's CPU model has no live caller:
-`WorldScreenMappings.Of`, `RenderGraphHitWalk` and `SourceFocus` are called
-only by their laws, `SourceHandle.Producer` only by tests, and the screen
-shading reads its own bezel constant. The pipeline pane's pointer is the one
-live mapping. Each commit is marked with what it waits on; only step 5 waits
-on P7b's groups.
+**P13b, the rest of the package.** Panes publish live mappings and the hit walk
+runs over the live instance set, but `WorldScreenMappings.Of` and `SourceFocus`
+are called only by their laws, `SourceHandle.Producer` only by tests, and the
+screen shading reads its own bezel constant. Each commit is marked with what it
+waits on; only step 5 waits on P7b's groups.
 
-1. Mappings are published from the live renderer. GPU-free, in two halves,
-   neither landed. The pane half is in progress: each pane publishes its
-   mapping through its graph instance. The screens half follows P12b-3: the
+1. Mappings are published from the live renderer. The pane half has landed:
+   `WorldViewGraphHost.PublishPanes` publishes each shown view's and pane's
+   `SourceMapping` through its graph instance, named by the instance's
+   `RenderGraphInstance.Handle`, at the extent the runtime's latest schedule
+   renders it at, and `world.view.panes` reports the mappings it publishes.
+   Laws: `WorldViewPaneMappingLawTests` over the live host's placements; the
+   `pane-display` canary. The screen half is owed, GPU-free, after P12b-3: the
    binder publishes each screen's `SourceMapping` through
-   `WorldScreenMappings.Of`, with the source instance's `SourceHandle` in
-   place of the stand-in, and `world.screens` reports the mapping it
-   publishes. Laws: `WorldScreenInputLawTests` over the live binder's rows.
+   `WorldScreenMappings.Of`, with the source instance's `SourceHandle` in place
+   of the stand-in, and `world.screens` reports the mapping it publishes
+   (`SourceMapping.Describe`, the line `world.view.panes` prints). Laws:
+   `WorldScreenInputLawTests` over the live binder's rows.
 2. The simulation destination, landed. A tick's command snapshot never reaches
    the server, which integrates each seat's `PlayerIntent`, so the intent
    carries the ray:
@@ -2987,9 +3033,10 @@ on P7b's groups.
      three-tick burst gives three snapshots, each carrying the ray; and
      `Locate` answers what the cursor's own mapping answered.
    A machine that reads a pointer, a light gun, is still owed.
-3. The presentation destination. The CPU picker has landed
-   (`SourcePanePicker`); a host publishing its panes to it moves with the views
-   the graph root now owns, and GPU picking follows P4's visibility record.
+3. The presentation destination. The CPU picker and its host half have landed:
+   the World host publishes its panes to its `SourcePanePicker` every frame,
+   from the placements `place` draws. Nothing reads the picker for hover or
+   highlight yet, and GPU picking follows P4's visibility record.
 4. Host passthrough. Can land after P12b-2 on Windows. The input router feeds
    `SourceFocus`, a focused capture source's window receives pointer and key
    events at `SourcePassthrough.ToClient`'s client coordinates, and the chord
@@ -3001,10 +3048,15 @@ on P7b's groups.
    `WorldScreenMappings.Bezel`, is deleted. It adds a per-screen buffer to the
    SDF engine, so it waits for the engine's groups rather than adding a
    binding P7b-20 would move again.
-6. Hits continue through live instances. Can land after P11b wires the graph
-   root and P12b-1. `RenderGraphHitWalk` walks the runtime's instance set, and
-   the pane pointer maps through its instance. The portal check needs a nested world rendered as an instance,
-   which no live world does yet.
+6. Hits continue through live instances. Landed, except the portal check:
+   `WorldViewGraphHost.Walk` runs `RenderGraphHitWalk` over the runtime's
+   instance set from the published panes, with each view's seat camera and each
+   pane's paired camera, and the pane pointer maps through its instance's
+   published mapping. The live host reports no surface placements inside an
+   instance's world, so a walk ends on the first instance it continues into
+   until screens publish (step 1's screen half). The portal check, a pick
+   through a portal reaching the nested world's surface, needs a nested world
+   rendered as an instance, which no live world does yet.
 
 ### P14 — The SDF engine as a pass package
 
@@ -3342,7 +3394,7 @@ owner at a time.
 is under way: steps 1 to 13, 14a, 14b-1 to 14b-5 and 15 to 19 have landed, and
 step 22 is in progress. What remains is the SDF engine's groups (14b-6 and
 step 20, which also follows P4-1), 14b-7's deletions, and step 21. P8 is
-complete but for its echo of every shipped package's interface, and its frame
+complete but for a GPU run of its echo of every shipped interface family, and its frame
 group
 became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not
 read simulation state, so they do not wait on the state rebuild.

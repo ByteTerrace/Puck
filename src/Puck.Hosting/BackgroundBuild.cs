@@ -26,6 +26,10 @@ public sealed class BackgroundBuild<T> where T : class {
     public bool IsCompleted => (m_task is { IsCompleted: true });
     /// <summary>Gets whether a build has started and its result has not been taken or canceled.</summary>
     public bool IsPending => (m_task is not null);
+    /// <summary>Gets the pending build's task, which completes when the build finishes, successfully or not, or
+    /// <see langword="null"/> when none is pending. A waiter on another thread reads it under the owner's lock and waits
+    /// outside it, then takes the result through the owner; it never takes the result from the task itself.</summary>
+    public Task? Completion => m_task;
 
     // Faults of a detached build are observed here, so a superseded failure never reaches the unobserved-task handler.
     internal static void Finish(Task<T> task, CancellationTokenSource cancellation, Action<T>? discard) {

@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 using Puck.Commands;
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 
@@ -8,8 +10,8 @@ namespace Puck.World;
 
 /// <summary>
 /// The window-composition verb surface — the LIVE session override <c>view.override</c> (composition authority that
-/// changes what every seat sees) plus the pipe-assertable <c>world.view.state</c> and
-/// <c>world.view.pointer</c> reads.
+/// changes what every seat sees) plus the pipe-assertable <c>world.view.state</c>, <c>world.view.pointer</c> and
+/// <c>world.view.panes</c> reads.
 /// The durable views-section rows are authored through the general <see cref="WorldRowCommandModule"/> —
 /// <c>world.row.set views.seatRig &lt;json&gt;</c> for the keyless row, and
 /// <c>world.row.set</c>/<c>world.row.remove views.layouts ...</c> for the keyed one. Control FEEL is not a views row
@@ -31,8 +33,9 @@ namespace Puck.World;
 /// and a boot shape that does not register the verb name refuses the document at vocabulary composition.
 /// <see cref="IServerLink"/> and <see cref="WorldViewComposer"/> are core, so <c>view.override</c> and
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
-/// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent.</para></remarks>
-internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
+/// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent, as
+/// <c>world.view.panes</c> does without the GPU presentation's <see cref="WorldViewGraphHost"/>.</para></remarks>
+internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -98,6 +101,84 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             ? status.Hover
             : "none")} syscount={status.SystemReleaseCount}]"
         ));
+    }
+    // Lists the panes the render graph's root last published, in drawing order, and, given a display point, what the
+    // presentation picker and the hit walk through the live instance set answer there.
+    private CommandResult DescribePanes(WireArgs args) {
+        if (graphs is not { } host) {
+            return CommandResult.Error(output: "[world.view.panes: requires a GPU presentation — a headless boot publishes no panes]");
+        }
+        if (args.Count is not (0 or 2)) {
+            return CommandResult.Usage(
+                form: "[<x> <y>]",
+                verb: "world.view.panes"
+            );
+        }
+
+        var builder = new StringBuilder(value: "[world.view.panes: ");
+
+        _ = builder.Append(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"display {host.DisplayWidth}x{host.DisplayHeight} panes={host.Panes.Count}"
+        );
+
+        for (var index = 0; (index < host.Panes.Count); index++) {
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" | pane{index} {host.Panes[index].Describe()}"
+            );
+        }
+
+        if (args.Count == 2) {
+            if (
+                !float.TryParse(
+                    provider: CultureInfo.InvariantCulture,
+                    result: out var x,
+                    s: args[0].ToString(),
+                    style: NumberStyles.Float
+                ) ||
+                !float.TryParse(
+                    provider: CultureInfo.InvariantCulture,
+                    result: out var y,
+                    s: args[1].ToString(),
+                    style: NumberStyles.Float
+                ) ||
+                !float.IsFinite(f: x) ||
+                !float.IsFinite(f: y)
+            ) {
+                return CommandResult.Error(output: "[world.view.panes: expected a display point as two finite numbers, in display pixels from the top-left corner]");
+            }
+
+            var picked = (host.Picker.TryPick(
+                pick: out var pick,
+                point: new Vector2(
+                    x: x,
+                    y: y
+                )
+            )
+                ? string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"{((pick.Source.Kind == SourceHandleKind.Producer) ? "producer" : "instance")}:{pick.Source.Name} pixel {pick.Hit.PixelX},{pick.Hit.PixelY}"
+                )
+                : "none");
+            var walk = host.Walk(point: new FixedVector2(
+                X: FixedQ4816.FromDouble(value: x),
+                Y: FixedQ4816.FromDouble(value: y)
+            ));
+            var ended = ((walk is null)
+                ? "no-runtime"
+                : string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"{walk.End} steps={walk.Steps.Count}{((walk.Instance >= 0) ? $" in {host.InstanceName(index: walk.Instance)}" : string.Empty)}"
+                ));
+
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" | at {x:0.###},{y:0.###} pick={picked} walk={ended}"
+            );
+        }
+
+        return new CommandResult(Output: builder.Append(value: ']').ToString());
     }
     private string DescribeState() {
         var builder = new StringBuilder(value: "[world.view.state: ");
@@ -230,6 +311,13 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             ) is { } refusal)
             ? refusal
             : DescribePointer()),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.view.panes",
+            description: "Echoes the panes the render graph's root last published, in drawing order (the world's shown views, then the views.graphs panes): world.view.panes [<x> <y>] — the display extent and, per pane, its SourceMapping (the source by its instance handle, the pane's normalized rect, the source extent the instance last rendered at, the crop, layout, fit, any warp and the destination). Given a display point in display pixels from the top-left corner, it also echoes what the presentation picker answers there (pick=<kind>:<instance> pixel <x>,<y>, or none off every source) and how the hit walk through the live instance set ends (walk=<end> steps=<n>, and the instance whose world it ended in). The pipeline pane pointer maps through the same published mapping. A query (always echoes); refused by name in a boot with no GPU presentation.",
+            handler: (context, args) => DescribePanes(args: args),
             routing: CommandRouting.Immediate
         );
     }

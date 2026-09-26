@@ -1,6 +1,7 @@
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -200,6 +201,84 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Assert.Equal(expected: (1U, 2U), actual: (bindings[RenderGraphPackageCatalog.SourceRegion], bindings[RenderGraphPackageCatalog.SourceImage]));
             }
         }
+    }
+    /// <summary>On a device whose memory stages the source's region, the source's node leases the region-copy pipeline,
+    /// records the region's copy ahead of the conversion, and the device-local buffer the conversion reads holds exactly
+    /// the bytes the upload wrote, header and image, after every tick, under the model that runs the copy kernel.</summary>
+    [Fact]
+    public void AStagedSourceRegionReachesItsConversionByteExact() {
+        var gpu = new UploadModelGpu(reportVersion: 0);
+        var recorders = new Recorders();
+        var header = ImageSourceUploadLayout.HeaderOf(
+            color: ImageColorEncoding.Srgb,
+            format: ImagePixelFormat.B8G8R8A8Unorm,
+            height: SourceExtent,
+            width: SourceExtent
+        );
+        var byteCount = ImageSourceUploadLayout.ByteCount(header: in header);
+        var expected = new byte[byteCount];
+
+        ImageSourceUploadLayout.Write(
+            header: in header,
+            region: expected
+        );
+        SourceConversionPackage.RegisterAll(packages: recorders.Registry);
+        recorders.Registry.RegisterSource(
+            factory: _ => new FakeUpload(format: ImagePixelFormat.B8G8R8A8Unorm),
+            package: Upload
+        );
+
+        Assert.Equal(
+            actual: GpuResidency.Select(profile: gpu.MemoryProfile, byteCount: ((ulong)byteCount), readersInFlight: true),
+            expected: GpuResidencyPolicy.Staged
+        );
+
+        using var runtime = Runtime(gpu, recorders, Set(RenderGraphInstance.Source(name: "pattern", producer: "test")), "pattern", new RenderGraphRuntimeGraph[1]);
+
+        var tick = 0L;
+        var converted = 0UL;
+
+        // The graph installs and the copy pipeline builds on the thread pool, so frames run until three conversions have
+        // been checked.
+        Assert.True(
+            condition: SpinWait.SpinUntil(
+                condition: () => {
+                    tick++;
+
+                    var frame = new RenderGraphFrame(
+                        DisplayHeight: Display,
+                        DisplayHertz: 60,
+                        DisplayWidth: Display,
+                        Footprints: [],
+                        Index: tick,
+                        Roots: [new RenderGraphRoot(Height: 1.0, Instance: "pattern", Width: 1.0)],
+                        Tick: tick
+                    );
+
+                    _ = runtime.ProduceFrame(
+                        context: default,
+                        frame: in frame
+                    );
+
+                    if (runtime.Node(instance: 0).FrameCounter == converted) {
+                        return false;
+                    }
+
+                    converted = runtime.Node(instance: 0).FrameCounter;
+                    // FakeUpload writes the tick as the first image word.
+                    BitConverter.TryWriteBytes(destination: expected.AsSpan(start: ImageSourceUploadLayout.HeaderBytes), value: ((uint)tick));
+                    Assert.Equal(
+                        actual: gpu.DeviceLocal(sizeBytes: ((ulong)byteCount)),
+                        expected: expected
+                    );
+
+                    return (converted >= 3UL);
+                },
+                timeout: TimeSpan.FromSeconds(value: 30)
+            ),
+            userMessage: "The staged source never converted three times."
+        );
+        Assert.True(condition: (gpu.UploadCopies > 1));
     }
     [Fact]
     public void ARefusedUploadRendersNothingAndNamesItsFault() {
