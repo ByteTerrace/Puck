@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Diagnostics;
+using Puck.World;
 
 namespace Puck.Cli.Parity;
 
@@ -15,6 +16,8 @@ internal static class ParityCommand {
     private const string ScratchPrefix = "puck-parity-";
     private const string SdfDocumentPath = "tests/Puck.Parity/parity.sdf.json";
     private const string WorldPath = "tests/Puck.Parity/parity.world.json";
+    // The ticks a leg runs past the world's last scheduled capture, so the frame that serves it lands first.
+    private const ulong WaitMarginTicks = 30;
 
     private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 900);
 
@@ -82,27 +85,37 @@ internal static class ParityCommand {
     // Boots one offscreen leg on the named backend; the parity world's own captures rows land every scheduled
     // frame and write the manifest. Returns CliExit.Success with the manifest written, or CliExit.Refused with the
     // refusal already reported.
+    // The last tick the world's captures rows schedule, read from the document itself so a station added there is
+    // captured without a second statement of its schedule here.
+    private static ulong LastCaptureTick(string worldPath) => (WorldDefinitionSerialization.Deserialize(
+        documentDirectory: Path.GetDirectoryName(path: worldPath),
+        utf8Json: File.ReadAllBytes(path: worldPath)
+    ).Captures?.Rows.SelectMany(selector: static row => row.Ticks).DefaultIfEmpty().Max() ?? 0UL);
     private static int RunBackend(string artifact, string backend, string repositoryRoot, string runDirectory, Stopwatch suiteClock) {
         var captureDirectory = Path.Combine(
             path1: runDirectory,
             path2: $"captures-{backend}"
         );
         // The parity world drives no seats and reads no input, so no controller-clearing guard is needed; the script
-        // only composes the world's companion SDF document and waits past the last scheduled capture tick.
+        // only composes the world's companion SDF document and waits past the last tick its captures rows schedule.
+        var lastTick = LastCaptureTick(worldPath: Path.Combine(
+            path1: repositoryRoot,
+            path2: WorldPath
+        ));
         var script = $"world.sdf.load {Path.Combine(
             path1: repositoryRoot,
             path2: SdfDocumentPath
         ).Replace(
             newChar: '\\',
             oldChar: '/'
-        )}\nworld.wait 1180\n";
+        )}\nworld.wait {(lastTick + WaitMarginTicks)}\n";
         var leg = WorldOffscreenLeg.Run(
             arguments: ["--capture-dir", captureDirectory],
             artifact: artifact,
             backend: backend,
             budget: SuiteBudget,
             // A SAFETY NET, not the leg length: the script closes with quit, so a healthy leg ends as soon as its
-            // 1180-tick wait releases. The net outlasts a slow machine's whole leg: an offscreen leg paces one produced
+            // wait releases. The net outlasts a slow machine's whole leg: an offscreen leg paces one produced
             // frame per tick (about 45 s for the wait on an RTX 2060), and the host may hold its clock at a capture for
             // at most WorldCaptureScheduler.BuildHoldBudgetSeconds while the engine's pipeline set builds on a cold
             // driver cache plus WorldCaptureScheduler.HoldBudgetSeconds once it is ready.
@@ -141,8 +154,9 @@ internal static class ParityCommand {
 
         command.Detail(detail: """
             Boots tests/Puck.Parity/parity.world.json offscreen once per backend (vulkan, directx — no
-            window is shown), collects each run's tick-scheduled captures and puck.parity.manifest.v1, and
-            compares the pair under tests/Puck.Parity/parity.contract.json.
+            window is shown), runs each leg until 30 ticks past the last tick its captures rows schedule,
+            collects each run's tick-scheduled captures and puck.parity.manifest.v1, and compares the pair
+            under tests/Puck.Parity/parity.contract.json.
 
             Per capture, three independent verdicts, in order: the content gate (a capture its
             producer refused by name, one missing, or one below its station's census floor never reaches

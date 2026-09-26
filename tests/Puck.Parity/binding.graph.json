@@ -1,0 +1,59 @@
+{
+  "$schema": "puck.render.graph.v1",
+  "name": "binding",
+  "resources": [
+    {
+      "name": "pattern",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 96, "height": 96 }
+    },
+    {
+      "name": "cells",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 96, "height": 96 }
+    },
+    {
+      "name": "image",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 96, "height": 96 }
+    }
+  ],
+  "passes": [
+    {
+      "name": "seed",
+      "source": "binding-seed.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [ { "name": "pattern" } ]
+    },
+    {
+      "name": "pixelate",
+      "source": "binding-pixelate.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "inputs": [ { "name": "pattern", "as": "source" } ],
+      "outputs": [ { "name": "cells", "as": "destination" } ],
+      "config": {
+        "cellSize": { "type": "uint", "default": 6, "min": 1, "description": "The cell edge, in pixels." },
+        "levels": { "type": "uint3", "default": [3, 4, 5], "min": 2, "description": "Each channel's level count." }
+      }
+    },
+    {
+      "name": "grain",
+      "source": "binding-grain.hlsl",
+      "entryPoint": "main",
+      "kind": "Fullscreen",
+      "inputs": [ { "name": "cells" } ],
+      "outputs": [ { "name": "image" } ],
+      "config": {
+        "seed": { "type": "uint", "default": 7, "description": "The grain hash's seed." },
+        "intensity": { "type": "float", "default": 0.08, "min": 0, "max": 1, "description": "The peak per-channel offset." },
+        "flickerHz": { "type": "uint", "default": 24, "min": 1, "description": "How often the grain changes, per second." }
+      }
+    }
+  ],
+  "outputs": ["image"]
+}

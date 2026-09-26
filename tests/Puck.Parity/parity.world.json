@@ -241,6 +241,7 @@
             "material": 1
           }
         ],
+        "instance": "world",
         "station": "sky",
         "ticks": [
           600,
@@ -258,6 +259,7 @@
             "material": 1
           }
         ],
+        "instance": "world",
         "station": "materials",
         "ticks": [
           720,
@@ -275,6 +277,7 @@
             "material": 1
           }
         ],
+        "instance": "world",
         "station": "lattice",
         "ticks": [
           860,
@@ -292,6 +295,7 @@
             "material": 1
           }
         ],
+        "instance": "world",
         "station": "noise",
         "ticks": [
           1010,
@@ -309,10 +313,29 @@
             "material": 1
           }
         ],
+        "instance": "world",
         "station": "vocabulary",
         "ticks": [
           1110,
           1150
+        ]
+      },
+      {
+        "instance": "binding",
+        "palette": [
+          {
+            "color": "#000000",
+            "material": 0
+          },
+          {
+            "color": "#FFFFFF",
+            "material": 1
+          }
+        ],
+        "station": "binding",
+        "ticks": [
+          1200,
+          1220
         ]
       }
     ]
@@ -1041,6 +1064,14 @@
     ]
   },
   "views": {
+    "graphs": [
+      {
+        "camera": null,
+        "name": "binding",
+        "source": "binding.graph.json",
+        "timeScale": 1
+      }
+    ],
     "layouts": [
       {
         "name": "parity",
@@ -1052,6 +1083,14 @@
             "width": 1,
             "x": 0,
             "y": 0
+          },
+          {
+            "camera": null,
+            "height": 0.25,
+            "instance": "binding",
+            "width": 0.25,
+            "x": 0.75,
+            "y": 0.75
           }
         ],
         "transitionRenderScale": 1,
