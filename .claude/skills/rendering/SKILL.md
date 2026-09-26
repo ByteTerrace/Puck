@@ -1013,9 +1013,13 @@ a windowed World. `main` is the root whenever anything is
 drawn over the world, panes included, and always when K > 1; otherwise `world`
 is the root. With `views.root` set the runtime
 runs the rows alone, and the document may author no `views.post`. A config that
-does not bind is the compiler's `RENDERGRAPH_PACKAGE_CONFIG`, which the boot's
-pre-flight (`WorldPostBuildWiring`) reports as a refused definition naming the
-row (`views.post[<i>] '<name>'`). `WorldRenderRoot`
+does not bind is refused when the document validates, naming the row
+(`views.post[<i>].config`), live edits included; the boot's pre-flight
+(`WorldPostBuildWiring`) still reports the compiler's `RENDERGRAPH_PACKAGE_CONFIG`
+as a refused definition. A `views.post` change recomposes the running root: the
+host composes it from the document's current rows whenever they move
+(`WorldViewGraphHost.Reconcile`), and `WorldPostPasses` follows the recomposed
+graph. `WorldRenderRoot`
 builds the engine node, the packages and the runtime for both GPU shapes, and
 `RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
 what captures, `world.screenshot` and readiness read. A `captures` row may name

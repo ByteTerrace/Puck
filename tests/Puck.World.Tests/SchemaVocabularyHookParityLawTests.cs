@@ -71,5 +71,6 @@ public sealed class SchemaVocabularyHookParityLawTests {
         Assert.NotNull(@object: Protocol.MutationKindVocabularyHook.Describe);
         Assert.NotNull(@object: Protocol.MutationKindVocabularyHook.TryParse);
         Assert.NotNull(@object: WorldPostProcessVocabularyHook.PostProcessPackageCheck);
+        Assert.NotNull(@object: WorldPostProcessVocabularyHook.PostProcessConfigCheck);
     }
 }

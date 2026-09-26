@@ -18,15 +18,17 @@ public sealed class WorldPostPassesLawTests {
     private static WorldPostPasses Twice() {
         var passes = new WorldPostPasses();
 
-        passes.Attach(
-            graph: WorldRootGraph.Compose(
+        var graph = WorldRootGraph.Compose(
                 overlay: false,
                 packages: RenderGraphPackageCatalog.Engine,
                 post: [
                     new(Config: Json(text: """{"intensity":0.1,"size":2}"""), Name: First, Package: RenderGraphPackageCatalog.SdfFilmGrain),
                     new(Config: Json(text: """{"intensity":0.3,"size":4}"""), Name: Second, Package: RenderGraphPackageCatalog.SdfFilmGrain),
                 ]
-            ),
+        );
+
+        passes.Attach(
+            graph: () => graph,
             root: static () => null
         );
 
