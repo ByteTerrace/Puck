@@ -15,6 +15,7 @@ namespace Puck.World.Client;
 /// </summary>
 public sealed class WorldThemeResolve {
     private ThemeReads? m_reads;
+    private int m_generation;
     private OverlayThemeValues m_resolved;
     private int m_resolvedAt;
     private int m_resolutions;
@@ -51,7 +52,7 @@ public sealed class WorldThemeResolve {
 
         private void Note(StateBinding? binding, WorldStateConversion conversion) {
             if (binding is { } bound) {
-                Bound.Add(item: Mirror.Register(
+                Bound.Add(item: Mirror.SlotOf(
                     binding: in bound,
                     conversion: conversion
                 ));
@@ -469,6 +470,7 @@ public sealed class WorldThemeResolve {
             objA: m_reads?.Mirror,
             objB: mirror
         ) ||
+            (mirror.Generation != m_generation) ||
             BoundSlotMoved()
         ) {
             if (!ReferenceEquals(
@@ -485,6 +487,7 @@ public sealed class WorldThemeResolve {
                 mirror: m_reads
             );
             m_resolvedAt = mirror.Revision;
+            m_generation = mirror.Generation;
             m_resolutions++;
         }
 

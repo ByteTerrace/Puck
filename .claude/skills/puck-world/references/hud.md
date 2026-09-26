@@ -118,9 +118,10 @@ is a full `WorldDefinition`, not a separate document family, so there is no
 distinct "cannot verify existence" scope in this codebase today;
 `HudRowValidation`'s `stateRows: null` parameter default exists for a caller
 with no such document to check against, but nothing currently calls it that
-way. Render-side, `WorldHudBindingResolver` parses each token once and
-registers a `state.*` token's slot with the client's state mirror
-(`WorldClient.StateMirror`, `WorldStateMirror`), the one path every
+way. Render-side, `WorldHudBindingResolver` parses each token once and looks
+a `state.*` token's slot up among those the document's presentation manifest
+registered with the client's state mirror (`WorldClient.StateMirror`,
+`WorldStateMirror.SlotOf`), the one path every
 presentation binding reads through: a cell carrying a `dynamics` trait
 presents its eased follower, interpolated at the frame's fraction, unless the
 token carries the `.$target` facet above, in which case it presents stored truth

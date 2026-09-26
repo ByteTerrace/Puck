@@ -436,8 +436,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         if (m_synthesized is { } synthesized) {
-            foreach (var instance in synthesized.Instances) {
-                if (runtime.NodeOf(instance: instance.Name) is { } node) {
+            var instances = synthesized.Instances;
+
+            for (var index = 0; (index < instances.Count); index++) {
+                if (runtime.NodeOf(instance: instances[index].Name) is { } node) {
                     node.Frame = frame;
                 }
             }
