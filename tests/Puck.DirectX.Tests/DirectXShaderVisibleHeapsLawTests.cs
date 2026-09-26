@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 using Puck.DirectX.Interop;
 using Xunit;
 
