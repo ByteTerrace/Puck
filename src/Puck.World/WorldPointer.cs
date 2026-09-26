@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Puck.Commands;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -25,20 +26,25 @@ namespace Puck.World;
 /// roster currently maps IT to; <see cref="WorldPointerSink"/> resolves that slot per event rather than caching it,
 /// so a live <c>player.assign</c> that moves a mouse carries its pointer with it.</para>
 /// </remarks>
-internal sealed class WorldPointer {
+public sealed class WorldPointer {
     // 0=left, 1=right, 2=middle — the same index WindowInputEvent.PointerButton carries in ButtonIndex, held here as
     // one bit each so a consumer asks "is this button down" without a per-button array.
     private readonly int[] m_buttons = new int[PlayerRoster.MaxSlots];
-    // Latched by the first SetPosition and never cleared: (0,0) is a legal cursor position, so "has the platform
-    // ever reported one" needs its own bit rather than a sentinel value.
+    // Latched by SetPosition and cleared only by ForgetPosition: (0,0) is a legal cursor position, so "has the
+    // platform reported one" needs its own bit rather than a sentinel value.
     private readonly int[] m_hasPosition = new int[PlayerRoster.MaxSlots];
     private readonly float[] m_motionX = new float[PlayerRoster.MaxSlots];
     private readonly float[] m_motionY = new float[PlayerRoster.MaxSlots];
     private readonly ulong[] m_motionSequence = new ulong[PlayerRoster.MaxSlots];
     private readonly float[] m_positionX = new float[PlayerRoster.MaxSlots];
     private readonly float[] m_positionY = new float[PlayerRoster.MaxSlots];
-    // The seat of the latest SetPosition, or -1 before any: the process has one OS pointer, and it rides whichever
-    // seat's mouse moved it last.
+    // The seat and device of the latest SetPosition, or -1 before any and after ForgetPosition: the process has one
+    // OS pointer, riding the seat of the device that moved it last. Guarded by m_positionGate so the pair and the
+    // per-seat latch change together.
+    private readonly Lock m_positionGate = new();
+
+    private InputDeviceId m_positionedDevice;
+
     private int m_positionedSlot = -1;
     // Monotonic per-slot: see SystemReleaseCount's remarks for the consumer contract this exists for.
     private readonly int[] m_systemReleaseCount = new int[PlayerRoster.MaxSlots];
@@ -233,36 +239,71 @@ internal sealed class WorldPointer {
     }
 
     /// <summary>Gets the seat the process's one OS pointer rides: the seat of the latest reported position, or
-    /// <see langword="null"/> before any position was reported. Non-destructive, like <see cref="Position"/>.</summary>
-    public int? PositionedSlot => ((Volatile.Read(location: ref m_positionedSlot) is var slot and >= 0)
-        ? slot
-        : null
-    );
+    /// <see langword="null"/> before any position was reported and after <see cref="ForgetPosition"/>.
+    /// Non-destructive, like <see cref="Position"/>.</summary>
+    public int? PositionedSlot {
+        get {
+            lock (m_positionGate) {
+                return ((m_positionedSlot >= 0)
+                    ? m_positionedSlot
+                    : null
+                );
+            }
+        }
+    }
+    /// <summary>Gets the device the latest reported position is attributed to: the physical mouse that moved it, or
+    /// the default id when the platform names none. Meaningful only while <see cref="PositionedSlot"/> is not
+    /// <see langword="null"/>.</summary>
+    public InputDeviceId PositionedDevice {
+        get {
+            lock (m_positionGate) {
+                return m_positionedDevice;
+            }
+        }
+    }
 
+    /// <summary>Forgets every seat's position: the pointer left the window, or a device moved between seats, so no
+    /// seat points anywhere until the platform reports a position again. <see cref="HasPosition"/> answers
+    /// <see langword="false"/> for every seat and <see cref="PositionedSlot"/> <see langword="null"/>.</summary>
+    public void ForgetPosition() {
+        lock (m_positionGate) {
+            for (var slot = 0; (slot < m_hasPosition.Length); slot++) {
+                Volatile.Write(
+                    location: ref m_hasPosition[slot],
+                    value: 0
+                );
+            }
+
+            m_positionedSlot = -1;
+            m_positionedDevice = default;
+        }
+    }
     /// <summary>Records a seat's new absolute cursor position.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="position">The absolute position in client pixels.</param>
-    public void SetPosition(int slot, Vector2 position) {
+    /// <param name="device">The device the position is attributed to: the physical mouse that moved it, or the
+    /// default id when the platform names none.</param>
+    public void SetPosition(int slot, Vector2 position, InputDeviceId device = default) {
         if (!InRange(slot: slot)) {
             return;
         }
 
-        Volatile.Write(
-            location: ref m_positionX[slot],
-            value: position.X
-        );
-        Volatile.Write(
-            location: ref m_positionY[slot],
-            value: position.Y
-        );
-        Volatile.Write(
-            location: ref m_hasPosition[slot],
-            value: 1
-        );
-        Volatile.Write(
-            location: ref m_positionedSlot,
-            value: slot
-        );
+        lock (m_positionGate) {
+            Volatile.Write(
+                location: ref m_positionX[slot],
+                value: position.X
+            );
+            Volatile.Write(
+                location: ref m_positionY[slot],
+                value: position.Y
+            );
+            Volatile.Write(
+                location: ref m_hasPosition[slot],
+                value: 1
+            );
+            m_positionedSlot = slot;
+            m_positionedDevice = device;
+        }
     }
     /// <summary>Gets a seat's system-release generation — a monotonic count of how many times this store has
     /// force-cleared the seat's held buttons without a genuine release event (<see cref="ReleaseButtons"/>, and so

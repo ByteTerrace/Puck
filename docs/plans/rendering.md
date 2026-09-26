@@ -2811,7 +2811,8 @@ on P7b's groups.
      `WorldSeatViewports.Locate`, the mapping the drawn cursor shares, casts it
      with `SourceRay.Through` over the camera published for the frame on
      screen, and holds both commands on the seat's lane with
-     `InputRouter.Sustain` until the pointer leaves the view.
+     `InputRouter.Sustain` while that seat holds the mouse that moved the
+     pointer and the pointer stays inside its view and the window.
    - Laws: a recorded tape with pointer intents replays to the same mapped hit
      and state hash; a miss, the bezel and no ray read `on` 0; the ray crosses
      the wire and the tape bit for bit and an absent one costs one byte; a
