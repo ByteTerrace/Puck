@@ -65,7 +65,7 @@ public sealed class WorldScreenInputLawTests {
     public void ASimulationScreenMapsARayToItsSourcePixelFromTheRowAlone() {
         var mapping = WorldScreenMappings.Of(
             screen: Screen(input: SourceDestination.Simulation),
-            source: SourceHandle.Producer(id: "cabinet"),
+            source: SourceHandle.Producer(name: "cabinet"),
             sourceHeight: 144,
             sourceWidth: 160
         );
@@ -96,7 +96,7 @@ public sealed class WorldScreenInputLawTests {
             expected: hit,
             actual: WorldScreenMappings.Of(
                 screen: Screen(input: SourceDestination.Simulation),
-                source: SourceHandle.Producer(id: "cabinet"),
+                source: SourceHandle.Producer(name: "cabinet"),
                 sourceHeight: 144,
                 sourceWidth: 160
             ).MapRay(ray: RayAt(

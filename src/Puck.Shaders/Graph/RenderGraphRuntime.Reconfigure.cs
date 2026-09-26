@@ -1,13 +1,14 @@
 using System.Diagnostics.CodeAnalysis;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Sources;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
 
 public sealed partial class RenderGraphRuntime {
     /// <summary>Replaces the instance set the runtime runs. An instance of the new set that has the same name and kind as
-    /// one of the old set (and, for an external instance, the same package) keeps its node or producer, and with it its
-    /// installed graph, history, captures and latest output; every other instance of the new set starts as
+    /// one of the old set (and, for an external instance, the same package and settings) keeps its node or producer, and
+    /// with it its installed graph, history, captures and latest output; every other instance of the new set starts as
     /// <see cref="TryCreate"/> starts one, and every old instance absent from it is disposed once the device has finished
     /// every submission that may sample its output. Scheduling history restarts, so the next frame renders everything it
     /// shows.</summary>
@@ -269,12 +270,17 @@ public sealed partial class RenderGraphRuntime {
     }
 
     // Whether an instance of a new set continues an instance of the old one of its name.
+    // A source opened with other settings is another image, so it is a new producer under the same name.
     private static bool Keeps(RenderGraphInstance instance, RenderGraphInstance old) => (
         (instance.Kind == old.Kind) &&
         string.Equals(
             a: instance.ExternalPackage,
             b: old.ExternalPackage,
             comparisonType: StringComparison.Ordinal
+        ) &&
+        ImageSourceSettings.Equal(
+            left: instance.Settings,
+            right: old.Settings
         )
     );
     // Disposes every old instance the new set does not keep, after the device has finished every submission that may

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Sources;
 
 namespace Puck.Hosting;
 
@@ -39,6 +40,25 @@ public sealed class RenderGraphInstanceSet {
         Instances: instances,
         Message: message
     );
+    // Why an instance is not a well-formed source, or carries settings without being one; null when it is either a
+    // well-formed source or no source at all. A source's cadence paces it, so it states no refresh of its own.
+    private static string? SourceRefusal(RenderGraphInstance instance) {
+        if (!instance.IsSource) {
+            return ((instance.Settings is null)
+                ? null
+                : "carries settings, but only a source instance (package 'source.<producer id>') carries settings");
+        }
+        if (!ImageSourceProducerRegistry<IImageSourceProducer>.IsValidId(id: instance.SourceProducer)) {
+            return $"is a source of package '{instance.ExternalPackage}', which names no producer id";
+        }
+        if (instance.Refresh != RenderGraphRefresh.EveryFrame) {
+            return $"is a source of package '{instance.ExternalPackage}' with refresh divisor {instance.Refresh.Divisor} and hertz {instance.Refresh.Hertz}; a source is paced by its producer's cadence and refreshes on every frame it allows";
+        }
+
+        return ((instance.Output == ShaderPipelineResourceKind.Image)
+            ? null
+            : $"is a source of package '{instance.ExternalPackage}' whose output is {instance.Output}; a source's output is an image");
+    }
     private static string[]? FindCycle(IReadOnlyList<RenderGraphInstance> instances, IReadOnlyList<IReadOnlyList<RenderGraphEdge>> reads) {
         var state = new byte[instances.Count];
         var stack = new List<int>();
@@ -214,6 +234,15 @@ public sealed class RenderGraphInstanceSet {
                 refusal = Refuse(
                     RenderGraphInstanceRefusalCode.ExternalReads,
                     $"Render-graph instance '{instance.Name}' is the external producer '{instance.ExternalPackage}', which renders through its own submissions and reads no instance, but it declares {instance.Reads.Count} reads.",
+                    instance.Name
+                );
+
+                return false;
+            }
+            if (SourceRefusal(instance: instance) is { } sourceRefusal) {
+                refusal = Refuse(
+                    RenderGraphInstanceRefusalCode.SourceDeclaration,
+                    $"Render-graph instance '{instance.Name}' {sourceRefusal}.",
                     instance.Name
                 );
 

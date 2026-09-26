@@ -17,13 +17,13 @@ public sealed class SourcePanePickerLawTests {
     private static readonly SourceMapping Back = SourceMapping.WholePane(
         height: 100,
         region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f),
-        source: SourceHandle.Producer(id: "back"),
+        source: SourceHandle.Producer(name: "back"),
         width: 100
     );
     private static readonly SourceMapping Front = SourceMapping.WholePane(
         height: 100,
         region: new NormalizedRect(Height: 0.5f, Width: 0.5f, X: 0.25f, Y: 0.25f),
-        source: SourceHandle.Producer(id: "front"),
+        source: SourceHandle.Producer(name: "front"),
         width: 100
     );
 

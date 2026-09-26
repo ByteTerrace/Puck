@@ -11,7 +11,7 @@ namespace Puck.Hosting.Tests;
 /// renders its producer once a frame before the views that read it, at no extent and for no pass-pixels, and a read of
 /// another kind than its producer's output is refused naming both instances.
 /// </summary>
-public sealed class RenderGraphSchedulerLawTests {
+public sealed partial class RenderGraphSchedulerLawTests {
     private const int DisplayHeight = 1080;
     private const int DisplayWidth = 1920;
 

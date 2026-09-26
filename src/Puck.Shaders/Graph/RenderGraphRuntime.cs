@@ -555,7 +555,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         Device: deviceContext,
         HostsOnDirectX: hostsOnDirectX,
         Instance: instance.Name,
-        Package: instance.ExternalPackage!
+        Package: instance.ExternalPackage!,
+        Settings: instance.Settings
     ));
     // The extent is a placeholder: the instance's first render requests its scheduled extent before the node builds
     // anything.
@@ -890,10 +891,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
 
         var schedule = m_schedules[m_turn];
+        var prior = m_history;
 
         RenderGraphScheduler.Schedule(
             frame: frame,
-            history: m_history,
+            history: prior,
             schedule: schedule,
             set: m_set
         );
@@ -909,7 +911,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             var row = schedule.Instances[index];
 
             // An external producer submits through its own ring, at the scheduled extent, before its consumers render. A
-            // capture of it moves to it first, and it serves the capture from the next frame it produces.
+            // capture of it moves to it first, and it serves the capture from the next frame it produces. A render it
+            // could not produce is withdrawn from the history, so its cadence counts from its last completed frame and a
+            // source that renders once is asked again on the next frame.
             if (m_producers[index] is { } producer) {
                 if (index == m_captureInstance) {
                     m_capture.Forward(target: producer);
@@ -924,6 +928,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     )
                 ) {
                     m_unproduced++;
+                    schedule.Next.Withdraw(
+                        index: index,
+                        previous: prior
+                    );
                 }
 
                 continue;
