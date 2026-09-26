@@ -230,7 +230,7 @@ nested records, which are the authority:
 | Authoring | SetAuthoringDefaults 28 |
 | Collision | SetCollision 29 |
 | Host | SetHostDefaults 30 |
-| Views | SetViewDefaults 31, UpsertViewLayout 32, RemoveViewLayout 33, SetViewSeatRig 70, SetViewSeatControl 71, UpsertViewGraph 74, RemoveViewGraph 75, CommitViewGraph 78 |
+| Views | SetViewDefaults 31, UpsertViewLayout 32, RemoveViewLayout 33, SetViewSeatRig 70, SetViewSeatControl 71, UpsertViewGraph 74, RemoveViewGraph 75, CommitViewGraph 78, SetViewPost 79 |
 | Looks | UpsertLook 34, RemoveLook 35, SetLookAssignment 36 |
 | Grants | UpsertGrant 37, RemoveGrant 38 |
 | Hud | UpsertHudPanel 39, RemoveHudPanel 40, UpsertHudElement 41, RemoveHudElement 42, SetHudDefaults 43 |

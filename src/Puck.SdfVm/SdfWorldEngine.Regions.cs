@@ -41,7 +41,6 @@ public sealed partial class SdfWorldEngine {
     private readonly GpuRegion m_decalRegion;
     // Every region's copy sets, by its index: RegionAt's, then the brick staging's with a brick pool.
     private readonly GpuRegionCopyPool m_regionCopyPool;
-
     // The upload pass's owed copies, recorded through the engine's counted recorder into the frame's command buffer.
     private readonly GpuRegionCopyRecording m_regionCopies;
 
@@ -137,6 +136,7 @@ public sealed partial class SdfWorldEngine {
         for (var index = 0; (index < RegionCount); index++) {
             if (RegionAt(index: index) is { } region) {
                 m_regionCopies.Record(
+                    handsToReaders: true,
                     region: region,
                     slot: m_currentSlot
                 );

@@ -223,7 +223,7 @@ public sealed class SurfaceCompositor : IDisposable {
             key: GpuPassPipelineKey.OfGraphics(
                 description: BlitDescription,
                 fragment: m_blitFragmentBytecode,
-                renderPass: VulkanGpuRenderPass.PresentDescription(format: VulkanGpuFormats.FromVkFormat(vkFormat: m_renderer.Swapchain.ImageFormat)),
+                renderPass: VulkanGpuRenderPass.PresentDescription(format: m_renderer.Swapchain.Format),
                 vertex: m_vertexBytecode
             )
         );

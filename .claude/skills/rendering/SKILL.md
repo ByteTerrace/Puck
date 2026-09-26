@@ -591,7 +591,14 @@ These are one-line cautions; the owning pages hold the derivations.
   every owed copy through the same `GpuRegionCopyRecording` in one command buffer
   ahead of the frame's passes, its barriers reaching the compute and fragment
   stages; the upload model (`tests/Shared/UploadModelGpu.cs`) refuses a copy
-  recorded with no barrier ordering the earlier compute reads before it. Every region counts in the node's account
+  recorded with no barrier ordering the earlier compute reads before it. The
+  recording hands a package region's copied buffer to its readers; a host buffer
+  port's is recorded with `handsToReaders` false and handed over by its readers'
+  planned barriers: the copies are recorded after the passes but submitted
+  before them, and Direct3D 12 carries a buffer's state from list to list within
+  one submission, so a buffer transitions in one command buffer of a submission
+  (`UploadModelGpu.StateConflicts` replays a submission as Direct3D 12 tracks
+  it). Every region counts in the node's account
   (`GpuRegion.BytesOf`, `RegionBytes`, a replaced graph's `LiveBytes`) and in
   `world.budget`'s live rows. A new host upload is a region, never a hand-written
   buffer, and a new host-written port is a host buffer port. On Direct3D 12 a buffer the fragment stage
@@ -608,7 +615,16 @@ These are one-line cautions; the owning pages hold the derivations.
   row, the external destination and byte-identical region
   contents over `UploadModelGpu` (`tests/Shared`),
   `GpuRegionCopyPassLawTests` one pipeline per device shared by its
-  owners, and `pipeline.inspect` echoes the profile and the policy.
+  owners, and `pipeline.inspect` echoes the profile and the policy. A device
+  with an aperture rings by default, so the staged path on a real device is
+  chosen through the profile alone: `StagedRegionDeviceLawTests`
+  (`tests/Puck.World.Tests`) hands the runtime a context reporting the device's
+  own profile with no host-visible device-local bytes and reads an uploaded
+  source's conversion back byte-exact on Vulkan, Direct3D 12 hardware (debug
+  layer on, no `[d3d12-debug]` line) and WARP.
+  A Vulkan swapchain is created only in a `GpuPixelFormat`
+  (`VulkanSwapchainFactory.SelectSurfaceFormat` over `SwapchainFormats`); a
+  surface offering none of them refuses at creation, never mid-frame.
   `ShaderPipelineMemoryBudget.For(profile)` is the other reader: a pipeline
   instance's budget is a quarter of the device-local bytes, or 512 MiB when the
   profile reports none.
@@ -871,8 +887,9 @@ name on both backends. A pool's sets release with it
 (`DirectXGpuBindings.LiveHandles`). `DirectXGroupedBindingLawTests` and
 `VulkanGroupedBindingLawTests` hold the writes and binds. Every pipeline pass and
 package pass is created from its interface's layout
-(`ShaderInterfaceLayout.PipelineLayout`); `GpuComputeBindingKind` still carries
-the combined image sampler for the SDF engine until it moves onto groups.
+(`ShaderInterfaceLayout.PipelineLayout`). A description's positional binding list
+(`GpuComputeBinding`) states a `GpuBindingKind` and holds only buffers and
+storage images; a sampled image or a sampler belongs to a group.
 
 The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
 [frame graphs](../../../docs/reference/shaders.md#frame-graphs)) and the one
@@ -1023,9 +1040,13 @@ a windowed World. `main` is the root whenever anything is
 drawn over the world, panes included, and always when K > 1; otherwise `world`
 is the root. With `views.root` set the runtime
 runs the rows alone, and the document may author no `views.post`. A config that
-does not bind is the compiler's `RENDERGRAPH_PACKAGE_CONFIG`, which the boot's
-pre-flight (`WorldPostBuildWiring`) reports as a refused definition naming the
-row (`views.post[<i>] '<name>'`). `WorldRenderRoot`
+does not bind is refused when the document validates, naming the row
+(`views.post[<i>].config`), live edits included; the boot's pre-flight
+(`WorldPostBuildWiring`) still reports the compiler's `RENDERGRAPH_PACKAGE_CONFIG`
+as a refused definition. A `views.post` change recomposes the running root: the
+host composes it from the document's current rows whenever they move
+(`WorldViewGraphHost.Reconcile`), and `WorldPostPasses` follows the recomposed
+graph. `WorldRenderRoot`
 builds the engine node, the packages and the runtime for both GPU shapes, and
 `RenderGraphRuntimeNode` is the host's render root; `WorldRenderProbe.Root` is
 what captures, `world.screenshot` and readiness read. A `captures` row may name

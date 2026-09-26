@@ -478,6 +478,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldViewGraph> WorldViewGraph => Get<WorldViewGraph>();
     /// <summary>Gets the type info for <see cref="WorldViewLayout"/>.</summary>
     public JsonTypeInfo<WorldViewLayout> WorldViewLayout => Get<WorldViewLayout>();
+    /// <summary>Gets the type info for the <see cref="WorldViewDefaults.Post"/> list.</summary>
+    public JsonTypeInfo<IReadOnlyList<WorldViewPostPass>> WorldViewPostPassList => Get<IReadOnlyList<WorldViewPostPass>>();
 
     private WorldJsonContext() {
         var options = new JsonSerializerOptions(options: WorldJsonSourceContext.Default.Options) {

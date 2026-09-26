@@ -53,7 +53,6 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
             admission: out var clears,
             owner: ClearOwner,
             pools: [new GpuDescriptorPoolSizes(
-                CombinedImageSamplerCount: 0U,
                 MaxSets: 1U,
                 StorageBufferCount: 0U,
                 StorageImageCount: ClearDescriptors

@@ -14,28 +14,53 @@ public sealed class WorldPostPasses {
     // Each composed pass's live config, by pass name: its row's config with every field a binding has written.
     private readonly Dictionary<string, JsonObject> m_live = new(comparer: StringComparer.Ordinal);
 
+    private Func<WorldRootGraph?>? m_graph;
+    // The graph m_live was taken from: a live views.post change recomposes the root, and the kept configs follow it.
+    private WorldRootGraph? m_liveGraph;
     private Func<ShaderPipelineRenderNode?>? m_root;
 
     /// <summary>Attaches the root instance the default render graph's post passes record in.</summary>
-    /// <param name="graph">The composed default graph, whose <see cref="WorldRootGraph.Post"/> rows each pass starts
-    /// from.</param>
+    /// <param name="graph">Reads the composed default graph the root runs now, whose <see cref="WorldRootGraph.Post"/> rows
+    /// each pass starts from: when it changes, as a live <c>views.post</c> edit recomposes it, every kept config starts
+    /// again from the new rows. <see langword="null"/> when the document names its own root.</param>
     /// <param name="root">Reads the synthesized root instance's node, which is <see langword="null"/> while the graph
     /// draws nothing over the world.</param>
     /// <exception cref="ArgumentNullException"><paramref name="graph"/> or <paramref name="root"/> is
     /// <see langword="null"/>.</exception>
-    public void Attach(WorldRootGraph graph, Func<ShaderPipelineRenderNode?> root) {
+    public void Attach(Func<WorldRootGraph?> graph, Func<ShaderPipelineRenderNode?> root) {
         ArgumentNullException.ThrowIfNull(argument: graph);
         ArgumentNullException.ThrowIfNull(argument: root);
 
+        m_graph = graph;
+        m_liveGraph = null;
         m_root = root;
+        Follow();
+    }
+
+    // Starts every kept config again from the running graph's rows when the root has been recomposed since.
+    private void Follow() {
+        var graph = m_graph?.Invoke();
+
+        if (
+            (m_liveGraph is not null) &&
+            ReferenceEquals(
+                objA: graph,
+                objB: m_liveGraph
+            )
+        ) {
+            return;
+        }
+
+        m_liveGraph = graph;
         m_live.Clear();
 
-        foreach (var pass in graph.Post) {
+        foreach (var pass in (graph?.Post ?? [])) {
             m_live[pass.Name] = ((pass.Config is { ValueKind: JsonValueKind.Object } config)
                 ? JsonObject.Create(element: config)!
                 : []);
         }
     }
+
     /// <summary>Updates a declared floating-point config field of one post pass, over the pass's own config; the pass's
     /// frame block carries it from the next frame the root renders.</summary>
     /// <param name="pass">The <c>views.post[].name</c> of the pass.</param>
@@ -72,6 +97,7 @@ public sealed class WorldPostPasses {
         ArgumentException.ThrowIfNullOrEmpty(argument: pass);
         ArgumentException.ThrowIfNullOrEmpty(argument: field);
         ArgumentNullException.ThrowIfNull(argument: write);
+        Follow();
 
         if (
             !m_live.TryGetValue(

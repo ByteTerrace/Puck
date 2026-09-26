@@ -244,10 +244,9 @@ public static partial class WorldDefinitionValidator {
     ) &&
         (row.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool)
     );
-    // The views.post rows, which the synthesized root runs over the composed frame: each name, and each package against
-    // the host's post-process vocabulary. A row's config is opaque here; the graph compiler binds it against its
-    // package's schema when the root graph is composed (RENDERGRAPH_PACKAGE_CONFIG), and the boot refuses it naming the
-    // row.
+    // The views.post rows, which the synthesized root runs over the composed frame: each name, each package against the
+    // host's post-process vocabulary, and each config bound against its package's schema, as the graph compiler binds
+    // it when the root is composed, so a live views.post edit whose config does not bind is refused naming the row.
     private static void ValidatePostPasses(WorldViewDefaults views, List<string> errors, ICollection<string>? deferred) {
         var passes = (views.Post ?? []);
 
@@ -300,6 +299,10 @@ public static partial class WorldDefinitionValidator {
                     break;
                 case null:
                     deferred?.Add(item: $"{path}.package: post-process package '{pass.Package}' deferred — this host carries no render graph package catalog.");
+
+                    break;
+                case true when (WorldPostProcessVocabularyHook.ConfigRefusal(config: pass.Config, package: pass.Package, pass: pass.Name) is { } refusal):
+                    errors.Add(item: $"{path}.config of post pass '{pass.Name}' does not bind to package '{pass.Package}': {refusal}");
 
                     break;
             }

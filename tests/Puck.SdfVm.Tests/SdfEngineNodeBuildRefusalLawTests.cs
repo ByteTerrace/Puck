@@ -179,7 +179,6 @@ public sealed class SdfEngineNodeBuildRefusalLawTests {
 
         // Another owner holds one view descriptor of a heap exactly the engine's size, so the engine's pool does not fit.
         var other = bindings.CreatePool(sizes: new GpuDescriptorPoolSizes(
-            CombinedImageSamplerCount: 0,
             MaxSets: 1,
             StorageBufferCount: 1,
             StorageImageCount: 0

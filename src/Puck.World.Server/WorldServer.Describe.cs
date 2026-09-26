@@ -158,6 +158,7 @@ public sealed partial class WorldServer {
         WorldMutation.SetViewDefaults => "SetViewDefaults",
         WorldMutation.SetViewSeatRig => "SetViewSeatRig",
         WorldMutation.SetViewSeatControl => "SetViewSeatControl",
+        WorldMutation.SetViewPost m => $"SetViewPost {m.Post.Count}",
         WorldMutation.SetPlayerDefaults => "SetPlayerDefaults",
         WorldMutation.SetPlayerSeatLook => "SetPlayerSeatLook",
         WorldMutation.UpsertViewLayout m => $"UpsertViewLayout '{m.Layout.Name}'",

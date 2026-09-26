@@ -60,25 +60,6 @@ public sealed class VulkanDescriptorAllocator(IVulkanDescriptorApi descriptorApi
             samplerHandle: samplerHandle
         );
     }
-    /// <summary>Writes a combined image sampler descriptor into a set, in shader-read-only layout.</summary>
-    /// <param name="device">The command table of the logical device.</param>
-    /// <param name="descriptorSetHandle">The native <c>VkDescriptorSet</c> handle to write into.</param>
-    /// <param name="binding">The binding index within the set.</param>
-    /// <param name="arrayElement">The array element within the binding.</param>
-    /// <param name="imageViewHandle">The native <c>VkImageView</c> handle to sample.</param>
-    /// <param name="samplerHandle">The native <c>VkSampler</c> handle to sample with.</param>
-    public void WriteCombinedImageSampler(VulkanDeviceCommands device, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) {
-        descriptorApi.WriteImage(request: new VulkanDescriptorImageWriteRequest(
-            ArrayElement: arrayElement,
-            Binding: binding,
-            DescriptorSetHandle: descriptorSetHandle,
-            DescriptorType: VulkanDescriptorType.CombinedImageSampler,
-            Device: device,
-            ImageLayout: VulkanImageLayout.ShaderReadOnlyOptimal,
-            ImageViewHandle: imageViewHandle,
-            SamplerHandle: samplerHandle
-        ));
-    }
     /// <summary>Writes a sampled image descriptor into a set, in shader-read-only layout, read through a separate
     /// sampler.</summary>
     /// <param name="device">The command table of the logical device.</param>

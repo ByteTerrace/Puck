@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
@@ -21,7 +22,7 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
 
     [Fact]
     public void AnUploadOutlivingARecreateRefusesTheReplacementAndItsLateRelease() {
-        using var context = WarpDevices.Context();
+        using var context = DirectXTestDevices.Warp();
         var upload = new DirectXSurfaceUpload(deviceContext: context);
         var pixels = new byte[((Extent * Extent) * 4U)];
 
@@ -52,7 +53,7 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
     }
     [Fact]
     public void AnUploadReleasedBeforeItsDeviceGoesIsReleasedAndTheNextOneWorksOnTheReplacement() {
-        using var context = WarpDevices.Context();
+        using var context = DirectXTestDevices.Warp();
         var pixels = new byte[((Extent * Extent) * 4U)];
 
         using (var upload = new DirectXSurfaceUpload(deviceContext: context)) {
@@ -77,7 +78,7 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
     }
     [Fact]
     public void AReadbackOutlivingARecreateRefusesTheReplacementAndItsLateRelease() {
-        using var context = WarpDevices.Context();
+        using var context = DirectXTestDevices.Warp();
         var readback = new DirectXGpuSurfaceTransferFactory(deviceContext: context).CreateReadback();
         var source = Source(context: context);
 

@@ -523,7 +523,6 @@ public sealed class SdfWorldEngineUploadLawTests {
                 admission: out _,
                 owner: "another owner",
                 pools: [new GpuDescriptorPoolSizes(
-                    CombinedImageSamplerCount: 0U,
                     MaxSets: 1U,
                     StorageBufferCount: heap.FreeViewDescriptors,
                     StorageImageCount: 0U

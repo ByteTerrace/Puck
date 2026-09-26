@@ -39,6 +39,31 @@ public static class WorldSchemaVocabularyHooks {
             id: package,
             package: out var offered
         ) && offered.IsPostProcess);
+        // A post pass's config binds as the graph compiler binds it when the root is composed; a package the check above
+        // refuses is reported there, not here.
+        WorldPostProcessVocabularyHook.PostProcessConfigCheck = static (package, pass, config) => {
+            if (!Puck.Shaders.RenderGraphPackageCatalog.Engine.TryGet(
+                id: package,
+                package: out var offered
+            )) {
+                return null;
+            }
+            if (offered.Config is not { } schema) {
+                return ((config is null)
+                    ? null
+                    : "the package takes no config");
+            }
+
+            return (Puck.Shaders.ShaderConfigBinding.TryBind(
+                config: config,
+                ownerName: pass,
+                reason: out var reason,
+                schema: schema,
+                values: out _
+            )
+                ? null
+                : reason);
+        };
         WorldProbeVocabularyHook.ProbeKindCheck = id => probeKindCheck(id);
     }
 }

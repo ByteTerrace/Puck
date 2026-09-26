@@ -29,22 +29,22 @@ public sealed class AbstractionsContractTests {
         _ = Assert.Throws<ArgumentException>(testCode: () => GpuDescriptorPoolSizes.ForSets([
             new GpuComputeBinding(
                 0,
-                GpuComputeBindingKind.StorageImage
+                GpuBindingKind.StorageImage
             ),
             new GpuComputeBinding(
                 0,
-                GpuComputeBindingKind.StorageBufferRead
+                GpuBindingKind.ReadOnlyBuffer
             )
         ]));
         _ = Assert.Throws<OverflowException>(testCode: () => GpuDescriptorPoolSizes.ForSets([
             new GpuComputeBinding(
                 Binding: 0,
                 Count: uint.MaxValue,
-                Kind: GpuComputeBindingKind.StorageImage
+                Kind: GpuBindingKind.StorageImage
             ),
             new GpuComputeBinding(
                 1,
-                GpuComputeBindingKind.StorageImage
+                GpuBindingKind.StorageImage
             )
         ]));
     }
