@@ -555,7 +555,9 @@ These are one-line cautions; the owning pages hold the derivations.
   them from that statement, and checks `IGpuBindings.CanAdmit` before it
   allocates, so a candidate that does not fit is refused with
   `GPU_DESCRIPTOR_HEAP` and nothing grows; a new owner does the same, and a new
-  shader-visible heap is never created. The owning explanation is
+  shader-visible heap is never created: `DirectXDescriptorHeaps.Create` makes
+  CPU-only heaps, and `DirectXGpuBindings.ShaderVisibleHeapsCreated` reads two
+  per device. The owning explanation is
   [Direct3D 12](../../../docs/rendering/directx.md#descriptor-heaps).
 - **Every pipeline goes through the device's persistent cache.** Vulkan's
   `VulkanLogicalDevice.PipelineCache` and Direct3D 12's
@@ -1344,8 +1346,8 @@ The Direct3D 12 surface compositor's blit is build DXIL
 compositors bind `SurfaceBlitLayout` (the pass group, `t0` and `s1` in space 3)
 and lease their blit from the device's `GpuPassPipelineCache` for a render pass
 in the swapchain's format, so no presentation pipeline is created outside a
-build cache; the Direct3D 12 one keeps its own one-SRV and one-sampler
-shader-visible heaps until P16. No Puck assembly may
+build cache; the Direct3D 12 one binds a set of a pool admitted into the
+device's heaps. No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
 
 ## Verifying

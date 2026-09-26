@@ -2314,10 +2314,10 @@ Phase 3, the groups, follows phase 2:
       `VulkanGroupedBindingFloorLawTests`. Its GPU check is `puck parity` and
       every Direct3D 12 canary: the coverage index is recorded on Vulkan and
       does not map Direct3D 12 sources.
-      The surface compositor and the surface upload in
-      `Puck.DirectX.Presentation` still create shader-visible heaps of their
-      own on command lists of their own; P16 folds them into the device's
-      heaps when it makes the compositors the display-transform node's writer.
+      The surface compositor and the surface upload create no shader-visible
+      heap of their own: the compositor's blit set is a pool of the device's
+      heaps, and the upload holds no descriptor
+      ([P16](#p16--display-output)).
 
     14b, the groups. Each commit lands with `puck parity` unchanged, and the
     canaries named are those `tests/Puck.Affected/canary-coverage.json` maps

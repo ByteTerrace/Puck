@@ -20,9 +20,12 @@ using static Puck.DirectX.DirectXConstants;
 namespace Puck.DirectX.Presentation;
 
 /// <summary>
-/// Owns the DXGI flip-model swap chain, back-buffer RTVs, a shader-visible SRV slot for the blit texture and a
-/// shader-visible sampler slot for its sampler, and a lease on the blit pipeline, the <see cref="GpuPassPipelineCache"/>
-/// entry for <see cref="SurfaceBlitLayout"/> in the swap chain's format. On every frame it:
+/// Owns the DXGI flip-model swap chain, back-buffer RTVs, one descriptor pool of the device's shader-visible heaps
+/// (<see cref="DirectXShaderVisibleHeaps"/>) holding the blit group's set, its source image and its sampler, and a lease
+/// on the blit pipeline, the <see cref="GpuPassPipelineCache"/> entry for <see cref="SurfaceBlitLayout"/> in the swap
+/// chain's format. It creates no shader-visible heap of its own: the pool is admitted through
+/// <see cref="IGpuBindings.CanAdmit"/> like every other owner's, and a CPU surface is uploaded through the device's
+/// <see cref="IGpuSurfaceUpload"/>. On every frame it:
 /// <list type="bullet">
 ///   <item>resets the per-frame command allocator and command list,</item>
 ///   <item>delegates recording to the injected <see cref="IDirectXCommandListRecorder"/>,</item>
@@ -50,6 +53,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     // The blit's build-compiled DXIL (Assets/Shaders/surface-blit.*.hlsl), read from the shader directory.
     private const string BlitPixelFileName = "surface-blit.frag.dxil";
     private const string BlitVertexFileName = "surface-blit.vert.dxil";
+    // The name the blit's pool is admitted and named under.
+    private const string BlitOwner = "surface-blit";
 
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
     private readonly GpuPassPipelineCache m_pipelines;
@@ -72,8 +77,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     // The blit pipeline's lease on the device's pass pipelines, held from Initialize to Dispose.
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_blitLease;
+    private IGpuBindings? m_bindings;
     private DirectXDrawCommand[]? m_blitDrawCommands;
-    private DirectXSurfaceUpload? m_cpuUpload;
+    // The blit group's pool, a range of the device's heaps, and its one set, whose source image Blit rewrites.
+    private nint m_blitPool;
+    private nint m_blitSet;
+    private IGpuSurfaceUpload? m_cpuUpload;
     private nint m_frameFence;
     private HANDLE m_frameFenceEvent;
 
@@ -87,8 +96,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private uint m_presentFlags;
     private nint m_rtvHeap;
     private uint m_rtvStride;
-    private nint m_samplerHeap;
-    private nint m_srvHeap;
     private uint m_swapChainFlags;
     private nint m_swapChain;
     private uint m_width;
@@ -172,9 +179,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         );
         CreateRtvHeap(device: device);
         AcquireBackBuffers(device: device);
-        CreateSrvHeap(device: device);
-        CreateSamplerHeap(device: device);
         var blitPipeline = AcquireBlitPipeline(deviceContext: deviceContext);
+        var blitSet = AllocateBlitSet(
+            blitPipeline: blitPipeline,
+            deviceContext: deviceContext
+        );
+        var heaps = deviceContext.DescriptorHeaps;
 
         CreateCommandInfrastructure(device: device);
 
@@ -189,10 +199,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 ),
                 Group: SurfaceBlitLayout.Group,
                 PipelineLayoutHandle: blitPipeline.LayoutHandle,
-                SamplerHeapHandle: m_samplerHeap,
-                SamplerTableGpuHandle: GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_samplerHeap)).ptr,
-                ViewHeapHandle: m_srvHeap,
-                ViewTableGpuHandle: GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_srvHeap)).ptr
+                SamplerHeapHandle: heaps.SamplerHeap,
+                SamplerTableGpuHandle: blitSet.SamplerGpuBase,
+                ViewHeapHandle: heaps.ViewHeap,
+                ViewTableGpuHandle: blitSet.GpuBase
             ),
         ];
     }
@@ -255,55 +265,46 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             return;
         }
 
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
-
-        nint sourceResource;
-        DXGI_FORMAT sourceFormat;
+        nint sourceView;
 
         if (surface.IsSameDeviceImage) {
-            var view = ((DirectXImageView)GCHandle.FromIntPtr(value: surface.ImageViewHandle).Target!);
-
-            sourceResource = view.ResourceHandle;
-            sourceFormat = view.Format;
+            sourceView = surface.ImageViewHandle;
         } else if (surface.IsCpuPixels) {
-            m_cpuUpload ??= new DirectXSurfaceUpload(deviceContext: deviceContext);
+            m_cpuUpload ??= deviceContext.Services.SurfaceTransferFactory.CreateUpload();
             // The upload texture is one resource shared by every ring slot: an in-flight frame may still be
             // sampling it, so overwriting it must wait for every presented frame, not just this slot's.
             WaitForAllFrames();
-            m_cpuUpload.Upload(
-                pixels: surface.Pixels.Span,
-                width: surface.Width,
+            sourceView = m_cpuUpload.Upload(
+                format: surface.Format,
                 height: surface.Height,
-                format: surface.Format
+                pixels: surface.Pixels,
+                width: surface.Width
             );
-            sourceResource = m_cpuUpload.TextureHandle;
-            sourceFormat = m_cpuUpload.TextureFormat;
         } else if (surface.IsSharedHandle) {
             m_surfaceImport ??= deviceContext.Services.SurfaceTransferFactory.CreateImport();
-            var imported = m_surfaceImport.Import(
+            sourceView = m_surfaceImport.Import(
                 sharedHandle: surface.SharedHandle,
                 format: surface.Format,
                 width: surface.Width,
                 height: surface.Height
-            );
-            var view = ((DirectXImageView)GCHandle.FromIntPtr(value: imported.ImageViewHandle).Target!);
-
-            sourceResource = view.ResourceHandle;
-            sourceFormat = view.Format;
+            ).ImageViewHandle;
         } else {
             throw new InvalidOperationException(message: "The surface has an unsupported payload kind.");
         }
 
-        // Skip rewriting the single SRV descriptor when the source resource is unchanged (parity with the
-        // Vulkan compositor's last-written-view cache).
+        var sourceResource = ((DirectXImageView)GCHandle.FromIntPtr(value: sourceView).Target!).ResourceHandle;
+
+        // Skip rewriting the set's source image when the source resource is unchanged (parity with the Vulkan
+        // compositor's last-written-view cache).
         if (sourceResource != m_lastBlitResource) {
-            // The single SRV descriptor is consumed at command-list execution, so rewriting it while the other
-            // ring slot's frame is still in flight would redirect that frame's read mid-execution.
+            // The set's view is consumed at command-list execution, so rewriting it while the other ring slot's frame
+            // is still in flight would redirect that frame's read mid-execution.
             WaitForAllFrames();
-            WriteSrv(
-                device: device,
-                format: sourceFormat,
-                resource: ((ID3D12Resource*)sourceResource)
+            m_bindings!.WriteSampledImage(
+                arrayElement: 0U,
+                binding: SurfaceBlitLayout.SourceImageBinding,
+                descriptorSetHandle: m_blitSet,
+                imageViewHandle: sourceView
             );
 
             m_lastBlitResource = sourceResource;
@@ -547,8 +548,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         // The device's pass pipelines dispose the blit once no other lease holds it.
         m_blitLease?.Release();
         m_blitLease = null;
-        Release(pointer: ref m_samplerHeap);
-        Release(pointer: ref m_srvHeap);
+        // The pool's range returns to the device's heaps, and its set with it.
+        m_bindings?.DestroyPool(poolHandle: m_blitPool);
+        m_blitPool = 0;
+        m_blitSet = 0;
+        m_bindings = null;
+        m_lastBlitResource = 0;
         Release(pointer: ref m_rtvHeap);
         Release(pointer: ref m_swapChain);
 
@@ -695,7 +700,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_rtvHeap = ((nint)DirectXDescriptorHeaps.Create(
             count: FrameCount,
             device: device,
-            shaderVisible: false,
             type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV
         ));
         m_rtvStride = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -726,38 +730,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         for (var i = 0; (i < m_backBuffers.Length); i++) {
             Release(pointer: ref m_backBuffers[i]);
         }
-    }
-    private void CreateSrvHeap(ID3D12Device* device) {
-        // One SRV: the blit samples a SINGLE source texture into the swapchain back buffer. `WriteSrv` always writes
-        // slot 0. This is deliberate scope — the compositor is a single-source present, not a multi-layer compositor;
-        // adding more source layers would require sizing this heap from the layer count and a per-slot WriteSrv.
-        var srvHeap = DirectXDescriptorHeaps.Create(
-            count: 1,
-            device: device,
-            shaderVisible: true,
-            type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
-        );
-
-        m_srvHeap = ((nint)srvHeap);
-        // A fresh SRV heap has no descriptor written yet; force the next Blit to write one.
-        m_lastBlitResource = 0;
-    }
-    // The blit's sampler: one clamp-addressed, linear-filtered descriptor in a one-slot shader-visible sampler heap beside
-    // the SRV heap, which the draw binds together.
-    private void CreateSamplerHeap(ID3D12Device* device) {
-        var samplerHeap = DirectXDescriptorHeaps.Create(
-            count: 1,
-            device: device,
-            shaderVisible: true,
-            type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
-        );
-        var sampler = DirectXGpuBindings.ClampSampler(filter: GpuSamplerFilter.Linear);
-
-        m_samplerHeap = ((nint)samplerHeap);
-        device->CreateSampler(
-            DestDescriptor: GetCpuHeapStart(heap: samplerHeap),
-            pDesc: &sampler
-        );
     }
     // Takes the blit from the device's pass pipelines: the shared layout, for a render pass of one color attachment in the
     // swap chain's format, its vertex stage drawing the fullscreen triangle from SV_VertexID so the pipeline reads no
@@ -792,6 +764,47 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         );
 
         return m_blitLease.Wait(cancellationToken: CancellationToken.None);
+    }
+    // Creates the blit group's pool as a range of the device's shader-visible heaps, admitted first like every other
+    // owner's so a heap that cannot hold it refuses it by name, and allocates its one set, whose sampler never changes.
+    private DirectXDescriptorSet AllocateBlitSet(DirectXDeviceContext deviceContext, GpuPassPipeline blitPipeline) {
+        var bindings = deviceContext.Services.Bindings;
+        GpuDescriptorPoolSizes[] pools = [GpuDescriptorPoolSizes.ForGroups(groups: SurfaceBlitLayout.Layout.Groups)];
+
+        if (!bindings.CanAdmit(
+            owner: BlitOwner,
+            pools: pools,
+            refusal: out var refusal
+        )) {
+            throw new GpuDescriptorHeapRefusalException(message: refusal);
+        }
+
+        m_bindings = bindings;
+        m_blitPool = bindings.CreatePool(
+            name: new GpuObjectName(
+                owner: BlitOwner,
+                part: "pool"
+            ),
+            sizes: in pools[0]
+        );
+        m_blitSet = bindings.AllocateSet(
+            descriptorSetLayoutHandle: blitPipeline.GroupLayoutHandles[((int)SurfaceBlitLayout.Group)],
+            name: new GpuObjectName(
+                owner: BlitOwner,
+                part: "set"
+            ),
+            poolHandle: m_blitPool
+        );
+        bindings.WriteSampler(
+            arrayElement: 0U,
+            binding: SurfaceBlitLayout.SamplerBinding,
+            descriptorSetHandle: m_blitSet,
+            samplerHandle: bindings.CreateSampler(filter: GpuSamplerFilter.Linear)
+        );
+        // A fresh set has no source written yet; the next Blit writes one.
+        m_lastBlitResource = 0;
+
+        return ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: m_blitSet).Target!);
     }
     private void CreateCommandInfrastructure(ID3D12Device* device) {
         for (var i = 0u; (i < FrameCount); i++) {
@@ -841,20 +854,5 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 result: Marshal.GetHRForLastWin32Error()
             );
         }
-    }
-    private void WriteSrv(ID3D12Device* device, ID3D12Resource* resource, DXGI_FORMAT format) {
-        var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
-            Format = format,
-            Shader4ComponentMapping = DefaultShader4ComponentMapping,
-            ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D,
-        };
-
-        srvDesc.Anonymous.Texture2D.MipLevels = 1;
-
-        device->CreateShaderResourceView(
-            pResource: resource,
-            pDesc: &srvDesc,
-            DestDescriptor: GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_srvHeap))
-        );
     }
 }
