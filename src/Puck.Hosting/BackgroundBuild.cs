@@ -21,6 +21,11 @@ public sealed class BackgroundBuild<T> where T : class {
     private CancellationTokenSource? m_cancellation;
     private Task<T>? m_task;
 
+    /// <summary>Gets the pending build's task, for a party that must block until it finishes, or <see langword="null"/>
+    /// when none is pending. Read it where the owner's thread or lock reads every other member, and wait on it outside
+    /// that lock; the result is still taken only through <see cref="TryTake"/>. A wait on a pool thread may run a build
+    /// that has not started yet inline, so a build that waits for another cannot starve the pool.</summary>
+    public Task? Completion => m_task;
     /// <summary>Gets whether the pending build has finished, successfully or not, so <see cref="TryTake"/> would take
     /// it; <see langword="false"/> while it runs and when none is pending.</summary>
     public bool IsCompleted => (m_task is { IsCompleted: true });
