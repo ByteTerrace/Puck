@@ -4,7 +4,7 @@
   "bootShape": "headless",
   "requirements": [],
   "timeoutSeconds": 60,
-  "binding": "world.refusals reflects over one RefusalAttribute across seven anchored assemblies; a door whose enums live outside the composition root (Puck.World.Client's sdf.decode, Puck.State's state.rule.compile and state.rule.fire, the latter including the state core's own ArmUnbound arm, and Puck.State.Rules' state.transform) must not drop out, and a second attribute type would make the rule substrate invisible to the scan. The positive leg calls world.refusals and asserts the current census (186 across 12 doors) plus one member per out-of-root assembly; the discriminating leg never calls world.refusals, so the census text is absent there and the runner's cross-check proves the positive assertions are sensitive to it.",
+  "binding": "world.refusals reflects over one RefusalAttribute across seven anchored assemblies; a door whose enums live outside the composition root (Puck.World.Client's sdf.decode, Puck.State's state.rule.compile and state.rule.fire, the latter including the state core's own ArmUnbound arm, and Puck.State.Rules' state.transform) must not drop out, and a second attribute type would make the rule substrate invisible to the scan. The positive leg calls world.refusals and asserts the current census (187 across 12 doors) plus one member per out-of-root assembly; the discriminating leg never calls world.refusals, so the census text is absent there and the runner's cross-check proves the positive assertions are sensitive to it.",
   "fixtures": [],
   "positive": {
     "world": "src/Puck.World/Assets/worlds/puck.world.json",
@@ -15,7 +15,7 @@
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "census matches the seven-assembly scan", "stream": "stdout", "match": "contains", "text": "[world.refusals: 186 across 12 door(s)", "present": true },
+      { "type": "line", "name": "census matches the seven-assembly scan", "stream": "stdout", "match": "contains", "text": "[world.refusals: 187 across 12 door(s)", "present": true },
       { "type": "line", "name": "a known SdfRefusal member is present", "stream": "stdout", "match": "contains", "text": "sdf.decode/UnknownOpName", "present": true },
       { "type": "line", "name": "the rule compiler door is present", "stream": "stdout", "match": "contains", "text": "state.rule.compile/RuleGroupMalformed", "present": true },
       { "type": "line", "name": "the rule firing door is present", "stream": "stdout", "match": "contains", "text": "state.rule.fire/MutationRejected", "present": true },
