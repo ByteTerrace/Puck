@@ -79,7 +79,6 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                 description: new GpuGraphicsPipelineDescription(
                     EnableStorageBuffer: false,
                     Layout: context.Parameters.Layout.PipelineLayout(
-                        pushesIndex: false,
                         stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
                     ),
                     Name: "overlay-unified",

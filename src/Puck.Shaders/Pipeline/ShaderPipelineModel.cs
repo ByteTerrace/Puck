@@ -495,6 +495,8 @@ public sealed record ShaderPipelinePass(
 /// <see cref="ShaderPipelineDispatchKind.Extent"/>.</param>
 /// <param name="Config">The package's config schema with each field defaulting to the pass's bound value, which lays out
 /// its frame block after the frame members; <see langword="null"/> when the package takes no config.</param>
+/// <param name="PushesIndex">Whether its package's pipelines push one 4-byte index
+/// (<see cref="RenderGraphPackage.PushesIndex"/>), which its interface declares.</param>
 public sealed record ShaderPipelinePackagePass(
     string Name,
     string Package,
@@ -504,7 +506,8 @@ public sealed record ShaderPipelinePackagePass(
     IReadOnlyList<RenderGraphPortAccess> OutputAccesses,
     IReadOnlyList<ShaderInterfaceMember> Members,
     ShaderPipelineDispatch? Dispatch = null,
-    IReadOnlyDictionary<string, ShaderConfigField>? Config = null
+    IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
+    bool PushesIndex = false
 ) {
     // Whether each port access is declared once per reference, reads on the inputs and writes on the outputs.
     internal bool HasValidAccesses => (

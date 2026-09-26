@@ -132,7 +132,9 @@ public sealed record RenderGraphPackagePort(
 /// <param name="Summary">What the package renders.</param>
 /// <param name="Config">The config schema a pass of it binds its <see cref="RenderGraphPackagePass.Config"/> against,
 /// name to field, or <see langword="null"/> when it takes no config.</param>
-public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null);
+/// <param name="PushesIndex">Whether the package's pipelines push one 4-byte index, which its interface declares
+/// (<see cref="ShaderInterface.PushesIndex"/>) and its shaders read as <c>pushedIndex.index</c>.</param>
+public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, bool PushesIndex = false);
 /// <summary>The engine packages a host offers graphs, by id.</summary>
 public sealed class RenderGraphPackageCatalog {
     /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,

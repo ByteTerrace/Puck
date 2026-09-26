@@ -919,7 +919,8 @@ public sealed partial class ShaderPipelineCompiler {
                     ? ShaderPipelineParameterLayout.ForPackage(
                         config: pass.Config,
                         members: packageByName[pass.Name].Members,
-                        package: pass.Source
+                        package: pass.Source,
+                        pushesIndex: packageByName[pass.Name].PushesIndex
                     )
                     : ShaderPipelineParameterLayout.Resolve(
                         pass: pass,

@@ -16,9 +16,21 @@ public sealed class GpuGroupLayoutTableLawTests {
     public void Film_grains_interface_lays_out_the_film_grain_table() {
         Assert.Equal(
             actual: Describe(description: ShaderInterfaceSpike.FilmGrain.Layout().PipelineLayout(
-                pushesIndex: true,
                 stages: ShaderPipelineDocumentPassKind.Fullscreen.Stages()
             )),
+            expected: Describe(description: GpuGroupLayoutTables.FilmGrain(pushesIndex: false))
+        );
+    }
+    [Fact]
+    public void An_interface_that_pushes_an_index_lays_out_a_table_pushing_one() {
+        var pushing = new ShaderInterface(
+            members: ShaderInterfaceSpike.FilmGrain.Members,
+            name: ShaderInterfaceSpike.FilmGrain.Name,
+            pushesIndex: true
+        );
+
+        Assert.Equal(
+            actual: Describe(description: pushing.Layout().PipelineLayout(stages: ShaderPipelineDocumentPassKind.Fullscreen.Stages())),
             expected: Describe(description: GpuGroupLayoutTables.FilmGrain(pushesIndex: true))
         );
     }
@@ -26,7 +38,6 @@ public sealed class GpuGroupLayoutTableLawTests {
     public void Pixelates_interface_lays_out_the_pixelate_table() {
         Assert.Equal(
             actual: Describe(description: ShaderInterfaceSpike.Pixelate.Layout().PipelineLayout(
-                pushesIndex: false,
                 stages: ShaderPipelineDocumentPassKind.Compute.Stages()
             )),
             expected: Describe(description: GpuGroupLayoutTables.Pixelate(pushesIndex: false))
@@ -47,7 +58,6 @@ public sealed class GpuGroupLayoutTableLawTests {
             pushConstants: ShaderInterfaceGroup.Frame
         );
         var exception = Assert.Throws<InvalidOperationException>(testCode: () => pushed.Layout().PipelineLayout(
-            pushesIndex: false,
             stages: GpuShaderStage.Compute
         ));
 

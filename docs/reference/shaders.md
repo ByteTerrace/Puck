@@ -558,7 +558,8 @@ live in `tests/Puck.Shaders.Tests`.
 name, a frequency group and a kind: a `Value` (a `ShaderValueType` scalar or
 vector), an `Array` of values with a fixed length, a `SampledImage` or
 `StorageImage` with its texel type (a storage image also names its
-`GpuPixelFormat`), or a `Sampler`. The groups are `Frame`, `World`,
+`GpuPixelFormat`), a `ReadOnlyBuffer` or `ReadWriteBuffer` with an optional
+element type, or a `Sampler`. The groups are `Frame`, `World`,
 `Instance` and `Pass`, and a group's ordinal is its Vulkan descriptor set and
 its Direct3D 12 register space on both backends, so the frame group is set 0
 and space 0 in every pass. The interface reads and writes strict JSON through
@@ -571,7 +572,8 @@ so it has no generated schema yet.
 binding allocator is consulted:
 
 - A group with values or arrays owns one constant block at binding 0. Its
-  images and samplers follow at bindings 1, 2, and so on in declaration order.
+  images, buffers and samplers follow at bindings 1, 2, and so on in
+  declaration order.
   A group with no block numbers them from 0.
 - A binding's Direct3D 12 register number equals its Vulkan binding number, in
   the register class its kind takes: `b`, `t`, `u` or `s`.
@@ -587,6 +589,10 @@ binding allocator is consulted:
   the same rule and declared `[[vk::push_constant]]` with `register(b0, space0)`,
   where both backends' root constants live. A pushed group holds values and
   arrays only.
+- An interface that binds its groups may instead push one 4-byte index
+  (`ShaderInterface.PushesIndex`), described under
+  [the pushed index](#the-pushed-index). It pushes its frame block or an index,
+  never both.
 
 `ShaderInterfaceHlsl.Generate` writes the include a pass reads, named
 `<interface>.interface.hlsli`. It declares one struct per group, named for the
@@ -605,25 +611,34 @@ a `GpuBindingKind` (`src/Puck.Abstractions/Gpu/Bindings`), the one closed set
 of binding kinds: constant buffer, read-only buffer, read-write buffer,
 sampled image, storage image and sampler. Push constants are not a kind. A
 pushed block is a constant buffer marked `Pushed`, which only SPIR-V can tell
-apart; DXIL reflects it as the constant buffer at `b0`, space 0, which
-`ShaderInterfaceLayout.DxilBindings` states:
+apart; DXIL reflects a pushed frame block as the constant buffer at `b0`,
+space 0, which `ShaderInterfaceLayout.DxilBindings` states. A buffer record
+carries its `ElementStride` ([buffer elements](#buffer-elements)).
 
-- `SpirvInterfaceReader` parses a SPIR-V module's `DescriptorSet`, `Binding`
-  and `Offset` decorations, its push-constant variable and its debug names. It
-  is pure C#.
+- `SpirvInterfaceReader` parses a SPIR-V module's `DescriptorSet`, `Binding`,
+  `Offset` and `ArrayStride` decorations, its push-constant variable and its
+  debug names. A buffer's stride is the `ArrayStride` of the runtime array its
+  block ends in. It is pure C#.
 - `DxilInterfaceReader` asks DXC's documented reflection interface
   (`IDxcUtils::CreateReflection` returning `ID3D12ShaderReflection`), loaded
-  from the `dxcompiler.dll` beside the `dxc` a `ShaderToolchain` resolves. It
-  parses no container part itself. It is Windows-only, because DXC's
-  non-Windows `IUnknown` carries a virtual destructor that moves every vtable
-  slot.
+  from the `dxcompiler.dll` beside the `dxc` a `ShaderToolchain` resolves. A
+  structured or byte-address buffer's stride is its bind description's
+  `NumSamples`. It parses no container part itself. It is Windows-only, because
+  DXC's non-Windows `IUnknown` carries a virtual destructor that moves every
+  vtable slot.
 
-The spike interfaces two passes: film grain, and a pixelate compute pass that
-exists only as the spike's fixture. Each one
-uses the frame group (set 0) and the pass group (set 3). Each variant compiles
-with the shared recipe's DXC flags. Both readers find every binding and block
-member where the layout put it. DXC writes identical SPIR-V and DXIL on a
-second build in another directory. A hand-edited `vk::offset` fails the SPIR-V
+Both readers, and both of a layout's views, order records by set, then binding,
+then a bound block before a pushed one at the same place
+(`ShaderInterfaceLayout.Ordered`).
+
+The spike interfaces three passes: film grain, a pixelate compute pass, and a
+compute pass reading structured buffers of a 4-byte and a 16-byte element, a
+raw buffer and a pushed index; the last two exist only as the spike's
+fixtures. Each one uses the frame group (set 0) and the pass group (set 3).
+Each variant compiles with the shared recipe's DXC flags. The SPIR-V reader
+finds every binding, block member and stride where `Bindings` put it, and the
+DXIL reader where `DxilBindings` put it. DXC writes identical SPIR-V and DXIL
+on a second build in another directory. A hand-edited `vk::offset` fails the SPIR-V
 reader, and a removed padding member fails the DXIL reader. Every document pass
 runs the two-group layout on both backends; running it inside the parity
 contract's tolerances is open.
@@ -653,11 +668,16 @@ pool for one set of each group. On Direct3D 12 a group's samplers take a range
 of the device's sampler heap. Every document pass is created this way.
 
 An interface that pushes its frame block has no pipeline layout, because a
-pipeline pushes only an index.
+pipeline pushes only an index. An interface that pushes an index gives its
+pipeline layout that push ([the pushed index](#the-pushed-index)).
 
 `ShaderInterfaceLayout.Mismatch` names how a compiled module reads a binding, a
-block member or an offset other than as laid out; a load runs it over every
-document pass's SPIR-V and a package build over both bytecodes.
+block member, an offset or a buffer stride other than as laid out; a load runs
+it over every document pass's SPIR-V and a package build over both bytecodes.
+It holds the module's records to one backend's view at a time, `Bindings` or
+`DxilBindings`, and accepts them when every record fits the same view, so a
+pushed frame block and a pushed index, which SPIR-V reports at the same place,
+are told apart by their members.
 `ShaderInterfaceEcho.Generate` writes an interface's echo pass: a compute pass
 that reads every word of every block member, in set order, through the
 generated declarations, compares it with the
@@ -667,6 +687,62 @@ package build compiles each interface's echo and holds its reflection to the
 layout; the `pipeline-echo` canary runs one on both backends with
 `pipeline.sentinels` on, and an echo expecting two members' sentinels swapped
 fails it.
+
+### Buffer elements
+
+A buffer member is raw by default: the include declares a `ReadOnlyBuffer` as
+a `ByteAddressBuffer` and a `ReadWriteBuffer` as an `RWByteAddressBuffer`, read
+and written by byte address. Given an element type
+(`ShaderInterfaceMember.ReadOnlyBuffer(name, group, element)` or
+`ReadWriteBuffer(name, group, element)`, which lands in the member's `Type`), it
+is a `StructuredBuffer<T>` or `RWStructuredBuffer<T>`, where `T` is the type's
+HLSL spelling. An element is a scalar, a two-component vector or a
+four-component vector. The interface refuses a three-component element by name:
+DXIL's structured stride for one is its 12 bytes, while SPIR-V's buffer layout
+may pad it to 16, so the two backends would disagree on where each element
+starts.
+
+Each buffer binding carries the element stride its bytecode reflects
+(`ShaderInterfaceBinding.ElementStride`; every other binding carries 0). A
+structured buffer's stride is its element's size on both backends: 4, 8 or 16
+bytes. A raw buffer's stride is what each backend reports for a byte-address
+buffer: SPIR-V declares one as a runtime array of `uint` whose `ArrayStride` is
+4 (`ShaderInterfaceLayout.SpirvRawBufferStride`), and DXIL's reflection reports
+a `NumSamples` of 0 (`ShaderInterfaceLayout.DxilRawBufferStride`), the zero
+stride a raw Direct3D 12 view is written with. So in SPIR-V a raw buffer and a
+structured buffer of a 4-byte element reflect alike, and only the DXIL
+reflection tells them apart. A kernel that declares another element than its
+interface, such as `StructuredBuffer<uint4>` where the interface says `uint`, is
+a `Mismatch` on both backends that names both strides.
+
+### The pushed index
+
+An interface constructed with `pushesIndex: true` declares that its pipeline
+pushes one 4-byte index, the one value a grouped pipeline can push; an
+interface pushes its frame block or an index, never both, and refuses the pair
+by name. After the groups the include declares:
+
+```hlsl
+// The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
+struct SdfBricksPushedIndex {
+    [[vk::offset(0)]] uint index;
+};
+[[vk::push_constant]] ConstantBuffer<SdfBricksPushedIndex> pushedIndex : register(b0, space4);
+```
+
+The struct is named for the interface (`ShaderInterface.PushedIndexTypeName`),
+and the space is `GpuPipelineLayoutDescription.PushIndexSpace`, outside every
+group's space. A kernel reads `pushedIndex.index`. On Vulkan it is a 4-byte
+push-constant range at offset 0; on Direct3D 12 it is one root constant at
+`b0` in space 4. `ShaderInterfaceLayout.PipelineLayout` takes the push from the
+interface, and the layout's reflected views include it: `Bindings` as a pushed
+constant block at set 0, binding 0, which is how SPIR-V reports every push
+constant, and `DxilBindings` as the constant buffer at `b0` in space 4. The
+canonical JSON writes `pushesIndex` only when it is set, so an interface that
+pushes nothing carries no trace of it in its JSON, hash or include. A graph
+package declares the push with `RenderGraphPackage.PushesIndex`, which
+`ShaderPipelineParameterLayout.ForPackage`, the planner and
+`puck shaders generate` carry into the package's interface.
 
 ## API
 

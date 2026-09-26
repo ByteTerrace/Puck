@@ -754,7 +754,14 @@ group's ordinal is its set and register space, a register number equals the
 Vulkan binding, and block offsets are explicit `vk::offset`s with named `uint`
 padding that Direct3D 12 needs to land on them; a pushed group
 (`ShaderInterface.PushConstants`, the frame group only) keeps those offsets as
-push constants at `register(b0, space0)`. Change a rule in `ShaderInterfaceLayout`
+push constants at `register(b0, space0)`. An interface that binds its groups
+may instead push one index (`ShaderInterface.PushesIndex`, read as
+`pushedIndex.index` at `b0` in space 4), never both. A buffer member with an
+element type is a structured buffer (never a three-component element), and
+every buffer binding carries the stride each bytecode reflects
+(`ShaderInterfaceBinding.ElementStride`; a raw buffer is 4 in SPIR-V and 0 in
+DXIL), so `Mismatch` holds a module to `Bindings` or `DxilBindings` as a whole.
+Change a rule in `ShaderInterfaceLayout`
 and `ShaderInterfaceSpikeTests` hold both bytecode readers to it; never add a
 register remap. `ShaderRegisterBindingLawTests` holds every shader the build
 compiles to the register rule, with a shrink-only list of the declarations that

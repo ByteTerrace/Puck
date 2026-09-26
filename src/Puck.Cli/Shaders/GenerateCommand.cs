@@ -55,7 +55,8 @@ internal static class GenerateCommand {
             var shaderInterface = ShaderPipelineParameterLayout.ForPackage(
                 config: package.Config,
                 members: package.Members,
-                package: package.Id
+                package: package.Id,
+                pushesIndex: package.PushesIndex
             ).Interface;
             var fileName = ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name);
             var found = interfaceFiles.Where(predicate: file => file.EndsWith(comparisonType: StringComparison.Ordinal, value: ("/" + fileName))).ToArray();

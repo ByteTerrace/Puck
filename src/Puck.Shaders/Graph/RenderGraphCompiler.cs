@@ -287,7 +287,8 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 Name: pass.Name,
                 OutputAccesses: [.. package.Outputs.Select(selector: static port => port.Access)],
                 Outputs: pass.OutputReferences,
-                Package: pass.Package
+                Package: pass.Package,
+                PushesIndex: package.PushesIndex
             ));
         }
 
