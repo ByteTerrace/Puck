@@ -238,33 +238,27 @@ public sealed class WorldPointer {
         ) != held);
     }
 
-    /// <summary>Gets the seat the process's one OS pointer rides: the seat of the latest reported position, or
-    /// <see langword="null"/> before any position was reported and after <see cref="ForgetPosition"/>.
-    /// Non-destructive, like <see cref="Position"/>.</summary>
-    public int? PositionedSlot {
+    /// <summary>Gets the seat the process's one OS pointer rides and the device that put it there, read together under
+    /// the lock <see cref="SetPosition"/> writes them under, so the pair never tears whatever thread reads it: the seat
+    /// and device of the latest reported position, or <see langword="null"/> before any position was reported and after
+    /// <see cref="ForgetPosition"/>. Non-destructive, like <see cref="Position"/>.</summary>
+    public WorldPointerPositioned? Positioned {
         get {
             lock (m_positionGate) {
                 return ((m_positionedSlot >= 0)
-                    ? m_positionedSlot
+                    ? new WorldPointerPositioned(
+                        Device: m_positionedDevice,
+                        Slot: m_positionedSlot
+                    )
                     : null
                 );
-            }
-        }
-    }
-    /// <summary>Gets the device the latest reported position is attributed to: the physical mouse that moved it, or
-    /// the default id when the platform names none. Meaningful only while <see cref="PositionedSlot"/> is not
-    /// <see langword="null"/>.</summary>
-    public InputDeviceId PositionedDevice {
-        get {
-            lock (m_positionGate) {
-                return m_positionedDevice;
             }
         }
     }
 
     /// <summary>Forgets every seat's position: the pointer left the window, or a device moved between seats, so no
     /// seat points anywhere until the platform reports a position again. <see cref="HasPosition"/> answers
-    /// <see langword="false"/> for every seat and <see cref="PositionedSlot"/> <see langword="null"/>.</summary>
+    /// <see langword="false"/> for every seat and <see cref="Positioned"/> <see langword="null"/>.</summary>
     public void ForgetPosition() {
         lock (m_positionGate) {
             for (var slot = 0; (slot < m_hasPosition.Length); slot++) {
@@ -358,3 +352,9 @@ public sealed class WorldPointer {
         return DrainWheel(slot: slot);
     }
 }
+/// <summary>The seat the process's one OS pointer rides and the device that put it there, read together
+/// (<see cref="WorldPointer.Positioned"/>).</summary>
+/// <param name="Slot">The 0-based seat slot of the latest reported position.</param>
+/// <param name="Device">The device the position is attributed to: the physical mouse that moved it, or the default id
+/// when the platform names none.</param>
+public readonly record struct WorldPointerPositioned(int Slot, InputDeviceId Device);

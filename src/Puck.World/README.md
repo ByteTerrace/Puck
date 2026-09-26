@@ -1121,10 +1121,14 @@ change. A producer registers twice, once per half:
 
 A source is a render-graph instance. `WorldSourceInstances` derives one
 external instance for each distinct `producer`, `machine` or `probe` source the
-screens show, named `source$<screen>` after the first screen showing it, whose
+screens show, named by its content as `source$<producer>$<digest>`, whose
 package is `source.<producer id>` and which carries the source's settings (a
-machine's `instance` and `output`, a probe's `id`). Screens showing equal
-sources read one instance, which the scheduler renders at most once a frame, at
+machine's `instance` and `output`, a probe's `id`). The digest is 16 hex
+characters of the settings' canonical form (`ImageSourceSettings.Canonical`:
+members sorted, numbers written by value, no settings the same as empty ones),
+so equal settings share a name however they are spelled, a settings change is
+a new name and a new producer, and adding, removing or reordering screens
+renames no source. Screens showing equal sources read one instance, which the scheduler renders at most once a frame, at
 its producer's cadence and negotiated extent, and the instance's `SourceHandle`
 is its identity. `WorldImageProducers.RegisterPackages` registers one
 external-producer factory per producer under its source package, which opens

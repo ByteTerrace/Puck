@@ -156,6 +156,7 @@ public sealed class RatchetLedger {
 
         return normalized;
     }
+
     // A file a project links from elsewhere reaches the compiler as `project/../../src/…`; the key is the file's own path.
     private static string CollapseDotSegments(string path) {
         var segments = new List<string>();
@@ -165,7 +166,7 @@ public sealed class RatchetLedger {
                 continue;
             }
 
-            if ((segment == "..") && (segments.Count != 0) && (segments[segments.Count - 1] != "..") && (segments[segments.Count - 1].Length != 0)) {
+            if ((segment == "..") && (segments.Count != 0) && (segments[(segments.Count - 1)] != "..") && (segments[(segments.Count - 1)].Length != 0)) {
                 segments.RemoveAt(index: (segments.Count - 1));
                 continue;
             }
@@ -178,6 +179,7 @@ public sealed class RatchetLedger {
             values: segments
         );
     }
+
     /// <summary>Renders a ledger document: the format, the ceiling, and the recorded counts in ordinal key order,
     /// indented by four spaces and ending in a line feed.</summary>
     /// <param name="ceiling">The ceiling the document declares.</param>

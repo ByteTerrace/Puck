@@ -104,6 +104,7 @@ public sealed class OverlayFrameSlots {
         HoldBound();
         m_pendingRetire.MoveTo(destination: destination);
     }
+
     // Moves the bound leases to the retire-pending list, after any still pending, and empties the slot table.
     private void HoldBound() {
         for (var index = 0; (index < m_boundCount); index++) {

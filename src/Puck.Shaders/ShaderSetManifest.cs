@@ -60,6 +60,7 @@ public sealed partial record ShaderSetManifest(
     /// declarations the set's stages include as <c>&lt;name&gt;.interface.hlsli</c>.</summary>
     [JsonIgnore]
     public ShaderPipelineParameterLayout FrameLayout { get; private init; } = null!;
+
     /// <summary>Gets the pass-group members <see cref="Bindings"/> declare, in order.</summary>
     /// <exception cref="InvalidDataException">A binding's kind is one a manifest does not declare.</exception>
     [JsonIgnore]
@@ -79,12 +80,17 @@ public sealed partial record ShaderSetManifest(
     /// <see cref="FrameLayout"/> lays out once the set loads. A set's declarations are generated from this before its
     /// bytecode can be built.</summary>
     /// <param name="manifestPath">The manifest file's path.</param>
+    /// <param name="text">The manifest's text as the caller read it, or <see langword="null"/> to read the file at
+    /// <paramref name="manifestPath"/>.</param>
     /// <returns>The interface.</returns>
     /// <exception cref="InvalidDataException">The manifest is malformed, its config schema is invalid, or its name or
     /// a config field does not make a frame interface.</exception>
     /// <exception cref="IOException">The manifest cannot be read.</exception>
-    public static ShaderInterface ReadFrameInterface(string manifestPath) {
-        var manifest = ReadDeclaration(manifestPath: manifestPath);
+    public static ShaderInterface ReadFrameInterface(string manifestPath, string? text = null) {
+        var manifest = ReadDeclaration(
+            manifestPath: manifestPath,
+            text: text
+        );
 
         return ShaderFrameInterface.ForPass(
             config: manifest.Config,
@@ -96,15 +102,17 @@ public sealed partial record ShaderSetManifest(
     /// which a package catalog offers before any set is loaded. Its <see cref="Bytecode"/> is empty and its
     /// <see cref="FrameLayout"/> unset; <see cref="Load(string)"/> loads a set to run it.</summary>
     /// <param name="manifestPath">The manifest file's path.</param>
+    /// <param name="text">The manifest's text as the caller read it, or <see langword="null"/> to read the file at
+    /// <paramref name="manifestPath"/>.</param>
     /// <returns>The declaration.</returns>
     /// <exception cref="InvalidDataException">The manifest is malformed or its config schema is invalid.</exception>
     /// <exception cref="IOException">The manifest cannot be read.</exception>
-    public static ShaderSetManifest ReadDeclaration(string manifestPath) {
+    public static ShaderSetManifest ReadDeclaration(string manifestPath, string? text = null) {
         ShaderSetManifest manifest;
 
         try {
             manifest = (JsonSerializer.Deserialize(
-                json: File.ReadAllText(path: manifestPath),
+                json: (text ?? File.ReadAllText(path: manifestPath)),
                 jsonTypeInfo: ShaderManifestJsonContext.Default.ShaderSetManifest
             ) ?? throw new InvalidDataException(message: $"Shader set manifest is empty or 'null': {manifestPath}"));
         } catch (JsonException exception) {
@@ -250,6 +258,7 @@ public sealed partial record ShaderSetManifest(
 
         return (manifest with { Bytecode = bytecode, Directory = directory, FrameLayout = layout });
     }
+
     private static void ValidateStage(Dictionary<string, ReadOnlyMemory<byte>> bytecode, string directory, string manifestName, string? stem, string stageName, WorkCounterSet work) {
         if (stem is null) {
             return;

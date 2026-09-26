@@ -200,12 +200,21 @@ internal static class AffectedCommand {
         var recorded = ((deleted.Count > 0)
             ? AffectedCoverage.ReadAt(repositoryRoot: repositoryRoot, revision: since)
             : null);
-        // Reading every canary world is the cost of this map, so it is built only for a change a document can reach.
+        // Reading every canary world is the cost of this map, so it is built only for a change a document can reach; the
+        // base's map, over the tree the base recorded, only for a deleted file one can reach.
+        var workingTree = new AffectedWorkingTree(root: repositoryRoot);
+        var baseTree = new AffectedRevisionTree(revision: since, root: repositoryRoot);
         var reachedBy = new Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>>(valueFactory: () => AffectedDocuments.ReachedBy(
             canaries: canaries,
-            repositoryRoot: repositoryRoot
+            tree: workingTree
+        ));
+        var recordedReachedBy = new Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>>(valueFactory: () => AffectedDocuments.ReachedBy(
+            canaries: canaries,
+            tree: baseTree
         ));
         IReadOnlySet<string> none = new HashSet<string>();
+
+        bool Reachable(string path) => ReachableExtensions.Any(predicate: extension => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: extension));
 
         plan = AffectedSelection.Select(
             canaries: canaries,
@@ -218,13 +227,13 @@ internal static class AffectedCommand {
                 ((owner is not null) && catalogProjects.Contains(item: owner))),
             declaresTests: path => File.ReadLines(path: Path.Combine(path1: repositoryRoot, path2: path)).Any(predicate: static line => line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "test \"")),
             projects: projects,
-            canariesReaching: path => ((ReachableExtensions.Any(predicate: extension => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: extension)) && reachedBy.Value.TryGetValue(key: path, value: out var reaching))
+            canariesReaching: path => ((Reachable(path: path) && reachedBy.Value.TryGetValue(key: path, value: out var reaching))
                 ? reaching
                 : none),
             standInsFor: AffectedStandIns.Create(
                 indexed: [.. coverage.Keys],
                 projects: projects,
-                tree: new AffectedWorkingTree(root: repositoryRoot)
+                tree: workingTree
             ),
             worldClosure: closure,
             deleted: deleted,
@@ -236,8 +245,12 @@ internal static class AffectedCommand {
                 : AffectedStandIns.Create(
                     indexed: [.. recorded.Keys],
                     projects: projects,
-                    tree: new AffectedRevisionTree(revision: since, root: repositoryRoot)
-                ))
+                    tree: baseTree
+                )),
+            // A deleted file is reached through the documents the base's tree held.
+            recordedCanariesReaching: path => ((Reachable(path: path) && recordedReachedBy.Value.TryGetValue(key: path, value: out var reaching))
+                ? reaching
+                : none)
         );
 
         return true;
@@ -418,12 +431,15 @@ internal static class AffectedCommand {
               graph document declares with their includes. Parity is chosen with any GPU canary. A file no
               canary can execute is placed through the indexed sources it stands for: a project file,
               restore lock or NativeMethods list through its project's sources, a shader source or
-              include through the C# that names each kernel whose include closure reaches it, and a file
-              puck schema writes through the sources declaring the types it is generated from. A changed
+              include through the C# that names each kernel whose include closure reaches it, in the
+              kernel's project or one its build references, a shader-set manifest, its stage sources and
+              its frame interface through the C# declaring the manifest's model, and a file puck schema
+              writes through the sources declaring the types it is generated from. A changed
               World source neither the index nor a stand-in places is listed as unmapped rather than
               widening the run. A file deleted since --since is placed by the index the base recorded,
-              directly or through the stand-ins the base's tree gave it; one neither places is listed as
-              deleted, never unmapped.
+              directly or through the stand-ins the base's tree gave it, or by the canaries whose
+              documents reached it in the base's tree; one none of these places is listed as deleted,
+              never unmapped.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test.
               Prose, .claude/, .github/, editors/ and experimental/ choose nothing.

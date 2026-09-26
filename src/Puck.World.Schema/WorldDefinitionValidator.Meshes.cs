@@ -7,8 +7,8 @@ public static partial class WorldDefinitionValidator {
     // where only a static stamp draws one.
     private static HashSet<string> ValidatePrototypes(WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
         var ids = ValidateCreations(
-            definition: definition,
             creations: creations,
+            definition: definition,
             errors: errors,
             fontNames: fontNames,
             hasTextCatalog: hasTextCatalog
@@ -123,8 +123,8 @@ public static partial class WorldDefinitionValidator {
             }
 
             var area = Vector3.Cross(
-                vector1: (vertices[(int)b] - vertices[(int)a]),
-                vector2: (vertices[(int)c] - vertices[(int)a])
+                vector1: (vertices[((int)b)] - vertices[((int)a)]),
+                vector2: (vertices[((int)c)] - vertices[((int)a)])
             );
 
             if (area.LengthSquared() == 0f) {

@@ -71,7 +71,6 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return sizes;
     }
-
     // Creates a pass's pass region, one constant buffer per slot, which SeedPassRegions fills once the install has
     // preserved the live config.
     private void CreatePassRegion(RuntimePass pass) {

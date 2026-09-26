@@ -239,7 +239,6 @@ public sealed class DeviceLossRecoveryLawTests {
             expected: CaptureRequestSlot.DeviceLostReason
         );
     }
-
     /// <summary>The operator's <c>gpu.faults lose 2</c>: the offscreen host counts each frame against the faults, the
     /// second loses the device on a healthy root, and the host recovers through its registered rebuild exactly as from
     /// a real loss, refusing the capture armed at it, and renders on.</summary>

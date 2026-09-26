@@ -18,8 +18,25 @@ namespace Puck.Shaders;
 // taken and the next build starts. A device loss or disposal waits a build out and discards it, because it creates
 // objects on the device being released. The replaced graph is never drained on the frame thread; see
 // ShaderPipelineRenderNode.Retirement.cs.
+//
+// A refused candidate is tried again only when something it was refused on changes, as SdfWorldPipelineSource retries
+// a refused build: the operator's GPU faults (GpuCreationFaults.Revision: an arm, a disarm, or a fault firing
+// elsewhere, never the one that refused it, since the revision is read after the refusal), and, for a candidate the
+// device's descriptor heap refused (GpuDescriptorHeapRefusalException), the heap's release revision
+// (IGpuBindings.HeapReleaseRevision), which moves as another owner returns its pools. A frame that changes neither tries
+// nothing, so a persistent refusal is attempted once per change, never once per frame and never on a clock. A new
+// request, a swap or a resize, replaces the refused candidate.
 public sealed partial class ShaderPipelineRenderNode {
     private readonly BackgroundBuild<GraphBuild> m_build = new();
+
+    // The refused candidate: its pipeline, or null for a refused resize of the installed one, and the revisions it was
+    // refused under.
+    private bool m_hasRefusal;
+    private bool m_refusedByHeap;
+    private long m_refusedFaultsRevision;
+    private long m_refusedHeapRevision;
+    private CompiledShaderPipeline? m_refusedPending;
+    private bool m_refusedResize;
 
     private BuildKey m_buildKey;
 
@@ -49,6 +66,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // device loss is not a replacement and is never refused by the budget: nothing else is owned then, and the graph it
     // restores was accepted when it installed.
     private void EnsureBuild() {
+        RetryRefusal();
         if (
             m_disposed ||
             m_build.IsPending ||
@@ -161,12 +179,48 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private void Refuse(bool candidate, Exception error) {
         if (candidate) {
+            m_hasRefusal = ((m_pending is not null) || m_resizePending);
+            m_refusedByHeap = (error is GpuDescriptorHeapRefusalException);
+            m_refusedFaultsRevision = FaultsRevision;
+            m_refusedHeapRevision = m_device.Services.Bindings.HeapReleaseRevision;
+            m_refusedPending = m_pending;
+            m_refusedResize = m_resizePending;
             m_pending = null;
-            // A refused resize is not retried until a different extent is requested.
             m_resizePending = false;
         }
 
         m_lastSwapError = error;
+    }
+    // The operator's GPU faults' revision, or zero on a device that passes its creations through none.
+    private long FaultsRevision => (m_device.Services.Faults?.Revision ?? 0L);
+    // Forgets the refused candidate, which a new request replaces.
+    private void ForgetRefusal() {
+        m_hasRefusal = false;
+        m_refusedPending = null;
+        m_refusedResize = false;
+    }
+    // Queues the refused candidate again once the faults or, for a heap refusal, the heap's release revision moves,
+    // unless a newer request is queued.
+    private void RetryRefusal() {
+        if (
+            !m_hasRefusal ||
+            (m_pending is not null) ||
+            m_resizePending ||
+            (
+                (FaultsRevision == m_refusedFaultsRevision) &&
+                (
+                    !m_refusedByHeap ||
+                    (m_device.Services.Bindings.HeapReleaseRevision == m_refusedHeapRevision)
+                )
+            )
+        ) {
+            return;
+        }
+
+        m_pending = m_refusedPending;
+        m_resizePending = m_refusedResize;
+        m_lastSwapError = null;
+        ForgetRefusal();
     }
     // Kept apart from EnsureBuild so the build's closure is allocated only when a build starts, never on a polled frame.
     private void StartBuild(BuildKey key) {
@@ -470,6 +524,7 @@ public sealed partial class ShaderPipelineRenderNode {
                         StrideBytes: 0
                     ))
             );
+
             RenderPass = gpu.RenderPassFactory.Create(
                 description: RenderPassOf(
                     planned: planned,

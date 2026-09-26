@@ -83,7 +83,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             pipeline: candidate
         );
 
-        Assert.IsType<InvalidDataException>(@object: node.LastSwapError);
+        Assert.IsType<GpuDescriptorHeapRefusalException>(@object: node.LastSwapError);
         Assert.StartsWith(
             actualString: node.LastSwapError!.Message,
             expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'shader pipeline feedback' needs {HeapDemand(pipeline: candidate)} view and {SamplerDemand(pipeline: candidate)} sampler descriptors in 1 pool(s) and is refused: "

@@ -27,7 +27,6 @@ public sealed unsafe class VulkanProcResolver {
     /// <summary>Gets the kind counting instance-level procedures resolved through <c>vkGetInstanceProcAddr</c>,
     /// required and optional alike, found or not.</summary>
     public static WorkKind InstanceResolutions { get; } = new(name: "vulkan.procedures.instance-resolved", unit: "count", workClass: WorkClass.PerBackendDeterministic);
-
     /// <summary>Gets this resolver's resolution counts, which a host registers once as its
     /// <see cref="WorkSourceName"/> source. Every instance and device table built over this resolver counts here, and a
     /// device recreated after a loss adds its table again. Counts only go up.</summary>
@@ -114,7 +113,6 @@ public sealed unsafe class VulkanProcResolver {
             return 0;
         }
     }
-
     /// <summary>Resolves a required device-level procedure through this resolver's <c>vkGetDeviceProcAddr</c>.</summary>
     /// <param name="deviceHandle">The native <c>VkDevice</c> handle the procedure is scoped to.</param>
     /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCreateBuffer"u8</c>).</param>

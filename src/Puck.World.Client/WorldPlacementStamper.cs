@@ -23,6 +23,7 @@ public static class WorldPlacementStamper {
     // Probe instances are spaced far apart so the program's segment-merge pass can never collapse consecutive probe
     // segments — a merged probe would under-reserve the segment directory a real scattered world needs (contract).
     private const float ProbeSpread = 100f;
+
     // Each inline prototype mesh's engine-frame SdfMesh, keyed by the immutable mesh record (MeshOf).
     private static readonly ConditionalWeakTable<WorldPrototypeMesh, SdfMesh> Meshes = new();
 
@@ -557,7 +558,7 @@ public static class WorldPlacementStamper {
                 textCatalog: textCatalog,
                 worldSeed: worldSeed,
                 volumes: volumes,
-                mesh: ((meshDraws is not null) && (creation.Mesh is { } mesh)
+                mesh: (((meshDraws is not null) && (creation.Mesh is { } mesh))
                     ? MeshOf(mesh: mesh)
                     : null),
                 meshMaterial: paletteIds[Math.Clamp(

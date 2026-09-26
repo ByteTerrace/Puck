@@ -19,6 +19,7 @@ internal sealed class ObservedPackageFactory(IRenderGraphPackageFactory inner, F
     public (GpuImageLayout Input, GpuImageLayout Output) Layouts { get; private set; }
     /// <summary>Gets the outcome the last recording returned.</summary>
     public RenderGraphPackageOutcome Outcome { get; private set; }
+
     /// <inheritdoc/>
     public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => inner.Build(
         cancellationToken: cancellationToken,

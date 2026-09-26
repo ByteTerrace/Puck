@@ -115,7 +115,6 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
         return !Log.HasLoggedErrors;
     }
 }
-
 /// <summary>
 /// Removes shader bytecode the build wrote whose <c>.hlsl</c> source is gone, and refuses any other bytecode
 /// with no source. The build owns what it writes: a <c>.spv</c> or <c>.dxil</c> left behind by a deleted source is
@@ -234,7 +233,6 @@ internal static class PuckShaderHashing {
 
         return (sourceHash, bytecodeHash);
     }
-
     /// <summary>True when <paramref name="value"/> is a SHA-256 in the lowercase hex <see cref="ToHex"/> writes.</summary>
     public static bool IsHash(string value) {
         if (value.Length != 64) {

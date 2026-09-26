@@ -80,7 +80,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                     EnableStorageBuffer: false,
                     Layout: context.Parameters.Layout.PipelineLayout(
                         pushesIndex: false,
-                        stages: (GpuShaderStage.Vertex | GpuShaderStage.Fragment)
+                        stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
                     ),
                     Name: "overlay-unified",
                     PushConstantBinding: null,
@@ -185,8 +185,13 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
     private sealed class Recorder : IRenderGraphPackageRecorder {
         private readonly Built m_built;
         private readonly OverlayFrameComposer m_composer;
-        private readonly IGpuStorageBuffer m_data;
+        // Each frame slot's storage buffer: the static prefix (the token slab and the glyph pack), then the frame's
+        // regions at the builder's own bases, so the pass block's region bases are the same in every slot.
+        private readonly IGpuStorageBuffer[] m_data;
+        // The theme revision each slot's token slab holds.
+        private readonly int[] m_dataThemes;
         private readonly uint[] m_frameSlots = new uint[RenderGraphPackageCatalog.OverlayFrameSlotCount];
+        // A framebuffer over each image the output can be, created at install, so a recording creates nothing.
         private readonly Dictionary<nint, IGpuFramebuffer> m_framebuffers;
         private readonly IGpuBuffer m_geometry;
         private readonly OverlayPackage m_package;
@@ -202,11 +207,13 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
         public Recorder(RenderGraphPackageRecorderContext context, Built built, OverlayFrameComposer composer, RenderGraphPackageGroups groups, OverlayPackage package) {
             var inFlight = context.InFlightFrames;
             var builder = composer.Builder;
-            var totalWords = (builder.PanelBaseWords + (inFlight * composer.DynamicWords));
+            var totalWords = builder.WordCount;
             var parameters = context.Parameters;
 
             m_built = built;
             m_composer = composer;
+            m_data = new IGpuStorageBuffer[inFlight];
+            m_dataThemes = new int[inFlight];
             m_framebuffers = new Dictionary<nint, IGpuFramebuffer>(capacity: inFlight);
             m_package = package;
             m_services = context.Services;
@@ -241,14 +248,30 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                     m_frameSlots[slot] = m_sets.BindingOf(member: RenderGraphPackageCatalog.OverlayFrameSlot(slot: slot));
                 }
 
-                m_data = m_services.BufferFactory.CreateHostVisible(
-                    name: new GpuObjectName(owner: context.Instance, part: context.Pass, detail: "data"),
-                    sizeBytes: (((ulong)totalWords) * sizeof(uint)),
-                    usage: GpuBufferUsage.Storage
-                );
+                foreach (var image in groups.OutputImages[0]) {
+                    if (!m_framebuffers.ContainsKey(key: image.ImageHandle)) {
+                        m_framebuffers.Add(
+                            key: image.ImageHandle,
+                            value: m_services.RenderPassFactory.CreateFramebuffer(
+                                colors: [image],
+                                depth: null,
+                                renderPass: built.RenderPass!
+                            )
+                        );
+                    }
+                }
+
                 m_sampler = m_services.Bindings.CreateSampler();
 
                 for (var slot = 0; (slot < inFlight); slot++) {
+                    m_data[slot] = m_services.BufferFactory.CreateHostVisible(
+                        name: new GpuObjectName(owner: context.Instance, part: context.Pass, detail: "data", index: slot),
+                        sizeBytes: (((ulong)totalWords) * sizeof(uint)),
+                        usage: GpuBufferUsage.Storage
+                    );
+                    // The token slab and the glyph pack are static, so each slot's buffer takes them once.
+                    m_data[slot].Write<uint>(data: builder.Scratch[..builder.PanelBaseWords]);
+                    m_dataThemes[slot] = m_themeRevision;
                     m_services.Bindings.WriteSampler(
                         arrayElement: 0,
                         binding: m_sets.BindingOf(member: RenderGraphPackageCatalog.OverlaySampler),
@@ -257,7 +280,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                     );
                     m_services.Bindings.WriteBuffer(
                         binding: m_sets.BindingOf(member: RenderGraphPackageCatalog.OverlayData),
-                        bufferHandle: m_data.BufferHandle,
+                        bufferHandle: m_data[slot].BufferHandle,
                         bufferSize: (((ulong)totalWords) * sizeof(uint)),
                         descriptorSetHandle: m_sets.PassSet(slot: slot),
                         elementStride: 0,
@@ -265,8 +288,6 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                     );
                 }
 
-                // The token slab and the glyph pack are static and shared by every slot's region.
-                m_data.Write<uint>(data: builder.Scratch[..builder.PanelBaseWords]);
             } catch {
                 Dispose();
 
@@ -294,7 +315,9 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                 m_services.Bindings.DestroySampler(samplerHandle: m_sampler);
             }
 
-            m_data?.Dispose();
+            foreach (var data in m_data) {
+                data?.Dispose();
+            }
             m_geometry?.Dispose();
             m_built.Dispose();
         }
@@ -302,7 +325,14 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             if (m_themeRevision != m_package.m_themeRevision) {
                 m_themeRevision = m_package.m_themeRevision;
                 m_composer.UpdateTheme(theme: in m_package.m_theme);
-                m_data.Write<uint>(data: m_composer.Builder.Scratch[..OverlayTokenBlock.WordCount]);
+            }
+
+            // A slot takes a new token slab when it next records, once the submission that last read its buffer retired.
+            var data = m_data[recording.Slot];
+
+            if (m_dataThemes[recording.Slot] != m_themeRevision) {
+                m_dataThemes[recording.Slot] = m_themeRevision;
+                data.Write<uint>(data: m_composer.Builder.Scratch[..OverlayTokenBlock.WordCount]);
             }
 
             var visible = m_composer.Compose(renderTicks: recording.Context.RenderTicks);
@@ -324,38 +354,17 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             var command = recording.CommandBuffer;
             var recorder = recording.Recorder;
             var pipeline = m_built.Pipeline!;
-            var shift = (recording.Slot * m_composer.DynamicWords);
-
-            if (!m_framebuffers.TryGetValue(
-                key: target.ImageHandle,
-                value: out var framebuffer
-            )) {
-                framebuffer = m_services.RenderPassFactory.CreateFramebuffer(
-                    colors: [target],
-                    depth: null,
-                    renderPass: m_built.RenderPass!
-                );
-                m_framebuffers.Add(
-                    key: target.ImageHandle,
-                    value: framebuffer
-                );
-            }
+            var framebuffer = (m_framebuffers.GetValueOrDefault(key: target.ImageHandle) ?? throw new InvalidDataException(message: $"Output '{output.Version}' is an image the overlay was not installed with."));
 
             WriteImages(
                 set: m_sets.PassSet(slot: recording.Slot),
                 worldView: input.Image.ImageViewHandle
             );
-            m_composer.WritePassValues(
-                shiftWords: shift,
-                values: recording.PassBlock.Slice(
-                    length: OverlayFrameComposer.PassValueBytes,
-                    start: m_values
-                )
-            );
-            m_composer.UploadFrameRegions(
-                buffer: m_data,
-                shiftWords: shift
-            );
+            m_composer.WritePassValues(values: recording.PassBlock.Slice(
+                length: OverlayFrameComposer.PassValueBytes,
+                start: m_values
+            ));
+            m_composer.UploadFrameRegions(buffer: data);
             recorder.BeginRenderPass(
                 commandBufferHandle: command,
                 framebuffer: framebuffer

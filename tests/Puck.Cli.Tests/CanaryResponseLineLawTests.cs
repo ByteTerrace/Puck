@@ -59,7 +59,6 @@ public sealed class CanaryResponseLineLawTests {
             line: null,
             occurrence: 1
         ));
-
     /// <summary>An operand with <c>minus</c> is the numeric difference of its two extracted values: the world node moved
     /// from submission 5 to 8 between the two reads, a change of 3 and not their sum or either read.</summary>
     [InlineData(3, true)]

@@ -240,7 +240,8 @@ These are one-line cautions; the owning pages hold the derivations.
   refuses it by name. An import's CPU staged-copy fallback (the camera and
   capture CPU tiers) is still `Imported`. A source is a render-graph instance:
   `WorldSourceInstances` makes one external instance per distinct producer,
-  machine or probe source the screens show (`source$<screen>`, package
+  machine or probe source the screens show (`source$<producer>$<digest>`, named by
+  its content through `ImageSourceSettings.Digest`, package
   `source.<producer id>`, carrying the settings), and
   `WorldImageProducers.RegisterPackages` registers one external-producer factory
   per producer id that opens the instance's feed through `TryOpen`. A typed
@@ -319,7 +320,11 @@ These are one-line cautions; the owning pages hold the derivations.
   refusal reads it. It is never retried
   because a frame arrived and never on a clock; a new input to a build joins
   its `inputsOf`. The node has no previous engine then and presents nothing
-  new; a view serves the image it served before. `SdfWorldEngine`'s
+  new; a view serves the image it served before. `ShaderPipelineRenderNode`
+  keeps a refused candidate by the same rule (`RetryRefusal`): it builds it
+  again when the faults' revision, read after the refusal, moves or, for a heap
+  refusal (`GpuDescriptorHeapRefusalException`), the release revision does,
+  unless a newer swap or resize replaced it. `SdfWorldEngine`'s
   constructor owns its creations through one `GpuCreationScope`, which
   releases them newest first when a later step throws, so a refusal leaks
   nothing (`SdfWorldEngineCreationFaultLawTests`,
@@ -560,10 +565,11 @@ These are one-line cautions; the owning pages hold the derivations.
   `GpuCreationFaultsLawTests`' coverage table fails on a member it does not
   name. A fault law fails every creation of an owner in turn over a tracking
   fake and holds it to releasing exactly what it created: the SDF engine's
-  construction and the unified overlay's resources (`UnifiedOverlayWorkLawTests`)
+  construction and the overlay package's graph (`OverlayPackageLawTests`)
   over `FakeGpuDevice` with `trackObjects`, whose `Created` and `Memory` show
   what was released and the device-local bytes still held, and a shader
-  pipeline candidate over `FakePipelineGpu`.
+  pipeline candidate and a post pass (`PostProcessPackageLawTests`) over
+  `FakePipelineGpu`.
 - **Every GPU object is named at creation, from its creator's identity.** Each
   creating member of `GpuDeviceServices` (buffers, images, pipelines,
   descriptor pools and sets, command pools, render passes) takes a
@@ -783,10 +789,10 @@ group. A set belongs to the group of the layout it was allocated against (group
 `VulkanLogicalDevice.SetGroups`, and a bind at any other group is refused by
 name on both backends. A pool's sets release with it
 (`DirectXGpuBindings.LiveHandles`). `DirectXGroupedBindingLawTests` and
-`VulkanGroupedBindingLawTests` hold the writes and binds. No shipped pipeline
-is created from a plan yet; `GpuComputeBindingKind` and
-`ShaderSetManifestBindingKind` still carry the combined image sampler until the
-owners move onto groups.
+`VulkanGroupedBindingLawTests` hold the writes and binds. Every pipeline pass and
+package pass is created from its interface's layout
+(`ShaderInterfaceLayout.PipelineLayout`); `GpuComputeBindingKind` still carries
+the combined image sampler for the SDF engine until it moves onto groups.
 
 The frame graph is `puck.render.graph.v1` (`src/Puck.Shaders/Graph`,
 [frame graphs](../../../docs/reference/shaders.md#frame-graphs)) and the one
@@ -855,8 +861,10 @@ A package pass records inside that node's submission through the recorder
 the `IRenderGraphPackageFactory` registered in `RenderGraphPackageRecorders`
 creates for its package id: the factory's `Build` creates its modules,
 pipelines and render passes in the candidate's `BackgroundBuild`, its `Create`
-takes them at install and allocates per-slot sets from the node's one pool
-(whose statement includes the factory's `SetBindings`), and a recorder records
+takes them at install and allocates a frame and a pass set per slot from the
+node's one pool (`RenderGraphPackageSets`; the pool's statement,
+`ShaderPipelineRenderNode.DescriptorPools`, counts both for every pass), and
+creates its framebuffers there, and a recorder records
 into the command buffer it is handed and never submits, waits, creates a
 pipeline or records a barrier: the node records the pass's planned barriers
 first, so a drawing package's target arrives in `RenderTarget` and its sampled

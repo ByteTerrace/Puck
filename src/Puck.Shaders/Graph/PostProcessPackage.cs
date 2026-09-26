@@ -124,7 +124,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                     EnableStorageBuffer: false,
                     Layout: context.Parameters.Layout.PipelineLayout(
                         pushesIndex: false,
-                        stages: (GpuShaderStage.Vertex | GpuShaderStage.Fragment)
+                        stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment
                     ),
                     Name: Manifest.Name,
                     PushConstantBinding: null,
@@ -203,8 +203,9 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
     // slot's previous submission before recording into it.
     private sealed class Recorder : IRenderGraphPackageRecorder {
         private readonly Built m_built;
+        // A framebuffer over each image the output can be, created at install, so a recording creates nothing.
         private readonly Dictionary<nint, IGpuFramebuffer> m_framebuffers;
-        private readonly IGpuBuffer m_geometry;
+        private readonly IGpuBuffer? m_geometry;
         private readonly uint m_input;
         private readonly nint[] m_samplers;
         private readonly GpuDeviceServices m_services;
@@ -220,19 +221,32 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             m_samplers = new nint[inFlight];
             m_services = context.Services;
 
-            // The vertex buffer comes from the device's own factory, as a shader pass's geometry does, so it counts as no
-            // created storage buffer.
-            m_geometry = context.Device.Services.BufferFactory.CreateHostVisible(
-                data: FullscreenTriangle.CreateVertexData(),
-                name: new GpuObjectName(
-                    detail: "geometry",
-                    owner: context.Instance,
-                    part: context.Pass
-                ),
-                usage: GpuBufferUsage.Vertex
-            );
-
             try {
+                // The vertex buffer comes from the device's own factory, as a shader pass's geometry does, so it counts as
+                // no created storage buffer.
+                m_geometry = context.Device.Services.BufferFactory.CreateHostVisible(
+                    data: FullscreenTriangle.CreateVertexData(),
+                    name: new GpuObjectName(
+                        detail: "geometry",
+                        owner: context.Instance,
+                        part: context.Pass
+                    ),
+                    usage: GpuBufferUsage.Vertex
+                );
+
+                foreach (var image in groups.OutputImages[0]) {
+                    if (!m_framebuffers.ContainsKey(key: image.ImageHandle)) {
+                        m_framebuffers.Add(
+                            key: image.ImageHandle,
+                            value: m_services.RenderPassFactory.CreateFramebuffer(
+                                colors: [image],
+                                depth: null,
+                                renderPass: built.RenderPass!
+                            )
+                        );
+                    }
+                }
+
                 m_sets = new RenderGraphPackageSets(
                     context: context,
                     groupLayoutHandles: built.Pipeline!.GroupLayoutHandles,
@@ -278,7 +292,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 }
             }
 
-            m_geometry.Dispose();
+            m_geometry?.Dispose();
             m_built.Dispose();
         }
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
@@ -290,20 +304,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             var pipeline = m_built.Pipeline!;
             var sets = m_sets!;
 
-            if (!m_framebuffers.TryGetValue(
-                key: target.ImageHandle,
-                value: out var framebuffer
-            )) {
-                framebuffer = m_services.RenderPassFactory.CreateFramebuffer(
-                    colors: [target],
-                    depth: null,
-                    renderPass: m_built.RenderPass!
-                );
-                m_framebuffers.Add(
-                    key: target.ImageHandle,
-                    value: framebuffer
-                );
-            }
+            var framebuffer = (m_framebuffers.GetValueOrDefault(key: target.ImageHandle) ?? throw new InvalidDataException(message: $"Output '{output.Version}' is an image the pass was not installed with."));
 
             m_services.Bindings.WriteSampledImage(
                 arrayElement: 0,
@@ -322,7 +323,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             );
             recorder.BindVertexBuffer(
                 command,
-                m_geometry.BufferHandle,
+                m_geometry!.BufferHandle,
                 m_geometry.SizeBytes,
                 FullscreenTriangle.StrideBytes
             );

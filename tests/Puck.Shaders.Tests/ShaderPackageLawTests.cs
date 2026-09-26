@@ -979,7 +979,7 @@ public sealed partial class ShaderPackageLawTests {
 
                 try {
                     passes = new ShaderPipelineCompiler().Compile(definition: ShaderPipelineLoader.ReadDefinition(name: "fixture", path: document)).Passes;
-                } catch (Exception exception) when (exception is InvalidDataException or ShaderPipelineCompilationException or System.Text.Json.JsonException) {
+                } catch (Exception exception) when ((exception is InvalidDataException or ShaderPipelineCompilationException or System.Text.Json.JsonException)) {
                     continue;
                 }
 

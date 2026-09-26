@@ -148,6 +148,71 @@ public sealed partial class OverlayPackageLawTests {
             expected: 1
         );
     }
+    /// <summary>A lease the overlay bound for a visible <c>Frame</c> element is released exactly once when the recording
+    /// that bound it fails before handing it to its frame, as a device lost mid-recording does: the recorder's disposal
+    /// retires what its table still holds.</summary>
+    [Fact]
+    public void ALeaseARecordingBoundBeforeItFailedIsReleasedOnceWhenTheOverlayIsDisposed() {
+        var released = 0;
+        var hud = new HudStore();
+
+        hud.Publish(frame: new OverlayHudFrame(Panels: new[] {
+            new OverlayHudPanel(
+                Band: OverlayHudBand.Over,
+                Elements: new[] {
+                    new OverlayHudElement(
+                        Binding: null,
+                        FrameSource: 7,
+                        Kind: OverlayHudElementKind.Frame,
+                        Rect: new OverlayHudRect(
+                            Height: 32f,
+                            Width: 32f,
+                            X: 0f,
+                            Y: 0f
+                        ),
+                        Role: default,
+                        Text: null
+                    ),
+                },
+                Id: "face",
+                Rect: new OverlayHudRect(
+                    Height: 32f,
+                    Width: 32f,
+                    X: 0f,
+                    Y: 0f
+                ),
+                Style: default
+            ),
+        }));
+
+        var sources = new LeasingFrameSources(retire: () => released++);
+        var rig = new Rig(
+            frameSources: sources,
+            hud: hud
+        );
+
+        try {
+            _ = ProduceUntilPublished(node: rig.Node);
+            rig.Gpu.OnCall = static key => {
+                if (key == "IGpuBindings.WriteSampledImage") {
+                    throw new DeviceLostException(message: "The law lost the device while the overlay wrote its images.");
+                }
+            };
+
+            _ = Assert.Throws<DeviceLostException>(testCode: () => rig.Node.ProduceFrame(context: default));
+            rig.Gpu.OnCall = null;
+        } finally {
+            rig.Dispose();
+        }
+
+        // Every lease a drawn frame handed on retired with its frame, and the one the failed recording still held was
+        // released with its recorder: each exactly once.
+        Assert.True(condition: (sources.Acquired > 1));
+        Assert.Equal(
+            actual: released,
+            expected: sources.Acquired
+        );
+    }
     [Fact]
     public void ASteadyDrawnOverlayFrameAllocatesNothing() {
         using var rig = new Rig();
@@ -172,7 +237,9 @@ public sealed partial class OverlayPackageLawTests {
     private sealed class Rig : IDisposable {
         private readonly CursorStore m_cursor = new();
 
-        public Rig(GpuCreationFaults? faults = null, bool trackObjects = false) {
+        // hud, when given, is the overlay's HUD, drawn with room for one panel of one element, and frameSources the host
+        // seam its Frame elements acquire leases through.
+        public Rig(GpuCreationFaults? faults = null, bool trackObjects = false, HudStore? hud = null, IOverlayFrameSources? frameSources = null) {
             var gpu = new FakeGpuDevice(
                 countCalls: true,
                 reportVersion: 0,
@@ -185,9 +252,9 @@ public sealed partial class OverlayPackageLawTests {
                     BindingBarMaxBanks: 0,
                     BindingBarMaxModifiers: 0,
                     BindingBarMaxSlotsPerBank: 0,
-                    HudElementsPerPanel: 0,
+                    HudElementsPerPanel: ((hud is null) ? 0 : 1),
                     HudElementsPerSeatPanel: 0,
-                    HudPanels: 0,
+                    HudPanels: ((hud is null) ? 0 : 1),
                     HudSeatPanelsPerSeat: 0,
                     MarkerMaxChipsPerSeat: 0,
                     Seats: 1,
@@ -195,7 +262,7 @@ public sealed partial class OverlayPackageLawTests {
                     WheelMaxSectorsPerRing: 0
                 ),
                 fragmentBytecode: new byte[] { 1 },
-                frameSources: new LeasingFrameSources(retire: static () => { }),
+                frameSources: (frameSources ?? new LeasingFrameSources(retire: static () => { })),
                 glyphs: CreateGlyphs(
                     atlasCellHeight: 1,
                     atlasCellWidth: 1,
@@ -208,6 +275,8 @@ public sealed partial class OverlayPackageLawTests {
                     Console: null,
                     Cursor: m_cursor,
                     FeedTick: null,
+                    Hud: hud,
+                    HudBindings: ((hud is null) ? null : new NoHudBindings()),
                     Toast: null
                 ),
                 theme: OverlayThemeValues.Zero with {
@@ -286,9 +355,21 @@ public sealed partial class OverlayPackageLawTests {
             ),
         }));
     }
-    // Hands out a lease for every key, counting each retirement.
+    // A HUD binding resolver that resolves nothing, for a HUD whose elements bind no value.
+    private sealed class NoHudBindings : IHudBindingResolver {
+        public bool TryResolve(string binding, out float fraction, out string text) {
+            fraction = 0f;
+            text = string.Empty;
+
+            return false;
+        }
+    }
+    // Hands out a lease for every key, counting each acquisition and each retirement.
     private sealed class LeasingFrameSources(Action retire) : IOverlayFrameSources {
+        public int Acquired { get; private set; }
+
         public bool TryAcquire(int key, out GpuImageLease lease) {
+            Acquired++;
             lease = new GpuImageLease(
                 ImageViewHandle: (0x6000 + key),
                 Release: _ => retire()

@@ -19,7 +19,7 @@ public sealed class AffectedDeletedStandInsLawTests {
     private static readonly AffectedProject Engine = new(Directory: "src/Engine", IsSuite: false, Name: "Engine", References: []);
     // The tree the base recorded: a project whose shader items compile one kernel, the include that kernel reaches, the
     // C# that loads the kernel by name, and a shader nothing compiles or loads.
-    private static readonly MemoryTree Base = new(files: new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+    private static readonly AffectedMemoryTree Base = new(files: new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
         ["src/Engine/Engine.csproj"] = """<Project><ItemGroup><ComputeShaderSource Include="Assets/**/*.comp.hlsl" /></ItemGroup></Project>""",
         [Include] = "static const uint Common = 1;",
         [Kernel] = "#include \"common.hlsli\"\n[numthreads(1, 1, 1)] void main() {}",
@@ -84,15 +84,5 @@ public sealed class AffectedDeletedStandInsLawTests {
 
         Assert.Equal(actual: kernel.Path, expected: Kernel);
         Assert.Equal(actual: kernel.Closure, expected: [Kernel, Include]);
-    }
-
-    // A tree held in memory, rooted where no file exists, so any read that reached the file system would find nothing.
-    private sealed class MemoryTree(Dictionary<string, string> files) : IAffectedTree {
-        public string Root { get; } = Path.GetFullPath(path: Path.Combine(path1: Path.GetTempPath(), path2: "puck-affected-memory-tree-never-on-disk"));
-
-        public IReadOnlyList<string> Files(string directory) => [.. files.Keys
-            .Where(predicate: path => path.StartsWith(comparisonType: StringComparison.Ordinal, value: (directory + "/")))
-            .Order(comparer: StringComparer.Ordinal)];
-        public string? ReadText(string path) => files.GetValueOrDefault(key: path);
     }
 }

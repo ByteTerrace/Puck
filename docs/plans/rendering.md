@@ -658,10 +658,11 @@ sub-steps, in this order:
   - A package id is served by an `IRenderGraphPackageFactory`. Its `Build` runs
     in the candidate's `BackgroundBuild` beside the shader passes and creates the
     pass's modules, pipeline and render pass; its `Create` takes them when the
-    graph installs and allocates one descriptor set per frame slot from the
-    node's one pool, whose statement (`ShaderPipelineRenderNode.DescriptorPools`)
-    includes the factory's `SetBindings`, admitted through the heap budget. A
-    recording carries the pass's frame block and the frame's lease list, and an
+    graph installs and allocates a frame and a pass set per frame slot from the
+    node's one pool (`RenderGraphPackageSets`), whose statement
+    (`ShaderPipelineRenderNode.DescriptorPools`) counts them for every pass,
+    admitted through the heap budget. A recording carries the pass's pass block
+    and the frame's lease list, and an
     image a package draws into is created usable as a color attachment.
   - `PostProcessPackage` is the one factory for every `post.<id>`, registered
     per set under its id. Each frame it writes the input into the slot's set,
@@ -765,7 +766,7 @@ Each sub-step's gate:
   `src/Puck.Overlays` to four canaries: `instrument-clock-source`,
   `music-conditional-layer-and-embellishment`, `voice-babble` and
   `world-seat-binding-recompose`. Whether their captures include overlay pixels
-  is unverified, so 5c also runs `UnifiedOverlayWorkLawTests` and
+  is unverified, so 5c also runs `OverlayPackageLawTests` and
   `OverlayFrameSlotsLawTests` and states which of those canaries observes an
   overlay.
 - 5d: the 5b post canary and the 5c overlay canaries once the wiring commit
@@ -1975,7 +1976,7 @@ Phase 3, the groups, follows phase 2:
       (the reported and guaranteed sizes, the no-heap refusal, whole-or-nothing
       admission, release and reuse, the live-pool refusal, the bytes), and on
       the fakes one law per owner that its statement equals the pools it
-      creates (`SdfWorldEngineWorkLawTests`, `UnifiedOverlayWorkLawTests`,
+      creates (`SdfWorldEngineWorkLawTests`, `OverlayPackageLawTests`,
       `ShaderPipelineRenderNodeLawTests`, `GpuResidencyLawTests`). The choice and the two rejected sizings are in [the decisions](../decisions/rendering.md#how-worlds-reach-the-gpu).
     - 14a-3, done: the heap in place. `DirectXGpuBindings` creates the two
       shader-visible heaps, `DirectXShaderVisibleHeaps`, when its context
@@ -2060,8 +2061,8 @@ Phase 3, the groups, follows phase 2:
       and a failed set layout leaves nothing alive),
       `GpuDescriptorHeapBudgetLawTests` (sampler ranges and a refusal by the
       sampler heap), `GpuPipelineDescriptionLayoutLawTests` and
-      `UnifiedOverlayWorkLawTests` (an overlay refused before it creates
-      anything). `DirectXGroupedLayoutDebugLayerTests` creates the three root
+      `OverlayPackageLawTests` (an overlay graph the heap refuses before it
+      creates anything, installed once another owner returns heap space). `DirectXGroupedLayoutDebugLayerTests` creates the three root
       signatures and a film grain set on the default adapter with the debug
       layer on; it creates no pipeline state, and Vulkan has no device
       creation check. Canaries: the 18 the pipeline factories map to,
@@ -2097,7 +2098,7 @@ Phase 3, the groups, follows phase 2:
       `firstSet` on both bind points, a refused bind, and a destroyed pool's
       sets forgotten), `SdfEngineNodeBuildRefusalLawTests` (a heap-refused
       engine retries exactly once after another owner releases its pool),
-      `UnifiedOverlayWorkLawTests` (the same for the overlay's resources),
+      `OverlayPackageLawTests` (the same for the overlay's graph),
       and the wrapper coverage in `GpuWorkCountingLawTests` and
       `GpuCreationFaultsLawTests`. `DirectXGroupedLayoutDebugLayerTests`
       also writes and binds a film grain pass-group set under the debug
@@ -2622,8 +2623,11 @@ except step 8.
    screen source, a machine output and a probe output an external instance
    whose package is `source.<producer id>` (`machine` and `probe` for the typed
    arms, ids the vocabulary refuses to a document producer) and which carries
-   its settings; screens showing equal sources read one instance, named
-   `source$<screen>` after the first. `WorldImageProducers.RegisterPackages`
+   its settings. An instance is named by its content,
+   `source$<producer>$<digest>` over the canonical form of its settings
+   (`ImageSourceSettings`), so screens showing equal sources read one
+   instance, and adding, removing or reordering screens renames no source and
+   never gives a name to other content. `WorldImageProducers.RegisterPackages`
    registers one external-producer factory per producer id, which opens the
    instance's feed from its settings through `TryOpen`, so a feed that
    disagrees with its registration is refused by name. The scheduler schedules
@@ -2638,12 +2642,15 @@ except step 8.
    `RenderGraphSchedulerLawTests`: two screens on one camera publish it once a
    frame, counted; a source no visible consumer reads publishes nothing; a
    static source publishes once; a tick source once per completed tick; a rate
-   source never exceeds its rate over a fixed frame sequence. What is still
-   open moves to step 2: no screen reads a source instance yet, because
-   `sdf.world` takes no image reads, so the live set does not install them and
-   no host supplies `RenderGraphFrame.Sources`; and the live runtime node
-   passes a display rate of zero, under which a rate source may render on
-   every frame.
+   source never exceeds its rate over a fixed frame sequence. Laws in
+   `WorldSourceInstanceLawTests`: removing or reordering screens keeps every
+   remaining source's name and producer; no name is reused for other
+   content; equal settings in another member order or number spelling read
+   one instance. What is still open moves to step 2: no screen reads a source
+   instance yet, because `sdf.world` takes no image reads, so the live set
+   does not install them and no host supplies `RenderGraphFrame.Sources`; and
+   the live runtime node passes a display rate of zero, under which a rate
+   source may render on every frame.
 2. Feeds are external producers, and every screen image is a lease. Can land
    now; it edits `SdfEngineNode`, so it lands before or after P7b-20, not
    beside it. An `IWorldImageFeed` adapts to `IRenderGraphExternalProducer`:
@@ -2651,9 +2658,12 @@ except step 8.
    `WorldCaptureGate.Resolve`'s lease, so the gate sits at the one place a
    source's image is acquired. External producers take image reads: the runtime
    binds each read's latest completed output as a lease and hands the bound
-   leases to `Produce`, and `SdfEngineNode` maps them to its screen slots. The
-   refusal of external reads narrows to buffer and previous-frame reads. The
-   capture GPU route acquires its slot through `LatestSlotPublication` as the
+   leases to `Produce`, and `SdfEngineNode` maps them to its screen slots.
+   Before a host supplies `RenderGraphFrame.Sources`, the live runtime node
+   passes the display's real rate, or refuses a `Rate` source by name while
+   it has none, so no rate source renders on every frame. The refusal of
+   external reads narrows to buffer and previous-frame reads. The capture GPU
+   route acquires its slot through `LatestSlotPublication` as the
    camera does, and the offscreen views bind acquired leases rather than
    `ScreenSlot.Handle()` until P11b deletes `ViewStack`. This deletes
    `ScreenSourceCell`, the binder's per-slot callbacks,
@@ -2709,9 +2719,10 @@ except step 8.
    made before the writer writes, cannot retire until the signal, and then reads
    the pattern; the Vulkan law imports the fence and holds a submission waiting
    on it unretired until the Direct3D 11 signal, and skips by name on a device
-   without the extension. Whether WARP's Direct3D 11 device opens a shared fence
-   is what the law's WARP case answers; it has not run yet. Still open: a recorded camera run on
-   both backends on real hardware, and the capture GPU route, which publishes
+   without the extension. WARP's Direct3D 11 device opens the shared fence, so
+   the WARP case orders its write by the fence rather than a CPU wait, and the
+   WARP reader reads the pattern. Still open: a recorded camera run on both
+   backends on real hardware, and the capture GPU route, which publishes
    its slot's value but acquires no lease until step 2.
 5. The capture gate over the graph. Can land now, after step 2. The gate
    reads the capture armed on `RenderGraphRuntime` rather than

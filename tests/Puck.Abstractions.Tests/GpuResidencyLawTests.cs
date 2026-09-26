@@ -602,7 +602,6 @@ public sealed class GpuResidencyLawTests {
 
         _ = Assert.Throws<InvalidOperationException>(testCode: () => region.Target(destinationWord: 0));
     }
-
     /// <summary>A uniform region is a constant buffer of whole 256-byte views that a host writes: under the ring and in
     /// place it needs no copy kernel and gives each slot its buffer, and it is refused staged or at a size a
     /// constant-buffer view cannot take. A staged region of either usage is refused without its copy kernel.</summary>
@@ -624,21 +623,21 @@ public sealed class GpuResidencyLawTests {
             usage: GpuBufferUsage.Uniform
         );
 
-        using (var ring = Uniform(policy: GpuResidencyPolicy.Ring, byteCount: alignment)) {
+        using (var ring = Uniform(byteCount: alignment, policy: GpuResidencyPolicy.Ring)) {
             Assert.NotSame(
                 expected: ring.Buffer(slot: 0),
                 actual: ring.Buffer(slot: 1)
             );
         }
-        using (var inPlace = Uniform(policy: GpuResidencyPolicy.InPlace, byteCount: (alignment * 2))) {
+        using (var inPlace = Uniform(byteCount: (alignment * 2), policy: GpuResidencyPolicy.InPlace)) {
             Assert.Same(
                 expected: inPlace.Buffer(slot: 0),
                 actual: inPlace.Buffer(slot: 1)
             );
         }
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Uniform(policy: GpuResidencyPolicy.Staged, byteCount: alignment));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Uniform(policy: GpuResidencyPolicy.Ring, byteCount: (alignment - 4)));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Uniform(byteCount: alignment, policy: GpuResidencyPolicy.Staged));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Uniform(byteCount: (alignment - 4), policy: GpuResidencyPolicy.Ring));
         _ = Assert.Throws<ArgumentNullException>(testCode: () => new GpuRegion(
             bindings: gpu.Services.Bindings,
             buffers: gpu.Services.BufferFactory,
@@ -652,7 +651,6 @@ public sealed class GpuResidencyLawTests {
             usage: GpuBufferUsage.Storage
         ));
     }
-
     [Fact]
     public void ASlotOwingEverythingAgainSendsTheWholeRegionWhateverItHeld() {
         var gpu = new UploadModelGpu(reportVersion: 0);
@@ -701,6 +699,7 @@ public sealed class GpuResidencyLawTests {
             expected: [1, 2, 3, 4]
         );
     }
+
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {
         using var module = gpu.Services.ShaderModuleFactory.Create(
             bytecode: new byte[] { UploadModelGpu.RegionCopyBytecode },

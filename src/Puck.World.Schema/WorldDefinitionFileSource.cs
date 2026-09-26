@@ -1178,11 +1178,6 @@ public static partial class WorldDefinitionFileSource {
 
     private static IWorldDocumentSource? InstalledLocalDocuments;
 
-    /// <summary>Gets the source that resolves each document name to its <c>.world.json</c> file beside the referrer and
-    /// nothing else: a name whose <c>.puck</c> source stands there is refused by name, since this source cannot compile
-    /// it and a document file beside a source is never read in its place.</summary>
-    public static IWorldDocumentSource DirectoryDocuments { get; } = new DirectoryDocumentSource();
-
     /// <summary>Gets the source every local file load resolves a <c>basis</c> or an <c>imports[].document</c> through
     /// when its caller names none: the one a host installed (<see cref="UseLocalDocuments"/>), or
     /// <see cref="DirectoryDocuments"/> in a host that installed none. The game, the CLI and the test hosts install the
@@ -1611,14 +1606,16 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
     /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
-    /// <param name="documents">The source every basis and import resolves through, or <see langword="null"/> for the
-    /// directory source, which reads each named document's <c>.world.json</c> file.</param>
+    /// <param name="documents">The source every basis and import resolves through, or <see langword="null"/> for
+    /// <see cref="LocalDocuments"/>.</param>
+    /// <param name="content">The document's bytes as the caller read them, or <see langword="null"/> to read the file at
+    /// <paramref name="path"/>.</param>
     /// <returns><see langword="true"/> when the file was readable and its graph composed.</returns>
-    public static bool TryComposeDocumentTree(string path, out JsonObject? tree, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, IWorldDocumentSource? documents = null) {
+    public static bool TryComposeDocumentTree(string path, out JsonObject? tree, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, IWorldDocumentSource? documents = null, byte[]? content = null) {
         tree = null;
 
         try {
-            var bytes = File.ReadAllBytes(path: path);
+            var bytes = (content ?? File.ReadAllBytes(path: path));
 
             return TryComposeDocumentTreeCore(
                 bytes: bytes,
@@ -1744,12 +1741,16 @@ public static partial class WorldDefinitionFileSource {
     /// (<see langword="null"/> for a basis link or an unaliased import), its own top-level keys, and the
     /// <c>exports</c> it authors as written (<see langword="null"/> when it authors none); empty on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <param name="content">The document's bytes as the caller read them, or <see langword="null"/> to read the file at
+    /// <paramref name="path"/>.</param>
+    /// <param name="documents">The source every basis and import resolves through, or <see langword="null"/> for
+    /// <see cref="LocalDocuments"/>.</param>
     /// <returns><see langword="true"/> when the file was readable and its graph resolved.</returns>
-    public static bool TryDescribeComposition(string path, out IReadOnlyList<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)> layers, out string reason) {
+    public static bool TryDescribeComposition(string path, out IReadOnlyList<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)> layers, out string reason, byte[]? content = null, IWorldDocumentSource? documents = null) {
         var collected = new List<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)>();
 
         try {
-            var bytes = File.ReadAllBytes(path: path);
+            var bytes = (content ?? File.ReadAllBytes(path: path));
 
             if (!TryDescribeLayers(
                 alias: null,
@@ -1758,7 +1759,7 @@ public static partial class WorldDefinitionFileSource {
                 layers: collected,
                 reason: out reason,
                 resolvedPath: PuckPaths.Normalize(path: path),
-                source: LocalDocuments
+                source: (documents ?? LocalDocuments)
             )) {
                 layers = collected;
 
@@ -2086,50 +2087,6 @@ public static partial class WorldDefinitionFileSource {
     /// read, and <see cref="ForgetComposedDocuments"/> drops the lot.</summary>
     public static int ComposedDocumentsHeld => ComposedDocuments.Count;
 
-    // The directory-backed IWorldDocumentSource every local load walks over — the one place Path.Combine/
-    // Path.GetFullPath/File.Exists/File.ReadAllBytes for a basis reference live, so TryLoad's directory behavior and
-    // TryResolveChainFiles' push-side walk can never drift apart.
-    private sealed class DirectoryDocumentSource : IWorldDocumentSource {
-        public bool ResolvesFiles => true;
-
-        public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
-            content = null;
-
-            if (!TryResolveDocumentBeside(
-                documentPath: out resolvedName,
-                name: name,
-                reason: out reason,
-                referrerName: referrerName,
-                sourcePath: out var sourcePath
-            )) {
-                return false;
-            }
-
-            if (File.Exists(path: sourcePath)) {
-                reason = $"document '{name}' (named by {referrerName}) has a .puck source at {sourcePath}, and no composer is installed to compile it; this host resolves .world.json documents only.";
-
-                return false;
-            }
-
-            if (!File.Exists(path: resolvedName)) {
-                reason = $"basis document {resolvedName} (named by {referrerName}) does not exist.";
-
-                return false;
-            }
-
-            try {
-                content = File.ReadAllBytes(path: resolvedName);
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                reason = $"cannot read basis document {resolvedName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-                return false;
-            }
-
-            reason = string.Empty;
-
-            return true;
-        }
-    }
     // A fully in-memory IWorldDocumentSource for TryComposeFragmentBytes: the two names the synthetic root below
     // ever names ("host", "fragment") resolve to caller-supplied bytes, never a file. Any other name is a fragment
     // or host that itself declares basis/imports of its own — refused by name, since neither this entry point nor

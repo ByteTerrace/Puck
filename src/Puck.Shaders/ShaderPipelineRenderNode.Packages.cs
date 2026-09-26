@@ -54,7 +54,28 @@ public sealed partial class ShaderPipelineRenderNode {
     );
     // Creates a built package pass's recorder once the graph's pool exists. The recorder owns the built objects from
     // here, so a factory that throws releases them itself; the ones it never received are released here.
-    private void InstallPackage(ShaderPipelinePlannedPass planned, RuntimePass runtime, PassObjects objects, nint descriptorPool) {
+    // Each output's owned image instances a package can draw into, one per instance and empty for an external or buffer
+    // output. History the install carries binds the replaced graph's instances, which move into this graph only once
+    // nothing else can fail, as a document pass's framebuffers do.
+    private static IReadOnlyList<IGpuImage>[] PackageOutputImages(RuntimePass pass, IReadOnlyDictionary<string, RuntimeResource> map, IReadOnlyDictionary<int, CarriedHistory> carried) =>
+        [.. pass.Outputs.Select(selector: output => {
+            var resource = map[output.Name];
+
+            if (
+                resource.Spec.IsExternal ||
+                (resource.Spec.Kind == ShaderPipelineResourceKind.Buffer)
+            ) {
+                return (IReadOnlyList<IGpuImage>)[];
+            }
+
+            return ((carried.TryGetValue(
+                key: resource.Storage.Index,
+                value: out var carry
+            )
+                ? carry.Old.Images
+                : resource.Images) ?? []);
+        })];
+    private void InstallPackage(ShaderPipelinePlannedPass planned, RuntimePass runtime, PassObjects objects, nint descriptorPool, IReadOnlyList<IReadOnlyList<IGpuImage>> outputImages) {
         if (planned.Package is null) {
             return;
         }
@@ -87,6 +108,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     count: ((int)m_inFlight),
                     start: 0
                 ).Select(selector: slot => m_frameRegion!.Buffer(slot: slot))],
+                OutputImages: outputImages,
                 PassBlocks: [.. Enumerable.Range(
                     count: ((int)m_inFlight),
                     start: 0

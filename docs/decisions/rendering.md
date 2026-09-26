@@ -171,8 +171,9 @@ read it, and whether a buffer is read or written is part of its kind, so it is
 the one statement of buffer access. Keeping `GpuComputeBindingKind` and
 `ShaderSetManifestBindingKind` beside it with translations between them is
 rejected, because each translation is a second statement of the same access
-that can drift from the first. Both older enums are deleted once every combined
-image sampler has moved to a separate image and sampler.
+that can drift from the first. `ShaderSetManifestBindingKind` is deleted, and
+`GpuComputeBindingKind` goes once the SDF engine's combined image samplers have
+moved to a separate image and sampler.
 
 **A binding is visible to the pipeline's stages, never to its own.** A
 pipeline's stages come from its pass kind, compute or vertex and fragment, and

@@ -77,6 +77,10 @@ internal static class AffectedSelection {
     /// <param name="recordedStandInsFor">The stand-ins a deleted file had in the tree the base recorded
     /// (<see cref="AffectedStandIns"/> over <see cref="AffectedRevisionTree"/>), looked up in <paramref name="recorded"/>
     /// and then the current index, or <see langword="null"/> for none.</param>
+    /// <param name="recordedCanariesReaching">The canaries whose manifest worlds and fixtures reached a deleted file
+    /// through the documents the base's tree held (<see cref="AffectedDocuments"/> over
+    /// <see cref="AffectedRevisionTree"/>), or <see langword="null"/> for none; a deleted file is never reached in the
+    /// working tree.</param>
     /// <returns>The plan.</returns>
     public static AffectedPlan Select(
         IReadOnlyList<string> changed,
@@ -91,7 +95,8 @@ internal static class AffectedSelection {
         Func<string, IReadOnlySet<string>> canariesReaching,
         IReadOnlySet<string>? deleted = null,
         IReadOnlyDictionary<string, IReadOnlySet<string>>? recorded = null,
-        Func<string, IReadOnlyList<string>>? recordedStandInsFor = null
+        Func<string, IReadOnlyList<string>>? recordedStandInsFor = null,
+        Func<string, IReadOnlySet<string>>? recordedCanariesReaching = null
     ) {
         var catalog = false;
         var everything = false;
@@ -136,7 +141,11 @@ internal static class AffectedSelection {
                 }
             }
 
-            var reaching = canariesReaching(arg: path);
+            // A deleted file is reached through the documents the base's tree held, which named it; the working tree's
+            // documents can name it no longer.
+            var reaching = (isDeleted
+                ? (recordedCanariesReaching?.Invoke(arg: path) ?? new HashSet<string>())
+                : canariesReaching(arg: path));
 
             selected.UnionWith(other: reaching);
 

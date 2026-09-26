@@ -96,6 +96,7 @@ public sealed partial class ShaderPipelineRenderNode {
             ? values
             : throw new InvalidDataException(message: $"Invalid parameters for pass {planned.Name}.")
         );
+
         // A document pass's frame set per slot, null for a package pass, whose recorder binds its own sets; every pass's pass
         // block region; and where each of a document pass's ports binds in its pass group.
         public nint[]? FrameSets;
@@ -103,6 +104,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public PortBinding[]? PortBindings;
         // The graph's frame region, on the pass that created it; null on every other pass.
         public GpuRegion? FrameRegion;
+
         public bool Grouped => (PortBindings is not null);
 
         // Why a package pass's outputs cannot stand for its inputs when it draws nothing, or null when they can.

@@ -650,9 +650,15 @@ break, and nothing wider:
   its project's sources. A shader source or include stands for the C# that
   names, by its file name, each kernel whose include closure reaches it: the
   kernels are the stage sources the projects' shader items declare, the
-  Direct3D 11 kernels (`Direct3D11KernelSource`) among them. A file
+  Direct3D 11 kernels (`Direct3D11KernelSource`) among them, and the naming C#
+  may sit in the kernel's project or any project its build references, as a
+  conversion pass's name is a constant in `ImageSourceConversion`. A shader-set
+  manifest (`*.puck.shader.json`), the stage sources it names beside it with
+  their includes, and the frame interface generated for it stand for the
+  manifest's owner: the C# declaring `ShaderSetManifest`, the model a manifest
+  is read into, since no C# names a set that documents select by id. A file
   `puck schema` writes stands for the sources declaring the types it is
-  generated from. A shader that neither a kernel's loader nor a canary's
+  generated from. A shader that no kernel's loader, shader set or canary's
   documents reach has no stand-in.
 - A changed `Puck.World` source that neither the coverage index nor a stand-in
   places is listed as `unmapped`. It chooses no canary; the list says coverage
@@ -662,8 +668,13 @@ break, and nothing wider:
   the canaries that executed it, directly or through the stand-ins the base's
   own tree gave it: a deleted shader stands for the loader of each base kernel
   whose closure reached it, read through `git show <since>:<path>` and never
-  from the working tree. One neither places is listed as `deleted`, and its
-  project's suites still run. Nothing reads a deleted file from disk.
+  from the working tree. It is also placed by document reach in the base's
+  tree: each canary's worlds and graph documents are read as the base recorded
+  them, through the same readers, so a deleted pass source that a base graph
+  document declared, or an asset a base world named, chooses the canaries whose
+  documents reached it there. The canaries are today's, since only a canary
+  that exists now can run. One none of these places is listed as `deleted`, and
+  its project's suites still run. Nothing reads a deleted file from disk.
 
 - Build infrastructure (`build/`, `Directory.Build.*`, `global.json`,
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`
