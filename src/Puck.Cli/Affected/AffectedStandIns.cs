@@ -9,16 +9,25 @@ namespace Puck.Cli.Affected;
 /// <summary>One stage source the shader build compiles: its path and every file its include closure reaches.</summary>
 /// <param name="Path">The stage source, repository-relative with forward slashes.</param>
 /// <param name="Closure">The stage source and every include it reaches, repository-relative with forward slashes.</param>
-/// <param name="Project">The directory of the project whose build declares it, repository-relative.</param>
-internal sealed record AffectedKernel(string Path, IReadOnlyList<string> Closure, string Project);
+/// <param name="Projects">Where the C# that names it may live: the directory of the project whose build declares it, and of
+/// every project that build references, transitively, repository-relative.</param>
+internal sealed record AffectedKernel(string Path, IReadOnlyList<string> Closure, IReadOnlyList<string> Projects);
+/// <summary>One shader set: its manifest and every file the set is built from.</summary>
+/// <param name="Manifest">The manifest, repository-relative with forward slashes.</param>
+/// <param name="Files">The manifest, each stage source it names beside it with that source's include closure, and the
+/// frame interface include generated for it, repository-relative with forward slashes.</param>
+internal sealed record AffectedShaderSet(string Manifest, IReadOnlyList<string> Files);
 /// <summary>
 /// Maps a changed file the coverage index cannot know, because no canary executes it, to the indexed C# sources it
 /// stands for, following an edge the build already states. A project's own build inputs (its project file, its restore
 /// lock, the method list its source generator reads) stand for every indexed source of that project. A shader source or
 /// include stands for the C# that loads each kernel whose include closure reaches it: the stage sources come from the
 /// projects' shader items and their closures from <see cref="ShaderSourceClosure"/>, and a loader names its kernel by
-/// a string literal. A file <c>puck schema</c> writes stands for the files that declare the types it is generated from.
-/// A file none of these edges reaches has no stand-in and stays unmapped. Every file is read through one
+/// a string literal in the kernel's project or any project its build references, such as a conversion pass named by a
+/// constant. A shader-set manifest, the stage sources it names with their closures, and the frame interface generated
+/// for it stand for the manifest's owner: the C# declaring <see cref="ShaderSetManifest"/>, the model it is read into. A
+/// file <c>puck schema</c> writes stands for the files that declare the types it is generated from. A file none of these
+/// edges reaches has no stand-in and stays unmapped. Every file is read through one
 /// <see cref="IAffectedTree"/>, the working tree or the tree the base recorded, so a file deleted since the base stands
 /// for what the base's own projects, shaders and index said.
 /// </summary>
@@ -60,8 +69,9 @@ internal static partial class AffectedStandIns {
             : [name, name[..^stage.Length]]
         );
     }
-    /// <summary>The C# that loads each kernel whose closure reaches a changed shader file: the indexed sources of the
-    /// kernel's own project that name it by a string literal.</summary>
+    /// <summary>The C# that loads each kernel whose closure reaches a changed shader file: the indexed sources that name it
+    /// by a string literal, in the kernel's own project or any project its build references, where a name the loader
+    /// reads may be declared as a constant.</summary>
     /// <param name="path">The changed shader file.</param>
     /// <param name="kernels">Every stage source the build compiles.</param>
     /// <param name="indexed">Every indexed source.</param>
@@ -73,7 +83,7 @@ internal static partial class AffectedStandIns {
         foreach (var kernel in kernels.Where(predicate: kernel => kernel.Closure.Contains(value: path, comparer: StringComparer.Ordinal))) {
             var literals = KernelNames(kernelPath: kernel.Path).Select(selector: static name => $"\"{name}\"").ToArray();
 
-            foreach (var source in indexed.Where(predicate: source => IsUnder(directory: kernel.Project, path: source))) {
+            foreach (var source in indexed.Where(predicate: source => kernel.Projects.Any(predicate: project => IsUnder(directory: project, path: source)))) {
                 var text = read(arg: source);
 
                 if (literals.Any(predicate: literal => text.Contains(comparisonType: StringComparison.Ordinal, value: literal))) {
@@ -107,6 +117,27 @@ internal static partial class AffectedStandIns {
     /// <returns>The kernels. A stage source whose closure cannot be collected is left out.</returns>
     internal static IReadOnlyList<AffectedKernel> Kernels(IAffectedTree tree, IReadOnlyList<AffectedProject> projects) {
         var kernels = new List<AffectedKernel>();
+        var byName = projects.ToDictionary(comparer: StringComparer.OrdinalIgnoreCase, keySelector: static project => project.Name);
+
+        // The project's directory and the directory of every project its build references, transitively.
+        IReadOnlyList<string> ProjectsOf(AffectedProject project) {
+            var reached = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+            var pending = new Stack<AffectedProject>(collection: [project]);
+
+            while (pending.TryPop(result: out var next)) {
+                if (!reached.Add(item: next.Name)) {
+                    continue;
+                }
+
+                foreach (var reference in next.References) {
+                    if (byName.TryGetValue(key: reference, value: out var referenced)) {
+                        pending.Push(item: referenced);
+                    }
+                }
+            }
+
+            return [.. reached.Select(selector: name => byName[name].Directory).Order(comparer: StringComparer.Ordinal)];
+        }
 
         string? ReadFull(string path) => tree.ReadText(path: Relative(path: path, repositoryRoot: tree.Root));
 
@@ -146,7 +177,7 @@ internal static partial class AffectedStandIns {
                     kernels.Add(item: new AffectedKernel(
                         Closure: [.. closure.Sources.Concat(second: closure.Includes).Select(selector: dependency => Relative(path: dependency.Path, repositoryRoot: tree.Root))],
                         Path: Relative(path: file, repositoryRoot: tree.Root),
-                        Project: project.Directory
+                        Projects: ProjectsOf(project: project)
                     ));
                 } catch (ShaderClosureRefusedException) {
                     // A closure the build itself would refuse reaches nothing a canary could observe.
@@ -155,6 +186,47 @@ internal static partial class AffectedStandIns {
         }
 
         return kernels;
+    }
+    /// <summary>Reads every shader set the projects ship, from one tree: each shader-set manifest under a project, read
+    /// with its own reader (<see cref="ShaderSetManifest.ReadDeclaration"/>), with the stage sources it names beside it
+    /// (<c>&lt;stage&gt;.hlsl</c>) and their include closures, and the frame interface include generated for it
+    /// (<see cref="ShaderSetManifest.ReadFrameInterface"/>).</summary>
+    /// <param name="tree">The tree the manifests are read from.</param>
+    /// <param name="projects">Every project.</param>
+    /// <param name="kernels">Every stage source the build compiles, whose closures a set's stage sources reach.</param>
+    /// <returns>The sets. A manifest its reader refuses is a set of itself alone.</returns>
+    internal static IReadOnlyList<AffectedShaderSet> ShaderSets(IAffectedTree tree, IReadOnlyList<AffectedProject> projects, IReadOnlyList<AffectedKernel> kernels) {
+        var sets = new List<AffectedShaderSet>();
+
+        foreach (var project in projects.Where(predicate: static project => !project.IsSuite)) {
+            foreach (var manifest in tree.Files(directory: project.Directory).Where(predicate: static file => file.EndsWith(comparisonType: StringComparison.Ordinal, value: ShaderSetManifest.FileSuffix))) {
+                var files = new SortedSet<string>(comparer: StringComparer.Ordinal) { manifest };
+                var directory = manifest[..(manifest.LastIndexOf(value: '/') + 1)];
+                var full = Path.Combine(path1: tree.Root, path2: manifest);
+                var text = (tree.ReadText(path: manifest) ?? string.Empty);
+
+                try {
+                    var stages = ShaderSetManifest.ReadDeclaration(manifestPath: full, text: text).Stages;
+
+                    foreach (var stage in new[] { stages.Vertex, stages.Fragment, stages.Compute }.OfType<string>()) {
+                        var source = $"{directory}{stage}.hlsl";
+
+                        files.UnionWith(other: (kernels.FirstOrDefault(predicate: kernel => (kernel.Path == source))?.Closure ?? [source]));
+                    }
+
+                    _ = files.Add(item: (directory + ShaderFrameInterface.IncludeFileName(interfaceName: ShaderSetManifest.ReadFrameInterface(manifestPath: full, text: text).Name)));
+                } catch (InvalidDataException) {
+                    // A manifest its reader refuses builds nothing but itself.
+                }
+
+                sets.Add(item: new AffectedShaderSet(
+                    Files: [.. files],
+                    Manifest: manifest
+                ));
+            }
+        }
+
+        return sets;
     }
 
     /// <summary>Creates the stand-in map for one tree of the repository: the working tree for a changed file, or the tree
@@ -177,22 +249,41 @@ internal static partial class AffectedStandIns {
             return text;
         }
 
+        var sets = new Lazy<IReadOnlyList<AffectedShaderSet>>(valueFactory: () => ShaderSets(kernels: kernels.Value, projects: projects, tree: tree));
+        // A shader set's owner: the C# that declares the model its manifest is read into.
+        var setOwners = new Lazy<IReadOnlyList<string>>(valueFactory: () => Declaring(indexed: indexed, read: Read, types: [typeof(ShaderSetManifest)]));
+
         return path => {
             if (IsProjectInput(path: path)) {
                 return ((owners.FirstOrDefault(predicate: project => IsUnder(directory: project.Directory, path: path)) is { } owner)
                     ? ProjectSources(directory: owner.Directory, indexed: indexed)
                     : []);
             }
-            if (
+
+            var isShader = (
                 path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".hlsl") ||
                 path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".hlsli")
+            );
+
+            if (
+                isShader ||
+                path.EndsWith(comparisonType: StringComparison.Ordinal, value: ShaderSetManifest.FileSuffix)
             ) {
-                return ShaderLoaders(
-                    indexed: indexed,
-                    kernels: kernels.Value,
-                    path: path,
-                    read: Read
-                );
+                var standIns = new SortedSet<string>(comparer: StringComparer.Ordinal);
+
+                if (isShader) {
+                    standIns.UnionWith(other: ShaderLoaders(
+                        indexed: indexed,
+                        kernels: kernels.Value,
+                        path: path,
+                        read: Read
+                    ));
+                }
+                if (sets.Value.Any(predicate: set => set.Files.Contains(value: path, comparer: StringComparer.Ordinal))) {
+                    standIns.UnionWith(other: setOwners.Value);
+                }
+
+                return [.. standIns];
             }
 
             return Declaring(
