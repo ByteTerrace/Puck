@@ -103,7 +103,7 @@ public sealed class SdfCapabilityMatrixLawTests {
                 "SdfWorldEngine.RequestViewExtent", "SdfWorldEngine.HasViewOutput", "SdfWorldEngine.TryAcquireViewOutput",
                 "SdfWorldEngine.ReleaseViewOutput", "SdfWorldEngine.ViewOutputHolds", "SdfEngineNode.ViewProducer",
                 "SdfEngineNode.HasViewOutput",
-                "SdfWorldEngine.MaxViewports", "SdfWorldEngine.ConeNear", "SdfWorldEngine.PrimaryMarchSteps",
+                "SdfWorldEngine.ConeNear", "SdfWorldEngine.PrimaryMarchSteps",
                 "SdfWorldEngineOptions.ViewportCapacity", "SdfWorldRenderSpec.ViewportCapacity", "SdfWorldRenderSpec.Width",
                 "SdfWorldRenderSpec.Height",
             ]

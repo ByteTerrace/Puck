@@ -88,7 +88,7 @@ public sealed partial class SdfProgramBuilder {
     public const float MinSuperellipsoidExponent = 2f;
     /// <summary>The most screen surfaces one program may declare (matches <c>Puck.SdfVm.SdfWorldEngine.MaxScreenSurfaces</c>
     /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract separate from the
-    /// viewport capacity <c>Puck.SdfVm.SdfWorldEngine.MaxViewports</c>). Capped at 32 by the single-<c>uint</c>
+    /// engine's viewport capacity). Capped at 32 by the single-<c>uint</c>
     /// <c>screenMask</c> the engine pushes per frame.</summary>
     public const int MaxScreenSurfaces = 32;
     /// <summary>The reserved material identifier used by the plain procedural screen material, which the kernels read

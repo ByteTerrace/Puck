@@ -948,7 +948,7 @@ It deletes the SDF engine's composite, and it has landed.
   `SdfEngineNode.ViewProducer` gives the producers `world$2..world$K`, each
   leasing its own view's output. K is `WorldRootGraph.ViewsOf`: the most
   non-instance slots of any `views.layouts` row or `PlayerRoster.MaxSlots`,
-  capped at `SdfWorldEngine.MaxViewports`. With K above one, the root `main` runs one
+  uncapped since commit 13. With K above one, the root `main` runs one
   `place` pass per view ahead of the pane passes, and
   `WorldFramePresenter.PrepareGraph` sets each view's footprint to its rect at
   its render scale, so `place` also does the render-scale reconstruction. A
@@ -1052,7 +1052,8 @@ P11b's last four commits are these; 11 and 12 have landed:
        `SdfEngineNodeLeaseLawTests.AViewTakesTheFrameTheNodeRendersNext`.
     3. The view limit goes: `SdfWorldEngine.MaxViewports` is deleted, an
        engine provisions any viewport capacity, and `WorldRootGraph.ViewsOf`
-       is uncapped. Law: more than five views render.
+       is uncapped. Law: more than five views render. Landed:
+       `SdfWorldEngineWorkLawTests.MoreThanFiveViewsEachRenderIntoTheirOwnOutput`.
     4. The procedural test card goes: a screen with nothing bound shades as
        dark glass.
     5. The engine node is an external producer only: `SdfEngineNode` is no
@@ -1179,8 +1180,8 @@ root, in both presentation shapes (see P11b commit 6 above):
 3. The launcher, which hands the root's image to a surface compositor that
    blits it to the swapchain.
 
-The SDF engine renders up to `SdfWorldEngine.MaxViewports` (5) views, each into
-its own output image; P11b commit 13 deletes the limit. Diegetic screens are 32
+The SDF engine renders as many views as its viewport capacity provisions, each into
+its own output image. Diegetic screens are 32
 fixed sampler slots
 with a nearest filter. Nested cameras and sessions are external `sdf.world`
 instances the scheduler renders by demand at their footprint's extent and the

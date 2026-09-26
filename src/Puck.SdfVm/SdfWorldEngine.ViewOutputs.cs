@@ -1,3 +1,4 @@
+using System.Globalization;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
@@ -15,9 +16,6 @@ namespace Puck.SdfVm;
 /// acquisition.</param>
 public readonly record struct SdfViewOutput(nint ImageHandle, nint ImageViewHandle, uint Width, uint Height, int Identity);
 public sealed partial class SdfWorldEngine {
-    // The debug-name detail of each view slot's descriptor sets and output image.
-    private static readonly string[] ViewDetails = ["view0", "view1", "view2", "view3", "view4"];
-
     // The last identity handed to an output image, over every engine in the process, so a lease names one image.
     private static int OutputIdentity;
 
@@ -155,6 +153,11 @@ public sealed partial class SdfWorldEngine {
         ))
     );
     private static int NextOutputIdentity() => Interlocked.Increment(location: ref OutputIdentity);
+    // The debug-name detail of a view slot's descriptor sets and output image, made only when one is created.
+    private static string ViewDetail(int view) => string.Create(
+        provider: CultureInfo.InvariantCulture,
+        handler: $"view{view}"
+    );
     // Binds each view's output into the current ring slot's views set for it; a set keeps its binding until the view's
     // output is replaced, since the engine owns the image.
     private void BindViewOutputs(uint viewportCount) {
@@ -233,7 +236,7 @@ public sealed partial class SdfWorldEngine {
                 image: m_gpu.ImageFactory.Create(
                     format: Format,
                     height: height,
-                    name: NameOf(detail: ViewDetails[view], part: "output"),
+                    name: NameOf(detail: ViewDetail(view: view), part: "output"),
                     usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
                     width: width
                 ),

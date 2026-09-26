@@ -188,22 +188,16 @@ public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
 
         m_deviceContext = gpuDevice;
         m_engine = m_pipelines.TryBuild(
-            construct: static (pipelines, regionCopy, inputs) => {
-                // The viewport CAPACITY: the first frame's count raised to the declared floor (the split-screen
-                // envelope — the engine itself renders each frame's actual Views.Count, validated against it).
-                if (inputs.Options.ViewportCapacity > SdfWorldEngine.MaxViewports) {
-                    throw new ArgumentException(message: $"The world engine supports at most {SdfWorldEngine.MaxViewports} viewports; the frame/floor asks for {inputs.Options.ViewportCapacity}.");
-                }
-
-                return new SdfWorldEngine(
-                    device: inputs.Device,
-                    height: inputs.Height,
-                    options: inputs.Options,
-                    pipelines: pipelines,
-                    regionCopy: regionCopy,
-                    width: inputs.Width
-                );
-            },
+            // The viewport CAPACITY is the first frame's count raised to the declared floor (the split-screen envelope —
+            // the engine itself renders each frame's actual Views.Count, validated against it).
+            construct: static (pipelines, regionCopy, inputs) => new SdfWorldEngine(
+                device: inputs.Device,
+                height: inputs.Height,
+                options: inputs.Options,
+                pipelines: pipelines,
+                regionCopy: regionCopy,
+                width: inputs.Width
+            ),
             device: gpuDevice,
             hostsOnDirectX: false,
             includeBrickPipelines: (m_brickPoolVoxelCapacity > 0),

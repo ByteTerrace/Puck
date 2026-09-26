@@ -8,8 +8,7 @@ namespace Puck.SdfVm;
 /// (the "program uploaded once" seam the dynamic-transform channel rides). A host whose scene later changes calls
 /// <see cref="SdfWorldEngine.UploadProgram"/> — program and instance buffers grow when necessary.</param>
 /// <param name="ViewportCapacity">The number of view slots to provision (each with its views set per frame ring slot, its
-/// output image and its packed viewport row). Frames may carry fewer views than the capacity, never more; at most
-/// <see cref="SdfWorldEngine.MaxViewports"/>.</param>
+/// output image and its packed viewport row), at least one. Frames may carry fewer views than the capacity, never more.</param>
 /// <param name="DynamicTransformCapacity">The number of dynamic entity-transform slots to allocate (at least one slot
 /// is always bound so the binding stays valid for a static scene). The engine automatically raises this floor to the
 /// program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/>. Each slot costs 48 bytes of the dynamic-transform

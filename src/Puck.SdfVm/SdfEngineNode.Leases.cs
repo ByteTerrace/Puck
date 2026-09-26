@@ -12,10 +12,10 @@ namespace Puck.SdfVm;
 public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
     // Replaced engines whose outputs a consumer still holds, each disposed when its last acquisition is released.
     private readonly List<RetiringEngine> m_retiringEngines = [];
-    // Per view slot: the extent the graph last scheduled the view at, or zero before one.
-    private readonly (uint Width, uint Height)[] m_scheduledViewExtents = new (uint Width, uint Height)[SdfWorldEngine.MaxViewports];
+    // Per view slot: the extent the graph last scheduled the view at, or zero before one; grown as a view is asked for.
+    private (uint Width, uint Height)[] m_scheduledViewExtents = new (uint Width, uint Height)[1];
     // Per view slot past view 0: the producer that stands for the view in a render graph, created on first request.
-    private readonly SdfViewProducer?[] m_viewProducers = new SdfViewProducer?[SdfWorldEngine.MaxViewports];
+    private SdfViewProducer?[] m_viewProducers = new SdfViewProducer?[1];
 
     // Created on the first acquisition, so a lease allocates nothing per frame.
     private Action<int>? m_releaseOutput;
@@ -42,18 +42,25 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
     /// the extent the graph scheduled the view at, which the engine renders the view at from the next frame on, and it
     /// hands out the view's latest output. The node renders every view in its own <see cref="Produce"/>, so a graph
     /// schedules the node before these. The node owns each producer; disposing one releases nothing.</summary>
-    /// <param name="view">The view slot, from 1 to <see cref="SdfWorldEngine.MaxViewports"/> less one.</param>
+    /// <param name="view">The view slot, from 1.</param>
     /// <returns>The view's producer, the same object on every call.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="view"/> is 0 or past the last view slot.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="view"/> is below 1.</exception>
     public IRenderGraphExternalProducer ViewProducer(int view) {
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1,
             value: view
         );
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            other: SdfWorldEngine.MaxViewports,
-            value: view
-        );
+
+        if (view >= m_viewProducers.Length) {
+            Array.Resize(
+                array: ref m_viewProducers,
+                newSize: (view + 1)
+            );
+            Array.Resize(
+                array: ref m_scheduledViewExtents,
+                newSize: (view + 1)
+            );
+        }
 
         return (m_viewProducers[view] ??= new SdfViewProducer(
             node: this,
@@ -114,7 +121,7 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
     }
     // Hands the engine every view extent a graph has scheduled, before the frame that renders at them.
     private void ApplyScheduledViewExtents(SdfWorldEngine engine, int viewCount) {
-        for (var view = 0; (view < viewCount); view++) {
+        for (var view = 0; (view < Math.Min(val1: viewCount, val2: m_scheduledViewExtents.Length)); view++) {
             var (width, height) = m_scheduledViewExtents[view];
 
             if ((width != 0) && (height != 0)) {

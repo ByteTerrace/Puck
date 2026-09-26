@@ -1098,7 +1098,7 @@ The main view runs through the runtime. `WorldRootGraph`
 `views.root` is absent, as a document value the graph compiler plans: `world`
 (the `sdf.world` producer) and `world$2..world$K` for K =
 `WorldRootGraph.ViewsOf` (the most non-instance slots of any `views.layouts`
-row or `PlayerRoster.MaxSlots`, capped at `SdfWorldEngine.MaxViewports`), then
+row or `PlayerRoster.MaxSlots`; an engine provisions any viewport capacity), then
 the root `main`, which reads `world` and every pane and runs, when K > 1, one
 `place` pass per view (`main$view$<n>`, n from 1; view 1's reads `world`
 through a second version beside `main$world`), then one `place` package pass
