@@ -12,11 +12,12 @@ namespace Puck.Cli.Affected;
 /// <param name="Projects">Where the C# that names it may live: the directory of the project whose build declares it, and of
 /// every project that build references, transitively, repository-relative.</param>
 internal sealed record AffectedKernel(string Path, IReadOnlyList<string> Closure, IReadOnlyList<string> Projects);
-/// <summary>One shader set: its manifest and every file the set is built from.</summary>
+/// <summary>One shader set: its id, its manifest and every file the set is built from.</summary>
+/// <param name="Id">The set's id, its manifest's file stem, which a world document names in <c>render.extensions</c>.</param>
 /// <param name="Manifest">The manifest, repository-relative with forward slashes.</param>
 /// <param name="Files">The manifest, each stage source it names beside it with that source's include closure, and the
 /// frame interface include generated for it, repository-relative with forward slashes.</param>
-internal sealed record AffectedShaderSet(string Manifest, IReadOnlyList<string> Files);
+internal sealed record AffectedShaderSet(string Id, string Manifest, IReadOnlyList<string> Files);
 /// <summary>
 /// Maps a changed file the coverage index cannot know, because no canary executes it, to the indexed C# sources it
 /// stands for, following an edge the build already states. A project's own build inputs (its project file, its restore
@@ -25,7 +26,8 @@ internal sealed record AffectedShaderSet(string Manifest, IReadOnlyList<string> 
 /// projects' shader items and their closures from <see cref="ShaderSourceClosure"/>, and a loader names its kernel by
 /// a string literal in the kernel's project or any project its build references, such as a conversion pass named by a
 /// constant. A shader-set manifest, the stage sources it names with their closures, and the frame interface generated
-/// for it stand for the manifest's owner: the C# declaring <see cref="ShaderSetManifest"/>, the model it is read into. A
+/// for it are placed through the canaries whose world documents name the set (<see cref="AffectedDocuments"/>), and
+/// stand for the manifest's owner, the C# declaring <see cref="ShaderSetManifest"/>, only when no document does. A
 /// file <c>puck schema</c> writes stands for the files that declare the types it is generated from. A file none of these
 /// edges reaches has no stand-in and stays unmapped. Every file is read through one
 /// <see cref="IAffectedTree"/>, the working tree or the tree the base recorded, so a file deleted since the base stands
@@ -221,6 +223,7 @@ internal static partial class AffectedStandIns {
 
                 sets.Add(item: new AffectedShaderSet(
                     Files: [.. files],
+                    Id: Path.GetFileName(path: manifest)[..^ShaderSetManifest.FileSuffix.Length],
                     Manifest: manifest
                 ));
             }
@@ -234,10 +237,15 @@ internal static partial class AffectedStandIns {
     /// <param name="tree">The tree every project, shader and indexed source is read from.</param>
     /// <param name="projects">Every project.</param>
     /// <param name="indexed">Every indexed source.</param>
+    /// <param name="shaders">The tree's shaders, shared with document reach, or <see langword="null"/> to read them
+    /// here.</param>
+    /// <param name="documented">Whether a canary's documents reach a shader set's manifest (<see cref="AffectedDocuments"/>),
+    /// which places the set's files through those canaries rather than the manifest's owner; <see langword="null"/> when
+    /// no document is read.</param>
     /// <returns>The indexed sources a changed file stands for, or none.</returns>
-    public static Func<string, IReadOnlyList<string>> Create(IAffectedTree tree, IReadOnlyList<AffectedProject> projects, IReadOnlyCollection<string> indexed) {
+    public static Func<string, IReadOnlyList<string>> Create(IAffectedTree tree, IReadOnlyList<AffectedProject> projects, IReadOnlyCollection<string> indexed, AffectedShaders? shaders = null, Func<string, bool>? documented = null) {
         var owners = projects.OrderByDescending(keySelector: static project => project.Directory.Length).ToArray();
-        var kernels = new Lazy<IReadOnlyList<AffectedKernel>>(valueFactory: () => Kernels(projects: projects, tree: tree));
+        var built = (shaders ?? new AffectedShaders(projects: projects, tree: tree));
         var texts = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
         string Read(string source) {
@@ -249,8 +257,8 @@ internal static partial class AffectedStandIns {
             return text;
         }
 
-        var sets = new Lazy<IReadOnlyList<AffectedShaderSet>>(valueFactory: () => ShaderSets(kernels: kernels.Value, projects: projects, tree: tree));
-        // A shader set's owner: the C# that declares the model its manifest is read into.
+        // A shader set's owner, the C# that declares the model its manifest is read into, is its fallback: a set a canary's
+        // documents name is placed through those canaries instead.
         var setOwners = new Lazy<IReadOnlyList<string>>(valueFactory: () => Declaring(indexed: indexed, read: Read, types: [typeof(ShaderSetManifest)]));
 
         return path => {
@@ -274,12 +282,15 @@ internal static partial class AffectedStandIns {
                 if (isShader) {
                     standIns.UnionWith(other: ShaderLoaders(
                         indexed: indexed,
-                        kernels: kernels.Value,
+                        kernels: built.Kernels,
                         path: path,
                         read: Read
                     ));
                 }
-                if (sets.Value.Any(predicate: set => set.Files.Contains(value: path, comparer: StringComparer.Ordinal))) {
+                if (built.Sets.Any(predicate: set => (
+                    set.Files.Contains(value: path, comparer: StringComparer.Ordinal) &&
+                    !(documented?.Invoke(arg: set.Manifest) ?? false)
+                ))) {
                     standIns.UnionWith(other: setOwners.Value);
                 }
 
