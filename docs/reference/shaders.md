@@ -499,7 +499,10 @@ an instance that survives keeps its node, its graph and its history, and a
 removed one retires. A surviving instance whose replacement graph is still
 building keeps presenting its installed graph, so a removed instance that graph
 reads stays alive until the replacement installs, the name is bound again, or
-the survivor is released. The host compiles each source row in the background
+the survivor is released; a survivor that never rendered bound nothing of it,
+so nothing holds it. A reconfiguration prepares everything that can fail
+before it changes the running set, so a failure leaves that set running as it
+was and releases what the attempt created. The host compiles each source row in the background
 through `ShaderPackager.LoadSource` and installs the result with `TryInstall`,
 its inputs taken from the row's `inputs`. The `pipeline.*` console verbs
 address these rows by name.
@@ -535,8 +538,13 @@ The first view's place pass sets the `place` config's `letterbox`, so outside
 its rect it writes the letterbox color, `(0.015, 0.016, 0.02)`, which the
 kernel states, rather than its base; every later place pass keeps its base
 there. Pixels no view or pane covers show that color, and a layout that covers
-the whole display pays no pass for it. When the first view is not shown and its
-pass must still draw, it copies its base everywhere.
+the whole display pays no pass for it. The letterbox does not wait for the
+first view: while it is not shown and part of the display lies outside every
+rect the root shows (`RenderGraphPlacement.Uncovered`), its pass writes the
+letterbox color everywhere, and the later passes place what is shown over it.
+The display counts as covered only when one shown rect covers it whole, a lone
+full-display view or a full-display pane, and then the unshown pass stands for
+the world and dispatches nothing.
 
 Screens still render through `ViewStack`; moving them onto graph instances is
 the rest of P11b in
