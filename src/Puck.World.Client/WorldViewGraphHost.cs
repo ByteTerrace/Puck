@@ -393,8 +393,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="renderScale">The view's render scale in (0, 1]; any other value renders native.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
     /// <param name="shown">Whether the root draws the view's output into its rect this frame.</param>
+    /// <param name="uncovered">Whether part of the display lies outside everything the root shows this frame, so the
+    /// first view's place pass, when the view is not shown, writes the letterbox color everywhere rather than standing
+    /// for its base (<see cref="RenderGraphPlacement.Uncovered"/>).</param>
     /// <returns><see langword="true"/> when the root places the view this frame.</returns>
-    public bool PlaceView(int view, NormalizedRect region, float renderScale, float sharpness, bool shown) {
+    public bool PlaceView(int view, NormalizedRect region, float renderScale, float sharpness, bool shown, bool uncovered) {
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
@@ -407,6 +410,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             : 1f);
 
         m_placements[synthesized.ViewPasses[view]] = new RenderGraphPlacement(
+            Uncovered: uncovered,
             Height: region.Height,
             Left: region.X,
             Sharpness: sharpness,
@@ -431,13 +435,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// native scale, which is never shown, so the root stands for the world itself. Before the world has composed a frame
     /// there are no views, but the world must still be scheduled, since it composes inside its own frame, so the first
     /// view is placed, not shown, over the whole display at native scale, which it renders at until its first frame names
-    /// its views.</summary>
+    /// its views. The display counts as covered only when one rect covers it whole: a lone whole-display view, a shown
+    /// view over the whole display, or a pane that covers it (<paramref name="panesCover"/>); otherwise pixels no rect
+    /// covers show the letterbox color, even while the first view is not shown.</summary>
     /// <param name="views">The views of the world's last composed frame, in view order.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
     /// <param name="rendered">Whether the world has rendered a view into its output, by 0-based view, or
     /// <see langword="null"/> when no view has an output yet.</param>
+    /// <param name="panesCover">Whether a pane the root shows this frame covers the whole display.</param>
     /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
-    public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered) {
+    public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered, bool panesCover) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
@@ -448,6 +455,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 renderScale: 1f,
                 sharpness: sharpness,
                 shown: false,
+                uncovered: !panesCover,
                 view: 0
             );
 
@@ -459,19 +467,39 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             (views[0].Region == whole) &&
             !((views[0].RenderScale > 0f) && (views[0].RenderScale < 1f))
         );
+        var covered = (panesCover || lone);
 
+        for (var view = 0; (view < views.Count); view++) {
+            covered |= (
+                (views[view].Region == whole) &&
+                Shows(
+                    lone: lone,
+                    rendered: rendered,
+                    view: view
+                )
+            );
+        }
         for (var view = 0; (view < views.Count); view++) {
             var snapshot = views[view];
 
             _ = PlaceView(
+                uncovered: !covered,
                 region: snapshot.Region,
                 renderScale: snapshot.RenderScale,
                 sharpness: sharpness,
-                shown: (!lone && (rendered?.Invoke(arg: view) ?? false)),
+                shown: Shows(
+                    lone: lone,
+                    rendered: rendered,
+                    view: view
+                ),
                 view: view
             );
         }
     }
+
+    // Whether a view of a composed frame is shown: once rendered, unless it is the lone whole-display view.
+    private static bool Shows(bool lone, Func<int, bool>? rendered, int view) => (!lone && (rendered?.Invoke(arg: view) ?? false));
+
     /// <inheritdoc/>
     /// <remarks>A pane or view of the synthesized root the host did not place this frame is not shown, so its pass
     /// draws nothing.</remarks>

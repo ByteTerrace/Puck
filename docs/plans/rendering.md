@@ -302,13 +302,15 @@ through DXC:
 The same build showed that a group holding a sampler needs a second table on
 Direct3D 12, because a descriptor table cannot mix samplers with other views.
 The gate's GPU half has passed: the two-group layout runs on Direct3D 12 and
-Vulkan inside the parity contract as the `binding` parity station (P7b step 16).
+Vulkan inside the parity contract as the `binding` parity station (P7b step 16),
+whose frames equal a CPU reference image exactly.
 The capability report has been read too: each backend fills
 `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
 `world.counters gpu` prints it on a `capabilities` line and in its JSON, and the
 floor and ceiling devices' readings on both backends are recorded under step 14.
-One leg stays open: one build on Linux compared byte for byte, which needs the
-pinned DXC that `setup-dxc` installs.
+One leg stays open, and is not yet proven: one build on Linux compared byte for
+byte with the Windows build of the same commit. CI runs it as `verify.yml`'s
+`shader-bytecode` job (see P7's gate).
 
 P8 is complete but for one item of its check: the generated echo runs on both
 backends for one interface, the `pipeline-echo` canary's own, rather than for
@@ -519,7 +521,7 @@ and every split-screen seat run through the graph runtime (commits 6, 9 and 10
 below), but `ViewStack` still renders every screen. P11b moves the screens onto graph instances fed by the scheduler,
 puts the live schedule's extents and prices in `world.budget`, runs the parity
 and counted-GPU checks, and makes the rest of the deletions P11 lists (commits
-11 to 14 below). These
+11, 13 and 14 below). These
 P11b items have landed: the first-class package pass kind in
 `ShaderPipelineCompiler`, a steady-state schedule that allocates nothing, a
 document pass kind with no package member, so package work enters the
@@ -916,13 +918,20 @@ It deletes the SDF engine's composite, and it has landed.
   `split-seats` canary also captures a letterboxed layout it selects through
   `view.override`.
 
-P11b's remaining work is four commits:
+P11b's last four commits are these; 12 has landed:
 
 11. The per-device pass-pipeline cache: the graph's pass pipelines built once a
     device, off the frame thread, and shared by every node that installs the
     same pass.
-12. The live budget: `world.budget` prints the live schedule's extents and
-    prices for every instance.
+12. The live budget, landed: `world.budget` ends with what the runtime's latest
+    schedule decided for every instance (`RenderGraphLiveBudget`, reading
+    `RenderGraphRuntime.Latest`): rendered, waiting, deferred or unread; its
+    extent, a graph instance's quantized footprint or a source's negotiated
+    extent; its frame divisor; its passes and the pass-pixels it spent; and the
+    executed passes, dispatches and draws its newest completed submission
+    counted. Every figure is a count, and a steady read allocates nothing.
+    `RenderGraphRuntimeLawTests.LiveBudget` holds a pane at divisor 2 and a
+    static source across frames.
 13. Screens onto graph instances, after P12b-2: each screen reads a graph
     instance the scheduler feeds, and `ViewStack`, `OffscreenRenderBudget`, the
     procedural test card, `SdfWorldEngine.MaxViewports` and the hand-composed
@@ -1788,8 +1797,17 @@ compute pass, each with two frequency groups, has passed its build-time half,
 as the [implementation status](#implementation-status) records, and its GPU
 half has passed: the two-group layout runs on Direct3D 12 and Vulkan inside
 `tests/Puck.Parity/parity.contract.json`'s tolerances, as the `binding` parity
-station (step 16). One leg remains: one build on Linux is compared byte for byte
-with the two on one host.
+station (step 16). One leg remains, not yet proven: one build on Linux compared
+byte for byte with the Windows build of the same commit. The artifacts job
+collects the Windows build's shaders (`puck shaders collect`, the
+`shader-bytecode-windows` artifact) without rebuilding them, and `verify.yml`'s
+`shader-bytecode` job installs the pinned DXC on Ubuntu through `setup-dxc`,
+compiles every shader through the build's own `CompileShaders` target and holds
+each SPIR-V and DXIL output to the Windows one (`puck shaders compare --build`).
+It runs only in CI: on every pull request and every push to `main`, through
+**Release Azure**, or by dispatching **Verify runtime behavior** by hand. The leg
+is proven when that job passes; a difference it names, such as DXIL the Linux
+compiler hashes or signs differently, is the gate's failure toward Slang.
 Both backends' capability reports, read on the floor and ceiling devices, show that
 neither lacks what the grouped contract assumes. The gate still fails toward
 Slang when DXC output is not byte-stable across hosts, or when the second group
@@ -2198,7 +2216,9 @@ Phase 3, the groups, follows phase 2:
     layout and captured as its own instance): a compute pass and a fullscreen
     pass reading a frame group and a pass group, with config, a formatted load, a
     storage image and a pass-group sampler table, match on Direct3D 12 and Vulkan
-    exactly, well inside `parity.contract.json`. `puck parity` now runs each leg
+    exactly. Every pass works in whole 255ths, so each capture must also equal
+    the CPU reference `ParityBindingReference` computes from the graph's config
+    and the world's step rate. `puck parity` now runs each leg
     until just past the world's last scheduled capture.
 17. Done: the region-copy kernel leaves the SDF engine for `Puck.Shaders`
     (`Assets/Shaders/Residency/region-copy.comp.hlsl`), each register at its
@@ -2318,7 +2338,8 @@ destination. A region's staging buffer states its copy (header, run table,
 words), so the region-copy kernel pushes nothing. The SDF engine's groups are
 P7b-20's; after it the 32 screens bind as 32 bindings and one sampler, and
 P12b-8 makes them an array with per-screen filtering. The test fakes
-consolidate as the surface shrinks. Open: the gate's Linux build.
+consolidate as the surface shrinks. Open: the gate's Linux build, which CI's
+`shader-bytecode` job runs and has not yet proven.
 
 ### P8 — The shader package, and one source language
 
@@ -3286,7 +3307,7 @@ read simulation state, so they do not wait on the state rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
 P11b items its implementation status lists, the main view through the graph
-runtime among them. The rest of P11b, commits 11 to 14, waits on nothing from
+runtime among them. The rest of P11b, commits 11, 13 and 14, waits on nothing from
 P7b, whose groups have landed for everything but the SDF engine; commit 13, the
 screens, follows P12b-2. P12's
 source contract, producers and conversion passes have landed; P12b, the graph
