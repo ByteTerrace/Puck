@@ -13,7 +13,8 @@ namespace Puck.World.Tests;
 /// the position is attributed to. When that mouse leaves the seat (a leave, then another device seated there) or moves
 /// to another seat (an assign), the seat's next snapshot carries no pointer commands, whether or not the pointer sink
 /// forgot the position first; a position the platform attributes to no mouse, and a pointer that left the window,
-/// point nowhere. Each law opens with its control: the same seat pointing before the change.
+/// point nowhere. Each law opens with its control: the same seat pointing before the change. The positioned seat and
+/// its device are read as one pair, which never tears while another thread reports positions.
 /// </summary>
 public sealed class WorldPointerRayCaptureLawTests {
     private const int Seat = 1;
@@ -200,7 +201,7 @@ public sealed class WorldPointerRayCaptureLawTests {
         Assert.Empty(collection: rig.Frame());
 
         if (withSink) {
-            Assert.Null(@object: rig.Pointer.PositionedSlot);
+            Assert.Null(@object: rig.Pointer.Positioned);
             Assert.False(condition: rig.Pointer.HasPosition(slot: Seat));
         }
     }
@@ -229,7 +230,7 @@ public sealed class WorldPointerRayCaptureLawTests {
         Assert.Empty(collection: rig.Frame());
 
         if (withSink) {
-            Assert.Null(@object: rig.Pointer.PositionedSlot);
+            Assert.Null(@object: rig.Pointer.Positioned);
             rig.Point(device: Mouse);
             Assert.Equal(
                 actual: rig.Frame(),
@@ -265,7 +266,7 @@ public sealed class WorldPointerRayCaptureLawTests {
 
         rig.Sink!.Observe(inputEvent: WindowInputEvent.PointerLeft());
 
-        Assert.Null(@object: rig.Pointer.PositionedSlot);
+        Assert.Null(@object: rig.Pointer.Positioned);
         Assert.Empty(collection: rig.Frame());
 
         rig.Point(device: Mouse);
@@ -273,6 +274,51 @@ public sealed class WorldPointerRayCaptureLawTests {
             actual: rig.Frame(),
             expected: [Seat]
         );
+    }
+    [Fact]
+    public void ThePositionedSeatAndItsDeviceAreReadTogether() {
+        const int LeastReads = 100_000;
+        const int MostReads = 10_000_000;
+
+        var pointer = new WorldPointer();
+        var first = new WorldPointerPositioned(Device: Mouse, Slot: 0);
+        var second = new WorldPointerPositioned(Device: Gamepad, Slot: Seat);
+        var stop = 0;
+
+        // Another thread alternates two reports, each writing a seat and its device, while this one reads the pair: a
+        // read of the seat and the device apart would sometimes pair one report's seat with the other's device.
+        var writer = new Thread(start: () => {
+            while (Volatile.Read(location: ref stop) == 0) {
+                foreach (var report in ((WorldPointerPositioned[])[first, second])) {
+                    pointer.SetPosition(
+                        device: report.Device,
+                        position: Centre,
+                        slot: report.Slot
+                    );
+                }
+            }
+        });
+
+        var (sawFirst, sawSecond) = (false, false);
+
+        writer.Start();
+
+        try {
+            for (var read = 0; ((read < MostReads) && ((read < LeastReads) || !sawFirst || !sawSecond)); read++) {
+                if (pointer.Positioned is not { } positioned) {
+                    continue;
+                }
+
+                Assert.True(condition: ((positioned == first) || (positioned == second)), userMessage: $"torn pair {positioned}");
+                sawFirst |= (positioned == first);
+                sawSecond |= (positioned == second);
+            }
+        } finally {
+            Volatile.Write(location: ref stop, value: 1);
+            writer.Join();
+        }
+
+        Assert.True(condition: (sawFirst && sawSecond), userMessage: "the reader never saw both reports, so the race was not exercised");
     }
 
     private sealed class PointerModule : ICommandModule {

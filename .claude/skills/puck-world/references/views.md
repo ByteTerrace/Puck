@@ -338,7 +338,7 @@ Free Cam do not alter the logical movement basis.
   slot occupants; an instance slot prints as `instance:<name>`, or
   `instance:<name>:missing` when the runtime has no such instance.
 - `world.view.pointer` — reads the seat the pointer rides (the seat of the
-  device the latest position is attributed to, `WorldPointer.PositionedSlot`,
+  device the latest position is attributed to, `WorldPointer.Positioned`,
   seat 1 with `reason=no-position` after the pointer left the window or a
   device changed seats), pointer position,
   viewport mapping (`WorldSeatViewports.Locate`, which the pointer-ray capture
