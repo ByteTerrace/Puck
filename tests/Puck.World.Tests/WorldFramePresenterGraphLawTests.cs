@@ -90,6 +90,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         using var instances = FakeGraphInstances.Attach(
             create: static name => new ShaderPipelineRenderNode(
+                pipelines: new GpuPassPipelineCache(),
                 deviceContext: new RefusingGpuDevice(),
                 height: 4,
                 hostsOnDirectX: false,
