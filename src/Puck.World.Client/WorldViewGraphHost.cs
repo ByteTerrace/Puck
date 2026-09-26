@@ -74,6 +74,27 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         public Puck.Commands.SourceMapping? Pane { get; set; }
         /// <summary>Gets the node the runtime renders the instance through, which the runtime owns.</summary>
         public required ShaderPipelineRenderNode Node { get; init; }
+        /// <summary>Gets why the instance can show nothing, or <see langword="null"/> while it has a graph installed or on
+        /// its way (a compilation pending, a candidate queued or building). It is its latest compilation's failure, or
+        /// the refusal of the candidate its node was given. A slot showing a refused instance places nothing, so the
+        /// root draws the world beneath it and a capture of the root never waits on it; a wait on the instance fails
+        /// naming the refusal.</summary>
+        public string? Refusal {
+            get {
+                if (
+                    IsCompiling ||
+                    (Node.Plan is not null) ||
+                    Node.HasPendingCandidate ||
+                    Node.IsBuildingCandidate
+                ) {
+                    return null;
+                }
+
+                return ((LastCompile is { Status: ShaderPipelineLoadStatus.Failed or ShaderPipelineLoadStatus.Unsupported } failed)
+                    ? failed.Message
+                    : Node.LastSwapError?.Message);
+            }
+        }
         /// <summary>The number of dependency changes observed.</summary>
         public int SourceChangeCount { get; private set; }
         /// <summary>The root source being watched, or null when watching is disabled.</summary>
@@ -313,7 +334,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     }
     /// <summary>Places a pane this frame: the synthesized root shows the instance inside a normalized rect of the display,
     /// renders it at that rect's extent, and reconstructs it at the given sharpness. An instance the root does not place
-    /// is ignored.</summary>
+    /// is ignored, and so is a refused one (<see cref="Entry.Refusal"/>): the root draws the world beneath its slot, and
+    /// nothing the root shows waits on it.</summary>
     /// <param name="instance">The <c>views.graphs</c> instance the slot names.</param>
     /// <param name="region">The slot's normalized rect.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
@@ -322,7 +344,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             !synthesized.Panes.Contains(value: instance) ||
-            m_placements.ContainsKey(key: instance)
+            m_placements.ContainsKey(key: instance) ||
+            (m_entries.TryGetValue(
+                key: instance,
+                value: out var entry
+            ) && (entry.Refusal is not null))
         ) {
             return false;
         }

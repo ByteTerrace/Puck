@@ -94,19 +94,45 @@ public sealed partial class WorldViewGraphHost {
                 detail = error.Message;
                 return WaitState.Failed;
             }
-            return ((Node.IsReady && ReferenceEquals(
+            if (Node.IsReady && ReferenceEquals(
                 objA: Node.Plan,
                 objB: LastCompile!.Pipeline!.Plan
-            ))
-                ? WaitState.Reached
-                : WaitState.Pending
-            );
+            )) {
+                return WaitState.Reached;
+            }
+
+            return ((Refusal is { } refused)
+                ? Refused(
+                    detail: out detail,
+                    refusal: refused
+                )
+                : WaitState.Pending);
+        }
+        // A refused instance (Refusal) reaches no phase past its compilation until a new compilation starts, so a wait on
+        // it fails naming the refusal, and a capture it holds is withdrawn, since no frame will serve it.
+        private WaitState Refused(string refusal, out string? detail) {
+            if (Capture is { } pending) {
+                _ = pending.TryFail(error: new InvalidOperationException(message: refusal));
+                CompleteCapture(error: refusal);
+            }
+
+            detail = refusal;
+
+            return ((LastCompile?.Status == ShaderPipelineLoadStatus.Unsupported)
+                ? WaitState.Unsupported
+                : WaitState.Failed);
         }
         // An instance builds a resize off the frame thread while it keeps presenting the old extent, paused or running, so
         // it has reached the phase only once the graph at the new extent has installed; a refusal since the wait was armed
         // fails it.
         private WaitState EvaluateResized(out string? detail) {
             detail = null;
+            if (Refusal is { } refused) {
+                return Refused(
+                    detail: out detail,
+                    refusal: refused
+                );
+            }
             if (Node.RequestedExtent != m_waitExtent) { return WaitState.Pending; }
             if (Node.Extent == m_waitExtent) { return WaitState.Reached; }
             if (
@@ -199,7 +225,14 @@ public sealed partial class WorldViewGraphHost {
                 case WorldPipelinePhase.Resized:
                     return EvaluateResized(detail: out detail);
                 case WorldPipelinePhase.Captured:
-                    if (Capture is not null) { return WaitState.Pending; }
+                    if (Capture is not null) {
+                        return ((Refusal is { } refused)
+                            ? Refused(
+                                detail: out detail,
+                                refusal: refused
+                            )
+                            : WaitState.Pending);
+                    }
                     if (CapturesRequested == 0) { detail = "no capture was requested"; return WaitState.Failed; }
                     if (LastCaptureError is { } error) { detail = error; return WaitState.Failed; }
                     return WaitState.Reached;

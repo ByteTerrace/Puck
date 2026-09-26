@@ -253,6 +253,91 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
         );
         Assert.Null(@object: m_instances.NodeOf(instance: "ink"));
     }
+    // A slot showing a pane whose graph never installs places nothing, so the root draws the world beneath the slot and
+    // nothing the root shows waits on the pane; the same pane places while a compilation is still on its way.
+    [Fact]
+    public void ARefusedPaneIsNotPlacedAndAPaneStillCompilingIs() {
+        var views = new WorldViewDefaults(
+            Graphs: [new WorldViewGraph(
+                Name: "ink",
+                Source: "pass.hlsl"
+            )],
+            Layouts: [new WorldViewLayout(
+                Name: "pane",
+                Slots: [new WorldViewSlot(Instance: "ink")]
+            )]
+        );
+        var region = new Puck.Abstractions.Presentation.NormalizedRect(
+            Height: 0.5f,
+            Width: 0.5f,
+            X: 0f,
+            Y: 0f
+        );
+
+        m_runtime.BeginFrame(views: views);
+        Assert.NotNull(@object: m_runtime.Entries["ink"].Refusal);
+        Assert.False(condition: m_runtime.Place(
+            instance: "ink",
+            region: region,
+            sharpness: 0f
+        ));
+        Assert.DoesNotContain(
+            collection: m_runtime.Footprints,
+            filter: static footprint => (footprint.Producer == "ink")
+        );
+        Assert.True(condition: m_runtime.TryGet(
+            instance: WorldViewGraphs.MainInstance,
+            pass: "ink",
+            placement: out var placement
+        ));
+        Assert.False(condition: placement.Shown);
+
+        // Control: the same pane with a compilation on its way is placed.
+        m_runtime.QueueCompile(
+            name: "ink",
+            source: "pass.hlsl"
+        );
+        m_runtime.BeginFrame(views: views);
+        Assert.Null(@object: m_runtime.Entries["ink"].Refusal);
+        Assert.True(condition: m_runtime.Place(
+            instance: "ink",
+            region: region,
+            sharpness: 0f
+        ));
+        Assert.Contains(
+            collection: m_runtime.Footprints,
+            filter: static footprint => (footprint.Producer == "ink")
+        );
+        PumpUntilCompiled();
+    }
+    // A capture of a refused pane can never be served, so a wait on it fails naming the refusal at once and withdraws
+    // the capture, rather than holding until its deadline.
+    [Fact]
+    public async Task ACaptureWaitOnARefusedPaneFailsNamingTheRefusal() {
+        var entry = m_runtime.Entries["ink"];
+        var request = new Puck.Abstractions.Presentation.FrameCaptureRequest(path: Path.Combine(
+            path1: m_directory,
+            path2: "ink.png"
+        ));
+
+        entry.RequestCapture(request: request);
+
+        var hold = m_runtime.ArmWait(
+            name: "ink",
+            phase: WorldPipelinePhase.Captured,
+            seconds: 30,
+            submissions: 0
+        );
+
+        Assert.False(condition: hold());
+        Assert.Equal(
+            actual: Assert.Single(collection: m_reports),
+            expected: $"[pipeline: ink wait captured unsupported: {entry.Refusal}]"
+        );
+        Assert.True(condition: request.Completion.IsCompleted);
+        Assert.False(condition: (await request.Completion).Succeeded);
+        Assert.Null(@object: entry.Capture);
+    }
     [InlineData(0)]
     [InlineData((WorldViewGraphHost.MaxWaitSeconds + 1))]
     [Theory]
