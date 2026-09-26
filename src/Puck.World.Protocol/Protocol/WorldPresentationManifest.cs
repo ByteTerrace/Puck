@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Puck.Commands;
 using Puck.World.Authoring;
 
 namespace Puck.World.Client;
@@ -28,7 +29,8 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// document itself for the population's scale row, which every body reads, a <see cref="WorldLook"/> for its motion's
 /// reads, and a
 /// <see cref="WorldPrototype"/> for its creation's drivers and effectors, so a body's lease acquires exactly the
-/// templates of what it wears when it arrives.
+/// templates of what it wears when it arrives. What a seat composes rather than any one document authors — its binding
+/// contexts, radial wheel cells and binding bar cells — is compiled per seat by <see cref="SeatBindings"/>.
 /// <para>
 /// A surface is found by the type that carries it, wherever the document places that type, so a section that gains a
 /// bindable member is covered without a new walker. The walk follows the world document model's generated shape
@@ -143,6 +145,102 @@ public sealed class WorldPresentationManifest {
             )
         );
     }
+    /// <summary>Compiles the reads one seat's presentation makes that no single document records, because the seat
+    /// composes their sources: its binding document, composed from the world's overlays, the seat identity's layer and
+    /// its session rebinds, and its binding bar, resolved from the identity or the world
+    /// (<see cref="WorldBindingBarAuthoring.Resolve"/>). They are every state-backed binding context family's row
+    /// (<c>state:&lt;row&gt;</c>, read as stored truth and keyed by the seat's body when the row is keyed), every radial
+    /// wheel's label and icon cells keyed by each sector's id and the label row's
+    /// <see cref="BindingWheelDefinition.HubLabelKey"/>, the bar's icon cell keyed by every page entry's
+    /// <see cref="BindingPageEntryDefinition.KeyOf"/>, and the bar's layout and model cells. A seat registers them on the
+    /// mirror it reads through (<see cref="WorldStateMirror.Register"/>), so none is first read on a frame.</summary>
+    /// <param name="definition">The world the seat presents from, whose rows say which context family is keyed.</param>
+    /// <param name="bindings">The seat's composed binding document.</param>
+    /// <param name="bar">The seat's resolved binding bar.</param>
+    /// <param name="bodyIndex">The seat's controlled body, or -1 for none; a keyed family reads nothing without one.</param>
+    /// <returns>The reads, each once, in document order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/>, <paramref name="bindings"/> or
+    /// <paramref name="bar"/> is <see langword="null"/>.</exception>
+    public static WorldPresentationBinding[] SeatBindings(WorldDefinition definition, BindingProfileDocument bindings, WorldBindingBarAuthoring bar, int bodyIndex) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: bindings);
+        ArgumentNullException.ThrowIfNull(argument: bar);
+
+        var builder = new Builder();
+
+        foreach (var context in (bindings.Contexts ?? [])) {
+            if (
+                (context is null) ||
+                !WorldStateBindingContext.TryResolveRow(
+                definition: definition,
+                family: context.Family,
+                row: out var row
+            ) ||
+                !StateBinding.TryResolveBodyKey(
+                bodyIndex: bodyIndex,
+                key: (row.IsKeyed
+                ? StateBinding.BodyKey
+                : null),
+                resolved: out var key
+            )
+            ) {
+                continue;
+            }
+
+            builder.Add(
+                binding: new StateBinding(
+                    Key: key,
+                    Row: row.Name.Value,
+                    Target: true
+                ),
+                conversion: WorldStateConversion.Number
+            );
+        }
+        foreach (var wheel in (bindings.Wheels ?? [])) {
+            if (wheel is null) {
+                continue;
+            }
+
+            builder.AddCell(
+                key: BindingWheelDefinition.HubLabelKey,
+                rowReference: wheel.LabelRow
+            );
+
+            foreach (var ring in wheel.Rings) {
+                foreach (var sector in (ring?.Entries ?? [])) {
+                    builder.AddCell(
+                        key: sector?.Id,
+                        rowReference: wheel.LabelRow
+                    );
+                    builder.AddCell(
+                        key: sector?.Id,
+                        rowReference: wheel.IconRow
+                    );
+                }
+            }
+        }
+        foreach (var chord in bindings.Chords) {
+            foreach (var entry in (chord?.Page?.Entries ?? [])) {
+                if (entry is not null) {
+                    builder.AddCell(
+                        key: BindingPageEntryDefinition.KeyOf(entry: entry),
+                        rowReference: bar.IconRow
+                    );
+                }
+            }
+        }
+
+        builder.Add(
+            binding: StateBinding.Parse(token: bar.LayoutCell),
+            conversion: WorldStateConversion.Number
+        );
+        builder.Add(
+            binding: StateBinding.Parse(token: bar.ModelCell),
+            conversion: WorldStateConversion.Number
+        );
+
+        return [.. builder.Bindings];
+    }
 
     // Every model type from which a surface type is reachable through a readable member, an element type, or a
     // polymorphic arm: the fixed point over the generated shape table, computed once.
@@ -246,6 +344,25 @@ public sealed class WorldPresentationManifest {
                     Binding: bound,
                     Conversion: conversion
                 ));
+            }
+        }
+        // A keyed cell of a row named by a state.<row> reference, read as text through its number slot.
+        public void AddCell(string? rowReference, string? key) {
+            if (
+                (key is { Length: > 0 }) &&
+                WorldStateBindingContext.TryParseRowReference(
+                reference: rowReference,
+                rowName: out var row
+            )
+            ) {
+                Add(
+                    binding: new StateBinding(
+                        Key: key,
+                        Row: row,
+                        Target: false
+                    ),
+                    conversion: WorldStateConversion.Number
+                );
             }
         }
         // A lease reads every template as a number.

@@ -41,9 +41,9 @@ public sealed unsafe class VulkanSurfaceTransferLawTests {
         );
 
         _ = Assert.Throws<VulkanException>(testCode: () => upload.Upload(
+            format: GpuPixelFormat.R8G8B8A8Unorm,
             height: 1U,
             pixels: new byte[4],
-            vulkanFormat: R8G8B8A8Unorm,
             width: 1U
         ));
 

@@ -37,10 +37,18 @@ public static class VulkanPresenterServiceRegistration {
         services.AddSingleton(implementationInstance: procedures);
         services.AddSingleton<IWorkCounterSource>(implementationInstance: procedures.Work);
     }
-    // How the renderer creates its neutral services (IGpuDeviceContext.Services), each bound to it as the device
-    // context and passing through the host's GpuCreationFaults when one is registered: the native APIs are resolved
-    // here, once, so the provider never escapes into the renderer.
-    private static Func<IVulkanDeviceContext, GpuDeviceServices> DeviceServices(IServiceProvider serviceProvider) {
+
+    /// <summary>Returns how a Vulkan device context creates its neutral services
+    /// (<see cref="IGpuDeviceContext.Services"/>), each bound to the context it is handed and passing through the host's
+    /// <see cref="GpuCreationFaults"/> when one is registered. The native APIs are resolved here, once, so the provider
+    /// never escapes into the context: the renderer creates its services through it, and so does a headless device
+    /// context over a logical device of its own.</summary>
+    /// <param name="serviceProvider">The provider holding the native APIs and factories
+    /// (<see cref="AddVulkanNativeApis"/>, <see cref="AddVulkanFactories"/>), an <see cref="IAllocator"/>, the
+    /// <see cref="VulkanRendererOptions"/> and the <see cref="VulkanQueueSubmitter"/>.</param>
+    /// <returns>The function creating a context's services.</returns>
+    /// <exception cref="InvalidOperationException">A required service is not registered.</exception>
+    public static Func<IVulkanDeviceContext, GpuDeviceServices> DeviceServices(IServiceProvider serviceProvider) {
         var allocator = serviceProvider.GetRequiredService<IAllocator>();
         var bufferApi = serviceProvider.GetRequiredService<IVulkanBufferApi>();
         var commandBufferRecordingApi = serviceProvider.GetRequiredService<IVulkanCommandBufferRecordingApi>();
@@ -127,7 +135,6 @@ public static class VulkanPresenterServiceRegistration {
             });
         };
     }
-
     /// <summary>Registers the factories, command-buffer recorder, asset source, and shader loader the
     /// renderer and compositor compose over the native APIs, and the backend's <c>pipeline-cache.vulkan</c> and
     /// <c>procedures.vulkan</c> and <c>memory.vulkan</c> <see cref="IWorkCounterSource"/>s.</summary>

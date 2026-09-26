@@ -49,19 +49,16 @@ internal sealed class WorldBindingBarControl {
     private readonly CompiledBindingBarLayout[] m_compiled = new CompiledBindingBarLayout[PlayerRoster.MaxSlots];
 
     private readonly WorldSeatBindings m_bindings;
-    private readonly WorldClient m_client;
     private readonly WorldOverlayFacts m_facts;
     private readonly PlayerRoster m_roster;
     private readonly WorldBindingBarVisibility m_visibility;
 
     /// <summary>Initializes a binding-bar policy resolver.</summary>
-    public WorldBindingBarControl(WorldClient client, PlayerRoster roster, WorldOverlayFacts facts, WorldSeatBindings bindings, WorldBindingBarVisibility visibility) {
-        ArgumentNullException.ThrowIfNull(client);
+    public WorldBindingBarControl(PlayerRoster roster, WorldOverlayFacts facts, WorldSeatBindings bindings, WorldBindingBarVisibility visibility) {
         ArgumentNullException.ThrowIfNull(roster);
         ArgumentNullException.ThrowIfNull(facts);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(visibility);
-        m_client = client;
         m_roster = roster;
         m_facts = facts;
         m_bindings = bindings;
@@ -79,28 +76,18 @@ internal sealed class WorldBindingBarControl {
 
         return m_compiled[slot];
     }
-    // A layout or model cell's text, or null when the token is absent, is no binding, or its cell holds no text.
-    private string? CellText(string? token) {
-        var slot = m_client.StateMirror.RegisterToken(
+    // A layout or model cell's text through the seat's routed mirror, or null when the token is absent, is no binding,
+    // no registration records it, or its cell holds no text.
+    private static string? CellText(WorldStateMirror? mirror, string? token) {
+        var slot = (mirror?.SlotOf(
             conversion: WorldStateConversion.Number,
             token: token
-        );
+        ) ?? -1);
 
-        return (((slot >= 0) && (m_client.StateMirror.Sample(slot: slot).Value is { Kind: CellKind.Text } text))
+        return (((slot >= 0) && (mirror!.Sample(slot: slot).Value is { Kind: CellKind.Text } text))
             ? text.AsText
             : null
         );
-    }
-    private (WorldBindingBarAuthoring Authoring, string Source) ResolveAuthoring(int slot) {
-        if (m_roster.ProfileAt(slot: slot)?.Document?.BindingOverlays.FirstOrDefault()?.BindingBar is { } profile) {
-            return (profile, "identity");
-        }
-
-        if (m_client.Definition.BindingOverlays.FirstOrDefault()?.BindingBar is { } world) {
-            return (world, "world");
-        }
-
-        return (WorldBindingBarAuthoring.Absent, "default");
     }
 
     /// <summary>Gets one seat's resolved policy and current visibility.</summary>
@@ -112,7 +99,19 @@ internal sealed class WorldBindingBarControl {
             PlayerRoster.MaxSlots
         );
 
-        var (authoring, source) = ResolveAuthoring(slot: slot);
+        // The bar follows the seat's route, like its pages and wheels: its policy is the identity's, else the routed
+        // world's, and its cells read the routed authority's mirror.
+        m_bindings.GetRoutedState(
+            definition: out var routed,
+            slot: slot,
+            state: out var mirror
+        );
+
+        var authoring = WorldBindingBarAuthoring.Resolve(
+            identity: m_roster.ProfileAt(slot: slot)?.Document,
+            source: out var source,
+            world: routed
+        );
         var liveOverride = m_visibility.Override(slot: slot);
         bool hidden;
         string reason;
@@ -140,9 +139,15 @@ internal sealed class WorldBindingBarControl {
         var preferences = m_bindings.ProfileBindings(slot: slot)?.BindingBar;
         // Which layout is live is a state cell's answer, read through the state mirror: the bar's shape is data the
         // player can flip.
-        var layout = authoring.LayoutNamed(name: CellText(token: authoring.LayoutCell));
+        var layout = authoring.LayoutNamed(name: CellText(
+            mirror: mirror,
+            token: authoring.LayoutCell
+        ));
         var stacked = !string.Equals(
-            a: CellText(token: authoring.ModelCell),
+            a: CellText(
+                mirror: mirror,
+                token: authoring.ModelCell
+            ),
             b: WorldBindingBarAuthoring.SingleModel,
             comparisonType: StringComparison.Ordinal
         );

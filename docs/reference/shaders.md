@@ -232,8 +232,8 @@ instead of ports: a package's catalog entry (`RenderGraphPackage.Members`) lists
 the values its recorder writes into the pass block each frame and the resources
 it binds, and a set's manifest lists its `bindings`. Nothing is pushed.
 
-Image formats are validated against `GpuPixelFormat`, and an image declares a
-color format. A graphics pass draws into its color output at that output's
+Image formats are validated against `GpuPixelFormat`, and an image declares an
+uncompressed color format; the block-compressed formats are only ever sampled. A graphics pass draws into its color output at that output's
 declared format. A compute pass writes its
 storage images through `[[vk::image_format(...)]]` declarations matching each
 image's format. Planner defaults admit the Vulkan portable minimums: a pass

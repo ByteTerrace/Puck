@@ -14,7 +14,8 @@ does not substitute for a rendered glyph pixel-conformance test.
 chains and exact one-material tiles. `BakeSamplingFixtureLawTests` holds
 `Fixtures/bake-sampling.json`, the BC7, BC5 and BC6H textures of one real bake with
 a probe texel per level, to a fresh bake and to the CPU decoder; it is the GPU-free
-half of a sampling check whose device half needs a block-compressed GPU image.
+half of a sampling check whose device half, `BakeSamplingDeviceLawTests` in
+`tests/Puck.World.Tests`, samples the same probes on Vulkan, Direct3D 12 and WARP.
 
 ## Verification
 

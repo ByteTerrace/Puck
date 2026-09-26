@@ -67,7 +67,16 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // definition changes reference.
     private readonly IReadOnlyList<WorldBindingOverlay>[] m_overlays;
     private readonly BindingProfileDocument?[] m_profileBindings;
+    // Per seat: the identity's owned world, whose binding bar the seat presents before the world's.
+    private readonly WorldDefinition?[] m_profileWorlds;
+    // Per seat: the composed binding document the seat's pages, contexts and wheels were last compiled from.
+    private readonly BindingProfileDocument[] m_composed;
     private readonly IReadOnlyList<BindingContextDefinition>[] m_seatContexts;
+    // Per seat: the reads its composition makes (WorldPresentationManifest.SeatBindings), the mirror they are registered
+    // on under the seat's context lease, and that mirror's install they were compiled at.
+    private readonly WorldPresentationBinding[][] m_seatReads;
+    private readonly int[] m_seatReadsInstalls;
+    private readonly WorldStateMirror?[] m_seatReadsMirror;
     private readonly PagedInputBindings[] m_seats;
     private readonly BindingProfileDocument?[] m_sessionRebinds;
     private readonly int[] m_stateEntityIndices;
@@ -279,6 +288,59 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         return signature;
     }
+    // Registers the reads the seat's own composition makes on the mirror its route reads through, under the seat's
+    // context lease, so its contexts, wheels and bar read slots registered and read at a tick boundary rather than
+    // first on a frame. Compiled again only when the composition, the route's mirror, its installed document or the
+    // controlled body moved; an unchanged set is not registered again.
+    private void RegisterSeatReads(int slot) {
+        var reads = m_contextReads[slot];
+
+        if (reads.Mirror is not { } mirror) {
+            return;
+        }
+
+        var seat = WorldPresentationManifest.SeatBindings(
+            bar: WorldBindingBarAuthoring.Resolve(
+                identity: m_profileWorlds[slot],
+                source: out _,
+                world: m_definitions[slot]
+            ),
+            bindings: m_composed[slot],
+            bodyIndex: reads.BodyIndex,
+            definition: m_definitions[slot]
+        );
+        var previous = m_seatReadsMirror[slot];
+
+        m_seatReadsInstalls[slot] = mirror.Installs;
+
+        if (
+            ReferenceEquals(
+            objA: previous,
+            objB: mirror
+        ) &&
+            seat.AsSpan().SequenceEqual(other: m_seatReads[slot])
+        ) {
+            return;
+        }
+
+        mirror.Register(
+            bindings: seat,
+            owner: reads
+        );
+
+        if (
+            (previous is not null) &&
+            !ReferenceEquals(
+            objA: previous,
+            objB: mirror
+        )
+        ) {
+            previous.Unregister(owner: reads);
+        }
+
+        m_seatReads[slot] = seat;
+        m_seatReadsMirror[slot] = mirror;
+    }
     // Publishes only the state-backed families the seat's composed document actually references, each read through
     // the routed authority's state mirror. Called when a context slot moved, the route or controlled body changed, or
     // the bindings recomposed — never on an unchanged tick.
@@ -401,6 +463,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             // armed chord rows, release latches, and held commands intact. Context references may be new even
             // though their content is identical, so retain the newest document view for read-back.
             m_seatContexts[slot] = (document.Contexts ?? []);
+            m_composed[slot] = document;
+            RegisterSeatReads(slot: slot);
             DeriveActiveGroup(slot: slot);
             return;
         }
@@ -439,6 +503,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         // The new document's context rows replace the seat's cached set, and the active group re-derives against
         // them (the reload already re-applied the last APPLIED group; the derivation may now pick a different one).
         m_seatContexts[slot] = (document.Contexts ?? []);
+        m_composed[slot] = document;
+        RegisterSeatReads(slot: slot);
         PublishStateContexts(slot: slot);
         DeriveActiveGroup(
             releasePriorGroup: false,
@@ -1227,13 +1293,15 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     /// for the whole profile rather than one per layer: a seat is handed a coherent set at a single moment, and a
     /// layer added later cannot be delivered at some call sites and forgotten at others.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
-    /// <param name="bindings">The profile's binding section, or <see langword="null"/> when it carries none.</param>
-    public void SetProfileLayers(int slot, BindingProfileDocument? bindings) {
+    /// <param name="profile">The selected identity, whose binding layer (<see cref="WorldIdentity.Bindings"/>) and
+    /// owned world's binding bar the seat presents, or <see langword="null"/> for none.</param>
+    public void SetProfileLayers(int slot, WorldIdentity? profile) {
         if (((uint)slot) >= SeatCount) {
             return;
         }
 
-        m_profileBindings[slot] = bindings;
+        m_profileBindings[slot] = profile?.Bindings;
+        m_profileWorlds[slot] = profile?.Document;
         RecomposeSeat(slot: slot);
     }
     /// <summary>Sets a seat's live session-rebind layer and recomposes that seat — the <c>player.bind</c> path. The layer
@@ -1329,6 +1397,18 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             bodyIndex: entityIndex,
             mirror: state
         );
+
+        if (
+            !ReferenceEquals(
+            objA: state,
+            objB: m_seatReadsMirror[slot]
+        ) ||
+            (state.Installs != m_seatReadsInstalls[slot]) ||
+            (entityIndex != m_stateEntityIndices[slot])
+        ) {
+            RegisterSeatReads(slot: slot);
+        }
+
         contextsMoved |= (reads.Changed != m_contextChanged[slot]);
 
         // A gated overlay's own When is state, not a document swap — its holds() value can flip on any tick that
@@ -1627,6 +1707,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     public WorldSeatBindings(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         m_profileBindings = new BindingProfileDocument?[SeatCount];
+        m_profileWorlds = new WorldDefinition?[SeatCount];
+        m_composed = new BindingProfileDocument[SeatCount];
+        m_seatReads = new WorldPresentationBinding[SeatCount][];
+        m_seatReadsInstalls = new int[SeatCount];
+        m_seatReadsMirror = new WorldStateMirror?[SeatCount];
         m_sessionRebinds = new BindingProfileDocument?[SeatCount];
         m_contextStates = new Dictionary<string, string>[SeatCount];
         m_contextChanged = new int[SeatCount];
@@ -1690,6 +1775,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 [WorldContextFamilies.Engagement] = WorldContextFamilies.EngagementNone,
             };
             m_seatContexts[slot] = (seedDocument.Contexts ?? []);
+            m_composed[slot] = seedDocument;
+            m_seatReads[slot] = [];
             m_effectiveDocuments[slot] = seedDocumentBytes;
             m_effectiveChannelNames[slot] = seedChannelNames;
             SyncSeatModes(

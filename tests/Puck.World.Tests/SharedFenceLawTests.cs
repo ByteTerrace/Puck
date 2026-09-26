@@ -3,9 +3,9 @@ using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.DirectX;
 using Puck.DirectX.Apis;
-using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Puck.Platform.Windows;
+using Puck.Testing;
 using Puck.Vulkan;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Factories;
@@ -360,24 +360,5 @@ public sealed unsafe class SharedFenceLawTests {
             ),
             ptr: ptr
         );
-    }
-    // Creates every device on the software renderer and reads it through the native API.
-    private sealed class WarpDeviceApi : IDirectXDeviceApi {
-        private readonly DirectXNativeDeviceApi m_native = new();
-
-        public DirectXDevice CreateDevice(long adapterLuid, DirectXFeatureLevel minimumFeatureLevel) =>
-            m_native.CreateWarpDevice(minimumFeatureLevel: minimumFeatureLevel);
-        public DirectXDevice CreateWarpDevice(DirectXFeatureLevel minimumFeatureLevel) =>
-            m_native.CreateWarpDevice(minimumFeatureLevel: minimumFeatureLevel);
-        public long GetAdapterLuid(nint deviceHandle) =>
-            m_native.GetAdapterLuid(deviceHandle: deviceHandle);
-        public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) =>
-            m_native.GetDeviceCapabilities(deviceHandle: deviceHandle);
-        public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) =>
-            m_native.GetDeviceIdentity(deviceHandle: deviceHandle);
-        public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) =>
-            m_native.GetMemoryProfile(deviceHandle: deviceHandle);
-        public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) =>
-            m_native.ProbeMaxFeatureLevel(adapterLuid: adapterLuid);
     }
 }

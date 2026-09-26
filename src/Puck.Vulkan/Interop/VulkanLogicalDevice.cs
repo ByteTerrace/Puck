@@ -25,6 +25,10 @@ public sealed class VulkanLogicalDevice : IDisposable {
     /// residency selection branches on it. The default profile, which reports nothing, for a device created without
     /// one.</summary>
     public GpuMemoryProfile MemoryProfile { get; init; }
+    /// <summary>Gets whether the device was created with <c>textureCompressionBC</c> enabled, so it samples every BC
+    /// format from an optimal-tiling image; an upload of a block-compressed format refuses a device without it.
+    /// <see langword="false"/> for a device created without the feature.</summary>
+    public bool SamplesBlockCompression { get; init; }
     /// <summary>Gets the device's command table, which carries the native <c>VkDevice</c> handle.</summary>
     public VulkanDeviceCommands Commands { get; }
     /// <summary>Gets whether the device has been disposed — a native call through <see cref="Commands"/> after that is
