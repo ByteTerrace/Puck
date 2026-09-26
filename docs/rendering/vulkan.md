@@ -173,14 +173,19 @@ setting a viewport of negative height over the area the pass draws, so clip-spac
 top of the attachment as on Direct3D 12, and a scissor over the same area. The presenter's
 recorder (`VulkanCommandBufferRecorder`) sets the same viewport over the swapchain image, and
 its compositor leases the blit from the device's `GpuPassPipelineCache` for a render pass
-in the swapchain's format (`VulkanGpuRenderPass.PresentDescription` over `VulkanSwapchain.Format`);
+in the swapchain's format (`VulkanGpuRenderPass.PresentDescription` over `VulkanSwapchain.Output`'s format);
 the swapchain's own render pass is that description's request ending in `PRESENT_SRC_KHR`
 (`VulkanGpuRenderPass.PresentRequestOf`), so the two are compatible: attachments and dependencies
-match and only a final layout differs. A swapchain is only ever created in a `GpuPixelFormat`:
-`VulkanSwapchainFactory.SelectSurfaceFormat` takes the caller's preference when the surface offers it,
-otherwise the first of `SwapchainFormats` (8-bit unsigned normalized, 8-bit sRGB, 10-bit, half float)
-the surface offers, whatever the surface's own order, and a surface offering none of them refuses
-swapchain creation with a `NotSupportedException` naming the `VkFormat` values it offers. `BindIndexBuffer`
+match and only a final layout differs. A swapchain is only ever created in a `DisplayOutput`, a
+`GpuPixelFormat` and a `DisplayColorSpace`: `VulkanSwapchainFactory.SelectOutput` reads the surface's
+format and color-space pairs (the instance enables `VK_EXT_swapchain_colorspace` when the loader has it,
+so a surface on an HDR display lists its HDR pairs) and chooses through `DisplayOutput.TrySelect`. A
+requested HDR color space (`PresentationOptions.ColorSpace`, which every host leaves at `Srgb`) is taken
+when the surface offers it in its format; otherwise the output is SDR, an `SRGB_NONLINEAR_KHR` pair in the
+caller's preference when offered, else the first of `DisplayOutput.SdrFormats` (8-bit unsigned
+normalized, 8-bit sRGB, 10-bit, half float) the surface offers, whatever the surface's own order. A
+surface offering none of them refuses swapchain creation with a `NotSupportedException` naming the
+`VkFormat` values it offers. `BindIndexBuffer`
 and `DrawIndexed` record `vkCmdBindIndexBuffer` and `vkCmdDrawIndexed`.
 
 | Kind | Usage | Memory |

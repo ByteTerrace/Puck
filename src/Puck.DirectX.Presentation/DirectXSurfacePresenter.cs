@@ -45,6 +45,9 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
     }
 
     /// <inheritdoc/>
+    public DisplayOutput? Output => m_compositor.Output;
+
+    /// <inheritdoc/>
     public void Activate(NativeSurfaceBinding binding, uint width, uint height) {
         // The contract is "safe to call repeatedly — each call replaces any previously acquired resources",
         // so release any prior activation before re-acquiring.

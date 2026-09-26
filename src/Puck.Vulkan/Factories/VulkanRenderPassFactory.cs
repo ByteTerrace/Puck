@@ -30,7 +30,7 @@ public sealed class VulkanRenderPassFactory : IVulkanRenderPassFactory {
 
         var request = VulkanGpuRenderPass.PresentRequestOf(
             device: logicalDevice.Commands,
-            format: swapchain.Format
+            format: swapchain.Output.Format
         );
         var result = m_renderPassApi.CreateRenderPass(
             renderPassHandle: out var renderPassHandle,

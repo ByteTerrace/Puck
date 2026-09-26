@@ -276,17 +276,36 @@ device up and releases them when the context releases it, on `Recreate` and
   device's increment, and their release ends those entries before the device's
   teardown ends the device.
 
-The surface compositor and the surface upload in `Puck.DirectX.Presentation`
-still create shader-visible heaps of their own, which they bind on command
-lists of their own. The compositor's blit is the device's pass pipeline for
-`SurfaceBlitLayout`, the pass group both compositors bind (the source at `t0`
-and its sampler at `s1`, space 3), leased from `GpuPassPipelineCache` for a
-render pass in the swap chain's format: its root signature has a view table and
-a sampler table, so the compositor keeps a one-SRV heap and a one-sampler heap,
-writes the sampler clamp-addressed with a linear filter
-(`DirectXGpuBindings.ClampSampler`), and each `DirectXDrawCommand` names the
-group, both heaps and both tables, which `DirectXCommandListRecorder` binds at
-the group's `ViewTableIndex` and `SamplerTableIndex`.
+- **No other shader-visible heap exists.** `DirectXDescriptorHeaps.Create`
+  makes only CPU-only heaps (render targets, depth, the clear mirror);
+  `CreateShaderVisible` is called for the device's pair alone and counts each
+  heap it creates into `DirectXGpuBindings.ShaderVisibleHeapsCreated`, which
+  reads two per device brought up (`DirectXShaderVisibleHeapsLawTests`).
+
+The surface compositor in `Puck.DirectX.Presentation` records on command lists
+of its own, but its descriptors live in the device's heaps. Its blit is the
+device's pass pipeline for `SurfaceBlitLayout`, the pass group both compositors
+bind (the source at `t0` and its sampler at `s1`, space 3), leased from
+`GpuPassPipelineCache` for a render pass in the swap chain's format. The
+compositor admits one pool for that group through `IGpuBindings.CanAdmit`,
+allocates its one set, writes the sampler once with a linear filter
+(`WriteSampler`, clamp-addressed as `DirectXGpuBindings.ClampSampler` states)
+and the source image through `WriteSampledImage` whenever the source resource
+changes. Its `DirectXDrawCommand` names the group, the device's two heaps and
+the set's two tables, which `DirectXCommandListRecorder` binds at the group's
+`ViewTableIndex` and `SamplerTableIndex`. A CPU surface reaches the blit through
+the device's `IGpuSurfaceUpload`, whose texture holds no descriptor of its own.
+
+The compositor creates its swap chain as SDR in the preferred 8-bit unsigned
+normalized format, then chooses its `DisplayOutput` through
+`DisplayOutput.TrySelect` from what the display reports: SDR in either 8-bit
+order always, and HDR10 and scRGB when the containing output's
+`IDXGIOutput6::GetDesc1` color space is `G2084_NONE_P2020`, which is how Windows
+reports HDR turned on. A requested HDR output (`PresentationOptions.ColorSpace`,
+which every host leaves at `Srgb`) resizes the buffers into its format and sets
+its color space when `CheckColorSpaceSupport` allows presenting it, and returns
+to SDR otherwise. `DirectXSurfaceCompositor.Output` exposes the choice, which
+`ISurfacePresenter.Output` reports for either backend.
 
 ---
 
