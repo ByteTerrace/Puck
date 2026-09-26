@@ -13,8 +13,13 @@ namespace Puck.World.Client;
 /// producer is the root. The graph is a document value planned by <see cref="RenderGraphCompiler"/>, the one path every
 /// graph takes, so a pass config that does not bind is the compiler's refusal, named by its entry.</summary>
 public sealed class WorldRootGraph {
-    private const string FrameVersion = "frame";
-    private const string WorldVersion = "world";
+    // The versions and passes the root declares for itself are generated names (WorldViewNames.Root), so none can equal a
+    // pane's version or place pass, which take the pane's authored name.
+    private static readonly string FrameVersion = WorldViewNames.Root("frame");
+    private static readonly string OverlayPass = WorldViewNames.Root(RenderGraphPackageCatalog.Overlay);
+    private static readonly string WorldVersion = WorldViewNames.Root(WorldViewGraphs.WorldInstance);
+
+    private const string PostPart = "post";
 
     private WorldRootGraph(RenderGraphPlan? plan, IReadOnlyDictionary<string, IReadOnlyList<string>> postPasses, IReadOnlyList<string> panes) {
         Plan = plan;
@@ -155,11 +160,8 @@ public sealed class WorldRootGraph {
                 }
 
                 var name = ((named.Count == 0)
-                    ? entry.Id
-                    : string.Create(
-                        provider: CultureInfo.InvariantCulture,
-                        handler: $"{entry.Id}-{(named.Count + 1)}"
-                    ));
+                    ? WorldViewNames.Root(PostPart, entry.Id)
+                    : WorldViewNames.Root(PostPart, entry.Id, (named.Count + 1).ToString(provider: CultureInfo.InvariantCulture)));
 
                 named.Add(item: name);
                 entryOf[name] = entryIndex;
@@ -173,7 +175,7 @@ public sealed class WorldRootGraph {
             } else {
                 passes.Add(item: new RenderGraphPackagePass(
                     Inputs: [new ResourceReference(Name: input)],
-                    Name: RenderGraphPackageCatalog.Overlay,
+                    Name: OverlayPass,
                     Outputs: [new ResourceReference(Name: output)],
                     Package: RenderGraphPackageCatalog.Overlay
                 ));
@@ -269,9 +271,9 @@ public sealed class WorldRootGraph {
         Initialization: initialization,
         Name: name
     );
-    private static string StageVersion(int index) => string.Create(
-        provider: CultureInfo.InvariantCulture,
-        handler: $"stage{index}"
+    private static string StageVersion(int index) => WorldViewNames.Root(
+        "stage",
+        index.ToString(provider: CultureInfo.InvariantCulture)
     );
 }
 /// <summary>A world's default render graph that the graph compiler refused, such as a <c>render.extensions</c> entry
