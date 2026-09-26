@@ -445,8 +445,14 @@ producer's latest completed output, whether or not the producer rendered this
 frame, under a `GpuImageLease`. The consumer's node holds the lease in its
 frame slot's `LeaseRetireList` until that slot's fence proves the sampling
 submission finished, or until a device loss or disposal. An external producer
-reads no instance and keeps no history, so the instance set refuses a read
-declared by one and a previous-frame read of one. `SdfEngineNode` is the
+keeps no history, so the instance set refuses a previous-frame read of one. It
+may read other instances' images within the frame, never a buffer, its own
+output or a previous frame: before it produces, the runtime binds each read to
+the latest completed output of the instance read (an external producer's under
+the lease its acquisition returns, a graph instance's unleased) in a
+`RenderGraphExternalReads` it hands to `Produce`. The producer takes the leases
+its submission samples (`Take`) and retires them after that submission's
+fence, and the runtime retires the rest once `Produce` returns. `SdfEngineNode` is the
 `sdf.world` producer: it submits through the SDF engine's own frame ring and
 renders every view of the frame, each into its own output image.
 `SdfEngineNode.ViewProducer` gives a producer for each later view, whose own

@@ -300,9 +300,14 @@ and the frame's pass-pixel budget:
   `RenderGraphSourceState`: its cadence and its negotiated extent, never a
   refresh or a footprint. A static source renders once, a tick source at most
   once per completed simulation tick (`RenderGraphFrame.Tick`), and a rate
-  source at most its rate, counted in presented frames at the display's rate;
-  when the display's rate is unknown it may render on every frame. A source
-  whose producer declares nothing or no extent does not render. Cadence is
+  source at most its rate, counted in presented frames at the display's rate
+  (`RenderGraphFrame.DisplayHertz`, which a host takes from
+  `FrameContext.DisplayHertz`, the rate its pacer targets). While the
+  display's rate is unknown (zero, as offscreen) a rate source is refused: it
+  does not render, and its row reads `RenderGraphInstanceStatus.Refused`. A
+  source whose producer declares nothing or no extent does not render. The
+  runtime declares an upload's state and a source producer's
+  (`IRenderGraphSourceProducer.Descriptor`) itself, after the host's. Cadence is
   counted in ticks and frames, never the wall clock.
   `RenderGraphHistory.Withdraw` takes back a render the producer could not
   complete, so its cadence counts from its last completed frame.

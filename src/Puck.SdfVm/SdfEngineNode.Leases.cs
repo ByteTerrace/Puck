@@ -172,11 +172,13 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
     /// <param name="context">The host's frame context, which resolves the device.</param>
     /// <param name="width">View 0's extent width, in pixels.</param>
     /// <param name="height">View 0's extent height, in pixels.</param>
+    /// <param name="reads">The images the world's instance reads, which the node takes no lease of: its screens bind
+    /// through its screen sources.</param>
     /// <returns><see langword="true"/> when the frame was submitted; <see langword="false"/> while the engine's
     /// pipelines build or the context resolves no device.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is
     /// zero.</exception>
-    public bool Produce(in FrameContext context, uint width, uint height) {
+    public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
         ArgumentOutOfRangeException.ThrowIfZero(value: width);
         ArgumentOutOfRangeException.ThrowIfZero(value: height);
 
@@ -226,7 +228,7 @@ public sealed partial class SdfEngineNode : IRenderGraphExternalProducer {
 
         public void Dispose() { }
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height) {
+        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             ArgumentOutOfRangeException.ThrowIfZero(value: width);
             ArgumentOutOfRangeException.ThrowIfZero(value: height);
 

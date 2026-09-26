@@ -970,15 +970,25 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 if (index == m_captureInstance) {
                     m_capture.Forward(target: producer);
                 }
-                if (
-                    (row.Width <= 0) ||
-                    (row.Height <= 0) ||
-                    !producer.Produce(
+
+                var reads = BindExternalReads(
+                    index: index,
+                    schedule: schedule
+                );
+                var produced = (
+                    (row.Width > 0) &&
+                    (row.Height > 0) &&
+                    producer.Produce(
                         context: in context,
                         height: ((uint)row.Height),
+                        reads: reads,
                         width: ((uint)row.Width)
                     )
-                ) {
+                );
+
+                reads?.RetireUntaken();
+
+                if (!produced) {
                     m_unproduced++;
                     schedule.Next.Withdraw(
                         index: index,

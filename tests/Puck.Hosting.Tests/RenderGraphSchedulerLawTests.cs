@@ -600,18 +600,30 @@ public sealed partial class RenderGraphSchedulerLawTests {
         Assert.Contains(expectedSubstring: "reads 'security' as Buffer, but its output is Image", actualString: bufferOfImage.Message);
     }
     [Fact]
-    public void AnExternalProducerThatReadsIsRefusedByName() {
-        Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+    public void AnExternalProducerReadsImagesButNoBufferOrPreviousFrame() {
+        Assert.True(condition: RenderGraphInstanceSet.TryCreate(
             instances: [
                 Instance(name: "camera"),
                 World(reads: [new RenderGraphRead(Producer: "camera")]),
             ],
-            refusal: out var refusal,
-            set: out _
+            refusal: out _,
+            set: out var set
         ));
-        Assert.Equal(expected: RenderGraphInstanceRefusalCode.ExternalReads, actual: refusal.Code);
-        Assert.Equal(expected: ["world"], actual: refusal.Instances);
-        Assert.Contains(expectedSubstring: "'world' is the external producer 'sdf.world'", actualString: refusal.Message);
+        Assert.Equal(expected: [0, 1], actual: set.Order);
+
+        foreach (var read in ((RenderGraphRead[])[new(Producer: "camera", PreviousFrame: true), new(Producer: "world")])) {
+            Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+                instances: [
+                    Instance(name: "camera"),
+                    World(reads: [read]),
+                ],
+                refusal: out var refusal,
+                set: out _
+            ));
+            Assert.Equal(expected: RenderGraphInstanceRefusalCode.ExternalReads, actual: refusal.Code);
+            Assert.Equal(expected: ["world"], actual: refusal.Instances);
+            Assert.Contains(expectedSubstring: "'world' is the external producer 'sdf.world'", actualString: refusal.Message);
+        }
     }
     [Fact]
     public void APreviousFrameReadOfTheWorldProducerIsRefusedByName() {

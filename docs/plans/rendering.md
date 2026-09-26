@@ -2872,10 +2872,7 @@ except step 8.
    remaining source's name and producer; no name is reused for other
    content; equal settings in another member order or number spelling read
    one instance. What is still open moves to step 2: no screen reads a source
-   instance yet, because `sdf.world` takes no image reads, so the live set
-   does not install them and no host supplies `RenderGraphFrame.Sources`; and
-   the live runtime node passes a display rate of zero, under which a rate
-   source may render on every frame.
+   instance yet, so the live set does not install them.
 2. Feeds are external producers, and every screen image is a lease. Can land
    now; it edits `SdfEngineNode`, so it lands before or after P7b-20, not
    beside it. An `IWorldImageFeed` adapts to `IRenderGraphExternalProducer`:
@@ -2904,9 +2901,47 @@ except step 8.
    Laws on the fake GPU: a screen's lease
    retires after the sampling slot's fence; a slot the capture producer is
    lapping is never handed out while leased; a filled external source binds
-   its fill and is never acquired. Canaries: `view-screens`,
-   `instrument-clock-source`, `hud-frame-slots`, the rest of the binder's 62,
-   and `puck parity`.
+   its fill and is never acquired; an external wait lands in the submission
+   that samples its image. Canaries: `view-screens`,
+   `instrument-clock-source`, `hud-frame-slots`, `uploaded-sources`,
+   `source-conversion`, the binder's canaries `puck affected` lists, and
+   `puck parity`. It lands as these commits, in order, each green:
+   1. External producers take image reads. `RenderGraphInstanceSet` refuses
+      only an external producer's buffer and previous-frame reads.
+      `IRenderGraphExternalProducer.Produce` takes the frame's
+      `RenderGraphExternalReads`: the runtime binds each image read's latest
+      completed output as a lease (an external producer's acquisition, a graph
+      instance's output unleased), the producer takes the leases it samples,
+      and the runtime retires the rest after `Produce`. A source's external
+      producer states its cadence and extent (`RenderGraphSourceState`), which
+      the runtime adds to `RenderGraphFrame.Sources` beside the uploads'.
+      `FrameContext.DisplayHertz` carries the presented rate the pacer
+      targets, `RenderGraphRuntimeNode` passes it, and while it is zero the
+      scheduler refuses a `Rate` source: it is never due, and its row in the
+      schedule reads `RenderGraphInstanceStatus.Refused`, which names it.
+      Landed.
+   2. The external wait rides the lease. `GpuImageLease` carries its
+      `GpuExternalWait`, and the node that samples it adds the wait to the
+      submission that samples it, never to whichever submission comes next.
+   3. Feeds are external producers and screens read source instances. Every
+      `IWorldImageFeed` adapts to a source producer whose `TryAcquireOutput`
+      is `WorldCaptureGate.Resolve`, and the machine and probe arms register
+      producers of their reserved ids. `WorldSourceInstances` joins the live
+      set, the world producer reads each shown source with a footprint, and
+      `SdfEngineNode` maps the reads to its screen slots. `ScreenSourceCell`,
+      the binder's per-slot callbacks, `SetScreenSourceFrames` and
+      `SdfWorldRenderSpec.ScreenSources` and `ScreenSourceFrames` go.
+   4. Live `screen.source` binds are source instances, so they publish
+      mappings.
+   5. The capture GPU route acquires its slot through `LatestSlotPublication`,
+      and its superseded images and shared fence are released through the
+      lease after the last submission that samples them.
+   6. The offscreen views bind acquired leases rather than
+      `ScreenSlot.Handle()` until P11b-13 deletes `ViewStack`.
+   7. The capture and camera CPU tiers go through `source-rgba`, each capture
+      fill is a static source, and `CpuSurfaceSource`'s screen role goes with
+      its last caller, as do `IWorldImageFeed.Publish` and `AcquireFrame` for
+      uploaded feeds.
 3. Uploaded sources write regions, and conversions are planned passes. The
    source-graph side has landed. An uploaded producer registers an upload for
    its source package (`RenderGraphPackageRecorders.RegisterSource`, through

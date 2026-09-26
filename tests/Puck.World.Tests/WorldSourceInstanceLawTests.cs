@@ -373,7 +373,7 @@ public sealed class WorldSourceInstanceLawTests {
 
         public void Dispose() => Opening.Feed?.Dispose();
         public void OnDeviceLost() => Opening.Feed?.NotifyDeviceLost();
-        public bool Produce(in FrameContext context, uint width, uint height) => false;
+        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) => false;
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new InvalidOperationException(message: "the test source serves no capture"));
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
             output = default;

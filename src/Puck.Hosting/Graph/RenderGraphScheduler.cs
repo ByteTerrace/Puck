@@ -302,6 +302,12 @@ public static class RenderGraphScheduler {
                     (frame.Tick != history.LatestTick(index: index))
                 );
             default:
+                // A rate counted in frames of a display whose rate is unknown would render on every frame; the source is
+                // refused instead (RenderGraphInstanceStatus.Refused).
+                if (frame.DisplayHertz <= 0) {
+                    return false;
+                }
+
                 divisor = RenderGraphRefresh.At(hertz: ((int)Math.Min(
                     val1: state.Cadence.RateHz,
                     val2: int.MaxValue
@@ -313,6 +319,12 @@ public static class RenderGraphScheduler {
                 );
         }
     }
+    // Whether a source's producer declares a rate cadence on a frame whose display rate is unknown, which refuses it.
+    private static bool RefusesRate(RenderGraphFrame frame, int index, int[] sourceState) => (
+        (frame.DisplayHertz <= 0) &&
+        (sourceState[index] >= 0) &&
+        (frame.Sources![sourceState[index]].Cadence.Refresh == ImageRefresh.Rate)
+    );
     // The stalest instance first, ties in render order: a total order, so the sort's result never depends on its
     // algorithm.
     private static bool Precedes(int left, int right, long[] staleness, int[] positionOf) => ((staleness[left] != staleness[right])
@@ -705,7 +717,9 @@ public static class RenderGraphScheduler {
                 : (deferred[index]
                     ? RenderGraphInstanceStatus.Deferred
                     : (decided[index]
-                        ? RenderGraphInstanceStatus.Waiting
+                        ? (RefusesRate(frame: frame, index: index, sourceState: sourceState)
+                            ? RenderGraphInstanceStatus.Refused
+                            : RenderGraphInstanceStatus.Waiting)
                         : RenderGraphInstanceStatus.Unread)))
             ;
 

@@ -926,7 +926,8 @@ zero-allocation steady frame with a buffer edge in it. A source instance
 by demand at most once a frame, but at the cadence and negotiated extent its
 producer declares in the frame's `RenderGraphSourceState` list (static once,
 tick once per `RenderGraphFrame.Tick`, rate at most its hertz in frames at the
-display's rate), never a refresh or a footprint; cadence is never the wall
+display's rate, `FrameContext.DisplayHertz`, and `Refused` while that is zero),
+never a refresh or a footprint; cadence is never the wall
 clock, and the scheduler's `.Sources` laws pin each. The runtime withdraws a
 render an external producer could not produce (`RenderGraphHistory.Withdraw`),
 so a static source is asked again. A world's instances are
@@ -985,7 +986,10 @@ buffer is larger than the producer's (`InputFormat`). An external instance
 through its own submissions, and each consumer binds its latest output under
 a `GpuImageLease` that the consumer node's per-slot `LeaseRetireList` holds
 until that slot's fence (the leased `BindImage` serves one frame). The set
-refuses an external instance's reads and any previous-frame read of one.
+refuses an external instance's buffer, own and previous-frame reads, and any
+previous-frame read of one; its image reads reach `Produce` as a
+`RenderGraphExternalReads`, whose leases the producer `Take`s for what its
+submission samples, the runtime retiring the rest.
 `SdfEngineNode` is the `sdf.world` producer for view 0 (`world`), and
 `SdfEngineNode.ViewProducer(view)` is the producer of each later view
 (`world$2..world$K`, named by `WorldViewNames.World`). The node renders every

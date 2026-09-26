@@ -198,8 +198,8 @@ public sealed partial class RenderGraphRuntime {
             source?.Dispose();
         }
     }
-    // The frame the scheduler reads: the host's frame, with each upload's cadence and extent after the host's source
-    // states, unless the host declares that source itself.
+    // The frame the scheduler reads: the host's frame, with each upload's and each source producer's cadence and extent
+    // after the host's source states, unless the host declares that source itself.
     private RenderGraphFrame WithSourceStates(in RenderGraphFrame frame) {
         var uploads = false;
 
@@ -207,7 +207,10 @@ public sealed partial class RenderGraphRuntime {
             uploads |= (source?.State is not null);
         }
 
-        if (!uploads) {
+        if (
+            !uploads &&
+            !HasSourceProducers()
+        ) {
             return frame;
         }
 
@@ -238,6 +241,8 @@ public sealed partial class RenderGraphRuntime {
                 m_sourceStates.Add(item: state);
             }
         }
+
+        AddProducerSourceStates();
 
         return (frame with {
             Sources = m_sourceStates,
