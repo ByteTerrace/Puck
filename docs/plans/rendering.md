@@ -33,8 +33,9 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-P2, P3 and P5 are complete; P1a, P1b, P4 and P6 are not. The programmable compute and
-graphics foundation has functional GPU fixtures on both backends. The
+P2, P3, P5, P7, P9 and P10 are complete; P1a, P1b, P4, P6, P8 and P11 to P17
+are not. The programmable compute and graphics foundation has functional GPU
+fixtures on both backends. The
 work-counting model, the GPU work ledger, and the counting wrappers live in
 `Puck.Abstractions`. The state arena, rules and search, the shader pipeline
 node, the SDF world engine, its views, and the unified overlay all report
@@ -503,8 +504,11 @@ group at set 1 and the pass group at set 3, each register number the Vulkan
 binding and each group's ordinal its register space, so no pass source assigns
 a register by hand.
 
-P7's adapter memory profile, residency selector, consumer migration and binding
-groups have landed. `IGpuDeviceContext`
+P7 is complete: its adapter memory profile, residency selector, consumer
+migration and binding groups have landed, all twenty-two steps of P7b among
+them; its gate's Linux bytecode leg is
+[deferred to the end](#deferred-to-the-end).
+`IGpuDeviceContext`
 reports a `GpuMemoryProfile` beside its identity, filled at device creation
 from `D3D12_FEATURE_DATA_ARCHITECTURE`, `DXGI_ADAPTER_DESC1` and options 16's
 GPU upload heap support on Direct3D 12, and from the device type and
@@ -1022,7 +1026,8 @@ P11b's last four commits are these; 11 and 12 have landed:
 14. The final sweep: the rest of the deletions P11 lists, and the owning guides
     and the `rendering` skill describe the result.
 
-P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
+P13's CPU half has landed, and so have P13b's live mappings, simulation
+destination, host passthrough and live hit walk, described below. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
 or pane placement, an optional warp pass, a UV layout, a letterboxing fit and a
 crop, as data. A warp declares its exact inverse (`SourceWarpInverse.Affine`)
@@ -1173,8 +1178,14 @@ There is no jitter, motion vector, or history in the SDF kernels; render scale
 is a bilinear-to-Catmull-Rom upsample in the graph's `place` pass.
 
 P12's source contract, producer registration and conversion passes have
-landed, and so has synchronization across devices; the graph wiring and the
-uploads through P7's residency are owed. The camera and probe GPU tiers, and
+landed, and so have P12b's steps 1 to 4 and 6: sources are graph instances,
+feeds are external producers whose every screen image is a lease, uploaded
+sources write regions that a planned conversion pass reads, devices
+synchronize through a shared fence, and a machine's output is an uploaded
+source held to its exact verdict. The capture gate over the graph (step 5),
+probe outputs and view exports as sources (step 7), consumer-chosen filtering
+with no slot limit (step 8) and the check's list with its deletions (step 9)
+remain. The camera and probe GPU tiers, and
 desktop capture on a Direct3D 12 host, share their images without a copy, as
 simultaneous-access Direct3D 12 textures that a Vulkan host imports. A camera
 or capture producer signals the consumer's Direct3D 12 shared fence after each
@@ -1220,17 +1231,19 @@ through the same one-pass graph on a node of their own
 their tier is chosen per device at run time and the HUD reads them outside the
 set, and hand out counted leases. A fill converts as soon as a screen shows or
 a HUD frame names an external source, because a converter's graph builds off
-the frame thread (`WorldCaptureFills`, held by `WorldCaptureFillLawTests`); a camera source's descriptor states the extent its seat's
-sensor delivers, requested until the device negotiates one. A machine's video
-output is an uploaded source too (`MachineVideoSourceUpload`): once per completed
+the frame thread (`WorldCaptureFills`, held by `WorldCaptureFillLawTests`); a
+camera source's descriptor states the extent its seat's sensor delivers,
+requested until the device negotiates one. A machine's video output is an
+uploaded source too (`MachineVideoSourceUpload`): once per completed
 tick it writes the output's latest frame into the instance's region, RGBA8 or an
 indexed image and its palette, and the instance converts it once however many
 screens show it. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
 through Media Foundation (`Win32MediaFoundationCameraService`). Linux registers
 null capture services, and there is no POSIX file-descriptor import or
 external semaphore.
-A hit maps back to a source's pixels only through P13's CPU model; no live
-consumer feeds it a world-surface hit yet. The GPU bakes
+A hit maps back to a source's pixels through P13's mapping on the CPU, which
+the simulation destination feeds a seat's pointer ray on a world surface
+(P13b-2). The GPU bakes
 settled carves into 128-cubed bricks (`SdfWorldEngine.BrickBake.cs`).
 
 P17's CPU half and the device half of its sampling check have landed; drawing a
@@ -3534,12 +3547,12 @@ Each commit is marked with what it waits on; only step 5 waits on P7b's groups.
      held by the child it was pressed on).
    - Its check, the recorded Windows run on real hardware, is
      [deferred to the end](#deferred-to-the-end).
-5. The GPU draws from the mapping. Waits on P7b-20. The screen shading reads
+5. The GPU draws from the mapping. Can land now: P7b-20, the engine's groups,
+   has landed. The screen shading reads
    each screen's UV layout, crop, letterbox and warp inset from the published
    mapping instead of `CrtBezel` in `sdf-world.hlsli`, and its mirror,
    `WorldScreenMappings.Bezel`, is deleted. It adds a per-screen buffer to the
-   SDF engine, so it waits for the engine's groups rather than adding a
-   binding P7b-20 would move again.
+   SDF engine as a member of the engine's groups.
 6. Hits continue through live instances. Landed, except the portal check:
    `WorldViewGraphHost.Walk` runs `RenderGraphHitWalk` over the runtime's
    instance set from the published panes, with each view's seat camera and each
@@ -3896,43 +3909,50 @@ Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
-**Contracts.** P7's memory profile and residency selector have landed, and so
-has every step of P7b; the gate's Linux bytecode leg is
+**Contracts.** P7 is complete: its memory profile, its residency selector and
+every step of P7b have landed, and the gate's Linux bytecode leg is
 [deferred to the end](#deferred-to-the-end). P8 is complete but for its echo of
 the SDF engine's two interfaces, which P14-5 adds, and that canary's GPU run;
-its frame group became a descriptor set when step 15 put pipelines on groups. P7 and P8 do not
-read simulation state, so they do not wait on the state rebuild.
+its frame group became a descriptor set when step 15 put pipelines on groups.
+P7 and P8 do not read simulation state, so they do not wait on the state
+rebuild.
 
 **The frame graph and nesting.** P11's CPU half has landed, and so have the
 P11b items its implementation status lists, the main view through the graph
-runtime among them. The rest of P11b, commits 13 and 14, waits on nothing from
-P7b, whose groups have landed for every pass; commit 13, the screens, follows
-P12b-2, which has landed. P12's
-source contract, producers and conversion passes have landed, and so has P12b-2;
-the rest of P12b, the graph wiring, follows P11b, and P13b follows P12b and P11b. P14 follows P4, P7b, P8,
-P11b and P12b, because the engine's composition and screens need somewhere to
-go before it moves; its capability matrix (P14-1), generated instruction-set
-declarations (P14-3) and the planner's vocabulary with multi-basis counts
-(P14-4) needed none of them and have landed. P4-2's mesh
-work follows P4-1 and P7b's services. P15 and P16 both follow P14: P15 also needs P4, and P16, the smallest package
-in this group, needs P14's float working targets. P17's CPU half, the bakes and
-their texture codecs, has landed, and so has their block-compressed upload and
-sampling check on both backends; drawing a bake follows P4 and choosing
-between a bake and the field follows P6.
+runtime among them. The rest of P11b is commits 13 and 14, which wait on
+nothing: P7b's groups have landed for every pass, and commit 13, the screens,
+follows P12b-2, which has landed. P12's source contract, producers and
+conversion passes have landed, and so have P12b's steps 1 to 4 and 6. Of the
+rest, steps 5 and 7 can land now, step 8 can too since P7b-14b-6 and P7b-20
+have landed, and step 9 comes last, its `view` and `session` arms going with
+P11b-13's deletion of `ViewStack`. P13b's live mappings (step 1), simulation
+destination (step 2), host passthrough (step 4) and live hit walk (step 6)
+have landed, with step 3's CPU half; step 5, the GPU drawing from the
+mapping, waited only on P7b-20 and can land now, and GPU picking follows P4.
+P14 follows P4, P7b, P8, P11b and P12b, because the engine's composition and
+screens need somewhere to go before it moves. Its capability matrix (P14-1),
+generated instruction-set declarations (P14-3), the planner's vocabulary with
+multi-basis counts (P14-4) and post passes as the root graph's own passes
+(P14-12) needed none of them and have landed, and the HLSL module split
+(P14-2) is in progress. P15 and P16 both follow P14: P15 also needs P4, and
+P16, the smallest package in this group, needs P14's float working targets.
+P17's CPU half, the bakes and their texture codecs, has landed, and so have
+their block-compressed upload and sampling check on both backends and the one
+pixel-format vocabulary, `GpuPixelFormat`; drawing a bake follows P4 and
+choosing between a bake and the field follows P6.
 
-**Bound state.** P9, which also fills the frame group P8 declares, has
-landed. It is written against the state interface of
+**Bound state.** P9 and P10 have landed. P9, which also fills the frame group
+P8 declares, is written against the state interface of
 [the presentation view](runtime-and-delivery.md#the-presentation-view), which
-the runtime and delivery programme owns. P10 is last in this group: a bound
-member and an overridden member have to compose by a stated rule, so it needs
-P7's residency policies and P9's mirror as well as P5-1 and P8's interface,
-which have landed. It also follows P11b's graph wiring, because the rows it
-binds are `views.graphs` rows.
+the runtime and delivery programme owns. P10 binds the pass members of
+`views.graphs` rows to state through P9's mirror and P7's residency policies,
+and a bound member and an overridden member compose by the rule
+[the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2 and P4-2c have landed, so the longest
-remaining chain now runs P11b-13, P14-5, then P14-6, P14-7 to P14-13,
-and ends with P15. P16 follows P14-10's float working targets, and drawing a
-bake (P17) comes before P6's choice between a bake and the field.
+remaining chain runs P11b-13 and P14-2, then P14-5, P14-6, P14-7 to P14-11 and
+P14-13, and ends with P15. P16 follows P14-10's float working targets, and
+drawing a bake (P17) comes before P6's choice between a bake and the field.
 
 ## Deferred to the end
 

@@ -176,9 +176,9 @@ public sealed class ShaderPipelinePlan {
         ? string.Empty
         : Outputs[0]
     );
-    /// <summary>Gets the graph's shader passes and versions copied into this plan, every binding resolved. A package's
-    /// pass is not part of it; a graph plan keeps the document it planned
-    /// (<see cref="RenderGraphPlan.Definition"/>).</summary>
+    /// <summary>Gets the graph's shader passes, package passes and versions copied into this plan, every binding
+    /// resolved, with its tick rate and tiers: a snapshot the plan owns, so a later change to the document it was
+    /// planned from never reaches it.</summary>
     public RenderGraphDefinition Definition { get; }
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs { get; }
@@ -222,6 +222,15 @@ public sealed class ShaderPipelinePlan {
             }
             : null),
         }).ToArray();
+        var packages = definition.Packages?.Select(selector: static package => package with {
+            Inputs = ((package.Inputs is null)
+            ? null
+            : new ReadOnlyCollection<ResourceReference>(list: package.Inputs.Select(selector: static input => input with { }).ToList())),
+            Outputs = ((package.Outputs is null)
+            ? null
+            : new ReadOnlyCollection<ResourceReference>(list: package.Outputs.Select(selector: static output => output with { }).ToList())),
+            Config = package.Config?.Clone(),
+        }).ToArray();
 
         return new RenderGraphDefinition(
             Schema: definition.Schema,
@@ -229,6 +238,9 @@ public sealed class ShaderPipelinePlan {
             Resources: new ReadOnlyCollection<ShaderPipelineResource>(list: resources),
             Outputs: new ReadOnlyCollection<string>(list: definition.Outputs.ToArray()),
             Passes: new ReadOnlyCollection<ShaderPipelinePass>(list: passes),
+            Packages: ((packages is null)
+                ? null
+                : new ReadOnlyCollection<RenderGraphPackagePass>(list: packages)),
             TickRate: definition.TickRate,
             Tiers: ((definition.Tiers is { } tiers)
                 ? new ReadOnlyCollection<Puck.Abstractions.Presentation.QualityTier>(list: tiers.ToArray())

@@ -306,7 +306,7 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
         }
 
         var pipeline = m_planner.Compile(
-            definition: definition with { Packages = null },
+            definition: definition,
             packages: packagePasses
         );
         var steps = pipeline.Passes.Select(selector: planned => new RenderGraphStep(
