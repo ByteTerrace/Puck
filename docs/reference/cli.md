@@ -639,10 +639,11 @@ break, and nothing wider:
   recorded in [`tests/Puck.Affected`](../../tests/Puck.Affected/README.md).
   A canary is also chosen for any file its manifest's documents reach, read
   with the documents' own readers: a world reaches the layers it composes,
-  the neighbour worlds its adjacencies name and the `.graph.json` documents
-  its `views.graphs` rows name, and a graph document
-  reaches the pass shaders it declares and every file they include, each
-  resolved as the host resolves it. A world is read composed and parsed but not validated, so a world whose
+  the neighbour worlds its adjacencies name, the `.graph.json` documents its
+  `views.graphs` rows name, and the files of each shader set its
+  `render.extensions` entries name by id; a graph document reaches the pass
+  shaders it declares and every file they include, each resolved as the host
+  resolves it. A world is read composed and parsed but not validated, so a world whose
   adjacencies or extensions need the host's resolvers still reaches them.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
 - A file no canary can execute is placed through the indexed C# sources it
@@ -654,9 +655,11 @@ break, and nothing wider:
   may sit in the kernel's project or any project its build references, as a
   conversion pass's name is a constant in `ImageSourceConversion`. A shader-set
   manifest (`*.puck.shader.json`), the stage sources it names beside it with
-  their includes, and the frame interface generated for it stand for the
-  manifest's owner: the C# declaring `ShaderSetManifest`, the model a manifest
-  is read into, since no C# names a set that documents select by id. A file
+  their includes, and the frame interface generated for it are placed through
+  the canaries whose worlds name the set by id in `render.extensions`, read as
+  the rest of a canary's documents are. A set no canary's world names falls
+  back to the manifest's owner: the C# declaring `ShaderSetManifest`, the model
+  a manifest is read into, since no C# names a set by id. A file
   `puck schema` writes stands for the sources declaring the types it is
   generated from. A shader that no kernel's loader, shader set or canary's
   documents reach has no stand-in.
