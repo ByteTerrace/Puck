@@ -96,7 +96,10 @@ public sealed class RenderGraphRuntimeNode : IRenderNode, ICaptureRequestTarget 
                 DisplayWidth: m_displayWidth,
                 Footprints: Footprints,
                 Index: m_frame++,
-                Roots: m_roots
+                Roots: m_roots,
+                Tick: ((context.StepTicks == 0UL)
+                    ? 0L
+                    : ((long)(context.ElapsedTicks / context.StepTicks)))
             )
         );
     }

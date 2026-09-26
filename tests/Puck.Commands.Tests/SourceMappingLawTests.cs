@@ -13,7 +13,7 @@ public sealed class SourceMappingLawTests {
     private const int SourceHeight = 240;
     private const int SourceWidth = 320;
 
-    private static readonly SourceHandle Emulator = SourceHandle.Producer(id: "emulator");
+    private static readonly SourceHandle Emulator = SourceHandle.Producer(name: "emulator");
     // A face frame with no axis aligned to the world: right (2, 2, 1)/3 and up (-1, 2, -2)/3 are unit and orthogonal.
     private static readonly SourcePlacement.Surface TiltedSurface = new(
         HalfHeight: 1.5f,

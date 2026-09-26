@@ -60,7 +60,7 @@ public static class WorldScreenMappings {
 
         return Of(
             screen: screen,
-            source: SourceHandle.Producer(id: $"screens[{screen.Index}]"),
+            source: SourceHandle.Producer(name: $"screens[{screen.Index}]"),
             sourceHeight: 1,
             sourceWidth: 1
         );

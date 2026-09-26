@@ -2,6 +2,7 @@ using Puck.Assets.Documents;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Sources;
 
 namespace Puck.World;
 
@@ -60,45 +61,22 @@ public abstract record WorldScreenSource {
                 return true;
             }
 
-            if (!string.Equals(
-                a: Id,
-                b: other.Id,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return false;
-            }
-
-            var count = (Settings?.Count ?? 0);
-
-            if (count != (other.Settings?.Count ?? 0)) {
-                return false;
-            }
-
-            if (count == 0) {
-                return true;
-            }
-
-            foreach (var (key, value) in Settings!) {
-                if (
-                    !other.Settings!.TryGetValue(
-                        key: key,
-                        value: out var theirs
-                    ) ||
-                    !JsonElement.DeepEquals(
-                        element1: value,
-                        element2: theirs
-                    )
-                ) {
-                    return false;
-                }
-            }
-
-            return true;
+            return (
+                string.Equals(
+                    a: Id,
+                    b: other.Id,
+                    comparisonType: StringComparison.Ordinal
+                ) &&
+                ImageSourceSettings.Equal(
+                    left: Settings,
+                    right: other.Settings
+                )
+            );
         }
         /// <inheritdoc/>
         public override int GetHashCode() => HashCode.Combine(
             value1: StringComparer.Ordinal.GetHashCode(obj: Id),
-            value2: (Settings?.Count ?? 0)
+            value2: ImageSourceSettings.HashOf(settings: Settings)
         );
     }
     /// <summary>A named view from the presentation view stack, such as a monitor showing another camera's output.</summary>

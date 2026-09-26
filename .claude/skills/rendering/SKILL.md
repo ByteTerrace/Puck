@@ -230,7 +230,15 @@ These are one-line cautions; the owning pages hold the derivations.
   transport; it never adds a source kind. Every feed it opens declares that
   id, class and transport, or `WorldImageProducers.TryOpen` disposes it and
   refuses it by name. An import's CPU staged-copy fallback (the camera and
-  capture CPU tiers) is still `Imported`. An external image (camera, capture,
+  capture CPU tiers) is still `Imported`. A source is a render-graph instance:
+  `WorldSourceInstances` makes one external instance per distinct producer,
+  machine or probe source the screens show (`source$<screen>`, package
+  `source.<producer id>`, carrying the settings), and
+  `WorldImageProducers.RegisterPackages` registers one external-producer factory
+  per producer id that opens the instance's feed through `TryOpen`. A typed
+  arm's source takes the reserved id `machine` or `probe`, which the vocabulary
+  refuses to a document producer. Its `RenderGraphInstance.Handle` is its
+  identity, never the producer id. An external image (camera, capture,
   probe output) is resolved through the binder's `WorldCaptureGate`, never
   directly: a new path that samples one without the gate leaks it into
   captures. An uploaded source's region layout and the conversion kernels are a
@@ -823,7 +831,15 @@ leaves the schedule unchanged, and a host alternating two schedules allocates
 nothing in a steady frame. `RenderGraphSchedulerLawTests` pins demand, extent,
 refresh, self-reads, cycles, the pass-pixel budget, buffer reads (demanded by
 every rendering reader, no extent, no pass-pixels), kind mismatches and that
-zero-allocation steady frame with a buffer edge in it. A world's instances are
+zero-allocation steady frame with a buffer edge in it. A source instance
+(`RenderGraphInstance.IsSource`, package `source.<producer id>`) is scheduled
+by demand at most once a frame, but at the cadence and negotiated extent its
+producer declares in the frame's `RenderGraphSourceState` list (static once,
+tick once per `RenderGraphFrame.Tick`, rate at most its hertz in frames at the
+display's rate), never a refresh or a footprint; cadence is never the wall
+clock, and the scheduler's `.Sources` laws pin each. The runtime withdraws a
+render an external producer could not produce (`RenderGraphHistory.Withdraw`),
+so a static source is asked again. A world's instances are
 `views.graphs` rows, validated through `RenderGraphInstanceSet.TryCreate` and
 priced by `WorldPresentationCost` in the cost report and `world.budget`.
 `RenderGraphRuntime` (`src/Puck.Shaders/Graph`, since `Puck.Hosting` cannot

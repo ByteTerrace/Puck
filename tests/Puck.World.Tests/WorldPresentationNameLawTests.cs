@@ -163,8 +163,12 @@ public sealed class WorldPresentationNameLawTests {
             actual: seat.Split(separator: GeneratedName.Joiner),
             expected: [SeatCamera, WorldViewNames.SeatPart, "2"]
         );
+        Assert.Equal(
+            actual: WorldViewNames.Source(screen: 4),
+            expected: "source$4"
+        );
 
-        foreach (var name in ((string[])[WorldViewNames.Session(screen: 0), seat])) {
+        foreach (var name in ((string[])[WorldViewNames.Session(screen: 0), seat, WorldViewNames.Source(screen: 0)])) {
             Assert.True(condition: GeneratedName.IsGenerated(name: name), userMessage: name);
             Assert.False(condition: GeneratedName.TryValidateAuthored(
                 name: name,

@@ -75,6 +75,12 @@ public static class WorldImageProducerSettings {
     public const string CameraId = "camera";
     /// <summary>The desktop-capture producer's id.</summary>
     public const string CaptureId = "capture";
+    /// <summary>The producer id of a <see cref="WorldScreenSource.Machine"/> source's render-graph instance. The machine
+    /// arm stays typed because it names a <c>machines</c> row, so no document producer may take this id.</summary>
+    public const string MachineId = "machine";
+    /// <summary>The producer id of a <see cref="WorldScreenSource.Probe"/> source's render-graph instance. The probe arm
+    /// stays typed because it names a <c>probes</c> row, so no document producer may take this id.</summary>
+    public const string ProbeId = "probe";
     /// <summary>The QR producer's id.</summary>
     public const string QrId = "qr";
     /// <summary>The test-pattern producer's id.</summary>

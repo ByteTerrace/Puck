@@ -171,6 +171,33 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
     }
     [Fact]
+    public void AProducerThatCouldNotProduceIsAskedAgainOnTheNextFrame() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, frames, producers) = WorldScene(
+            gpu: gpu,
+            refresh: RenderGraphRefresh.Every(divisor: 4)
+        );
+
+        using (runtime) {
+            var world = producers.Only;
+
+            world.Holding = true;
+            frames.Next(count: 1);
+            Assert.Equal(expected: 0, actual: world.Produced);
+
+            // The render it could not produce was withdrawn, so it is due again at once rather than a divisor later, and
+            // its divisor counts from the frame it completed.
+            world.Holding = false;
+            frames.Next(count: 1);
+            Assert.Equal(expected: 1, actual: world.Produced);
+            frames.Next(count: 3);
+            Assert.Equal(expected: 1, actual: world.Produced);
+            frames.Next(count: 1);
+            Assert.Equal(expected: 2, actual: world.Produced);
+        }
+    }
+    [Fact]
     public void ADeviceLossAndDisposalReleaseEveryLease() {
         var gpu = new FakePipelineGpu();
 

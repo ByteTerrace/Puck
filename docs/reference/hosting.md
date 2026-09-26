@@ -293,6 +293,19 @@ and the frame's pass-pixel budget:
   producer is demanded whenever a consumer is, renders at most once a frame
   before its same-frame readers, and renders at no extent for no pass-pixels.
   A root or footprint that names a buffer is refused.
+- A source is an external instance whose package is `source.<producer id>`
+  (`RenderGraphInstance.Source`), which reads nothing and carries its
+  producer's settings. It is demanded as any shown producer is and renders at
+  most once a frame, but at what its producer declares in the frame's
+  `RenderGraphSourceState`: its cadence and its negotiated extent, never a
+  refresh or a footprint. A static source renders once, a tick source at most
+  once per completed simulation tick (`RenderGraphFrame.Tick`), and a rate
+  source at most its rate, counted in presented frames at the display's rate;
+  when the display's rate is unknown it may render on every frame. A source
+  whose producer declares nothing or no extent does not render. Cadence is
+  counted in ticks and frames, never the wall clock.
+  `RenderGraphHistory.Withdraw` takes back a render the producer could not
+  complete, so its cadence counts from its last completed frame.
 
 The schedule lists every instance with its status, extent, divisor, passes and
 price, the renders in order, and the frame and kind of the output each
@@ -304,9 +317,11 @@ schedule, because a schedule's own `Next` cannot be its input. A host that
 alternates two schedules schedules a steady frame without allocating once their
 read lists have grown to the frame's reads, and `RenderGraphFrame` is a value,
 so describing each frame over the same root and footprint lists allocates
-nothing either. Nothing renders through it yet: the live renderer still
-composes its views itself, and moving it onto the scheduler is P11b in
-[the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
+nothing either. The main view and the `views.graphs` panes render through it
+(`RenderGraphRuntime` in `Puck.Shaders`); screens still render through the
+offscreen view stack until the rest of P11b in
+[the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views)
+moves them, and no screen reads a source instance until P12b-2.
 
 `RenderGraphHitWalk` follows a hit through nested instances. Each instance
 reports, through `IRenderGraphHitScene`, the source placements in its world
@@ -340,7 +355,7 @@ intermediate publications is correct.
 | Observation | `FrameCaptureController`, `PublishBuffer<T>` | Capture sessions and latest-value handoff |
 | Background work | `BackgroundBuild<T>` | A candidate built on the thread pool and installed at a frame boundary |
 | Sampled images | `GpuImageLease`, `LeaseRetireList` | An image a submission samples, released once that submission retires |
-| View scheduling | `RenderGraphInstance`, `RenderGraphInstanceSet`, `RenderGraphScheduler`, `RenderGraphExtent` | Which views render in a frame, at what extent, rate and price |
+| View scheduling | `RenderGraphInstance`, `RenderGraphInstanceSet`, `RenderGraphScheduler`, `RenderGraphExtent`, `RenderGraphSourceState` | Which views and sources render in a frame, at what extent, rate or cadence, and price |
 | Nested hits | `RenderGraphHitWalk`, `IRenderGraphHitScene`, `RenderGraphHitPath` | Where a pick through views that show other views lands |
 | Child processes | `ChildProcess`, `ChildProcessResult` | Tool runs and driven companions started from an argument vector |
 

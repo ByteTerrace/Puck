@@ -620,8 +620,12 @@ A mapped point goes to one `SourceDestination`:
 | `Simulation` | A pointer ray, named by the `source.pointer.origin` and `source.pointer.direction` Axis3D commands (`SourcePointerCommands`), quantized by `CommandValueQuantization.QuantizeAxis3D` and mapped from document data. A World server integrates seat intents, not command snapshots, so a seat folds the two commands into its `PlayerIntent.SourceRay`, the intent carries the ray through the wire and the replay tape, and the server maps it through the screen row in the tick for the `$pointer:` rule read. On a windowed World host, `WorldPointerRayCapture` casts the OS pointer through its seat's camera with `SourceRay.Through` each host frame and holds both commands on that seat's lane with `InputRouter.Sustain`, so every tick of the frame carries the ray. `TryValidate` refuses a pane here, because a pane's aspect ratio depends on the host's display. |
 | `Passthrough` | An external window on the host. `SourcePassthrough.ToClient` scales a source pixel into the window's client area in physical and logical pixels. Only a source whose `SourceOpener` is the local user may take this destination, and `TryValidate` refuses it by name for a source a document opened. |
 
-`SourceHandle` names the source shown, a registered producer or a render-graph
-instance. Nothing publishes mappings from the live renderer yet: the renderer's
+`SourceHandle` names the source shown by its render-graph instance: a source
+instance a registered producer supplies, whose hit ends at its pixels, or a
+rendered instance, whose hit continues into its camera. It is the instance's
+identity (`RenderGraphInstance.Handle`), so two sources of one producer opened
+with different settings are two handles. Nothing publishes mappings from the
+live renderer yet: the renderer's
 screens and panes read them when the frame graph wires sources, and delivery of
 passthrough input to a window is Windows-specific host work. Both are open in
 [the rendering programme](../plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).

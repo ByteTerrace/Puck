@@ -3,8 +3,9 @@ using System.Globalization;
 namespace Puck.World.Client;
 
 /// <summary>Mints the names of the offscreen view registrations the engine creates beside the ones an author names:
-/// a session screen's view and a seat-relative camera's per-seat view, and the names the synthesized root graph
-/// declares for itself (<see cref="Root"/>). Each is a generated document name
+/// a session screen's view and a seat-relative camera's per-seat view, a screen source's render-graph instance
+/// (<see cref="Source"/>, <c>source$&lt;screen&gt;</c>), and the names the synthesized root graph declares for itself
+/// (<see cref="Root"/>). Each is a generated document name
 /// (<see cref="GeneratedName.Join"/>), and an authored camera name may not be in that form, so no minted view name can
 /// equal a camera's own registration. The parts are recoverable: a session view is <c>session$&lt;screen&gt;</c>, two
 /// parts; a seat view is <c>&lt;camera&gt;$seat$&lt;seat&gt;</c>, three parts, the camera first because it is the
@@ -14,12 +15,23 @@ public static class WorldViewNames {
     public const string SessionHead = "session";
     /// <summary>The part between a camera's name and the seat number in a seat-relative camera's view name.</summary>
     public const string SeatPart = "seat";
+    /// <summary>The first part of a source instance's name.</summary>
+    public const string SourceHead = "source";
 
     /// <summary>Returns the view name a session-sourced screen registers its view under.</summary>
     /// <param name="screen">The 0-based index of the screen the session feeds.</param>
     /// <returns><c>session$&lt;screen&gt;</c>.</returns>
     public static string Session(int screen) => GeneratedName.Join(
         SessionHead,
+        screen.ToString(provider: CultureInfo.InvariantCulture)
+    );
+    /// <summary>Returns the name of the source instance a screen's producer, machine or probe source is read through,
+    /// named after the first screen showing it, so every later screen showing the same source reads the same
+    /// instance.</summary>
+    /// <param name="screen">The 0-based index of the first screen showing the source.</param>
+    /// <returns><c>source$&lt;screen&gt;</c>.</returns>
+    public static string Source(int screen) => GeneratedName.Join(
+        SourceHead,
         screen.ToString(provider: CultureInfo.InvariantCulture)
     );
     /// <summary>Returns the view name a seat-relative camera registers under for one seat.</summary>

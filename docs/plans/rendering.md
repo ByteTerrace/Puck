@@ -958,8 +958,9 @@ casts the OS pointer through its seat's published camera with
 
 P13b owes the rest. Nothing publishes a mapping from the live renderer, so the
 screen shading still reads its own bezel constant, which `WorldScreenMappings`
-mirrors, and the GPU does not yet draw from the mapping. `SourceHandle` stands
-in for P12's producer id until P12b names sources in the graph. No host feeds
+mirrors, and the GPU does not yet draw from the mapping. A `SourceHandle` names
+a source by its render-graph instance (`RenderGraphInstance.Handle`), but no
+live screen publishes one until P13b-1. No host feeds
 `SourceFocus` or delivers a focused source's input to its window, no machine
 reads a mapped pointer, and no host publishes its panes to `SourcePanePicker`
 yet. The recorded Windows run, a click reaching a
@@ -2589,19 +2590,32 @@ source. Four facts shape the order:
 Each commit is marked with what it waits on. None waits on P7b's groups
 except step 8.
 
-1. Sources are instances. GPU-free; can land now. A `producer` screen source,
-   a machine output and a probe output become external instances whose package
-   is `source.<producer id>` and which carry their settings, and
-   `WorldImageProducers` registers one external-producer factory per producer
-   id. The scheduler schedules a source by demand, at most once a frame however
-   many screens read it; at its descriptor's cadence (a `Static` source once, a
-   `Tick` source once per completed tick, a `Rate` source at most `RateHz`);
-   and at the extent its producer negotiated rather than a footprint. An
-   instance's `SourceHandle` is its identity, which P13b-1 reads. Laws in
+1. Sources are instances. Landed. `WorldSourceInstances` makes a `producer`
+   screen source, a machine output and a probe output an external instance
+   whose package is `source.<producer id>` (`machine` and `probe` for the typed
+   arms, ids the vocabulary refuses to a document producer) and which carries
+   its settings; screens showing equal sources read one instance, named
+   `source$<screen>` after the first. `WorldImageProducers.RegisterPackages`
+   registers one external-producer factory per producer id, which opens the
+   instance's feed from its settings through `TryOpen`, so a feed that
+   disagrees with its registration is refused by name. The scheduler schedules
+   a source by demand, at most once a frame however many screens read it; at
+   the cadence its producer declares in the frame's `RenderGraphSourceState`
+   (a `Static` source once, a `Tick` source once per completed tick, a `Rate`
+   source at most `RateHz`, counted in frames at the display's rate); and at
+   the extent its producer negotiated rather than a footprint. The runtime
+   withdraws a render an external producer could not complete, so a static
+   source is asked again. An instance's `RenderGraphInstance.Handle` is its
+   `SourceHandle` and its identity, which P13b-1 reads. Laws in
    `RenderGraphSchedulerLawTests`: two screens on one camera publish it once a
    frame, counted; a source no visible consumer reads publishes nothing; a
-   static source publishes once; a rate source never exceeds its rate over a
-   fixed frame sequence.
+   static source publishes once; a tick source once per completed tick; a rate
+   source never exceeds its rate over a fixed frame sequence. What is still
+   open moves to step 2: no screen reads a source instance yet, because
+   `sdf.world` takes no image reads, so the live set does not install them and
+   no host supplies `RenderGraphFrame.Sources`; and the live runtime node
+   passes a display rate of zero, under which a rate source may render on
+   every frame.
 2. Feeds are external producers, and every screen image is a lease. Can land
    now; it edits `SdfEngineNode`, so it lands before or after P7b-20, not
    beside it. An `IWorldImageFeed` adapts to `IRenderGraphExternalProducer`:
