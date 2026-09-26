@@ -51,6 +51,11 @@ public sealed record RenderGraphPackagePass(
 /// them.</param>
 /// <param name="Packages">The engine-package passes, or <see langword="null"/> for none. Only a host that offers packages
 /// plans them (<see cref="RenderGraphCompiler"/>); a pipeline instance runs shader passes alone.</param>
+/// <param name="TickRate">The rate, in ticks a second, the graph's passes read the deterministic tick at
+/// (<see cref="ShaderFrameInterface.Tick"/>), or <see langword="null"/> for the engine's own
+/// (<see cref="ShaderFrameInterface.EngineTickRate"/>). A pass reads the engine tick divided by the engine rate over this
+/// rate, so the rate must divide the engine rate exactly; the planner refuses any other by name
+/// (<c>SHADERPIPE_TICK_RATE</c>).</param>
 [method: JsonConstructor]
 public sealed record RenderGraphDefinition(
     [property: JsonPropertyName("$schema")] string Schema,
@@ -58,7 +63,8 @@ public sealed record RenderGraphDefinition(
     IReadOnlyList<ShaderPipelineResource> Resources,
     IReadOnlyList<string> Outputs,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShaderPipelinePass>? Passes = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RenderGraphPackagePass>? Packages = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RenderGraphPackagePass>? Packages = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] uint? TickRate = null
 ) {
     /// <summary>Initializes a graph using <see cref="RenderGraphSchemas.Graph"/>.</summary>
     /// <param name="name">The graph name.</param>

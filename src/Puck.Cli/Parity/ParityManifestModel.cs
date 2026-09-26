@@ -10,12 +10,14 @@ internal sealed record ParityManifest(
 );
 /// <summary>One armed capture's entry. When <see cref="Refusal"/> is present the producer wrote no frame for it —
 /// <c>cameraInside</c>, <c>busy</c>, <c>stale</c>, <c>failed</c>, <c>unserved</c> or <c>deviceLost</c>, with <see cref="Detail"/>
-/// naming the ticks involved — so <see cref="Frame"/> and <see cref="Census"/> are <see langword="null"/>, and only
-/// <see cref="StateHash"/>, the sim-state summary at the armed tick, is meaningful.</summary>
+/// naming the ticks involved — so <see cref="Frame"/>, <see cref="Census"/> and <see cref="RegionTick"/> are
+/// <see langword="null"/>, and only <see cref="StateHash"/>, the sim-state summary at the armed tick, is meaningful. A
+/// landed frame carries <see cref="RegionTick"/>, the tick the frame refreshed its bound regions at.</summary>
 internal sealed record ParityManifestCapture(
     string Station,
     ulong Tick,
     string StateHash,
+    ulong? RegionTick,
     string? Refusal,
     string? Detail,
     string? Frame,

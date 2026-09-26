@@ -1130,6 +1130,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// which a view must have before the root shows it, so a capture is never served over a stand-in; or
     /// <see langword="null"/> before a render root is attached, when no view is shown.</summary>
     public Func<int, bool>? ViewRendered { get; set; }
+    /// <summary>Gets the simulation tick the frame being composed refreshed its bound regions at: the state mirror's
+    /// delivered tick when <see cref="PrepareGraph"/> wrote every row's bound parameters, which a capture that frame
+    /// serves records; or <see langword="null"/> before the first frame.</summary>
+    public ulong? RegionTick { get; private set; }
 
     /// <summary>Prepares the render graph's frame before its runtime schedules it: reconciles the document's
     /// <c>views.graphs</c> rows onto the runtime, hands every graph instance this frame's presented tick and
@@ -1146,6 +1150,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// layout change places its views and panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) {
+        RegionTick = m_client.StateMirror.Tick;
+
         if (m_graphs is not { } graphs) {
             return;
         }

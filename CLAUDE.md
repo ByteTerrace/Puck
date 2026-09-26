@@ -24,8 +24,9 @@ engine contract it covered is a live gap, not a live gate — except the one
 narrow slice `puck parity` covers: it boots the authored parity world
 (`tests/Puck.Parity/parity.world.json`) offscreen once per backend, the
 world's own tick-scheduled `captures` rows write a manifest, and each capture
-gets three verdicts — content gate, exact `stateHash`, per-tile pixels under
-the contract versioned beside the world. Presentation-only float and artistic
+gets four verdicts — content gate, exact `stateHash`, the tick its frame
+refreshed its bound regions at, per-tile pixels under the contract versioned
+beside the world. Presentation-only float and artistic
 work remain outside the simulation-state determinism contract.
 
 Enforcement covers **observable behavior** — pixels, hashes, parity, determinism

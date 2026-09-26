@@ -36,6 +36,8 @@ public enum WorldCaptureRefusal : byte {
 /// frame and its census, or a refusal and its detail, never both and never neither.</summary>
 /// <param name="Station">The capture row's station name.</param>
 /// <param name="Tick">The simulation tick the capture was armed for.</param>
+/// <param name="RegionTick">The simulation tick the frame that served the capture refreshed its bound regions at, which
+/// <c>puck parity</c> holds to <paramref name="Tick"/>, or <see langword="null"/> when refused.</param>
 /// <param name="Frame">The PNG file name inside the capture directory, or <see langword="null"/> when refused.</param>
 /// <param name="StateHash">The capture-scope state hash at <paramref name="Tick"/>, as 16 lower-case hex digits.</param>
 /// <param name="Census">The per-material pixel census of the frame, or <see langword="null"/> when refused.</param>
@@ -45,6 +47,7 @@ public enum WorldCaptureRefusal : byte {
 public sealed record WorldCaptureManifestEntry(
     string Station,
     ulong Tick,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ulong? RegionTick,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Frame,
     [property: JsonPropertyName("stateHash")] string StateHash,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, long>? Census,
@@ -110,6 +113,7 @@ public sealed class WorldCaptureScheduler {
     private readonly WorldStateMirror m_state;
     private readonly WorldServer m_server;
     private readonly IWorldEngineReadiness? m_readiness;
+    private readonly Func<ulong?>? m_regionTick;
     private readonly string m_worldFile;
 
     private readonly WorkCounterSet m_work = new(
@@ -137,9 +141,12 @@ public sealed class WorldCaptureScheduler {
     /// <param name="readiness">The engine readiness a hold reads: time held while it is not ready is spent from the
     /// pipeline-build budget, and a capture refused then names its reason. <see langword="null"/> for a boot that
     /// composes no renderer, whose holds all count as ready.</param>
+    /// <param name="regionTick">Reads the simulation tick the frame being composed refreshed its bound regions at, which
+    /// each capture records from the frame that serves it (<see cref="WorldCaptureManifestEntry.RegionTick"/>);
+    /// <see langword="null"/> for a boot that composes no renderer.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/>, <paramref name="directory"/>,
     /// <paramref name="backend"/>, or <paramref name="worldFile"/> is <see langword="null"/>.</exception>
-    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null) {
+    public WorldCaptureScheduler(WorldServer server, string directory, string backend, string worldFile, Func<string?, ICaptureRequestTarget?>? captureTarget, IWorldEngineReadiness? readiness = null, Func<ulong?>? regionTick = null) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: backend);
@@ -151,6 +158,7 @@ public sealed class WorldCaptureScheduler {
         m_worldFile = worldFile;
         m_captureTarget = captureTarget;
         m_readiness = readiness;
+        m_regionTick = regionTick;
         m_state = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => server.Definition));
 
         if (server.Definition.Captures is not { Rows: { } rows }) {
@@ -370,7 +378,10 @@ public sealed class WorldCaptureScheduler {
             path1: m_directory,
             path2: frameName
         );
-        var request = new FrameCaptureRequest(path: path);
+        var request = new FrameCaptureRequest(
+            path: path,
+            tick: m_regionTick
+        );
 
         try {
             target.RequestCapture(request: request);
@@ -733,6 +744,7 @@ public sealed class WorldCaptureScheduler {
             ),
             Detail: null,
             Frame: pending.FrameName,
+            RegionTick: result.Tick,
             Refusal: null,
             StateHash: ToHex(hash: pending.StateHash),
             Station: pending.Station.Value,
@@ -751,6 +763,7 @@ public sealed class WorldCaptureScheduler {
             Census: null,
             Detail: detail,
             Frame: null,
+            RegionTick: null,
             Refusal: refusal,
             StateHash: ToHex(hash: stateHash),
             Station: station.Value,

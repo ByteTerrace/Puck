@@ -238,6 +238,7 @@ public sealed partial class ShaderPipelineRenderNode {
             layout.WriteFrame(
                 block: block,
                 frame: m_frame,
+                tickRate: m_pipeline!.Plan.TickRate,
                 values: Frame
             );
         }

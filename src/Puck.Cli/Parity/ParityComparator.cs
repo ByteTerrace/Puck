@@ -18,10 +18,11 @@ internal sealed record ParityCaptureOutcome(
     public bool Failed => Verdicts.Any(predicate: static verdict => !verdict.Passed);
 }
 /// <summary>
-/// The two-verdict comparator core: per capture, a content gate that must hold before any pixel work runs, then
-/// an exact stateHash check and a per-tile pixel check — computed and reported independently of each other once
-/// the gate holds. Reads frame files from the given left/right directories only; every threshold and floor comes
-/// from the contract, never a literal in this class.
+/// The comparator core: per capture, a content gate that must hold before any pixel work runs, then an exact stateHash
+/// check, a tick check holding the tick each side's frame refreshed its bound regions at to the armed tick, and a
+/// per-tile pixel check — computed and reported independently of each other once the gate holds, so a frame showing
+/// another tick fails the tick verdict whatever its pixels. Reads frame files from the given left/right directories
+/// only; every threshold and floor comes from the contract, never a literal in this class.
 /// </summary>
 internal static class ParityComparator {
     private static ParityCaptureOutcome CompareCapture(string station, ulong tick, ParityManifestCapture? leftCapture, ParityManifestCapture? rightCapture, string leftDir, string rightDir, ParityStationContract stationContract, int tileSize) {
@@ -150,6 +151,18 @@ internal static class ParityComparator {
                 Detail: $"left {leftCapture.StateHash} right {rightCapture.StateHash}"
             )));
 
+        verdicts.Add(item: (((leftCapture.RegionTick == tick) && (rightCapture.RegionTick == tick))
+            ? new ParityCaptureVerdict(
+                Detail: $"both frames refreshed their regions at the armed tick {tick}",
+                Name: "TICK-OK",
+                Passed: true
+            )
+            : new ParityCaptureVerdict(
+                Name: "TICK-FAILED",
+                Passed: false,
+                Detail: $"armed at tick {tick}; the left frame refreshed its regions at tick {leftCapture.RegionTick}, the right at tick {rightCapture.RegionTick}"
+            )));
+
         if (stationContract.Reference is { } reference) {
             verdicts.Add(item: CompareReference(
                 left: leftImage,
@@ -222,7 +235,7 @@ internal static class ParityComparator {
         var expected = reference.Render(tick: tick);
         var failures = new List<string>();
 
-        foreach (var (side, image) in (ReadOnlySpan<(string, PngImage)>)[("vulkan", left), ("directx", right)]) {
+        foreach (var (side, image) in ((ReadOnlySpan<(string, PngImage)>)[("vulkan", left), ("directx", right)])) {
             if (
                 (image.Width != reference.Width) ||
                 (image.Height != reference.Height)
@@ -248,7 +261,7 @@ internal static class ParityComparator {
             if (first >= 0) {
                 var pixel = (first / 4);
 
-                failures.Add(item: $"{side} differs in {mismatches} bytes, first at ({(pixel % (int)reference.Width)},{(pixel / (int)reference.Width)}) channel {(first % 4)}: {image.RgbaPixels[first]} vs {expected[first]}");
+                failures.Add(item: $"{side} differs in {mismatches} bytes, first at ({(pixel % ((int)reference.Width))},{(pixel / ((int)reference.Width))}) channel {(first % 4)}: {image.RgbaPixels[first]} vs {expected[first]}");
             }
         }
 

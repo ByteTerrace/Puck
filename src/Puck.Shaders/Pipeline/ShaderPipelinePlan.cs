@@ -182,6 +182,10 @@ public sealed class ShaderPipelinePlan {
     public RenderGraphDefinition Definition { get; }
     /// <summary>Gets the public versions.</summary>
     public IReadOnlyList<string> Outputs { get; }
+    /// <summary>Gets the rate, in ticks a second, the graph's passes read the deterministic tick at: the graph's requested
+    /// <see cref="RenderGraphDefinition.TickRate"/>, which divides the engine rate exactly, or
+    /// <see cref="ShaderFrameInterface.EngineTickRate"/>.</summary>
+    public uint TickRate => (Definition.TickRate ?? ShaderFrameInterface.EngineTickRate);
     /// <summary>Gets every block the passes read together, in bytes: the frame group's block once, when the graph has a
     /// pass, and each pass's pass block. It is the pipeline instance's parameter region, the bytes whose residency
     /// <c>pipeline.inspect</c> reports.</summary>
@@ -224,7 +228,8 @@ public sealed class ShaderPipelinePlan {
             Name: definition.Name,
             Resources: new ReadOnlyCollection<ShaderPipelineResource>(list: resources),
             Outputs: new ReadOnlyCollection<string>(list: definition.Outputs.ToArray()),
-            Passes: new ReadOnlyCollection<ShaderPipelinePass>(list: passes)
+            Passes: new ReadOnlyCollection<ShaderPipelinePass>(list: passes),
+            TickRate: definition.TickRate
         );
     }
     private static Dictionary<string, ShaderConfigField> SnapshotConfig(IReadOnlyDictionary<string, ShaderConfigField> config) =>

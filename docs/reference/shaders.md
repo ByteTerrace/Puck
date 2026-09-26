@@ -143,11 +143,11 @@ the name must be lowercase ASCII words joined by hyphens
 |--------|------|-------|
 | `extent` | `uint2` | The pass's width and height in pixels: its first output's, else its first input's, else the frame's. In the pass block. |
 | `pointer` | `float2` | The pointer's position during its most recent press over the instance, in the pass's pixels with the origin at the top-left corner; zero before the first press. |
-| `tick` | `uint2` | The deterministic engine tick the frame presents, low word then high word: the state mirror's delivered engine tick. |
+| `tick` | `uint2` | The deterministic tick the frame presents, low word then high word: the state mirror's delivered engine tick divided by the engine rate over `tickRate`. |
 | `time` | `float` | The instance's time, in seconds: the presentation clock through the instance's time scale, pauses, steps and resets. |
 | `timeDelta` | `float` | The seconds the instance's time moved since its previous frame. |
 | `frame` | `uint` | The frames the pass's node submitted before this one—pacing-dependent, presentation only. |
-| `tickRate` | `uint` | Engine ticks per second, the rate `tick` counts in. |
+| `tickRate` | `uint` | The rate `tick` counts in, ticks a second: the graph's requested `tickRate`, or the engine's 50,400. |
 | `pointerDown` | `uint` | One while the pointer is pressed. |
 | `pointerPresses` | `uint` | How many presses the pointer has made over the instance. |
 | `cameraPosition`, `cameraTarget`, `cameraUp` | `float3` | The paired camera. |
@@ -164,6 +164,14 @@ row's `timeScale`: `pipeline.time` pauses it, sets it or changes the scale, a
 `pipeline.step` advances it by one sixtieth of a second, and a reset starts it
 from zero, each from the frame last presented, so the time a pane showed never
 jumps. An instance no layout slot shows reads the clock itself.
+
+A graph may request the rate its passes read `tick` at with a top-level
+`tickRate`. With `"tickRate": 30`, `tick` counts thirtieths of a second: the
+delivered engine tick divided, in whole numbers, by 50,400 / 30 = 1,680. Every
+frame presenting one delivered tick writes the same `tick` words, whatever the
+display rate or the frame's interpolation fraction, since presentation time is
+`time`'s alone. A rate that does not divide 50,400 exactly is refused by name
+as `SHADERPIPE_TICK_RATE`; a graph that requests none reads the engine rate.
 
 A pass's ports follow its block in the pass group, in document order: each
 input, then a compute pass's outputs. A graphics pass's outputs are

@@ -2771,11 +2771,28 @@ follow it.
    the turns that write them.
 4. The `parameter` statement: `parameter <pass>.<member> = <value>` inside a
    `graph` block lowers to `parameters`, and the decompiler prints it back.
-5. The deterministic tick and the tick verdict. A pass reading a requested tick
-   rate gets the tick divided by the engine rate over that rate, refused unless
-   the rate divides the engine rate exactly; a capture records the tick its
-   regions were refreshed at, and `puck parity` holds it to the armed tick
-   between the state and pixel verdicts.
+5. Done, pending its first device run: the deterministic tick and the tick
+   verdict. A graph requests the rate its passes read the tick at with a
+   top-level `tickRate` (`RenderGraphDefinition.TickRate`,
+   `ShaderPipelinePlan.TickRate`), and the frame group's `tick` is the
+   delivered engine tick divided, in whole numbers, by the engine rate over
+   that rate, `tickRate` the rate; the planner refuses a rate that does not
+   divide the engine rate exactly as `SHADERPIPE_TICK_RATE`, naming the graph
+   and the rate. A capture request carries a tick source
+   (`FrameCaptureRequest`'s `tick`, `FrameCaptureResult.Tick`), which the
+   capture scheduler points at the presenter's `RegionTick`, the state mirror's
+   tick when the frame wrote its bound parameters and rows, so each landed
+   manifest entry records the `regionTick` its frame refreshed its regions at.
+   `puck parity` holds it to the armed tick in a tick verdict between the state
+   and pixel verdicts (`TICK-OK`, `TICK-FAILED` naming both sides' ticks). The
+   offscreen host composes at most one frame per step
+   (`OffscreenTickHostedService.ComposesFrame`), and the owed frame again only
+   while a capture waits for it. Laws: `ShaderPipelineRenderNodeLawTests.Tick`
+   (one delivered tick writes identical bytes at three presentation clocks; a
+   non-dividing rate refuses by name), `ParityComparatorTests` (a mid-burst
+   capture fails the tick verdict rather than the pixel verdict),
+   `WorldCaptureSchedulerLawTests` (a landed entry records its region tick) and
+   `OffscreenFrameCadenceLawTests`.
 6. The presentation dimension. The cost report prices every binding in bytes
    per tick and per frame, with a per-document ceiling refusing by pipeline and
    binding; `world.budget` prints it, and the browser report carries it.

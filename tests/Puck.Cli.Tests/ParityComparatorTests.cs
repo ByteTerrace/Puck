@@ -6,10 +6,11 @@ using Xunit;
 namespace Puck.Cli.Tests;
 
 /// <summary>
-/// Proves the two-verdict comparator against synthetic fixtures authored here — no dependency on a real parity
-/// capture run. Each fact names the one law it proves: a gate refuses before any pixel work, state and pixel are
-/// independent verdicts, a localized pixel defect a whole-frame mean would dilute away fails per-tile, and a
-/// malformed input document is a distinct exit code from a real parity failure.
+/// Proves the comparator against synthetic fixtures authored here — no dependency on a real parity capture run. Each fact
+/// names the one law it proves: a gate refuses before any pixel work, state, tick and pixel are independent verdicts, a
+/// capture served mid-burst fails the tick verdict rather than the pixel verdict, a localized pixel defect a whole-frame
+/// mean would dilute away fails per-tile, and a malformed input document is a distinct exit code from a real parity
+/// failure.
 /// </summary>
 public sealed class ParityComparatorTests : IDisposable {
     private const string OtherStateHash = "fedcba9876543210";
@@ -67,7 +68,7 @@ public sealed class ParityComparatorTests : IDisposable {
 
         return rgba;
     }
-    private static (ParityManifest Left, ParityManifest Right) BuildManifestPair(string station, ulong tick, string stateHashLeft, string stateHashRight, bool cameraInsideLeft, bool cameraInsideRight, string frame, long censusLeft, long censusRight) {
+    private static (ParityManifest Left, ParityManifest Right) BuildManifestPair(string station, ulong tick, string stateHashLeft, string stateHashRight, bool cameraInsideLeft, bool cameraInsideRight, string frame, long censusLeft, long censusRight, ulong? regionTickRight = null) {
         var left = new ParityManifest(
             Backend: "vulkan",
             World: "w",
@@ -84,6 +85,9 @@ public sealed class ParityComparatorTests : IDisposable {
                     Refusal: (cameraInsideLeft
             ? "cameraInside"
             : null),
+                    RegionTick: (cameraInsideLeft
+            ? null
+            : tick),
                     Station: station,
                     StateHash: stateHashLeft,
                     Tick: tick
@@ -105,6 +109,9 @@ public sealed class ParityComparatorTests : IDisposable {
                     Refusal: (cameraInsideRight
             ? "cameraInside"
             : null),
+                    RegionTick: (cameraInsideRight
+            ? null
+            : (regionTickRight ?? tick)),
                     Station: station,
                     StateHash: stateHashRight,
                     Tick: tick
@@ -114,7 +121,7 @@ public sealed class ParityComparatorTests : IDisposable {
         return (left, right);
     }
     private static string CaptureJson(string station, ulong tick, string stateHash, long censusMaterial0, string frame) =>
-        (((((((((("{\"station\":\"" + station) + "\",\"tick\":") + tick) + ",\"stateHash\":\"") + stateHash) + "\",\"frame\":\"") + frame) + "\",\"census\":{\"0\":") + censusMaterial0) + "}}");
+        (((((((((((("{\"station\":\"" + station) + "\",\"tick\":") + tick) + ",\"regionTick\":") + tick) + ",\"stateHash\":\"") + stateHash) + "\",\"frame\":\"") + frame) + "\",\"census\":{\"0\":") + censusMaterial0) + "}}");
     private string CreateSubdirectory(string name) {
         var path = Path.Combine(
             path1: m_root,
@@ -519,6 +526,67 @@ public sealed class ParityComparatorTests : IDisposable {
             filter: verdict => ((verdict.Name == "PIXEL-OK") && verdict.Passed)
         );
     }
+    /// <summary>A capture requested at a tick in the middle of a catch-up burst, as a <c>world.screenshot</c> is, is
+    /// served by the frame composed after the burst, which refreshed its bound regions at a later tick. Its frame and
+    /// state agree with the other side's, so it fails the tick verdict, between the state and pixel verdicts, and passes
+    /// the pixel verdict.</summary>
+    [Fact]
+    public void AMidBurstCaptureFailsTheTickVerdictRatherThanThePixelVerdict() {
+        const int Width = 16;
+        const int Height = 16;
+
+        var leftDir = CreateSubdirectory(name: "left");
+        var rightDir = CreateSubdirectory(name: "right");
+        var rgba = BuildGradientRgba(
+            height: Height,
+            width: Width
+        );
+
+        foreach (var directory in ((string[])[leftDir, rightDir])) {
+            WritePng(
+                directory: directory,
+                fileName: "s~1.png",
+                height: Height,
+                rgba: rgba,
+                width: Width
+            );
+        }
+
+        var manifests = BuildManifestPair(
+            cameraInsideLeft: false,
+            cameraInsideRight: false,
+            censusLeft: 10,
+            censusRight: 10,
+            frame: "s~1.png",
+            regionTickRight: 5,
+            stateHashLeft: ValidStateHash,
+            stateHashRight: ValidStateHash,
+            station: "s",
+            tick: 1
+        );
+
+        Assert.True(condition: ParityComparator.TryCompare(
+            contract: DefaultContract(),
+            error: out _,
+            left: manifests.Left,
+            leftDir: leftDir,
+            outcomes: out var outcomes,
+            right: manifests.Right,
+            rightDir: rightDir
+        ));
+
+        var outcome = Assert.Single(collection: outcomes);
+
+        Assert.True(condition: outcome.Failed);
+        Assert.Equal(
+            actual: outcome.Verdicts.Select(selector: static verdict => (verdict.Name, verdict.Passed)).ToArray(),
+            expected: [("GATE-OK", true), ("STATE-OK", true), ("TICK-FAILED", false), ("PIXEL-OK", true)]
+        );
+        Assert.Equal(
+            actual: outcome.Verdicts[2].Detail,
+            expected: "armed at tick 1; the left frame refreshed its regions at tick 1, the right at tick 5"
+        );
+    }
     [Fact]
     public void CameraInsideGatesBeforeAnyPixelOrStateComparison() {
         var leftDir = CreateSubdirectory(name: "left");
@@ -544,6 +612,7 @@ public sealed class ParityComparatorTests : IDisposable {
                     Detail: "the camera is inside geometry",
                     Frame: null,
                     Refusal: "cameraInside",
+                    RegionTick: null,
                     StateHash: ValidStateHash,
                     Station: "s",
                     Tick: 1
@@ -557,6 +626,7 @@ public sealed class ParityComparatorTests : IDisposable {
                     Detail: null,
                     Frame: "s~1.png",
                     Refusal: null,
+                    RegionTick: 1,
                     Station: "s",
                     StateHash: OtherStateHash,
                     Tick: 1
@@ -699,7 +769,7 @@ public sealed class ParityComparatorTests : IDisposable {
         );
         Assert.Contains(
             actualString: stderr,
-            expectedSubstring: "carries a refusal, so frame and census must be absent"
+            expectedSubstring: "carries a refusal, so frame, census and regionTick must be absent"
         );
     }
     public void Dispose() {

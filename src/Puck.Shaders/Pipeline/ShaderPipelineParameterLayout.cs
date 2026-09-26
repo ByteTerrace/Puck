@@ -376,25 +376,33 @@ public sealed class ShaderPipelineParameterLayout {
         WriteUInt32(block: block, offset: (m_extent + 4), value: height);
     }
     /// <summary>Writes every frame group value into the frame block at the offset the interface places it, leaving the
-    /// padding as it is.</summary>
+    /// padding as it is. The tick is the presented engine tick divided, in whole numbers, by the engine rate over
+    /// <paramref name="tickRate"/>, so every frame presenting one tick at that rate writes the same tick words whatever
+    /// its presentation clock.</summary>
     /// <param name="block">The block, at least <see cref="FrameBlockSizeBytes"/> long.</param>
-    /// <param name="values">The host's frame values, the presented tick among them.</param>
+    /// <param name="values">The host's frame values, the presented engine tick among them.</param>
     /// <param name="frame">The frames the node submitted before this one; only the low 32 bits are written.</param>
+    /// <param name="tickRate">The rate, in ticks a second, the tick is written at: the plan's
+    /// <see cref="ShaderPipelinePlan.TickRate"/>, or <see cref="ShaderFrameInterface.EngineTickRate"/>.</param>
     /// <exception cref="ArgumentException"><paramref name="block"/> is shorter than
-    /// <see cref="FrameBlockSizeBytes"/>.</exception>
-    public void WriteFrame(Span<byte> block, in ShaderFrameValues values, ulong frame) {
+    /// <see cref="FrameBlockSizeBytes"/>, or <paramref name="tickRate"/> does not divide the engine rate exactly.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tickRate"/> is zero.</exception>
+    public void WriteFrame(Span<byte> block, in ShaderFrameValues values, ulong frame, uint tickRate = ShaderFrameInterface.EngineTickRate) {
         Require(
             block: block,
             sizeBytes: FrameBlockSizeBytes
         );
+
+        var tick = (values.Tick / EngineTicks.PerRate(ratePerSecond: tickRate));
+
         WriteSingle(block: block, offset: m_pointer, value: values.Pointer.X);
         WriteSingle(block: block, offset: (m_pointer + 4), value: values.Pointer.Y);
-        WriteUInt32(block: block, offset: m_tick, value: unchecked((uint)values.Tick));
-        WriteUInt32(block: block, offset: (m_tick + 4), value: ((uint)(values.Tick >> 32)));
+        WriteUInt32(block: block, offset: m_tick, value: unchecked((uint)tick));
+        WriteUInt32(block: block, offset: (m_tick + 4), value: ((uint)(tick >> 32)));
         WriteSingle(block: block, offset: m_time, value: ((float)values.Time));
         WriteSingle(block: block, offset: m_timeDelta, value: ((float)values.TimeDelta));
         WriteUInt32(block: block, offset: m_frame, value: unchecked((uint)frame));
-        WriteUInt32(block: block, offset: m_tickRate, value: ((uint)EngineTicks.PerSecond));
+        WriteUInt32(block: block, offset: m_tickRate, value: tickRate);
         WriteUInt32(block: block, offset: m_pointerDown, value: (values.PointerDown ? 1u : 0u));
         WriteUInt32(block: block, offset: m_pointerPresses, value: values.PointerPresses);
         WriteVector3(block: block, offset: m_cameraPosition, value: values.CameraPosition);

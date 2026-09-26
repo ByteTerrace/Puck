@@ -3,6 +3,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.SdfVm;
 using Puck.Shaders;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -52,6 +53,12 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
         ? (node.NotReadyReason ?? root.Runtime.UnservedCaptureReason)
         : "the renderer has not been composed: no frame has been produced"
     );
+    /// <summary>The frame presenter, or <see langword="null"/> until it is built.</summary>
+    public WorldFramePresenter? Presenter { get; set; }
+    /// <summary>The simulation tick the frame being composed refreshed its bound regions at
+    /// (<see cref="WorldFramePresenter.RegionTick"/>), or <see langword="null"/> before the presenter's first
+    /// frame.</summary>
+    public ulong? RegionTick => Presenter?.RegionTick;
     /// <summary>The render graph's root, the render host every captured and presented frame comes from, or
     /// <see langword="null"/> until the render factory has run. <c>world.screenshot</c> arms captures on it, so the
     /// readback is the frame the display shows.</summary>

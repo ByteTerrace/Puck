@@ -83,6 +83,7 @@ internal static class ParityCommand {
             )
         );
     }
+
     // The tick the leg waits to, past the last tick the world's captures rows schedule, read from the document itself
     // so a station added there is captured without a second statement of its schedule here. A world that cannot be
     // read, or whose last tick leaves no room for the margin, is refused by name.
@@ -109,10 +110,11 @@ internal static class ParityCommand {
             return false;
         }
 
-        waitTick = checked(lastTick + WaitMarginTicks);
+        waitTick = checked((lastTick + WaitMarginTicks));
 
         return true;
     }
+
     // Boots one offscreen leg on the named backend; the parity world's own captures rows land every scheduled
     // frame and write the manifest. Returns CliExit.Success with the manifest written, or CliExit.Refused with the
     // refusal already reported.
@@ -193,10 +195,11 @@ internal static class ParityCommand {
             collects each run's tick-scheduled captures and puck.parity.manifest.v1, and compares the pair
             under tests/Puck.Parity/parity.contract.json.
 
-            Per capture, three independent verdicts, in order: the content gate (a capture its
+            Per capture, four independent verdicts, in order: the content gate (a capture its
             producer refused by name, one missing, or one below its station's census floor never reaches
             comparison — agreement between degenerate frames is vacuous), the state verdict
-            (stateHash equality, exact, no envelope), and the pixel verdict (per-tile deltas
+            (stateHash equality, exact, no envelope), the tick verdict (each frame refreshed its bound
+            regions at the armed tick), and the pixel verdict (per-tile deltas
             against the station's contract thresholds — a localized defect cannot dilute itself
             across a whole-frame mean). Failures write both frames, a delta heatmap, and a
             per-verdict summary beside the run.

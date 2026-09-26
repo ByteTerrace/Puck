@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -18,8 +19,9 @@ public static class ShaderFrameInterface {
     /// <summary>The frame member holding the pointer's position during its most recent press, in the pass's pixels with
     /// the origin at the top-left corner, or zero before the first press (<c>float2</c>).</summary>
     public const string Pointer = "pointer";
-    /// <summary>The frame member holding the deterministic engine tick the frame presents, low word then high word
-    /// (<c>uint2</c>).</summary>
+    /// <summary>The frame member holding the deterministic tick the frame presents, low word then high word
+    /// (<c>uint2</c>): the engine tick of the state the frame shows, divided by the engine rate over the graph's
+    /// <see cref="TickRate"/>, so it counts at that rate.</summary>
     public const string Tick = "tick";
     /// <summary>The frame member holding the presentation time in seconds (<c>float</c>).</summary>
     public const string Time = "time";
@@ -28,9 +30,12 @@ public static class ShaderFrameInterface {
     /// <summary>The frame member holding how many frames the pass's node has submitted before this one
     /// (<c>uint</c>).</summary>
     public const string Frame = "frame";
-    /// <summary>The frame member holding the number of engine ticks in one second, the rate <see cref="Tick"/> counts in
-    /// (<c>uint</c>).</summary>
+    /// <summary>The frame member holding the rate <see cref="Tick"/> counts in, in ticks a second: the rate the graph
+    /// requests (<see cref="RenderGraphDefinition.TickRate"/>), or <see cref="EngineTickRate"/> (<c>uint</c>).</summary>
     public const string TickRate = "tickRate";
+    /// <summary>The engine's tick rate, <c>EngineTicks.PerSecond</c> ticks a second: the rate a graph that requests none
+    /// reads its tick at.</summary>
+    public const uint EngineTickRate = ((uint)EngineTicks.PerSecond);
     /// <summary>The frame member holding one while the pointer is pressed and zero otherwise (<c>uint</c>).</summary>
     public const string PointerDown = "pointerDown";
     /// <summary>The frame member holding how many presses the pointer has made over the pass (<c>uint</c>).</summary>

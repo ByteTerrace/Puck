@@ -169,6 +169,22 @@ public sealed partial class ShaderPipelineCompiler {
                 definition.Name
             );
         }
+        // A requested tick is the engine tick divided by a whole number of engine ticks, so the rate must divide the
+        // engine rate exactly; any other would present a tick that drifts against the state it names.
+        if (
+            (definition.TickRate is { } tickRate) &&
+            (
+                (tickRate == 0U) ||
+                ((ShaderFrameInterface.EngineTickRate % tickRate) != 0U)
+            )
+        ) {
+            Add(
+                diagnostics,
+                "SHADERPIPE_TICK_RATE",
+                $"Graph '{definition.Name}' requests a tick rate of {tickRate} a second, which does not divide the engine's {ShaderFrameInterface.EngineTickRate} ticks a second exactly.",
+                definition.Name
+            );
+        }
         if (definition.Resources.Count > m_limits.MaxResources) {
             Add(
                 diagnostics,

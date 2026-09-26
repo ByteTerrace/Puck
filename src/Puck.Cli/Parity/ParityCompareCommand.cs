@@ -6,7 +6,8 @@ namespace Puck.Cli.Parity;
 
 /// <summary><c>puck parity compare &lt;leftDir&gt; &lt;rightDir&gt;</c> — reads two <c>puck.parity.manifest.v1</c>
 /// runs (a pinned capture pipeline's output, not authored here) and, per scheduled capture, runs a content gate,
-/// an exact stateHash check, and a per-tile pixel check (<see cref="ParityComparator"/>). A gate failure is
+/// an exact stateHash check, a region-tick check, and a per-tile pixel check (<see cref="ParityComparator"/>). A gate
+/// failure is
 /// never "parity held"; a per-tile check catches a localized defect a whole-frame mean would dilute away. Every
 /// verdict prints a line naming its station, tick, and outcome; a failed capture's evidence — both frames, a
 /// delta heatmap, and a one-line-per-verdict summary — lands under <c>--output</c>.</summary>
@@ -123,7 +124,7 @@ internal static class ParityCompareCommand {
             return CliExit.Failed;
         }
 
-        Console.WriteLine(value: $"PASS: {outcomes.Count} capture(s) held every verdict (content gate, stateHash, reference where the station names one, per-tile pixel).");
+        Console.WriteLine(value: $"PASS: {outcomes.Count} capture(s) held every verdict (content gate, stateHash, region tick, reference where the station names one, per-tile pixel).");
 
         return CliExit.Success;
     }
@@ -192,15 +193,16 @@ internal static class ParityCompareCommand {
         var rightArgument = new Argument<string>(name: "rightDir") { Description = "The second such directory, compared capture-for-capture against the first." };
         var command = new Command(
             description: """
-            Gate/state/pixel-verdict comparison of two already-captured manifest runs.
+            Gate/state/tick/pixel-verdict comparison of two already-captured manifest runs.
 
             Per capture, in order: a content gate (a capture its producer refused — cameraInside, busy,
             stale, failed, unserved, deviceLost — a capture or frame absent from either side, or a census below its
-            station's floor refuses the capture before any pixel comparison), an exact stateHash check, and
-            a per-tile pixel check (any tile exceeding its station's mean or max threshold fails the
-            capture). The gate, state, and pixel checks are independent verdicts — a gate failure skips the
-            other two; state and pixel are always both computed and both printed once the gate holds. Every
-            verdict prints one line naming its station, tick, and outcome.
+            station's floor refuses the capture before any pixel comparison), an exact stateHash check, a tick
+            check (each side's frame refreshed its bound regions at the armed tick, its regionTick), and a
+            per-tile pixel check (any tile exceeding its station's mean or max threshold fails the capture). The
+            gate, state, tick, and pixel checks are independent verdicts — a gate failure skips the others;
+            state, tick, and pixel are always all computed and all printed once the gate holds. Every verdict
+            prints one line naming its station, tick, and outcome.
 
             Exit codes: 0 every capture held every verdict, 1 at least one verdict failed, 2 a usage
             error or a malformed manifest or contract file (distinct from a parity failure).

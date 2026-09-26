@@ -19,8 +19,10 @@ namespace Puck.World.Tests;
 /// <see cref="FixedStepPump"/> stepping a real <see cref="WorldServer"/> through <see cref="WorldServerStepShell"/>,
 /// the scheduler published after every step as <c>WorldHostStep</c> publishes it, and one composed frame after every
 /// pump call. The frame is a fake render chain whose PNG records the tick and capture-scope state hash of the server
-/// at the moment it was composed, so a manifest entry can be checked against what its frame really showed. Every
-/// armed capture must end as exactly one manifest entry: the frame showing its tick, or a named refusal.</summary>
+/// at the moment it was composed, so a manifest entry can be checked against what its frame really showed, and whose
+/// region tick is the server's last completed tick when it composes, as the presenter's is the state it refreshed its
+/// regions from. Every armed capture must end as exactly one manifest entry: the frame showing its tick and recording
+/// the tick its regions were refreshed at, or a named refusal.</summary>
 public sealed class WorldCaptureSchedulerLawTests : IDisposable {
     private const ulong BurstSteps = 60UL;
     private const ulong FirstTick = 10UL;
@@ -187,6 +189,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
                         ? WorldTarget
                         : throw new ArgumentException(message: $"The render graph has no instance '{instance}'."))),
                 directory: directory,
+                regionTick: () => (m_row.Server.NextInputTick - 1UL),
                 server: m_row.Server,
                 worldFile: "fixture.world.json"
             );
@@ -303,6 +306,10 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             Assert.Equal(
                 expected: tick,
                 actual: entry.GetProperty(propertyName: "tick").GetUInt64()
+            );
+            Assert.Equal(
+                expected: tick,
+                actual: entry.GetProperty(propertyName: "regionTick").GetUInt64()
             );
             Assert.False(condition: entry.TryGetProperty(
                 propertyName: "refusal",

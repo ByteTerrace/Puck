@@ -1293,12 +1293,16 @@ Per capture, these independent verdicts, in order:
    degenerate frames is vacuous.
 2. **State verdict**—`stateHash` equality, exact, no envelope. A one-bit
    sim-state divergence is a defect, never noise.
-3. **Reference verdict**—only for a station whose contract entry names a
+3. **Tick verdict**—each side's `regionTick`, the tick its frame refreshed
+   its bound regions at, equals the armed tick. A frame composed after the
+   simulation moved on, such as a capture requested in the middle of a
+   catch-up burst, fails here rather than as a pixel difference.
+4. **Reference verdict**—only for a station whose contract entry names a
    `reference`: each side must equal the frame computed on the CPU from the
    station's own documents, byte for byte, so a mistake both backends share
    still fails. `REFERENCE-FAILED` names the side, the differing byte count and
    the first differing pixel.
-4. **Pixel verdict**—per-tile mean/max deltas against the station's contract
+5. **Pixel verdict**—per-tile mean/max deltas against the station's contract
    thresholds. A localized defect cannot dilute itself across a whole-frame
    mean.
 

@@ -53,10 +53,12 @@ namespace Puck.World;
 /// genuinely need a live render/pointer, which only <see cref="AddWorldPresentation"/> can supply.</para>
 /// </summary>
 public static class WorldBootComposition {
-    // Points world.counters' sdf.transforms forwarder at the presenter's moved set the moment the presenter is built,
-    // so the forwarder can be registered, and read, before the presenter exists.
-    private static WorldFramePresenter RetargetTransforms(this WorldFramePresenter presenter, WorldRenderProbe probe) {
+    // Hands the render probe the presenter the moment the presenter is built: world.counters' sdf.transforms forwarder
+    // points at its moved set, and a scheduled capture reads the tick its frame refreshed its regions at, so both can be
+    // registered, and read, before the presenter exists.
+    private static WorldFramePresenter AttachTo(this WorldFramePresenter presenter, WorldRenderProbe probe) {
         probe.Transforms.Retarget(target: presenter.MovedTransforms);
+        probe.Presenter = presenter;
 
         return presenter;
     }
@@ -579,6 +581,10 @@ public static class WorldBootComposition {
                     : string.Empty
                 ),
                 readiness: sp.GetService<IWorldEngineReadiness>(),
+                regionTick: ((renderProbe is null)
+                    ? null
+                    : () => renderProbe.RegionTick
+                ),
                 server: server,
                 worldFile: Path.GetFileName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath)
             );
@@ -1111,7 +1117,7 @@ public static class WorldBootComposition {
         ) {
             // An offscreen capture shows bound state exactly as of the tick it is armed for.
             PinsStateFraction = true,
-        }.RetargetTransforms(probe: sp.GetRequiredService<WorldRenderProbe>()));
+        }.AttachTo(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
         // The default render graph, touching no GPU, so the boot's pre-flight (WorldPostBuildWiring) refuses a
         // views.post config that does not bind as a named definition refusal before any hosted service starts.
@@ -1445,7 +1451,7 @@ public static class WorldBootComposition {
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             bakes: sp.GetRequiredService<WorldBakeSchedule>()
-        ).RetargetTransforms(probe: sp.GetRequiredService<WorldRenderProbe>()));
+        ).AttachTo(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
         // The overlay's glyph pack, loaded once, and the default render graph, which draws the overlay when the pack
         // loaded. Neither touches the GPU, so the boot's pre-flight (WorldPostBuildWiring) refuses a views.post config

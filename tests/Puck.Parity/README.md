@@ -47,7 +47,8 @@ the same grain. An edit to those passes changes `ParityBindingReference` in
 the same change.
 
 Every armed capture is exactly one manifest entry. Either it carries the
-`frame` and `census` of the frame that showed its armed tick, or it carries a
+`frame` and `census` of the frame that showed its armed tick, with the
+`regionTick` that frame refreshed its bound regions at, or it carries a
 `refusal` and a `detail` naming the ticks involved:
 
 | `refusal` | Meaning |
@@ -68,7 +69,11 @@ The comparator's content gate fails a capture that either side refused, and
 prints the refusal and its detail. A capture absent from a manifest is a
 producer defect, never a refusal. When a capture is armed, the fixed-step pump
 ends its catch-up burst there. The host then composes the frame for that tick
-before the next step, so a slow machine does not step past a capture.
+before the next step, so a slow machine does not step past a capture. The
+offscreen host composes at most one frame per step, and composes the owed frame
+again only while a capture waits for it. The comparator's tick verdict holds
+each side's `regionTick` to the armed tick, so a frame that shows another
+tick's regions fails there whatever its pixels.
 `WorldCaptureSchedulerLawTests` (`tests/Puck.World.Tests`) drives this without
 a GPU.
 

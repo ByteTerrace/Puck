@@ -12,13 +12,16 @@ namespace Puck.Launcher;
 /// The offscreen boot shape's outermost host loop — a real GPU device and the composed-frame render pipeline with NO
 /// window and NO swapchain. Paces the SAME <see cref="FixedStepPump"/> <see cref="HeadlessTickHostedService"/> drives
 /// (wall clock converts to engine ticks exactly, never enters simulation state), and — because there is no present
-/// cadence to ride — produces one composed frame per host-loop iteration, right after the fixed-step pump advances:
-/// frame pacing rides the fixed-step pump's own cadence instead of vsync. The console pump and every registered
-/// <see cref="ISnapshotInputCapture"/> contribution run every iteration exactly like the other two host loops.
+/// cadence to ride — composes a frame right after the fixed-step pump advances, and only when it stepped
+/// (<see cref="ComposesFrame"/>): frame pacing rides the fixed-step pump's own cadence instead of vsync, and the host
+/// renders at most one frame per step, so a frame never presents a tick twice for a presentation clock to tell apart.
+/// The console pump and every registered <see cref="ISnapshotInputCapture"/> contribution run every iteration exactly
+/// like the other two host loops.
 /// <para>Its frames are its only output, so its pump holds its clock for them
 /// (<see cref="IFixedStepSimulation.HoldsClock"/>): while a frame a step owes has not been served, for whatever reason
 /// the render chain cannot serve it yet, the loop keeps producing frames and draining the console but steps no further
-/// tick. The two other host loops never hold.</para>
+/// tick. Those frames are the one exception to one frame per step: the owed frame is composed again until one serves
+/// it. The two other host loops never hold.</para>
 /// <para>A device loss follows the windowed host's policy (<see cref="DeviceLossRecovery"/>), rebuilding through the
 /// <see cref="IDeviceRebuild"/> the offscreen GPU activation registers; a loss it cannot recover from faults the
 /// run.</para>
@@ -123,6 +126,20 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         m_registry.RouteSimulationTo(sink: m_inputRouter?.ConsoleTextSink);
     }
 
+    /// <summary>Returns whether the offscreen host composes a frame after a pump call: one that stepped the simulation, or
+    /// one that stepped nothing while a step still owes a frame (<see cref="IFixedStepSimulation.AwaitsFrame"/>, a capture
+    /// armed at its tick not yet served), so the host renders at most one frame per step and never steps past an owed
+    /// frame. A host with no simulation composes a frame every call.</summary>
+    /// <param name="hasSimulation">Whether the host steps a simulation.</param>
+    /// <param name="stepsAdvanced">The steps the pump call ran.</param>
+    /// <param name="awaitsFrame">Whether the simulation owes a frame after the call.</param>
+    /// <returns><see langword="true"/> when the host composes a frame.</returns>
+    public static bool ComposesFrame(bool hasSimulation, int stepsAdvanced, bool awaitsFrame) => (
+        !hasSimulation ||
+        (stepsAdvanced > 0) ||
+        awaitsFrame
+    );
+
     private void RunOffscreenLoop(CancellationToken stoppingToken) {
         Exception? fault = null;
 
@@ -194,41 +211,48 @@ public sealed class OffscreenTickHostedService : BackgroundService {
 
                 m_bufferedOutput.Flush();
 
-                // No presenter, no swapchain: produce the composed frame directly off the render root. A capture
-                // armed by world.screenshot is served from inside this call (SdfEngineNode's own readback), so the
-                // returned surface needs no further handling — it is simply not presented anywhere.
-                var frameContext = new FrameContext(
-                    AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
-                    DeltaTicks: (((ulong)stepsAdvanced) * stepTicks),
-                    ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
-                    FrameDeltaTicks: deltaTicks,
-                    Host: m_rootHostContext,
-                    StepTicks: stepTicks,
-                    TargetHeight: m_renderOptions.Height,
-                    TargetWidth: m_renderOptions.Width
-                );
+                // No presenter, no swapchain: produce the composed frame directly off the render root, once for the
+                // steps just run, or again for a frame a step still owes. A capture armed by world.screenshot is served
+                // from inside this call, so the returned surface needs no further handling — it is simply not presented
+                // anywhere.
+                if (ComposesFrame(
+                    awaitsFrame: (m_simulation?.AwaitsFrame ?? false),
+                    hasSimulation: (pump is not null),
+                    stepsAdvanced: stepsAdvanced
+                )) {
+                    var frameContext = new FrameContext(
+                        AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
+                        DeltaTicks: (((ulong)stepsAdvanced) * stepTicks),
+                        ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
+                        FrameDeltaTicks: deltaTicks,
+                        Host: m_rootHostContext,
+                        StepTicks: stepTicks,
+                        TargetHeight: m_renderOptions.Height,
+                        TargetWidth: m_renderOptions.Width
+                    );
 
-                // A loss follows the windowed host's policy: captures armed at it are refused by name, the device is
-                // rebuilt in place, and the loop steps on. A loss it cannot recover from ends the run as a fault.
-                try {
-                    // The operator's gpu.faults lose loses the device on its armed frame, here, like a real loss.
-                    m_faults?.ThrowIfLossDue();
-                    _ = m_root.ProduceFrame(context: in frameContext);
-                    deviceLoss.NoteFrameProduced();
-                } catch (DeviceLostException deviceLost) {
-                    if (!deviceLoss.TryRecover(
-                        deviceLost: deviceLost,
-                        rebuild: m_deviceRebuild
-                    )) {
-                        throw;
+                    // A loss follows the windowed host's policy: captures armed at it are refused by name, the device
+                    // is rebuilt in place, and the loop steps on. A loss it cannot recover from ends the run as a fault.
+                    try {
+                        // The operator's gpu.faults lose loses the device on its armed frame, here, like a real loss.
+                        m_faults?.ThrowIfLossDue();
+                        _ = m_root.ProduceFrame(context: in frameContext);
+                        deviceLoss.NoteFrameProduced();
+                    } catch (DeviceLostException deviceLost) {
+                        if (!deviceLoss.TryRecover(
+                            deviceLost: deviceLost,
+                            rebuild: m_deviceRebuild
+                        )) {
+                            throw;
+                        }
+
+                        m_bufferedOutput.Flush();
+
+                        continue;
                     }
 
                     m_bufferedOutput.Flush();
-
-                    continue;
                 }
-
-                m_bufferedOutput.Flush();
 
                 nextDeadline += period;
 

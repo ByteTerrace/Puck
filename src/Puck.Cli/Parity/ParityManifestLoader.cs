@@ -53,6 +53,7 @@ internal static class ParityManifestLoader {
             refusal: Refusal,
             "station",
             "tick",
+            "regionTick",
             "frame",
             "stateHash",
             "census",
@@ -98,13 +99,18 @@ internal static class ParityManifestLoader {
             propertyName: "detail",
             value: out _
         );
+        var hasRegionTick = row.TryGetProperty(
+            propertyName: "regionTick",
+            value: out _
+        );
 
         if (hasRefusal) {
             if (
                 hasFrame ||
-                hasCensus
+                hasCensus ||
+                hasRegionTick
             ) {
-                throw new ParityDocumentRefusal(message: $"{context} carries a refusal, so frame and census must be absent.");
+                throw new ParityDocumentRefusal(message: $"{context} carries a refusal, so frame, census and regionTick must be absent.");
             }
 
             var refusal = CliStrictJson.ReadRequiredString(
@@ -128,6 +134,7 @@ internal static class ParityManifestLoader {
                 ),
                 Frame: null,
                 Refusal: refusal,
+                RegionTick: null,
                 StateHash: stateHash,
                 Station: station,
                 Tick: tick
@@ -137,9 +144,10 @@ internal static class ParityManifestLoader {
         if (
             !hasFrame ||
             !hasCensus ||
+            !hasRegionTick ||
             hasDetail
         ) {
-            throw new ParityDocumentRefusal(message: $"{context} carries no refusal, so frame and census are required and detail must be absent.");
+            throw new ParityDocumentRefusal(message: $"{context} carries no refusal, so frame, census and regionTick are required and detail must be absent.");
         }
 
         var frame = CliStrictJson.ReadRequiredString(
@@ -163,6 +171,11 @@ internal static class ParityManifestLoader {
             Detail: null,
             Frame: frame,
             Refusal: null,
+            RegionTick: ReadRequiredUInt64(
+                context: context,
+                element: row,
+                member: "regionTick"
+            ),
             StateHash: stateHash,
             Station: station,
             Tick: tick
@@ -251,9 +264,9 @@ internal static class ParityManifestLoader {
         );
 
         return (ParityBindingReference.TryLoad(
+            error: out var error,
             graphPath: graph,
             reference: out var reference,
-            error: out var error,
             worldPath: world
         )
             ? reference

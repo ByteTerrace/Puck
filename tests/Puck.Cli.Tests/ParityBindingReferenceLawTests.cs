@@ -13,8 +13,8 @@ namespace Puck.Cli.Tests;
 /// </summary>
 public sealed class ParityBindingReferenceLawTests : IDisposable {
     private const string ContractPath = "tests/Puck.Parity/parity.contract.json";
-    private const string Station = "binding";
     private const string StateHash = "0123456789abcdef";
+    private const string Station = "binding";
     private const ulong Tick = 1205;
     private const string WorldPath = "tests/Puck.Parity/parity.world.json";
 
@@ -99,6 +99,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
                 Detail: null,
                 Frame: "binding.png",
                 Refusal: null,
+                RegionTick: Tick,
                 Station: Station,
                 StateHash: StateHash,
                 Tick: Tick
@@ -201,7 +202,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         var (contract, reference) = LoadContract();
         var expected = reference.Render(tick: Tick);
         var right = expected.ToArray();
-        var at = ((((5 * (int)reference.Width) + 7) * 4) + 2);
+        var at = ((((5 * ((int)reference.Width)) + 7) * 4) + 2);
 
         right[at] ^= 1;
 
